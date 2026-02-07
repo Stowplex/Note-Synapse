@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>USER_MANUAL</title>
+  <title>README</title>
   <style>
     /* Default styles provided by pandoc.
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -24,851 +24,1084 @@
       vertical-align: middle;
     }
     .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
   </style>
   <link rel="stylesheet" href="github-pandoc.css" />
 </head>
 <body>
-<h1 id="note-synapse-user-manual">Note Synapse User Manual</h1>
-<h2 id="table-of-contents">Table of Contents</h2>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#note-synapse-documentation"
+id="toc-note-synapse-documentation">Note Synapse Documentation</a>
+<ul>
+<li><a href="#editor-writing" id="toc-editor-writing">✍️ Editor &amp;
+Writing</a></li>
+<li><a href="#organization" id="toc-organization">🗂
+Organization</a></li>
+<li><a href="#ai-thinking" id="toc-ai-thinking">🧠 AI &amp;
+Thinking</a></li>
+<li><a href="#productivity" id="toc-productivity">⚡
+Productivity</a></li>
+<li><a href="#developer" id="toc-developer">👩‍💻 Developer</a></li>
+<li><a href="#examples" id="toc-examples">🧪 Examples</a></li>
+</ul></li>
+<li><a href="#hands-on-tag-algebra-virtual-folders"
+id="toc-hands-on-tag-algebra-virtual-folders">Hands-On: Tag Algebra
+(Virtual Folders)</a>
+<ul>
+<li><a href="#the-concept-filters-create-hierarchy"
+id="toc-the-concept-filters-create-hierarchy">The Concept: Filters
+Create Hierarchy</a>
+<ul>
+<li><a href="#problem" id="toc-problem">Problem</a></li>
+<li><a href="#walkthrough-creating-a-virtual-hierarchy"
+id="toc-walkthrough-creating-a-virtual-hierarchy">Walkthrough: Creating
+a “Virtual” Hierarchy</a></li>
+</ul></li>
+<li><a href="#tag-filters-your-saved-views"
+id="toc-tag-filters-your-saved-views">Tag Filters: Your Saved Views</a>
+<ul>
+<li><a href="#the-filter-strip" id="toc-the-filter-strip">1. The Filter
+Strip</a></li>
+<li><a href="#hierarchy-mode-auto-organization"
+id="toc-hierarchy-mode-auto-organization">2. Hierarchy Mode
+(Auto-Organization)</a></li>
+<li><a href="#pinning-for-speed" id="toc-pinning-for-speed">3. Pinning
+for Speed</a></li>
+</ul></li>
+<li><a href="#automation-associated-tag-prompts"
+id="toc-automation-associated-tag-prompts">Automation: Associated Tag
+Prompts</a>
+<ul>
+<li><a href="#use-case-research-papers"
+id="toc-use-case-research-papers">Use Case: Research Papers</a></li>
+</ul></li>
+</ul></li>
+<li><a href="#hands-on-web-clipper-api-vibe-coding"
+id="toc-hands-on-web-clipper-api-vibe-coding">Hands-On: Web Clipper
+&amp; API Vibe Coding</a>
+<ul>
+<li><a href="#the-readability-toggle"
+id="toc-the-readability-toggle">The “Readability” Toggle</a>
+<ul>
+<li><a href="#problem-1" id="toc-problem-1">Problem</a></li>
+<li><a href="#walkthrough" id="toc-walkthrough">Walkthrough</a></li>
+</ul></li>
+<li><a href="#dealing-with-images" id="toc-dealing-with-images">Dealing
+with Images</a>
+<ul>
+<li><a href="#method-1-the-rich-clip"
+id="toc-method-1-the-rich-clip">Method 1: The “Rich” Clip</a></li>
+<li><a href="#method-2-fetching-later"
+id="toc-method-2-fetching-later">Method 2: Fetching Later</a></li>
+</ul></li>
+<li><a href="#hands-on-clipping-api-docs-for-vibe-coding"
+id="toc-hands-on-clipping-api-docs-for-vibe-coding">Hands-On: Clipping
+API Docs for Vibe Coding</a>
+<ul>
+<li><a href="#usage" id="toc-usage">Usage</a></li>
+</ul></li>
+</ul></li>
+<li><a href="#hands-on-calendar-time-blocking"
+id="toc-hands-on-calendar-time-blocking">Hands-On: Calendar &amp; Time
+Blocking</a>
+<ul>
+<li><a href="#drag-drop-rescheduling"
+id="toc-drag-drop-rescheduling">Drag &amp; Drop Rescheduling</a>
+<ul>
+<li><a href="#problem-2" id="toc-problem-2">Problem</a></li>
+<li><a href="#walkthrough-1" id="toc-walkthrough-1">Walkthrough</a></li>
+</ul></li>
+<li><a href="#the-timeline-view-gtd" id="toc-the-timeline-view-gtd">The
+Timeline View (GTD)</a></li>
+</ul></li>
+<li><a href="#tree-conversations-git-for-thoughts"
+id="toc-tree-conversations-git-for-thoughts">Tree Conversations: Git for
+Thoughts</a>
+<ul>
+<li><a href="#the-forking-workflow" id="toc-the-forking-workflow">The
+“Forking” Workflow</a>
+<ul>
+<li><a href="#problem-3" id="toc-problem-3">Problem</a></li>
+<li><a href="#solution-fork-it" id="toc-solution-fork-it">Solution: Fork
+It</a></li>
+</ul></li>
+<li><a href="#navigating-the-tree"
+id="toc-navigating-the-tree">Navigating the Tree</a>
+<ul>
+<li><a href="#the-graph-view" id="toc-the-graph-view">The Graph
+View</a></li>
+<li><a href="#multi-select-actions"
+id="toc-multi-select-actions">Multi-Select Actions</a></li>
+<li><a href="#use-case-text-adventure-game"
+id="toc-use-case-text-adventure-game">Use Case: Text Adventure
+Game</a></li>
+</ul></li>
+<li><a href="#context-pruning" id="toc-context-pruning">Context
+Pruning</a></li>
+</ul></li>
+<li><a href="#hands-on-immersive-reading-pdfs"
+id="toc-hands-on-immersive-reading-pdfs">Hands-On: Immersive Reading
+(PDFs)</a>
+<ul>
+<li><a href="#the-circle-to-ask-gesture"
+id="toc-the-circle-to-ask-gesture">The “Circle to Ask” Gesture</a>
+<ul>
+<li><a href="#problem-4" id="toc-problem-4">Problem</a></li>
+</ul></li>
+<li><a href="#entering-immersive-mode"
+id="toc-entering-immersive-mode">Entering Immersive Mode</a></li>
+<li><a href="#working-with-pdfs" id="toc-working-with-pdfs">Working with
+PDFs</a>
+<ul>
+<li><a href="#opening-a-pdf" id="toc-opening-a-pdf">1. Opening a
+PDF</a></li>
+<li><a href="#the-side-handle-ai-panel"
+id="toc-the-side-handle-ai-panel">2. The Side Handle (AI Panel)</a></li>
+</ul></li>
+<li><a href="#the-circle-to-ask-gesture-1"
+id="toc-the-circle-to-ask-gesture-1">The “Circle to Ask” Gesture</a>
+<ul>
+<li><a href="#problem-5" id="toc-problem-5">Problem</a></li>
+<li><a href="#walkthrough-2" id="toc-walkthrough-2">Walkthrough</a></li>
+</ul></li>
+<li><a href="#the-scratchpad" id="toc-the-scratchpad">The Scratchpad</a>
+<ul>
+<li><a href="#problem-6" id="toc-problem-6">Problem</a></li>
+<li><a href="#solution" id="toc-solution">Solution</a></li>
+</ul></li>
+<li><a href="#hands-on-limiting-context-scope"
+id="toc-hands-on-limiting-context-scope">Hands-On: Limiting Context
+Scope</a>
+<ul>
+<li><a href="#problem-7" id="toc-problem-7">Problem</a></li>
+<li><a href="#walkthrough-3" id="toc-walkthrough-3">Walkthrough</a></li>
+</ul></li>
+</ul></li>
+<li><a href="#connecting-to-external-tools-mcp"
+id="toc-connecting-to-external-tools-mcp">Connecting to External Tools
+(MCP)</a>
+<ul>
+<li><a href="#what-is-mcp" id="toc-what-is-mcp">What is MCP?</a></li>
+<li><a href="#supported-transports"
+id="toc-supported-transports">Supported Transports</a></li>
+<li><a href="#how-to-connect-the-definitive-guide"
+id="toc-how-to-connect-the-definitive-guide">How to Connect: The
+Definitive Guide</a>
+<ul>
+<li><a href="#the-magic-way-auto-discovery"
+id="toc-the-magic-way-auto-discovery">1. The “Magic” Way
+(Auto-Discovery)</a></li>
+<li><a href="#the-simple-way-token-auth"
+id="toc-the-simple-way-token-auth">2. The “Simple” Way (Token
+Auth)</a></li>
+<li><a href="#the-manual-way-advanced-oauth"
+id="toc-the-manual-way-advanced-oauth">3. The “Manual” Way (Advanced
+OAuth)</a></li>
+</ul></li>
+<li><a href="#debugging-tools-ai-introspection"
+id="toc-debugging-tools-ai-introspection">Debugging Tools (AI
+Introspection)</a></li>
+</ul></li>
+<li><a href="#smart-model-matching-multi-capability-selection"
+id="toc-smart-model-matching-multi-capability-selection">Smart Model
+Matching (Multi-Capability Selection)</a>
+<ul>
+<li><a href="#problem-8" id="toc-problem-8">Problem</a></li>
+<li><a href="#solution-capability-based-priority"
+id="toc-solution-capability-based-priority">Solution: Capability-Based
+Priority</a></li>
+<li><a href="#how-to-configure" id="toc-how-to-configure">How to
+Configure</a></li>
+<li><a href="#matching-logic" id="toc-matching-logic">Matching
+Logic</a></li>
+<li><a href="#supported-capabilities"
+id="toc-supported-capabilities">Supported Capabilities</a></li>
+</ul></li>
+<li><a href="#hands-on-agentic-research"
+id="toc-hands-on-agentic-research">Hands-On: Agentic Research</a>
+<ul>
+<li><a href="#the-research-agent-workflow"
+id="toc-the-research-agent-workflow">The “Research Agent” Workflow</a>
+<ul>
+<li><a href="#problem-9" id="toc-problem-9">Problem</a></li>
+<li><a href="#walkthrough-4" id="toc-walkthrough-4">Walkthrough</a></li>
+</ul></li>
+<li><a href="#reviewing-the-plan" id="toc-reviewing-the-plan">Reviewing
+the Plan</a></li>
+</ul></li>
+<li><a href="#hands-on-block-based-editing"
+id="toc-hands-on-block-based-editing">Hands-On: Block-Based Editing</a>
+<ul>
+<li><a href="#the-hidden-drag-gesture"
+id="toc-the-hidden-drag-gesture">The “Hidden” Drag Gesture</a>
+<ul>
+<li><a href="#problem-10" id="toc-problem-10">Problem</a></li>
+<li><a href="#solution-1" id="toc-solution-1">Solution</a></li>
+<li><a href="#walkthrough-5" id="toc-walkthrough-5">Walkthrough</a></li>
+</ul></li>
+<li><a href="#reordering-blocks" id="toc-reordering-blocks">Reordering
+Blocks</a></li>
+</ul></li>
+<li><a href="#architecture" id="toc-architecture">Architecture</a>
+<ul>
+<li><a href="#technical-stack" id="toc-technical-stack">Technical
+Stack</a></li>
+<li><a href="#network-resilience-http3"
+id="toc-network-resilience-http3">Network Resilience (HTTP/3)</a></li>
+<li><a href="#agent-architecture" id="toc-agent-architecture">Agent
+Architecture</a></li>
+<li><a href="#local-first-data-model"
+id="toc-local-first-data-model">Local-First Data Model</a></li>
+</ul></li>
+<li><a href="#user-apps-vibe-coding" id="toc-user-apps-vibe-coding">User
+Apps &amp; “Vibe Coding”</a>
+<ul>
+<li><a href="#the-vibe-coding-workflow"
+id="toc-the-vibe-coding-workflow">The “Vibe Coding” Workflow</a>
+<ul>
+<li><a href="#tutorial-build-a-weather-dashboard"
+id="toc-tutorial-build-a-weather-dashboard">Tutorial: “Build a Weather
+Dashboard”</a></li>
+</ul></li>
+<li><a href="#window.synapse-api-reference"
+id="toc-window.synapse-api-reference"><code>window.Synapse</code> API
+Reference</a>
+<ul>
+<li><a href="#database-access-sql" id="toc-database-access-sql">1.
+Database Access (SQL)</a></li>
+<li><a href="#state-management" id="toc-state-management">2. State
+Management</a></li>
+<li><a href="#ai-integration-multi-part"
+id="toc-ai-integration-multi-part">3. AI Integration
+(Multi-Part)</a></li>
+<li><a href="#network-proxy" id="toc-network-proxy">3. Network
+Proxy</a></li>
+<li><a href="#note-manipulation" id="toc-note-manipulation">4. Note
+Manipulation</a></li>
+</ul></li>
+<li><a href="#security-model" id="toc-security-model">Security
+Model</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="note-synapse-documentation">Note Synapse Documentation</h1>
+<p>The <strong>Hands-On</strong> Manual for Power Users.</p>
+<h2 id="editor-writing">✍️ Editor &amp; Writing</h2>
+<ul>
+<li><strong><a href="guides/editor/block_editing.md">Block-Based
+Editing</a></strong>: The “hidden” drag gesture, reordering, and block
+types.</li>
+</ul>
+<h2 id="organization">🗂 Organization</h2>
+<ul>
+<li><strong><a href="guides/organize/tag_algebra.md">Tag
+Algebra</a></strong>: Creating virtual folder hierarchies
+(<code>Tag A</code> + <code>Tag B</code>).</li>
+</ul>
+<h2 id="ai-thinking">🧠 AI &amp; Thinking</h2>
+<ul>
+<li><strong><a href="guides/ai/tree_conversations.md">Tree
+Conversations</a></strong>: “Git for Chat”, forking timelines, and
+pruning context.</li>
+<li><strong><a href="guides/ai/agents.md">Agentic Research</a></strong>:
+Background research tasks and dependency graphs.</li>
+<li><strong><a href="guides/ai/immersive_reading.md">Immersive
+Reading</a></strong>: Circle-to-ask on PDFs and precision context
+scope.</li>
+<li><strong><a href="guides/ai/smart_model_matching.md">Smart Model
+Matching</a></strong>: Automatically switch models based on capabilities
+(Images, Logic).</li>
+<li><strong><a href="guides/ai/mcp.md">MCP Tools</a></strong>: Connect
+Note Synapse to external tools (Google Drive, Slack, etc).</li>
+</ul>
+<h2 id="productivity">⚡ Productivity</h2>
+<ul>
+<li><strong><a href="guides/productivity/web_clipper.md">Web
+Clipper</a></strong>: Readability vs Raw HTML (for Vibe Coding).</li>
+<li><strong><a href="guides/productivity/calendar.md">Calendar &amp;
+Tasks</a></strong>: Drag-and-drop scheduling.</li>
+</ul>
+<h2 id="developer">👩‍💻 Developer</h2>
+<ul>
+<li><strong><a href="developer/user_apps.md">User Apps &amp; Vibe
+Coding</a></strong>: Build tools using <code>window.Synapse</code>.</li>
+<li><strong><a
+href="developer/architecture.md">Architecture</a></strong>: Local-first
+design and HTTP/3.</li>
+</ul>
+<h2 id="examples">🧪 Examples</h2>
+<ul>
+<li><strong><a href="examples/weather_dashboard.html">Weather
+Dashboard</a></strong></li>
+<li><strong><a href="examples/sql_dashboard.html">SQL
+Stats</a></strong></li>
+</ul>
+<h1 id="hands-on-tag-algebra-virtual-folders">Hands-On: Tag Algebra
+(Virtual Folders)</h1>
+<p>Organize your notes without ever moving a file.</p>
+<h2 id="the-concept-filters-create-hierarchy">The Concept: Filters
+Create Hierarchy</h2>
+<p>Tags in Synapse are <strong>flat</strong>. <code>#project</code> and
+<code>#marketing</code> are just separate labels. They do
+<strong>not</strong> use file paths like
+<code>#project/marketing</code>.</p>
+<p>Instead, <strong>Hierarchy is defined by Filter Algebra</strong>: *
+<strong>Filter A</strong>: Notes with <code>#project</code>. *
+<strong>Filter B</strong>: Notes with <code>#project</code> AND
+<code>#marketing</code>. * <strong>Result</strong>: Synapse sees that
+Filter B is a <em>subset</em> of Filter A, so it automatically nests B
+under A in the visual tree.</p>
+<h3 id="problem">Problem</h3>
+<p>You want to organize 50 notes about “AI Learning” into sub-topics
+like “LLMs” and “Vision”, but you don’t want to manage complex folder
+structures.</p>
+<h3 id="walkthrough-creating-a-virtual-hierarchy">Walkthrough: Creating
+a “Virtual” Hierarchy</h3>
 <ol type="1">
-<li><a href="#setup">Setup</a></li>
-<li><a href="#notes">Notes</a></li>
-<li><a href="#chat">Chat</a></li>
-<li><a href="#user-app">User App</a></li>
-<li><a href="#settings">Settings</a></li>
-</ol>
-<hr />
-<h2 id="setup">Setup</h2>
-<h3 id="how-to-set-up-api-key">How to Set Up API Key</h3>
-<ol type="1">
-<li>When you first launch the app, you’ll be prompted to enter an API
-key.</li>
-<li>Alternatively, navigate to <strong>Settings</strong> → <strong>AI
-API</strong> → <strong>API Key</strong>.</li>
-<li>Enter your API key in the provided field.</li>
-<li>Click the key icon or “Get API Key” button to open the API key
-provider’s website in your browser.</li>
-<li>The API key is securely stored and will be used for all AI
-operations.</li>
+<li><strong>Tag Freely</strong>:
+<ul>
+<li>Tag general notes with <code>#AI</code>.</li>
+<li>Tag specific notes with <code>#AI</code> <em>and</em>
+<code>#LLM</code>.</li>
+<li>Note: You do NOT need to name the tag <code>AI/LLM</code>. Just use
+two separate tags.</li>
+</ul></li>
+<li><strong>Create Parent Filter</strong>:
+<ul>
+<li>Create a filter named “AI” that includes tag <code>#AI</code>.</li>
+</ul></li>
+<li><strong>Create Child Filter</strong>:
+<ul>
+<li>Create a filter named “LLMs” that includes tags <code>#AI</code>
+<em>and</em> <code>#LLM</code>.</li>
+</ul></li>
+<li><strong>Result</strong>: In the Filter Strip, “LLMs” automatically
+tucks inside “AI” because it is a more specific subset.</li>
 </ol>
 <blockquote>
-<p><strong>Note:</strong> You can configure multiple AI models with
-different API keys. Go to <strong>Settings</strong> → <strong>AI
-API</strong> → <strong>Model Configuration</strong> to add or change
-models.</p>
+<p><strong>Screenshot Placeholder:</strong> [Image of Filter Strip
+showing ‘LLMs’ nested under ‘AI’ because of tag containment.]</p>
+</blockquote>
+<h2 id="tag-filters-your-saved-views">Tag Filters: Your Saved Views</h2>
+<p>While you can manually select tags, <strong>Filters</strong> let you
+save complex combinations (Algebra) for one-tap access.</p>
+<h3 id="the-filter-strip">1. The Filter Strip</h3>
+<p>Located at the top of your note list, the <strong>Filter
+Strip</strong> holds all your saved views. - <strong>Add (+)</strong>:
+Tap the plus icon to create a new filter. You can define it by: -
+<strong>Tags</strong>: Include or exclude specific tags. -
+<strong>Text</strong>: Must contain specific keywords.</p>
+<h3 id="hierarchy-mode-auto-organization">2. Hierarchy Mode
+(Auto-Organization)</h3>
+<p>If you have many filters, the strip can get cluttered. Use
+<strong>Hierarchy Mode</strong> to organize them automatically. -
+<strong>Toggle</strong>: Tap the <strong>Tree Icon</strong>
+(<code>account_tree</code>) on the far left of the strip. - <strong>Full
+Tree View</strong>: <strong>Long Press</strong> the Tree Icon to open a
+popup dialog showing your entire filter hierarchy as a classic
+file-system tree. - <strong>Logic</strong>: Synapse detects “Algebraic
+Parents”. - If Filter A uses <code>#project</code>… - And Filter B uses
+<code>#project</code> AND <code>#dev</code>… - Then <strong>Filter B
+becomes a child of Filter A</strong>. - <strong>Navigation</strong>:
+Child filters are hidden to save space. Tap the <strong>dropdown
+arrow</strong> on the parent filter to reveal them.</p>
+<h3 id="pinning-for-speed">3. Pinning for Speed</h3>
+<p>Keep your most-used filters accessible, even if they are deep in the
+hierarchy or hierarchy mode is active. 1. <strong>Select</strong>: Tap a
+filter to activate it. 2. <strong>Pin</strong>: Tap the <strong>Pin
+Icon</strong> (<code>push_pin</code>) inside the active filter chip. 3.
+<strong>Result</strong>: The filter moves to the <strong>far
+left</strong> of the strip and stays visible at all times, bypassing the
+hierarchy collapse.</p>
+<blockquote>
+<p><strong>Screenshot Placeholder:</strong> [Image of the Filter Strip
+showing a Pinned filter on the left, and a Parent filter with a dropdown
+arrow for hierarchy.]</p>
+</blockquote>
+<h2 id="automation-associated-tag-prompts">Automation: Associated Tag
+Prompts</h2>
+<p>Tags can trigger AI work for you. You can associate a specific
+<strong>Prompt</strong> with a tag, so that when you apply it, Synapse
+automatically transforms the note.</p>
+<h3 id="use-case-research-papers">Use Case: Research Papers</h3>
+<p>Imagine you save PDFs of research papers. You want to extract the
+same key info from every paper. 1. <strong>Configure</strong>: - Go to
+<strong>Tag Management</strong> (or long-press a tag in the filter
+list). - Tap the <strong>Brain Icon</strong> (<code>psychology</code>)
+next to the <code>#paper</code> tag. - Enter a Prompt: <em>“Summarize
+the key contributions, limitations, and related work of this
+paper.”</em> 2. <strong>Apply</strong>: - Open a new note containing a
+paper. - Add the tag <code>#paper</code>. 3. <strong>Result</strong>:
+Synapse detects the associated prompt and automatically runs it against
+the note content, appending the AI-generated summary to your note.</p>
+<h1 id="hands-on-web-clipper-api-vibe-coding">Hands-On: Web Clipper
+&amp; API Vibe Coding</h1>
+<p>Stop copy-pasting. Start clipping.</p>
+<h2 id="the-readability-toggle">The “Readability” Toggle</h2>
+<h3 id="problem-1">Problem</h3>
+<p>You want to read a long article in Note Synapse, but the “Raw” view
+is full of ads, popups, and broken layout scripts.</p>
+<h3 id="walkthrough">Walkthrough</h3>
+<ol type="1">
+<li><strong>Open Browser</strong>: Go to any article (e.g., a Hacker
+News link).</li>
+<li><strong>Share</strong>: Tap the system <strong>Share</strong> button
+-&gt; <strong>Note Synapse</strong>.</li>
+<li><strong>The Switch</strong>:
+<ul>
+<li><strong>ON</strong>: Synapse strips all junk. <em>Why?</em> Better
+for reading and standardizing the text for the AI.</li>
+<li><strong>OFF</strong>: Synapse keeps the raw HTML. <em>Why?</em>
+Better for “Vibe Coding” where you need the exact table structure or API
+code blocks.</li>
+</ul></li>
+<li><strong>Save</strong>.</li>
+</ol>
+<h2 id="dealing-with-images">Dealing with Images</h2>
+<p>Images are tricky. Here are the two ways Note Synapse handles
+them.</p>
+<h3 id="method-1-the-rich-clip">Method 1: The “Rich” Clip</h3>
+<p>If you use the Web Clipper with <strong>Readability ON</strong>,
+Synapse tries to download the main article images as
+<strong>Attachments</strong>. - They appear at the bottom of the note. -
+They act as local files (great for offline).</p>
+<h3 id="method-2-fetching-later">Method 2: Fetching Later</h3>
+<p>Sometimes the clipper misses images, or you clipped in “Raw” mode
+(where images are just URL links). 1. Open the Note. 2. Tap the
+<strong>Examples/Menu</strong> (<code>more_vert</code>) icon. 3. Select
+<strong>“Fetch Remote Images”</strong>. 4. <strong>Result</strong>: The
+app scans the note for <code>![](http://...)</code> links, downloads
+them, and converts them to local attachments
+<code>![](file://...)</code>.</p>
+<h2 id="hands-on-clipping-api-docs-for-vibe-coding">Hands-On: Clipping
+API Docs for Vibe Coding</h2>
+<h3 id="usage">Usage</h3>
+<p>You want to build an app that uses the <strong>Stripe API</strong>,
+but the AI doesn’t know the latest endpoints.</p>
+<ol type="1">
+<li>Navigate to the Stripe API reference for “Create Charge”.</li>
+<li><strong>Share</strong> to Note Synapse.</li>
+<li><strong>Turn Readability OFF</strong>.
+<ul>
+<li><em>Why?</em> You want the raw table structures and code blocks so
+the AI can understand the exact JSON schema.</li>
+</ul></li>
+<li><strong>Use it</strong>: Now use this note as context to say “Write
+me a Stripe dashboard”.</li>
+</ol>
+<h1 id="hands-on-calendar-time-blocking">Hands-On: Calendar &amp; Time
+Blocking</h1>
+<p>Stop managing tasks in a list. Manage them in <em>time</em>.</p>
+<h2 id="drag-drop-rescheduling">Drag &amp; Drop Rescheduling</h2>
+<h3 id="problem-2">Problem</h3>
+<p>You have 5 tasks due today and you know you can’t do them all.
+Changing the due date on each one via a dropdown menu is slow.</p>
+<h3 id="walkthrough-1">Walkthrough</h3>
+<ol type="1">
+<li>Open the <strong>Calendar View</strong> (Calendar icon).</li>
+<li>You will see your tasks as blocks on the timeline.</li>
+<li><strong>Long Press</strong> on a task block.</li>
+<li><strong>Drag</strong> it to tomorrow, or next week.</li>
+<li><strong>Drop</strong>. The due date is instantly updated.</li>
+</ol>
+<blockquote>
+<p><strong>Screenshot Placeholder:</strong> [Image of the Calendar view,
+showing a task being dragged from ‘Today’ to ‘Tomorrow’.]</p>
+</blockquote>
+<h2 id="the-timeline-view-gtd">The Timeline View (GTD)</h2>
+<ol type="1">
+<li>Switch to <strong>Timeline View</strong> (List icon).</li>
+<li>This shows a linear stream of <em>all</em> tasks across <em>all</em>
+notes.</li>
+<li><strong>Filter</strong>: Tap the Funnel icon to show only “High
+Priority” tasks.</li>
+<li><strong>Check off</strong>: Tap the circle to complete. It updates
+the original note instantly.</li>
+</ol>
+<h1 id="tree-conversations-git-for-thoughts">Tree Conversations: Git for
+Thoughts</h1>
+<p>Don’t let a bad turn ruin a good conversation. Note Synapse treats
+every conversation as a <strong>Tree</strong>, allowing you to explore
+multiple possibilities without losing your place.</p>
+<h2 id="the-forking-workflow">The “Forking” Workflow</h2>
+<h3 id="problem-3">Problem</h3>
+<p>You are debating architecture with the AI. It made a great point 5
+messages ago, but then went down a rabbit hole about database drivers.
+You want to go back to that great point and explore a different
+direction.</p>
+<h3 id="solution-fork-it">Solution: Fork It</h3>
+<ol type="1">
+<li>Scroll back to the <strong>Message</strong> where the AI made the
+good point (or where you want to change your reply).</li>
+<li>Tap the <strong>Fork Icon</strong> (<code>call_split</code>) on the
+message bubble.</li>
+<li><strong>Result</strong>: A new “Branch” is created.
+<ul>
+<li>The old conversation is safe.</li>
+<li>You are now in a fresh timeline starting from that exact
+moment.</li>
+<li>The current thread is automatically highlighted in the Tree
+View.</li>
+</ul></li>
+</ol>
+<blockquote>
+<p><strong>Screenshot Placeholder:</strong> [Image of a chat message
+bubble with the Fork icon highlighted.]</p>
 </blockquote>
 <hr />
-<h2 id="notes">Notes</h2>
-<h3 id="how-to-create-a-note">How to Create a Note</h3>
-<h4 id="manually-from-text-image-attachment">Manually from Text, Image,
-Attachment</h4>
+<h2 id="navigating-the-tree">Navigating the Tree</h2>
+<p>Tap the <strong>Tree Icon</strong> (<code>account_tree</code>) in the
+top-right of the chat screen to see the bigger picture.</p>
+<h3 id="the-graph-view">The Graph View</h3>
+<ul>
+<li><strong>Green Node</strong>: Your current location.</li>
+<li><strong>Blue Nodes</strong>: Other branches.</li>
+<li><strong>Edges</strong>: Show the history flow.</li>
+<li><strong>Tap</strong> any node to jump instantly to that version of
+reality.</li>
+</ul>
+<h3 id="multi-select-actions">Multi-Select Actions</h3>
+<p>You can manage multiple branches at once: 1. <strong>Long
+Press</strong> a node to enter selection mode. 2. Tap other nodes to add
+them to your selection. 3. Use the top-right menu for actions: *
+<strong>Create Note</strong> (<code>note_add</code>): Compile the
+selected conversation parts into a single permanent note. This is
+perfect for saving the “good parts” of a brainstorming session. *
+<strong>New Conversation</strong> (<code>add</code>): Start a brand new
+conversation using the selected nodes as context. You can even use an
+<strong>AI Transformation</strong> to summarize them first (e.g.,
+“Summarize these 3 branches into a requirements doc”).</p>
+<h3 id="use-case-text-adventure-game">Use Case: Text Adventure Game</h3>
+<p>Imagine playing an RPG with the AI. 1. <strong>Choice A</strong>: You
+attack the dragon. -&gt; <em>You die.</em> 2. <strong>Rewind</strong>:
+Go back to the message before the choice. 3. <strong>Fork</strong>:
+Choose “Choice B: Negotiate”. -&gt; <em>You succeed.</em> 4.
+<strong>Tree View</strong>: You can now see both timelines side-by-side
+and effectively “save scum” your way to victory.</p>
+<hr />
+<h2 id="context-pruning">Context Pruning</h2>
+<p>Sometimes the AI generates massive output (e.g., a 500-line log
+analysis tool output) that clogs up your context window and wastes
+tokens.</p>
 <ol type="1">
-<li>From the main screen, tap the <strong>+</strong> (plus) button or
-the “Create Note” button.</li>
-<li><strong>For text notes:</strong>
+<li>Tap the <strong>Tool Icon</strong> (<code>build</code>) on the
+message with the large output.</li>
+<li>Select <strong>“Strip Tool Output”</strong> (or “Exclude
+Message”).</li>
+<li><strong>Result</strong>: The message remains in the visual history,
+but its heavy content is removed from the AI’s “memory” for future
+turns. This keeps your conversation fast and focused.</li>
+</ol>
+<h1 id="hands-on-immersive-reading-pdfs">Hands-On: Immersive Reading
+(PDFs)</h1>
+<p>Study complex papers without leaving your flow.</p>
+<h2 id="the-circle-to-ask-gesture">The “Circle to Ask” Gesture</h2>
+<h3 id="problem-4">Problem</h3>
+<p>You are reading a PDF about Quantum Mechanics. You see a formula
+<code>H(t) |ψ(t)&gt;</code>. You have no idea what <code>H(t)</code>
+specificially means in <em>this</em> context.</p>
+<h2 id="entering-immersive-mode">Entering Immersive Mode</h2>
+<ol type="1">
+<li><strong>Open any Note</strong>.</li>
+<li>Tap the <strong>Book Icon</strong> (<code>chrome_reader_mode</code>)
+in the top toolbar.</li>
+<li><strong>Result</strong>: You enter a unified viewing experience
+where the distractions of the editor are removed.</li>
+</ol>
+<h2 id="working-with-pdfs">Working with PDFs</h2>
+<p>Immersive Mode is designed for deep reading of attached PDFs.</p>
+<h3 id="opening-a-pdf">1. Opening a PDF</h3>
+<p><em>This is the tricky part.</em> By default, Immersive Mode shows
+the note text. 1. Tap the <strong>Outline Icon</strong>
+(<code>format_list_bulleted</code>) in the top-right. 2. You will see a
+list of sections. 3. <strong>Select the PDF</strong>: If your note has a
+PDF attachment, it appears here. Tap it to switch the view to the
+PDF.</p>
+<h3 id="the-side-handle-ai-panel">2. The Side Handle (AI Panel)</h3>
+<p>You will see a small “Handle” floating on the side or bottom of the
+screen. - <strong>Tap</strong> to expand the AI Chat panel. -
+<strong>Drag</strong> to resize the panel (give yourself more reading
+space vs. chat space). - <strong>Context</strong>: The AI in this panel
+automatically sees what you are reading.</p>
+<h2 id="the-circle-to-ask-gesture-1">The “Circle to Ask” Gesture</h2>
+<h3 id="problem-5">Problem</h3>
+<p>You are reading a critical formula <code>H(t) |ψ(t)&gt;</code> and
+need an explanation.</p>
+<h3 id="walkthrough-2">Walkthrough</h3>
+<ol type="1">
+<li>In Immersive Mode (with PDF open), select the <strong>Pen
+Tool</strong> (or just use your Apple Pencil).</li>
+<li><strong>Draw a Red Circle</strong> around the formula.</li>
+<li>Write in the prompt: “Explain this parameter”.</li>
+<li><strong>Result</strong>: The AI analyzes the <em>pixels</em> inside
+your circle to understand symbols that normal text extraction
+misses.</li>
+</ol>
+<h2 id="the-scratchpad">The Scratchpad</h2>
+<h3 id="problem-6">Problem</h3>
+<p>You are reading and have a flash of insight, or need to jot down key
+terms, but you don’t want to leave the reading view or start a full chat
+session.</p>
+<h3 id="solution">Solution</h3>
+<p>The Scratchpad is a temporary buffer that sits “between” your reading
+and your permanent note.</p>
+<ol type="1">
+<li><strong>Toggle</strong>: Tap the <strong>Note Icon</strong> inside
+the AI Panel (near the input bar) to switch from “Chat Mode” to
+“Scratchpad Mode”.
 <ul>
-<li>Enter a title and content in the note editor.</li>
-<li>Tap <strong>Save</strong> to create the note.</li>
+<li><em>Indicator</em>: The input bar hint changes to “Send to
+scratchpad”.</li>
 </ul></li>
-<li><strong>For image notes:</strong>
+<li><strong>Capture</strong>: Type notes, copy-paste snippets from the
+PDF, or even scribble with the pen.</li>
+<li><strong>Use It</strong>:
 <ul>
-<li>Tap the image icon in the toolbar.</li>
-<li>Choose <strong>Take Photo</strong> or <strong>Pick from
-Gallery</strong>.</li>
-<li>The image will be attached to a new note automatically.</li>
-</ul></li>
-<li><strong>For file attachments:</strong>
-<ul>
-<li>Tap the attachment icon in the toolbar.</li>
-<li>Select a file from your device.</li>
-<li>The file will be attached to a new note automatically.</li>
+<li><strong>Context for AI</strong>: Check the box <strong>“Include
+scratchpad in chat context”</strong>. Now, when you switch back to Chat,
+the AI knows everything you just jotted down.</li>
+<li><strong>Save to Note</strong>: Tap <strong>“Add to Note”</strong> to
+append your scratchpad items permanently to the underlying note.</li>
 </ul></li>
 </ol>
 <blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of main screen with
-create note button]</p>
+<p><strong>Screenshot Placeholder:</strong> [Image of the AI Panel in
+‘Scratchpad Mode’, showing a list of bullet points and the ‘Include in
+Chat’ checkbox.]</p>
 </blockquote>
-<h4 id="clipboard-share">Clipboard, Share</h4>
+<h2 id="hands-on-limiting-context-scope">Hands-On: Limiting Context
+Scope</h2>
+<h3 id="problem-7">Problem</h3>
+<p>You are asking the AI to summarize Chapter 5, but it keeps
+hallucinating facts from Chapter 1.</p>
+<h3 id="walkthrough-3">Walkthrough</h3>
 <ol type="1">
-<li><strong>From clipboard:</strong>
-<ul>
-<li>Copy text or an image to your clipboard.</li>
-<li>Open Note Synapse and use the share extension or paste option.</li>
-</ul></li>
-<li><strong>From share menu:</strong>
-<ul>
-<li>In any app, tap the <strong>Share</strong> button.</li>
-<li>Select <strong>Note Synapse</strong> from the share menu.</li>
-<li>The shared content will open in the Share Screen.</li>
-</ul></li>
+<li>In the Immersive Chat, tap the <strong>Context Settings</strong>
+icon (Gear/Page symbol).</li>
+<li><strong>Scope</strong>: Switch from “Whole Document” to
+<strong>“Current Chapter”</strong>.</li>
+<li><strong>Range</strong>: Set the page slider to <strong>“+/- 0
+pages”</strong>.</li>
+<li><strong>Result</strong>: The AI is now blind to everything except
+exactly what you are looking at. Hallucinations drop to near zero.</li>
 </ol>
-<h5 id="web-extraction">Web Extraction</h5>
-<p>When sharing a URL:</p>
+<h1 id="connecting-to-external-tools-mcp">Connecting to External Tools
+(MCP)</h1>
+<p>Note Synapse uses the <strong>Model Context Protocol (MCP)</strong>
+to talk to the outside world.</p>
+<h2 id="what-is-mcp">What is MCP?</h2>
+<p>MCP (Model Context Protocol) is an open standard that allows AI
+assistants to connect to external data and tools.</p>
+<h2 id="supported-transports">Supported Transports</h2>
 <ol type="1">
-<li>The Share Screen will detect the URL automatically.</li>
-<li>Tap <strong>Extract Web Content</strong> to open the web extraction
-dialog.</li>
-<li>A WebView will load the page.</li>
-<li>Use the extraction controls to:
+<li><strong>SSE (Server-Sent Events)</strong>: Best for remote
+servers.</li>
+<li><strong>StreamHTTP</strong>: Note Synapse supports MCP over
+HTTPStreaming</li>
+</ol>
+<h2 id="how-to-connect-the-definitive-guide">How to Connect: The
+Definitive Guide</h2>
+<h3 id="the-magic-way-auto-discovery">1. The “Magic” Way
+(Auto-Discovery)</h3>
+<p>If your MCP server supports OpenID Connect (OIDC) discovery, Note
+Synapse can configure itself.</p>
+<ol type="1">
+<li><strong>Add Endpoint</strong>: Settings -&gt; MCP -&gt; Add
+(+).</li>
+<li><strong>Transport</strong>: Select <code>SSE</code> (or HTTP).</li>
+<li><strong>Auth (OAuth Tab)</strong>:
 <ul>
-<li>Extract the main article content</li>
-<li>Select specific images to download</li>
-<li>Save the page as a note with extracted content</li>
+<li>Click the <strong>Magic Wand Icon</strong>
+(<code>auto_fix_high</code>).</li>
+<li>Enter the base URL of your server (e.g.,
+<code>https://my-mcp-server.com</code>).</li>
+<li>Tap <strong>Discover</strong>.</li>
 </ul></li>
-<li>Review the extracted content, edit the title and tags if
-needed.</li>
-<li>Tap <strong>Create Note</strong> or <strong>Append to Note</strong>
-to save.</li>
+<li><strong>Result</strong>: Synapse fetches the meta-data and
+auto-fills <code>Authorization URL</code>, <code>Token URL</code>, and
+<code>Scopes</code>.</li>
+<li><strong>Login</strong>: Click the <strong>Login</strong> icon button
+to authenticate and capture your first token.</li>
+<li><strong>Save</strong>: Click Create/Save.</li>
 </ol>
 <blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of web extraction
-dialog with WebView]</p>
+<p><strong>Screenshot Placeholder:</strong> [Image of the OAuth
+Discovery dialog showing the “Auto Configure” button and auto-filled
+fields.]</p>
 </blockquote>
-<h4 id="ai-note-creation">AI Note Creation</h4>
+<h3 id="the-simple-way-token-auth">2. The “Simple” Way (Token Auth)</h3>
+<p>For servers that just need a static secret.</p>
 <ol type="1">
-<li>From the main screen or notes list, tap the AI icon or select
-<strong>AI Actions</strong>.</li>
-<li>Choose <strong>Create New Notes</strong>.</li>
-<li>Enter a prompt describing what you want to create.</li>
-<li>Optionally:
+<li><strong>Add Endpoint</strong>: Settings -&gt; MCP -&gt; Add
+(+).</li>
+<li><strong>Auth (Token Tab)</strong>:
 <ul>
-<li>Attach files or images</li>
-<li>Select existing notes as context</li>
+<li>Paste your Bearer token (e.g., <code>sk-proj-...</code>).</li>
 </ul></li>
-<li>Tap <strong>Create</strong> to generate the note(s).</li>
-<li>Review the generated content and save.</li>
+<li><strong>Save</strong>.</li>
 </ol>
 <blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of AI note creation
-dialog]</p>
+<p><strong>Screenshot Placeholder:</strong> [Image of the MCP Settings
+dialog with the ‘Token’ tab selected and a token pasted in.]</p>
 </blockquote>
-<h3 id="how-to-edit-a-note">How to Edit a Note</h3>
-<h4 id="manually">Manually</h4>
+<h3 id="the-manual-way-advanced-oauth">3. The “Manual” Way (Advanced
+OAuth)</h3>
+<p>If auto-discovery fails, you can enter the OAuth details
+manually.</p>
 <ol type="1">
-<li>Open a note by tapping it from the notes list.</li>
-<li>Tap the <strong>Edit</strong> button (pencil icon) in the
+<li><strong>Auth (OAuth Tab)</strong>: Fill in the fields manually.
+<ul>
+<li><strong>Auth URL</strong>:
+<code>https://accounts.google.com/o/oauth2/v2/auth</code></li>
+<li><strong>Token URL</strong>:
+<code>https://oauth2.googleapis.com/token</code></li>
+<li><strong>Client ID</strong>: Your registered app ID.</li>
+<li><strong>Scopes</strong>: Space-separated list (e.g.,
+<code>openid profile email</code>).</li>
+<li><strong>PKCE</strong>: Check this if your server handles Proof Key
+for Code Exchange (standard for mobile apps).</li>
+</ul></li>
+<li><strong>Login</strong>: You MUST click the Login button
+<em>inside</em> this dialog to verify the flow before saving.</li>
+</ol>
+<h2 id="debugging-tools-ai-introspection">Debugging Tools (AI
+Introspection)</h2>
+<p>If a tool isn’t working, use the <strong>AI Debug Overlay</strong>:
+1. Enable it in <strong>Settings -&gt; AI Debug Overlay</strong>. 2.
+Look for “MCP: Call Tool” requests. 3. Inspect the <code>Result</code>
+payload to see raw JSON-RPC errors.</p>
+<blockquote>
+<p><strong>Screenshot Placeholder:</strong> [Image of the AI Debug
+Overlay showing a successful MCP tool call and its JSON response.]</p>
+</blockquote>
+<h1 id="smart-model-matching-multi-capability-selection">Smart Model
+Matching (Multi-Capability Selection)</h1>
+<p>Note Synapse solves the “Model Dilemma”: <em>Do I use the cheap, fast
+model (e.g., Gemini Flash) or the smart, expensive one (e.g.,
+GPT-4o)?</em></p>
+<p>With <strong>Smart Matching</strong>, you don’t have to choose. You
+set a default (cheap) model, and Synapse automatically swaps in a
+powerful model <strong>only when required</strong>.</p>
+<h2 id="problem-8">Problem</h2>
+<p>You default to a text-only or lightweight model (e.g., local Llama on
+your Mac, or Gemini Flash) for speed and cost. But occasionally, you
+drag in an <strong>Image</strong> or a <strong>PDF</strong>, or ask for
+<strong>Code Generation</strong>. Your default model fails or gives poor
+results.</p>
+<h2 id="solution-capability-based-priority">Solution: Capability-Based
+Priority</h2>
+<p>You define a “Priority List” of models. When you send a message,
+Synapse analyzes it: <em>“This message contains an Image and requires
+Code Generation.”</em></p>
+<p>It then scans your models in order: 1. <strong>Active Model</strong>
+(Default): Does it support Images + Code? -&gt; No. 2. <strong>Priority
+1</strong> (e.g., Claude 3.5 Sonnet): Does it support Images + Code?
+-&gt; <strong>Yes</strong>. 3. <strong>Result</strong>: Synapse
+automatically uses Priority 1 for <em>this specific turn</em>.</p>
+<p>The next message (text only) reverts to your lightweight default.</p>
+<h2 id="how-to-configure">How to Configure</h2>
+<ol type="1">
+<li>Go to <strong>Settings -&gt; AI Settings -&gt; Model
+Preference</strong>.</li>
+<li><strong>Defaults</strong>: Set your “Active Model” (main chat
+screen) to your preferred daily driver (e.g., Flash).</li>
+<li><strong>Priority List</strong>: Drag and drop powerful models from
+“Available” to “Priority List”.
+<ul>
+<li><em>Recommendation</em>: Put your most capable “Swiss Army Knife”
+model at the top (e.g., GPT-4o or Claude 3.5 Sonnet).</li>
+<li><em>Recommendation</em>: Put specialized models below (e.g., a
+dedicated Image Generator).</li>
+</ul></li>
+</ol>
+<blockquote>
+<p><strong>Screenshot Placeholder:</strong> [Image of Model Preference
+screen showing a ‘Priority List’ with ‘Gemini Pro’ above ‘DALL-E 3’, and
+‘Llama Local’ as the active default.]</p>
+</blockquote>
+<h2 id="matching-logic">Matching Logic</h2>
+<p>The selector follows this strict order:</p>
+<ol type="1">
+<li><strong>Perfect Match</strong>: Scans the Priority List for the
+first model that supports <strong>ALL</strong> required capabilities
+(Images, Audio, Docs, etc.) found in your message.</li>
+<li><strong>Critical Media Fallback</strong>: If no perfect match is
+found but your message has Media (Images/Video), it prioritizes
+<em>any</em> model that can see the media, even if it lacks other skills
+to avoid “I can’t see that” errors.</li>
+<li><strong>Fallback</strong>: If nothing matches, it uses your Active
+Default.</li>
+</ol>
+<h2 id="supported-capabilities">Supported Capabilities</h2>
+<ul>
+<li>🖼️ <strong>Images</strong>: Analyzing photos/screenshots.</li>
+<li>📄 <strong>Documents</strong>: Reading PDFs or text files.</li>
+<li>🎥 <strong>Video</strong>: Analyzing video files.</li>
+<li>🎙️ <strong>Audio</strong>: Listening to voice notes.</li>
+<li>🎨 <strong>Image Gen</strong>: Creating images (DALL-E /
+Imagen).</li>
+<li>💻 <strong>Code Gen</strong>: Writing complex code.</li>
+</ul>
+<h1 id="hands-on-agentic-research">Hands-On: Agentic Research</h1>
+<p>Turn Note Synapse into a background worker.</p>
+<h2 id="the-research-agent-workflow">The “Research Agent” Workflow</h2>
+<h3 id="problem-9">Problem</h3>
+<p>You want to know “How does Note Synapse handle dependency injection?”
+but you don’t want to search through 50 files yourself.</p>
+<h3 id="walkthrough-4">Walkthrough</h3>
+<ol type="1">
+<li><strong>Start Agent Mode</strong>: Toggle the toggle switch from
+“Chat” to “Agent”.</li>
+<li><strong>Define Objective</strong>: Type: <em>“Analyze the codebase
+and explain the Service Locator pattern usage.”</em></li>
+<li><strong>Attach Context</strong>:
+<ul>
+<li>Tap the <strong>Paperclip</strong>.</li>
+<li>Add <code>lib/services/service_locator.dart</code>.</li>
+<li><em>Tip</em>: Giving the agent a starting point helps it run
+faster.</li>
+</ul></li>
+<li><strong>Run</strong>: Tap Send.</li>
+<li><strong>Multi-Tasking</strong>:
+<ul>
+<li><strong>Android Users</strong>: You can minimize the app. A
+“Foreground Service” notification will appear (“Synapse Agent is
+Thinking…”).</li>
+<li>Go check your email. The agent will continue reading files and
+reasoning in the background.</li>
+</ul></li>
+</ol>
+<h2 id="reviewing-the-plan">Reviewing the Plan</h2>
+<ol type="1">
+<li>Before executing, the Agent will propose a <strong>Plan</strong>
+(e.g., “1. List files, 2. Read File A, 3. Read File B”).</li>
+<li><strong>Edit the Plan</strong>: You can delete steps that seem
+irrelevant (e.g., “Don’t read <code>main.dart</code>, I know that’s not
+it”).</li>
+<li><strong>Approve</strong>: Tap “Execute” to start the background
+work.</li>
+</ol>
+<blockquote>
+<p><strong>Screenshot Placeholder:</strong> [Image of the Agent Plan
+Review screen, showing a list of proposed tasks with generic
+checkboxes.]</p>
+</blockquote>
+<h1 id="hands-on-block-based-editing">Hands-On: Block-Based Editing</h1>
+<p>Note Synapse treats every paragraph, header, and list item as a
+separate “block”. This gives you power features usually found in tools
+like Notion.</p>
+<h2 id="the-hidden-drag-gesture">The “Hidden” Drag Gesture</h2>
+<h3 id="problem-10">Problem</h3>
+<p>You want to reorder a paragraph or convert it to a different type,
+but you don’t see any handles.</p>
+<h3 id="solution-1">Solution</h3>
+<p>The “Edit” icon (Pen) in the top-right is actually a
+<strong>Draggable Tool</strong>.</p>
+<h3 id="walkthrough-5">Walkthrough</h3>
+<ol type="1">
+<li>Open any note in <strong>Viewing Mode</strong> (not editing
+text).</li>
+<li><strong>Long Press</strong> the ✏️ (Pen) icon in the top
 toolbar.</li>
-<li>Modify the title, content, tags, or attachments.</li>
-<li>Changes are auto-saved as you type.</li>
-<li>Tap <strong>Done</strong> or the back button to exit edit mode.</li>
-</ol>
-<h4 id="with-ai-note-transform">With AI (Note Transform)</h4>
-<ol type="1">
-<li>Open a note.</li>
-<li>Tap the <strong>AI Actions</strong> button (or three-dot menu →
-<strong>Transform Note</strong>).</li>
-<li>Enter a transformation instruction (e.g., “Make this more concise”
-or “Translate to Spanish”).</li>
-<li>Optionally attach additional files for context.</li>
-<li>Tap <strong>Transform</strong>.</li>
-<li>Review the transformed content.</li>
-<li>Choose to:
+<li><strong>Drag</strong> it onto any block of text in your note.</li>
+<li><strong>Drop</strong> it.</li>
+<li>A menu will appear allowing you to:
 <ul>
-<li>Replace the original content</li>
-<li>Create a new note with the transformed content</li>
-<li>Cancel</li>
+<li><strong>Edit</strong> just that block.</li>
+<li><strong>Delete</strong> the block.</li>
+<li><strong>Reorder</strong> (if multiple blocks selected).</li>
+<li><strong>Convert</strong> (e.g., Text -&gt; Checkbox).</li>
 </ul></li>
 </ol>
 <blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of note transform
-dialog]</p>
+<p><strong>Screenshot Placeholder:</strong> [Image showing the Pen icon
+being dragged from the app bar, with a ghost icon floating over a
+paragraph, highlighting the drop target.]</p>
 </blockquote>
-<h3 id="subnotes">Subnotes</h3>
-<h4 id="reparent-subnote">Reparent Subnote</h4>
+<h2 id="reordering-blocks">Reordering Blocks</h2>
 <ol type="1">
-<li>Open a note that contains subnotes.</li>
-<li>Find the subnote you want to move.</li>
-<li>Tap the three-dot menu (⋮) next to the subnote.</li>
-<li>Select <strong>Reparent Subnote</strong>.</li>
-<li>In the dialog that appears:
+<li>Once you select a block (via the Pen Drop method), you enter
+<strong>Block Selection Mode</strong>.</li>
+<li>Tap other blocks to add them to the selection.</li>
+<li>Use the <strong>Up/Down arrows</strong> in the floating menu to move
+the entire selection.</li>
+</ol>
+<h1 id="architecture">Architecture</h1>
+<h2 id="technical-stack">Technical Stack</h2>
 <ul>
-<li>Search for the target note by title or content</li>
-<li>Filter by tags if needed</li>
-<li>Select the destination note</li>
-</ul></li>
-<li>Tap <strong>Move</strong> to complete the reparenting.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of reparent subnote
-dialog]</p>
-</blockquote>
-<h3 id="task">Task</h3>
-<h4 id="how-to-specify-due-date">How to Specify Due Date</h4>
-<ol type="1">
-<li>Create a new task or convert an existing note to a task.</li>
-<li>Open the task detail screen.</li>
-<li>Tap the <strong>Due Date</strong> field.</li>
-<li>Select a date and time from the date picker.</li>
-<li>The due date will be saved automatically.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of task with due date
-picker]</p>
-</blockquote>
-<h4 id="how-to-change-status">How to Change Status</h4>
-<ol type="1">
-<li>Open a task.</li>
-<li>Find the status dropdown (usually in the header or toolbar).</li>
-<li>Select one of the following statuses:
-<ul>
-<li><strong>To Do</strong>: Task not started</li>
-<li><strong>In Progress</strong>: Task is being worked on</li>
-<li><strong>Completed</strong>: Task is finished</li>
-<li><strong>Cancelled</strong>: Task is abandoned</li>
-</ul></li>
-<li>The status change is saved automatically.</li>
-</ol>
-<p>Alternatively, you can change status from: - The task list view
-(status dropdown in each task card) - The calendar view - The TODO list
-view</p>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of task status
-dropdown]</p>
-</blockquote>
-<h4 id="how-to-convert-between-note-and-task">How to Convert Between
-Note and Task</h4>
-<ol type="1">
-<li>Open a note or task.</li>
-<li>Tap the three-dot menu (⋮) in the toolbar.</li>
-<li>Select <strong>Convert to Task</strong> or <strong>Convert to
-Note</strong>.</li>
-<li>The conversion happens immediately.
-<ul>
-<li>Notes converted to tasks will have status set to “To Do”</li>
-<li>Tasks converted to notes will lose task-specific fields (status, due
-date, etc.)</li>
-</ul></li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of convert menu
-option]</p>
-</blockquote>
-<h4 id="how-to-view-tasks-on-calendar">How to View Tasks on
-Calendar</h4>
-<ol type="1">
-<li>Navigate to the <strong>Calendar</strong> tab in the main
-navigation.</li>
-<li>The calendar view shows:
-<ul>
-<li>Tasks scheduled for specific dates</li>
-<li>Tasks with due dates</li>
-</ul></li>
-<li>Tap on a date to see tasks for that day.</li>
-<li>Use the view switcher to change between:
-<ul>
-<li><strong>Month view</strong>: Full calendar month</li>
-<li><strong>Two Weeks view</strong>: Two-week period</li>
-<li><strong>Week view</strong>: Single week</li>
-</ul></li>
-<li>Tap a task in the calendar to open its details.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of calendar view with
-tasks]</p>
-</blockquote>
-<h4 id="how-to-view-tasks-timeline">How to View Tasks Timeline</h4>
-<ol type="1">
-<li>Navigate to the <strong>Calendar</strong> tab.</li>
-<li>Tap the view switcher and select <strong>Timeline</strong>.</li>
-<li>The timeline view shows all tasks and notes in chronological
-order.</li>
-<li>Tasks are grouped by date.</li>
-<li>Filter by tags using the tag filter chips at the top.</li>
-<li>Tap any item to open it.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of timeline view]</p>
-</blockquote>
-<h4 id="how-to-view-tasks-todo-list">How to View Tasks TODO List</h4>
-<ol type="1">
-<li>Navigate to the <strong>Calendar</strong> tab.</li>
-<li>Tap the view switcher and select <strong>TODO</strong>.</li>
-<li>The TODO list shows all tasks with their:
-<ul>
-<li>Status icons</li>
-<li>Titles and content preview</li>
-<li>Completion percentage (if applicable)</li>
-<li>Status dropdown for quick changes</li>
-</ul></li>
-<li>Filter by tags using the tag filter chips.</li>
-<li>Tap a task to open its details.</li>
-<li>Change task status directly from the list using the status
-dropdown.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of TODO list
-view]</p>
-</blockquote>
-<hr />
-<h2 id="chat">Chat</h2>
-<h3 id="how-to-chat">How to Chat</h3>
-<ol type="1">
-<li>Navigate to the <strong>Chat</strong> tab or tap the chat icon.</li>
-<li>Start a new conversation or open an existing one.</li>
-<li>Type your message in the input field at the bottom.</li>
-<li>Optionally:
-<ul>
-<li>Attach files or images</li>
-<li>Add notes as context (see below)</li>
-</ul></li>
-<li>Tap <strong>Send</strong> or press Enter.</li>
-<li>Wait for the AI response.</li>
-</ol>
-<h4 id="how-to-save-chat-to-note">How to Save Chat to Note</h4>
-<ol type="1">
-<li>During or after a chat, find the message you want to save.</li>
-<li>For assistant messages, tap the <strong>Add to Note</strong> button
-(note icon) in the message action row.</li>
-<li>Choose to:
-<ul>
-<li>Create a new note with the message content</li>
-<li>Append to an existing note</li>
-</ul></li>
-<li>The message content will be saved as a note.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of chat message with
-save to note button]</p>
-</blockquote>
-<h4 id="how-to-retry-chat">How to Retry Chat</h4>
-<ol type="1">
-<li>If an AI response fails or you want to regenerate:
-<ul>
-<li>Tap the <strong>Retry</strong> button (refresh icon) next to the
-failed message</li>
-<li>Or tap the three-dot menu on a message and select
-<strong>Retry</strong></li>
-</ul></li>
-<li>The AI will regenerate the response.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of retry button in
-chat]</p>
-</blockquote>
-<h4 id="how-to-configure-ai-tools-and-mcps">How to Configure AI Tools
-and MCPs</h4>
-<ol type="1">
-<li>In the chat screen, look for the <strong>Tools</strong> or
-<strong>MCP</strong> panel (usually collapsible).</li>
-<li><strong>For MCP servers:</strong>
-<ul>
-<li>Tap to expand the MCP panel</li>
-<li>Toggle MCP endpoints on/off using the filter chips</li>
-<li>Each endpoint shows available tools</li>
-</ul></li>
-<li><strong>For AI Tools:</strong>
-<ul>
-<li>Toggle AI tool services on/off using the filter chips</li>
-<li>Each service shows its available tools</li>
-</ul></li>
-<li>Active tools will be automatically used by the AI when
-relevant.</li>
-<li>To configure MCP servers globally:
-<ul>
-<li>Go to <strong>Settings</strong> → <strong>MCP Settings</strong></li>
-<li>Add, edit, or remove MCP endpoints</li>
-<li>Configure authentication (bearer tokens, etc.)</li>
-</ul></li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of tools/MCP
-configuration panel in chat]</p>
-</blockquote>
-<h3 id="how-to-add-note-as-context-to-chat">How to Add Note as Context
-to Chat</h3>
-<ol type="1">
-<li>In the chat screen, tap the <strong>Add Notes</strong> button (note
-icon with plus).</li>
-<li>A note selection dialog will appear.</li>
-<li>Search or browse for notes to add.</li>
-<li>Select one or more notes.</li>
-<li>Tap <strong>Add</strong> to include them as context.</li>
-<li>The selected notes will appear as chips above the message
-input.</li>
-<li>The AI will have access to the content of these notes during the
-conversation.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of note selection
-dialog in chat]</p>
-</blockquote>
-<h3 id="how-to-view-past-chats">How to View Past Chats</h3>
-<ol type="1">
-<li>In the chat screen, tap the <strong>History</strong> button (clock
-icon) or three-dot menu → <strong>View History</strong>.</li>
-<li>The history dialog shows:
-<ul>
-<li>All past conversations</li>
-<li>Filtered by time range (Last 24 hours, Last week, Last month, All
-time)</li>
-<li>Filtered by tags (if conversations are tagged)</li>
-</ul></li>
-<li>Tap a conversation to open it.</li>
-<li>Use the search bar to find specific conversations.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of chat history
-dialog]</p>
-</blockquote>
-<h3 id="how-to-use-non-linear-chats">How to Use Non-Linear Chats</h3>
-<h4 id="fork">Fork</h4>
-<ol type="1">
-<li>In a conversation, find the message where you want to fork.</li>
-<li>Tap the three-dot menu on that message.</li>
-<li>Select <strong>Fork Conversation</strong>.</li>
-<li>If the message appears in multiple conversations, you’ll be asked to
-select which conversation context to use.</li>
-<li>A new conversation will be created starting from that message.</li>
-<li>You can continue the conversation from that point with different
-questions or directions.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of fork conversation
-option]</p>
-</blockquote>
-<h4 id="transform">Transform</h4>
-<ol type="1">
-<li>In a conversation, find the message you want to transform.</li>
-<li>Tap the three-dot menu on that message.</li>
-<li>Select <strong>Transform</strong> (if available).</li>
-<li>Enter a transformation instruction.</li>
-<li>The message content will be transformed using AI.</li>
-<li>You can use the transformed content to continue the
-conversation.</li>
-</ol>
-<blockquote>
-<p><strong>Note:</strong> Transform functionality may vary depending on
-the message type and context.</p>
-</blockquote>
-<hr />
-<h2 id="user-app">User App</h2>
-<h3 id="how-to-create-an-app">How to Create an App</h3>
-<h4 id="user-app-1">User App</h4>
-<ol type="1">
-<li>Navigate to <strong>User Apps</strong> from the main menu.</li>
-<li>Tap the <strong>+</strong> (plus) button or <strong>Create
-App</strong>.</li>
-<li>Fill in the app details:
-<ul>
-<li><strong>Name</strong>: The app’s display name</li>
-<li><strong>Description</strong>: What the app does</li>
-<li><strong>Steps</strong>: List the steps/features the app should have
-(add multiple steps with the + button)</li>
-</ul></li>
-<li>Optionally:
-<ul>
-<li>Select <strong>App Type</strong>: Normal, Note Action, or AI
-Tool</li>
-<li>Add attachments (images, files) for reference</li>
-<li>Add notes as context</li>
-<li>Add third-party libraries (see below)</li>
-</ul></li>
-<li>Tap <strong>Create</strong> to generate the app.</li>
-<li>The AI will generate the HTML code for your app.</li>
-<li>Review the generated app in the preview.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of app creation
-form]</p>
-</blockquote>
-<h4 id="note-action-app">Note Action App</h4>
-<ol type="1">
-<li>Follow the steps above for creating a user app.</li>
-<li>Select <strong>App Type</strong>: <strong>Note Action
-App</strong>.</li>
-<li>Note Action Apps operate on pre-selected notes.</li>
-<li>When the app runs, it will receive the selected notes through
-<code>window.Synapse.Notes</code>.</li>
-<li>Design your app to process, analyze, or manipulate these notes.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of note action app
-type selection]</p>
-</blockquote>
-<h4 id="ai-tool">AI Tool</h4>
-<ol type="1">
-<li>Follow the steps above for creating a user app.</li>
-<li>Select <strong>App Type</strong>: <strong>AI Tool</strong>.</li>
-<li>AI Tool apps can be used as tools in chat conversations.</li>
-<li>The app should expose functions that can be called by the AI.</li>
-<li>Configure the tool’s description and parameters.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of AI tool app type
-selection]</p>
-</blockquote>
-<h4 id="provide-context-to-create-app">Provide Context to Create
-App</h4>
-<ol type="1">
-<li>When creating an app, you can provide context in several ways:
-<ul>
-<li><strong>Notes</strong>: Tap <strong>Add Notes</strong> and select
-relevant notes that describe what you want</li>
-<li><strong>Attachments</strong>: Add images or files that show examples
-or requirements</li>
-<li><strong>Libraries</strong>: Add third-party libraries that the app
-should use</li>
-</ul></li>
-<li>The AI will use this context to better understand your requirements
-and generate appropriate code.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of context selection
-in app creation]</p>
-</blockquote>
-<h3 id="how-to-iterate-app">How to Iterate App</h3>
-<h4 id="submit-edit-suggestion">Submit Edit Suggestion</h4>
-<ol type="1">
-<li>Open the app you want to edit.</li>
-<li>Tap <strong>Edit</strong> or the edit icon.</li>
-<li>In the edit screen, you’ll see tabs for:
-<ul>
-<li><strong>Edit Suggestion</strong>: Enter what you want to change</li>
-<li><strong>Code</strong>: View and edit the source code directly</li>
-<li><strong>Preview</strong>: See how the app looks</li>
-</ul></li>
-<li>In the <strong>Edit Suggestion</strong> tab:
-<ul>
-<li>Enter a description of the changes you want</li>
-<li>Optionally add notes, attachments, or libraries</li>
-</ul></li>
-<li>Tap <strong>Submit</strong> to generate a new revision.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of app edit
-suggestion form]</p>
-</blockquote>
-<h4 id="view-ai-response">View AI Response</h4>
-<ol type="1">
-<li>After submitting an edit suggestion, the AI will generate a new
-revision.</li>
-<li>The AI response (explanation of changes) will be shown in the
-revision details.</li>
-<li>You can view it in the <strong>Revisions</strong> section of the
-app.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of AI response in
-revision]</p>
-</blockquote>
-<h4 id="check-source-code">Check Source Code</h4>
-<ol type="1">
-<li>In the app edit screen, switch to the <strong>Code</strong>
-tab.</li>
-<li>You’ll see the full HTML source code of the app.</li>
-<li>You can:
-<ul>
-<li>View the code with syntax highlighting</li>
-<li>Edit the code directly</li>
-<li>Search within the code</li>
-</ul></li>
-<li>Changes made directly to the code will create a new revision when
-saved.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of code editor]</p>
-</blockquote>
-<h4 id="move-between-revisions">Move Between Revisions</h4>
-<ol type="1">
-<li>In the app detail screen, find the <strong>Revisions</strong>
-section.</li>
-<li>You’ll see a list of all revisions with:
-<ul>
-<li>Revision number</li>
-<li>Timestamp</li>
-<li>User prompt or edit description</li>
-<li>AI response summary</li>
-</ul></li>
-<li>Tap a revision to view its details.</li>
-<li>To switch to a different revision:
-<ul>
-<li>Tap <strong>Use This Revision</strong> or the pin icon</li>
-<li>The app will use that revision’s code</li>
-</ul></li>
-<li>You can compare revisions side-by-side.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of revisions
-list]</p>
-</blockquote>
-<h3 id="how-to-add-third-party-dependencies-to-app">How to Add Third
-Party Dependencies to App</h3>
-<ol type="1">
-<li>When creating or editing an app, find the <strong>Libraries</strong>
-section.</li>
-<li>Tap <strong>Add Library</strong>.</li>
-<li>For each library, provide:
-<ul>
-<li><strong>Name</strong>: The library name (e.g., “Chart.js”)</li>
-<li><strong>Usage Instructions</strong>: How the library should be used
-in the app</li>
-<li><strong>Links</strong>: CDN URLs or download links for the library
-files</li>
-</ul></li>
-<li>Add multiple dependency links for each library if needed.</li>
-<li>The libraries will be downloaded and included when the app
-runs.</li>
-<li>The AI will be informed about these libraries and can use them in
-the generated code.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of library
-configuration]</p>
-</blockquote>
-<h3 id="share-app">Share App</h3>
-<h4 id="export">Export</h4>
-<ol type="1">
-<li>Open the app you want to export.</li>
-<li>Tap the three-dot menu (⋮) or <strong>Share</strong> button.</li>
-<li>Select <strong>Export App</strong>.</li>
-<li>The app will be exported as a YAML file containing:
-<ul>
-<li>App metadata (name, description, type)</li>
-<li>The current revision’s HTML code (base64 encoded)</li>
-<li>Library dependencies and their links</li>
-</ul></li>
-<li>Choose where to save the file or share it via your device’s share
-menu.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of export app
-option]</p>
-</blockquote>
-<h4 id="import">Import</h4>
-<ol type="1">
-<li>Navigate to <strong>User Apps</strong>.</li>
-<li>Tap the <strong>+</strong> (plus) button or <strong>Import
-App</strong>.</li>
-<li>Select the YAML file you want to import.</li>
-<li>The import process will:
-<ul>
-<li>Parse the YAML file</li>
-<li>Create the app with its metadata</li>
-<li>Restore the HTML code</li>
-<li>Download and restore library dependencies</li>
-</ul></li>
-<li>Once imported, the app will appear in your apps list and be ready to
-use.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of import app
-dialog]</p>
-</blockquote>
-<hr />
-<h2 id="settings">Settings</h2>
-<h3 id="configure-color-theme">Configure Color Theme</h3>
-<ol type="1">
-<li>Navigate to <strong>Settings</strong> →
-<strong>Appearance</strong>.</li>
-<li>Toggle <strong>Dark Mode</strong> on or off.</li>
-<li>The theme change applies immediately.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of appearance
-settings]</p>
-</blockquote>
-<h3 id="configure-language">Configure Language</h3>
-<ol type="1">
-<li>Navigate to <strong>Settings</strong> →
-<strong>Language</strong>.</li>
-<li>Select your preferred language:
-<ul>
-<li><strong>English</strong></li>
-<li><strong>Chinese (Simplified)</strong></li>
-</ul></li>
-<li>The language change applies immediately.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of language
-settings]</p>
-</blockquote>
-<h3 id="ai-configuration">AI Configuration</h3>
-<h4 id="add-change-ai-models">Add / Change AI Models</h4>
-<ol type="1">
-<li>Navigate to <strong>Settings</strong> → <strong>AI API</strong> →
-<strong>Model Configuration</strong>.</li>
-<li>You’ll see a list of available model types (OpenAI, Gemini,
-etc.).</li>
-<li>To configure a model:
-<ul>
-<li>Tap on the model</li>
-<li>Enter or update the <strong>API Key</strong></li>
-<li>Optionally configure:
-<ul>
-<li><strong>Endpoint URL</strong> (for custom endpoints)</li>
-<li><strong>Model Name</strong> (specific model variant)</li>
-<li><strong>Display Name</strong></li>
-<li><strong>Max Input/Output Tokens</strong></li>
-</ul></li>
-</ul></li>
-<li>Tap <strong>Save</strong> to store the configuration.</li>
-<li>To add a new model type, tap <strong>Add Model</strong> and follow
-the same steps.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of model
-configuration screen]</p>
-</blockquote>
-<h4 id="add-custom-prompts">Add Custom Prompts</h4>
-<ol type="1">
-<li>Navigate to <strong>Settings</strong> → <strong>Prompt
-Settings</strong>.</li>
-<li>You’ll see different prompt categories:
-<ul>
-<li><strong>Note Transformation</strong>: Custom instructions for note
-transformations</li>
-<li><strong>Chat System</strong>: System-level instructions for chat
-conversations</li>
-<li><strong>Chat Per Message</strong>: Instructions added to each chat
-message</li>
-<li><strong>App Generation</strong>: Instructions for app
-generation</li>
-</ul></li>
-<li>Tap on a category to edit.</li>
-<li>Enter your custom prompt or instructions.</li>
-<li>These will be appended to the default prompts when using the
-respective features.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of prompt
-settings]</p>
-</blockquote>
-<h4 id="add-mcp-servers">Add MCP Servers</h4>
-<ol type="1">
-<li>Navigate to <strong>Settings</strong> → <strong>MCP
-Settings</strong>.</li>
-<li>Tap <strong>Add MCP Server</strong> or the <strong>+</strong>
-button.</li>
-<li>Fill in the server details:
-<ul>
-<li><strong>Name</strong>: Display name for the server</li>
-<li><strong>Base URL</strong>: The MCP server endpoint URL</li>
-<li><strong>Transport Type</strong>: HTTP or SSE (Server-Sent
-Events)</li>
-<li><strong>Bearer Token</strong>: Authentication token (if
-required)</li>
-<li><strong>Additional Headers</strong>: Custom headers (if needed)</li>
-</ul></li>
-<li>Tap <strong>Save</strong>.</li>
-<li>The MCP server will be available in chat conversations.</li>
-<li>To test the connection, tap <strong>Refresh Tools</strong> to fetch
-available tools from the server.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of MCP settings
-screen]</p>
-</blockquote>
-<h3 id="ai-debug">AI Debug</h3>
-<h4 id="how-to-debug-ai-activities">How to Debug AI Activities</h4>
-<ol type="1">
-<li>Navigate to <strong>Settings</strong> → <strong>AI Debug
-Overlay</strong>.</li>
-<li>Toggle the debug overlay on.</li>
-<li>When enabled, you’ll see a debug panel that shows:
-<ul>
-<li>All AI requests and responses</li>
-<li>Request IDs</li>
-<li>Endpoints called</li>
-<li>Headers and request bodies</li>
-<li>Response data</li>
-<li>Timing information</li>
-<li>Errors and warnings</li>
-</ul></li>
-<li>The debug overlay appears as a floating panel or overlay on relevant
-screens.</li>
-</ol>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of AI debug
-overlay]</p>
-</blockquote>
-<h4 id="interpret-debugging-info">Interpret Debugging Info</h4>
-<p>The debug overlay shows:</p>
-<ul>
-<li><strong>Request ID</strong>: Unique identifier for each request
-(useful for tracking)</li>
-<li><strong>Endpoint</strong>: Which AI service/model was called</li>
-<li><strong>Headers</strong>: Authentication and request headers</li>
-<li><strong>Request Body</strong>: The full prompt and context sent to
-the AI</li>
-<li><strong>Response</strong>: The AI’s response</li>
-<li><strong>Duration</strong>: How long the request took</li>
-<li><strong>Status</strong>: Success or error status</li>
-<li><strong>Error Details</strong>: If an error occurred, details about
-what went wrong</li>
+<li><strong>Framework</strong>: Flutter (Dart)</li>
+<li><strong>Database</strong>: SQLite (via <code>sqflite</code>
+FFI)</li>
+<li><strong>AI</strong>: Gemini API / OpenAI API (Standardized
+Interface)</li>
+<li><strong>Network</strong>: HTTP/1.1 + HTTP/3 (QUIC)</li>
 </ul>
-<p>Use this information to: - Understand what prompts are being sent -
-Debug why certain responses are generated - Identify API errors or
-configuration issues - Optimize prompt structure</p>
-<blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of detailed debug
-info]</p>
-</blockquote>
-<h3 id="backup-and-recovery">Backup and Recovery</h3>
+<h2 id="network-resilience-http3">Network Resilience (HTTP/3)</h2>
+<p>LLM inference requests are long-lived and fragile. Simple timeouts
+break agents. Note Synapse uses a custom networking stack including
+<strong>HTTP/3 (QUIC)</strong> to ensure stability on flaky mobile
+networks (e.g., switching from WiFi to 5G while an agent is thinking). -
+<strong>Libraries</strong>: Custom Rust-based HTTP client bridged via
+FFI.</p>
+<h2 id="agent-architecture">Agent Architecture</h2>
+<p>Agents are not just “loops”. - <strong>Android</strong>: Agents run
+as <strong>Foreground Services</strong>. This means you can start a deep
+research task, switch to another app, lock your phone, and the agent
+continues to work. - <strong>State Machine</strong>: Notes are the
+state. An agent reads a note, performs an action, and updates the note.
+This provides “Time Travel” debugging for agents.</p>
+<h2 id="local-first-data-model">Local-First Data Model</h2>
+<p>Your data is yours. - <strong>DB Path</strong>:
+<code>note_synapse.db</code> in your App Documents folder. -
+<strong>Attachments</strong>: Stored as raw files in
+<code>attachments/</code>. - <strong>Querying</strong>: You can open the
+DB with any SQLite viewer. The schema is straightforward: -
+<code>notes</code>: id, title, content (markdown), type -
+<code>note_tags</code>: many-to-many link - <code>relationships</code>:
+graph edges (parent/child, related)</p>
+<h1 id="user-apps-vibe-coding">User Apps &amp; “Vibe Coding”</h1>
+<p>Turn your notes into software. User Apps are HTML/JS applications
+that run <em>inside</em> Note Synapse with privileged access to your
+data and AI.</p>
+<h2 id="the-vibe-coding-workflow">The “Vibe Coding” Workflow</h2>
+<p>You don’t need to write code to build a tool. You just need the
+<em>docs</em>.</p>
+<h3 id="tutorial-build-a-weather-dashboard">Tutorial: “Build a Weather
+Dashboard”</h3>
 <ol type="1">
-<li>Navigate to <strong>Settings</strong> →
-<strong>Recovery</strong>.</li>
-<li><strong>To create a backup:</strong>
-<ul>
-<li>Tap <strong>Backup All Notes</strong></li>
-<li>The backup process will:
-<ul>
-<li>Create a checkpoint of the database</li>
-<li>Copy the database file</li>
-<li>Copy all attachments</li>
-<li>Update file paths to be relative</li>
-<li>Package everything into a ZIP file</li>
-</ul></li>
-<li>Choose where to save the backup file</li>
-</ul></li>
-<li><strong>To restore from backup:</strong>
-<ul>
-<li>Tap <strong>Restore from Backup</strong></li>
-<li>Select the backup ZIP file</li>
-<li>The restore process will:
-<ul>
-<li>Extract the backup</li>
-<li>Validate the database version</li>
-<li>Migrate if needed</li>
-<li>Merge notes, tags, conversations, etc. with existing data</li>
-<li>Restore attachments</li>
-</ul></li>
-<li>Review the import log for any issues</li>
-</ul></li>
-<li><strong>To undo a restore:</strong>
-<ul>
-<li>If you just restored and want to undo:
-<ul>
-<li>Tap <strong>Undo Last Restore</strong></li>
-<li>The app will restore the database from before the import</li>
-</ul></li>
-</ul></li>
-<li><strong>Recovery points:</strong>
-<ul>
-<li>The app automatically creates recovery points before major
-operations</li>
-<li>You can view and restore from these recovery points in the Recovery
-screen</li>
-</ul></li>
+<li><strong>Clip</strong>: Use the Web Clipper to save the
+<code>OpenWeatherMap API</code> documentation page.</li>
+<li><strong>Context</strong>: Open a new Chat. Add the “OpenWeatherMap
+API” note as context.</li>
+<li><strong>Prompt</strong>: &gt; “Create a User App called ‘Weather
+Dash’. It should use <code>window.Synapse.proxyFetch</code> to call the
+API. Ask the user for a city, then display the current temp and icon.
+Use the API key provided in the system prompt.”</li>
+<li><strong>Result</strong>: Note Synapse generates a fully functional
+HTML/JS app. Click “Run” to test it instantly.</li>
 </ol>
 <blockquote>
-<p><strong>Image Placeholder:</strong> [Screenshot of backup and
-recovery screen]</p>
+<p><strong>Screenshot Placeholder:</strong> [Image showing the ‘Create
+User App’ dialog with the API documentation attached as context.]</p>
 </blockquote>
-<hr />
-<h2 id="additional-tips">Additional Tips</h2>
+<h2 id="window.synapse-api-reference"><code>window.Synapse</code> API
+Reference</h2>
+<h3 id="database-access-sql">1. Database Access (SQL)</h3>
+<p>Directly query your <code>note_synapse.db</code> SQLite database.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Get tasks due today</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> today <span class="op">=</span> <span class="kw">new</span> <span class="bu">Date</span>()<span class="op">.</span><span class="fu">toISOString</span>()<span class="op">.</span><span class="fu">split</span>(<span class="st">&#39;T&#39;</span>)[<span class="dv">0</span>]<span class="op">;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> tasks <span class="op">=</span> <span class="cf">await</span> <span class="bu">window</span><span class="op">.</span><span class="at">Synapse</span><span class="op">.</span><span class="fu">runQuery</span>(</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="vs">`SELECT * FROM notes </span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="vs">   WHERE type = &#39;task&#39; </span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="vs">   AND json_extract(content, &#39;$.dueDate&#39;) LIKE &#39;</span><span class="sc">${</span>today<span class="sc">}</span><span class="vs">%&#39;`</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>)<span class="op">;</span></span></code></pre></div>
+<h3 id="state-management">2. State Management</h3>
+<p>Apps can persist state between sessions.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Save preferences</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> <span class="bu">window</span><span class="op">.</span><span class="at">Synapse</span><span class="op">.</span><span class="fu">storeAppState</span>({ <span class="dt">theme</span><span class="op">:</span> <span class="st">&#39;dark&#39;</span><span class="op">,</span> <span class="dt">lastCity</span><span class="op">:</span> <span class="st">&#39;London&#39;</span> })<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co">// Load preferences</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> state <span class="op">=</span> <span class="cf">await</span> <span class="bu">window</span><span class="op">.</span><span class="at">Synapse</span><span class="op">.</span><span class="fu">loadAppState</span>()<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="bu">console</span><span class="op">.</span><span class="fu">log</span>(state<span class="op">.</span><span class="at">lastCity</span>)<span class="op">;</span> <span class="co">// &#39;London&#39;</span></span></code></pre></div>
+<h3 id="ai-integration-multi-part">3. AI Integration (Multi-Part)</h3>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> response <span class="op">=</span> <span class="cf">await</span> <span class="bu">window</span><span class="op">.</span><span class="at">Synapse</span><span class="op">.</span><span class="fu">chatAI</span>(</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;Analyze this data...&quot;</span><span class="op">,</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  { </span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">temperature</span><span class="op">:</span> <span class="fl">0.7</span><span class="op">,</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">model_hint</span><span class="op">:</span> [<span class="st">&#39;gemini-pro&#39;</span>] </span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>)<span class="op">;</span></span></code></pre></div>
+<h3 id="network-proxy">3. Network Proxy</h3>
+<p>Bypass CORS (Cross-Origin Resource Sharing) restrictions.</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Fetch data from any API, even if it doesn&#39;t support CORS</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> data <span class="op">=</span> <span class="cf">await</span> <span class="bu">window</span><span class="op">.</span><span class="at">Synapse</span><span class="op">.</span><span class="fu">proxyFetch</span>(</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;https://api.example.com/data&quot;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>)<span class="op">;</span></span></code></pre></div>
+<h3 id="note-manipulation">4. Note Manipulation</h3>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Save a new note</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> <span class="bu">window</span><span class="op">.</span><span class="at">Synapse</span><span class="op">.</span><span class="fu">saveNotes</span>([</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  { <span class="dt">title</span><span class="op">:</span> <span class="st">&quot;Report&quot;</span><span class="op">,</span> <span class="dt">content</span><span class="op">:</span> <span class="st">&quot;...&quot;</span> }</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>])<span class="op">;</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="co">// Open a note in the editor</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> <span class="bu">window</span><span class="op">.</span><span class="at">Synapse</span><span class="op">.</span><span class="fu">openNote</span>(<span class="st">&quot;note-id-123&quot;</span>)<span class="op">;</span></span></code></pre></div>
+<h2 id="security-model">Security Model</h2>
 <ul>
-<li><strong>Search</strong>: Use the search bar in notes, chats, and
-apps lists to quickly find content.</li>
-<li><strong>Tags</strong>: Organize notes and conversations with tags
-for better filtering and organization.</li>
-<li><strong>Pinning</strong>: Pin important notes to keep them at the
-top of your list.</li>
-<li><strong>Archiving</strong>: Archive old notes to keep your main list
-clean without deleting them.</li>
+<li><strong>Read-Only by Default</strong>: Apps can read DB/Notes by
+default.</li>
+<li><strong>Modification Approval</strong>: The first time an app tries
+to <code>deleteNotes</code> or run a <code>Write</code> SQL query, the
+user is prompted to approve the session.</li>
 </ul>
-<hr />
-<p><em>Last Updated: [Date]</em></p>
-<p><em>For technical support or feature requests, please refer to the
-project repository.</em></p>
 </body>
 </html>

@@ -7,14 +7,18 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:html2md/html2md.dart';
-import 'package:http/http.dart' as http;
+
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../services/share_service.dart';
 import '../services/ai_service.dart';
+import '../services/content_ingestion_service.dart';
+import '../services/service_locator.dart';
+import '../services/logger_service.dart';
 import '../services/web_content_extraction_service.dart';
 import '../services/media_attachment_service.dart';
+import '../services/network_provider.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/remote_image_utils.dart';
@@ -1127,36 +1131,51 @@ class _ShareScreenState extends State<ShareScreen> {
     });
 
     try {
-      String content;
-      List<String> tags = ['shared', 'image'];
+      // Use ShareService to process the image content (copies to storage)
+      final result = await ShareService.processSharedContent({
+        'action': 'SEND',
+        'type': 'image/jpeg', // Trigger image processing path
+        'filePath': filePath,
+        'fileName': fileName,
+      });
+
+      if (result['success'] != true) {
+        setState(() {
+          _isExtracting = false;
+          _error = result['error'] ?? 'Could not process image file';
+        });
+        return;
+      }
+
+      Note note = result['note'] as Note;
+      final relativePath = note.attachmentPaths.first;
 
       if (useAI) {
         // Let AI service handle API key validation
 
-        // Extract content using AI
-        final result = await AIService.extractContentFromImage(filePath);
-        if (result['success'] == true) {
-          content = result['content'] ?? 'Image content extracted with AI';
-          tags.add('ai_processed');
-        } else {
-          content = 'Image shared from ${fileName ?? 'unknown source'}';
-        }
-      } else {
-        // Basic image note
-        content = 'Image shared from ${fileName ?? 'unknown source'}';
-      }
+        // Extract content using AI - use the saved file path
+        final absolutePath = await FileUtils.getFullFilePath(
+          relativePath,
+          true,
+        );
 
-      final note = Note(
-        id: const Uuid().v4(),
-        title:
-            '${l10n.sharedImage} - ${DateTime.now().toString().substring(0, 16)}',
-        content: content,
-        type: NoteType.note,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        attachmentPaths: [filePath],
-        tags: tags,
-      );
+        final aiResult = await getIt<AIService>().extractContentFromImage(
+          absolutePath,
+        );
+        if (aiResult['success'] == true) {
+          // Update the note with AI-extracted content
+          note = Note(
+            id: note.id,
+            title: note.title,
+            content: aiResult['content'] ?? note.content,
+            type: note.type,
+            createdAt: note.createdAt,
+            updatedAt: DateTime.now(),
+            attachmentPaths: note.attachmentPaths,
+            tags: [...note.tags, 'ai_processed'],
+          );
+        }
+      }
 
       setState(() {
         _applyPreparedNote(note);
@@ -1166,6 +1185,7 @@ class _ShareScreenState extends State<ShareScreen> {
       // Initialize the text controllers with the extracted note's data
       _titleController.text = note.title;
       _tagsController.text = note.tags.join(', ');
+      _selectedTags.clear();
       _selectedTags.addAll(note.tags);
     } catch (e) {
       setState(() {
@@ -1215,7 +1235,9 @@ class _ShareScreenState extends State<ShareScreen> {
           relativePath,
           true,
         );
-        final aiResult = await AIService.extractContentFromPdf(absolutePath);
+        final aiResult = await getIt<AIService>().extractContentFromPdf(
+          absolutePath,
+        );
         if (aiResult['success'] == true) {
           // Update the note with AI-extracted content
           note = Note(
@@ -1569,6 +1591,19 @@ class _ShareScreenState extends State<ShareScreen> {
         }
 
         await appProvider.addNote(finalNote);
+
+        // Trigger AI content ingestion if needed (fire and forget)
+        if (!finalNote.content.contains('> [!SUMMARY]')) {
+          getIt<ContentIngestionService>().processNote(
+            finalNote,
+            appProvider,
+            onMessage: (_) {},
+            onError: (msg) =>
+                LoggerService.error('Share Screen AI Ingestion Error: $msg'),
+            onSuccess: () {},
+          );
+        }
+
         // Clear downloaded file path after successful note creation
         _downloadedFilePath = null;
         _showMediaDownloadFailures(downloadReport, l10n);
@@ -1609,6 +1644,19 @@ class _ShareScreenState extends State<ShareScreen> {
         );
 
         await appProvider.updateNote(updatedNote);
+
+        // Trigger AI content ingestion if needed (fire and forget)
+        if (!updatedNote.content.contains('> [!SUMMARY]')) {
+          getIt<ContentIngestionService>().processNote(
+            updatedNote,
+            appProvider,
+            onMessage: (_) {},
+            onError: (msg) =>
+                LoggerService.error('Share Screen AI Ingestion Error: $msg'),
+            onSuccess: () {},
+          );
+        }
+
         // Clear downloaded file path after successful note update
         _downloadedFilePath = null;
         _showMediaDownloadFailures(downloadReport, l10n);
@@ -1699,7 +1747,9 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           _status = l10n.webExtractionStatusCheckingFileType;
         });
         try {
-          final headResponse = await http.head(Uri.parse(widget.url));
+          final headResponse = await NetworkProvider.head(
+            Uri.parse(widget.url),
+          );
           if (headResponse.statusCode == 200) {
             detectedContentType = headResponse.headers['content-type']
                 ?.toLowerCase();
@@ -1767,7 +1817,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         });
 
         try {
-          final response = await http.get(Uri.parse(widget.url));
+          final response = await NetworkProvider.get(Uri.parse(widget.url));
           if (response.statusCode == 200) {
             final content = response.body;
 
@@ -1864,7 +1914,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         });
 
         try {
-          final response = await http.get(Uri.parse(widget.url));
+          final response = await NetworkProvider.get(Uri.parse(widget.url));
 
           if (response.statusCode == 200) {
             final responseContentType =
@@ -2340,7 +2390,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       }
 
       if (useAI) {
-        final aiResult = await AIService.extractContentFromText(
+        final aiResult = await getIt<AIService>().extractContentFromText(
           markdownContent,
           'web_content',
           title,

@@ -71,13 +71,6 @@ abstract class ModelProvider {
   /// Generate user app HTML
   Future<String> generateApp(String prompt, {String? requestId});
 
-  /// Generate user app HTML with attachments
-  Future<String> generateAppWithAttachments(
-    String prompt,
-    List<PlatformFile>? attachedFiles, {
-    String? requestId,
-  });
-
   /// Chat AI with configurable parameters
   Future<String> chatAI(
     String prompt, {

@@ -5,6 +5,7 @@ import '../l10n/app_localizations.dart';
 import 'ai_conversation_creator_dialog.dart';
 import '../services/conversation_service.dart';
 import '../services/logger_service.dart';
+import '../services/service_locator.dart';
 
 /// Dialog for choosing how to add a conversation from selected nodes
 /// Options: Add directly or Let AI process first
@@ -199,8 +200,8 @@ class AddConversationDialog extends StatelessWidget {
     }
     
     try {
-      final conversationService = ConversationService();
-      
+      final conversationService = getIt<ConversationService>();
+
       // Create conversation directly with selected nodes
       final newConversation = await conversationService.createConversationFromSelectedNodes(
         selectedNodeIds: selectedNodeIds,

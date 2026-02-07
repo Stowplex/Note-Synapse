@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/filter.dart';
+import '../models/note.dart';
 import '../l10n/app_localizations.dart';
 import '../widgets/tag_selection_dialog.dart';
 
@@ -22,8 +23,11 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
   late TextEditingController _nameController;
   late TextEditingController _includeTextController;
   late TextEditingController _includeTagsController;
+  late TextEditingController _excludeTagsController;
   bool _includeArchived = false;
   Set<String> _selectedTags = {};
+  Set<String> _selectedExcludeTags = {};
+  Set<NoteType> _selectedNoteTypes = {NoteType.note, NoteType.task};
 
   final Uuid _uuid = const Uuid();
 
@@ -37,9 +41,17 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
       text: widget.existingFilter?.includeText ?? '',
     );
     _includeTagsController = TextEditingController();
+    _excludeTagsController = TextEditingController();
     _includeArchived = widget.existingFilter?.includeArchived ?? false;
     _selectedTags = Set.from(widget.existingFilter?.includeTags ?? []);
+    _selectedExcludeTags = Set.from(widget.existingFilter?.excludeTags ?? []);
+
+    if (widget.existingFilter != null) {
+      _selectedNoteTypes = Set.from(widget.existingFilter!.noteTypes);
+    }
+
     _updateTagsDisplay();
+    _updateExcludeTagsDisplay();
 
     // Add listeners to update validation state
     _nameController.addListener(_onTextChanged);
@@ -53,6 +65,7 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
     _nameController.dispose();
     _includeTextController.dispose();
     _includeTagsController.dispose();
+    _excludeTagsController.dispose();
     super.dispose();
   }
 
@@ -64,6 +77,10 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
 
   void _updateTagsDisplay() {
     _includeTagsController.text = _selectedTags.join(', ');
+  }
+
+  void _updateExcludeTagsDisplay() {
+    _excludeTagsController.text = _selectedExcludeTags.join(', ');
   }
 
   void _showTagSelector() async {
@@ -89,6 +106,29 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
     }
   }
 
+  void _showExcludeTagSelector() async {
+    final l10n = AppLocalizations.of(context)!;
+
+    final result = await showDialog<List<String>>(
+      context: context,
+      builder: (context) => TagSelectionDialog(
+        title: l10n.selectTagsToExclude,
+        initialSelectedTags: _selectedExcludeTags.toList(),
+        allowCreateNew: false, // Don't create tags just to exclude them usually
+        allowEmptySelection: true,
+        showManageTagsButton: false,
+        returnAsSet: false,
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedExcludeTags = result.toSet();
+        _updateExcludeTagsDisplay();
+      });
+    }
+  }
+
   void _removeTag(String tag) {
     setState(() {
       _selectedTags.remove(tag);
@@ -96,10 +136,18 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
     });
   }
 
+  void _removeExcludeTag(String tag) {
+    setState(() {
+      _selectedExcludeTags.remove(tag);
+      _updateExcludeTagsDisplay();
+    });
+  }
+
   bool _isValid() {
     return _nameController.text.trim().isNotEmpty &&
         (_includeTextController.text.trim().isNotEmpty ||
-            _selectedTags.isNotEmpty);
+            _selectedTags.isNotEmpty) &&
+        _selectedNoteTypes.isNotEmpty;
   }
 
   @override
@@ -173,6 +221,72 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
               },
               controlAffinity: ListTileControlAffinity.leading,
             ),
+            const SizedBox(height: 16),
+            Text(l10n.noteType, style: Theme.of(context).textTheme.titleSmall),
+            CheckboxListTile(
+              title: Text(l10n.note),
+              value: _selectedNoteTypes.contains(NoteType.note),
+              onChanged: (value) {
+                setState(() {
+                  if (value == true) {
+                    _selectedNoteTypes.add(NoteType.note);
+                  } else {
+                    _selectedNoteTypes.remove(NoteType.note);
+                  }
+                });
+              },
+              controlAffinity: ListTileControlAffinity.leading,
+              dense: true,
+            ),
+            CheckboxListTile(
+              title: Text(l10n.task),
+              value: _selectedNoteTypes.contains(NoteType.task),
+              onChanged: (value) {
+                setState(() {
+                  if (value == true) {
+                    _selectedNoteTypes.add(NoteType.task);
+                  } else {
+                    _selectedNoteTypes.remove(NoteType.task);
+                  }
+                });
+              },
+              controlAffinity: ListTileControlAffinity.leading,
+              dense: true,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _excludeTagsController,
+              decoration: InputDecoration(
+                labelText: l10n.excludeTags,
+                border: const OutlineInputBorder(),
+                hintText: l10n.excludeTagsHint,
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.add),
+                  onPressed: _showExcludeTagSelector,
+                ),
+              ),
+              readOnly: true,
+              onTap: _showExcludeTagSelector,
+            ),
+            if (_selectedExcludeTags.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: _selectedExcludeTags
+                    .map(
+                      (tag) => Chip(
+                        label: Text(tag),
+                        deleteIcon: const Icon(Icons.close, size: 16),
+                        onDeleted: () => _removeExcludeTag(tag),
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.errorContainer.withOpacity(0.5),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
           ],
         ),
       ),
@@ -199,6 +313,8 @@ class _CustomFilterDialogState extends State<CustomFilterDialog> {
           ? null
           : _includeTextController.text.trim(),
       includeTags: _selectedTags.toList(),
+      excludeTags: _selectedExcludeTags.toList(),
+      noteTypes: _selectedNoteTypes.toList(),
       includeArchived: _includeArchived,
       createdAt: widget.existingFilter?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),

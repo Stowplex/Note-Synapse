@@ -10,12 +10,14 @@ class NoteSelectionDialog extends StatefulWidget {
   final Function(List<Note>) onNotesSelected;
   final String? title;
   final bool singleSelection;
+  final List<String> initialSelectedNoteIds;
 
   const NoteSelectionDialog({
     super.key,
     required this.onNotesSelected,
     this.title,
     this.singleSelection = false,
+    this.initialSelectedNoteIds = const [],
   });
 
   @override
@@ -27,6 +29,23 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
   final NoteSelectionService _noteSelectionService = NoteSelectionService();
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized && widget.initialSelectedNoteIds.isNotEmpty) {
+      _initialized = true;
+      // Pre-select notes based on IDs
+      final allNotes = context.read<AppProvider>().notes;
+      for (final noteId in widget.initialSelectedNoteIds) {
+        final note = allNotes.where((n) => n.id == noteId).firstOrNull;
+        if (note != null) {
+          _selectedNotes.add(note);
+        }
+      }
+    }
+  }
 
   @override
   void dispose() {

@@ -27,6 +27,8 @@ import AVFoundation
         self?.requestMicrophonePermission(result: result)
       } else if call.method == "getClipboardText" {
         self?.getClipboardText(result: result)
+      } else if call.method == "saveFileToExternalStorage" {
+        self?.saveFileToExternalStorage(call: call, result: result)
       } else {
         result(FlutterMethodNotImplemented)
       }
@@ -199,6 +201,34 @@ import AVFoundation
     }
   }
   
+  private func saveFileToExternalStorage(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let controller = window?.rootViewController as? FlutterViewController else {
+      result(FlutterError(code: "NO_CONTROLLER", message: "Unable to access FlutterViewController", details: nil))
+      return
+    }
+
+    guard let arguments = call.arguments as? [String: Any],
+          let filePath = arguments["filePath"] as? String else {
+      result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing filePath argument", details: nil))
+      return
+    }
+
+    let fileURL = URL(fileURLWithPath: filePath)
+    if !FileManager.default.fileExists(atPath: filePath) {
+      result(FlutterError(code: "FILE_NOT_FOUND", message: "File does not exist at path: \(filePath)", details: nil))
+      return
+    }
+
+    let documentPicker = UIDocumentPickerViewController(forExporting: [fileURL], asCopy: true)
+    documentPicker.modalPresentationStyle = .formSheet
+    controller.present(documentPicker, animated: true, completion: nil)
+    
+    // We confirm success immediately as the picker handles the rest asynchronously.
+    // Ideally we would wait for delegate callbacks, but for simplicity of this one-way export, this suffices for now.
+    // If we need result confirmation, we'd implement UIDocumentPickerDelegate.
+    result(true)
+  }
+
   private func handleCaptureRegion(call: FlutterMethodCall, result: @escaping FlutterResult) {
     guard let controller = window?.rootViewController as? FlutterViewController else {
       result(FlutterError(code: "NO_CONTROLLER", message: "Unable to access FlutterViewController", details: nil))

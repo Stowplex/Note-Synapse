@@ -15,12 +15,29 @@ import '../services/database_service.dart';
 import '../services/logger_service.dart';
 import '../services/user_app_service.dart';
 import '../utils/file_type_utils.dart';
-import '../utils/file_utils.dart';
 import '../utils/synapse_temp_utils.dart';
+import 'note_modification_service.dart';
+import 'sql_query_service.dart';
+import 'service_locator.dart';
 
 typedef OpenNoteCallback = Future<void> Function(Note note, bool replaceWindow);
-typedef OpenConversationsCallback = Future<void> Function(List<Note> notes, bool immersiveMode);
+typedef OpenConversationsCallback =
+    Future<void> Function(List<Note> notes, bool immersiveMode);
 typedef OpenAIActionsCallback = Future<void> Function(List<Note> notes);
+typedef ModificationRequestCallback =
+    Future<bool> Function(
+      UserAppRuntimeBridge source,
+      String noteId,
+      Map<String, dynamic> modification,
+    );
+typedef SqlWriteApprovalCallback =
+    Future<bool> Function(
+      UserAppRuntimeBridge source,
+      String sql,
+      SqlQueryType queryType,
+    );
+typedef DeletionApprovalCallback =
+    Future<bool> Function(UserAppRuntimeBridge source, List<String> noteIds);
 
 /// Shared runtime bridge that wires the Synapse JavaScript API into a WebView.
 ///
@@ -36,6 +53,9 @@ class UserAppRuntimeBridge {
     this.onOpenNote,
     this.onOpenConversations,
     this.onOpenAIActions,
+    this.onModificationRequest,
+    this.onSqlWriteApprovalRequest,
+    this.onDeletionApprovalRequest,
   }) : _selectedNotes = selectedNotes ?? const [];
 
   final UserApp app;
@@ -46,8 +66,34 @@ class UserAppRuntimeBridge {
   final OpenNoteCallback? onOpenNote;
   final OpenConversationsCallback? onOpenConversations;
   final OpenAIActionsCallback? onOpenAIActions;
+  final ModificationRequestCallback? onModificationRequest;
+  final SqlWriteApprovalCallback? onSqlWriteApprovalRequest;
+  final DeletionApprovalCallback? onDeletionApprovalRequest;
 
-  final DatabaseService _databaseService = DatabaseService();
+  bool _sessionApprovedModifications = false;
+  bool _sessionApprovedSqlWrites = false;
+  bool _sessionApprovedDeletions = false;
+
+  void approveSession() {
+    _sessionApprovedModifications = true;
+  }
+
+  void approveSqlWritesForSession() {
+    _sessionApprovedSqlWrites = true;
+    LoggerService.debug(
+      '[UserAppRuntimeBridge] SQL write operations approved for session',
+    );
+  }
+
+  void approveDeletionsForSession() {
+    _sessionApprovedDeletions = true;
+    LoggerService.debug(
+      '[UserAppRuntimeBridge] Note deletions approved for session',
+    );
+  }
+
+  DatabaseService get _databaseService => getIt<DatabaseService>();
+  SqlQueryService get _sqlQueryService => getIt<SqlQueryService>();
   static final HttpClient _proxyHttpClient = HttpClient()
     ..autoUncompress = true;
 
@@ -181,6 +227,10 @@ class UserAppRuntimeBridge {
             const result = await window.flutter_inappwebview.callHandler('openNote', noteId, replaceWindow === true);
             return result;
           },
+          updateNotes: async (notes) => {
+             const result = await window.flutter_inappwebview.callHandler('updateNotes', notes ?? []);
+             return result;
+          },
           openConversations: async (notes = [], immersiveMode = false) => {
             const result = await window.flutter_inappwebview.callHandler('openConversations', notes ?? [], immersiveMode === true);
             return result;
@@ -226,12 +276,61 @@ class UserAppRuntimeBridge {
         try {
           final sql = args.first as String;
           LoggerService.debug('[Synapse.runQuery] Called with SQL: $sql');
-          final result = await _databaseService.executeRawQuery(sql);
-          final duration = DateTime.now().difference(startTime);
+
+          // Detect query type using SqlQueryService
+          final queryType = _sqlQueryService.getQueryType(sql);
+          final isReadOnly = _sqlQueryService.isReadOnlyQuery(sql);
+
           LoggerService.debug(
-            '[Synapse.runQuery] Success - Returned ${result.length} rows in ${duration.inMilliseconds}ms',
+            '[Synapse.runQuery] Query type: ${_sqlQueryService.getQueryTypeDescription(queryType)}, read-only: $isReadOnly',
           );
-          return {'success': true, 'data': result};
+
+          // If it's a write operation, check for approval
+          if (!isReadOnly) {
+            if (!_sessionApprovedSqlWrites) {
+              if (onSqlWriteApprovalRequest != null) {
+                final approved = await onSqlWriteApprovalRequest!(
+                  this,
+                  sql,
+                  queryType,
+                );
+                if (!approved) {
+                  return {
+                    'success': false,
+                    'error': 'User denied the SQL write operation.',
+                  };
+                }
+                LoggerService.debug(
+                  '[Synapse.runQuery] Write operation approved by user',
+                );
+              } else {
+                return {
+                  'success': false,
+                  'error':
+                      'Write operations require user approval. This context does not support write operations.',
+                };
+              }
+            }
+          }
+
+          // Execute the query
+          final result = await _sqlQueryService.executeQuery(
+            sql,
+            requireApprovalForWrites: false, // Already checked above
+            allowWriteOperations: true,
+          );
+
+          final duration = DateTime.now().difference(startTime);
+
+          if (result.success) {
+            LoggerService.debug(
+              '[Synapse.runQuery] Success - Returned ${result.data?.length ?? 0} rows in ${duration.inMilliseconds}ms',
+            );
+            return {'success': true, 'data': result.data ?? []};
+          } else {
+            LoggerService.error('[Synapse.runQuery] Error: ${result.error}');
+            return {'success': false, 'error': result.error};
+          }
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
           LoggerService.error(
@@ -279,7 +378,7 @@ class UserAppRuntimeBridge {
           LoggerService.debug(
             '[Synapse.loadAppState] Called for app: ${app.id}',
           );
-          final state = await UserAppService.getAppState(app.id);
+          final state = await getIt<UserAppService>().getAppState(app.id);
           final duration = DateTime.now().difference(startTime);
           if (state != null) {
             LoggerService.debug(
@@ -341,6 +440,8 @@ class UserAppRuntimeBridge {
           if (jsonBody != null) {
             try {
               requestBody = jsonEncode(jsonBody);
+              LoggerService.debug('proxyFetch requestBody: $requestBody');
+
               final contentTypeKey = headers.keys.firstWhere(
                 (key) => key.toLowerCase() == HttpHeaders.contentTypeHeader,
                 orElse: () => '',
@@ -455,19 +556,48 @@ class UserAppRuntimeBridge {
             validated.attachments,
           );
 
-          final response = await AIService.chatAI(
-            prompt,
-            temperature: validated.temperature,
-            topK: validated.topK,
-            topP: validated.topP,
-            attachedFiles: attachments,
-          );
+          // Extract new options for model hint and response type
+          final modelHintRaw = options?['model_hint'];
+          final List<String>? modelHint = modelHintRaw is List
+              ? modelHintRaw.map((e) => e.toString()).toList()
+              : null;
+          final responseType = options?['response_type'] as String? ?? 'string';
+          final isMultiPart = responseType == 'multi_part';
 
-          final duration = DateTime.now().difference(startTime);
-          LoggerService.debug(
-            '[Synapse.chatAI] Success - Response length: ${response.length} in ${duration.inMilliseconds}ms',
-          );
-          return {'success': true, 'response': response};
+          if (isMultiPart) {
+            LoggerService.debug(
+              '[Synapse.chatAI] Using multi-part response mode',
+            );
+            final response = await getIt<AIService>().chatAIMultiPart(
+              prompt,
+              temperature: validated.temperature,
+              topK: validated.topK,
+              topP: validated.topP,
+              attachedFiles: attachments,
+              modelHint: modelHint,
+            );
+
+            final duration = DateTime.now().difference(startTime);
+            LoggerService.debug(
+              '[Synapse.chatAI] Multi-part success - ${response.length} parts in ${duration.inMilliseconds}ms',
+            );
+            return {'success': true, 'response': response};
+          } else {
+            final response = await getIt<AIService>().chatAI(
+              prompt,
+              temperature: validated.temperature,
+              topK: validated.topK,
+              topP: validated.topP,
+              attachedFiles: attachments,
+              modelHint: modelHint,
+            );
+
+            final duration = DateTime.now().difference(startTime);
+            LoggerService.debug(
+              '[Synapse.chatAI] Success - Response length: ${response.length} in ${duration.inMilliseconds}ms',
+            );
+            return {'success': true, 'response': response};
+          }
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
           LoggerService.error(
@@ -745,6 +875,103 @@ class UserAppRuntimeBridge {
     );
 
     controller.addJavaScriptHandler(
+      handlerName: 'updateNotes',
+      callback: (args) async {
+        final startTime = DateTime.now();
+        try {
+          final notesData =
+              (args.isNotEmpty ? args.first : []) as List<dynamic>;
+          LoggerService.debug(
+            '[Synapse.updateNotes] Called with ${notesData.length} note updates',
+          );
+
+          // Check approval before any modifications
+          if (!_sessionApprovedModifications) {
+            if (onModificationRequest != null) {
+              // Build specific modification data if single note, otherwise summary
+              String targetNoteId = 'batch-update';
+              Map<String, dynamic> modificationData;
+
+              if (notesData.length == 1 &&
+                  notesData.first is Map<String, dynamic>) {
+                final noteData = notesData.first as Map<String, dynamic>;
+                targetNoteId = noteData['id']?.toString() ?? 'unknown';
+
+                // If granular modification, pass that. Otherwise pass the note data.
+                if (noteData.containsKey('modification') &&
+                    noteData['modification'] is Map) {
+                  modificationData = noteData['modification'];
+                } else {
+                  modificationData = Map.from(noteData)..remove('id');
+                }
+              } else {
+                // Batch update: Itemize first 20 notes
+                final updates = <Map<String, dynamic>>[];
+                final NOTE_LIMIT = 20;
+
+                for (var i = 0; i < notesData.length && i < NOTE_LIMIT; i++) {
+                  final item = notesData[i];
+                  if (item is Map<String, dynamic>) {
+                    final id = item['id']?.toString() ?? 'unknown';
+                    // Extract modification similar to single case
+                    Map<String, dynamic> changes;
+                    if (item.containsKey('modification') &&
+                        item['modification'] is Map) {
+                      changes = item['modification'];
+                    } else {
+                      changes = Map.from(item)..remove('id');
+                    }
+
+                    updates.add({'id': id, 'changes': changes});
+                  }
+                }
+
+                modificationData = <String, dynamic>{
+                  'isBatch': true,
+                  'count': notesData.length,
+                  'updates': updates,
+                  // Keep noteIds for legacy/other checks if needed?
+                  'noteIds': notesData
+                      .whereType<Map<String, dynamic>>()
+                      .map((n) => n['id']?.toString() ?? 'unknown')
+                      .toList(),
+                };
+              }
+
+              final approved = await onModificationRequest!(
+                this,
+                targetNoteId,
+                modificationData,
+              );
+              if (!approved) {
+                return {'success': false, 'error': 'User denied modification.'};
+              }
+            } else {
+              return {
+                'success': false,
+                'error': 'Modification not supported in this context.',
+              };
+            }
+          }
+
+          final updatedCount = await _updateNotesFromJavaScript(notesData);
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.debug(
+            '[Synapse.updateNotes] Success - Updated $updatedCount notes in ${duration.inMilliseconds}ms',
+          );
+          return {'success': true, 'updatedCount': updatedCount};
+        } catch (e) {
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.error(
+            '[Synapse.updateNotes] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
       handlerName: 'openConversations',
       callback: (args) async {
         final startTime = DateTime.now();
@@ -756,7 +983,8 @@ class UserAppRuntimeBridge {
             };
           }
 
-          final notesData = (args.isNotEmpty ? args.first : []) as List<dynamic>;
+          final notesData =
+              (args.isNotEmpty ? args.first : []) as List<dynamic>;
           final immersiveMode = args.length > 1
               ? (args[1] as bool? ?? false)
               : false;
@@ -829,7 +1057,8 @@ class UserAppRuntimeBridge {
             };
           }
 
-          final notesData = (args.isNotEmpty ? args.first : []) as List<dynamic>;
+          final notesData =
+              (args.isNotEmpty ? args.first : []) as List<dynamic>;
           LoggerService.debug(
             '[Synapse.openAIActions] Called with ${notesData.length} notes',
           );
@@ -1187,11 +1416,12 @@ class UserAppRuntimeBridge {
   }
 
   Future<int> _saveNotesFromJavaScript(List<dynamic> notesData) async {
+    final modificationService = getIt<NoteModificationService>();
     var savedCount = 0;
     for (final noteData in notesData) {
       if (noteData is! Map<String, dynamic>) continue;
       try {
-        final note = await _createNoteFromJavaScriptData(noteData);
+        final note = await modificationService.buildNote(noteData);
         await appProvider.addNote(note);
         savedCount++;
         LoggerService.debug(
@@ -1208,7 +1438,8 @@ class UserAppRuntimeBridge {
   }
 
   Future<int> _deleteNotesFromJavaScript(List<dynamic> noteIdsData) async {
-    var deletedCount = 0;
+    // Validate and collect note IDs first
+    final noteIds = <String>[];
     for (final noteIdData in noteIdsData) {
       if (noteIdData is! String || noteIdData.trim().isEmpty) {
         LoggerService.warning(
@@ -1216,207 +1447,46 @@ class UserAppRuntimeBridge {
         );
         continue;
       }
+      noteIds.add(noteIdData.trim());
+    }
+
+    if (noteIds.isEmpty) {
+      return 0;
+    }
+
+    // Check approval before deleting
+    if (!_sessionApprovedDeletions) {
+      if (onDeletionApprovalRequest != null) {
+        final approved = await onDeletionApprovalRequest!(this, noteIds);
+        if (!approved) {
+          LoggerService.debug(
+            '[Synapse.deleteNotes] User denied deletion of ${noteIds.length} notes',
+          );
+          throw Exception('User denied the note deletion.');
+        }
+      } else {
+        // No approval callback - block delete operations
+        LoggerService.warning(
+          '[Synapse.deleteNotes] No approval callback, blocking deletion',
+        );
+        throw Exception('Note deletion requires user approval.');
+      }
+    }
+
+    var deletedCount = 0;
+    for (final noteId in noteIds) {
       try {
-        final noteId = noteIdData.trim();
         await appProvider.deleteNote(noteId);
         deletedCount++;
-        LoggerService.debug(
-          '[Synapse.deleteNotes] Deleted note: $noteId',
-        );
+        LoggerService.debug('[Synapse.deleteNotes] Deleted note: $noteId');
       } catch (e) {
         LoggerService.error(
-          '[Synapse.deleteNotes] Error deleting note $noteIdData: $e',
+          '[Synapse.deleteNotes] Error deleting note $noteId: $e',
           error: e,
         );
       }
     }
     return deletedCount;
-  }
-
-  Future<Note> _createNoteFromJavaScriptData(Map<String, dynamic> data) async {
-    final title = data['title']?.toString().trim() ?? '';
-    if (title.isEmpty) {
-      throw Exception('Note title is required and cannot be empty');
-    }
-    if (!data.containsKey('content')) {
-      throw Exception('Note content is required and cannot be empty');
-    }
-    if (!data.containsKey('type')) {
-      throw Exception('Note type is required');
-    }
-
-    final now = DateTime.now();
-    final noteType = _parseNoteType(data['type'].toString());
-
-    final subNotes = <SubNote>[];
-    if (data['subNotes'] is List) {
-      for (final subNoteData in (data['subNotes'] as List)) {
-        if (subNoteData is Map<String, dynamic>) {
-          subNotes.add(_createSubNoteFromJavaScriptData(subNoteData));
-        }
-      }
-    }
-
-    final attachmentPaths = <String>[];
-    if (data['attachments'] is List) {
-      for (final attachment in (data['attachments'] as List)) {
-        attachmentPaths.add(await _processAttachmentFromJavaScript(attachment));
-      }
-    }
-
-    String? scheduledAt;
-    String? completeBy;
-    TaskStatus? status;
-    double? completionPercentage;
-    if (noteType == NoteType.task) {
-      scheduledAt = data['scheduledAt']?.toString();
-      completeBy = data['completeBy']?.toString();
-      status = data['status'] != null
-          ? _parseTaskStatus(data['status'].toString())
-          : TaskStatus.todo;
-      completionPercentage = data['completionPercentage'] != null
-          ? (data['completionPercentage'] as num).toDouble()
-          : 0.0;
-    }
-
-    return Note(
-      id: const Uuid().v4(),
-      title: title,
-      content: data['content'].toString().trim(),
-      type: noteType,
-      createdAt: now,
-      updatedAt: now,
-      subNotes: subNotes,
-      tags: const [],
-      attachmentPaths: attachmentPaths,
-      scheduledAt: scheduledAt,
-      completeBy: completeBy,
-      status: status,
-      completionPercentage: completionPercentage,
-      pinned: data['pinned'] == true,
-      isArchived: data['isArchived'] == true,
-    );
-  }
-
-  SubNote _createSubNoteFromJavaScriptData(Map<String, dynamic> data) {
-    final name = data['name']?.toString().trim() ?? '';
-    if (name.isEmpty) {
-      throw Exception('SubNote name is required and cannot be empty');
-    }
-
-    return SubNote(
-      id: const Uuid().v4(),
-      name: name,
-      content: data['content']?.toString().trim() ?? '',
-      createdAt: DateTime.now(),
-      isCompleted: data['isCompleted'] == true,
-    );
-  }
-
-  NoteType _parseNoteType(String typeString) {
-    switch (typeString.toLowerCase()) {
-      case 'note':
-        return NoteType.note;
-      case 'task':
-        return NoteType.task;
-      default:
-        throw Exception('Invalid note type: $typeString');
-    }
-  }
-
-  TaskStatus _parseTaskStatus(String statusString) {
-    switch (statusString.toLowerCase()) {
-      case 'todo':
-        return TaskStatus.todo;
-      case 'in_progress':
-        return TaskStatus.inProgress;
-      case 'complete':
-        return TaskStatus.complete;
-      case 'abandoned':
-        return TaskStatus.abandoned;
-      default:
-        return TaskStatus.todo;
-    }
-  }
-
-  Future<String> _processAttachmentFromJavaScript(dynamic attachment) async {
-    if (attachment is String) {
-      if (SynapseTempUtils.isSynapseTempUri(attachment)) {
-        return await _promoteSynapseTempAttachment(attachment);
-      }
-
-      final isValid = await _databaseService.verifyAttachmentPath(attachment);
-      if (isValid) {
-        return attachment;
-      }
-      throw Exception(
-        'Invalid attachment path: $attachment - file not found in database',
-      );
-    } else if (attachment is Map<String, dynamic>) {
-      if (attachment['type'] == 'base64' &&
-          attachment['data'] != null &&
-          attachment['fileName'] != null) {
-        return await _saveBase64Attachment(
-          attachment['data'],
-          attachment['fileName'],
-        );
-      }
-      throw Exception(
-        'Invalid base64 attachment format: missing type, data, or fileName',
-      );
-    }
-
-    throw Exception(
-      'Invalid attachment format: expected string (file URI) or object (base64), got ${attachment.runtimeType}',
-    );
-  }
-
-  Future<String> _promoteSynapseTempAttachment(String uri) async {
-    try {
-      final tempFile = await SynapseTempUtils.loadFile(uri);
-      final relativePath = await FileUtils.saveFileToPrivateStorage(
-        tempFile.bytes,
-        tempFile.fileName,
-      );
-      LoggerService.debug(
-        '[Synapse.saveNotes] Promoted temporary attachment ${tempFile.fileName} to $relativePath',
-      );
-      return relativePath;
-    } catch (e) {
-      LoggerService.error(
-        '[Synapse.saveNotes] Error promoting temporary attachment from $uri: $e',
-        error: e,
-      );
-      throw Exception('Failed to promote temporary attachment: $e');
-    }
-  }
-
-  Future<String> _saveBase64Attachment(
-    String base64Data,
-    String fileName,
-  ) async {
-    try {
-      var base64String = base64Data;
-      if (base64String.contains(',')) {
-        base64String = base64String.split(',').last;
-      }
-
-      final bytes = base64Decode(base64String);
-      final relativePath = await FileUtils.saveFileToPrivateStorage(
-        bytes,
-        fileName,
-      );
-      LoggerService.debug(
-        '[Synapse.saveNotes] Saved base64 attachment: $fileName (${bytes.length} bytes) to $relativePath',
-      );
-      return relativePath;
-    } catch (e) {
-      LoggerService.error(
-        '[Synapse.saveNotes] Error saving base64 attachment: $e',
-        error: e,
-      );
-      rethrow;
-    }
   }
 
   String _getExtensionFromMimeType(String mimeType) {
@@ -1481,6 +1551,201 @@ class UserAppRuntimeBridge {
       default:
         return 'application/octet-stream';
     }
+  }
+
+  Future<int> _updateNotesFromJavaScript(List<dynamic> notesData) async {
+    var updatedCount = 0;
+    final modificationService = getIt<NoteModificationService>();
+
+    for (final noteData in notesData) {
+      if (noteData is! Map<String, dynamic>) continue;
+
+      final id = noteData['id']?.toString();
+      if (id == null || id.isEmpty) {
+        LoggerService.warning(
+          '[Synapse.updateNotes] Skipping update for note without ID',
+        );
+        continue;
+      }
+
+      try {
+        final existingNote = await _databaseService.getNote(id);
+        if (existingNote == null) {
+          LoggerService.warning('[Synapse.updateNotes] Note not found: $id');
+          continue;
+        }
+
+        // Check for granular modification mode
+        if (noteData.containsKey('modification') &&
+            noteData['modification'] is Map<String, dynamic>) {
+          // Use NoteModificationService for granular updates
+          final modification = noteData['modification'] as Map<String, dynamic>;
+
+          // Process attachments in modification if present
+          if (modification.containsKey('attachments')) {
+            final attMod = modification['attachments'] as Map<String, dynamic>?;
+            if (attMod != null && attMod.containsKey('added')) {
+              final addedPaths = <String>[];
+              for (final att in (attMod['added'] as List? ?? [])) {
+                addedPaths.add(
+                  await modificationService.processAttachment(att),
+                );
+              }
+              modification['attachments'] = {...attMod, 'added': addedPaths};
+            }
+          }
+
+          await modificationService.applyModifications(id, modification);
+          updatedCount++;
+          LoggerService.debug(
+            '[Synapse.updateNotes] Applied granular modification to note: $id',
+          );
+        } else {
+          // Full replacement mode (existing behavior)
+          final updatedNote = await _mergeNoteData(existingNote, noteData);
+          await appProvider.updateNote(updatedNote);
+          updatedCount++;
+          LoggerService.debug(
+            '[Synapse.updateNotes] Updated note: ${updatedNote.id} - ${updatedNote.title}',
+          );
+        }
+      } catch (e) {
+        LoggerService.error(
+          '[Synapse.updateNotes] Error updating note $id: $e',
+          error: e,
+        );
+      }
+    }
+    return updatedCount;
+  }
+
+  Future<Note> _mergeNoteData(
+    Note existing,
+    Map<String, dynamic> changes,
+  ) async {
+    String? title = existing.title;
+    if (changes.containsKey('title')) {
+      title = changes['title']?.toString().trim() ?? '';
+      if (title.isEmpty) title = existing.title;
+    }
+
+    String? content = existing.content;
+    if (changes.containsKey('content')) {
+      content = changes['content']?.toString().trim() ?? existing.content;
+    }
+
+    NoteType type = existing.type;
+    if (changes.containsKey('type')) {
+      final typeStr = changes['type'].toString().toLowerCase();
+      type = typeStr == 'task' ? NoteType.task : NoteType.note;
+    }
+
+    // Subnotes: replace entire list if present
+    List<SubNote> subNotes = existing.subNotes;
+    final subNotesData = changes['subNotes'] ?? changes['subnotes'];
+    if (subNotesData is List) {
+      subNotes = [];
+      for (final subNoteData in subNotesData) {
+        if (subNoteData is Map<String, dynamic>) {
+          final name =
+              (subNoteData['name'] ?? subNoteData['title'])
+                  ?.toString()
+                  .trim() ??
+              'Untitled Task';
+          subNotes.add(
+            SubNote(
+              id: const Uuid().v4(),
+              name: name,
+              content: subNoteData['content']?.toString().trim() ?? '',
+              createdAt: DateTime.now(),
+              isCompleted:
+                  subNoteData['isCompleted'] == true ||
+                  subNoteData['is_completed'] == true,
+            ),
+          );
+        }
+      }
+    }
+
+    // Tags: replace entire list if present
+    List<String> tags = existing.tags;
+    if (changes.containsKey('tags') && changes['tags'] is List) {
+      tags = (changes['tags'] as List).map((e) => e.toString()).toList();
+    }
+
+    // Attachments: replace entire list if present
+    final modificationService = getIt<NoteModificationService>();
+    List<String> attachmentPaths = existing.attachmentPaths;
+    if (changes.containsKey('attachments') && changes['attachments'] is List) {
+      attachmentPaths = [];
+      for (final attachment in (changes['attachments'] as List)) {
+        attachmentPaths.add(
+          await modificationService.processAttachment(attachment),
+        );
+      }
+    }
+
+    // Task fields
+    String? scheduledAt = existing.scheduledAt;
+    if (changes.containsKey('scheduledAt'))
+      scheduledAt = changes['scheduledAt']?.toString();
+
+    String? completeBy = existing.completeBy;
+    if (changes.containsKey('completeBy'))
+      completeBy = changes['completeBy']?.toString();
+
+    TaskStatus? status = existing.status;
+    if (changes.containsKey('status')) {
+      final statusStr = changes['status'].toString().toLowerCase();
+      switch (statusStr) {
+        case 'todo':
+          status = TaskStatus.todo;
+          break;
+        case 'in_progress':
+          status = TaskStatus.inProgress;
+          break;
+        case 'complete':
+          status = TaskStatus.complete;
+          break;
+        case 'abandoned':
+          status = TaskStatus.abandoned;
+          break;
+        default:
+          status = TaskStatus.todo;
+      }
+    }
+
+    double? completionPercentage = existing.completionPercentage;
+    if (changes.containsKey('completionPercentage')) {
+      completionPercentage =
+          (changes['completionPercentage'] as num?)?.toDouble() ?? 0.0;
+    }
+
+    bool pinned = existing.pinned;
+    if (changes.containsKey('pinned')) {
+      pinned = changes['pinned'] == true;
+    }
+
+    bool isArchived = existing.isArchived;
+    if (changes.containsKey('isArchived')) {
+      isArchived = changes['isArchived'] == true;
+    }
+
+    return existing.copyWith(
+      title: title,
+      content: content,
+      type: type,
+      subNotes: subNotes,
+      tags: tags,
+      attachmentPaths: attachmentPaths,
+      scheduledAt: scheduledAt,
+      completeBy: completeBy,
+      status: status,
+      completionPercentage: completionPercentage,
+      pinned: pinned,
+      isArchived: isArchived,
+      updatedAt: DateTime.now(),
+    );
   }
 }
 

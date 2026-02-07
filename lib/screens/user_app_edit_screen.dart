@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 
 import 'package:re_editor/re_editor.dart';
@@ -18,6 +19,10 @@ import '../widgets/synapse_code_editor.dart';
 import '../models/generation_context.dart';
 import '../models/model_config.dart';
 import '../widgets/model_selector_button.dart';
+import '../widgets/drawing_editor.dart';
+import '../services/attachment_preprocessor.dart';
+import '../services/model_selector.dart';
+import '../services/service_locator.dart';
 
 class UserAppEditScreen extends StatefulWidget {
   final UserApp app;
@@ -255,6 +260,33 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
       final generationContext = GenerationContext();
       if (_selectedModel != null) {
         generationContext.modelOverride = _selectedModel;
+      } else {
+        // Collect attachments for capability check
+        final attachmentsToScan = <PlatformFile>[];
+        for (final path in _attachmentPaths) {
+          final file = File(path);
+          if (await file.exists()) {
+            final bytes = await file.readAsBytes();
+            attachmentsToScan.add(
+              PlatformFile(
+                name: path.split('/').last,
+                size: bytes.length,
+                bytes: bytes,
+                path: path,
+              ),
+            );
+          }
+        }
+        final caps = await AttachmentPreprocessor.detectRequiredCapabilities(
+          attachmentsToScan,
+        );
+        if (caps.isNotEmpty) {
+          final preferredModel = await getIt<ModelSelector>()
+              .selectModelByPreference(caps);
+          if (preferredModel != null) {
+            generationContext.modelOverride = preferredModel;
+          }
+        }
       }
 
       // Create the new revision using the existing editUserApp method
@@ -299,12 +331,6 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
                   )!.errorCreatingAppFromEdit(e.toString()),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'Please check your API key and try again.',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                ),
               ],
             ),
             actions: [
@@ -475,6 +501,30 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
     }
   }
 
+  Future<void> _openDrawingEditor() async {
+    try {
+      final File? drawnFile = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const DrawingEditor()),
+      );
+
+      if (drawnFile != null) {
+        setState(() {
+          _attachmentPaths.add(drawnFile.path);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding drawing: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _removeAttachment(int index) {
     setState(() {
       _attachmentPaths.removeAt(index);
@@ -537,6 +587,14 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
             },
             icon: const Icon(Icons.photo_library),
             label: const Text('Gallery'),
+          ),
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _openDrawingEditor();
+            },
+            icon: const Icon(Icons.brush),
+            label: const Text('Draw'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context),

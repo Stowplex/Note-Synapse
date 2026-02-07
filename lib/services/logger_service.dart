@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AiLogEntry {
   final String id;
@@ -39,7 +40,53 @@ class LoggerService {
 
   // Global singleton log bucket for AI requests and responses
   static final List<AiLogEntry> _aiLogBucket = [];
-  static const int _maxLogEntries = 100;
+
+  /// Default max log entries (100). -1 = unlimited, 0 = disabled.
+  static const int defaultMaxLogEntries = 100;
+  static const String _maxLogEntriesKey = 'system_max_log_entries';
+
+  /// Cached value for max log entries (loaded on first access).
+  static int _cachedMaxLogEntries = defaultMaxLogEntries;
+  static bool _maxLogEntriesLoaded = false;
+
+  /// Gets the configured max log entries limit.
+  /// -1 = unlimited, 0 = disabled, >0 = limit.
+  static Future<int> getMaxLogEntries() async {
+    if (!_maxLogEntriesLoaded) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final stored = prefs.getInt(_maxLogEntriesKey);
+        _cachedMaxLogEntries = stored ?? defaultMaxLogEntries;
+        _maxLogEntriesLoaded = true;
+      } catch (e) {
+        // Fallback to default
+        _cachedMaxLogEntries = defaultMaxLogEntries;
+      }
+    }
+    return _cachedMaxLogEntries;
+  }
+
+  /// Sets the max log entries limit.
+  /// Use -1 for unlimited, 0 to disable logging.
+  static Future<void> setMaxLogEntries(int value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_maxLogEntriesKey, value);
+      _cachedMaxLogEntries = value;
+      _maxLogEntriesLoaded = true;
+
+      // Apply the new limit immediately
+      if (value == 0) {
+        _aiLogBucket.clear();
+      } else if (value > 0) {
+        while (_aiLogBucket.length > value) {
+          _aiLogBucket.removeAt(0);
+        }
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+  }
 
   static List<AiLogEntry> get aiLogBucket => List.unmodifiable(_aiLogBucket);
 
@@ -48,8 +95,14 @@ class LoggerService {
   }
 
   static void _addToLogBucket(AiLogEntry entry) {
+    // Check if logging is disabled (0)
+    if (_cachedMaxLogEntries == 0) return;
+
     _aiLogBucket.add(entry);
-    if (_aiLogBucket.length > _maxLogEntries) {
+
+    // Trim if we have a limit (not -1 = unlimited)
+    if (_cachedMaxLogEntries > 0 &&
+        _aiLogBucket.length > _cachedMaxLogEntries) {
       _aiLogBucket.removeAt(0); // Remove oldest entry
     }
   }

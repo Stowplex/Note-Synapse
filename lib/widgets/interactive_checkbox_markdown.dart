@@ -11,7 +11,9 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:gpt_markdown/custom_widgets/selectable_adapter.dart';
 import 'package:gpt_markdown/custom_widgets/markdown_config.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:re_highlight/languages/all.dart';
 import 'package:re_highlight/re_highlight.dart';
 import 'package:re_highlight/styles/atom-one-dark.dart';
@@ -19,10 +21,16 @@ import 'package:re_highlight/styles/atom-one-light.dart';
 
 import 'package:crypto/crypto.dart';
 import '../utils/synapse_temp_utils.dart';
+import '../utils/synapse_resource_uri.dart';
+import '../services/database_service.dart';
+import '../services/network_provider.dart';
+import '../screens/note_detail_screen.dart';
+import '../screens/conversation_chat_screen.dart';
 import '../utils/remote_image_storage.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
 import 'interactive_checkbox_component.dart';
+import '../widgets/drawing_editor.dart';
 
 /// Enum to represent image source type
 enum _ImageSourceType { local, remote }
@@ -71,12 +79,62 @@ class _InteractiveCheckboxMarkdownState
     _currentContent = widget.originalContent;
   }
 
-  @override
-  void didUpdateWidget(InteractiveCheckboxMarkdown oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.originalContent != widget.originalContent) {
-      _currentContent = widget.originalContent;
+  final Map<String, Future<_LocalImageSource?>> _localImageFutures = {};
+  final Map<String, Future<SynapseTempFile>> _synapseTempFutures = {};
+
+  /// Map to track image versions and force rebuilds on edit
+  final Map<String, int> _imageVersions = {};
+
+  /// Handles synapseresource:// URIs and navigates to the appropriate screen.
+  Future<void> _handleSynapseResourceLink(String url) async {
+    final link = SynapseResourceUri.parse(url);
+    if (link == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Invalid resource link')));
+      }
+      return;
     }
+
+    switch (link.type) {
+      case SynapseResourceType.note:
+        final note = await DatabaseService().getNote(link.id);
+        if (note != null && mounted) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => NoteDetailScreen(note: note),
+            ),
+          );
+        } else if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Note not found')));
+        }
+      case SynapseResourceType.conversation:
+        if (mounted) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) =>
+                  ConversationChatScreen(conversationId: link.id),
+            ),
+          );
+        }
+    }
+  }
+
+  Future<_LocalImageSource?> _resolveLocalImageSourceCached(String url) {
+    return _localImageFutures.putIfAbsent(
+      url,
+      () => _resolveLocalImageSource(url),
+    );
+  }
+
+  Future<SynapseTempFile> _resolveSynapseTempFileCached(String url) {
+    return _synapseTempFutures.putIfAbsent(
+      url,
+      () => SynapseTempUtils.loadFile(url),
+    );
   }
 
   void _handleCheckboxToggle(
@@ -195,7 +253,7 @@ class _InteractiveCheckboxMarkdownState
     // Use LayoutBuilder to ensure proper constraints are provided to the child
     // This prevents layout errors when selection containers try to access widget sizes
     // The key is providing finite vertical constraints even when the parent has infinite height
-    return LayoutBuilder(
+    Widget result = LayoutBuilder(
       builder: (context, constraints) {
         // Provide a finite maxHeight to prevent layout issues with transforms in selection containers
         // Use a large but finite value if constraints are unbounded
@@ -214,6 +272,83 @@ class _InteractiveCheckboxMarkdownState
         );
       },
     );
+
+    return result;
+  }
+
+  Widget _buildGenericSynapseTempImage(
+    BuildContext context,
+    String url,
+    double? width,
+    double? height, {
+    BoxFit fit = BoxFit.contain,
+  }) {
+    return FutureBuilder<SynapseTempFile>(
+      future: _resolveSynapseTempFileCached(url),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return _buildLoadingPlaceholder(width, height);
+        }
+
+        if (snapshot.hasError || !snapshot.hasData) {
+          return _buildPlaceholder(
+            width,
+            height,
+            'Unable to load temporary image',
+          );
+        }
+
+        final tempFile = snapshot.data!;
+        final mime = tempFile.mimeType.toLowerCase();
+        final isSvg = mime == 'image/svg+xml';
+
+        if (isSvg) {
+          // Render SVG using InAppWebView for better compatibility and edge case handling
+          try {
+            final svgContent = utf8.decode(tempFile.bytes);
+            widget.hasWebViewNotifier?.value = true;
+            return _SvgWebViewWithInfoBar(
+              svgContent: svgContent,
+              imageUrl: url,
+              width: width,
+              height: height,
+              noteId: widget.noteId,
+            );
+          } catch (e) {
+            return _buildPlaceholder(width, height, 'Failed to decode SVG');
+          }
+        }
+
+        if (mime.startsWith('image/')) {
+          final imageWidget = Image.memory(
+            tempFile.bytes,
+            key: ValueKey('\$url_\${_imageVersions[url] ?? 0}'),
+            fit: fit,
+            errorBuilder: (context, error, stackTrace) {
+              return _buildPlaceholder(width, height, 'Failed to render image');
+            },
+          );
+          return _wrapImageWithInfoBar(
+            image: SizedBox(width: width, height: height, child: imageWidget),
+            imageUrl: url,
+            isSvg: false,
+            onFullscreen: () {
+              _FullscreenViewer.show(
+                context,
+                imageWidget: Image.memory(tempFile.bytes, fit: BoxFit.contain),
+                title: 'Image',
+              );
+            },
+          );
+        }
+
+        return _buildPlaceholder(
+          width,
+          height,
+          'Unsupported image type: ${tempFile.mimeType}',
+        );
+      },
+    );
   }
 
   /// Custom image builder that handles data URLs and synapsetemp:/// URIs.
@@ -227,86 +362,17 @@ class _InteractiveCheckboxMarkdownState
     double? width,
     double? height,
   }) {
-    if (SynapseTempUtils.isSynapseTempUri(url)) {
-      return FutureBuilder<SynapseTempFile>(
-        future: SynapseTempUtils.loadFile(url),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return _buildLoadingPlaceholder(width, height);
-          }
-
-          if (snapshot.hasError || !snapshot.hasData) {
-            if (snapshot.hasError && kDebugMode) {
-              debugPrint('SynapseTemp image load error: ${snapshot.error}');
-            }
-            return _buildPlaceholder(
-              width,
-              height,
-              'Unable to load temporary image',
-            );
-          }
-
-          final tempFile = snapshot.data!;
-          final mime = tempFile.mimeType.toLowerCase();
-          final isSvg = mime == 'image/svg+xml';
-
-          if (isSvg) {
-            // Render SVG using InAppWebView for better compatibility and edge case handling
-            try {
-              final svgContent = utf8.decode(tempFile.bytes);
-              widget.hasWebViewNotifier?.value = true;
-              return _SvgWebViewWithInfoBar(
-                svgContent: svgContent,
-                imageUrl: url,
-                width: width,
-                height: height,
-                noteId: widget.noteId,
-              );
-            } catch (e) {
-              if (kDebugMode) {
-                debugPrint('Error decoding SVG content: $e');
-              }
-              return _buildPlaceholder(width, height, 'Failed to decode SVG');
-            }
-          }
-
-          if (mime.startsWith('image/')) {
-            final imageWidget = Image.memory(
-              tempFile.bytes,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) {
-                return _buildPlaceholder(
-                  width,
-                  height,
-                  'Failed to render image',
-                );
-              },
-            );
-            return _wrapImageWithInfoBar(
-              image: SizedBox(width: width, height: height, child: imageWidget),
-              imageUrl: url,
-              isSvg: false,
-              onFullscreen: () {
-                _FullscreenViewer.show(
-                  context,
-                  imageWidget: Image.memory(
-                    tempFile.bytes,
-                    fit: BoxFit.contain,
-                  ),
-                  title: 'Image',
-                );
-              },
-            );
-          }
-
-          return _buildPlaceholder(
-            width,
-            height,
-            'Unsupported image type: ${tempFile.mimeType}',
-          );
-        },
-      );
+    Widget wrapWithDragTarget(Widget child) {
+      return child;
     }
+
+    // If we are in "preview mode" (indicated by maxLines being set),
+    // we want to enforce a stable image height to prevent scroll jumping in lists.
+    // We also use BoxFit.cover to fill the banner area nicely.
+    final bool isPreview = widget.maxLines != null;
+    final double? effectiveHeight = isPreview ? 200.0 : height;
+    final double? effectiveWidth = isPreview ? double.infinity : width;
+    final BoxFit effectiveFit = isPreview ? BoxFit.cover : BoxFit.contain;
 
     if (url.startsWith('data:')) {
       try {
@@ -315,7 +381,13 @@ class _InteractiveCheckboxMarkdownState
 
         final commaIndex = dataString.indexOf(',');
         if (commaIndex == -1) {
-          return _buildPlaceholder(width, height, 'Invalid data URL format');
+          return wrapWithDragTarget(
+            _buildPlaceholder(
+              effectiveWidth,
+              effectiveHeight,
+              'Invalid data URL format',
+            ),
+          );
         }
 
         final header = dataString.substring(5, commaIndex); // Skip 'data:'
@@ -340,76 +412,128 @@ class _InteractiveCheckboxMarkdownState
                 ? utf8.decode(base64.decode(data))
                 : Uri.decodeComponent(data);
             widget.hasWebViewNotifier?.value = true;
-            return _SvgWebViewWithInfoBar(
-              svgContent: svgContent,
-              imageUrl: url,
-              width: width,
-              height: height,
-              noteId: widget.noteId,
+            return wrapWithDragTarget(
+              _SvgWebViewWithInfoBar(
+                svgContent: svgContent,
+                imageUrl: url,
+                width: effectiveWidth,
+                height: effectiveHeight,
+                noteId: widget.noteId,
+              ),
             );
           } catch (e) {
             if (kDebugMode) {
               debugPrint('Error decoding SVG from data URL: $e');
             }
-            return _buildPlaceholder(width, height, 'Failed to decode SVG');
+            return wrapWithDragTarget(
+              _buildPlaceholder(
+                effectiveWidth,
+                effectiveHeight,
+                'Failed to decode SVG',
+              ),
+            );
           }
         }
 
         if (mimetype.startsWith('image/')) {
           if (!isBase64) {
-            return _buildPlaceholder(
-              width,
-              height,
-              'Only base64 encoded images are supported',
+            return wrapWithDragTarget(
+              _buildPlaceholder(
+                effectiveWidth,
+                effectiveHeight,
+                'Only base64 encoded images are supported',
+              ),
             );
           }
 
           final bytes = base64.decode(data);
           final imageWidget = Image.memory(
             bytes,
-            fit: BoxFit.contain,
+            key: ValueKey('${url}_${_imageVersions[url] ?? 0}'),
+            fit: effectiveFit,
             errorBuilder: (context, error, stackTrace) {
-              return _buildPlaceholder(width, height, 'Failed to render image');
-            },
-          );
-          return _wrapImageWithInfoBar(
-            image: SizedBox(width: width, height: height, child: imageWidget),
-            imageUrl: url,
-            isSvg: false,
-            onFullscreen: () {
-              _FullscreenViewer.show(
-                context,
-                imageWidget: Image.memory(bytes, fit: BoxFit.contain),
-                title: 'Image',
+              return wrapWithDragTarget(
+                _buildPlaceholder(
+                  effectiveWidth,
+                  effectiveHeight,
+                  'Failed to render image',
+                ),
               );
             },
           );
+          return wrapWithDragTarget(
+            _wrapImageWithInfoBar(
+              image: SizedBox(
+                width: effectiveWidth,
+                height: effectiveHeight,
+                child: imageWidget,
+              ),
+              imageUrl: url,
+              isSvg: false,
+              onFullscreen: () {
+                _FullscreenViewer.show(
+                  context,
+                  imageWidget: Image.memory(bytes, fit: BoxFit.contain),
+                  title: 'Image',
+                );
+              },
+            ),
+          );
         }
 
-        return _buildPlaceholder(
-          width,
-          height,
-          'Unsupported image type: $mimetype',
+        return wrapWithDragTarget(
+          _buildPlaceholder(
+            effectiveWidth,
+            effectiveHeight,
+            'Unsupported image type: $mimetype',
+          ),
         );
       } catch (e) {
-        return _buildPlaceholder(width, height, 'Error loading image: $e');
+        return wrapWithDragTarget(
+          _buildPlaceholder(
+            effectiveWidth,
+            effectiveHeight,
+            'Error loading image: $e',
+          ),
+        );
       }
     }
 
     if (widget.noteId != null &&
-        (_isHttpUrl(url) ||
+        (SynapseTempUtils.isSynapseTempUri(url) ||
+            _isHttpUrl(url) ||
             (!url.contains(':') &&
                 !url.contains('/') &&
                 !url.contains('\\')))) {
       return FutureBuilder<_LocalImageSource?>(
-        future: _resolveLocalImageSource(url),
+        future: _resolveLocalImageSourceCached(url),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return _buildLoadingPlaceholder(width, height);
+            return _buildLoadingPlaceholder(effectiveWidth, effectiveHeight);
           }
-          if (snapshot.hasError) {
+
+          Widget buildFallback() {
+            if (kDebugMode) {
+              debugPrint(
+                'InteractiveCheckboxMarkdown: Building fallback for $url',
+              );
+            }
+            if (SynapseTempUtils.isSynapseTempUri(url)) {
+              return _buildGenericSynapseTempImage(
+                context,
+                url,
+                effectiveWidth,
+                effectiveHeight,
+                fit: effectiveFit,
+              );
+            }
             return _wrapImageWithInfoBar(
-              image: _buildNetworkImage(url, width, height),
+              image: _buildNetworkImage(
+                url,
+                effectiveWidth,
+                effectiveHeight,
+                fit: effectiveFit,
+              ),
               imageUrl: url,
               isSvg: false,
               onFullscreen: () {
@@ -421,73 +545,124 @@ class _InteractiveCheckboxMarkdownState
               },
             );
           }
+
+          if (snapshot.hasError) {
+            return buildFallback();
+          }
+
           final source = snapshot.data;
           if (source != null) {
             if (source.svgContent != null) {
               widget.hasWebViewNotifier?.value = true;
-              return _SvgWebViewWithInfoBar(
-                svgContent: source.svgContent!,
-                imageUrl: url,
-                width: width,
-                height: height,
-                noteId: widget.noteId,
+              return wrapWithDragTarget(
+                _SvgWebViewWithInfoBar(
+                  svgContent: source.svgContent!,
+                  imageUrl: url,
+                  width: effectiveWidth,
+                  height: effectiveHeight,
+                  noteId: widget.noteId,
+                ),
               );
             }
             final imageFile = File(source.path);
-            return _wrapImageWithInfoBar(
-              image: SizedBox(
-                width: width,
-                height: height,
-                child: Image.file(
-                  imageFile,
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    return _buildPlaceholder(
-                      width,
-                      height,
-                      'Failed to render local image',
+            if (kDebugMode) {
+              debugPrint(
+                'InteractiveCheckboxMarkdown: Building local image widget for $url version ${_imageVersions[url]} (path: ${source.path})',
+              );
+            }
+
+            // Bypass FileImage cache by reading bytes directly
+            return FutureBuilder<Uint8List>(
+              future: imageFile.readAsBytes(),
+              builder: (context, byteSnapshot) {
+                if (byteSnapshot.hasData) {
+                  if (kDebugMode) {
+                    debugPrint(
+                      'InteractiveCheckboxMarkdown: Read ${byteSnapshot.data!.length} bytes from disk for $url',
                     );
-                  },
-                ),
-              ),
-              imageUrl: url,
-              isSvg: false,
-              onFullscreen: () {
-                _FullscreenViewer.show(
-                  context,
-                  imageWidget: Image.file(imageFile, fit: BoxFit.contain),
-                  title: 'Image',
+                  }
+                  return wrapWithDragTarget(
+                    _wrapImageWithInfoBar(
+                      image: SizedBox(
+                        width: effectiveWidth,
+                        height: effectiveHeight,
+                        child: Image.memory(
+                          byteSnapshot.data!,
+                          key: ValueKey('${url}${_imageVersions[url] ?? 0}'),
+                          fit: effectiveFit,
+                          errorBuilder: (context, error, stackTrace) {
+                            return wrapWithDragTarget(
+                              _buildPlaceholder(
+                                effectiveWidth,
+                                effectiveHeight,
+                                'Failed to render local image bytes',
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      imageUrl: url,
+                      isSvg: false,
+                      onFullscreen: () {
+                        _FullscreenViewer.show(
+                          context,
+                          imageWidget: Image.memory(
+                            byteSnapshot.data!,
+                            fit: BoxFit.contain,
+                          ),
+                          title: 'Image',
+                        );
+                      },
+                    ),
+                  );
+                }
+                return _buildLoadingPlaceholder(
+                  effectiveWidth,
+                  effectiveHeight,
                 );
               },
             );
           }
-          return _wrapImageWithInfoBar(
-            image: _buildNetworkImage(url, width, height),
-            imageUrl: url,
-            isSvg: false,
-            onFullscreen: () {
-              _FullscreenViewer.show(
-                context,
-                imageWidget: Image.network(url, fit: BoxFit.contain),
-                title: 'Image',
-              );
-            },
-          );
+          return buildFallback();
         },
       );
     }
 
-    return _wrapImageWithInfoBar(
-      image: _buildNetworkImage(url, width, height),
-      imageUrl: url,
-      isSvg: false,
-      onFullscreen: () {
-        _FullscreenViewer.show(
+    if (SynapseTempUtils.isSynapseTempUri(url)) {
+      return wrapWithDragTarget(
+        _buildGenericSynapseTempImage(
           context,
-          imageWidget: Image.network(url, fit: BoxFit.contain),
-          title: 'Image',
-        );
-      },
+          url,
+          effectiveWidth,
+          effectiveHeight,
+          fit: effectiveFit,
+        ),
+      );
+    }
+
+    final imageWidget = _buildNetworkImage(
+      url,
+      effectiveWidth,
+      effectiveHeight,
+      fit: effectiveFit,
+    );
+    return wrapWithDragTarget(
+      _wrapImageWithInfoBar(
+        image: SizedBox(
+          width: effectiveWidth,
+          height: effectiveHeight,
+          child: imageWidget,
+        ),
+        imageUrl: url,
+        isSvg: false,
+        onFullscreen: () {
+          _FullscreenViewer.show(
+            context,
+            imageWidget: Image.network(url, fit: BoxFit.contain),
+            title: 'Image',
+          );
+        },
+      ),
     );
   }
 
@@ -526,11 +701,17 @@ class _InteractiveCheckboxMarkdownState
     );
   }
 
-  Widget _buildNetworkImage(String url, double? width, double? height) {
+  Widget _buildNetworkImage(
+    String url,
+    double? width,
+    double? height, {
+    BoxFit fit = BoxFit.contain,
+  }) {
     return SizedBox(
       width: width,
       height: height,
       child: Image(
+        key: ValueKey('${url}_${_imageVersions[url] ?? 0}'),
         image: NetworkImage(url),
         loadingBuilder:
             (
@@ -550,7 +731,7 @@ class _InteractiveCheckboxMarkdownState
                 ),
               );
             },
-        fit: BoxFit.contain,
+        fit: fit,
         errorBuilder: (context, error, stackTrace) {
           return const Icon(Icons.broken_image, size: 48);
         },
@@ -567,7 +748,7 @@ class _InteractiveCheckboxMarkdownState
     VoidCallback? onFullscreen,
   }) {
     return FutureBuilder<_ImageSourceType>(
-      future: _determineImageSourceType(imageUrl),
+      future: _determineImageSourceTypeCached(imageUrl),
       builder: (context, snapshot) {
         final sourceType = snapshot.data ?? _ImageSourceType.remote;
         return _ImageWithInfoBar(
@@ -576,13 +757,218 @@ class _InteractiveCheckboxMarkdownState
           isSvg: isSvg,
           onBackgroundToggle: onBackgroundToggle,
           onFullscreen: onFullscreen,
+          onEdit: () async {
+            if (sourceType == _ImageSourceType.remote) {
+              await _handleNetworkImageEdit(imageUrl);
+            } else {
+              // Local handling
+              File? file;
+              if (SynapseTempUtils.isSynapseTempUri(imageUrl)) {
+                try {
+                  final synapseFile = await _resolveSynapseTempFileCached(
+                    imageUrl,
+                  );
+                  file = synapseFile.file;
+                } catch (_) {}
+              } else {
+                final source = await _resolveLocalImageSource(imageUrl);
+                if (source != null) {
+                  file = File(source.path);
+                }
+              }
+
+              if (file != null && await file.exists()) {
+                final editedFile = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        DrawingEditor(initialImagePath: file!.path),
+                  ),
+                );
+
+                if (editedFile != null && editedFile is File) {
+                  await file.writeAsBytes(
+                    await editedFile.readAsBytes(),
+                    flush: true,
+                  );
+                  if (kDebugMode) {
+                    debugPrint(
+                      'InteractiveCheckboxMarkdown: Overwrote local file ${file.path} with edited content (flushed)',
+                    );
+                  }
+
+                  if (mounted) {
+                    _localImageFutures.remove(imageUrl);
+                    _synapseTempFutures.remove(imageUrl);
+                    if (kDebugMode) {
+                      debugPrint(
+                        'InteractiveCheckboxMarkdown: Cleared futures cache for $imageUrl',
+                      );
+                    }
+
+                    await FileImage(file).evict();
+                    await FileImage(editedFile).evict();
+                    PaintingBinding.instance.imageCache.clear();
+                    PaintingBinding.instance.imageCache.clearLiveImages();
+
+                    // Wait for navigation animation
+                    await Future.delayed(const Duration(milliseconds: 350));
+
+                    // Increment version to force keyed rebuild
+                    _imageVersions[imageUrl] =
+                        (_imageVersions[imageUrl] ?? 0) + 1;
+                    if (kDebugMode) {
+                      debugPrint(
+                        'InteractiveCheckboxMarkdown: Updated version for $imageUrl to ${_imageVersions[imageUrl]}',
+                      );
+                    }
+                    setState(() {});
+                  }
+                }
+              } else {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Cannot edit this image (file not found)'),
+                    ),
+                  );
+                }
+              }
+            }
+          },
         );
       },
     );
   }
 
+  Future<void> _handleNetworkImageEdit(String imageUrl) async {
+    final shouldDownload = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Network Image'),
+        content: const Text(
+          'To edit this image, it must be downloaded first. Do you want to continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Download & Edit'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDownload == true) {
+      try {
+        // Download
+        final response = await NetworkProvider.get(Uri.parse(imageUrl));
+        if (response.statusCode == 200) {
+          final bytes = response.bodyBytes;
+          final tempDir = await getTemporaryDirectory();
+          final tempFile = File(
+            '${tempDir.path}/${DateTime.now().millisecondsSinceEpoch}_edit.png',
+          );
+          await tempFile.writeAsBytes(bytes);
+
+          if (!mounted) return;
+
+          // Open Editor
+          final editedFile = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  DrawingEditor(initialImagePath: tempFile.path),
+            ),
+          );
+
+          if (editedFile != null && editedFile is File) {
+            // We have the edited file locally.
+            // We need to update the markdown content to point to this new local file.
+            // Using file:// URI Scheme
+            final newUri = Uri.file(editedFile.path).toString();
+
+            // Update Content
+            if (widget.onContentChanged != null) {
+              // Evict cache for the new file
+              await FileImage(editedFile).evict();
+              // Also evict the old URL just in case
+              await NetworkImage(imageUrl).evict();
+
+              final newContent = _currentContent.replaceAll(imageUrl, newUri);
+              _currentContent = newContent;
+              widget.onContentChanged!(_currentContent);
+              setState(() {
+                // Update version
+                _imageVersions[imageUrl] = (_imageVersions[imageUrl] ?? 0) + 1;
+              });
+            }
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Download failed: ${response.statusCode}'),
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error downloading image: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  Future<_ImageSourceType> _determineImageSourceTypeCached(String url) {
+    // We can reuse the same future logic/cache mechanism or separate map
+    // Since _determineImageSourceType calls _resolveLocalImageSource (which is cached),
+    // we should cache this top-level result too to avoid FutureBuilder loop.
+    // However, _determineImageSourceType is lightweight EXCEPT for the async part.
+    // The FutureBuilder itself is the issue.
+    // Let's assume we can cache it in a map.
+    return _imageSourceTypeFutures.putIfAbsent(
+      url,
+      () => _determineImageSourceType(url),
+    );
+  }
+
+  final Map<String, Future<_ImageSourceType>> _imageSourceTypeFutures = {};
+
+  @override
+  void didUpdateWidget(InteractiveCheckboxMarkdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.originalContent != widget.originalContent) {
+      _currentContent = widget.originalContent;
+      // We don't strictly need to clear cache on content change as URLs are unique keys,
+      // but it helps keep memory usage low if content changes completely.
+      _localImageFutures.clear();
+      _synapseTempFutures.clear();
+      _imageSourceTypeFutures.clear();
+    }
+    if (oldWidget.noteId != widget.noteId) {
+      _localImageFutures.clear();
+      _synapseTempFutures.clear();
+      _imageSourceTypeFutures.clear();
+    }
+  }
+
   Future<_LocalImageSource?> _resolveLocalImageSource(String url) async {
+    if (kDebugMode) {
+      debugPrint(
+        'InteractiveCheckboxMarkdown: Resolving local image source for $url',
+      );
+    }
     if (widget.noteId == null) {
+      if (kDebugMode) {
+        debugPrint('InteractiveCheckboxMarkdown: noteId is null');
+      }
       return null;
     }
 
@@ -715,50 +1101,74 @@ class _InteractiveCheckboxMarkdownState
 
   @override
   Widget build(BuildContext context) {
-    // Create custom components list with our safe HTag and optional interactive checkbox component
+    // Basic inline components
+    final inlineComponents = [
+      _EmbeddedWebViewMd(
+        defaultSize: widget.defaultWebViewSize,
+        noteId: widget.noteId,
+        hasWebViewNotifier: widget.hasWebViewNotifier,
+      ),
+      if (widget.onLinkTap != null || widget.noteId != null)
+        // Helper to ensure links are handled if needed, usually default ATag is fine
+        // but we used DragTargetATagMd before. Standard ATagMd should be enough.
+        // If we need custom link handling (like avoiding ! prefixes),
+        // GptMarkdown handles that.
+        // We'll use the standard ones implicitly by NOT passing them in 'inlineComponents'
+        // except for the custom one.
+        ...MarkdownComponent.inlineComponents,
+    ];
+
+    // Check if we need to add standard ATagMd back if we excluded it?
+    // Wait, GptMarkdown adds inlineComponents on top of defaults?
+    // No, 'inlineComponents' argument to GptMarkdown REPLACES the list or APPENDS?
+    // Docs say: "inlineComponents: A list of custom inline components"
+    // Usually it appends or overrides if types match.
+    // Let's assume we can just pass our custom ones.
+
     final components = [
       CodeBlockMd(),
-      LatexMathMultiLine(),
       NewLines(),
-      BlockQuote(),
-      TableMd(),
-      SafeHTag(), // Use our safe version instead of HTag
-      UnOrderedList(),
-      OrderedList(),
-      RadioButtonMd(),
       if (widget.onContentChanged != null)
         InteractiveCheckboxMd(
           onToggle: (line, text, value) =>
               _handleCheckboxToggle(line, text, value),
         )
       else
-        CheckBoxMd(), // Use regular checkbox if not interactive
+        CheckBoxMd(),
       HrLine(),
+      UnOrderedList(),
+      OrderedList(),
+      BlockQuote(),
+      TableMd(),
       IndentMd(),
+      SafeHTag(), // Using SafeHTag from interactive_checkbox_component
+      LatexMathMultiLine(),
+      LatexBracketBlockMd(),
     ];
 
-    final inlineComponents = [
-      ...MarkdownComponent.inlineComponents,
-      ...MarkdownComponent.inlineComponents,
-      _EmbeddedWebViewMd(
-        defaultSize: widget.defaultWebViewSize,
-        noteId: widget.noteId,
-        hasWebViewNotifier: widget.hasWebViewNotifier,
+    return KeyedSubtree(
+      key: ValueKey('md_${_imageVersions.values.join()}'),
+      child: GptMarkdown(
+        _currentContent,
+        style: widget.style,
+        textDirection: widget.textDirection,
+        onLinkTap: (url, text) {
+          // Handle synapseresource:// URIs internally
+          if (SynapseResourceUri.isSynapseResourceUri(url)) {
+            _handleSynapseResourceLink(url);
+            return;
+          }
+          // Fall back to parent callback
+          widget.onLinkTap?.call(url, text);
+        },
+        maxLines: widget.maxLines,
+        overflow: widget.overflow,
+        latexBuilder: _customLatexBuilder,
+        imageBuilder: _customImageBuilder,
+        codeBuilder: _buildCodeBlock,
+        components: components,
+        inlineComponents: inlineComponents,
       ),
-    ];
-
-    return GptMarkdown(
-      _currentContent,
-      style: widget.style,
-      textDirection: widget.textDirection,
-      onLinkTap: widget.onLinkTap,
-      maxLines: widget.maxLines,
-      overflow: widget.overflow,
-      latexBuilder: _customLatexBuilder,
-      imageBuilder: _customImageBuilder,
-      codeBuilder: _buildCodeBlock,
-      components: components,
-      inlineComponents: inlineComponents,
     );
   }
 }
@@ -815,31 +1225,34 @@ class _EmbeddedWebViewMd extends InlineMd {
       baseline: TextBaseline.alphabetic,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        child: _MarkdownEmbeddedWebView(
-          url: url,
-          width: resolvedWidth,
-          height: resolvedHeight,
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          noteId: noteId,
+        child: SelectionContainer.disabled(
+          child: _MarkdownEmbeddedWebView(
+            url: url,
+            width: resolvedWidth,
+            height: resolvedHeight,
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            noteId: noteId,
+          ),
         ),
       ),
     );
   }
 
   int _findUrlEnd(String text, int startIndex) {
-    var depth = 0;
-    for (var i = startIndex; i < text.length; i++) {
-      final char = text[i];
-      if (char == '(') {
-        depth++;
-      } else if (char == ')') {
-        if (depth == 0) {
-          return i;
-        }
-        depth--;
+    int parenDepth = 0;
+    for (int i = startIndex; i < text.length; i++) {
+      if (text[i] == '(') {
+        parenDepth++;
+      } else if (text[i] == ')') {
+        if (parenDepth == 0) return i;
+        parenDepth--;
+      } else if (text[i] == ' ' && parenDepth == 0) {
+        // Stop at space if not inside parens (though URL usually doesn't have spaces unless encoded)
+        // Standard markdown allows title after URL in quotes, but here we just want the URL
+        return i;
       }
     }
-    return startIndex;
+    return -1;
   }
 }
 
@@ -1314,61 +1727,134 @@ class _SvgWebViewWidgetState extends State<_SvgWebViewWidget> {
     );
   }
 
+  /// Parse SVG content to extract aspect ratio from viewBox or width/height attributes
+  double? _parseSvgAspectRatio(String svgContent) {
+    // Try to parse viewBox first: viewBox="minX minY width height"
+    final viewBoxMatch = RegExp(
+      r'viewBox\s*=\s*["\x27]([^"\x27]+)["\x27]',
+      caseSensitive: false,
+    ).firstMatch(svgContent);
+    if (viewBoxMatch != null) {
+      final parts = viewBoxMatch.group(1)!.trim().split(RegExp(r'\s+'));
+      if (parts.length >= 4) {
+        final width = double.tryParse(parts[2]);
+        final height = double.tryParse(parts[3]);
+        if (width != null && height != null && width > 0 && height > 0) {
+          return height / width;
+        }
+      }
+    }
+
+    // Fall back to width/height attributes
+    final widthMatch = RegExp(
+      r'<svg[^>]*\swidth\s*=\s*["\x27]?([\d.]+)',
+      caseSensitive: false,
+    ).firstMatch(svgContent);
+    final heightMatch = RegExp(
+      r'<svg[^>]*\sheight\s*=\s*["\x27]?([\d.]+)',
+      caseSensitive: false,
+    ).firstMatch(svgContent);
+
+    if (widthMatch != null && heightMatch != null) {
+      final width = double.tryParse(widthMatch.group(1)!);
+      final height = double.tryParse(heightMatch.group(1)!);
+      if (width != null && height != null && width > 0 && height > 0) {
+        return height / width;
+      }
+    }
+
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
+    // If explicit height is provided (e.g., preview mode), use it without LayoutBuilder
+    if (widget.height != null) {
+      return _buildWebView(widget.width, widget.height!);
+    }
+
+    // Use LayoutBuilder to get actual available width and calculate height
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : widget.width ?? 400.0;
+
+        // Parse SVG to get aspect ratio
+        final aspectRatio = _parseSvgAspectRatio(widget.svgContent);
+
+        // Calculate height: if we have aspect ratio, use it; otherwise default to 0.75
+        // Cap height at 500px for non-preview mode
+        final double calculatedHeight;
+        if (aspectRatio != null) {
+          calculatedHeight = (availableWidth * aspectRatio).clamp(100.0, 500.0);
+        } else {
+          // Default aspect ratio of 0.75 (4:3)
+          calculatedHeight = (availableWidth * 0.75).clamp(100.0, 500.0);
+        }
+
+        return _buildWebView(
+          constraints.maxWidth.isFinite ? null : widget.width,
+          calculatedHeight,
+        );
+      },
+    );
+  }
+
+  Widget _buildWebView(double? width, double height) {
     final htmlContent = _createSvgHtmlWrapper(
       widget.svgContent,
       isDarkBackground: _isDarkBackground,
     );
-    final webViewHeight =
-        widget.height ?? (widget.width != null ? widget.width! * 0.75 : 300.0);
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onVerticalDragStart: (_) {},
-      onHorizontalDragStart: (_) {},
-      child: SizedBox(
-        width: widget.width,
-        height: webViewHeight,
-        child: InAppWebView(
-          initialData: InAppWebViewInitialData(
-            data: htmlContent,
-            mimeType: 'text/html',
-            encoding: 'utf8',
+    return SelectionContainer.disabled(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragStart: (_) {},
+        onHorizontalDragStart: (_) {},
+        child: SizedBox(
+          width: width,
+          height: height,
+          child: InAppWebView(
+            initialData: InAppWebViewInitialData(
+              data: htmlContent,
+              mimeType: 'text/html',
+              encoding: 'utf8',
+            ),
+            initialSettings: InAppWebViewSettings(
+              javaScriptEnabled: true,
+              supportZoom: true,
+              transparentBackground: true,
+              disableContextMenu: false,
+              horizontalScrollBarEnabled: false,
+              verticalScrollBarEnabled: false,
+              resourceCustomSchemes: ['synapse'],
+              useHybridComposition: true,
+              disableVerticalScroll: false,
+              disableHorizontalScroll: false,
+            ),
+            gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+              Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
+            },
+            onWebViewCreated: (controller) {
+              _webViewController = controller;
+            },
+            onLoadStop: (controller, url) {
+              _webViewController = controller;
+            },
+            onLoadResourceWithCustomScheme: (controller, request) async {
+              if (request.url.scheme.toLowerCase() == 'synapse') {
+                final data = await rootBundle.loadString(
+                  "assets/scripts/${request.url.host}",
+                );
+                return CustomSchemeResponse(
+                  contentType: 'application/javascript',
+                  data: Uint8List.fromList(utf8.encode(data)),
+                );
+              }
+              return null;
+            },
           ),
-          initialSettings: InAppWebViewSettings(
-            javaScriptEnabled: true,
-            supportZoom: true,
-            transparentBackground: true,
-            disableContextMenu: false,
-            horizontalScrollBarEnabled: false,
-            verticalScrollBarEnabled: false,
-            resourceCustomSchemes: ['synapse'],
-            useHybridComposition: true,
-            disableVerticalScroll: false,
-            disableHorizontalScroll: false,
-          ),
-          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-            Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
-          },
-          onWebViewCreated: (controller) {
-            _webViewController = controller;
-          },
-          onLoadStop: (controller, url) {
-            _webViewController = controller;
-          },
-          onLoadResourceWithCustomScheme: (controller, request) async {
-            if (request.url.scheme.toLowerCase() == 'synapse') {
-              final data = await rootBundle.loadString(
-                "assets/scripts/${request.url.host}",
-              );
-              return CustomSchemeResponse(
-                contentType: 'application/javascript',
-                data: Uint8List.fromList(utf8.encode(data)),
-              );
-            }
-            return null;
-          },
         ),
       ),
     );
@@ -1380,6 +1866,7 @@ class _SvgWebViewWidgetState extends State<_SvgWebViewWidget> {
   }) {
     final backgroundColor = isDarkBackground ? '#1e1e1e' : '#ffffff';
     // Create sandboxed iframe with SVG content
+    // CSS updated to make SVG fill width while maintaining aspect ratio
     final svgDataUrl =
         'data:text/html;charset=utf-8,' +
         Uri.encodeComponent('''
@@ -1392,7 +1879,7 @@ class _SvgWebViewWidgetState extends State<_SvgWebViewWidget> {
     html, body { width: 100%; height: 100%; overflow: hidden; background-color: $backgroundColor; }
     body { display: flex; align-items: center; justify-content: center; }
     #svg-container { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-    svg { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
+    svg { width: 100%; height: auto; max-height: 100%; display: block; }
   </style>
   <script src="synapse://svg.pan-zoom.min.js"></script>
 </head>
@@ -1536,6 +2023,9 @@ class _SvgWebViewWithInfoBarState extends State<_SvgWebViewWithInfoBar> {
       future: _determineImageSourceType(widget.imageUrl),
       builder: (context, snapshot) {
         final sourceType = snapshot.data ?? _ImageSourceType.remote;
+        // Note: We don't use IntrinsicWidth here because LayoutBuilder
+        // (used inside _SvgWebViewWidget) doesn't support intrinsic dimensions.
+        // Since we want SVG to span full width anyway, Column with stretch is correct.
         return Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1565,6 +2055,7 @@ class _SvgWebViewWithInfoBarState extends State<_SvgWebViewWithInfoBar> {
                   title: 'SVG',
                 );
               },
+              onEdit: null, // Hide edit button for SVGs
             ),
           ],
         );
@@ -1580,12 +2071,14 @@ class _ImageInfoBar extends StatelessWidget {
     required this.isSvg,
     this.onBackgroundToggle,
     this.onFullscreen,
+    this.onEdit,
   });
 
   final _ImageSourceType sourceType;
   final bool isSvg;
   final VoidCallback? onBackgroundToggle;
   final VoidCallback? onFullscreen;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -1593,48 +2086,66 @@ class _ImageInfoBar extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: isDark
-            ? colorScheme.surfaceContainerHighest.withOpacity(0.2)
-            : colorScheme.surfaceContainerHighest.withOpacity(0.15),
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(4),
-          bottomRight: Radius.circular(4),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            sourceType == _ImageSourceType.local ? Icons.storage : Icons.cloud,
-            size: 22,
-            color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+    return SelectionContainer.disabled(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isDark
+              ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.2)
+              : colorScheme.surfaceContainerHighest.withValues(alpha: 0.15),
+          borderRadius: const BorderRadius.only(
+            bottomLeft: Radius.circular(4),
+            bottomRight: Radius.circular(4),
           ),
-          if (onBackgroundToggle != null) ...[
-            const SizedBox(width: 12),
-            GestureDetector(
-              onTap: onBackgroundToggle,
-              child: Icon(
-                Icons.contrast,
-                size: 22,
-                color: colorScheme.onSurfaceVariant.withOpacity(0.5),
-              ),
+        ),
+        child: Row(
+          // Remove mainAxisSize: MainAxisSize.min to allow Spacer to work
+          children: [
+            Icon(
+              sourceType == _ImageSourceType.local
+                  ? Icons.storage
+                  : Icons.cloud,
+              size: 22,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
             ),
-          ],
-          if (onFullscreen != null) ...[
-            const SizedBox(width: 12),
-            GestureDetector(
-              onTap: onFullscreen,
-              child: Icon(
-                Icons.fullscreen,
-                size: 22,
-                color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+            if (onBackgroundToggle != null) ...[
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: onBackgroundToggle,
+                child: Icon(
+                  Icons.contrast,
+                  size: 22,
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                ),
               ),
-            ),
+            ],
+            if (onFullscreen != null) ...[
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: onFullscreen,
+                child: Icon(
+                  Icons.fullscreen,
+                  size: 22,
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                ),
+              ),
+            ],
+            const Spacer(),
+            if (onEdit != null) ...[
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: onEdit,
+                child: Icon(
+                  Icons.edit,
+                  size: 20,
+                  color: colorScheme.onSurfaceVariant.withValues(
+                    alpha: 0.8,
+                  ), // Slightly more opaque for visibility
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1647,6 +2158,7 @@ class _ImageWithInfoBar extends StatefulWidget {
     required this.isSvg,
     this.onBackgroundToggle,
     this.onFullscreen,
+    this.onEdit,
   });
 
   final Widget image;
@@ -1654,6 +2166,7 @@ class _ImageWithInfoBar extends StatefulWidget {
   final bool isSvg;
   final VoidCallback? onBackgroundToggle;
   final VoidCallback? onFullscreen;
+  final VoidCallback? onEdit;
 
   @override
   State<_ImageWithInfoBar> createState() => _ImageWithInfoBarState();
@@ -1672,39 +2185,42 @@ class _ImageWithInfoBarState extends State<_ImageWithInfoBar> {
 
     final showLocalToggle = !widget.isSvg;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ClipRRect(
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(4),
-            topRight: Radius.circular(4),
+    return IntrinsicWidth(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(4),
+              topRight: Radius.circular(4),
+            ),
+            child: Container(
+              color: showLocalToggle
+                  ? (_isDarkBackground
+                        ? const Color(0xFF1E1E1E)
+                        : const Color(0xFFFFFFFF))
+                  : null,
+              child: widget.image,
+            ),
           ),
-          child: Container(
-            color: showLocalToggle
-                ? (_isDarkBackground
-                      ? const Color(0xFF1E1E1E)
-                      : const Color(0xFFFFFFFF))
-                : null,
-            child: widget.image,
+          _ImageInfoBar(
+            sourceType: widget.sourceType,
+            isSvg: widget.isSvg,
+            onBackgroundToggle:
+                widget.onBackgroundToggle ??
+                (showLocalToggle
+                    ? () {
+                        setState(() {
+                          _isDarkBackground = !_isDarkBackground;
+                        });
+                      }
+                    : null),
+            onFullscreen: widget.onFullscreen,
+            onEdit: widget.onEdit,
           ),
-        ),
-        _ImageInfoBar(
-          sourceType: widget.sourceType,
-          isSvg: widget.isSvg,
-          onBackgroundToggle:
-              widget.onBackgroundToggle ??
-              (showLocalToggle
-                  ? () {
-                      setState(() {
-                        _isDarkBackground = !_isDarkBackground;
-                      });
-                    }
-                  : null),
-          onFullscreen: widget.onFullscreen,
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -2159,7 +2675,7 @@ class _FullscreenViewer extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
-      body: SafeArea(child: Center(child: _buildContent(context))),
+      body: _buildContent(context),
     );
   }
 
@@ -2207,13 +2723,12 @@ class _FullscreenSvgWebViewState extends State<_FullscreenSvgWebView> {
     if (_webViewController == null) return;
     final backgroundColor = _isDarkBackground ? '#1e1e1e' : '#ffffff';
     _webViewController!.evaluateJavascript(
-      source:
-          '''
+      source: '''
       (function() {
         const iframe = document.querySelector('iframe');
         if (iframe && iframe.contentWindow) {
           try {
-            iframe.contentWindow.postMessage({type: 'setBackground', color: '$backgroundColor'}, '*');
+            iframe.contentWindow.postMessage({type: 'setBackground', color: '\$backgroundColor'}, '*');
           } catch (e) {
             console.log('Cannot set background:', e);
           }
@@ -2230,56 +2745,59 @@ class _FullscreenSvgWebViewState extends State<_FullscreenSvgWebView> {
       isDarkBackground: _isDarkBackground,
     );
 
-    return Stack(
-      children: [
-        InAppWebView(
-          initialData: InAppWebViewInitialData(
-            data: htmlContent,
-            mimeType: 'text/html',
-            encoding: 'utf8',
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          InAppWebView(
+            initialData: InAppWebViewInitialData(
+              data: htmlContent,
+              mimeType: 'text/html',
+              encoding: 'utf8',
+            ),
+            initialSettings: InAppWebViewSettings(
+              javaScriptEnabled: true,
+              supportZoom: true,
+              transparentBackground: true,
+              disableContextMenu: false,
+              resourceCustomSchemes: ['synapse'],
+              useHybridComposition: true,
+            ),
+            gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+              Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
+            },
+            onWebViewCreated: (controller) {
+              _webViewController = controller;
+            },
+            onLoadStop: (controller, url) {
+              _webViewController = controller;
+            },
+            onLoadResourceWithCustomScheme: (controller, request) async {
+              if (request.url.scheme.toLowerCase() == 'synapse') {
+                final data = await rootBundle.loadString(
+                  "assets/scripts/\${request.url.host}",
+                );
+                return CustomSchemeResponse(
+                  contentType: 'application/javascript',
+                  data: Uint8List.fromList(utf8.encode(data)),
+                );
+              }
+              return null;
+            },
           ),
-          initialSettings: InAppWebViewSettings(
-            javaScriptEnabled: true,
-            supportZoom: true,
-            transparentBackground: true,
-            disableContextMenu: false,
-            resourceCustomSchemes: ['synapse'],
-            useHybridComposition: true,
+          Positioned(
+            bottom: 32, // Adjusted for SafeArea removal
+            right: 16,
+            child: FloatingActionButton(
+              mini: true,
+              backgroundColor: Colors.white.withValues(alpha: 0.9),
+              foregroundColor: Colors.black87,
+              onPressed: _toggleBackground,
+              child: const Icon(Icons.contrast, size: 20),
+            ),
           ),
-          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-            Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
-          },
-          onWebViewCreated: (controller) {
-            _webViewController = controller;
-          },
-          onLoadStop: (controller, url) {
-            _webViewController = controller;
-          },
-          onLoadResourceWithCustomScheme: (controller, request) async {
-            if (request.url.scheme.toLowerCase() == 'synapse') {
-              final data = await rootBundle.loadString(
-                "assets/scripts/${request.url.host}",
-              );
-              return CustomSchemeResponse(
-                contentType: 'application/javascript',
-                data: Uint8List.fromList(utf8.encode(data)),
-              );
-            }
-            return null;
-          },
-        ),
-        Positioned(
-          bottom: 16,
-          right: 16,
-          child: FloatingActionButton(
-            mini: true,
-            backgroundColor: Colors.white.withOpacity(0.9),
-            foregroundColor: Colors.black87,
-            onPressed: _toggleBackground,
-            child: const Icon(Icons.contrast, size: 20),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -2435,20 +2953,22 @@ class _FullscreenImageWidgetState extends State<_FullscreenImageWidget> {
           color: _isDarkBackground
               ? const Color(0xFF1E1E1E)
               : const Color(0xFFFFFFFF),
-          child: Center(
+          child: SizedBox.expand(
             child: InteractiveViewer(
-              minScale: 0.5,
-              maxScale: 4.0,
-              child: widget.imageWidget,
+              minScale: 0.1,
+              maxScale: 10.0,
+              boundaryMargin: const EdgeInsets.all(double.infinity),
+              clipBehavior: Clip.none,
+              child: Center(child: widget.imageWidget),
             ),
           ),
         ),
         Positioned(
-          bottom: 16,
+          bottom: 32, // Adjusted for SafeArea removal
           right: 16,
           child: FloatingActionButton(
             mini: true,
-            backgroundColor: Colors.white.withOpacity(0.9),
+            backgroundColor: Colors.white.withValues(alpha: 0.9),
             foregroundColor: Colors.black87,
             onPressed: _toggleBackground,
             child: const Icon(Icons.contrast, size: 20),
@@ -2456,5 +2976,124 @@ class _FullscreenImageWidgetState extends State<_FullscreenImageWidget> {
         ),
       ],
     );
+  }
+}
+
+class CustomATagMd extends ATagMd {
+  @override
+  RegExp get exp => RegExp(r"(?<!\!)\[[^\]]*\]\([^\s]*\)");
+
+  @override
+  InlineSpan span(
+    BuildContext context,
+    String text,
+    final GptMarkdownConfig config,
+  ) {
+    var bracketCount = 0;
+    var start = 1;
+    var end = 0;
+    for (var i = 0; i < text.length; i++) {
+      if (text[i] == '[') {
+        bracketCount++;
+      } else if (text[i] == ']') {
+        bracketCount--;
+        if (bracketCount == 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+
+    if (end + 1 >= text.length || text[end + 1] != '(') {
+      return const TextSpan();
+    }
+
+    // First try to find the basic pattern
+    // final basicMatch = RegExp(r'(?<!\!)\[(.*)\]\(').firstMatch(text.trim());
+    // if (basicMatch == null) {
+    //   return const TextSpan();
+    // }
+
+    final linkText = text.substring(start, end);
+    final urlStart = end + 2;
+
+    // Now find the balanced closing parenthesis
+    int parenCount = 0;
+    int urlEnd = urlStart;
+
+    for (int i = urlStart; i < text.length; i++) {
+      final char = text[i];
+
+      if (char == '(') {
+        parenCount++;
+      } else if (char == ')') {
+        if (parenCount == 0) {
+          // This is the closing parenthesis of the link
+          urlEnd = i;
+          break;
+        } else {
+          parenCount--;
+        }
+      }
+    }
+
+    if (urlEnd == urlStart) {
+      // No closing parenthesis found
+      return const TextSpan();
+    }
+
+    final url = text.substring(urlStart, urlEnd).trim();
+
+    var builder = config.linkBuilder;
+
+    var ending = text.substring(urlEnd + 1);
+
+    var endingSpans = MarkdownComponent.generate(
+      context,
+      ending,
+      config,
+      false,
+    );
+    var theme = GptMarkdownTheme.of(context);
+    var linkTextSpan = TextSpan(
+      children: MarkdownComponent.generate(context, linkText, config, false),
+      style: config.style?.copyWith(
+        color: theme.linkColor,
+        decorationColor: theme.linkColor,
+      ),
+    );
+
+    // Use custom builder if provided
+    WidgetSpan? child;
+    if (builder != null) {
+      child = WidgetSpan(
+        baseline: TextBaseline.alphabetic,
+        alignment: PlaceholderAlignment.baseline,
+        child: GestureDetector(
+          onTap: () => config.onLinkTap?.call(url, linkText),
+          child: builder(
+            context,
+            linkTextSpan,
+            url,
+            config.style ?? const TextStyle(),
+          ),
+        ),
+      );
+    }
+
+    // Default rendering
+    child ??= WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: InkWell(
+        hoverColor: theme.linkHoverColor,
+        onTap: () {
+          config.onLinkTap?.call(url, linkText);
+        },
+        child: config.getRich(linkTextSpan),
+      ),
+    );
+    var textSpan = TextSpan(children: [child, ...endingSpans]);
+    return textSpan;
   }
 }

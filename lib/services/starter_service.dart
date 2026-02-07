@@ -6,6 +6,7 @@ import 'package:yaml/yaml.dart';
 import '../models/note.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
+import 'service_locator.dart';
 
 /// Service for managing starter content (User Manual and starter apps)
 class StarterService {
@@ -16,7 +17,7 @@ class StarterService {
 
   /// Check if User Manual note exists
   static Future<Note?> getUserManualNote() async {
-    final databaseService = DatabaseService();
+    final databaseService = getIt<DatabaseService>();
     try {
       final note = await databaseService.getNote(userManualUuid);
       return note;
@@ -76,7 +77,7 @@ class StarterService {
 
   /// Install or update User Manual
   static Future<void> installUserManual() async {
-    final databaseService = DatabaseService();
+    final databaseService = getIt<DatabaseService>();
     
     // Parse YAML for version and update date
     final yamlData = await parseUserManualYaml();
@@ -172,7 +173,7 @@ Please refer to the attached PDF for detailed user manual.''';
             final description = yamlData['description']?.toString() ?? '';
 
             // Check if app is already installed
-            final databaseService = DatabaseService();
+            final databaseService = getIt<DatabaseService>();
             final existingApps = await databaseService.getAllUserApps();
             final isInstalled = existingApps.any((app) => app.uuid == uuid);
 

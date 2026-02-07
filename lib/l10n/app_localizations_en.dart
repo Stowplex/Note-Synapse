@@ -24,10 +24,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appearanceSubtitle => 'Theme and display settings';
 
   @override
-  String get aiApi => 'AI API';
+  String get aiApi => 'AI Settings';
 
   @override
-  String get aiApiSubtitle => 'Configure your AI API key';
+  String get aiApiSubtitle => 'Configure AI models and settings';
 
   @override
   String get aiPrompts => 'Prompts';
@@ -96,6 +96,75 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get settingsSaved => 'Settings saved';
+
+  @override
+  String get agenticSettings => 'Agentic Settings';
+
+  @override
+  String get agenticSettingsSubtitle => 'Configure agent mode parameters';
+
+  @override
+  String get compactionThreshold => 'Compaction Threshold';
+
+  @override
+  String get compactionThresholdDescription =>
+      'Maximum tokens before context compaction. Runtime uses min(this value, model\'s context window).';
+
+  @override
+  String get findingLimit => 'Finding Limit';
+
+  @override
+  String get findingLimitDescription =>
+      'Maximum number of findings to extract per task for synthesis.';
+
+  @override
+  String get findingMaxWords => 'Finding Detail Words';
+
+  @override
+  String get findingMaxWordsDescription =>
+      'Maximum words per finding\'s bullet point details.';
+
+  @override
+  String get maxTurns => 'Max Turns';
+
+  @override
+  String get maxTurnsDescription =>
+      'Maximum number of iterations allowed per task.';
+
+  @override
+  String get turnIncrement => 'Turn Increment';
+
+  @override
+  String get turnIncrementDescription =>
+      'Number of turns to add when resuming a paused task.';
+
+  @override
+  String turnsValue(Object count) {
+    return '$count turns';
+  }
+
+  @override
+  String get maxSubtaskDepth => 'Max Subtask Depth';
+
+  @override
+  String get maxSubtaskDepthDescription =>
+      'Maximum nesting depth for spawning subtasks. Set to 0 to disable spawning.';
+
+  @override
+  String get aiLogEntriesLimit => 'AI Log Entries Limit';
+
+  @override
+  String get aiLogEntriesLimitDescription =>
+      'Maximum number of AI log entries to keep.';
+
+  @override
+  String get aiLogEntriesDisabled => 'Disabled';
+
+  @override
+  String get aiLogEntriesUnlimited => 'Unlimited';
+
+  @override
   String get darkMode => 'Dark Mode';
 
   @override
@@ -139,6 +208,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get cancel => 'Cancel';
+
+  @override
+  String get checkIn => 'Check-in';
+
+  @override
+  String get enterCheckInNote => 'Enter check-in note';
 
   @override
   String get update => 'Update';
@@ -363,6 +438,63 @@ class AppLocalizationsEn extends AppLocalizations {
   String get languageChanged => 'Language changed successfully';
 
   @override
+  String get system => 'System';
+
+  @override
+  String get systemSubtitle => 'System behavior settings';
+
+  @override
+  String get keepScreenOn => 'Keep Screen On';
+
+  @override
+  String get keepScreenOnSubtitle =>
+      'Prevent screen from turning off automatically';
+
+  @override
+  String get network => 'Network';
+
+  @override
+  String get networkSubtitle => 'HTTP protocol and retry settings';
+
+  @override
+  String get protocolPreference => 'Protocol Preference';
+
+  @override
+  String get protocolPreferenceSubtitle =>
+      'Choose HTTP protocol mode for network requests';
+
+  @override
+  String get protocolAuto => 'Auto (Upgrade to HTTP/3)';
+
+  @override
+  String get protocolHttp3Only => 'HTTP/3 Only';
+
+  @override
+  String get protocolHttp11Only => 'HTTP/1.1 Only';
+
+  @override
+  String get retryCount => 'Retry Count';
+
+  @override
+  String get retryCountSubtitle =>
+      'Number of retry attempts for failed requests (0-5)';
+
+  @override
+  String get backoffBase => 'Backoff Base';
+
+  @override
+  String get backoffBaseSubtitle =>
+      'Base delay for exponential backoff in seconds (1-10)';
+
+  @override
+  String retryPattern(String base, String second, String third) {
+    return 'Retry delays: ${base}s → ${second}s → ${third}s';
+  }
+
+  @override
+  String get networkSettingsUpdated => 'Network settings updated';
+
+  @override
   String errorChangingLanguage(Object error) {
     return 'Error changing language: $error';
   }
@@ -543,6 +675,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get attachFiles => 'Attach files';
 
   @override
+  String get attachFile => 'Attach File';
+
+  @override
+  String get selectFromDevice => 'Select from Device';
+
+  @override
+  String get enterUri => 'Enter URI';
+
+  @override
   String get answerOnlyFromNotes => 'Answer only from selected notes';
 
   @override
@@ -574,6 +715,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addFiles => 'Add Files';
+
+  @override
+  String get add => 'Add';
 
   @override
   String get processingRequest => 'Processing your request...';
@@ -1622,7 +1766,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteApp => 'Delete App';
 
   @override
-  String get aiDebugOverlay => 'AI Debug Overlay';
+  String get aiDebugOverlay => 'AI Debug Log';
 
   @override
   String get aiDebugOverlaySubtitle => 'View AI request/response logs';
@@ -1843,7 +1987,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get aiModelSettings => 'AI Model Settings';
+  String get aiModelSettings => 'AI Settings';
 
   @override
   String get currentModel => 'Current Model';
@@ -2353,6 +2497,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Include query params for auth if needed (e.g., Smithery)';
 
   @override
+  String get builtInTools => 'Built-in Tools';
+
+  @override
   String get transportType => 'Transport Type';
 
   @override
@@ -2397,9 +2544,147 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get onboardingWelcomeTitle => 'Welcome to Note Synapse';
+
+  @override
+  String get onboardingWelcomeSubtitle => 'Your AI second brain';
+
+  @override
+  String get onboardingChooseModelTitle => 'Choose Your AI Model';
+
+  @override
+  String get onboardingChooseModelSubtitle =>
+      'Select the AI model that best fits your needs';
+
+  @override
+  String get onboardingStart => 'Get Started';
+
+  @override
+  String get onboardingNext => 'Next';
+
+  @override
+  String get onboardingSkip => 'Skip';
+
+  @override
+  String get onboardingLicenseTitle => 'License Agreement';
+
+  @override
+  String get onboardingLicenseSubtitle => 'Please read and accept the license';
+
+  @override
+  String get onboardingPrivacyTitle => 'Privacy Policy';
+
+  @override
+  String get onboardingPrivacySubtitle => 'How we handle your data';
+
+  @override
+  String get onboardingAccept => 'Accept & Continue';
+
+  @override
+  String get onboardingConfigLater => 'Config Later';
+
+  @override
+  String get about => 'About';
+
+  @override
+  String get aboutSubtitle => 'License, privacy, and version';
+
+  @override
+  String get version => 'Version';
+
+  @override
+  String get info => 'Info';
+
+  @override
+  String get applicationInfo => 'Application Information';
+
+  @override
+  String get githubPage => 'GitHub Page';
+
+  @override
+  String get viewLicense => 'View License';
+
+  @override
+  String get viewPrivacyPolicy => 'View Privacy Policy';
+
+  @override
+  String get stowplexCopyright => 'Stowplex LLC & Bruce Li All Rights Reserved';
+
+  @override
+  String get noWarranty => 'NO WARRANTY';
+
+  @override
+  String get debugMenu => 'Debug Menu';
+
+  @override
+  String get debugMenuSubtitle => 'Developer options';
+
+  @override
+  String get resetOnboarding => 'Reset Onboarding Flag';
+
+  @override
+  String get resetOnboardingTitle => 'Reset Onboarding Flag';
+
+  @override
+  String get resetOnboardingSuccess => 'Onboarding flag reset';
+
+  @override
+  String get dependencyLicenses => 'Dependency Library Licenses';
+
+  @override
   String refreshedToolsFor(Object name) {
     return 'Refreshed tools for $name';
   }
+
+  @override
+  String get bookmarkPage => 'Bookmark Page';
+
+  @override
+  String get page => 'Page';
+
+  @override
+  String get removeBookmark => 'Remove Bookmark';
+
+  @override
+  String get bookmarks => 'Bookmarks';
+
+  @override
+  String get addBookmark => 'Add Bookmark';
+
+  @override
+  String get editBookmark => 'Edit Bookmark';
+
+  @override
+  String get bookmarkAnnotationHint => 'Enter annotation (max 200 chars)';
+
+  @override
+  String get noBookmarksYet => 'No bookmarks yet';
+
+  @override
+  String get aiContextBookmarks => 'AI Context: Bookmarks';
+
+  @override
+  String get configureAiContext => 'Configure AI Context';
+
+  @override
+  String aiContext(String mode) {
+    return 'AI Context: $mode';
+  }
+
+  @override
+  String get aiContextFullPdf => 'Full PDF';
+
+  @override
+  String get aiContextWindow => 'Window';
+
+  @override
+  String get aiContextChapters => 'Chapters';
+
+  @override
+  String get windowSize => 'Window Size';
+
+  @override
+  String get pagesBeforeAfter => 'Pages before/after';
 
   @override
   String errorRefreshingTools(Object error) {
@@ -2408,6 +2693,33 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tools => 'Tools';
+
+  @override
+  String get markAllAs => 'Mark all as';
+
+  @override
+  String get archiveAll => 'Archive All';
+
+  @override
+  String get unarchiveAll => 'Unarchive All';
+
+  @override
+  String get selectAll => 'Select all';
+
+  @override
+  String get deselectAll => 'Deselect All';
+
+  @override
+  String get noteType => 'Note Type';
+
+  @override
+  String get excludeTags => 'Exclude Tags';
+
+  @override
+  String get excludeTagsHint => 'Select tags to exclude';
+
+  @override
+  String get selectTagsToExclude => 'Select Tags to Exclude';
 
   @override
   String toolsFor(Object name) {
@@ -2460,8 +2772,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get rawDataManager => 'Raw Data Manager';
 
   @override
-  String get rawDataManagerSubtitle =>
-      'Advanced tools for file and database management';
+  String get rawDataManagerSubtitle => 'Inspect and modify raw database data';
 
   @override
   String get files => 'Files';
@@ -3534,9 +3845,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Choose which images to download locally for offline use.';
 
   @override
-  String get selectAll => 'Select all';
-
-  @override
   String get clearAll => 'Clear all';
 
   @override
@@ -3698,9 +4006,6 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$count $_temp0 selected';
   }
-
-  @override
-  String get deselectAll => 'Deselect All';
 
   @override
   String get proceedWithInstallation => 'Install Selected Apps';
@@ -3895,4 +4200,158 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get exportDbTooltip => 'Export DB';
+
+  @override
+  String get undo => 'Undo';
+
+  @override
+  String get taskRescheduled => 'Task rescheduled';
+
+  @override
+  String get recoveryManager => 'Recovery Manager';
+
+  @override
+  String get backupAndRestore => 'Backup & Restore';
+
+  @override
+  String get databaseNotConnected => 'Database not connected';
+
+  @override
+  String get fileUsageUnavailable => 'File usage status unavailable';
+
+  @override
+  String get fileUsageDetails => 'File Usage Details';
+
+  @override
+  String get noReferencesFound => 'No references found in database';
+
+  @override
+  String usedByNotes(int count) {
+    return 'Used by $count note(s)';
+  }
+
+  @override
+  String usedByConversations(int count) {
+    return 'Used in $count conversation message(s)';
+  }
+
+  @override
+  String get noteNoLongerExists => 'Note no longer exists';
+
+  @override
+  String get messageNoLongerExists => 'Message no longer exists';
+
+  @override
+  String get showDetails => 'Show Details';
+
+  @override
+  String get saveFindings => 'Save Findings';
+
+  @override
+  String get saveFindingsToNote => 'Save findings to note';
+
+  @override
+  String get attachNotesToPlan => 'Attach Notes to Plan';
+
+  @override
+  String get attachNotesToTask => 'Attach Notes to Task';
+
+  @override
+  String get globalContextNotes => 'Global Context Notes';
+
+  @override
+  String get taskContextNotes => 'Task Context Notes';
+
+  @override
+  String get globalContextDescription =>
+      'These notes will be included as context for all tasks';
+
+  @override
+  String get taskContextDescription =>
+      'These notes will be included as context for this task only';
+
+  @override
+  String notesAttachedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count notes attached',
+      one: '1 note attached',
+      zero: 'No notes attached',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get agentRunningNotificationTitle => 'Agent Running';
+
+  @override
+  String agentRunningNotificationBody(String objective) {
+    return 'Working on: $objective';
+  }
+
+  @override
+  String get agentCompleteNotificationTitle => 'Agent Complete';
+
+  @override
+  String get agentCompleteNotificationBody => 'Tap to view results';
+
+  @override
+  String get agentPauseExecution => 'Pause';
+
+  @override
+  String get agentResumeExecution => 'Continue';
+
+  @override
+  String get agentStopExecution => 'Stop';
+
+  @override
+  String get agentPausedStatus => 'Paused';
+
+  @override
+  String get agentConflictTitle => 'Agent Already Running';
+
+  @override
+  String agentConflictMessage(String status) {
+    return 'An agent is currently $status in another conversation. You can stop it to start a new one, or switch to that conversation.';
+  }
+
+  @override
+  String get agentConflictStop => 'Stop Agent';
+
+  @override
+  String get agentConflictSwitch => 'Switch to Conversation';
+
+  @override
+  String get editBlock => 'Edit Block';
+
+  @override
+  String get deleteBlock => 'Delete Block';
+
+  @override
+  String get deleteBlockConfirmation =>
+      'Are you sure you want to delete this block? This action cannot be undone.';
+
+  @override
+  String get expandSelectionAbove => 'Expand Above';
+
+  @override
+  String get contractSelectionAbove => 'Contract Above';
+
+  @override
+  String get expandSelectionBelow => 'Expand Below';
+
+  @override
+  String get contractSelectionBelow => 'Contract Below';
+
+  @override
+  String get editSelection => 'Edit';
+
+  @override
+  String get deleteSelection => 'Delete Blocks';
+
+  @override
+  String confirmDeleteBlocks(int count) {
+    return 'Are you sure you want to delete $count blocks?';
+  }
 }

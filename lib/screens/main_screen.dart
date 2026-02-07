@@ -239,13 +239,16 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _createNewNote(NoteType type) {
+    final now = DateTime.now();
     final newNote = Note(
       id: const Uuid().v4(),
       title: '',
       content: '',
       type: type,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
+      createdAt: now,
+      updatedAt: now,
+      scheduledAt: type == NoteType.task ? now.toIso8601String() : null,
+      status: type == NoteType.task ? TaskStatus.todo : null,
     );
 
     Navigator.push(

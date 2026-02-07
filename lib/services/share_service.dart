@@ -18,6 +18,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
+import 'package:archive/archive_io.dart';
+import 'package:intl/intl.dart';
 import '../models/note.dart';
 import '../providers/app_provider.dart';
 import '../l10n/app_localizations.dart';
@@ -25,7 +27,9 @@ import '../utils/file_utils.dart';
 import '../services/logger_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/synapse_temp_utils.dart';
+import '../utils/global_keys.dart';
 import 'svg_renderer_service.dart';
+import 'math_renderer_service.dart';
 
 class ShareService {
   static const MethodChannel _channel = MethodChannel(
@@ -33,11 +37,30 @@ class ShareService {
   );
   static bool _initialized = false;
   static bool _waitingForNavigatorFrame = false;
+  static bool _processingQueue = false;
   static bool _isPresentingShareScreen = false;
+
+  /// For testing purposes only
+  @visibleForTesting
+  static Future<String?> Function({
+    String? dialogTitle,
+    String? fileName,
+    List<String>? allowedExtensions,
+  })?
+  filePickerSaveOverride;
+
+  /// For testing purposes only
+  @visibleForTesting
+  static Future<bool> Function({
+    required Uint8List bytes,
+    String? filename,
+    Rect? bounds,
+  })?
+  printingSharePdfOverride;
+
   static final List<Map<String, dynamic>> _pendingSharedQueue =
       <Map<String, dynamic>>[];
-  static final GlobalKey<NavigatorState> navigatorKey =
-      GlobalKey<NavigatorState>();
+  // navigatorKey is now imported from global_keys.dart
   static final _ShareLifecycleObserver _lifecycleObserver =
       _ShareLifecycleObserver();
   static bool _observerAttached = false;
@@ -169,6 +192,277 @@ class ShareService {
     return buffer.toString();
   }
 
+  /// Generates a Zip archive of Markdown notes and shares/saves it.
+  static Future<void> shareAsMarkdownZip({
+    required List<Note> notes,
+    required bool includeSubNotesAndLinkedNotes,
+    required AppProvider appProvider,
+    required AppLocalizations l10n,
+  }) async {
+    try {
+      final notesToExport = await _collectNotesForExport(
+        notes: notes,
+        includeLinkedNotes: includeSubNotesAndLinkedNotes,
+        appProvider: appProvider,
+      );
+
+      if (notesToExport.isEmpty) {
+        LoggerService.warning('shareAsMarkdownZip: No notes to export');
+        return;
+      }
+
+      LoggerService.debug(
+        'shareAsMarkdownZip: Exporting ${notesToExport.length} notes',
+      );
+
+      final tempDir = await getTemporaryDirectory();
+      final exportId = const Uuid().v4();
+      final exportDir = Directory(p.join(tempDir.path, 'export_$exportId'));
+      await exportDir.create();
+
+      LoggerService.debug('shareAsMarkdownZip: Export dir: ${exportDir.path}');
+
+      final attachmentsDir = Directory(p.join(exportDir.path, 'attachments'));
+      await attachmentsDir.create();
+
+      // Process each note
+      for (final note in notesToExport) {
+        // Sanitize title for filename
+        final safeTitle = note.title.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+        final truncatedTitle = safeTitle.length > 64
+            ? safeTitle.substring(0, 64)
+            : safeTitle;
+        final fileName = '${note.id}__$truncatedTitle.md';
+        final noteFile = File(p.join(exportDir.path, fileName));
+
+        final buffer = StringBuffer();
+
+        // Add single note content
+        await _addNoteToBuffer(
+          note: note,
+          buffer: buffer,
+          processedNoteIds:
+              {}, // Not tracking visited here as we handle iteration explicitly
+          includeSubNotesAndLinkedNotes: includeSubNotesAndLinkedNotes,
+          appProvider: appProvider,
+          l10n: l10n,
+          level: 0,
+          forExport: true,
+        );
+
+        // Remove the separator added by _addNoteToBuffer if present
+        var content = buffer.toString();
+        if (content.endsWith('---\n\n')) {
+          content = content.substring(0, content.length - 5);
+        }
+
+        await noteFile.writeAsString(content, flush: true);
+
+        LoggerService.debug(
+          'shareAsMarkdownZip: Wrote note file: ${noteFile.path} '
+          '(${content.length} chars)',
+        );
+
+        // Verify file was written
+        final exists = await noteFile.exists();
+        LoggerService.debug(
+          'shareAsMarkdownZip: Note file exists after write: $exists',
+        );
+
+        // Copy attachments
+        for (final attachmentPath in note.attachmentPaths) {
+          try {
+            final attachmentFile = File(attachmentPath);
+            if (await attachmentFile.exists()) {
+              final attachmentName = p.basename(attachmentPath);
+              final targetPath = p.join(attachmentsDir.path, attachmentName);
+              await attachmentFile.copy(targetPath);
+            }
+          } catch (e) {
+            LoggerService.warning(
+              'Failed to copy attachment for zip: $attachmentPath',
+              error: e,
+            );
+          }
+        }
+      }
+
+      // List files in export directory before zipping
+      LoggerService.debug(
+        'shareAsMarkdownZip: Listing files in export directory...',
+      );
+      await for (final entity in exportDir.list(recursive: true)) {
+        final stat = await entity.stat();
+        LoggerService.debug(
+          'shareAsMarkdownZip: Found: ${entity.path} '
+          '(type: ${entity is File ? "file" : "dir"}, size: ${stat.size})',
+        );
+      }
+
+      // Create Zip using async file iteration to avoid race conditions
+      final zipFileName =
+          'notes_export_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.zip';
+      final zipFilePath = p.join(tempDir.path, zipFileName);
+
+      LoggerService.debug('shareAsMarkdownZip: Creating ZIP at: $zipFilePath');
+
+      await _createZipArchiveFromDirectory(exportDir, zipFilePath);
+
+      // Verify ZIP was created
+      final zipFile = File(zipFilePath);
+      final zipExists = await zipFile.exists();
+      final zipSize = zipExists ? await zipFile.length() : 0;
+      LoggerService.debug(
+        'shareAsMarkdownZip: ZIP created - exists: $zipExists, size: $zipSize bytes',
+      );
+
+      // Share/Save
+      if (kIsWeb) {
+        await FileSaver.instance.saveAs(
+          name: zipFileName,
+
+          bytes: await File(zipFilePath).readAsBytes(),
+          fileExtension: 'zip',
+          mimeType: MimeType.zip,
+        );
+      } else if (Platform.isAndroid) {
+        // Use native file save dialog on Android (ACTION_CREATE_DOCUMENT)
+        await _channel.invokeMethod('saveFileToExternalStorage', {
+          'filePath': zipFilePath,
+          'fileName': zipFileName,
+          'mimeType': 'application/zip',
+        });
+      } else if (Platform.isIOS) {
+        await Share.shareXFiles([
+          XFile(zipFilePath, mimeType: 'application/zip'),
+        ], subject: 'Notes Export');
+      } else {
+        // Desktop
+        if (filePickerSaveOverride != null) {
+          final savePath = await filePickerSaveOverride!(
+            dialogTitle: 'Save Zip Archive',
+            fileName: zipFileName,
+            allowedExtensions: ['zip'],
+          );
+          if (savePath != null) {
+            await File(zipFilePath).copy(savePath);
+          }
+        } else {
+          final savePath = await FilePicker.platform.saveFile(
+            dialogTitle: 'Save Zip Archive',
+            fileName: zipFileName,
+            type: FileType.custom,
+            allowedExtensions: ['zip'],
+          );
+
+          if (savePath != null) {
+            await File(zipFilePath).copy(savePath);
+          }
+        }
+      }
+
+      // Cleanup
+      try {
+        await exportDir.delete(recursive: true);
+        // Note: We might want to keep the zip file for a bit or delete it?
+        // Usually temp files are cleaned up by OS, but explicit delete is good.
+        // However, on mobile shareXFiles might need the file to exist for a bit.
+        // We'll leave the zip file in temp.
+      } catch (e) {
+        LoggerService.warning('Failed to clean up export directory', error: e);
+      }
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Error generating Markdown Zip: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Creates a ZIP archive from a directory using streaming approach.
+  /// Uses ZipFileEncoder for memory-efficient streaming to avoid OOM with large files.
+  static Future<void> _createZipArchiveFromDirectory(
+    Directory sourceDir,
+    String zipFilePath,
+  ) async {
+    LoggerService.debug(
+      '_createZipArchiveFromDirectory: sourceDir=${sourceDir.path}',
+    );
+
+    final encoder = ZipFileEncoder();
+    encoder.create(zipFilePath);
+
+    int fileCount = 0;
+
+    await for (final entity in sourceDir.list(recursive: true)) {
+      if (entity is File) {
+        final file = entity;
+        final relativePath = file.path.substring(sourceDir.path.length + 1);
+
+        LoggerService.debug(
+          '_createZipArchiveFromDirectory: Adding file: $relativePath '
+          '(${await file.length()} bytes)',
+        );
+
+        // Use addFile with explicit File object for streaming
+        await encoder.addFile(file, relativePath);
+        fileCount++;
+      }
+    }
+
+    await encoder.close();
+
+    // Verify the ZIP was created correctly
+    final zipFile = File(zipFilePath);
+    final zipSize = await zipFile.length();
+
+    LoggerService.debug(
+      '_createZipArchiveFromDirectory: Added $fileCount files, '
+      'ZIP size: $zipSize bytes',
+    );
+
+    // If ZIP is suspiciously small (< 100 bytes with files), fall back to in-memory encoding
+    if (fileCount > 0 && zipSize < 100) {
+      LoggerService.warning(
+        '_createZipArchiveFromDirectory: Streaming ZIP failed ($zipSize bytes), '
+        'falling back to in-memory encoding',
+      );
+      await _createZipArchiveInMemory(sourceDir, zipFilePath);
+    }
+  }
+
+  /// Fallback: Creates a ZIP archive by loading all files into memory.
+  /// Used when streaming approach fails.
+  static Future<void> _createZipArchiveInMemory(
+    Directory sourceDir,
+    String zipFilePath,
+  ) async {
+    final archive = Archive();
+
+    await for (final entity in sourceDir.list(recursive: true)) {
+      if (entity is File) {
+        final relativePath = entity.path.substring(sourceDir.path.length + 1);
+        final bytes = await entity.readAsBytes();
+
+        LoggerService.debug(
+          '_createZipArchiveInMemory: Adding file: $relativePath '
+          '(${bytes.length} bytes)',
+        );
+
+        archive.addFile(ArchiveFile(relativePath, bytes.length, bytes));
+      }
+    }
+
+    final zipData = ZipEncoder().encode(archive);
+    await File(zipFilePath).writeAsBytes(zipData);
+
+    LoggerService.debug(
+      '_createZipArchiveInMemory: Created ZIP with ${zipData.length} bytes',
+    );
+  }
+
   /// Generates a PDF from selected notes and shares or saves it depending on the platform.
   static Future<_PdfShareResult?> shareAsPdf({
     required List<Note> notes,
@@ -176,6 +470,8 @@ class ShareService {
     required AppProvider appProvider,
     required AppLocalizations l10n,
     required Size pageSize,
+    required BuildContext context,
+    bool useSinglePageLayout = false,
   }) async {
     try {
       final notesToExport = await _collectNotesForExport(
@@ -193,6 +489,8 @@ class ShareService {
         includeSubNotes: includeSubNotesAndLinkedNotes,
         l10n: l10n,
         pageSize: pageSize,
+        context: context,
+        useSinglePageLayout: useSinglePageLayout,
       );
 
       final fileName = 'notes_${DateTime.now().millisecondsSinceEpoch}.pdf';
@@ -205,10 +503,10 @@ class ShareService {
       }
 
       if (kIsWeb) {
-        await FileSaver.instance.saveFile(
+        await FileSaver.instance.saveAs(
           name: fileName,
           bytes: Uint8List.fromList(pdfBytes),
-          ext: 'pdf',
+          fileExtension: 'pdf',
           mimeType: MimeType.pdf,
         );
       } else if (Platform.isAndroid) {
@@ -247,12 +545,21 @@ class ShareService {
           ], subject: l10n.shareDialogTitle);
         }
       } else if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
-        final result = await FilePicker.platform.saveFile(
-          dialogTitle: l10n.selectFileLocation,
-          fileName: fileName,
-          type: FileType.custom,
-          allowedExtensions: const ['pdf'],
-        );
+        String? result;
+        if (filePickerSaveOverride != null) {
+          result = await filePickerSaveOverride!(
+            dialogTitle: l10n.selectFileLocation,
+            fileName: fileName,
+            allowedExtensions: ['pdf'],
+          );
+        } else {
+          result = await FilePicker.platform.saveFile(
+            dialogTitle: l10n.selectFileLocation,
+            fileName: fileName,
+            type: FileType.custom,
+            allowedExtensions: const ['pdf'],
+          );
+        }
 
         if (result != null) {
           final destination = File(result);
@@ -320,10 +627,14 @@ class ShareService {
     required bool includeSubNotes,
     required AppLocalizations l10n,
     required Size pageSize,
+    required BuildContext context,
+    required bool useSinglePageLayout,
   }) async {
     final fonts = await _PdfFontManager.instance.load();
 
-    final pageFormat = PdfPageFormat(pageSize.width, pageSize.height);
+    // If single page layout is requested, we need to calculate the height first
+    // We'll use a temporary page format for content generation
+    var pageFormat = PdfPageFormat(pageSize.width, pageSize.height);
 
     final theme = pw.ThemeData.withFont(
       base: fonts.base,
@@ -338,6 +649,8 @@ class ShareService {
       l10n: l10n,
       pageFormat: pageFormat,
       fonts: fonts,
+      // ignore: use_build_context_synchronously
+      context: context,
     );
 
     final content = await exporter.buildContent();
@@ -348,15 +661,87 @@ class ShareService {
     // Create the main document
     final document = pw.Document(theme: theme);
 
-    // Add the generated note content pages FIRST
-    document.addPage(
-      pw.MultiPage(
-        pageFormat: pageFormat,
-        margin: const pw.EdgeInsets.all(24),
-        build: (context) => content,
-        maxPages: 10000, // Allow up to 10000 pages to handle large exports
-      ),
-    );
+    if (useSinglePageLayout) {
+      // Calculate estimated height for single page
+      double estimatedHeight = 100.0; // margins
+
+      // Heuristic estimation
+      // We can't verify exact height of widgets without layout, so we overestimate conservatively
+      for (final note in notes) {
+        // Title
+        estimatedHeight += 40.0;
+
+        // Metadata
+        estimatedHeight += 40.0;
+
+        // Content
+        if (note.content.isNotEmpty) {
+          // Estimate text height: approx 80 chars per line, 14pt per line
+          final lineCount = (note.content.length / 80).ceil();
+          estimatedHeight += lineCount * 14.0;
+
+          // Add extra for newlines which might be paragraphs
+          final paragraphCount = note.content.split('\n').length;
+          estimatedHeight += paragraphCount * 10.0;
+
+          // Check for markdown images in content
+          final imageMatches = RegExp(
+            r'!\[.*?\]\(.*?\)',
+          ).allMatches(note.content);
+          // Assume max height for images (e.g. 400pt)
+          estimatedHeight += imageMatches.length * 400.0;
+        }
+
+        // Subnotes
+        if (includeSubNotes) {
+          for (final subNote in note.subNotes) {
+            estimatedHeight += 30.0; // Header
+            final lineCount = (subNote.content.length / 80).ceil();
+            estimatedHeight += lineCount * 14.0;
+            final paragraphCount = subNote.content.split('\n').length;
+            estimatedHeight += paragraphCount * 10.0;
+          }
+        }
+
+        // Attachments
+        for (final _ in note.attachmentPaths) {
+          // Assume each attachment takes some vertical space (image or file listing)
+          // Images/SVGs can be up to 500px wide, let's assume 400px height avg
+          estimatedHeight += 400.0;
+        }
+
+        // Spacing/Divider
+        estimatedHeight += 50.0;
+      }
+
+      // Add a safety buffer (20%) + fixed minimum
+      estimatedHeight = (estimatedHeight * 1.2) + 1000.0;
+
+      LoggerService.debug('Estimated single page PDF height: $estimatedHeight');
+
+      pageFormat = PdfPageFormat(pageSize.width, estimatedHeight);
+
+      document.addPage(
+        pw.Page(
+          pageFormat: pageFormat,
+          margin: const pw.EdgeInsets.all(24),
+          build: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: content,
+          ),
+        ),
+      );
+    } else {
+      // Add the generated note content pages FIRST
+      document.addPage(
+        pw.MultiPage(
+          pageFormat: pageFormat,
+          margin: const pw.EdgeInsets.all(24),
+          build: (context) => content,
+          maxPages: 10000, // Allow up to 10000 pages to handle large exports
+        ),
+      );
+    }
 
     // If there are PDF attachments, add them as image pages AFTER the note content
     if (pdfAttachments.isNotEmpty) {
@@ -462,6 +847,19 @@ class ShareService {
       if (SynapseTempUtils.isSynapseTempUri(source)) {
         final tempFile = await SynapseTempUtils.loadFile(source);
         return tempFile.bytes;
+      }
+
+      // Handle simple filenames (local attachments)
+      // Same logic as InteractiveCheckboxMarkdown._resolveLocalImageSource
+      if (!source.contains(':') &&
+          !source.contains('/') &&
+          !source.contains('\\')) {
+        final dir = await FileUtils.getPrivateStorageDirectory();
+        final filePath = p.join(dir.path, source);
+        final file = File(filePath);
+        if (await file.exists()) {
+          return await file.readAsBytes();
+        }
       }
 
       final uri = Uri.tryParse(source);
@@ -570,6 +968,18 @@ class ShareService {
         return _decodeBytesToString(tempFile.bytes);
       }
 
+      // Handle simple filenames (local attachments)
+      if (!source.contains(':') &&
+          !source.contains('/') &&
+          !source.contains('\\')) {
+        final dir = await FileUtils.getPrivateStorageDirectory();
+        final filePath = p.join(dir.path, source);
+        final file = File(filePath);
+        if (await file.exists()) {
+          return await file.readAsString();
+        }
+      }
+
       final uri = Uri.tryParse(source);
       if (uri != null) {
         if (uri.scheme == 'data') {
@@ -635,6 +1045,7 @@ class ShareService {
     required AppProvider appProvider,
     required AppLocalizations l10n,
     required int level,
+    bool forExport = false,
   }) async {
     // Note: We don't need to check for duplicates here since the main BFS loop
     // already handles the visited check before calling this method
@@ -645,18 +1056,72 @@ class ShareService {
     buffer.writeln();
 
     // Add note metadata
-    buffer.writeln('**${l10n.type}:** ${note.isTask ? l10n.task : l10n.note}');
-    if (note.isTask && note.status != null) {
+    if (forExport) {
+      buffer.writeln('**ID:** ${note.id}');
+      // Use standard English for export
+      buffer.writeln('**Type:** ${note.isTask ? 'Task' : 'Note'}');
+      if (note.isTask && note.status != null) {
+        String statusText;
+        switch (note.status!) {
+          case TaskStatus.todo:
+            statusText = 'Todo';
+            break;
+          case TaskStatus.inProgress:
+            statusText = 'In Progress';
+            break;
+          case TaskStatus.complete:
+            statusText = 'Done';
+            break;
+          case TaskStatus.abandoned:
+            statusText = 'Abandoned';
+            break;
+        }
+        buffer.writeln('**Status:** $statusText');
+      }
+      if (note.isTask) {
+        if (note.scheduledAt != null) {
+          try {
+            final date = DateTime.parse(note.scheduledAt!);
+            buffer.writeln('**Scheduled:** ${date.toIso8601String()}');
+          } catch (_) {
+            buffer.writeln('**Scheduled:** ${note.scheduledAt}');
+          }
+        }
+        if (note.completeBy != null) {
+          try {
+            final date = DateTime.parse(note.completeBy!);
+            buffer.writeln('**Due:** ${date.toIso8601String()}');
+          } catch (_) {
+            buffer.writeln('**Due:** ${note.completeBy}');
+          }
+        }
+      }
+      if (note.tags.isNotEmpty) {
+        buffer.writeln('**Tags:** ${note.tags.join(', ')}');
+      }
+      buffer.writeln('**Created:** ${note.createdAt.toIso8601String()}');
+      if (note.updatedAt != note.createdAt) {
+        buffer.writeln('**Updated:** ${note.updatedAt.toIso8601String()}');
+      }
+    } else {
+      // Use localized strings for display/copy
       buffer.writeln(
-        '**${l10n.status}:** ${_getStatusText(note.status!, l10n)}',
+        '**${l10n.type}:** ${note.isTask ? l10n.task : l10n.note}',
       );
-    }
-    if (note.tags.isNotEmpty) {
-      buffer.writeln('**${l10n.tags}:** ${note.tags.join(', ')}');
-    }
-    buffer.writeln('**${l10n.created}:** ${_formatDateTime(note.createdAt)}');
-    if (note.updatedAt != note.createdAt) {
-      buffer.writeln('**${l10n.updated}:** ${_formatDateTime(note.updatedAt)}');
+      if (note.isTask && note.status != null) {
+        buffer.writeln(
+          '**${l10n.status}:** ${_getStatusText(note.status!, l10n)}',
+        );
+      }
+      if (note.tags.isNotEmpty) {
+        buffer.writeln('**${l10n.tags}:** ${note.tags.join(', ')}');
+      }
+      buffer.writeln('**${l10n.created}:** ${_formatDateTime(note.createdAt)}');
+      if (note.updatedAt != note.createdAt) {
+        buffer.writeln(
+          '**${l10n.updated}:** ${_formatDateTime(note.updatedAt)}',
+        );
+      }
     }
     buffer.writeln();
 
@@ -666,19 +1131,46 @@ class ShareService {
       buffer.writeln();
     }
 
+    // Add Attachments metadata if requested
+    if (forExport && note.attachmentPaths.isNotEmpty) {
+      buffer.writeln('## Attachments');
+      buffer.writeln();
+
+      for (final path in note.attachmentPaths) {
+        final fileName = path.split('/').last;
+        final ext = fileName.split('.').lastOrNull ?? 'unknown';
+        buffer.writeln('- **Name:** $fileName');
+        buffer.writeln('  - **Path:** $path');
+        buffer.writeln('  - **Type:** $ext');
+        buffer.writeln();
+      }
+    }
+
     // Add sub-notes if requested
     if (includeSubNotesAndLinkedNotes && note.subNotes.isNotEmpty) {
-      buffer.writeln('## ${l10n.subNotes}');
+      if (forExport) {
+        buffer.writeln('## Sub-notes');
+      } else {
+        buffer.writeln('## ${l10n.subNotes}');
+      }
       buffer.writeln();
 
       for (final subNote in note.subNotes) {
         buffer.writeln('### ${subNote.name}');
-        if (subNote.isCompleted) {
-          buffer.writeln('✅ **${l10n.completed}**');
+        if (forExport) {
+          buffer.writeln('**ID:** ${subNote.id}');
+          if (subNote.isCompleted) {
+            buffer.writeln('✅ **Completed**');
+          }
+          buffer.writeln('**Created:** ${_formatDateTime(subNote.createdAt)}');
+        } else {
+          if (subNote.isCompleted) {
+            buffer.writeln('✅ **${l10n.completed}**');
+          }
+          buffer.writeln(
+            '**${l10n.created}:** ${_formatDateTime(subNote.createdAt)}',
+          );
         }
-        buffer.writeln(
-          '**${l10n.created}:** ${_formatDateTime(subNote.createdAt)}',
-        );
         buffer.writeln();
         if (subNote.content.isNotEmpty) {
           buffer.writeln(subNote.content);
@@ -796,7 +1288,7 @@ class ShareService {
 
   /// Helper method to format DateTime
   static String _formatDateTime(DateTime dateTime) {
-    return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
+    return DateFormat('MM/dd/yyyy').format(dateTime);
   }
 
   /// Process shared content from platform channels
@@ -862,19 +1354,33 @@ class ShareService {
     }
   }
 
-  /// Extract URL from text (same logic as main screen)
+  /// Extract URL from text.
+  /// Returns the first URL match if its length is greater than 1/5 of the total text length.
   static String? _extractUrl(String text) {
-    final trimmedText = text.trim();
-    final uriPattern = RegExp(r'^https?://[^\s]+$');
+    if (text.isEmpty) return null;
 
-    if (uriPattern.hasMatch(trimmedText)) {
+    // Find all potential URLs
+    // Using a more robust regex that stops at common punctuation if at end, but simplifying for now
+    // to match typical "http://..." non-whitespace sequences which is standard for simple extractors.
+    final uriPattern = RegExp(r'https?://[^\s]+');
+    final matches = uriPattern.allMatches(text);
+
+    for (final match in matches) {
+      final urlString = match.group(0);
+      if (urlString == null) continue;
+
       try {
-        final uri = Uri.parse(trimmedText);
-        if (uri.scheme == 'http' || uri.scheme == 'https') {
-          return trimmedText;
+        // Validate URL structure
+        final uri = Uri.parse(urlString);
+        if (uri.scheme != 'http' && uri.scheme != 'https') continue;
+
+        // Ratio check: URL length > Total text length / 5
+        // Example: URL is 21 chars. Text is 100 chars. 21 > 20 => TRUE.
+        if (urlString.length > text.length / 5.0) {
+          return urlString;
         }
       } catch (e) {
-        // Invalid URI
+        // Invalid URI, skip
       }
     }
 
@@ -1224,11 +1730,13 @@ class _PdfNoteRenderer {
     required this.l10n,
     required this.pageFormat,
     required this.fonts,
+    required this.context,
   }) : _contentWidth = math.max(pageFormat.width - 48, 0),
        _markdownRenderer = _MarkdownPdfRenderer(
          l10n: l10n,
          maxContentWidth: math.max(pageFormat.width - 48, 0),
          fonts: fonts,
+         context: context,
        );
 
   final List<Note> notes;
@@ -1236,6 +1744,7 @@ class _PdfNoteRenderer {
   final AppLocalizations l10n;
   final PdfPageFormat pageFormat;
   final _PdfFonts fonts;
+  final BuildContext context;
 
   final double _contentWidth;
   final _MarkdownPdfRenderer _markdownRenderer;
@@ -1644,6 +2153,7 @@ class _MarkdownPdfRenderer {
     required this.l10n,
     required this.maxContentWidth,
     required this.fonts,
+    required this.context,
   }) : _baseTextStyle = pw.TextStyle(
          fontSize: 12,
          lineSpacing: 1.3,
@@ -1669,6 +2179,7 @@ class _MarkdownPdfRenderer {
   final AppLocalizations l10n;
   final double maxContentWidth;
   final _PdfFonts fonts;
+  final BuildContext context;
 
   final pw.TextStyle _baseTextStyle;
   final pw.TextStyle _linkStyle;
@@ -1679,7 +2190,11 @@ class _MarkdownPdfRenderer {
 
   Future<List<pw.Widget>> render(String markdown) async {
     final sanitized = markdown.replaceAll('\r\n', '\n');
-    final document = md.Document(extensionSet: md.ExtensionSet.gitHubFlavored);
+    final document = md.Document(
+      extensionSet: md.ExtensionSet.gitHubFlavored,
+      inlineSyntaxes: [LatexInlineSyntax()],
+      blockSyntaxes: [LatexBlockSyntax()],
+    );
     final nodes = document.parseLines(sanitized.split('\n'));
 
     final widgets = <pw.Widget>[];
@@ -1785,14 +2300,7 @@ class _MarkdownPdfRenderer {
         case 'ol':
           return await _buildList(node, ordered: true);
         case 'table':
-          final text = _extractPlainText(node);
-          if (text.isEmpty) {
-            return null;
-          }
-          return pw.Padding(
-            padding: const pw.EdgeInsets.only(bottom: 6),
-            child: pw.Text(text, style: _baseTextStyle),
-          );
+          return await _buildTable(node);
         case 'img':
           final spans = await _buildInlineSpan(node, _baseTextStyle);
           if (spans.isEmpty) {
@@ -1806,6 +2314,36 @@ class _MarkdownPdfRenderer {
                 )
                 .toList(),
           );
+        case 'latex':
+          // Block LaTeX
+          final tex = _unescapeHtml(node.textContent);
+          final imageBytes = await MathRendererService.renderMathToImage(
+            tex,
+            context,
+            isInline: false,
+            color: Colors.black,
+          );
+
+          if (imageBytes != null) {
+            final image = pw.MemoryImage(imageBytes);
+            // Limit width if needed, but for block math we can use full width
+            final maxWidth = math.min(maxContentWidth, 600.0).toDouble();
+
+            return pw.Container(
+              padding: const pw.EdgeInsets.symmetric(vertical: 8),
+              alignment: pw.Alignment.center,
+              child: pw.Image(image, width: maxWidth, fit: pw.BoxFit.contain),
+            );
+          } else {
+            // Fallback to text
+            return pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(vertical: 8),
+              child: pw.Text(
+                tex,
+                style: _codeStyle.copyWith(color: PdfColors.red900),
+              ),
+            );
+          }
       }
     } else if (node is md.Text) {
       final text = node.text.trim();
@@ -1815,6 +2353,149 @@ class _MarkdownPdfRenderer {
       return pw.Text(text, style: _baseTextStyle);
     }
     return null;
+  }
+
+  Future<pw.Widget?> _buildTable(md.Element element) async {
+    final rows = <pw.TableRow>[];
+
+    // Process table headers (thead) usually contains one row of th
+    final thead =
+        element.children
+                ?.where((c) => c is md.Element && c.tag == 'thead')
+                .firstOrNull
+            as md.Element?;
+    if (thead != null) {
+      for (final row in thead.children ?? []) {
+        if (row is md.Element && row.tag == 'tr') {
+          rows.add(await _buildTableRow(row, isHeader: true));
+        }
+      }
+    }
+
+    // Process table body (tbody)
+    final tbody =
+        element.children
+                ?.where((c) => c is md.Element && c.tag == 'tbody')
+                .firstOrNull
+            as md.Element?;
+    if (tbody != null) {
+      for (final row in tbody.children ?? []) {
+        if (row is md.Element && row.tag == 'tr') {
+          rows.add(await _buildTableRow(row, isHeader: false));
+        }
+      }
+    }
+
+    // If no explicit thead/tbody, try parsing direct tr children (unlikely in GFM but safe to handle)
+    if (rows.isEmpty) {
+      for (final child in element.children ?? []) {
+        if (child is md.Element && child.tag == 'tr') {
+          rows.add(await _buildTableRow(child, isHeader: false));
+        }
+      }
+    }
+
+    if (rows.isEmpty) {
+      return null;
+    }
+
+    // Determine column count from the first row (or max cols)
+    int colCount = 0;
+    if (rows.isNotEmpty) {
+      colCount = rows.first.children.length;
+    }
+
+    // Create table with specific border styling
+    // Using FlexColumnWidth to handle ultra-wide tables by letting columns flex within available width
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 8),
+      child: pw.Table(
+        border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+        columnWidths: {
+          for (int i = 0; i < colCount; i++) i: const pw.FlexColumnWidth(),
+        },
+        children: rows,
+      ),
+    );
+  }
+
+  Future<pw.TableRow> _buildTableRow(
+    md.Element row, {
+    required bool isHeader,
+  }) async {
+    final cells = <pw.Widget>[];
+
+    for (final child in row.children ?? []) {
+      if (child is md.Element) {
+        // th or td
+        final isTh = child.tag == 'th' || isHeader;
+
+        final spans = await _buildInlineSpans(child.children ?? []);
+
+        // Apply header styling override if needed, or just standard text
+        final style = isTh
+            ? _baseTextStyle.copyWith(
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.black,
+              )
+            : _baseTextStyle;
+
+        // If spans are empty, add empty text
+        if (spans.isEmpty) {
+          cells.add(
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(6),
+              child: pw.Text('', style: style),
+            ),
+          );
+        } else if (spans.every((span) => span is pw.WidgetSpan)) {
+          // If all widgets (e.g. images), wrap in column
+          cells.add(
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(6),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: spans
+                    .map((span) => (span as pw.WidgetSpan).child)
+                    .toList(),
+              ),
+            ),
+          );
+        } else {
+          // Mixed content or just text
+          // Re-apply style to all text spans if it's a header to ensure bolding
+          if (isTh) {
+            for (var i = 0; i < spans.length; i++) {
+              if (spans[i] is pw.TextSpan) {
+                final ts = spans[i] as pw.TextSpan;
+                spans[i] = pw.TextSpan(
+                  text: ts.text,
+                  style: ts.style?.merge(style) ?? style,
+                  children: ts.children,
+                  annotation: ts.annotation,
+                );
+              }
+            }
+          }
+
+          cells.add(
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(6),
+              child: pw.RichText(
+                text: pw.TextSpan(style: style, children: spans),
+              ),
+            ),
+          );
+        }
+      }
+    }
+
+    return pw.TableRow(
+      decoration: isHeader
+          ? const pw.BoxDecoration(color: PdfColors.grey200)
+          : null,
+      children: cells,
+    );
   }
 
   Future<pw.Widget?> _buildList(
@@ -1915,7 +2596,7 @@ class _MarkdownPdfRenderer {
     pw.TextStyle style,
   ) async {
     if (node is md.Text) {
-      final text = node.text;
+      final text = _unescapeHtml(node.text);
       if (text.isEmpty) {
         return const [];
       }
@@ -1974,6 +2655,40 @@ class _MarkdownPdfRenderer {
       case 'img':
         final imageSpan = await _buildImageSpan(node);
         return imageSpan ?? const [];
+      case 'latex':
+        // Inline LaTeX
+        final tex = _unescapeHtml(node.textContent);
+        // Use a smaller scale or adjustment for inline
+        final imageBytes = await MathRendererService.renderMathToImage(
+          tex,
+          context,
+          isInline: true,
+          scale: 3.0, // Higher scale for inline to look crisp when resized down
+          color: Colors.black,
+        );
+
+        if (imageBytes != null) {
+          final image = pw.MemoryImage(imageBytes);
+          // Calculate reasonable height based on font size.
+          // Standard text is 12pt. Let's aim for something that fits in line.
+          // However, pw.Image in TextSpan isn't fully supported as WidgetSpan in standard RichText in all pdf implementations?
+          // pdf package supports WidgetSpan in RichText.
+
+          return [
+            pw.WidgetSpan(
+              child: pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 2),
+                child: pw.Image(
+                  image,
+                  height: 14, // align with text size
+                  fit: pw.BoxFit.contain,
+                ),
+              ),
+              baseline: -4,
+            ),
+          ];
+        }
+        return [pw.TextSpan(text: tex, style: _codeStyle)];
       default:
         return _buildInlineSpans(node.children ?? [], styleOverride: style);
     }
@@ -2063,7 +2778,7 @@ class _MarkdownPdfRenderer {
 
   String _extractPlainText(md.Node node) {
     if (node is md.Text) {
-      return node.text;
+      return _unescapeHtml(node.text);
     }
     if (node is md.Element) {
       final buffer = StringBuffer();
@@ -2073,5 +2788,125 @@ class _MarkdownPdfRenderer {
       return buffer.toString();
     }
     return '';
+  }
+
+  /// Unescape common HTML entities that the markdown parser may produce.
+  String _unescapeHtml(String text) {
+    return text
+        .replaceAll('&quot;', '"')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&#039;', "'")
+        .replaceAll('&apos;', "'")
+        .replaceAll('&amp;', '&'); // Must be last to avoid double-unescaping
+  }
+}
+
+/// Syntax for inline LaTeX: \( ... \)
+class LatexInlineSyntax extends md.InlineSyntax {
+  LatexInlineSyntax() : super(r'\\\((.+?)\\\)');
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    final element = md.Element.text('latex', match[1]!);
+    parser.addNode(element);
+    return true;
+  }
+}
+
+// /// Syntax for block LaTeX: \[ ... \]
+// class LatexBlockSyntax extends md.BlockSyntax {
+//   @override
+//   RegExp get pattern =>
+//       RegExp(r'^\\\[(.+?)\\\]', multiLine: true, dotAll: true);
+//
+//   const LatexBlockSyntax();
+//
+//   @override
+//   md.Node parse(md.BlockParser parser) {
+//     final match = pattern.firstMatch(parser.current.content);
+//     if (match != null) {
+//       parser.advance();
+//       return md.Element.text('latex', match[1]!.trim());
+//     }
+//
+//     // Fallback if regex didn't match (shouldn't happen if pattern matched)
+//     parser.advance();
+//     return md.Element.text('latex', '');
+//   }
+// }
+
+/// Syntax for block LaTeX: \[ ... \]
+class LatexBlockSyntax extends md.BlockSyntax {
+  @override
+  RegExp get pattern => RegExp(r'^\s{0,3}\\\[', multiLine: true);
+
+  const LatexBlockSyntax();
+
+  @override
+  md.Node parse(md.BlockParser parser) {
+    // The pattern matches against the 'current' line, but for multi-line blocks
+    // we need to consume lines until we find the closing tag.
+    // However, the provided pattern uses dotAll: true, which implies it expects
+    // to match against the whole content?
+    // BlockParser operates line-by-line usually.
+
+    // Let's adapt the ShareService logic but robustly for BlockParser.
+    // Standard BlockParser checks pattern against parser.current.content.
+    // If our pattern expects \[ at start, it works.
+
+    final startLine = parser.current.content;
+
+    // Check if start line initiates a block
+    if (!startLine.trim().startsWith(r'\[')) {
+      return md.Element.text(
+        'latex',
+        '',
+      ); // Should not happen if canParse matched
+    }
+
+    // buffer.writeln(startLine); // Keep delimiters? Or strip them?
+    // ShareService strip them matches[1].
+    // If we want to support standard editing, maybe we should keep them?
+    // For rendering, 'gpt_markdown' might expect them or not?
+    // LateXMathMultiLine usually expects raw tex usually...
+    // But 'share_screen' extracts the content.
+
+    // Let's capture the raw content for the block including delimiters
+    // so the MarkdownBlock represents the whole thing in source.
+
+    // Consume lines until \]
+    // We need to advance the parser.
+
+    // Simple robust consumption:
+    // 1. Consume start line.
+    // 2. Consume subsequent lines until one ends with \]
+
+    final childLines = <String>[];
+
+    // Check if single line block: \[ ... \]
+    if (startLine.trim().endsWith(r'\]') && startLine.trim().length > 2) {
+      childLines.add(startLine.replaceAll(r'\[', '').replaceAll(r'\]', ''));
+      parser.advance();
+    } else {
+      // Multi-line
+      // Skip startline: \[
+      parser.advance();
+      while (!parser.isDone) {
+        final line = parser.current.content;
+        if (line.trim().endsWith(r'\]')) {
+          // Skip endline: \]
+          parser.advance();
+          break;
+        }
+        childLines.add(line);
+        parser.advance();
+      }
+    }
+
+    // Return a dummy element with type 'latex'
+    // The actual content logic is handled by _mapNodeType and source extraction.
+    final el = md.Element('latex', [md.Text(childLines.join('\n'))]);
+    return el;
   }
 }

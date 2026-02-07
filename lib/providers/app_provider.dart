@@ -14,12 +14,14 @@ import '../services/ai_service.dart';
 import '../services/user_app_service.dart';
 import '../services/conversation_service.dart';
 import '../services/logger_service.dart';
+import '../services/service_locator.dart';
 import '../services/model_storage_service.dart';
 import '../models/generation_context.dart';
 
 class AppProvider extends ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();
-  final ConversationService _conversationService = ConversationService();
+  ConversationService get _conversationService => getIt<ConversationService>();
+  UserAppService get _userAppService => getIt<UserAppService>();
 
   List<Note> _notes = [];
   List<Tag> _tags = [];
@@ -28,6 +30,7 @@ class AppProvider extends ChangeNotifier {
   final Map<String, List<AppRevision>> _appRevisions =
       {}; // Cache revisions by appId
   bool _isLoading = false;
+  int _dataVersion = 0;
   String? _error;
   bool _isDarkMode = false;
   Locale _locale = const Locale('en', '');
@@ -36,6 +39,9 @@ class AppProvider extends ChangeNotifier {
   List<String> _multiFunctionApps = [];
   String? _currentMultiFunctionAppId;
   bool _isHierarchyEnabled = false;
+  bool _onboardingCompleted = false;
+
+  bool get onboardingCompleted => _onboardingCompleted;
 
   List<Note> get notes => _notes;
   List<Tag> get tags => _tags;
@@ -43,6 +49,7 @@ class AppProvider extends ChangeNotifier {
   List<UserApp> get userApps => _userApps;
   Map<String, List<AppRevision>> get appRevisions => _appRevisions;
   bool get isLoading => _isLoading;
+  int get dataVersion => _dataVersion;
   String? get error => _error;
   bool get isDarkMode => _isDarkMode;
   Locale get locale => _locale;
@@ -64,19 +71,21 @@ class AppProvider extends ChangeNotifier {
       _filters = await _databaseService.getAllFilters();
       LoggerService.debug('Successfully loaded ${_filters.length} filters');
 
-      _userApps = await UserAppService.getAllUserApps();
+      _userApps = await _userAppService.getAllUserApps();
       LoggerService.debug('Successfully loaded ${_userApps.length} user apps');
 
-      _modelConfig = await ModelStorageService.getActiveModel();
+      _modelConfig = await getIt<ModelStorageService>().getActiveModel();
 
       await _refreshMultiFunctionApps();
       _currentMultiFunctionAppId = await _databaseService
           .getMultiFunctionDefaultAppId();
 
       await _loadHierarchyPreference();
+      await _loadOnboardingStatus();
 
       _error = null;
       LoggerService.info('loadData completed successfully');
+      _dataVersion++;
       notifyListeners(); // Notify listeners that data has been updated
     } catch (e) {
       _error = 'Error loading data: ${e.toString()}';
@@ -102,6 +111,7 @@ class AppProvider extends ChangeNotifier {
         if (fromShare) {
           newNoteFromShare = true;
         }
+        _dataVersion++;
         notifyListeners();
       }
 
@@ -123,6 +133,7 @@ class AppProvider extends ChangeNotifier {
         final noteIndex = _notes.indexWhere((n) => n.id == note.id);
         if (noteIndex != -1) {
           _notes[noteIndex] = updatedNote;
+          _dataVersion++;
           notifyListeners();
         }
       }
@@ -176,6 +187,7 @@ class AppProvider extends ChangeNotifier {
 
       // Update the local state immediately
       _notes[noteIndex] = updatedNote;
+      _dataVersion++;
       notifyListeners();
     } catch (e) {
       _error = e.toString();
@@ -212,6 +224,7 @@ class AppProvider extends ChangeNotifier {
 
       // Remove from local state immediately instead of reloading from database
       _notes.removeWhere((note) => note.id == noteId);
+      _dataVersion++;
       notifyListeners();
 
       _error = null; // Clear any previous errors
@@ -304,7 +317,7 @@ class AppProvider extends ChangeNotifier {
     GenerationContext? generationContext,
   }) async {
     try {
-      final response = await AIService.transformNote(
+      final response = await getIt<AIService>().transformNote(
         note,
         transformationPrompt,
         attachedFiles: attachedFiles,
@@ -327,7 +340,7 @@ class AppProvider extends ChangeNotifier {
     GenerationContext? generationContext,
   }) async {
     try {
-      final newNotes = await AIService.createNewNotes(
+      final newNotes = await getIt<AIService>().createNewNotes(
         prompt,
         contextNotes,
         attachedFiles: attachedFiles,
@@ -350,6 +363,7 @@ class AppProvider extends ChangeNotifier {
 
       // Add to local state with properly converted paths
       _notes.addAll(addedNotes);
+      _dataVersion++;
       notifyListeners();
 
       return addedNotes;
@@ -401,6 +415,19 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --- Agent / AI Features ---
+
+  Future<String?> getTagExtractionPrompt(String tagId) async {
+    return await _databaseService.getTagExtractionPrompt(tagId);
+  }
+
+  Future<void> updateTagExtractionPrompt(String tagId, String? prompt) async {
+    await _databaseService.updateTagExtractionPrompt(tagId, prompt);
+    // We don't necessarily need to reload tags, but we could if we stored it in the Tag model.
+    // For now, it is stored separately.
+    notifyListeners();
+  }
+
   Future<void> deleteTag(String tagName) async {
     try {
       await _databaseService.deleteTag(tagName);
@@ -436,14 +463,17 @@ class AppProvider extends ChangeNotifier {
       for (int i = 0; i < _notes.length; i++) {
         if (_notes[i].tags.contains(oldTagName)) {
           final updatedTags = List<String>.from(_notes[i].tags);
-          final oldTagIndex = updatedTags.indexOf(oldTagName);
-          if (oldTagIndex != -1) {
-            updatedTags[oldTagIndex] = newTagName;
-            _notes[i] = _notes[i].copyWith(
-              tags: updatedTags,
-              updatedAt: DateTime.now(),
-            );
+          // Remove the old tag
+          updatedTags.remove(oldTagName);
+          // Only add the new tag if the note doesn't already have it
+          // (handles dedup case where note has both A and B, and A is being replaced with B)
+          if (!updatedTags.contains(newTagName)) {
+            updatedTags.add(newTagName);
           }
+          _notes[i] = _notes[i].copyWith(
+            tags: updatedTags,
+            updatedAt: DateTime.now(),
+          );
         }
       }
 
@@ -600,6 +630,28 @@ class AppProvider extends ChangeNotifier {
     } catch (e) {
       LoggerService.error('Error loading hierarchy preference: $e', error: e);
       _isHierarchyEnabled = false;
+    }
+  }
+
+  Future<void> _loadOnboardingStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _onboardingCompleted = prefs.getBool('onboarding_completed') ?? false;
+      notifyListeners();
+    } catch (e) {
+      LoggerService.error('Error loading onboarding status: $e', error: e);
+      _onboardingCompleted = false;
+    }
+  }
+
+  Future<void> setOnboardingCompleted(bool completed) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('onboarding_completed', completed);
+      _onboardingCompleted = completed;
+      notifyListeners();
+    } catch (e) {
+      LoggerService.error('Error saving onboarding status: $e', error: e);
     }
   }
 
@@ -956,6 +1008,20 @@ class AppProvider extends ChangeNotifier {
       }).toList();
     }
 
+    // Filter by exclude tags (note must NOT have ANY of the excluded tags)
+    if (filter.excludeTags.isNotEmpty) {
+      filteredNotes = filteredNotes.where((note) {
+        return !note.tags.any((tag) => filter.excludeTags.contains(tag));
+      }).toList();
+    }
+
+    // Filter by note types
+    if (filter.noteTypes.isNotEmpty) {
+      filteredNotes = filteredNotes.where((note) {
+        return filter.noteTypes.contains(note.type);
+      }).toList();
+    }
+
     // Sort by pinned status first, then by creation date
     filteredNotes.sort((a, b) {
       if (a.pinned && !b.pinned) return -1;
@@ -969,7 +1035,7 @@ class AppProvider extends ChangeNotifier {
   // User App management methods
   Future<void> addUserApp(UserApp app) async {
     try {
-      await UserAppService.saveUserApp(app);
+      await _userAppService.saveUserApp(app);
       _userApps.add(app);
       notifyListeners();
       _error = null;
@@ -982,7 +1048,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> refreshUserApps() async {
     try {
-      _userApps = await UserAppService.getAllUserApps();
+      _userApps = await _userAppService.getAllUserApps();
       notifyListeners();
       _error = null;
     } catch (e) {
@@ -994,7 +1060,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> updateUserApp(UserApp app) async {
     try {
-      await UserAppService.updateUserApp(app);
+      await _userAppService.updateUserApp(app);
       final appIndex = _userApps.indexWhere((a) => a.id == app.id);
       if (appIndex != -1) {
         _userApps[appIndex] = app;
@@ -1014,7 +1080,7 @@ class AppProvider extends ChangeNotifier {
     List<String>? attachmentPaths,
   }) async {
     try {
-      final revision = await UserAppService.saveManualCodeEdit(
+      final revision = await _userAppService.saveManualCodeEdit(
         originalApp: originalApp,
         newCode: newCode,
         attachmentPaths: attachmentPaths,
@@ -1044,7 +1110,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> deleteUserApp(String appId) async {
     try {
-      await UserAppService.deleteUserApp(appId);
+      await _userAppService.deleteUserApp(appId);
       _userApps.removeWhere((app) => app.id == appId);
       notifyListeners();
       _error = null;
@@ -1079,7 +1145,7 @@ class AppProvider extends ChangeNotifier {
       }
       final userPrompt = promptBuffer.toString();
 
-      final app = await UserAppService.createUserApp(
+      final app = await _userAppService.createUserApp(
         name: name,
         description: description,
         steps: steps,
@@ -1110,7 +1176,7 @@ class AppProvider extends ChangeNotifier {
     GenerationContext? generationContext,
   }) async {
     try {
-      final revision = await UserAppService.editUserApp(
+      final revision = await _userAppService.editUserApp(
         originalApp: originalApp,
         editSuggestion: editSuggestion,
         attachmentPaths: attachmentPaths,
@@ -1153,7 +1219,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> getAppState(String appId) async {
     try {
-      return await UserAppService.getAppState(appId);
+      return await _userAppService.getAppState(appId);
     } catch (e) {
       _error = e.toString();
       notifyListeners();
@@ -1163,7 +1229,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> saveAppState(String appId, Map<String, dynamic> state) async {
     try {
-      await UserAppService.saveAppState(appId, state);
+      await _userAppService.saveAppState(appId, state);
       _error = null;
     } catch (e) {
       _error = e.toString();
@@ -1181,7 +1247,7 @@ class AppProvider extends ChangeNotifier {
       }
 
       // Load revisions from database
-      final revisions = await UserAppService.getAppRevisions(appId);
+      final revisions = await _userAppService.getAppRevisions(appId);
 
       // Cache the revisions (already sorted by revisionNumber ASC from database)
       _appRevisions[appId] = revisions;
@@ -1196,7 +1262,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<AppRevision?> getAppRevision(String revisionId) async {
     try {
-      return await UserAppService.getAppRevision(revisionId);
+      return await _userAppService.getAppRevision(revisionId);
     } catch (e) {
       _error = e.toString();
       notifyListeners();
@@ -1220,7 +1286,7 @@ class AppProvider extends ChangeNotifier {
         throw Exception('Revision not found in any app');
       }
 
-      await UserAppService.deleteAppRevision(revisionId);
+      await _userAppService.deleteAppRevision(revisionId);
 
       // Clear and refresh revisions cache for this app
       clearAppRevisionsCache(appId);
@@ -1245,7 +1311,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> setSelectedRevision(String appId, String revisionId) async {
     try {
-      await UserAppService.setSelectedRevision(appId, revisionId);
+      await _userAppService.setSelectedRevision(appId, revisionId);
 
       // Update the app in our local list
       final appIndex = _userApps.indexWhere((app) => app.id == appId);
@@ -1267,7 +1333,7 @@ class AppProvider extends ChangeNotifier {
   // Refresh revisions for a specific app
   Future<void> refreshAppRevisions(String appId) async {
     try {
-      final revisions = await UserAppService.getAppRevisions(appId);
+      final revisions = await _userAppService.getAppRevisions(appId);
       _appRevisions[appId] = revisions;
       notifyListeners();
     } catch (e) {
@@ -1285,7 +1351,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<AppRevision> createInitialRevision(String appId) async {
     try {
-      final revision = await UserAppService.createInitialRevision(appId);
+      final revision = await _userAppService.createInitialRevision(appId);
 
       // Update the app in our local list
       final appIndex = _userApps.indexWhere((app) => app.id == appId);

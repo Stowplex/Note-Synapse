@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mcp_client/mcp_client.dart' as mcp;
@@ -6,30 +7,44 @@ import 'package:uuid/uuid.dart';
 import '../models/mcp_endpoint.dart';
 import 'logger_service.dart';
 import 'oauth_token_manager.dart';
+import 'service_locator.dart';
 
 /// Service for managing MCP (Model Context Protocol) endpoints and tools
 class McpService {
+  final FlutterSecureStorage _storage;
+  final Map<String, OAuthTokenManager> _oauthManagers = {};
+
+  // Keep these as static constants (they're just key prefixes)
   static const String _endpointsKey = 'mcp_endpoints';
   static const String _toolsCachePrefix = 'mcp_tools_cache_';
   static const String _bearerTokenPrefix = 'mcp_bearer_token_';
-  static final Map<String, OAuthTokenManager> _oauthManagers =
-      <String, OAuthTokenManager>{};
-
-  static const _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(
-      encryptedSharedPreferences: true,
-      sharedPreferencesName: 'note_synapse_secure',
-      preferencesKeyPrefix: 'note_synapse_',
-    ),
-    iOptions: IOSOptions(
-      accessibility: KeychainAccessibility.first_unlock_this_device,
-    ),
-  );
 
   static const _uuid = Uuid();
 
+  McpService({FlutterSecureStorage? storage})
+      : _storage = storage ??
+            const FlutterSecureStorage(
+              aOptions: AndroidOptions(
+                encryptedSharedPreferences: true,
+                sharedPreferencesName: 'note_synapse_secure',
+                preferencesKeyPrefix: 'note_synapse_',
+              ),
+              iOptions: IOSOptions(
+                accessibility: KeychainAccessibility.first_unlock_this_device,
+              ),
+            );
+
+  /// Factory to get singleton from GetIt
+  factory McpService.instance() => getIt<McpService>();
+
+  /// Create instance for testing with mock storage
+  @visibleForTesting
+  static McpService createForTesting(FlutterSecureStorage storage) {
+    return McpService(storage: storage);
+  }
+
   /// Get all MCP endpoints
-  static Future<List<McpEndpoint>> getEndpoints() async {
+  Future<List<McpEndpoint>> getEndpoints() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final endpointsJson = prefs.getString(_endpointsKey);
@@ -49,7 +64,7 @@ class McpService {
   }
 
   /// Save MCP endpoints
-  static Future<void> _saveEndpoints(List<McpEndpoint> endpoints) async {
+  Future<void> _saveEndpoints(List<McpEndpoint> endpoints) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final endpointsJson = jsonEncode(
@@ -64,7 +79,7 @@ class McpService {
   }
 
   /// Add a new MCP endpoint
-  static Future<McpEndpoint> addEndpoint({
+  Future<McpEndpoint> addEndpoint({
     required String name,
     required String baseUrl,
     required McpTransportType transportType,
@@ -119,7 +134,7 @@ class McpService {
   }
 
   /// Update an existing MCP endpoint
-  static Future<void> updateEndpoint({
+  Future<void> updateEndpoint({
     required String id,
     String? name,
     String? baseUrl,
@@ -171,7 +186,7 @@ class McpService {
   }
 
   /// Delete an MCP endpoint
-  static Future<void> deleteEndpoint(String id) async {
+  Future<void> deleteEndpoint(String id) async {
     try {
       final endpoints = await getEndpoints();
       endpoints.removeWhere((e) => e.id == id);
@@ -195,7 +210,7 @@ class McpService {
   }
 
   /// Get bearer token for an endpoint
-  static Future<String?> getBearerToken(String endpointId) async {
+  Future<String?> getBearerToken(String endpointId) async {
     try {
       final endpoints = await getEndpoints();
       final endpoint = endpoints.firstWhere(
@@ -216,7 +231,7 @@ class McpService {
   }
 
   /// Get cached tools for an endpoint
-  static Future<McpToolsCache?> getCachedTools(String endpointId) async {
+  Future<McpToolsCache?> getCachedTools(String endpointId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cacheJson = prefs.getString('$_toolsCachePrefix$endpointId');
@@ -233,7 +248,7 @@ class McpService {
   }
 
   /// Refresh tools from an MCP endpoint
-  static Future<McpToolsCache> refreshTools(String endpointId) async {
+  Future<McpToolsCache> refreshTools(String endpointId) async {
     final requestId = 'mcp_refresh_${DateTime.now().millisecondsSinceEpoch}';
     final startTime = DateTime.now();
 
@@ -389,7 +404,7 @@ class McpService {
   }
 
   /// Call a tool on an MCP endpoint
-  static Future<String> callTool({
+  Future<String> callTool({
     required String endpointId,
     required String toolName,
     required Map<String, dynamic> arguments,
@@ -473,11 +488,30 @@ class McpService {
         // Call the tool
         final result = await client.callTool(toolName, arguments);
 
-        // Extract text content from result
+        // Extract content from result
+        // MCP tools can return multiple content types:
+        // - TextContent: simple text responses
+        // - ResourceContent: file contents (with text or blob field)
+        // - ImageContent: images (not handled yet)
         final buffer = StringBuffer();
         for (final content in result.content) {
           if (content is mcp.TextContent) {
             buffer.write(content.text);
+          } else if (content is mcp.ResourceContent) {
+            // ResourceContent contains the actual file/resource data
+            // Prefer text content, fall back to blob (which is base64)
+            if (content.text != null) {
+              buffer.write(content.text);
+            } else if (content.blob != null) {
+              // blob is base64-encoded, decode it for text files
+              try {
+                final decoded = utf8.decode(base64Decode(content.blob!));
+                buffer.write(decoded);
+              } catch (_) {
+                // If base64 decode fails or isn't valid UTF-8, return raw blob
+                buffer.write(content.blob);
+              }
+            }
           }
         }
 

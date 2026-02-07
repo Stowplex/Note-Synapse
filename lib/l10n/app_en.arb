@@ -4,8 +4,8 @@
   "settings": "Settings",
   "appearance": "Appearance",
   "appearanceSubtitle": "Theme and display settings",
-  "aiApi": "AI API",
-  "aiApiSubtitle": "Configure your AI API key",
+  "aiApi": "AI Settings",
+  "aiApiSubtitle": "Configure AI models and settings",
   "aiPrompts": "Prompts",
   "aiPromptsSubtitle": "Customize AI prompt injections and overrides",
   "aiConversationSettings": "AI conversations",
@@ -23,6 +23,26 @@
   "iterationLimitHelper": "Minimum allowed: {minLimit}",
   "iterationLimitDialogError": "Value must be greater than {minLimit}.",
   "iterationLimitUpdated": "Iteration limit updated to {count}",
+  "settingsSaved": "Settings saved",
+  "agenticSettings": "Agentic Settings",
+  "agenticSettingsSubtitle": "Configure agent mode parameters",
+  "compactionThreshold": "Compaction Threshold",
+  "compactionThresholdDescription": "Maximum tokens before context compaction. Runtime uses min(this value, model's context window).",
+  "findingLimit": "Finding Limit",
+  "findingLimitDescription": "Maximum number of findings to extract per task for synthesis.",
+  "findingMaxWords": "Finding Detail Words",
+  "findingMaxWordsDescription": "Maximum words per finding's bullet point details.",
+  "maxTurns": "Max Turns",
+  "maxTurnsDescription": "Maximum number of iterations allowed per task.",
+  "turnIncrement": "Turn Increment",
+  "turnIncrementDescription": "Number of turns to add when resuming a paused task.",
+  "turnsValue": "{count} turns",
+  "maxSubtaskDepth": "Max Subtask Depth",
+  "maxSubtaskDepthDescription": "Maximum nesting depth for spawning subtasks. Set to 0 to disable spawning.",
+  "aiLogEntriesLimit": "AI Log Entries Limit",
+  "aiLogEntriesLimitDescription": "Maximum number of AI log entries to keep.",
+  "aiLogEntriesDisabled": "Disabled",
+  "aiLogEntriesUnlimited": "Unlimited",
   "darkMode": "Dark Mode",
   "darkModeSubtitle": "Toggle between light and dark theme",
   "apiKey": "API Key",
@@ -38,6 +58,8 @@
   "apiKeyLabel": "API Key",
   "apiKeyHint": "Enter your API key here",
   "cancel": "Cancel",
+  "checkIn": "Check-in",
+  "enterCheckInNote": "Enter check-in note",
   "update": "Update",
   "reset": "Reset",
   "resetApiKeyConfirmation": "This will clear your current API key and return you to the setup screen. Are you sure?",
@@ -103,6 +125,30 @@
   "english": "English",
   "chineseSimplified": "简体中文",
   "languageChanged": "Language changed successfully",
+  "system": "System",
+  "systemSubtitle": "System behavior settings",
+  "keepScreenOn": "Keep Screen On",
+  "keepScreenOnSubtitle": "Prevent screen from turning off automatically",
+  "network": "Network",
+  "networkSubtitle": "HTTP protocol and retry settings",
+  "protocolPreference": "Protocol Preference",
+  "protocolPreferenceSubtitle": "Choose HTTP protocol mode for network requests",
+  "protocolAuto": "Auto (Upgrade to HTTP/3)",
+  "protocolHttp3Only": "HTTP/3 Only",
+  "protocolHttp11Only": "HTTP/1.1 Only",
+  "retryCount": "Retry Count",
+  "retryCountSubtitle": "Number of retry attempts for failed requests (0-5)",
+  "backoffBase": "Backoff Base",
+  "backoffBaseSubtitle": "Base delay for exponential backoff in seconds (1-10)",
+  "retryPattern": "Retry delays: {base}s → {second}s → {third}s",
+  "@retryPattern": {
+    "placeholders": {
+      "base": {"type": "String"},
+      "second": {"type": "String"},
+      "third": {"type": "String"}
+    }
+  },
+  "networkSettingsUpdated": "Network settings updated",
   "errorChangingLanguage": "Error changing language: {error}",
   "selected": "selected",
   "linkSelectedNotes": "Link Selected Notes",
@@ -161,6 +207,9 @@
   "createNewNotesHint": "Describe what new notes you want to create...",
   "enterYourPrompt": "Enter your prompt:",
   "attachFiles": "Attach Files",
+  "attachFile": "Attach File",
+  "selectFromDevice": "Select from Device",
+  "enterUri": "Enter URI",
   "answerOnlyFromNotes": "Answer only from selected notes",
   "process": "Process",
   "processing": "Processing...",
@@ -172,6 +221,7 @@
   "filesAttached": "Files attached",
   "removeFile": "Remove File",
   "addFiles": "Add Files",
+  "add": "Add",
   "processingRequest": "Processing your request...",
   "executingToolStatus": "Executing tool: {service} -> {tool}",
   "errorProcessingRequest": "Error processing request: {error}",
@@ -549,7 +599,7 @@
   "appGenerationPrompt": "Create a single-page self-contained HTML application based on the following requirements:\n\nApp Name: {name}\nDescription: {description}\nSteps: {steps}\n\nRequirements:\n1. The HTML must be completely self-contained with embedded CSS and JavaScript\n2. Do not reference any external resources\n3. Document the purpose, requirements, and approach in comments\n4. Use the following APIs to interact with the Flutter app:\n   - Synapse.runQuery(sql: string) - Query the app's database\n   - Synapse.storeAppState(state) - Store JSON serialized state\n   - Synapse.loadAppState() - Load saved state\n   - Synapse.chatAI(prompt) - Send prompt to AI and get response\n\nGenerate the complete HTML application now.",
   "editApp": "Edit App",
   "deleteApp": "Delete App",
-  "aiDebugOverlay": "AI Debug Overlay",
+  "aiDebugOverlay": "AI Debug Log",
   "aiDebugOverlaySubtitle": "View AI request/response logs",
   "aiDebugOverlayTitle": "AI Debug Overlay",
   "aiLogs": "AI Logs",
@@ -617,7 +667,7 @@
   "errorAppAlreadyExists": "Error: App with this UUID already exists",
   "errorCreatingApp": "Error creating app: {error}",
   "errorImportingApp": "Error importing app: {error}",
-  "aiModelSettings": "AI Model Settings",
+  "aiModelSettings": "AI Settings",
   "currentModel": "Current Model",
   "noModelSelected": "No model selected",
   "availableModels": "Available Models",
@@ -780,6 +830,7 @@
   "baseUrl": "Base URL",
   "baseUrlHint": "https://api.example.com or https://server.smithery.ai/@user/server/mcp?api_key=xxx",
   "baseUrlHelperText": "Include query params for auth if needed (e.g., Smithery)",
+  "builtInTools": "Built-in Tools",
   "transportType": "Transport Type",
   "bearerTokenOptional": "Bearer Token (Optional)",
   "bearerTokenHint": "Leave empty if auth is in URL params",
@@ -791,9 +842,71 @@
   "deleteEndpointConfirmation": "Are you sure you want to delete \"{name}\"? This will also delete cached tools.",
   "deletedEndpoint": "Deleted endpoint: {name}",
   "errorDeletingEndpoint": "Error deleting endpoint: {error}",
+  "onboardingWelcomeTitle": "Welcome to Note Synapse",
+  "onboardingWelcomeSubtitle": "Your AI second brain",
+  "onboardingChooseModelTitle": "Choose Your AI Model",
+  "onboardingChooseModelSubtitle": "Select the AI model that best fits your needs",
+  "onboardingStart": "Get Started",
+  "onboardingNext": "Next",
+  "onboardingSkip": "Skip",
+  "onboardingLicenseTitle": "License Agreement",
+  "onboardingLicenseSubtitle": "Please read and accept the license",
+  "onboardingPrivacyTitle": "Privacy Policy",
+  "onboardingPrivacySubtitle": "How we handle your data",
+  "onboardingAccept": "Accept & Continue",
+  "onboardingConfigLater": "Config Later",
+  "about": "About",
+  "aboutSubtitle": "License, privacy, and version",
+  "version": "Version",
+  "info": "Info",
+  "applicationInfo": "Application Information",
+  "githubPage": "GitHub Page",
+  "viewLicense": "View License",
+  "viewPrivacyPolicy": "View Privacy Policy",
+  "stowplexCopyright": "Stowplex LLC & Bruce Li All Rights Reserved",
+  "noWarranty": "NO WARRANTY",
+  "debugMenu": "Debug Menu",
+  "debugMenuSubtitle": "Developer options",
+  "resetOnboarding": "Reset Onboarding Flag",
+  "resetOnboardingTitle": "Reset Onboarding Flag",
+  "resetOnboardingSuccess": "Onboarding flag reset",
+  "dependencyLicenses": "Dependency Library Licenses",
+
   "refreshedToolsFor": "Refreshed tools for {name}",
+  "bookmarkPage": "Bookmark Page",
+  "page": "Page",
+  "removeBookmark": "Remove Bookmark",
+  "bookmarks": "Bookmarks",
+  "addBookmark": "Add Bookmark",
+  "editBookmark": "Edit Bookmark",
+  "bookmarkAnnotationHint": "Enter annotation (max 200 chars)",
+  "noBookmarksYet": "No bookmarks yet",
+  "aiContextBookmarks": "AI Context: Bookmarks",
+  "configureAiContext": "Configure AI Context",
+  "aiContext": "AI Context: {mode}",
+  "@aiContext": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "aiContextFullPdf": "Full PDF",
+  "aiContextWindow": "Window",
+  "aiContextChapters": "Chapters",
+  "windowSize": "Window Size",
+  "pagesBeforeAfter": "Pages before/after",
   "errorRefreshingTools": "Error refreshing tools: {error}",
   "tools": "Tools",
+  "markAllAs": "Mark all as",
+  "archiveAll": "Archive All",
+  "unarchiveAll": "Unarchive All",
+  "selectAll": "Select All",
+  "deselectAll": "Deselect All",
+  "noteType": "Note Type",
+  "excludeTags": "Exclude Tags",
+  "excludeTagsHint": "Select tags to exclude",
+  "selectTagsToExclude": "Select Tags to Exclude",
   "toolsFor": "Tools - {name}",
   "fetched": "Fetched",
   "toolsCount": "Tools: {count}",
@@ -1551,5 +1664,95 @@
   "askAiAboutNoteHint": "Ask AI about this note...",
   "openDbFileTooltip": "Open DB File",
   "resetToDefaultDbTooltip": "Reset to Default DB",
-  "exportDbTooltip": "Export DB"
+  "exportDbTooltip": "Export DB",
+  "undo": "Undo",
+  "taskRescheduled": "Task rescheduled",
+  "recoveryManager": "Recovery Manager",
+  "backupAndRestore": "Backup & Restore",
+  "rawDataManagerTitle": "Raw Data Manager",
+  "rawDataManagerSubtitle": "Inspect and modify raw database data",
+  "databaseNotConnected": "Database not connected",
+  "fileUsageUnavailable": "File usage status unavailable",
+  "fileUsageDetails": "File Usage Details",
+  "noReferencesFound": "No references found in database",
+  "usedByNotes": "Used by {count} note(s)",
+  "@usedByNotes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "usedByConversations": "Used in {count} conversation message(s)",
+  "@usedByConversations": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noteNoLongerExists": "Note no longer exists",
+  "messageNoLongerExists": "Message no longer exists",
+  "showDetails": "Show Details",
+  "close": "Close",
+
+  "saveFindings": "Save Findings",
+  "saveFindingsToNote": "Save findings to note",
+  "attachNotesToPlan": "Attach Notes to Plan",
+  "attachNotesToTask": "Attach Notes to Task",
+  "globalContextNotes": "Global Context Notes",
+  "taskContextNotes": "Task Context Notes",
+  "globalContextDescription": "These notes will be included as context for all tasks",
+  "taskContextDescription": "These notes will be included as context for this task only",
+  "notesAttachedCount": "{count, plural, =0{No notes attached} =1{1 note attached} other{{count} notes attached}}",
+  "@notesAttachedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "agentRunningNotificationTitle": "Agent Running",
+  "agentRunningNotificationBody": "Working on: {objective}",
+  "@agentRunningNotificationBody": {
+    "placeholders": {
+      "objective": {
+        "type": "String"
+      }
+    }
+  },
+  "agentCompleteNotificationTitle": "Agent Complete",
+  "agentCompleteNotificationBody": "Tap to view results",
+  "agentPauseExecution": "Pause",
+  "agentResumeExecution": "Continue",
+  "agentStopExecution": "Stop",
+  "agentPausedStatus": "Paused",
+  "agentConflictTitle": "Agent Already Running",
+  "agentConflictMessage": "An agent is currently {status} in another conversation. You can stop it to start a new one, or switch to that conversation.",
+  "@agentConflictMessage": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "agentConflictStop": "Stop Agent",
+  "agentConflictSwitch": "Switch to Conversation",
+  "editBlock": "Edit Block",
+  "deleteBlock": "Delete Block",
+  "deleteBlockConfirmation": "Are you sure you want to delete this block? This action cannot be undone.",
+  "expandSelectionAbove": "Expand Above",
+  "contractSelectionAbove": "Contract Above",
+  "expandSelectionBelow": "Expand Below",
+  "contractSelectionBelow": "Contract Below",
+  "editSelection": "Edit",
+  "deleteSelection": "Delete Blocks",
+  "confirmDeleteBlocks": "Are you sure you want to delete {count} blocks?",
+  "@confirmDeleteBlocks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

@@ -1,10 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:http/http.dart' as http;
+
 import 'package:path/path.dart' as path;
 import '../../services/global_library_service.dart';
 import '../../services/logger_service.dart';
+import '../../services/network_provider.dart';
 
 class UserAppLibrarySettingsScreen extends StatefulWidget {
   const UserAppLibrarySettingsScreen({super.key});
@@ -223,7 +224,7 @@ class _AddLibraryDialogState extends State<AddLibraryDialog> {
 
       if (_isUrlMode) {
         final url = _urlController.text;
-        final response = await http.get(Uri.parse(url));
+        final response = await NetworkProvider.get(Uri.parse(url));
         if (response.statusCode != 200) {
           throw Exception('Failed to download file: ${response.statusCode}');
         }

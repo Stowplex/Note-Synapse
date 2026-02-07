@@ -8,7 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:flutter_pdfview/flutter_pdfview.dart';
+
+import 'package:pdfrx/pdfrx.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
@@ -17,12 +18,14 @@ import '../l10n/app_localizations.dart';
 import '../models/conversation.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/note.dart';
+import '../models/attachment.dart';
 import '../models/tool_iteration_prompt.dart';
 import '../models/user_app.dart';
 import '../models/generation_context.dart';
 import '../models/model_config.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_tool_service.dart';
+import '../services/approval_service.dart';
 import '../services/conversation_service.dart';
 import '../services/conversation_ai_engine.dart';
 import '../services/database_service.dart';
@@ -30,27 +33,54 @@ import '../services/logger_service.dart';
 import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/conversation_settings_service.dart';
+import '../services/model_selector.dart';
+import '../services/service_locator.dart';
+import '../services/attachment_preprocessor.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/prompts/note_prompt_builder.dart';
 import '../services/prompts/prompt_models.dart';
 import '../services/prompts/prompt_configuration_service.dart';
 import '../services/prompts/registrations/chat_prompt_configuration.dart';
 import '../services/prompts/system_prompt_builder.dart';
+import '../services/sql_query_service.dart';
 import '../services/user_app_service.dart';
+import '../services/agent_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
 import '../utils/native_capture_utils.dart';
 import '../utils/synapse_temp_utils.dart';
+import '../widgets/approval_dialog.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../mixins/note_action_mixin.dart';
 import '../widgets/chat_message_action_row.dart';
 import '../widgets/active_tool_count_badge.dart';
+import '../widgets/drawing_editor.dart';
 import 'conversation_tree_screen.dart';
 import 'conversation_chat_screen.dart';
+import '../widgets/pdf_ai_context_dialog.dart';
+import 'package:path_provider/path_provider.dart';
 import 'note_selection_dialog.dart';
 import 'note_action_app_selection_screen.dart';
 import 'settings_screen.dart';
 import '../widgets/model_selector_button.dart';
+import '../services/built_in_tools_service.dart';
+
+enum DrawingTool { pen, rectangle }
+
+abstract class DrawingAction {
+  final Color color;
+  DrawingAction(this.color);
+}
+
+class StrokeAction extends DrawingAction {
+  final List<Offset> points;
+  StrokeAction(this.points, Color color) : super(color);
+}
+
+class RectangleAction extends DrawingAction {
+  final Rect rect;
+  RectangleAction(this.rect, Color color) : super(color);
+}
 
 class ImmersiveNoteScreen extends StatefulWidget {
   const ImmersiveNoteScreen({
@@ -75,7 +105,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         TickerProviderStateMixin,
         NoteActionMixin<ImmersiveNoteScreen>,
         WidgetsBindingObserver {
-  final ConversationService _conversationService = ConversationService();
+  ConversationService get _conversationService => getIt<ConversationService>();
   final DatabaseService _databaseService = DatabaseService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _chatScrollController = ScrollController();
@@ -91,7 +121,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final Map<String, Future<_AttachmentSource?>> _attachmentSourceFutures = {};
   final Map<String, int> _pdfCurrentPages = {};
   final Map<String, int> _pdfTotalPages = {};
-  final Map<String, PDFViewController> _pdfControllers = {};
+  final Map<String, PdfAiContextConfig> _pdfContextConfigs = {};
+  final Map<String, PdfViewerController> _pdfViewerControllers = {};
+  final Map<String, PdfDocument> _pdfDocuments = {};
+  final Map<String, List<PdfOutlineNode>> _pdfOutlines = {};
   final Map<String, TransformationController> _imageTransforms = {};
 
   final ConversationAiEngine _aiEngine = const ConversationAiEngine();
@@ -112,6 +145,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final List<ConversationMessage> _scratchpadItems = [];
   bool _includeScratchpadInChat = false;
   int _lastSavedScratchpadCount = 0;
+
+  // PDF State
+  bool _isPdfNightMode = false;
 
   bool get _isScratchpadDirty =>
       _scratchpadItems.length != _lastSavedScratchpadCount;
@@ -137,17 +173,33 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   int _maxToolIterations = ConversationSettingsService.defaultMaxToolIterations;
   ToolIterationPrompt? _iterationPrompt;
   final List<Offset> _penStrokePoints = [];
+
+  // Built-in Tools
+  final Set<String> _selectedBuiltInTools = {};
+
+  // System Tools (native tools from AgentService)
+  final Set<String> _selectedSystemTools = {};
+
+  // Drawing State
+  List<DrawingAction> _drawingActions = [];
+  List<DrawingAction> _redoStack = [];
+  DrawingTool _currentTool = DrawingTool.pen;
+  Color _currentColor = Colors.redAccent;
+  Offset? _currentRectStart;
+  Offset? _currentRectEnd;
+
   int _activeNoteIndex = 0;
   String? _activeAttachmentPath;
   final DateTime _sessionStart = DateTime.now();
   static const double _aiHandleHeight = 76.0;
   static const double _aiHandleWidth = 420.0;
   static const double _aiPanelHeightFraction = 0.45;
-  static const double _aiLandscapePanelFraction = 0.4;
+  double _aiLandscapePanelFraction = 0.4;
   static const double _aiHandleMargin = 12.0;
   static const double _aiHandlePadding = 12.0;
   static const double _aiHandleControlWidth = 44.0;
   static const double _aiHandleControlGap = 8.0;
+  static const double _kMinVerticalHeightForSplit = 600.0;
   double _aiHandleFraction = 0.75;
   bool _isAiPanelExpanded = false;
   _AiPanelSide _aiPanelSide = _AiPanelSide.bottom;
@@ -161,6 +213,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     _noteOrder = widget.notes.map((note) => note.id).toList();
     _conversationNotes = List<Note>.from(widget.notes);
     _loadIterationPreference();
+    _setupApprovalCallback();
 
     if (widget.initialConversation != null) {
       _conversation = widget.initialConversation;
@@ -183,6 +236,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       if (index != null) {
         _activeNoteIndex = index;
       }
+      _loadPdfContextConfig(widget.initialAttachmentPath!);
     }
 
     // Don't create conversation immediately - wait for first message
@@ -196,6 +250,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       _loadAiTools();
       _loadModelFeatures();
     });
+  }
+
+  /// Sets up the unified approval callback for AI tools.
+  void _setupApprovalCallback() {
+    ApprovalService.onApprovalRequest = (request) async {
+      if (!mounted) return ApprovalResult(approved: false);
+      return await ApprovalDialog.showWithContext(context, request);
+    };
   }
 
   ModelConfig? _previousModelConfig;
@@ -369,11 +431,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   Future<void> _loadMcpEndpoints() async {
     try {
-      final endpoints = await McpService.getEndpoints();
+      final endpoints = await getIt<McpService>().getEndpoints();
       // Only show endpoints that have cached tools
       final endpointsWithTools = <McpEndpoint>[];
       for (final endpoint in endpoints) {
-        final cache = await McpService.getCachedTools(endpoint.id);
+        final cache = await getIt<McpService>().getCachedTools(endpoint.id);
         if (cache != null && cache.tools.isNotEmpty) {
           endpointsWithTools.add(endpoint);
         }
@@ -429,7 +491,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
 
       try {
-        final revision = await UserAppService.getAppRevision(
+        final revision = await getIt<UserAppService>().getAppRevision(
           app.selectedRevisionId!,
         );
         if (revision == null) {
@@ -472,6 +534,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     });
   }
 
+  bool get _hasAvailableTools =>
+      _availableMcpEndpoints.isNotEmpty ||
+      _aiToolBundles.isNotEmpty ||
+      BuiltInToolsService.tools.isNotEmpty ||
+      true; // Model features are always potential candidates
+
   Map<String, List<McpTool>> _buildActiveToolsMap() {
     final combined = <String, List<McpTool>>{};
     combined.addAll(_mcpToolsByEndpoint);
@@ -480,6 +548,47 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       final tools = _aiToolMcpMap[service];
       if (tools != null && tools.isNotEmpty) {
         combined[service] = tools;
+      }
+    }
+
+    // Add Built-in Tools
+    if (_selectedBuiltInTools.isNotEmpty) {
+      final builtInTools = _selectedBuiltInTools
+          .map((id) => BuiltInToolsService.getToolById(id))
+          .where((t) => t != null)
+          .map(
+            (t) => McpTool(
+              name: t!.name,
+              description: t.description,
+              inputSchema: {},
+            ),
+          )
+          .toList();
+      if (builtInTools.isNotEmpty) {
+        combined['Built-in'] = builtInTools;
+      }
+    }
+
+    // Add System Tools (native tools from AgentService)
+    if (_selectedSystemTools.isNotEmpty) {
+      final agentService = context.read<AgentService>();
+      final systemTools = _selectedSystemTools
+          .map((id) {
+            final nativeTool = agentService.nativeTools
+                .where((t) => t.name == id)
+                .firstOrNull;
+            if (nativeTool == null) return null;
+            return McpTool(
+              name: nativeTool.name,
+              description: nativeTool.description,
+              inputSchema: nativeTool.inputSchema,
+            );
+          })
+          .where((t) => t != null)
+          .cast<McpTool>()
+          .toList();
+      if (systemTools.isNotEmpty) {
+        combined[BuiltInToolsService.systemToolsServiceKey] = systemTools;
       }
     }
 
@@ -710,9 +819,286 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final runtime = AiToolRuntime(
       bundle: bundle,
       appProvider: context.read<AppProvider>(),
+      onModificationRequest: _handleModificationRequest,
+      onSqlWriteApprovalRequest: _handleSqlWriteApprovalRequest,
     );
     _aiToolRuntimes[serviceName] = runtime;
     return runtime;
+  }
+
+  /// Handle note modification approval requests from AI tools.
+  Future<bool> _handleModificationRequest(
+    dynamic source,
+    String noteId,
+    Map<String, dynamic> modification,
+  ) async {
+    if (!mounted) return false;
+    return await ApprovalService.requestNoteModificationApproval(
+      noteId: noteId,
+      modification: modification,
+      source: 'AI Tool',
+    );
+  }
+
+  /// Handle SQL write approval requests from AI tools.
+  Future<bool> _handleSqlWriteApprovalRequest(
+    dynamic source,
+    String sql,
+    SqlQueryType queryType,
+  ) async {
+    if (!mounted) return false;
+    return await ApprovalService.requestSqlWriteApproval(
+      sql: sql,
+      queryType: queryType,
+      queryTypeDescription: getIt<SqlQueryService>().getQueryTypeDescription(
+        queryType,
+      ),
+      source: 'AI Tool',
+    );
+  }
+
+  // --- Bookmark Management ---
+
+  Future<void> _toggleBookmark() async {
+    if (_activeAttachmentPath == null) return;
+
+    final attachment = await _resolveAttachment(_activeAttachmentPath!);
+    if (attachment == null) return;
+
+    final currentPage = _pdfCurrentPages[_activeAttachmentPath!] ?? 0;
+    final bookmarks = attachment.getBookmarks();
+
+    // Check if current page is already bookmarked (compare page numbers)
+    final existingBookmarkIndex = bookmarks.indexWhere(
+      (b) => b.pageNumber == currentPage,
+    );
+
+    if (existingBookmarkIndex != -1) {
+      // Remove bookmark
+      await _removeBookmark(attachment, currentPage);
+      await _loadPdfContextConfig(_activeAttachmentPath!);
+    } else {
+      // Add bookmark
+      await _showAddEditBookmarkDialog(attachment, currentPage);
+      await _loadPdfContextConfig(_activeAttachmentPath!);
+    }
+  }
+
+  Future<Attachment?> _resolveAttachment(String path) async {
+    final note = widget.notes[_activeNoteIndex];
+    // This is a simplification; ideally we find the attachment object from the note or DB
+    final attachments = await _databaseService.getAttachmentsForNote(note.id);
+    try {
+      // Try to find by direct path match first (handling relative/absolute)
+      return attachments.firstWhere(
+        (a) => a.filePath == path || a.filePath.endsWith(path.split('/').last),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _saveBookmark(
+    Attachment attachment,
+    int page,
+    String annotation,
+  ) async {
+    final bookmarks = attachment.getBookmarks();
+    final newBookmark = PdfBookmark(
+      title: 'Page ${page + 1}', // Default title
+      pageNumber: page,
+      createdAt: DateTime.now(),
+      annotation: annotation.trim(),
+    );
+
+    // Remove existing if updating
+    bookmarks.removeWhere((b) => b.pageNumber == page);
+    bookmarks.add(newBookmark);
+    // Sort by page number
+    bookmarks.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+
+    final metadata = Map<String, dynamic>.from(attachment.metadata ?? {});
+    metadata['bookmarks'] = bookmarks.map((e) => e.toJson()).toList();
+
+    await _databaseService.updateAttachmentMetadata(attachment.id, metadata);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.noteUpdatedSuccessfully),
+        ),
+      );
+      // Force rebuild to update menu state if needed
+      setState(() {});
+      // Reload config as bookmarks might be part of it, or just to be safe
+      await _loadPdfContextConfig(_activeAttachmentPath!);
+    }
+  }
+
+  Future<void> _removeBookmark(Attachment attachment, int page) async {
+    final bookmarks = attachment.getBookmarks();
+    bookmarks.removeWhere((b) => b.pageNumber == page);
+
+    final metadata = Map<String, dynamic>.from(attachment.metadata ?? {});
+    metadata['bookmarks'] = bookmarks.map((e) => e.toJson()).toList();
+
+    await _databaseService.updateAttachmentMetadata(attachment.id, metadata);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.attachmentRemoved),
+        ), // Reusing suitable string or adding new one
+      );
+      setState(() {});
+      await _loadPdfContextConfig(attachment.filePath);
+    }
+  }
+
+  void _showBookmarksList() async {
+    if (_activeAttachmentPath == null) return;
+    final attachment = await _resolveAttachment(_activeAttachmentPath!);
+    if (attachment == null) return;
+
+    final bookmarks = attachment.getBookmarks();
+    final l10n = AppLocalizations.of(context)!;
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(l10n.bookmarks),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: bookmarks.isEmpty
+                ? Center(child: Text(l10n.noBookmarksYet))
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: bookmarks.length,
+                    itemBuilder: (context, index) {
+                      final bookmark = bookmarks[index];
+                      return ListTile(
+                        title: Text('${l10n.page} ${bookmark.pageNumber + 1}'),
+                        subtitle:
+                            bookmark.annotation != null &&
+                                bookmark.annotation!.isNotEmpty
+                            ? Text(
+                                bookmark.annotation!,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            : null,
+                        onTap: () {
+                          Navigator.pop(context);
+                          _jumpToPage(bookmark.pageNumber);
+                        },
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit),
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _showAddEditBookmarkDialog(
+                                  attachment,
+                                  bookmark.pageNumber,
+                                  existingBookmark: bookmark,
+                                );
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete),
+                              onPressed: () async {
+                                Navigator.pop(context);
+                                await _removeBookmark(
+                                  attachment,
+                                  bookmark.pageNumber,
+                                );
+                                _showBookmarksList(); // Reopen to show updated list
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(l10n.close),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showAddEditBookmarkDialog(
+    Attachment attachment,
+    int page, {
+    PdfBookmark? existingBookmark,
+  }) async {
+    final l10n = AppLocalizations.of(context)!;
+    final controller = TextEditingController(
+      text: existingBookmark?.annotation ?? '',
+    );
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(
+                existingBookmark == null ? l10n.addBookmark : l10n.editBookmark,
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('${l10n.page} ${page + 1}'),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: controller,
+                    maxLength: 200,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      hintText: l10n.bookmarkAnnotationHint,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _saveBookmark(attachment, page, controller.text);
+                  },
+                  child: Text(l10n.save),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _jumpToPage(int page) {
+    if (_activeAttachmentPath != null) {
+      final controller = _pdfViewerControllers[_activeAttachmentPath!];
+      if (controller != null) {
+        // pdfrx uses 1-indexed pages
+        controller.goToPage(pageNumber: page + 1);
+      }
+    }
   }
 
   @override
@@ -754,7 +1140,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 ),
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert),
-                onSelected: (value) {
+                onSelected: (value) async {
                   if (value == 'open_chat') {
                     _openConversationInChatMode();
                   } else if (value == 'note_action_apps') {
@@ -771,24 +1157,121 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                         builder: (context) => const AIDebugOverlayScreen(),
                       ),
                     );
+                  } else if (value == 'configure_pdf_ai_context') {
+                    await _showPdfAiContextDialogForActiveAttachment();
+                    if (_activeAttachmentPath != null) {
+                      await _loadPdfContextConfig(_activeAttachmentPath!);
+                    }
+                  } else if (value == 'bookmarks') {
+                    _showBookmarksList();
+                  } else if (value == 'toggle_bookmark') {
+                    _toggleBookmark();
+                  } else if (value == 'toggle_pdf_night_mode') {
+                    setState(() {
+                      _isPdfNightMode = !_isPdfNightMode;
+                    });
                   }
                 },
-                itemBuilder: (_) => [
-                  if (_conversation != null)
+                itemBuilder: (context) {
+                  final l10n = AppLocalizations.of(context)!;
+                  final isPdf =
+                      _activeAttachmentPath != null &&
+                      _activeAttachmentPath!.toLowerCase().endsWith('.pdf');
+
+                  return [
+                    if (_conversation != null)
+                      PopupMenuItem<String>(
+                        value: 'open_chat',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.chat_bubble_outline),
+                            const SizedBox(width: 8),
+                            Text(l10n.openInChatMode),
+                          ],
+                        ),
+                      ),
+                    if (_conversationNotes.isNotEmpty)
+                      PopupMenuItem<String>(
+                        value: 'note_action_apps',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.apps),
+                            const SizedBox(width: 8),
+                            Text(l10n.noteActionApps),
+                          ],
+                        ),
+                      ),
+                    if (isPdf) ...[
+                      const PopupMenuDivider(),
+                      PopupMenuItem<String>(
+                        value: 'bookmarks',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.bookmarks_outlined),
+                            const SizedBox(width: 8),
+                            Text(l10n.bookmarks),
+                          ],
+                        ),
+                      ),
+                      // We can check if page is bookmarked if we had sync access to it,
+                      // but for now generic "Bookmark Page" which toggles is fine.
+                      // Or we could try:
+                      // final isBookmarked = _isCurrentPageBookmarked(); // helper if we can make it sync
+                      PopupMenuItem<String>(
+                        value: 'toggle_bookmark',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.bookmark_add_outlined),
+                            const SizedBox(width: 8),
+                            Text(l10n.bookmarkPage),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'configure_pdf_ai_context',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.tune,
+                              color:
+                                  _hasPdfAiContextConfig(_activeAttachmentPath!)
+                                  ? Theme.of(context).colorScheme.primary
+                                  : null,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(_getPdfAiContextLabel(l10n))),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'toggle_pdf_night_mode',
+                        child: Row(
+                          children: [
+                            Icon(
+                              _isPdfNightMode
+                                  ? Icons.light_mode_outlined
+                                  : Icons.dark_mode_outlined,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _isPdfNightMode ? 'Day Mode' : 'Night Mode',
+                            ), // TODO: l10n
+                          ],
+                        ),
+                      ),
+                    ],
                     PopupMenuItem<String>(
-                      value: 'open_chat',
-                      child: Text(l10n.openInChatMode),
+                      value: 'ai_logs',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.bug_report_outlined),
+                          const SizedBox(width: 8),
+                          Text(l10n.aiLogs),
+                        ],
+                      ),
                     ),
-                  if (_conversationNotes.isNotEmpty)
-                    PopupMenuItem<String>(
-                      value: 'note_action_apps',
-                      child: Text(l10n.noteActionApps),
-                    ),
-                  PopupMenuItem<String>(
-                    value: 'ai_logs',
-                    child: Text(l10n.aiLogs),
-                  ),
-                ],
+                  ];
+                },
               ),
             ],
           ),
@@ -809,10 +1292,23 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                           onPanEnd: (_) => _handlePenPanEnd(),
                           onPanCancel: _resetPenStroke,
                           child: CustomPaint(
-                            painter: _FreeformStrokePainter(
-                              _penStrokePoints.isEmpty
-                                  ? null
-                                  : List<Offset>.from(_penStrokePoints),
+                            painter: _DrawingLayerPainter(
+                              actions: _drawingActions,
+                              activeStroke:
+                                  _currentTool == DrawingTool.pen &&
+                                      _penStrokePoints.isNotEmpty
+                                  ? List<Offset>.from(_penStrokePoints)
+                                  : null,
+                              activeRect:
+                                  _currentTool == DrawingTool.rectangle &&
+                                      _currentRectStart != null &&
+                                      _currentRectEnd != null
+                                  ? Rect.fromPoints(
+                                      _currentRectStart!,
+                                      _currentRectEnd!,
+                                    )
+                                  : null,
+                              activeColor: _currentColor,
                             ),
                             size: Size.infinite,
                           ),
@@ -853,7 +1349,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   List<Widget> _buildAiOverlays(Size size, AppLocalizations l10n) {
     final isLandscape = size.width > size.height;
-    if (isLandscape) {
+    // Use horizontal split layout only if we are in landscape AND have limited vertical space (like phones).
+    // Tablets in landscape usually have enough height to support the vertical bottom-sheet style,
+    // which is often preferred to avoid taking up horizontal space side-by-side.
+    if (isLandscape && size.height < _kMinVerticalHeightForSplit) {
       return _buildHorizontalAiOverlays(size, l10n);
     }
     return _buildVerticalAiOverlays(size, l10n);
@@ -865,7 +1364,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final totalHeight = size.height;
     final handleHeight = _currentHandleHeight();
     final panelHeight = _computePanelExtent(totalHeight, handleHeight);
-    final effectiveSide = _effectivePanelSide(false);
+
+    final effectiveSide = _effectivePanelSide(size);
 
     final minHandleTop = _aiHandleMargin;
     final maxHandleTop = max(
@@ -920,7 +1420,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       maxHandleTop,
     );
 
-    final handleWidth = min(size.width - (_aiHandleMargin * 2), _aiHandleWidth);
+    final handleWidth = min(
+      size.width - (_aiHandleMargin * 2),
+      max(_aiHandleWidth, size.width * 0.8),
+    );
     overlays.add(
       Positioned(
         left: _aiHandleMargin,
@@ -943,7 +1446,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final overlays = <Widget>[];
     final totalHeight = size.height;
     final handleHeight = _currentHandleHeight();
-    final effectiveSide = _effectivePanelSide(true);
+    final effectiveSide = _effectivePanelSide(size);
 
     final minHandleTop = _aiHandleMargin;
     final maxHandleTop = max(
@@ -957,7 +1460,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         : _aiHandleFraction * trackHeight;
     handleTop = _clampToRange(handleTop, minHandleTop, maxHandleTop);
 
-    final handleWidth = min(size.width - (_aiHandleMargin * 2), _aiHandleWidth);
+    final handleWidth = min(
+      size.width - (_aiHandleMargin * 2),
+      max(400.0, size.width * 0.45), // Min 400, max 45% of screen
+    );
 
     double panelWidth = 0.0;
     if (_isAiPanelExpanded) {
@@ -1054,7 +1560,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
 
     final minWidth = min(totalWidth * 0.25, available);
-    final maxWidth = min(totalWidth * 0.6, available);
+    final maxWidth = min(totalWidth * 0.5, available);
 
     return _clampToRange(
       totalWidth * _aiLandscapePanelFraction,
@@ -1063,8 +1569,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     );
   }
 
-  _AiPanelSide _effectivePanelSide(bool isLandscape) {
-    if (isLandscape) {
+  bool _isVerticalLayout(Size size) {
+    if (size.width <= size.height) return true; // Portrait
+    return size.height >= _kMinVerticalHeightForSplit; // Tablet Landscape
+  }
+
+  _AiPanelSide _effectivePanelSide(Size size) {
+    if (!_isVerticalLayout(size)) {
       if (_aiPanelSide == _AiPanelSide.left ||
           _aiPanelSide == _AiPanelSide.right) {
         return _aiPanelSide;
@@ -1079,8 +1590,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
-  _AiPanelSide _normalizePanelSide(_AiPanelSide side, bool isLandscape) {
-    if (isLandscape) {
+  _AiPanelSide _normalizePanelSide(_AiPanelSide side, Size size) {
+    if (!_isVerticalLayout(size)) {
       if (side == _AiPanelSide.left || side == _AiPanelSide.right) {
         return side;
       }
@@ -1093,11 +1604,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   double _currentHandleHeight() {
-    if (_pendingAttachments.isEmpty) {
-      return _aiHandleHeight;
+    double height = _aiHandleHeight;
+    if (_pendingAttachments.isNotEmpty) {
+      final attachmentRows = (_pendingAttachments.length / 2).ceil();
+      height += attachmentRows * 32.0;
     }
-    final attachmentRows = (_pendingAttachments.length / 2).ceil();
-    return _aiHandleHeight + attachmentRows * 32.0;
+    if (_isPenMode) {
+      height += 48.0; // Toolbar height
+    }
+    return height;
   }
 
   Widget _buildAiHandle(
@@ -1323,7 +1838,17 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                           onPressed: () {
                             setState(() {
                               _isPenMode = !_isPenMode;
-                              _penStrokePoints.clear();
+                              if (!_isPenMode) {
+                                // Reset drawing state when exiting without confirming
+                                _drawingActions.clear();
+                                _redoStack.clear();
+                                _penStrokePoints.clear();
+                              } else {
+                                // Initialize new session
+                                _drawingActions.clear();
+                                _redoStack.clear();
+                                _penStrokePoints.clear();
+                              }
                             });
                           },
                         ),
@@ -1380,6 +1905,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     _buildSendControl(l10n),
                   ],
                 ),
+                if (_isPenMode) ...[
+                  const Divider(height: 12),
+                  _buildDrawingToolbar(theme),
+                ],
               ],
             ),
           ),
@@ -1388,7 +1917,208 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     );
   }
 
+  Widget _buildDrawingToolbar(ThemeData theme) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Tools
+          IconButton(
+            icon: Icon(
+              Icons.edit,
+              color: _currentTool == DrawingTool.pen
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface.withOpacity(0.6),
+            ),
+            tooltip: 'Pen',
+            onPressed: () => setState(() => _currentTool = DrawingTool.pen),
+            iconSize: 20,
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(8),
+          ),
+          IconButton(
+            icon: const Icon(Icons.palette),
+            iconSize: 20,
+            onPressed: _openDrawingEditor,
+            tooltip: 'Advanced Drawing',
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(8),
+          ),
+          IconButton(
+            icon: Icon(
+              Icons.crop_square,
+              color: _currentTool == DrawingTool.rectangle
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface.withOpacity(0.6),
+            ),
+            tooltip: 'Rectangle',
+            onPressed: () =>
+                setState(() => _currentTool = DrawingTool.rectangle),
+            iconSize: 20,
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(8),
+          ),
+          const SizedBox(width: 8),
+          // Colors
+          ...[
+            Colors.redAccent,
+            Colors.blueAccent,
+            Colors.green,
+          ].map((color) => _buildColorButton(color)),
+          const SizedBox(width: 8),
+          // Undo/Redo
+          IconButton(
+            icon: const Icon(Icons.undo),
+            tooltip: 'Undo',
+            onPressed: _drawingActions.isEmpty ? null : _undoDrawing,
+            iconSize: 20,
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(8),
+          ),
+          IconButton(
+            icon: const Icon(Icons.redo),
+            tooltip: 'Redo',
+            onPressed: _redoStack.isEmpty ? null : _redoDrawing,
+            iconSize: 20,
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(8),
+          ),
+          const SizedBox(width: 8),
+          // Confirm
+          IconButton(
+            onPressed: _drawingActions.isEmpty ? null : _confirmDrawing,
+            icon: Icon(
+              Icons.check_circle,
+              color: _drawingActions.isEmpty ? null : theme.colorScheme.primary,
+            ),
+            tooltip: 'Done',
+            iconSize: 24,
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(8),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildColorButton(Color color) {
+    final isSelected = _currentColor == color;
+    return GestureDetector(
+      onTap: () => setState(() => _currentColor = color),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        width: 20,
+        height: 20,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : Colors.grey.withOpacity(0.5),
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: color.withOpacity(0.4),
+                    blurRadius: 4,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
+        ),
+      ),
+    );
+  }
+
+  void _undoDrawing() {
+    if (_drawingActions.isEmpty) return;
+    setState(() {
+      final action = _drawingActions.removeLast();
+      _redoStack.add(action);
+    });
+  }
+
+  void _redoDrawing() {
+    if (_redoStack.isEmpty) return;
+    setState(() {
+      final action = _redoStack.removeLast();
+      _drawingActions.add(action);
+    });
+  }
+
+  Future<void> _confirmDrawing({bool silent = false}) async {
+    if (_drawingActions.isEmpty) return;
+
+    // Calculate bounds of all actions
+    Rect? totalBounds;
+    for (final action in _drawingActions) {
+      Rect actionBounds;
+      if (action is StrokeAction) {
+        actionBounds = _computeStrokeBounds(action.points);
+      } else if (action is RectangleAction) {
+        actionBounds = action.rect;
+      } else {
+        continue;
+      }
+
+      if (totalBounds == null) {
+        totalBounds = actionBounds;
+      } else {
+        totalBounds = totalBounds.expandToInclude(actionBounds);
+      }
+    }
+
+    if (totalBounds == null) return;
+
+    try {
+      final imageBytes = await _captureDrawing(_drawingActions, totalBounds);
+      final result = await SynapseTempUtils.saveTempData(
+        mimeType: 'image/png',
+        bytes: imageBytes,
+      );
+
+      final platformFile = PlatformFile(
+        name: 'annotation_${DateTime.now().millisecondsSinceEpoch}.png',
+        path: result.file.path,
+        size: imageBytes.length,
+        bytes: imageBytes,
+      );
+
+      if (mounted) {
+        setState(() {
+          _pendingAttachments.add(platformFile);
+          _drawingActions.clear();
+          _redoStack.clear();
+          _isPenMode = false; // Optional: exit pen mode after adding?
+        });
+        if (!silent) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Annotation added to attachments.')),
+          );
+        }
+      }
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Failed to capture drawing: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to capture drawing: $e')),
+        );
+      }
+    }
+  }
+
   Widget _buildSendControl(AppLocalizations l10n) {
+    // Only show handle if there are tools available
+    if (!_hasAvailableTools) {
+      return const SizedBox.shrink();
+    }
     if (_isAborting) {
       return const SizedBox(
         width: 40,
@@ -1497,8 +2227,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final activeMcpCount = _selectedMcpEndpointIds.length;
     final activeLocalCount = _selectedAiToolServices.length;
     final activeModelFeaturesCount = _selectedModelFeatures.length;
+    final activeBuiltInToolsCount = _selectedBuiltInTools.length;
+    final activeSystemToolsCount = _selectedSystemTools.length;
     final totalActiveCount =
-        activeMcpCount + activeLocalCount + activeModelFeaturesCount;
+        activeMcpCount +
+        activeLocalCount +
+        activeModelFeaturesCount +
+        activeBuiltInToolsCount +
+        activeSystemToolsCount;
     final headerTitle = l10n.mcpAndLocalTools;
 
     return Container(
@@ -1567,6 +2303,69 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 8),
+                    // TODO(kkspeed): Built-in Tools section is hidden because agentic mode
+                    // is not yet implemented in immersive mode. The checkbox does nothing
+                    // and won't spawn the agent mode widget like in conversation_chat_screen.
+                    // Re-enable this section when agentic UX for immersive mode is defined.
+                    // ignore: dead_code
+                    if (false && BuiltInToolsService.tools.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.build,
+                            size: 16,
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.builtInTools,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.8,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (activeBuiltInToolsCount > 0)
+                            ActiveToolCountBadge(
+                              count: activeBuiltInToolsCount,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ...BuiltInToolsService.tools.map((tool) {
+                        final isSelected = _selectedBuiltInTools.contains(
+                          tool.id,
+                        );
+                        return CheckboxListTile(
+                          title: Text(tool.name),
+                          subtitle: Text(
+                            tool.description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          value: isSelected,
+                          secondary: Icon(tool.icon, color: tool.color),
+                          onChanged: (value) {
+                            setState(() {
+                              if (value == true) {
+                                _selectedBuiltInTools.add(tool.id);
+                              } else {
+                                _selectedBuiltInTools.remove(tool.id);
+                              }
+                            });
+                          },
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                          ),
+                          dense: true,
+                        );
+                      }),
+                      const Divider(),
+                    ],
                     if (_availableMcpEndpoints.isNotEmpty) ...[
                       Row(
                         children: [
@@ -1684,6 +2483,67 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                         }).toList(),
                       ),
                     ],
+                    // System Tools (native tools from AgentService)
+                    if (BuiltInToolsService.systemTools.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.memory,
+                            size: 16,
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'System Tools',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.8,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (activeSystemToolsCount > 0)
+                            ActiveToolCountBadge(
+                              count: activeSystemToolsCount,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: BuiltInToolsService.systemTools.map((tool) {
+                          final isSelected = _selectedSystemTools.contains(
+                            tool.id,
+                          );
+                          return FilterChip(
+                            label: Text(tool.name),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _selectedSystemTools.add(tool.id);
+                                } else {
+                                  _selectedSystemTools.remove(tool.id);
+                                }
+                              });
+                            },
+                            avatar: Icon(
+                              tool.icon,
+                              size: 16,
+                              color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface.withOpacity(
+                                      0.6,
+                                    ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
                     // Model Features Section
                     if (context
                                 .read<AppProvider>()
@@ -1792,14 +2652,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   void _expandAiPanel(_AiPanelSide side, Size canvasSize) {
-    final isLandscape = canvasSize.width > canvasSize.height;
-    final normalizedSide = _normalizePanelSide(side, isLandscape);
+    final normalizedSide = _normalizePanelSide(side, canvasSize);
 
     setState(() {
       _isAiPanelExpanded = true;
       _aiPanelSide = normalizedSide;
 
-      if (isLandscape) {
+      if (!_isVerticalLayout(canvasSize)) {
         return;
       }
 
@@ -2127,6 +2986,32 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   void _updateHandleDrag(Offset delta, Size canvasSize) {
+    // Handle horizontal resizing in landscape mode when expanded
+    if (!_isVerticalLayout(canvasSize) &&
+        _isAiPanelExpanded &&
+        delta.dx.abs() > delta.dy.abs()) {
+      final effectiveSide = _effectivePanelSide(canvasSize);
+      double widthDelta = 0;
+      if (effectiveSide == _AiPanelSide.right) {
+        widthDelta = -delta.dx; // Drag left increases width
+      } else if (effectiveSide == _AiPanelSide.left) {
+        widthDelta = delta.dx; // Drag right increases width
+      }
+
+      if (widthDelta != 0) {
+        final totalWidth = canvasSize.width;
+        final currentWidth = totalWidth * _aiLandscapePanelFraction;
+        final newWidth = currentWidth + widthDelta;
+
+        setState(() {
+          _aiLandscapePanelFraction = (newWidth / totalWidth)
+              .clamp(0.2, 0.8)
+              .toDouble();
+        });
+        return;
+      }
+    }
+
     final totalHeight = canvasSize.height;
     final handleHeight = _currentHandleHeight();
     final handleTravel = max(0.0, totalHeight - handleHeight);
@@ -2643,8 +3528,17 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 availableHeight: availableHeight,
                 currentPageMap: _pdfCurrentPages,
                 totalPageMap: _pdfTotalPages,
-                controllerMap: _pdfControllers,
+                controllerMap: _pdfViewerControllers,
                 onError: (message) => LoggerService.error(message),
+                onDocumentReady: (cacheKey, document, outline) {
+                  _pdfDocuments[cacheKey] = document;
+                  if (outline != null && outline.isNotEmpty) {
+                    setState(() {
+                      _pdfOutlines[cacheKey] = outline;
+                    });
+                  }
+                },
+                isNightMode: _isPdfNightMode,
               );
             },
           );
@@ -2762,6 +3656,255 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
+  /// Build an attachment outline item with PDF outline expansion support
+  Widget _buildAttachmentOutlineItem({
+    required String attachment,
+    required int noteIndex,
+    required int depth,
+    required BuildContext context,
+  }) {
+    final isPdf = attachment.toLowerCase().endsWith('.pdf');
+    final pdfOutline = isPdf ? _pdfOutlines[attachment] : null;
+    final hasOutline = pdfOutline != null && pdfOutline.isNotEmpty;
+    final isActive = attachment == _activeAttachmentPath;
+
+    return _AttachmentOutlineItem(
+      attachment: attachment,
+      noteIndex: noteIndex,
+      depth: depth,
+      isPdf: isPdf,
+      hasOutline: hasOutline,
+      isActive: isActive,
+      pdfOutline: pdfOutline,
+      currentPage: isPdf ? _pdfCurrentPages[attachment] : null,
+      onTap: () {
+        setState(() {
+          _activeNoteIndex = noteIndex;
+          _activeAttachmentPath = attachment;
+        });
+        Navigator.pop(context);
+      },
+      onNodeTap: (node) {
+        setState(() {
+          _activeNoteIndex = noteIndex;
+          _activeAttachmentPath = attachment;
+        });
+        Navigator.pop(context);
+        _navigateToPdfOutlineDestination(attachment, node);
+      },
+      onResolvePageNumber: (node) async {
+        // Try to access pageNumber directly from the destination
+        if (node.dest != null) {
+          return node.dest!.pageNumber;
+        }
+        return null;
+      },
+    );
+  }
+
+  /// Navigate to a PDF outline destination
+  void _navigateToPdfOutlineDestination(
+    String attachmentPath,
+    PdfOutlineNode node,
+  ) {
+    final controller = _pdfViewerControllers[attachmentPath];
+    if (controller == null) return;
+
+    // Use WidgetsBinding to delay navigation until after the sheet closes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (node.dest != null) {
+        controller.goToDest(node.dest!);
+      }
+    });
+  }
+
+  IconData _iconForAttachment(String path) {
+    final ext = path.split('.').last.toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext)) {
+      return Icons.image;
+    } else if (['mp4', 'mov', 'avi'].contains(ext)) {
+      return Icons.movie;
+    } else if (['mp3', 'wav', 'm4a'].contains(ext)) {
+      return Icons.audiotrack;
+    } else if (ext == 'pdf') {
+      return Icons.picture_as_pdf;
+    }
+    return Icons.insert_drive_file;
+  }
+
+  /// Check if a PDF has a custom AI context configuration
+  bool _hasPdfAiContextConfig(String attachmentPath) {
+    if (_activeAttachmentPath != attachmentPath) return false;
+    final config = _pdfContextConfigs[attachmentPath];
+    return config != null && config.hasCustomRange;
+  }
+
+  /// Get the label for the PDF AI context menu item
+  String _getPdfAiContextLabel(AppLocalizations l10n) {
+    if (_activeAttachmentPath == null) return l10n.configureAiContext;
+
+    final config = _pdfContextConfigs[_activeAttachmentPath];
+    if (config == null || !config.hasCustomRange) {
+      return l10n.configureAiContext;
+    }
+
+    String modeLabel;
+    switch (config.mode) {
+      case 'window':
+        modeLabel = l10n.aiContextWindow;
+        break;
+      case 'chapters':
+        modeLabel = l10n.aiContextChapters;
+        break;
+      case 'bookmarks':
+        modeLabel = l10n.aiContextBookmarks.replaceAll(
+          'AI Context: ',
+          '',
+        ); // Reuse existing label part or fallback
+        // Better to use the new simple labels if possible, but aiContextBookmarks in arb includes prefix.
+        // Let's rely on the new pattern:
+        // "aiContext": "AI Context: {mode}"
+        // But for bookmarks, the existing key "aiContextBookmarks" is "AI Context: Bookmarks".
+        // To be consistent with the plan, let's use the new key "aiContext" and pass specific string.
+        // Wait, "aiContextBookmarks" is "AI Context: Bookmarks".
+        // "aiContext" is "AI Context: {mode}".
+        // If I pass "Bookmarks" to the second one, I get "AI Context: Bookmarks".
+        // I don't have a "Bookmarks" standalone string key in the plan, I only saw "aiContextBookmarks".
+        // Actually, "bookmarks" key exists (line 1104 in original file view shows usage of l10n.bookmarks).
+        modeLabel = l10n.bookmarks;
+        break;
+      default:
+        modeLabel = l10n.aiContextFullPdf;
+    }
+
+    return l10n.aiContext(modeLabel);
+  }
+
+  /// Load and cache the PDF AI context configuration
+  Future<void> _loadPdfContextConfig(String path) async {
+    if (!path.toLowerCase().endsWith('.pdf')) return;
+
+    final attachment = await _resolveAttachment(path);
+    if (attachment == null) return;
+
+    final config = attachment.getAiContextConfig();
+    if (mounted) {
+      setState(() {
+        if (config != null) {
+          _pdfContextConfigs[path] = config;
+        } else {
+          _pdfContextConfigs.remove(path);
+        }
+      });
+    }
+  }
+
+  /// Show the PDF AI context dialog for the active attachment
+  Future<void> _showPdfAiContextDialogForActiveAttachment() async {
+    if (_activeAttachmentPath == null) return;
+    if (!_activeAttachmentPath!.toLowerCase().endsWith('.pdf')) return;
+
+    final notes = _resolveNotes(context.read<AppProvider>());
+    if (_activeNoteIndex >= notes.length) return;
+
+    final currentNote = notes[_activeNoteIndex];
+    final databaseService = DatabaseService();
+
+    // Get attachments for the note
+    final attachments = await databaseService.getAttachmentsForNote(
+      currentNote.id,
+    );
+
+    // Find the attachment that matches the active path
+    Attachment? attachment;
+    for (final att in attachments) {
+      final absPath = await att.getAbsolutePath();
+      if (absPath == _activeAttachmentPath) {
+        attachment = att;
+        break;
+      }
+    }
+
+    if (attachment == null) return;
+
+    final currentConfig = attachment.getAiContextConfig();
+
+    // Try to get cached outline and page count first
+    var outline = _pdfOutlines[_activeAttachmentPath];
+    var totalPages = _pdfTotalPages[_activeAttachmentPath] ?? 0;
+
+    // If not cached, load the PDF document
+    PdfDocument? loadedDocument;
+    if (outline == null || totalPages == 0) {
+      try {
+        final absPath = await attachment.getAbsolutePath();
+        // Check if we have a cached document
+        final cachedDoc = _pdfDocuments[_activeAttachmentPath];
+        if (cachedDoc != null) {
+          totalPages = cachedDoc.pages.length;
+          outline = await cachedDoc.loadOutline();
+        } else {
+          // Ensure Pdfrx cache directory is set (required for programmatic PDF loading)
+          Pdfrx.getCacheDirectory ??= () async {
+            final tempDir = await getTemporaryDirectory();
+            return tempDir.path;
+          };
+
+          // Load fresh document
+          loadedDocument = await PdfDocument.openFile(absPath);
+          totalPages = loadedDocument.pages.length;
+          outline = await loadedDocument.loadOutline();
+        }
+      } catch (e) {
+        LoggerService.error('Failed to load PDF for AI context dialog: $e');
+      }
+    }
+
+    if (!mounted) {
+      loadedDocument?.dispose();
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => PdfAiContextDialog(
+        attachment: attachment!,
+        currentConfig: currentConfig,
+        outline: outline,
+        totalPages: totalPages,
+        onSave: (config) async {
+          // Build new metadata
+          final currentMetadata = Map<String, dynamic>.from(
+            attachment!.metadata ?? {},
+          );
+          if (config == null) {
+            currentMetadata.remove('aiContextConfig');
+          } else {
+            currentMetadata['aiContextConfig'] = config.toJson();
+          }
+
+          // Update database
+          await databaseService.updateAttachmentMetadata(
+            attachment!.id,
+            currentMetadata.isEmpty ? null : currentMetadata,
+          );
+
+          if (mounted) {
+            ScaffoldMessenger.of(this.context).showSnackBar(
+              const SnackBar(
+                content: Text('AI context configuration saved'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        },
+      ),
+    );
+
+    // Dispose loaded document if we created one
+    loadedDocument?.dispose();
+  }
+
   Future<void> _showOutline(List<Note> notes, AppLocalizations l10n) async {
     // Collect linked notes with circular reference prevention
     final linkedNotesMap = <String, List<Note>>{};
@@ -2810,20 +3953,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   },
                 ),
                 for (final attachment in notes[i].attachmentPaths)
-                  ListTile(
-                    contentPadding: const EdgeInsets.only(left: 48, right: 16),
-                    leading: Icon(_iconForAttachment(attachment)),
-                    title: Text(
-                      attachment.split(Platform.pathSeparator).last,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onTap: () {
-                      setState(() {
-                        _activeNoteIndex = i;
-                        _activeAttachmentPath = attachment;
-                      });
-                      Navigator.pop(context);
-                    },
+                  _buildAttachmentOutlineItem(
+                    attachment: attachment,
+                    noteIndex: i,
+                    depth: 1,
+                    context: context,
                   ),
                 // Add linked notes section if present
                 if (linkedNotesMap.containsKey(notes[i].id)) ...[
@@ -3042,8 +4176,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   Future<void> _sendMessage() async {
     final trimmed = _messageController.text.trim();
-    if (trimmed.isEmpty && _pendingAttachments.isEmpty) {
+    if (trimmed.isEmpty &&
+        _pendingAttachments.isEmpty &&
+        _drawingActions.isEmpty) {
       return;
+    }
+
+    if (_isPenMode && _drawingActions.isNotEmpty) {
+      await _confirmDrawing(silent: true);
     }
 
     setState(() {
@@ -3056,6 +4196,17 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final generationContext = GenerationContext();
     if (_selectedModel != null) {
       generationContext.modelOverride = _selectedModel;
+    } else {
+      final caps = await AttachmentPreprocessor.detectRequiredCapabilities(
+        attachments,
+      );
+      if (caps.isNotEmpty) {
+        final preferredModel = await getIt<ModelSelector>()
+            .selectModelByPreference(caps);
+        if (preferredModel != null) {
+          generationContext.modelOverride = preferredModel;
+        }
+      }
     }
     final requestId = generationContext.ensureRequestId();
     _currentRequestId = requestId;
@@ -3137,6 +4288,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         conversationId: _conversation!.id,
         content: response.content,
         metadata: response.metadata,
+        modelUsed: response.metadata?['modelUsed'] as String?,
       );
 
       if (!mounted) return;
@@ -3218,15 +4370,79 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final requestId = generationContext.ensureRequestId();
     final noteBuilder = NotePromptBuilder(_databaseService);
     final systemMessage = _buildSystemPrompt();
+
+    // Get current PDF page for window mode context filtering
+    final currentPdfPage = _activeAttachmentPath != null
+        ? _pdfCurrentPages[_activeAttachmentPath]
+        : null;
+
     final contextMessage = await noteBuilder.buildContextMessage(
       _conversationNotes,
+      currentPdfPage: currentPdfPage,
     );
 
     final messages = <PromptMessage>[];
+
+    // Inject scratchpad content if enabled
+    if (_includeScratchpadInChat && _scratchpadItems.isNotEmpty) {
+      final buffer = StringBuffer();
+      buffer.writeln('Scratchpad content (user notes/drawings):');
+      final scratchpadAttachments = <PlatformFile>[];
+
+      for (final item in _scratchpadItems) {
+        buffer.writeln('- ${item.content}');
+        if (item.attachmentPaths.isNotEmpty) {
+          final itemAttachments = await _loadConversationAttachments(
+            item,
+            latestAttachments, // Pass latest attachments to resolve if needed, though usually for user message
+          );
+          scratchpadAttachments.addAll(itemAttachments);
+        }
+      }
+
+      messages.add(
+        PromptMessage(
+          role: PromptRole.user,
+          content: buffer.toString(),
+          attachments: scratchpadAttachments,
+          isContext: true,
+        ),
+      );
+    }
+
+    final preferredModel = await getIt<ModelSelector>().getModelByHint(
+      ['image_gen'],
+      currentOverride: getIt<ModelSelector>()
+          .currentModelConfig, // Pass current to avoid override if it supports it
+    );
+
+    final modelToUseId =
+        preferredModel?.id ?? getIt<ModelSelector>().currentModelConfig?.id;
+
     for (final message in _messages) {
-      final role = message.type == MessageType.user
+      // Filter out synthesized error messages
+      if (message.metadata?['isSynthesized'] == true) {
+        continue;
+      }
+
+      var role = message.type == MessageType.user
           ? PromptRole.user
           : PromptRole.assistant;
+      var content = message.content;
+
+      // If the message was generated by a different model, treat it as a user message
+      // to avoid potential format/capability mismatches (e.g. thoughtSignature)
+      if (role == PromptRole.assistant) {
+        final modelUsed = message.metadata?['modelUsed'] as String?;
+        final activeModelId = getIt<ModelSelector>().currentModelConfig?.id;
+
+        if (activeModelId != null &&
+            (modelUsed == null || modelUsed != activeModelId)) {
+          role = PromptRole.user;
+          final modelLabel = modelUsed ?? 'an earlier model';
+          content = '[Response from $modelLabel]:\n$content';
+        }
+      }
 
       if (role == PromptRole.user) {
         final messageTimeContext = SystemPromptBuilder.formatTimestamp(
@@ -3255,13 +4471,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       messages.add(
         PromptMessage(
           role: role,
-          content: message.content,
+          content: content,
           attachments: attachments,
           metadata: message.metadata,
         ),
       );
 
       // Add tool results from previous assistant message
+      // Only add tool results if we kept it as an assistant message
       if (role == PromptRole.assistant) {
         final toolCallsWithResults =
             message.metadata?['tool_calls_with_results'] as List?;
@@ -3283,30 +4500,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         }
       }
     }
-
-    if (_includeScratchpadInChat && _scratchpadItems.isNotEmpty) {
-      final buffer = StringBuffer();
-      buffer.writeln('Context from Scratchpad:');
-      for (final item in _scratchpadItems) {
-        buffer.writeln('- ${item.content}');
-      }
-      messages.add(
-        PromptMessage(
-          role: PromptRole.user,
-          content: buffer.toString(),
-          // We could also attach scratchpad attachments here if needed,
-          // but for now let's just include text context.
-        ),
-      );
-    }
-
-    messages.add(
-      PromptMessage(
-        role: PromptRole.user,
-        content: userMessage,
-        attachments: latestAttachments,
-      ),
-    );
 
     final request = PromptRequest(
       systemMessage: systemMessage,
@@ -3338,11 +4531,26 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       enableTools: activeTools.isNotEmpty || _selectedModelFeatures.isNotEmpty,
       executeTool: (serviceName, toolName, params, context) async {
         return _runWithToolStatus(serviceName, toolName, () async {
+          // Handle AI Tools
           if (_aiToolBundles.containsKey(serviceName)) {
             final runtime = await _getAiToolRuntime(serviceName);
             return runtime.invoke(toolName, params, context);
           }
 
+          // Handle System Tools (native tools from AgentService)
+          if (serviceName == BuiltInToolsService.systemToolsServiceKey) {
+            final agentService = this.context.read<AgentService>();
+            final nativeTool = agentService.nativeTools
+                .where((t) => t.name == toolName)
+                .firstOrNull;
+            if (nativeTool != null) {
+              final result = await nativeTool.execute(params);
+              return result is String ? result : result.toString();
+            }
+            return 'Error: System tool "$toolName" not found';
+          }
+
+          // Handle MCP Tools
           return McpToolIntegrationService.executeToolCall(
             serviceName: serviceName,
             toolName: toolName,
@@ -3474,10 +4682,16 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final renderObject = _noteBoundaryKey.currentContext?.findRenderObject();
     if (renderObject is! RenderBox) return;
     final localPosition = renderObject.globalToLocal(details.globalPosition);
+
     setState(() {
-      _penStrokePoints
-        ..clear()
-        ..add(localPosition);
+      if (_currentTool == DrawingTool.pen) {
+        _penStrokePoints
+          ..clear()
+          ..add(localPosition);
+      } else if (_currentTool == DrawingTool.rectangle) {
+        _currentRectStart = localPosition;
+        _currentRectEnd = localPosition;
+      }
     });
   }
 
@@ -3485,63 +4699,43 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final renderObject = _noteBoundaryKey.currentContext?.findRenderObject();
     if (renderObject is! RenderBox) return;
     final localPosition = renderObject.globalToLocal(details.globalPosition);
+
     setState(() {
-      final lastPoint = _penStrokePoints.isEmpty ? null : _penStrokePoints.last;
-      if (lastPoint == null ||
-          (lastPoint - localPosition).distanceSquared > 1) {
-        _penStrokePoints.add(localPosition);
+      if (_currentTool == DrawingTool.pen) {
+        final lastPoint = _penStrokePoints.isEmpty
+            ? null
+            : _penStrokePoints.last;
+        if (lastPoint == null ||
+            (lastPoint - localPosition).distanceSquared > 1) {
+          _penStrokePoints.add(localPosition);
+        }
+      } else if (_currentTool == DrawingTool.rectangle) {
+        _currentRectEnd = localPosition;
       }
     });
   }
 
-  Future<void> _handlePenPanEnd() async {
-    if (_penStrokePoints.length < 2) {
-      _resetPenStroke();
-      return;
-    }
-
-    final strokePoints = List<Offset>.from(_penStrokePoints);
-    final bounds = _computeStrokeBounds(strokePoints);
-    _resetPenStroke();
-
-    if (bounds.width < 12 || bounds.height < 12) {
-      return;
-    }
-
-    try {
-      final croppedBytes = await _captureStroke(strokePoints, bounds);
-      final result = await SynapseTempUtils.saveTempData(
-        mimeType: 'image/png',
-        bytes: croppedBytes,
-      );
-      final file = result.file;
-      final platformFile = PlatformFile(
-        name: 'annotation_${DateTime.now().millisecondsSinceEpoch}.png',
-        path: file.path,
-        size: croppedBytes.length,
-        bytes: croppedBytes,
-      );
-
-      if (mounted) {
-        setState(() {
-          _pendingAttachments.add(platformFile);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Annotation added to attachments.')),
-        );
+  void _handlePenPanEnd() {
+    setState(() {
+      if (_currentTool == DrawingTool.pen) {
+        if (_penStrokePoints.length >= 2) {
+          final points = List<Offset>.from(_penStrokePoints);
+          _drawingActions.add(StrokeAction(points, _currentColor));
+          _redoStack.clear();
+        }
+        _penStrokePoints.clear();
+      } else if (_currentTool == DrawingTool.rectangle) {
+        if (_currentRectStart != null && _currentRectEnd != null) {
+          final rect = Rect.fromPoints(_currentRectStart!, _currentRectEnd!);
+          if (rect.width > 0 && rect.height > 0) {
+            _drawingActions.add(RectangleAction(rect, _currentColor));
+            _redoStack.clear();
+          }
+        }
+        _currentRectStart = null;
+        _currentRectEnd = null;
       }
-    } catch (e, stackTrace) {
-      LoggerService.error(
-        'Failed to capture annotation: $e',
-        error: e,
-        stackTrace: stackTrace,
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to capture annotation: $e')),
-        );
-      }
-    }
+    });
   }
 
   void _resetPenStroke() {
@@ -3554,7 +4748,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   void _disposePdfResources() {
-    _pdfControllers.clear();
+    // Dispose PDF documents
+    for (final doc in _pdfDocuments.values) {
+      doc.dispose();
+    }
+    _pdfDocuments.clear();
+    _pdfViewerControllers.clear();
+    _pdfOutlines.clear();
     _pdfCurrentPages.clear();
     _pdfTotalPages.clear();
     _attachmentSourceFutures.clear();
@@ -3688,7 +4888,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return Rect.fromLTWH(left, top, width, height);
   }
 
-  Future<Uint8List> _captureStroke(List<Offset> points, Rect bounds) async {
+  Future<Uint8List> _captureDrawing(
+    List<DrawingAction> actions,
+    Rect bounds,
+  ) async {
     final renderObject = _noteBoundaryKey.currentContext?.findRenderObject();
     if (renderObject is! RenderRepaintBoundary) {
       throw Exception('Note view unavailable for capture.');
@@ -3763,36 +4966,56 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     );
     canvas.drawImageRect(baseImage, sourceRect, targetRect, paint);
 
-    final List<Offset> scaledPoints = points
-        .map(
-          (point) => Offset(
-            (point.dx - cappedRect.left) * devicePixelRatio,
-            (point.dy - cappedRect.top) * devicePixelRatio,
-          ),
-        )
-        .toList();
+    // Scale context for drawing
+    canvas.save();
+    canvas.scale(devicePixelRatio, devicePixelRatio);
+    canvas.translate(-cappedRect.left, -cappedRect.top);
 
-    if (scaledPoints.length >= 2) {
-      final Path strokePath = _FreeformStrokePainter.buildPath(scaledPoints);
-      final double strokeWidth = max(4.0, 2.0 * devicePixelRatio);
+    for (final action in actions) {
+      if (action is StrokeAction) {
+        if (action.points.length >= 2) {
+          final Path strokePath = _DrawingLayerPainter.buildStrokePath(
+            action.points,
+          );
 
-      final Paint glowPaint = Paint()
-        ..color = Colors.redAccent.withOpacity(0.18)
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..strokeWidth = strokeWidth * 2;
+          final Paint glowPaint = Paint()
+            ..color = action.color.withOpacity(0.18)
+            ..style = PaintingStyle.stroke
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            ..strokeWidth = 8;
 
-      final Paint strokePaint = Paint()
-        ..color = Colors.redAccent
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..strokeWidth = strokeWidth;
+          final Paint strokePaint = Paint()
+            ..color = action.color
+            ..style = PaintingStyle.stroke
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            ..strokeWidth = 3;
 
-      canvas.drawPath(strokePath, glowPaint);
-      canvas.drawPath(strokePath, strokePaint);
+          canvas.drawPath(strokePath, glowPaint);
+          canvas.drawPath(strokePath, strokePaint);
+        }
+      } else if (action is RectangleAction) {
+        final Paint glowPaint = Paint()
+          ..color = action.color.withOpacity(0.18)
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..strokeWidth = 8;
+
+        final Paint strokePaint = Paint()
+          ..color = action.color
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..strokeWidth = 3;
+
+        canvas.drawRect(action.rect, glowPaint);
+        canvas.drawRect(action.rect, strokePaint);
+      }
     }
+
+    canvas.restore();
 
     final ui.Picture picture = recorder.endRecording();
     final ui.Image croppedImage = await picture.toImage(
@@ -3830,10 +5053,29 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         return null;
       }
       final extension = FileTypeUtils.getFileExtension(file.path);
+
+      // For PDFs, look up the attachment to get ID and last page
+      String? attachmentId;
+      int? initialPage;
+      if (extension == 'pdf') {
+        final attachment = await _findAttachmentByPath(path);
+        if (attachment != null) {
+          attachmentId = attachment.id;
+          initialPage = attachment.getLastViewedPage();
+          LoggerService.debug(
+            'PDF attachment loaded: id=$attachmentId, initialPage=$initialPage, path=$path',
+          );
+        } else {
+          LoggerService.debug('PDF attachment not found for path: $path');
+        }
+      }
+
       return _AttachmentSource(
         file: file,
         extension: extension,
         originalPath: file.path,
+        attachmentId: attachmentId,
+        initialPage: initialPage,
       );
     } catch (e) {
       LoggerService.warning('Failed to load attachment $path: $e');
@@ -3841,23 +5083,19 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
-  IconData _iconForAttachment(String path) {
-    final extension = FileTypeUtils.getFileExtension(path);
-    switch (extension) {
-      case 'pdf':
-        return Icons.picture_as_pdf;
-      case 'svg':
-        return Icons.photo_size_select_large;
-      case 'png':
-      case 'jpg':
-      case 'jpeg':
-      case 'gif':
-      case 'webp':
-      case 'bmp':
-        return Icons.image;
-      default:
-        return Icons.insert_drive_file;
+  /// Finds attachment by absolute path across all notes
+  Future<Attachment?> _findAttachmentByPath(String path) async {
+    final databaseService = DatabaseService();
+    for (final note in widget.notes) {
+      final attachments = await databaseService.getAttachmentsForNote(note.id);
+      for (final attachment in attachments) {
+        final absPath = await attachment.getAbsolutePath();
+        if (absPath == path) {
+          return attachment;
+        }
+      }
     }
+    return null;
   }
 
   int? _findNoteIndexForAttachment(String attachmentPath, List<Note> notes) {
@@ -3879,6 +5117,43 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       'webp',
     }.contains(extension);
   }
+
+  Future<void> _openDrawingEditor() async {
+    try {
+      final File? drawnFile = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const DrawingEditor()),
+      );
+
+      if (drawnFile != null) {
+        final bytes = await drawnFile.readAsBytes();
+        final platformFile = PlatformFile(
+          name: drawnFile.path.split('/').last,
+          size: bytes.length,
+          bytes: bytes,
+          path: drawnFile.path,
+        );
+
+        if (mounted) {
+          setState(() {
+            _pendingAttachments.add(platformFile);
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Drawing added to attachments.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding drawing: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
 }
 
 class _AttachmentSource {
@@ -3887,12 +5162,16 @@ class _AttachmentSource {
     required this.extension,
     required this.originalPath,
     this.bytes,
+    this.attachmentId,
+    this.initialPage,
   });
 
   final File file;
   final Uint8List? bytes;
   final String extension;
   final String originalPath;
+  final String? attachmentId; // For saving page position
+  final int? initialPage; // Last viewed page from DB
 
   String get cacheKey => originalPath;
 }
@@ -3905,14 +5184,23 @@ class _PdfDocumentView extends StatefulWidget {
     required this.totalPageMap,
     required this.controllerMap,
     required this.onError,
+    this.onDocumentReady,
+    this.isNightMode = false,
   });
 
   final _AttachmentSource source;
   final double availableHeight;
   final Map<String, int> currentPageMap;
   final Map<String, int> totalPageMap;
-  final Map<String, PDFViewController> controllerMap;
+  final Map<String, PdfViewerController> controllerMap;
   final void Function(String message) onError;
+  final void Function(
+    String cacheKey,
+    PdfDocument document,
+    List<PdfOutlineNode>? outline,
+  )?
+  onDocumentReady;
+  final bool isNightMode;
 
   @override
   State<_PdfDocumentView> createState() => _PdfDocumentViewState();
@@ -3922,7 +5210,8 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
     with AutomaticKeepAliveClientMixin {
   late Future<String> _pdfPathFuture;
   String? _resolvedPath;
-  Widget? _cachedView;
+  PdfViewerController? _controller;
+  bool _documentReady = false;
 
   String get _cacheKey => widget.source.cacheKey;
 
@@ -3930,6 +5219,8 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
   void initState() {
     super.initState();
     _pdfPathFuture = _resolvePdfPath();
+    _controller = PdfViewerController();
+    widget.controllerMap[_cacheKey] = _controller!;
   }
 
   @override
@@ -3938,7 +5229,9 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
     if (oldWidget.source.cacheKey != widget.source.cacheKey) {
       _pdfPathFuture = _resolvePdfPath();
       _resolvedPath = null;
-      _cachedView = null;
+      _documentReady = false;
+      _controller = PdfViewerController();
+      widget.controllerMap[_cacheKey] = _controller!;
     }
   }
 
@@ -3970,65 +5263,67 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
         }
 
         final filePath = snapshot.data!;
-        if (_cachedView == null || _resolvedPath != filePath) {
-          _resolvedPath = filePath;
-          _cachedView = _buildPdfView(filePath);
-        }
-
-        return _cachedView!;
+        _resolvedPath = filePath;
+        return _buildPdfView(filePath);
       },
     );
   }
 
   Widget _buildPdfView(String filePath) {
-    widget.currentPageMap.putIfAbsent(_cacheKey, () => 0);
+    // Use initialPage from source (database) if runtime map doesn't have it
+    final storedPage = widget.source.initialPage ?? 0;
+    widget.currentPageMap.putIfAbsent(_cacheKey, () => storedPage);
+    final initialPage = widget.currentPageMap[_cacheKey] ?? storedPage;
 
-    return PDFView(
-      key: ValueKey('${_cacheKey}_pdf_view'),
-      filePath: filePath,
-      autoSpacing: false,
-      pageFling: false,
-      pageSnap: false,
-      enableSwipe: true,
-      swipeHorizontal: false,
-      fitPolicy: FitPolicy.BOTH,
-      preventLinkNavigation: false,
-      onViewCreated: (controller) async {
-        widget.controllerMap[_cacheKey] = controller;
-        final storedPage = widget.currentPageMap[_cacheKey] ?? 0;
-        try {
-          final currentPage = await controller.getCurrentPage();
-          if (currentPage != storedPage) {
-            await controller.setPage(storedPage);
-          }
-        } catch (e) {
-          widget.onError('Unable to set initial PDF page: $e');
-        }
-      },
-      onRender: (pages) {
-        if (pages != null) {
-          widget.totalPageMap[_cacheKey] = pages;
-          final stored = widget.currentPageMap[_cacheKey];
-          if (stored != null && stored >= pages) {
-            widget.currentPageMap[_cacheKey] = pages - 1;
-          }
-        }
-      },
-      onPageChanged: (page, total) {
-        if (page != null) {
-          widget.currentPageMap[_cacheKey] = page;
-        }
-        if (total != null) {
-          widget.totalPageMap[_cacheKey] = total;
-        }
-      },
-      onError: (error) {
-        widget.onError('PDFView error: $error');
-      },
-      onPageError: (page, error) {
-        widget.onError('PDFView page error ($page): $error');
-      },
-      backgroundColor: Colors.transparent,
+    return ColorFiltered(
+      colorFilter: ColorFilter.mode(
+        Colors.white,
+        widget.isNightMode ? BlendMode.difference : BlendMode.dst,
+      ),
+      child: PdfViewer.file(
+        filePath,
+        key: ValueKey('${_cacheKey}_pdf_view'),
+        controller: _controller,
+        params: PdfViewerParams(
+          textSelectionParams: const PdfTextSelectionParams(),
+          pageDropShadow: null,
+          onViewerReady: (document, controller) async {
+            if (_documentReady) return;
+            _documentReady = true;
+
+            // Store total pages
+            widget.totalPageMap[_cacheKey] = document.pages.length;
+
+            // Load outline
+            List<PdfOutlineNode>? outline;
+            try {
+              outline = await document.loadOutline();
+            } catch (e) {
+              // Outline loading failed, not critical
+            }
+
+            // Notify parent
+            widget.onDocumentReady?.call(_cacheKey, document, outline);
+
+            // Navigate to stored page
+            if (initialPage > 0 && initialPage < document.pages.length) {
+              try {
+                await controller.goToPage(
+                  pageNumber: initialPage + 1,
+                ); // pdfrx uses 1-indexed pages
+              } catch (e) {
+                widget.onError('Unable to set initial PDF page: $e');
+              }
+            }
+          },
+          onPageChanged: (pageNumber) {
+            if (pageNumber != null) {
+              // pdfrx uses 1-indexed page numbers, convert to 0-indexed for storage
+              widget.currentPageMap[_cacheKey] = pageNumber - 1;
+            }
+          },
+        ),
+      ),
     );
   }
 
@@ -4037,33 +5332,69 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
 
   @override
   void dispose() {
+    // Save current page to database before disposing
+    final attachmentId = widget.source.attachmentId;
+    final currentPage = widget.currentPageMap[_cacheKey];
+    if (attachmentId != null && currentPage != null && currentPage > 0) {
+      DatabaseService().updateLastViewedPage(attachmentId, currentPage);
+    }
+
     widget.controllerMap.remove(_cacheKey);
     super.dispose();
   }
 }
 
-class _FreeformStrokePainter extends CustomPainter {
-  _FreeformStrokePainter(List<Offset>? points)
-    : _points = points == null ? null : List<Offset>.unmodifiable(points);
+class _DrawingLayerPainter extends CustomPainter {
+  _DrawingLayerPainter({
+    required this.actions,
+    this.activeStroke,
+    this.activeRect,
+    this.activeColor = Colors.redAccent,
+  });
 
-  final List<Offset>? _points;
+  final List<DrawingAction> actions;
+  final List<Offset>? activeStroke;
+  final Rect? activeRect;
+  final Color activeColor;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final points = _points;
-    if (points == null || points.length < 2) return;
+    // Draw committed actions
+    for (final action in actions) {
+      _paintAction(canvas, action);
+    }
 
-    final path = buildPath(points);
+    // Draw active stroke
+    if (activeStroke != null && activeStroke!.length >= 2) {
+      _paintStroke(canvas, activeStroke!, activeColor);
+    }
+
+    // Draw active rect
+    if (activeRect != null) {
+      _paintRect(canvas, activeRect!, activeColor);
+    }
+  }
+
+  void _paintAction(Canvas canvas, DrawingAction action) {
+    if (action is StrokeAction) {
+      _paintStroke(canvas, action.points, action.color);
+    } else if (action is RectangleAction) {
+      _paintRect(canvas, action.rect, action.color);
+    }
+  }
+
+  void _paintStroke(Canvas canvas, List<Offset> points, Color color) {
+    final path = buildStrokePath(points);
 
     final glowPaint = Paint()
-      ..color = Colors.redAccent.withOpacity(0.18)
+      ..color = color.withOpacity(0.18)
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..strokeWidth = 8;
 
     final strokePaint = Paint()
-      ..color = Colors.redAccent
+      ..color = color
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
@@ -4073,8 +5404,28 @@ class _FreeformStrokePainter extends CustomPainter {
     canvas.drawPath(path, strokePaint);
   }
 
-  static Path buildPath(List<Offset> points) {
+  void _paintRect(Canvas canvas, Rect rect, Color color) {
+    final glowPaint = Paint()
+      ..color = color.withOpacity(0.18)
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = 8;
+
+    final strokePaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = 3;
+
+    canvas.drawRect(rect, glowPaint);
+    canvas.drawRect(rect, strokePaint);
+  }
+
+  static Path buildStrokePath(List<Offset> points) {
     final path = Path();
+    if (points.isEmpty) return path;
     path.moveTo(points.first.dx, points.first.dy);
     for (int i = 1; i < points.length; i++) {
       final prev = points[i - 1];
@@ -4090,9 +5441,258 @@ class _FreeformStrokePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _FreeformStrokePainter oldDelegate) {
-    return !listEquals(oldDelegate._points, _points);
+  bool shouldRepaint(covariant _DrawingLayerPainter oldDelegate) {
+    // Basic optimization: if list references changed, rebuild.
+    // Deep equality check might be expensive if many strokes.
+    return oldDelegate.actions != actions ||
+        oldDelegate.activeStroke != activeStroke ||
+        oldDelegate.activeRect != activeRect ||
+        oldDelegate.activeColor != activeColor;
   }
 }
 
 enum _AiPanelSide { top, bottom, left, right }
+
+class _AttachmentOutlineItem extends StatefulWidget {
+  final String attachment;
+  final int noteIndex;
+  final int depth;
+  final bool isPdf;
+  final bool hasOutline;
+  final bool isActive;
+  final int? currentPage;
+  final List<PdfOutlineNode>? pdfOutline;
+  final VoidCallback onTap;
+  final Function(PdfOutlineNode) onNodeTap;
+  final Future<int?> Function(PdfOutlineNode) onResolvePageNumber;
+
+  const _AttachmentOutlineItem({
+    required this.attachment,
+    required this.noteIndex,
+    required this.depth,
+    required this.isPdf,
+    required this.hasOutline,
+    required this.isActive,
+    required this.currentPage,
+    required this.pdfOutline,
+    required this.onTap,
+    required this.onNodeTap,
+    required this.onResolvePageNumber,
+  });
+
+  @override
+  State<_AttachmentOutlineItem> createState() => _AttachmentOutlineItemState();
+}
+
+class _AttachmentOutlineItemState extends State<_AttachmentOutlineItem> {
+  bool _isExpanded = false;
+  PdfOutlineNode? _activeNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _findActiveNode();
+  }
+
+  @override
+  void didUpdateWidget(_AttachmentOutlineItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.currentPage != oldWidget.currentPage ||
+        widget.pdfOutline != oldWidget.pdfOutline) {
+      _findActiveNode();
+    }
+  }
+
+  Future<void> _findActiveNode() async {
+    if (widget.pdfOutline == null || widget.currentPage == null) {
+      if (mounted && _activeNode != null) setState(() => _activeNode = null);
+      return;
+    }
+
+    final flatList = <MapEntry<PdfOutlineNode, int>>[];
+
+    Future<void> traverse(List<PdfOutlineNode> nodes) async {
+      for (final node in nodes) {
+        final page = await widget.onResolvePageNumber(node);
+        if (page != null) {
+          flatList.add(MapEntry(node, page));
+        }
+        if (node.children.isNotEmpty) {
+          await traverse(node.children);
+        }
+      }
+    }
+
+    await traverse(widget.pdfOutline!);
+    flatList.sort((a, b) => a.value.compareTo(b.value));
+
+    PdfOutlineNode? active;
+    final current = widget.currentPage!;
+
+    for (int i = 0; i < flatList.length; i++) {
+      final entry = flatList[i];
+      final page = entry.value;
+
+      if (page <= current) {
+        if (i + 1 < flatList.length) {
+          final nextPage = flatList[i + 1].value;
+          // Provide a small buffer or strictly less
+          if (current < nextPage) {
+            active = entry.key;
+            break;
+          }
+        } else {
+          active = entry.key;
+        }
+      }
+    }
+
+    if (mounted && _activeNode != active) {
+      setState(() => _activeNode = active);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fileName = widget.attachment.split(Platform.pathSeparator).last;
+    final leftPadding = 16.0 + (widget.depth * 32);
+    final theme = Theme.of(context);
+    final highlightColor = theme.colorScheme.primaryContainer.withValues(
+      alpha: 0.3,
+    );
+
+    if (!widget.hasOutline) {
+      return ListTile(
+        contentPadding: EdgeInsets.only(left: leftPadding, right: 16),
+        leading: Icon(_iconForAttachment(widget.attachment)),
+        title: Text(fileName, overflow: TextOverflow.ellipsis),
+        tileColor: widget.isActive ? highlightColor : null,
+        onTap: widget.onTap,
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () {
+            setState(() {
+              _isExpanded = !_isExpanded;
+            });
+          },
+          child: Container(
+            color: widget.isActive ? highlightColor : null,
+            padding: EdgeInsets.only(
+              left: leftPadding,
+              right: 16,
+              top: 12,
+              bottom: 12,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _iconForAttachment(widget.attachment),
+                  color: theme.iconTheme.color,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    fileName,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyLarge,
+                  ),
+                ),
+                Icon(
+                  _isExpanded ? Icons.expand_less : Icons.expand_more,
+                  color: theme.iconTheme.color?.withValues(alpha: 0.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_isExpanded)
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.only(
+                  left: leftPadding + 24,
+                  right: 16,
+                ),
+                leading: const Icon(Icons.visibility, size: 20),
+                title: Text('View PDF', style: theme.textTheme.bodyMedium),
+                onTap: widget.onTap,
+              ),
+              ..._buildPdfOutlineItems(
+                attachmentPath: widget.attachment,
+                nodes: widget.pdfOutline!,
+                noteIndex: widget.noteIndex,
+                depth: 0,
+                context: context,
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+
+  IconData _iconForAttachment(String path) {
+    final ext = path.split('.').last.toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext)) {
+      return Icons.image;
+    } else if (['mp4', 'mov', 'avi'].contains(ext)) {
+      return Icons.movie;
+    } else if (['mp3', 'wav', 'm4a'].contains(ext)) {
+      return Icons.audiotrack;
+    } else if (ext == 'pdf') {
+      return Icons.picture_as_pdf;
+    }
+    return Icons.insert_drive_file;
+  }
+
+  List<Widget> _buildPdfOutlineItems({
+    required String attachmentPath,
+    required List<PdfOutlineNode> nodes,
+    required int noteIndex,
+    required int depth,
+    required BuildContext context,
+  }) {
+    final widgets = <Widget>[];
+    final leftPadding = 80.0 + (depth * 16);
+    final theme = Theme.of(context);
+
+    for (final node in nodes) {
+      final isActiveSection = _activeNode == node;
+
+      widgets.add(
+        ListTile(
+          contentPadding: EdgeInsets.only(left: leftPadding, right: 16),
+          leading: const Icon(Icons.bookmark_outline, size: 18),
+          title: Text(
+            node.title,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: isActiveSection ? theme.colorScheme.primary : null,
+              fontWeight: isActiveSection ? FontWeight.bold : null,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () => widget.onNodeTap(node),
+        ),
+      );
+
+      if (node.children.isNotEmpty) {
+        widgets.addAll(
+          _buildPdfOutlineItems(
+            attachmentPath: attachmentPath,
+            nodes: node.children,
+            noteIndex: noteIndex,
+            depth: depth + 1,
+            context: context,
+          ),
+        );
+      }
+    }
+    return widgets;
+  }
+}

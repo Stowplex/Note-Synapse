@@ -1,13 +1,14 @@
 model_type: openai_compatible
 model_endpoint: https://api.openai.com/v1/chat/completions
-model_name: gpt-5.1
-model_display_name: GPT-5.1
+model_name: gpt-5.2
+model_display_name: GPT-5.2
 api_key_url: https://platform.openai.com/api-keys
 model_capabilities:
   - support_audio
   - support_video
   - support_document_understanding
   - support_image
+  - support_code_generation
 max_input_token: 400000
 max_output_token: 128000
 supported_attachment_mime_types:

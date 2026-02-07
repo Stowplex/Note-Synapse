@@ -12,7 +12,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appTitle => '笔记突触';
 
   @override
-  String get untitled => 'Untitled';
+  String get untitled => '无标题';
 
   @override
   String get settings => '设置';
@@ -94,6 +94,71 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get settingsSaved => '设置已保存';
+
+  @override
+  String get agenticSettings => '智能代理设置';
+
+  @override
+  String get agenticSettingsSubtitle => '配置智能代理模式参数';
+
+  @override
+  String get compactionThreshold => '上下文压缩阈值';
+
+  @override
+  String get compactionThresholdDescription =>
+      '触发上下文压缩的最大令牌数。运行时使用此值与模型上下文窗口的较小值。';
+
+  @override
+  String get findingLimit => '发现数量限制';
+
+  @override
+  String get findingLimitDescription => '每个任务提取用于综合的最大发现数量。';
+
+  @override
+  String get findingMaxWords => '发现详情字数';
+
+  @override
+  String get findingMaxWordsDescription => '每个发现的要点详情的最大字数。';
+
+  @override
+  String get maxTurns => 'Max Turns';
+
+  @override
+  String get maxTurnsDescription =>
+      'Maximum number of iterations allowed per task.';
+
+  @override
+  String get turnIncrement => 'Turn Increment';
+
+  @override
+  String get turnIncrementDescription =>
+      'Number of turns to add when resuming a paused task.';
+
+  @override
+  String turnsValue(Object count) {
+    return '$count turns';
+  }
+
+  @override
+  String get maxSubtaskDepth => '子任务最大深度';
+
+  @override
+  String get maxSubtaskDepthDescription => '子任务嵌套的最大深度。设置为 0 禁用子任务生成。';
+
+  @override
+  String get aiLogEntriesLimit => 'AI 日志条目上限';
+
+  @override
+  String get aiLogEntriesLimitDescription => '保留的最大 AI 日志条目数。';
+
+  @override
+  String get aiLogEntriesDisabled => '禁用';
+
+  @override
+  String get aiLogEntriesUnlimited => '无限制';
+
+  @override
   String get darkMode => '深色模式';
 
   @override
@@ -137,6 +202,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get cancel => '取消';
+
+  @override
+  String get checkIn => '签到';
+
+  @override
+  String get enterCheckInNote => '输入签到备注';
 
   @override
   String get update => '更新';
@@ -356,6 +427,59 @@ class AppLocalizationsZh extends AppLocalizations {
   String get languageChanged => '语言更改成功';
 
   @override
+  String get system => '系统';
+
+  @override
+  String get systemSubtitle => '系统行为设置';
+
+  @override
+  String get keepScreenOn => '保持屏幕常亮';
+
+  @override
+  String get keepScreenOnSubtitle => '防止屏幕自动关闭';
+
+  @override
+  String get network => '网络';
+
+  @override
+  String get networkSubtitle => 'HTTP协议与重试设置';
+
+  @override
+  String get protocolPreference => '协议偏好';
+
+  @override
+  String get protocolPreferenceSubtitle => '选择网络请求的HTTP协议模式';
+
+  @override
+  String get protocolAuto => '自动（升级到HTTP/3）';
+
+  @override
+  String get protocolHttp3Only => '仅HTTP/3';
+
+  @override
+  String get protocolHttp11Only => '仅HTTP/1.1';
+
+  @override
+  String get retryCount => '重试次数';
+
+  @override
+  String get retryCountSubtitle => '请求失败时的重试次数（0-5）';
+
+  @override
+  String get backoffBase => '退避基数';
+
+  @override
+  String get backoffBaseSubtitle => '指数退避的基础延迟秒数（1-10）';
+
+  @override
+  String retryPattern(String base, String second, String third) {
+    return '重试间隔：$base秒 → $second秒 → $third秒';
+  }
+
+  @override
+  String get networkSettingsUpdated => '网络设置已更新';
+
+  @override
   String errorChangingLanguage(Object error) {
     return '更改语言时出错：$error';
   }
@@ -532,6 +656,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get attachFiles => '附加文件';
 
   @override
+  String get attachFile => '附加文件';
+
+  @override
+  String get selectFromDevice => '从设备选择';
+
+  @override
+  String get enterUri => '输入 URI';
+
+  @override
   String get answerOnlyFromNotes => '仅从选中的笔记中回答';
 
   @override
@@ -563,6 +696,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get addFiles => '添加文件';
+
+  @override
+  String get add => '添加';
 
   @override
   String get processingRequest => '正在处理您的请求...';
@@ -2282,6 +2418,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get baseUrlHelperText => '如需要，请包含认证查询参数（例如：Smithery）';
 
   @override
+  String get builtInTools => 'Built-in Tools';
+
+  @override
   String get transportType => '传输类型';
 
   @override
@@ -2325,9 +2464,146 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get onboardingWelcomeTitle => '欢迎使用笔记突触';
+
+  @override
+  String get onboardingWelcomeSubtitle => '您的AI第二大脑';
+
+  @override
+  String get onboardingChooseModelTitle => '选择您的AI模型';
+
+  @override
+  String get onboardingChooseModelSubtitle => '选择最适合您需求的AI模型';
+
+  @override
+  String get onboardingStart => '开始使用';
+
+  @override
+  String get onboardingNext => '下一步';
+
+  @override
+  String get onboardingSkip => '跳过';
+
+  @override
+  String get onboardingLicenseTitle => '许可协议';
+
+  @override
+  String get onboardingLicenseSubtitle => '请阅读并接受许可协议';
+
+  @override
+  String get onboardingPrivacyTitle => '隐私政策';
+
+  @override
+  String get onboardingPrivacySubtitle => '我们如何处理您的数据';
+
+  @override
+  String get onboardingAccept => '接受并继续';
+
+  @override
+  String get onboardingConfigLater => '稍后配置';
+
+  @override
+  String get about => '关于';
+
+  @override
+  String get aboutSubtitle => '许可证、隐私政策与版本信息';
+
+  @override
+  String get version => '版本';
+
+  @override
+  String get info => '信息';
+
+  @override
+  String get applicationInfo => '应用信息';
+
+  @override
+  String get githubPage => 'GitHub 页面';
+
+  @override
+  String get viewLicense => '查看许可证';
+
+  @override
+  String get viewPrivacyPolicy => '查看隐私政策';
+
+  @override
+  String get stowplexCopyright => 'Stowplex LLC & Bruce Li 保留所有权利';
+
+  @override
+  String get noWarranty => '无担保声明';
+
+  @override
+  String get debugMenu => '调试菜单';
+
+  @override
+  String get debugMenuSubtitle => '开发者选项';
+
+  @override
+  String get resetOnboarding => '重置引导标志';
+
+  @override
+  String get resetOnboardingTitle => '重置引导标志';
+
+  @override
+  String get resetOnboardingSuccess => '引导页标志已重置';
+
+  @override
+  String get dependencyLicenses => '依赖库许可证';
+
+  @override
   String refreshedToolsFor(Object name) {
     return '已刷新$name的工具';
   }
+
+  @override
+  String get bookmarkPage => 'Bookmark Page';
+
+  @override
+  String get page => 'Page';
+
+  @override
+  String get removeBookmark => 'Remove Bookmark';
+
+  @override
+  String get bookmarks => 'Bookmarks';
+
+  @override
+  String get addBookmark => 'Add Bookmark';
+
+  @override
+  String get editBookmark => 'Edit Bookmark';
+
+  @override
+  String get bookmarkAnnotationHint => 'Enter annotation (max 200 chars)';
+
+  @override
+  String get noBookmarksYet => 'No bookmarks yet';
+
+  @override
+  String get aiContextBookmarks => 'AI Context: Bookmarks';
+
+  @override
+  String get configureAiContext => 'Configure AI Context';
+
+  @override
+  String aiContext(String mode) {
+    return 'AI Context: $mode';
+  }
+
+  @override
+  String get aiContextFullPdf => 'Full PDF';
+
+  @override
+  String get aiContextWindow => 'Window';
+
+  @override
+  String get aiContextChapters => 'Chapters';
+
+  @override
+  String get windowSize => 'Window Size';
+
+  @override
+  String get pagesBeforeAfter => 'Pages before/after';
 
   @override
   String errorRefreshingTools(Object error) {
@@ -2336,6 +2612,33 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get tools => '工具';
+
+  @override
+  String get markAllAs => '全部标记为';
+
+  @override
+  String get archiveAll => '全部归档';
+
+  @override
+  String get unarchiveAll => '全部取消归档';
+
+  @override
+  String get selectAll => '全选';
+
+  @override
+  String get deselectAll => '取消全选';
+
+  @override
+  String get noteType => 'Note Type';
+
+  @override
+  String get excludeTags => 'Exclude Tags';
+
+  @override
+  String get excludeTagsHint => 'Select tags to exclude';
+
+  @override
+  String get selectTagsToExclude => 'Select Tags to Exclude';
 
   @override
   String toolsFor(Object name) {
@@ -2354,164 +2657,162 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noToolsAvailable => '没有可用工具';
 
   @override
-  String get multiFunction => 'Multi-function';
+  String get multiFunction => '多功能';
 
   @override
-  String get addToMultiFunction => 'Add to multi-function tab';
+  String get addToMultiFunction => '添加到多功能标签页';
 
   @override
-  String get removeFromMultiFunction => 'Remove from multi-function view';
+  String get removeFromMultiFunction => '从多功能视图移除';
 
   @override
-  String get setAsDefaultView => 'Set as default view';
+  String get setAsDefaultView => '设为默认视图';
 
   @override
-  String get defaultView => 'Default View';
+  String get defaultView => '默认视图';
 
   @override
-  String get appAddedToMultiFunction => 'App added to multi-function tab';
+  String get appAddedToMultiFunction => '应用已添加到多功能标签页';
 
   @override
-  String get appRemovedFromMultiFunction =>
-      'App removed from multi-function tab';
+  String get appRemovedFromMultiFunction => '应用已从多功能标签页移除';
 
   @override
-  String get defaultViewUpdated => 'Default view updated';
+  String get defaultViewUpdated => '默认视图已更新';
 
   @override
-  String get selectView => 'Select View';
+  String get selectView => '选择视图';
 
   @override
-  String get switchToCalendar => 'Switch to Calendar';
+  String get switchToCalendar => '切换到日历';
 
   @override
-  String get rawDataManager => 'Raw Data Manager';
+  String get rawDataManager => '原始数据管理';
 
   @override
   String get rawDataManagerSubtitle => '用于文件和数据库管理的高级工具';
 
   @override
-  String get files => 'Files';
+  String get files => '文件';
 
   @override
-  String get database => 'Database';
+  String get database => '数据库';
 
   @override
-  String get tables => 'Tables';
+  String get tables => '表';
 
   @override
-  String get query => 'Query';
+  String get query => '查询';
 
   @override
-  String get executeQuery => 'Execute Query';
+  String get executeQuery => '执行查询';
 
   @override
-  String get noData => 'No data';
+  String get noData => '无数据';
 
   @override
   String rowsAffected(Object count) {
-    return '$count rows affected';
+    return '$count 行受影响';
   }
 
   @override
   String errorExecutingQuery(Object error) {
-    return 'Error executing query: $error';
+    return '执行查询时出错：$error';
   }
 
   @override
-  String get tableSchema => 'Table Schema';
+  String get tableSchema => '表结构';
 
   @override
-  String get columns => 'Columns';
+  String get columns => '列';
 
   @override
-  String get indexes => 'Indexes';
+  String get indexes => '索引';
 
   @override
-  String get foreignKeys => 'Foreign Keys';
+  String get foreignKeys => '外键';
 
   @override
-  String get browseTable => 'Browse Table';
+  String get browseTable => '浏览表';
 
   @override
-  String get refresh => 'Refresh';
+  String get refresh => '刷新';
 
   @override
-  String get download => 'Download';
+  String get download => '下载';
 
   @override
-  String get deleteFile => 'Delete File';
+  String get deleteFile => '删除文件';
 
   @override
   String confirmDeleteFile(Object fileName) {
-    return 'Are you sure you want to delete \"$fileName\"?';
+    return '您确定要删除 \"$fileName\" 吗？';
   }
 
   @override
-  String get fileDeletedSuccessfully => 'File deleted successfully';
+  String get fileDeletedSuccessfully => '文件删除成功';
 
   @override
   String errorDeletingFile(Object error) {
-    return 'Error deleting file: $error';
+    return '删除文件时出错：$error';
   }
 
   @override
-  String get uploadFile => 'Upload File';
+  String get uploadFile => '上传文件';
 
   @override
-  String get fileUploadedSuccessfully => 'File uploaded successfully';
+  String get fileUploadedSuccessfully => '文件上传成功';
 
   @override
   String errorUploadingFile(Object error) {
-    return 'Error uploading file: $error';
+    return '上传文件时出错：$error';
   }
 
   @override
-  String get createDirectory => 'Create Directory';
+  String get createDirectory => '创建目录';
 
   @override
-  String get directoryName => 'Directory Name';
+  String get directoryName => '目录名称';
 
   @override
-  String get directoryCreatedSuccessfully => 'Directory created successfully';
+  String get directoryCreatedSuccessfully => '目录创建成功';
 
   @override
   String errorCreatingDirectory(Object error) {
-    return 'Error creating directory: $error';
+    return '创建目录时出错：$error';
   }
 
   @override
-  String get path => 'Path';
+  String get path => '路径';
 
   @override
-  String get size => 'Size';
+  String get size => '大小';
 
   @override
-  String get modified => 'Modified';
+  String get modified => '修改时间';
 
   @override
-  String get chat => 'Chat';
+  String get chat => '聊天';
 
   @override
-  String get chatWithDatabase => 'Chat with Database';
+  String get chatWithDatabase => '与数据库聊天';
 
   @override
-  String get askQuestionAboutDatabase =>
-      'Ask a question about your database...';
+  String get askQuestionAboutDatabase => '询问关于数据库的问题...';
 
   @override
   String get send => '发送';
 
   @override
-  String get aiResponse => 'AI Response';
+  String get aiResponse => 'AI 响应';
 
   @override
   String errorSendingMessage(Object error) {
-    return 'Error sending message: $error';
+    return '发送消息时出错：$error';
   }
 
   @override
-  String get thinking => 'Thinking...';
+  String get thinking => '思考中...';
 
   @override
   String noToolsCachedFor(Object name) {
@@ -2594,16 +2895,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiTools => 'AI 工具';
 
   @override
-  String get modelFeatures => 'Model Features';
+  String get modelFeatures => '模型功能';
 
   @override
-  String get featureGoogleSearch => 'Google Search';
+  String get featureGoogleSearch => 'Google 搜索';
 
   @override
-  String get featureCodeExecution => 'Code Execution';
+  String get featureCodeExecution => '代码执行';
 
   @override
-  String get featureWebSearch => 'Web Search';
+  String get featureWebSearch => '网页搜索';
 
   @override
   String aiToolStartError(String appName, String error) {
@@ -3391,9 +3692,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mediaDownloadsDescription => '选择要下载到本地的图片，以便离线使用。';
 
   @override
-  String get selectAll => '全选';
-
-  @override
   String get clearAll => '全不选';
 
   @override
@@ -3542,9 +3840,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String appsSelected(int count) {
     return '已选择$count个应用';
   }
-
-  @override
-  String get deselectAll => '取消全选';
 
   @override
   String get proceedWithInstallation => '安装选中的应用';
@@ -3714,4 +4009,155 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get exportDbTooltip => '导出数据库';
+
+  @override
+  String get undo => '撤销';
+
+  @override
+  String get taskRescheduled => '任务已重新安排';
+
+  @override
+  String get recoveryManager => 'Recovery Manager';
+
+  @override
+  String get backupAndRestore => 'Backup & Restore';
+
+  @override
+  String get databaseNotConnected => 'Database not connected';
+
+  @override
+  String get fileUsageUnavailable => 'File usage status unavailable';
+
+  @override
+  String get fileUsageDetails => 'File Usage Details';
+
+  @override
+  String get noReferencesFound => 'No references found in database';
+
+  @override
+  String usedByNotes(int count) {
+    return 'Used by $count note(s)';
+  }
+
+  @override
+  String usedByConversations(int count) {
+    return 'Used in $count conversation message(s)';
+  }
+
+  @override
+  String get noteNoLongerExists => 'Note no longer exists';
+
+  @override
+  String get messageNoLongerExists => 'Message no longer exists';
+
+  @override
+  String get showDetails => 'Show Details';
+
+  @override
+  String get saveFindings => '保存发现';
+
+  @override
+  String get saveFindingsToNote => '将发现保存到笔记';
+
+  @override
+  String get attachNotesToPlan => '添加笔记到计划';
+
+  @override
+  String get attachNotesToTask => '添加笔记到任务';
+
+  @override
+  String get globalContextNotes => '全局上下文笔记';
+
+  @override
+  String get taskContextNotes => '任务上下文笔记';
+
+  @override
+  String get globalContextDescription => '这些笔记将作为所有任务的上下文';
+
+  @override
+  String get taskContextDescription => '这些笔记仅作为此任务的上下文';
+
+  @override
+  String notesAttachedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已附加$count个笔记',
+      one: '已附加1个笔记',
+      zero: '未附加笔记',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get agentRunningNotificationTitle => '智能体运行中';
+
+  @override
+  String agentRunningNotificationBody(String objective) {
+    return '正在处理: $objective';
+  }
+
+  @override
+  String get agentCompleteNotificationTitle => '智能体完成';
+
+  @override
+  String get agentCompleteNotificationBody => '点击查看结果';
+
+  @override
+  String get agentPauseExecution => '暂停';
+
+  @override
+  String get agentResumeExecution => '继续';
+
+  @override
+  String get agentStopExecution => '停止';
+
+  @override
+  String get agentPausedStatus => '已暂停';
+
+  @override
+  String get agentConflictTitle => '智能体已在运行';
+
+  @override
+  String agentConflictMessage(String status) {
+    return '智能体当前在另一个会话中$status。您可以停止它以启动新的智能体，或切换到该会话。';
+  }
+
+  @override
+  String get agentConflictStop => '停止智能体';
+
+  @override
+  String get agentConflictSwitch => '切换到会话';
+
+  @override
+  String get editBlock => '编辑区块';
+
+  @override
+  String get deleteBlock => '删除区块';
+
+  @override
+  String get deleteBlockConfirmation => '您确定要删除此区块吗？此操作无法撤消。';
+
+  @override
+  String get expandSelectionAbove => '向上扩展';
+
+  @override
+  String get contractSelectionAbove => '向上收缩';
+
+  @override
+  String get expandSelectionBelow => '向下扩展';
+
+  @override
+  String get contractSelectionBelow => '向下收缩';
+
+  @override
+  String get editSelection => '编辑';
+
+  @override
+  String get deleteSelection => '删除区块';
+
+  @override
+  String confirmDeleteBlocks(int count) {
+    return '确定要删除 $count 个区块吗？';
+  }
 }

@@ -5,18 +5,26 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/services.dart';
+import '../widgets/drawing_editor.dart';
+import '../widgets/approval_dialog.dart';
 import '../models/conversation.dart';
 import '../models/tool_iteration_prompt.dart';
 import '../models/note.dart';
+import '../models/agent_task.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/generation_context.dart';
 import '../models/model_config.dart';
 import '../services/conversation_service.dart';
+import '../services/model_selector.dart';
+import '../services/service_locator.dart';
+import '../services/attachment_preprocessor.dart';
 import '../services/logger_service.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/ai_tool_service.dart';
+import '../services/approval_service.dart';
 import '../services/prompts/prompt_models.dart';
 import '../services/prompts/system_prompt_builder.dart';
 import '../services/prompts/prompt_configuration_service.dart';
@@ -42,6 +50,13 @@ import '../mixins/note_action_mixin.dart';
 import '../widgets/chat_message_action_row.dart';
 import '../widgets/active_tool_count_badge.dart';
 import '../widgets/model_selector_button.dart';
+import '../services/agent_service.dart';
+import '../services/background_agent_service.dart';
+import '../services/built_in_tools_service.dart';
+import '../services/tools/note_tools.dart';
+import '../services/sql_query_service.dart';
+import '../widgets/agent_plan_review_widget.dart';
+import '../widgets/agent_task_tree_widget.dart';
 
 class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
@@ -61,7 +76,7 @@ class ConversationChatScreen extends StatefulWidget {
 
 class _ConversationChatScreenState extends State<ConversationChatScreen>
     with NoteActionMixin<ConversationChatScreen>, WidgetsBindingObserver {
-  final ConversationService _conversationService = ConversationService();
+  ConversationService get _conversationService => getIt<ConversationService>();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _messageFocusNode = FocusNode();
@@ -98,7 +113,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   final Set<String> _selectedModelFeatures = {};
   ModelConfig? _selectedModel;
 
+  // Built-in Tools
+  final Set<String> _selectedBuiltInTools = {};
+
+  // System Tools (native tools from AgentService)
+  final Set<String> _selectedSystemTools = {};
+
   bool _hasInitialized = false;
+  bool _waitingForAgentResult = false;
+  AgentService? _agentService;
 
   @override
   void initState() {
@@ -107,6 +130,32 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     _selectedModel = widget.initialModelOverride;
     _loadMcpEndpoints();
     _loadIterationPreference();
+    _setupSqlWriteApprovalCallback();
+    // Listener managed in didChangeDependencies
+  }
+
+  /// Sets up the unified approval callback for agentic mode.
+  /// Shows a dialog when the agent tries to execute sensitive operations.
+  void _setupSqlWriteApprovalCallback() {
+    // Register unified approval callback
+    ApprovalService.onApprovalRequest = (request) async {
+      if (!mounted) return ApprovalResult(approved: false);
+      return await ApprovalDialog.showWithContext(context, request);
+    };
+
+    // Keep legacy callback for backwards compatibility
+    RunSqlTool.onWriteApprovalRequest = (sql, queryType) async {
+      if (!mounted) return false;
+      final result = await ApprovalService.requestSqlWriteApproval(
+        sql: sql,
+        queryType: queryType,
+        queryTypeDescription: getIt<SqlQueryService>().getQueryTypeDescription(
+          queryType,
+        ),
+        source: 'Agent',
+      );
+      return result;
+    };
   }
 
   @override
@@ -114,6 +163,31 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     if (state == AppLifecycleState.resumed) {
       // Refresh model features when app resumes (e.g., after model configuration change)
       _loadModelFeatures();
+      // Stop background service when returning to app (agent continues in foreground)
+      BackgroundAgentService.stop();
+      // Clear background callback - UI will show progress instead
+      _agentService?.onProgressUpdate = null;
+    } else if (state == AppLifecycleState.paused) {
+      // Start background service if agent is running when app goes to background
+      final agentService = _agentService;
+      if (agentService != null &&
+          agentService.isRunning &&
+          _conversation != null) {
+        // Wire up progress updates to background notification
+        agentService.onProgressUpdate = (status) {
+          if (BackgroundAgentService.isRunningInBackground) {
+            BackgroundAgentService.updateProgress(status);
+            // Check for completion
+            if (status == 'Agent completed' || !agentService.isRunning) {
+              BackgroundAgentService.markComplete(status);
+            }
+          }
+        };
+        BackgroundAgentService.startBackgroundExecution(
+          conversationId: _conversation!.id,
+          objective: agentService.currentObjective ?? 'Agent task',
+        );
+      }
     }
   }
 
@@ -122,6 +196,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+
+    // Manage AgentService listener safely
+    final newAgentService = context.watch<AgentService>();
+    if (_agentService != newAgentService) {
+      _agentService?.removeListener(_onAgentStateChange);
+      _agentService = newAgentService;
+      _agentService?.addListener(_onAgentStateChange);
+    }
+
     if (!_hasInitialized) {
       _hasInitialized = true;
       _initializeConversation();
@@ -180,6 +263,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         // Initialize model features from config
         _loadModelFeatures();
         setState(() => _isLoading = false);
+        // Sync with agent state (update executor) now that we are initialized
+        _onAgentStateChange();
       }
     }
   }
@@ -193,11 +278,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   Future<void> _loadMcpEndpoints() async {
     try {
-      final endpoints = await McpService.getEndpoints();
+      final endpoints = await getIt<McpService>().getEndpoints();
       // Only show endpoints that have cached tools
       final endpointsWithTools = <McpEndpoint>[];
       for (final endpoint in endpoints) {
-        final cache = await McpService.getCachedTools(endpoint.id);
+        final cache = await getIt<McpService>().getCachedTools(endpoint.id);
         if (cache != null && cache.tools.isNotEmpty) {
           endpointsWithTools.add(endpoint);
         }
@@ -354,7 +439,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       }
 
       try {
-        final revision = await UserAppService.getAppRevision(
+        final revision = await getIt<UserAppService>().getAppRevision(
           app.selectedRevisionId!,
         );
         if (revision == null) {
@@ -397,6 +482,12 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     });
   }
 
+  bool get _hasAvailableTools =>
+      _availableMcpEndpoints.isNotEmpty ||
+      _aiToolBundles.isNotEmpty ||
+      BuiltInToolsService.tools.isNotEmpty ||
+      true; // Model features are always potential candidates
+
   Map<String, List<McpTool>> _buildActiveToolsMap() {
     final combined = <String, List<McpTool>>{};
     combined.addAll(_mcpToolsByEndpoint);
@@ -405,6 +496,47 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       final tools = _aiToolMcpMap[service];
       if (tools != null && tools.isNotEmpty) {
         combined[service] = tools;
+      }
+    }
+
+    // Add Built-in Tools
+    if (_selectedBuiltInTools.isNotEmpty) {
+      final builtInTools = _selectedBuiltInTools
+          .map((id) => BuiltInToolsService.getToolById(id))
+          .where((t) => t != null)
+          .map(
+            (t) => McpTool(
+              name: t!.name,
+              description: t.description,
+              inputSchema: {},
+            ),
+          )
+          .toList();
+      if (builtInTools.isNotEmpty) {
+        combined['Built-in'] = builtInTools;
+      }
+    }
+
+    // Add System Tools (native tools from AgentService)
+    if (_selectedSystemTools.isNotEmpty) {
+      final agentService = context.read<AgentService>();
+      final systemTools = _selectedSystemTools
+          .map((id) {
+            final nativeTool = agentService.nativeTools
+                .where((t) => t.name == id)
+                .firstOrNull;
+            if (nativeTool == null) return null;
+            return McpTool(
+              name: nativeTool.name,
+              description: nativeTool.description,
+              inputSchema: nativeTool.inputSchema,
+            );
+          })
+          .where((t) => t != null)
+          .cast<McpTool>()
+          .toList();
+      if (systemTools.isNotEmpty) {
+        combined[BuiltInToolsService.systemToolsServiceKey] = systemTools;
       }
     }
 
@@ -640,9 +772,42 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     final runtime = AiToolRuntime(
       bundle: bundle,
       appProvider: context.read<AppProvider>(),
+      onModificationRequest: _handleModificationRequest,
+      onSqlWriteApprovalRequest: _handleSqlWriteApprovalRequest,
     );
     _aiToolRuntimes[serviceName] = runtime;
     return runtime;
+  }
+
+  /// Handle note modification approval requests from AI tools.
+  Future<bool> _handleModificationRequest(
+    dynamic source,
+    String noteId,
+    Map<String, dynamic> modification,
+  ) async {
+    if (!mounted) return false;
+    return await ApprovalService.requestNoteModificationApproval(
+      noteId: noteId,
+      modification: modification,
+      source: 'AI Tool',
+    );
+  }
+
+  /// Handle SQL write approval requests from AI tools.
+  Future<bool> _handleSqlWriteApprovalRequest(
+    dynamic source,
+    String sql,
+    SqlQueryType queryType,
+  ) async {
+    if (!mounted) return false;
+    return await ApprovalService.requestSqlWriteApproval(
+      sql: sql,
+      queryType: queryType,
+      queryTypeDescription: getIt<SqlQueryService>().getQueryTypeDescription(
+        queryType,
+      ),
+      source: 'AI Tool',
+    );
   }
 
   Future<void> _sendMessage() async {
@@ -710,8 +875,118 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       if (_selectedModel != null) {
         generationContext.modelOverride = _selectedModel;
       }
+      // Note: Capability detection is now handled in ConversationAiEngine
       requestId = generationContext.ensureRequestId();
       _currentRequestId = requestId;
+
+      // Check for Agent Tool
+      if (_selectedBuiltInTools.contains(BuiltInToolsService.agentToolId)) {
+        final agentService = context.read<AgentService>();
+
+        // SINGLETON GUARD: Check if we can start a new agent here
+        if (!agentService.canStartNewAgent(_conversation!.id)) {
+          // Show conflict dialog
+          final result = await _showAgentConflictDialog(agentService);
+
+          if (result == 'switch') {
+            final targetId = agentService.boundConversationId;
+            if (targetId != null && mounted) {
+              // Use pushReplacement to switch to the active conversation
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ConversationChatScreen(conversationId: targetId),
+                ),
+              );
+              return; // Stop flow
+            }
+          } else if (result == 'abort') {
+            agentService.abortCurrentTask();
+            // Continue execution below...
+          } else {
+            // Cancel or dismissed
+            setState(() {
+              _isSending = false;
+              _currentRequestId = null;
+            });
+            return; // Stop flow
+          }
+        }
+
+        // Bind to this conversation now that we are clear
+        agentService.bindToConversation(_conversation!.id);
+
+        // Fetch available tools for the agent based on *current selection*
+        final activeTools = _buildActiveToolsMap();
+
+        // Gather Context
+        final noteBuilder = NotePromptBuilder(DatabaseService());
+        final noteContext = await noteBuilder.buildNoteContext(_notes);
+        final noteAttachments = await noteBuilder.loadNoteAttachments(_notes);
+
+        final historyBuffer = StringBuffer();
+        final historyAttachments = <PlatformFile>[];
+
+        // Gather history (last 10 messages)
+        final relevantMessages = _messages.length > 10
+            ? _messages.sublist(_messages.length - 10)
+            : _messages;
+
+        for (final msg in relevantMessages) {
+          historyBuffer.writeln(
+            '${msg.type.name.toUpperCase()}: ${msg.content}',
+          );
+          // Load attachments for this message
+          final msgAttachments = await _loadConversationAttachments(msg, []);
+          historyAttachments.addAll(msgAttachments);
+        }
+
+        // Include current message attachments if not already added
+        if (attachments.isNotEmpty) {
+          historyAttachments.addAll(attachments);
+        }
+
+        final combinedContext =
+            '''
+Associated Notes Context:
+$noteContext
+
+Recent Conversation History:
+$historyBuffer
+''';
+
+        final allAttachments = [...noteAttachments, ...historyAttachments];
+
+        // Trigger planning (fire and forget from UI perspective, handled by service listener)
+        setState(() {
+          _waitingForAgentResult = true;
+        });
+
+        agentService.generatePlan(
+          content,
+          activeTools: activeTools,
+          executeTool: _createToolExecutor(),
+          context: combinedContext,
+          contextAttachments: allAttachments,
+        );
+
+        // In a real app we might want to persist this message to DB
+        // For V1, we add to local list. If we want persistence, we need to save it.
+        final savedMessage = await _conversationService.addAIResponse(
+          conversationId: _conversation!.id,
+          content: '(Agent Plan)',
+          metadata: {'is_agent_plan': true},
+        );
+
+        if (!mounted) return;
+        setState(() {
+          _messages.add(savedMessage);
+          _isSending = false;
+          _currentRequestId = null;
+        });
+        _scrollToBottom();
+        return;
+      }
 
       final aiResponse = await _generateAIResponse(
         content,
@@ -723,6 +998,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         conversationId: _conversation!.id,
         content: aiResponse.content,
         metadata: aiResponse.metadata,
+        modelUsed: aiResponse.metadata?['modelUsed'] as String?,
       );
       if (!mounted) return;
 
@@ -861,11 +1137,26 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         enableTools: _hasAnyTools || _selectedModelFeatures.isNotEmpty,
         executeTool: (serviceName, toolName, params, context) async {
           return _runWithToolStatus(serviceName, toolName, () async {
+            // Handle AI Tools
             if (_aiToolBundles.containsKey(serviceName)) {
               final runtime = await _getAiToolRuntime(serviceName);
               return runtime.invoke(toolName, params, context);
             }
 
+            // Handle System Tools (native tools from AgentService)
+            if (serviceName == BuiltInToolsService.systemToolsServiceKey) {
+              final agentService = this.context.read<AgentService>();
+              final nativeTool = agentService.nativeTools
+                  .where((t) => t.name == toolName)
+                  .firstOrNull;
+              if (nativeTool != null) {
+                final result = await nativeTool.execute(params);
+                return result is String ? result : result.toString();
+              }
+              return 'Error: System tool "$toolName" not found';
+            }
+
+            // Handle MCP Tools
             return McpToolIntegrationService.executeToolCall(
               serviceName: serviceName,
               toolName: toolName,
@@ -909,10 +1200,31 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     final contextMessage = await noteBuilder.buildContextMessage(_notes);
 
     final conversationMessages = <PromptMessage>[];
+    final currentModelId =
+        _selectedModel?.id ?? getIt<ModelSelector>().currentModelConfig?.id;
+
     for (final message in _messages) {
-      final role = message.type == MessageType.user
+      // Filter out synthesized error messages
+      if (message.metadata?['isSynthesized'] == true) {
+        continue;
+      }
+
+      var role = message.type == MessageType.user
           ? PromptRole.user
           : PromptRole.assistant;
+      var content = message.content;
+
+      // If the message was generated by a different model, treat it as a user message
+      // to avoid potential format/capability mismatches (e.g. thoughtSignature)
+      if (role == PromptRole.assistant) {
+        final modelUsed = message.metadata?['modelUsed'] as String?;
+        if (currentModelId != null &&
+            (modelUsed == null || modelUsed != currentModelId)) {
+          role = PromptRole.user;
+          final modelLabel = modelUsed ?? 'an earlier model';
+          content = '[Response from $modelLabel]:\n$content';
+        }
+      }
 
       // Prepend every user message with a timestamp context message.
       // The timestamp is based on the message's timestamp for KV-cache friendly reuse.
@@ -942,7 +1254,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
       final promptMessage = PromptMessage(
         role: role,
-        content: message.content,
+        content: content,
         attachments: attachments,
         metadata: message.metadata,
       );
@@ -1062,6 +1374,24 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     final files = <PlatformFile>[];
     for (final path in message.attachmentPaths) {
       try {
+        // Check if it's a URI
+        final isUri =
+            path.startsWith('http://') ||
+            path.startsWith('https://') ||
+            path.startsWith('gs://');
+
+        if (isUri) {
+          files.add(
+            PlatformFile(
+              name: path.split('/').last,
+              path: path,
+              size: 0,
+              bytes: null,
+            ),
+          );
+          continue;
+        }
+
         final file = File(path);
         if (!file.existsSync()) {
           continue;
@@ -1091,6 +1421,16 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     }
 
     if (file.path != null) {
+      // Check if it's a URI
+      final isUri =
+          file.path!.startsWith('http://') ||
+          file.path!.startsWith('https://') ||
+          file.path!.startsWith('gs://');
+
+      if (isUri) {
+        return file;
+      }
+
       try {
         final bytes = await File(file.path!).readAsBytes();
         return PlatformFile(
@@ -1110,6 +1450,119 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   }
 
   Future<void> _attachFiles() async {
+    final l10n = AppLocalizations.of(context)!;
+
+    // Show dialog to choose between file and URI
+    final source = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(l10n.attachFile),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'file'),
+            child: Row(
+              children: [
+                const Icon(Icons.upload_file),
+                const SizedBox(width: 12),
+                Text(l10n.selectFromDevice),
+              ],
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'uri'),
+            child: Row(
+              children: [
+                const Icon(Icons.link),
+                const SizedBox(width: 12),
+                Text(l10n.enterUri),
+              ],
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'draw'),
+            child: Row(
+              children: [
+                const Icon(Icons.brush),
+                const SizedBox(width: 12),
+                const Text('Draw'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (source == 'file') {
+      await _pickFilesFromDevice();
+    } else if (source == 'uri') {
+      await _showUriInputDialog();
+    } else if (source == 'draw') {
+      await _openDrawingEditor();
+    }
+  }
+
+  Future<String?> _showAgentConflictDialog(AgentService agentService) async {
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Task in Progress'),
+        content: const Text(
+          'An agent task is currently running in another conversation. Do you want to switch to that task or abort it?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'cancel'),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'abort'),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Abort & Start New'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, 'switch'),
+            child: const Text('Switch to Task'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openDrawingEditor() async {
+    try {
+      final File? drawnFile = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const DrawingEditor()),
+      );
+
+      if (drawnFile != null) {
+        final bytes = await drawnFile.readAsBytes();
+        final platformFile = PlatformFile(
+          name: drawnFile.path.split('/').last,
+          size: bytes.length,
+          bytes: bytes,
+          path: drawnFile.path,
+        );
+        setState(() {
+          _attachedFiles.add(platformFile);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding drawing: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickFilesFromDevice() async {
     try {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
@@ -1131,6 +1584,78 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
           ),
         );
       }
+    }
+  }
+
+  Future<void> _showUriInputDialog() async {
+    final l10n = AppLocalizations.of(context)!;
+    final controller = TextEditingController();
+
+    final uri = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.enterUri),
+        content: TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            labelText: 'URI',
+            hintText: 'https://example.com/file.pdf',
+            border: const OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isNotEmpty) {
+                Navigator.pop(context, text);
+              }
+            },
+            child: Text(l10n.add),
+          ),
+        ],
+      ),
+    );
+
+    if (uri != null && uri.isNotEmpty) {
+      // Create a PlatformFile that represents a URI
+      // We use a special convention where bytes is null and path is the URI
+      // The name is extracted from the URI
+      String name;
+      try {
+        final uriObj = Uri.parse(uri);
+        if (uriObj.pathSegments.isNotEmpty) {
+          name = uriObj.pathSegments.last;
+        } else {
+          name = 'attachment_${DateTime.now().millisecondsSinceEpoch}';
+        }
+      } catch (e) {
+        name = uri.split('/').last;
+      }
+
+      if (name.isEmpty || !name.contains('.')) {
+        // If no extension found, try to guess from common patterns or leave as is
+        // But for now, just ensure it has a name
+        if (name.isEmpty) {
+          name = 'attachment_${DateTime.now().millisecondsSinceEpoch}';
+        }
+      }
+
+      final file = PlatformFile(
+        name: name,
+        size: 0, // Unknown size
+        path: uri,
+        bytes: null,
+      );
+
+      setState(() {
+        _attachedFiles.add(file);
+      });
     }
   }
 
@@ -1222,6 +1747,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   }
 
   Future<void> _previewAttachedFile(PlatformFile file) async {
+    if (file.path != null &&
+        (file.path!.startsWith('http://') ||
+            file.path!.startsWith('https://'))) {
+      final uri = Uri.tryParse(file.path!);
+      if (uri != null && await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    }
     await FileUtils.openPlatformFile(file, context);
   }
 
@@ -1320,8 +1854,14 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     final activeMcpCount = _selectedMcpEndpointIds.length;
     final activeLocalCount = _selectedAiToolServices.length;
     final activeModelFeaturesCount = _selectedModelFeatures.length;
+    final activeBuiltInToolsCount = _selectedBuiltInTools.length;
+    final activeSystemToolsCount = _selectedSystemTools.length;
     final totalActiveCount =
-        activeMcpCount + activeLocalCount + activeModelFeaturesCount;
+        activeMcpCount +
+        activeLocalCount +
+        activeModelFeaturesCount +
+        activeBuiltInToolsCount +
+        activeSystemToolsCount;
     final headerTitle = l10n.mcpAndLocalTools;
 
     // Get current model config to check for features
@@ -1389,6 +1929,67 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 8),
+                    // Built-in Tools
+                    if (BuiltInToolsService.tools.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.build,
+                            size: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.builtInTools,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.8),
+                                ),
+                          ),
+                          const Spacer(),
+                          if (activeBuiltInToolsCount > 0)
+                            ActiveToolCountBadge(
+                              count: activeBuiltInToolsCount,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ...BuiltInToolsService.tools.map((tool) {
+                        final isSelected = _selectedBuiltInTools.contains(
+                          tool.id,
+                        );
+                        return CheckboxListTile(
+                          title: Text(tool.name),
+                          subtitle: Text(
+                            tool.description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          value: isSelected,
+                          secondary: Icon(tool.icon, color: tool.color),
+                          onChanged: (value) {
+                            setState(() {
+                              if (value == true) {
+                                _selectedBuiltInTools.add(tool.id);
+                              } else {
+                                _selectedBuiltInTools.remove(tool.id);
+                              }
+                            });
+                          },
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                        );
+                      }),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                    ],
                     Row(
                       children: [
                         Icon(
@@ -1500,6 +2101,70 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
                               Icons.smart_toy,
                               size: 16,
                               color: selected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    // System Tools (native tools from AgentService)
+                    if (BuiltInToolsService.systemTools.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.memory,
+                            size: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'System Tools',
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.8),
+                                ),
+                          ),
+                          const Spacer(),
+                          if (activeSystemToolsCount > 0)
+                            ActiveToolCountBadge(
+                              count: activeSystemToolsCount,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: BuiltInToolsService.systemTools.map((tool) {
+                          final isSelected = _selectedSystemTools.contains(
+                            tool.id,
+                          );
+                          return FilterChip(
+                            label: Text(tool.name),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _selectedSystemTools.add(tool.id);
+                                } else {
+                                  _selectedSystemTools.remove(tool.id);
+                                }
+                              });
+                            },
+                            avatar: Icon(
+                              tool.icon,
+                              size: 16,
+                              color: isSelected
                                   ? Theme.of(context).colorScheme.primary
                                   : Theme.of(
                                       context,
@@ -2027,8 +2692,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
           // Attached files section
           _buildAttachedFilesSection(),
           // MCP selection section
-          if (_availableMcpEndpoints.isNotEmpty || _aiToolBundles.isNotEmpty)
-            _buildMcpSelectionSection(),
+          if (_hasAvailableTools) _buildMcpSelectionSection(),
           // Input area
           Container(
             padding: const EdgeInsets.all(16.0),
@@ -2390,6 +3054,49 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   Widget _buildMessageCard(ConversationMessage message) {
     final l10n = AppLocalizations.of(context)!;
+
+    // Agent Plan Widget
+    if (message.metadata?['is_agent_plan'] == true) {
+      return Consumer<AgentService>(
+        builder: (context, agentService, child) {
+          final isExecuting = agentService.isRunning;
+          final hasStartedExecution = agentService.tasks.any(
+            (t) => t.status != AgentTaskStatus.pending,
+          );
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Column(
+              children: [
+                // Show tree view during/after execution
+                if (hasStartedExecution)
+                  AgentTaskTreeWidget(
+                    onResume: () async {
+                      setState(() {
+                        _waitingForAgentResult = true;
+                      });
+                      await context.read<AgentService>().resumeExecution();
+                    },
+                  ),
+                // Show plan review when not executing and tasks are pending
+                if (!isExecuting && !hasStartedExecution)
+                  AgentPlanReviewWidget(
+                    onProceed: () {
+                      context.read<AgentService>().executePlan();
+                    },
+                    onCopy: (content) => copyContentToClipboard(content),
+                    onAddNote: (content) => handleAddContentToNote(
+                      content: content,
+                      contextNotes: _notes,
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
     final isUser = message.type == MessageType.user;
     final hasTools =
         message.metadata != null &&
@@ -2555,7 +3262,27 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       spacing: 6,
       runSpacing: 6,
       children: message.attachmentPaths.map((path) {
-        final label = path.split(Platform.pathSeparator).last;
+        String label;
+        final isUri =
+            path.startsWith('http://') ||
+            path.startsWith('https://') ||
+            path.startsWith('gs://');
+
+        if (isUri) {
+          try {
+            final uriObj = Uri.parse(path);
+            if (uriObj.pathSegments.isNotEmpty) {
+              label = uriObj.pathSegments.last;
+            } else {
+              label = path;
+            }
+          } catch (_) {
+            label = path.split('/').last;
+          }
+        } else {
+          label = path.split(Platform.pathSeparator).last;
+        }
+
         final extension = label.contains('.')
             ? label.split('.').last.toLowerCase()
             : null;
@@ -2569,6 +3296,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   }
 
   Future<void> _openAttachment(String path) async {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      final uri = Uri.tryParse(path);
+      if (uri != null) {
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          return;
+        }
+      }
+    }
     await FileUtils.openFile(path, context);
   }
 
@@ -2658,9 +3394,95 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     );
   }
 
+  void _onAgentStateChange() async {
+    // Safety check BEFORE accessing context or state
+    if (!mounted) return;
+    final agentService = _agentService;
+    if (agentService == null) return;
+    if (_isLoading)
+      return; // Wait for initialization to complete before updating executor
+
+    // CRITICAL FIX: Ensure AgentService uses the current, valid tool executor.
+    // When switching models or navigating, this screen is disposed and recreated,
+    // but AgentService persists. We must update the executor to use the NEW
+    // HeadlessWebView runtimes attached to this new screen instance.
+    if (agentService.isRunning || agentService.isPaused) {
+      agentService.updateToolExecutor(_createToolExecutor());
+    }
+
+    // If we just attached and agent is running, we should be waiting
+    if (agentService.isRunning && !_waitingForAgentResult) {
+      _waitingForAgentResult = true;
+    }
+
+    if (_waitingForAgentResult &&
+        !agentService.isRunning &&
+        agentService.finalAnswer != null) {
+      _waitingForAgentResult = false;
+
+      final content = agentService.finalAnswer!;
+      final metadata = agentService.finalMetadata ?? {};
+
+      // Add AI response to DB
+      final savedMessage = await _conversationService.addAIResponse(
+        conversationId: _conversation!.id,
+        content: content,
+        metadata: {...metadata, 'is_agent_summary': true},
+        modelUsed: metadata['modelUsed'] as String?,
+      );
+
+      if (mounted && content.trim().isNotEmpty) {
+        setState(() {
+          _messages.add(savedMessage);
+        });
+        _scrollToBottom();
+
+        // Clear agent state so future tasks can start without conflict dialog
+        // agentService.clearState();
+      }
+    }
+  }
+
+  /// Creates a tool executor that captures the current context and runtimes.
+  ToolExecutor _createToolExecutor() {
+    return (serviceName, toolName, params, ctx) async {
+      // Handle AI Tools
+      if (_aiToolBundles.containsKey(serviceName)) {
+        final runtime = await _getAiToolRuntime(serviceName);
+        return runtime.invoke(toolName, params, ctx);
+      }
+      // Handle System Tools (native tools from AgentService)
+      if (serviceName == BuiltInToolsService.systemToolsServiceKey) {
+        final agentService = _agentService!;
+        final nativeTool = agentService.nativeTools
+            .where((t) => t.name == toolName)
+            .firstOrNull;
+        if (nativeTool != null) {
+          final result = await nativeTool.execute(params);
+          return result is String ? result : result.toString();
+        }
+        return 'Error: System tool "$toolName" not found';
+      }
+      // Handle MCP Tools
+      return McpToolIntegrationService.executeToolCall(
+        serviceName: serviceName,
+        toolName: toolName,
+        parameters: params,
+        enabledEndpointIds: _selectedMcpEndpointIds.toList(),
+        generationContext: ctx,
+      );
+    };
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _agentService?.removeListener(_onAgentStateChange);
+
+    // Clean up SQL approval callback and session state
+    RunSqlTool.onWriteApprovalRequest = null;
+    RunSqlTool.resetSessionApproval();
+
     _resolveIterationPrompt(null);
     _messageController.dispose();
     _scrollController.dispose();

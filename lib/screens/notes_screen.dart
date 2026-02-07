@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
@@ -15,6 +16,9 @@ import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
 import 'note_action_app_selection_screen.dart';
 import 'conversation_chat_screen.dart';
+import 'package:file_picker/file_picker.dart';
+import '../services/import_service.dart';
+import '../services/logger_service.dart';
 import 'immersive_note_screen.dart';
 
 class NotesScreen extends StatefulWidget {
@@ -29,7 +33,8 @@ class _NotesScreenState extends State<NotesScreen> {
   List<Note> _selectedNotes = [];
   bool _isMultiSelectMode = false;
   Set<String> _selectedTags = {};
-  List<String> _availableTags = [];
+  // _availableTags removed - using provider directly
+
   Set<String> _selectedFilterIds = {
     'default',
   }; // 'default', 'pinned', 'archived', 'all', or custom filter IDs
@@ -37,9 +42,7 @@ class _NotesScreenState extends State<NotesScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadTags();
-    });
+    // _loadTags removed - tags are now derived directly from provider
   }
 
   @override
@@ -48,12 +51,64 @@ class _NotesScreenState extends State<NotesScreen> {
     super.dispose();
   }
 
-  void _loadTags() {
-    final appProvider = context.read<AppProvider>();
-    final allTags = appProvider.getAllAvailableTags();
-    setState(() {
-      _availableTags = ['all', ...allTags];
-    });
+  // _loadTags method removed
+
+  Future<void> _importFromZip() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['zip'],
+      );
+
+      if (result != null && result.files.single.path != null) {
+        if (!mounted) return;
+
+        // Show loading indicator
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => const Center(child: CircularProgressIndicator()),
+        );
+
+        final file = File(result.files.single.path!);
+        final stats = await ImportService().importFromMarkdownZip(
+          file,
+          context.read<AppProvider>(),
+        );
+
+        if (!mounted) return;
+        Navigator.of(context).pop(); // Dismiss loader
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Import Complete: $stats'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Refresh
+        context.read<AppProvider>().loadData();
+        context.read<AppProvider>().loadData();
+        // _loadTags(); removed
+      }
+    } catch (e) {
+      if (!mounted) return;
+      // Close loader if open?
+      // Hard to know if dialog is open easily without tracking.
+      // But standard interaction ensures we pop if we error after showing.
+      // Assuming loader acts as barrier.
+      try {
+        Navigator.of(context).pop();
+      } catch (_) {}
+
+      LoggerService.error('Import Error', error: e);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Import Failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -67,6 +122,9 @@ class _NotesScreenState extends State<NotesScreen> {
         notes.every((note) => _selectedNotes.contains(note));
     final noneSelected =
         notes.isNotEmpty && !notes.any((note) => _selectedNotes.contains(note));
+    final allArchived =
+        _selectedNotes.isNotEmpty &&
+        _selectedNotes.every((note) => note.isArchived);
 
     return Scaffold(
       appBar: AppBar(
@@ -119,6 +177,16 @@ class _NotesScreenState extends State<NotesScreen> {
                   case 'delete':
                     if (_selectedNotes.isNotEmpty) {
                       _deleteSelectedNotes();
+                    }
+                    break;
+                  case 'archive_all':
+                    if (_selectedNotes.isNotEmpty) {
+                      _toggleArchiveSelected(archive: true);
+                    }
+                    break;
+                  case 'unarchive_all':
+                    if (_selectedNotes.isNotEmpty) {
+                      _toggleArchiveSelected(archive: false);
                     }
                     break;
                 }
@@ -188,6 +256,20 @@ class _NotesScreenState extends State<NotesScreen> {
                     ],
                   ),
                 ),
+                PopupMenuItem(
+                  value: allArchived ? 'unarchive_all' : 'archive_all',
+                  enabled: _selectedNotes.isNotEmpty,
+                  child: Row(
+                    children: [
+                      Icon(
+                        allArchived ? Icons.unarchive : Icons.archive,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(allArchived ? l10n.unarchiveAll : l10n.archiveAll),
+                    ],
+                  ),
+                ),
               ],
             ),
             IconButton(
@@ -208,7 +290,11 @@ class _NotesScreenState extends State<NotesScreen> {
               tooltip: 'AI Conversation',
             ),
             MultiSelectTagFilter(
-              availableTags: _availableTags,
+              availableTags: [
+                'all',
+                ...context.watch<AppProvider>().getAllAvailableTags(),
+              ],
+
               selectedTags: _selectedTags,
               onSelectionChanged: (selectedTags) {
                 setState(() {
@@ -222,8 +308,29 @@ class _NotesScreenState extends State<NotesScreen> {
               icon: const Icon(Icons.refresh),
               onPressed: () {
                 context.read<AppProvider>().loadData();
-                _loadTags();
+                context.read<AppProvider>().loadData();
+                // _loadTags(); removed
               },
+            ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) {
+                if (value == 'import_zip') {
+                  _importFromZip();
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'import_zip',
+                  child: Row(
+                    children: [
+                      Icon(Icons.file_upload, size: 20),
+                      SizedBox(width: 8),
+                      Text('Import Markdown Zip'),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ],
@@ -256,38 +363,22 @@ class _NotesScreenState extends State<NotesScreen> {
                       ),
                       const SizedBox(height: 8),
                       // Filter tab strip
-                      Consumer<AppProvider>(
-                        builder: (context, appProvider, child) {
-                          // Update available tags when provider data changes
-                          final allTags = appProvider.getAllAvailableTags();
-                          final updatedAvailableTags = ['all', ...allTags];
-                          if (updatedAvailableTags.length !=
-                                  _availableTags.length ||
-                              !updatedAvailableTags.every(
-                                (tag) => _availableTags.contains(tag),
-                              )) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              setState(() {
-                                _availableTags = updatedAvailableTags;
-                              });
-                            });
-                          }
-
-                          return FilterTabStrip(
-                            selectedFilterIds: _selectedFilterIds,
-                            additionalSelectedTags: _selectedTags,
-                            customFilters: appProvider.filters,
-                            availableTags: _availableTags,
-                            onFilterSelected: _onFilterSelected,
-                            onFilterCreated: _onFilterCreated,
-                            onFilterUpdated: _onFilterUpdated,
-                            onFilterDeleted: _onFilterDeleted,
-                            onTagsUpdated: (tags) {
-                              setState(() {
-                                _selectedTags = tags;
-                              });
-                            },
-                          );
+                      FilterTabStrip(
+                        selectedFilterIds: _selectedFilterIds,
+                        additionalSelectedTags: _selectedTags,
+                        customFilters: appProvider.filters,
+                        availableTags: [
+                          'all',
+                          ...appProvider.getAllAvailableTags(),
+                        ],
+                        onFilterSelected: _onFilterSelected,
+                        onFilterCreated: _onFilterCreated,
+                        onFilterUpdated: _onFilterUpdated,
+                        onFilterDeleted: _onFilterDeleted,
+                        onTagsUpdated: (tags) {
+                          setState(() {
+                            _selectedTags = tags;
+                          });
                         },
                       ),
                     ],
@@ -298,11 +389,7 @@ class _NotesScreenState extends State<NotesScreen> {
       body: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
           // Load tags when data becomes available or when provider notifies of changes
-          if (!appProvider.isLoading && appProvider.notes.isNotEmpty) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _loadTags();
-            });
-          }
+          // Load tags callback removed
 
           if (appProvider.isLoading) {
             return const Center(child: CircularProgressIndicator());
@@ -789,6 +876,69 @@ class _NotesScreenState extends State<NotesScreen> {
     );
 
     _exitMultiSelectMode();
+  }
+
+  void _toggleArchiveSelected({required bool archive}) {
+    final appProvider = context.read<AppProvider>();
+    final l10n = AppLocalizations.of(context)!;
+
+    // Check for pinned notes if archiving
+    if (archive) {
+      final pinnedNotes = _selectedNotes.where((n) => n.pinned).toList();
+      if (pinnedNotes.isNotEmpty) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Cannot Archive Pinned Notes'),
+            content: Text(
+              'There are ${pinnedNotes.length} pinned notes selected. Please unpin them first before archiving.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(l10n.yes),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(archive ? l10n.archiveAll : l10n.unarchiveAll),
+        content: Text(
+          archive
+              ? 'Are you sure you want to archive ${_selectedNotes.length} notes?'
+              : 'Are you sure you want to unarchive ${_selectedNotes.length} notes?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              for (final note in _selectedNotes) {
+                // If archiving: set isArchived=true, pinned=false (done by check above but safe to enforce)
+                // If unarchiving: set isArchived=false.
+                final updatedNote = note.copyWith(
+                  isArchived: archive,
+                  pinned: archive ? false : note.pinned,
+                  updatedAt: DateTime.now(),
+                );
+                appProvider.updateNote(updatedNote);
+              }
+              _exitMultiSelectMode();
+            },
+            child: Text(archive ? l10n.archiveAll : l10n.unarchiveAll),
+          ),
+        ],
+      ),
+    );
   }
 }
 

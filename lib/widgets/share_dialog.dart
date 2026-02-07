@@ -6,21 +6,13 @@ import '../models/note.dart';
 import '../providers/app_provider.dart';
 import '../services/share_service.dart';
 
-enum _ShareAction {
-  pdf,
-  text,
-  clipboard,
-}
+enum _ShareAction { pdf, text, clipboard, zip }
 
 class ShareDialog extends StatefulWidget {
   final List<Note> notes;
   final String title;
 
-  const ShareDialog({
-    super.key,
-    required this.notes,
-    required this.title,
-  });
+  const ShareDialog({super.key, required this.notes, required this.title});
 
   @override
   State<ShareDialog> createState() => _ShareDialogState();
@@ -28,6 +20,7 @@ class ShareDialog extends StatefulWidget {
 
 class _ShareDialogState extends State<ShareDialog> {
   bool _includeSubNotesAndLinkedNotes = false;
+  bool _useSinglePageLayout = false;
   _ShareAction? _activeAction;
 
   @override
@@ -42,13 +35,10 @@ class _ShareDialogState extends State<ShareDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            l10n.shareDialogDescription,
-            style: theme.textTheme.bodyMedium,
-          ),
+          Text(l10n.shareDialogDescription, style: theme.textTheme.bodyMedium),
           const SizedBox(height: 16),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Checkbox(
                 value: _includeSubNotesAndLinkedNotes,
@@ -68,6 +58,27 @@ class _ShareDialogState extends State<ShareDialog> {
               ),
             ],
           ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Checkbox(
+                value: _useSinglePageLayout,
+                onChanged: isBusy
+                    ? null
+                    : (value) {
+                        setState(() {
+                          _useSinglePageLayout = value ?? false;
+                        });
+                      },
+              ),
+              Expanded(
+                child: Text(
+                  'Single page layout (for digital sharing)',
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           Text(
             l10n.notesToShare(widget.notes.length),
@@ -76,35 +87,51 @@ class _ShareDialogState extends State<ShareDialog> {
             ),
           ),
           const SizedBox(height: 24),
-          Row(
-            children: [
-              _buildShareOption(
-                icon: Icons.picture_as_pdf,
-                label: l10n.shareAsPdf,
-                color: theme.colorScheme.primary,
-                backgroundColor: theme.colorScheme.primaryContainer,
-                action: _ShareAction.pdf,
-                onTap: _shareAsPdf,
-              ),
-              const SizedBox(width: 16),
-              _buildShareOption(
-                icon: Icons.text_snippet,
-                label: l10n.shareAsText,
-                color: theme.colorScheme.secondary,
-                backgroundColor: theme.colorScheme.secondaryContainer,
-                action: _ShareAction.text,
-                onTap: _shareAsText,
-              ),
-              const SizedBox(width: 16),
-              _buildShareOption(
-                icon: Icons.copy,
-                label: l10n.copyToClipboard,
-                color: theme.colorScheme.tertiary,
-                backgroundColor: theme.colorScheme.tertiaryContainer,
-                action: _ShareAction.clipboard,
-                onTap: _copyToClipboard,
-              ),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildShareOption(
+                  icon: Icons.picture_as_pdf,
+                  label: l10n.shareAsPdf,
+                  color: theme.colorScheme.primary,
+                  backgroundColor: theme.colorScheme.primaryContainer,
+                  action: _ShareAction.pdf,
+                  onTap: _shareAsPdf,
+                ),
+                const SizedBox(width: 16),
+                _buildShareOption(
+                  icon: Icons.text_snippet,
+                  label: l10n.shareAsText,
+                  color: theme.colorScheme.secondary,
+                  backgroundColor: theme.colorScheme.secondaryContainer,
+                  action: _ShareAction.text,
+                  onTap: _shareAsText,
+                ),
+                const SizedBox(width: 16),
+                _buildShareOption(
+                  icon: Icons.folder_zip,
+                  label: 'Share as Zip',
+                  color: Colors.orange,
+                  backgroundColor: Colors.orange.withOpacity(0.2),
+                  // actually using theme.colorScheme.tertiaryContainer is safe if I change color to tertiary.
+                  // But Copy Clipboard uses tertiary.
+                  // I'll usage errorContainer or just a hardcoded color with opacity.
+                  // Let's use custom color.
+                  action: _ShareAction.zip,
+                  onTap: _shareAsZip,
+                ),
+                const SizedBox(width: 16),
+                _buildShareOption(
+                  icon: Icons.copy,
+                  label: l10n.copyToClipboard,
+                  color: theme.colorScheme.tertiary,
+                  backgroundColor: theme.colorScheme.tertiaryContainer,
+                  action: _ShareAction.clipboard,
+                  onTap: _copyToClipboard,
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -129,51 +156,45 @@ class _ShareDialogState extends State<ShareDialog> {
     final isActive = _activeAction == action;
     final isDisabled = _activeAction != null && !isActive;
 
-    return Expanded(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(48),
-            onTap: isDisabled ? null : () => _runWithAction(action, onTap),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: backgroundColor,
-                border: Border.all(
-                  color: isActive ? color : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: Center(
-                child: isActive
-                    ? SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(color),
-                        ),
-                      )
-                    : Icon(
-                        icon,
-                        size: 28,
-                        color: color,
-                      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(48),
+          onTap: isDisabled ? null : () => _runWithAction(action, onTap),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: backgroundColor,
+              border: Border.all(
+                color: isActive ? color : Colors.transparent,
+                width: 2,
               ),
             ),
+            child: Center(
+              child: isActive
+                  ? SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(color),
+                      ),
+                    )
+                  : Icon(icon, size: 28, color: color),
+            ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium,
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyMedium,
+        ),
+      ],
     );
   }
 
@@ -212,6 +233,8 @@ class _ShareDialogState extends State<ShareDialog> {
         appProvider: appProvider,
         l10n: l10n,
         pageSize: screenSize,
+        context: context,
+        useSinglePageLayout: _useSinglePageLayout,
       );
 
       if (!mounted) {
@@ -262,6 +285,39 @@ class _ShareDialogState extends State<ShareDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(l10n.errorSharingText(e.toString())),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _shareAsZip() async {
+    final appProvider = context.read<AppProvider>();
+    final l10n = AppLocalizations.of(context)!;
+
+    try {
+      await ShareService.shareAsMarkdownZip(
+        notes: widget.notes,
+        includeSubNotesAndLinkedNotes: _includeSubNotesAndLinkedNotes,
+        appProvider: appProvider,
+        l10n: l10n,
+      );
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Zip archive saved successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error sharing zip: $e'),
             backgroundColor: Colors.red,
           ),
         );

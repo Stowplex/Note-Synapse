@@ -3,6 +3,7 @@ import '../models/mcp_endpoint.dart';
 import '../models/generation_context.dart';
 import 'mcp_service.dart';
 import 'logger_service.dart';
+import 'service_locator.dart';
 
 /// Service for integrating MCP tools with AI models
 class McpToolIntegrationService {
@@ -13,9 +14,9 @@ class McpToolIntegrationService {
     final toolsByEndpoint = <String, List<McpTool>>{};
 
     for (final endpointId in endpointIds) {
-      final cache = await McpService.getCachedTools(endpointId);
+      final cache = await getIt<McpService>().getCachedTools(endpointId);
       if (cache != null && cache.tools.isNotEmpty) {
-        final endpoints = await McpService.getEndpoints();
+        final endpoints = await getIt<McpService>().getEndpoints();
         final endpoint = endpoints.firstWhere((e) => e.id == endpointId);
         toolsByEndpoint[endpoint.name] = cache.tools;
       }
@@ -31,36 +32,40 @@ class McpToolIntegrationService {
   ) {
     // Build enum of service names
     final serviceNames = toolsByEndpoint.keys.toList();
-    
+
     // Build detailed description with full tool information
     final toolsDescription = StringBuffer();
     toolsDescription
       ..writeln('Call an MCP tool. Available tools:\n')
       ..writeln(
-          'When you call this function, include the exact parameters required by the tool.')
+        'When you call this function, include the exact parameters required by the tool.',
+      )
       ..writeln(
-          'Provide them either inside the params object or as additional top-level fields.')
+        'Provide them either inside the params object or as additional top-level fields.',
+      )
       ..writeln(
-          'Arguments are named; order does not matter as long as you supply the correct keys.')
+        'Arguments are named; order does not matter as long as you supply the correct keys.',
+      )
       ..writeln(
-          'Do not wrap arguments inside an extra object named "param" or "parameters".');
-    
+        'Do not wrap arguments inside an extra object named "param" or "parameters".',
+      );
+
     for (final entry in toolsByEndpoint.entries) {
       final serviceName = entry.key;
       toolsDescription.writeln('=== Endpoint: $serviceName ===');
-      
+
       for (final tool in entry.value) {
         toolsDescription.writeln('Tool Name Argument: ${tool.name}');
-        
+
         if (tool.description != null && tool.description!.isNotEmpty) {
           toolsDescription.writeln('Description: ${tool.description}');
         }
-        
+
         if (tool.inputSchema != null) {
           final schema = tool.inputSchema!;
           final schemaType = schema['type'] ?? 'object';
           toolsDescription.writeln('Schema Type: $schemaType');
-          
+
           // Parse and display properties
           final properties = schema['properties'] as Map<String, dynamic>?;
           if (properties != null && properties.isNotEmpty) {
@@ -69,40 +74,51 @@ class McpToolIntegrationService {
               final details = paramDetails as Map<String, dynamic>;
               final paramType = details['type'] ?? 'any';
               final paramDesc = details['description'] ?? '';
-              toolsDescription.writeln('  - $paramName ($paramType): $paramDesc');
-              
+              toolsDescription.writeln(
+                '  - $paramName ($paramType): $paramDesc',
+              );
+
               // Include enum values if present
               if (details.containsKey('enum')) {
-                toolsDescription.writeln('    Allowed values: ${details['enum']}');
+                toolsDescription.writeln(
+                  '    Allowed values: ${details['enum']}',
+                );
               }
             });
-            
+
             // Show required parameters
             final required = schema['required'] as List?;
             if (required != null && required.isNotEmpty) {
-              toolsDescription.writeln('Required parameters: ${required.join(", ")}');
+              toolsDescription.writeln(
+                'Required parameters: ${required.join(", ")}',
+              );
             }
           }
         }
 
         if (tool.outputSchema != null) {
           final outputSchema = tool.outputSchema!;
-          final outputProperties = outputSchema['properties'] as Map<String, dynamic>?;
+          final outputProperties =
+              outputSchema['properties'] as Map<String, dynamic>?;
           if (outputProperties != null && outputProperties.isNotEmpty) {
             toolsDescription.writeln('Outputs:');
             outputProperties.forEach((outputName, outputDetails) {
               final details = outputDetails as Map<String, dynamic>;
               final outputType = details['type'] ?? 'any';
               final outputDesc = details['description'] ?? '';
-              toolsDescription.writeln('  - $outputName ($outputType): $outputDesc');
+              toolsDescription.writeln(
+                '  - $outputName ($outputType): $outputDesc',
+              );
 
               if (details.containsKey('enum')) {
-                toolsDescription.writeln('    Possible values: ${details['enum']}');
+                toolsDescription.writeln(
+                  '    Possible values: ${details['enum']}',
+                );
               }
             });
           }
         }
-        
+
         toolsDescription.writeln('');
       }
     }
@@ -140,32 +156,40 @@ class McpToolIntegrationService {
   ) {
     // Build enum of service names
     final serviceNames = toolsByEndpoint.keys.toList();
-    
+
     // Build detailed description with full tool information
     final toolsDescription = StringBuffer();
     toolsDescription.writeln('Call an MCP tool.');
-    toolsDescription.writeln('You must provide arguments as a JSON object with this shape:');
-    toolsDescription.writeln('{"service_name": "...", "tool_name": "...", "params": {"<required_param>": <value>, ...}}');
-    toolsDescription.writeln('Never omit the params field. Populate every required parameter exactly as listed.');
-    toolsDescription.writeln('If you do not have a value for a required parameter, ask the user for it.');
+    toolsDescription.writeln(
+      'You must provide arguments as a JSON object with this shape:',
+    );
+    toolsDescription.writeln(
+      '{"service_name": "...", "tool_name": "...", "params": {"<required_param>": <value>, ...}}',
+    );
+    toolsDescription.writeln(
+      'Never omit the params field. Populate every required parameter exactly as listed.',
+    );
+    toolsDescription.writeln(
+      'If you do not have a value for a required parameter, ask the user for it.',
+    );
     toolsDescription.writeln('\nAvailable tools:\n');
-    
+
     for (final entry in toolsByEndpoint.entries) {
       final serviceName = entry.key;
       toolsDescription.writeln('=== Endpoint: $serviceName ===');
-      
+
       for (final tool in entry.value) {
         toolsDescription.writeln('Tool Name Argument: ${tool.name}');
-        
+
         if (tool.description != null && tool.description!.isNotEmpty) {
           toolsDescription.writeln('Description: ${tool.description}');
         }
-        
+
         if (tool.inputSchema != null) {
           final schema = tool.inputSchema!;
           final schemaType = schema['type'] ?? 'object';
           toolsDescription.writeln('Schema Type: $schemaType');
-          
+
           // Parse and display properties
           final properties = schema['properties'] as Map<String, dynamic>?;
           if (properties != null && properties.isNotEmpty) {
@@ -174,40 +198,51 @@ class McpToolIntegrationService {
               final details = paramDetails as Map<String, dynamic>;
               final paramType = details['type'] ?? 'any';
               final paramDesc = details['description'] ?? '';
-              toolsDescription.writeln('  - $paramName ($paramType): $paramDesc');
-              
+              toolsDescription.writeln(
+                '  - $paramName ($paramType): $paramDesc',
+              );
+
               // Include enum values if present
               if (details.containsKey('enum')) {
-                toolsDescription.writeln('    Allowed values: ${details['enum']}');
+                toolsDescription.writeln(
+                  '    Allowed values: ${details['enum']}',
+                );
               }
             });
-            
+
             // Show required parameters
             final required = schema['required'] as List?;
             if (required != null && required.isNotEmpty) {
-              toolsDescription.writeln('Required parameters: ${required.join(", ")}');
+              toolsDescription.writeln(
+                'Required parameters: ${required.join(", ")}',
+              );
             }
           }
         }
 
         if (tool.outputSchema != null) {
           final outputSchema = tool.outputSchema!;
-          final outputProperties = outputSchema['properties'] as Map<String, dynamic>?;
+          final outputProperties =
+              outputSchema['properties'] as Map<String, dynamic>?;
           if (outputProperties != null && outputProperties.isNotEmpty) {
             toolsDescription.writeln('Outputs:');
             outputProperties.forEach((outputName, outputDetails) {
               final details = outputDetails as Map<String, dynamic>;
               final outputType = details['type'] ?? 'any';
               final outputDesc = details['description'] ?? '';
-              toolsDescription.writeln('  - $outputName ($outputType): $outputDesc');
+              toolsDescription.writeln(
+                '  - $outputName ($outputType): $outputDesc',
+              );
 
               if (details.containsKey('enum')) {
-                toolsDescription.writeln('    Possible values: ${details['enum']}');
+                toolsDescription.writeln(
+                  '    Possible values: ${details['enum']}',
+                );
               }
             });
           }
         }
-        
+
         toolsDescription.writeln('');
       }
     }
@@ -229,7 +264,8 @@ class McpToolIntegrationService {
           },
           'params': {
             'type': 'object',
-            'description': 'The parameters to pass to the tool (as a JSON object matching the tool\'s schema)',
+            'description':
+                'The parameters to pass to the tool (as a JSON object matching the tool\'s schema)',
           },
         },
         'required': ['service_name', 'tool_name', 'params'],
@@ -248,12 +284,22 @@ class McpToolIntegrationService {
 
     final buffer = StringBuffer();
     buffer.writeln('\n\n=== MCP TOOLS AVAILABLE ===\n');
-    buffer.writeln('You have access to external tools via the call_tool function.');
+    buffer.writeln(
+      'You have access to external tools via the call_tool function.',
+    );
     buffer.writeln('Use function calling to invoke these tools when needed.');
-    buffer.writeln('When you call call_tool, always include a params object and populate every required field exactly as defined by the schema.');
-    buffer.writeln('If a required value is missing, ask the user for it instead of guessing or omitting it.');
-    buffer.writeln('Validate that types match the schema before calling the tool.\n');
-    buffer.writeln('IMPORTANT: All tools MUST be called through call_tool via endpoint and tool name instead of calling tool\'s name directly.\n');
+    buffer.writeln(
+      'When you call call_tool, always include a params object and populate every required field exactly as defined by the schema.',
+    );
+    buffer.writeln(
+      'If a required value is missing, ask the user for it instead of guessing or omitting it.',
+    );
+    buffer.writeln(
+      'Validate that types match the schema before calling the tool.\n',
+    );
+    buffer.writeln(
+      'IMPORTANT: All tools MUST be called through call_tool via endpoint and tool name instead of calling tool\'s name directly.\n',
+    );
     buffer.writeln('''<example>
 Endpoint: example
 Tool Argument Name: tool_fn
@@ -269,18 +315,18 @@ tool_fn({a: "hello"})
     for (final entry in toolsByEndpoint.entries) {
       final serviceName = entry.key;
       buffer.writeln('=== Endpoint: $serviceName ===');
-      
+
       for (final tool in entry.value) {
         buffer.writeln('Tool Name Argument: ${tool.name}');
-        
+
         if (tool.description != null && tool.description!.isNotEmpty) {
           buffer.writeln('Description: ${tool.description}');
         }
-        
+
         if (tool.inputSchema != null) {
           final schema = tool.inputSchema!;
           final properties = schema['properties'] as Map<String, dynamic>?;
-          
+
           if (properties != null && properties.isNotEmpty) {
             buffer.writeln('Parameters:');
             properties.forEach((paramName, paramDetails) {
@@ -289,14 +335,14 @@ tool_fn({a: "hello"})
               final paramDesc = details['description'] ?? '';
               buffer.writeln('  - $paramName ($paramType): $paramDesc');
             });
-            
+
             final required = schema['required'] as List?;
             if (required != null && required.isNotEmpty) {
               buffer.writeln('Required: ${required.join(", ")}');
             }
           }
         }
-        
+
         buffer.writeln();
       }
     }
@@ -306,25 +352,29 @@ tool_fn({a: "hello"})
 
   /// Parse call_tool function arguments
   /// Handles named (object) format, key/value lists, and positional fallbacks
-  static Map<String, dynamic>? parseCallToolArguments(
-    dynamic argumentsRaw,
-  ) {
+  static Map<String, dynamic>? parseCallToolArguments(dynamic argumentsRaw) {
     try {
       late final Map<String, dynamic> arguments;
 
       if (argumentsRaw is Map) {
-        arguments = argumentsRaw.map((key, value) => MapEntry(key.toString(), value));
+        arguments = argumentsRaw.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
       } else if (argumentsRaw is List) {
         final listArguments = <String, dynamic>{};
         for (final entry in argumentsRaw) {
           if (entry is Map) {
-            final key = entry['name'] ?? entry['key'] ?? entry['field'] ?? entry['param'];
+            final key =
+                entry['name'] ??
+                entry['key'] ??
+                entry['field'] ??
+                entry['param'];
             if (key != null) {
               listArguments[key.toString()] = entry.containsKey('value')
                   ? entry['value']
                   : entry.containsKey('data')
-                      ? entry['data']
-                      : entry['argument'];
+                  ? entry['data']
+                  : entry['argument'];
               continue;
             }
           }
@@ -355,15 +405,19 @@ tool_fn({a: "hello"})
         return null;
       }
 
-      final serviceName = arguments['service_name'] as String? ??
+      final serviceName =
+          arguments['service_name'] as String? ??
           arguments['serviceName'] as String? ??
           arguments['service'] as String?;
-      final toolName = arguments['tool_name'] as String? ??
+      final toolName =
+          arguments['tool_name'] as String? ??
           arguments['toolName'] as String? ??
           arguments['tool'] as String?;
 
       if (serviceName == null || toolName == null) {
-        LoggerService.error('Missing required fields: service_name or tool_name');
+        LoggerService.error(
+          'Missing required fields: service_name or tool_name',
+        );
         return null;
       }
 
@@ -381,10 +435,12 @@ tool_fn({a: "hello"})
         final soleValue = params.values.first;
         if ((soleKey == 'param' || soleKey == 'params') &&
             soleValue is Map<String, dynamic>) {
-          params = soleValue.map((key, value) => MapEntry(key.toString(), value));
+          params = soleValue.map(
+            (key, value) => MapEntry(key.toString(), value),
+          );
         }
       }
-      
+
       // If params is not in nested format, check if all other fields are at top level
       if (params == null || params.isEmpty) {
         // Extract everything except service_name and tool_name as params
@@ -404,10 +460,8 @@ tool_fn({a: "hello"})
       }
 
       // If we still don't have params, fail
-      if (params.isEmpty) {
-        LoggerService.error('No params found in arguments');
-        return null;
-      }
+      // We allow empty params because some tools (like 'ls') take no arguments.
+      // Validation of required arguments happens at the tool execution level.
 
       return {
         'service_name': serviceName,
@@ -430,10 +484,11 @@ tool_fn({a: "hello"})
   }) async {
     try {
       // Find the endpoint by service name
-      final endpoints = await McpService.getEndpoints();
+      final endpoints = await getIt<McpService>().getEndpoints();
       final endpoint = endpoints.firstWhere(
         (e) => e.name == serviceName && enabledEndpointIds.contains(e.id),
-        orElse: () => throw Exception('Service not found or not enabled: $serviceName'),
+        orElse: () =>
+            throw Exception('Service not found or not enabled: $serviceName'),
       );
 
       final requestId = generationContext.ensureRequestId();
@@ -444,7 +499,7 @@ tool_fn({a: "hello"})
       LoggerService.debug('Tool parameters: ${jsonEncode(parameters)}');
 
       // Call the tool
-      final result = await McpService.callTool(
+      final result = await getIt<McpService>().callTool(
         endpointId: endpoint.id,
         toolName: toolName,
         arguments: parameters,
@@ -464,20 +519,20 @@ tool_fn({a: "hello"})
     Map<String, dynamic> responseData,
   ) {
     try {
-      if (responseData['candidates'] == null || 
+      if (responseData['candidates'] == null ||
           responseData['candidates'].isEmpty) {
         return null;
       }
 
       final candidate = responseData['candidates'][0];
       final content = candidate['content'];
-      
+
       if (content == null || content['parts'] == null) {
         return null;
       }
 
       final functionCalls = <Map<String, dynamic>>[];
-      
+
       for (final part in content['parts']) {
         if (part.containsKey('functionCall')) {
           functionCalls.add(part['functionCall'] as Map<String, dynamic>);
@@ -497,14 +552,13 @@ tool_fn({a: "hello"})
     Map<String, dynamic> responseData,
   ) {
     try {
-      if (responseData['choices'] == null || 
-          responseData['choices'].isEmpty) {
+      if (responseData['choices'] == null || responseData['choices'].isEmpty) {
         return null;
       }
 
       final choice = responseData['choices'][0];
       final message = choice['message'];
-      
+
       if (message == null || !message.containsKey('function_call')) {
         return null;
       }

@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import '../models/model_type.dart';
 import '../services/model_storage_service.dart';
+import '../services/service_locator.dart';
+import 'package:provider/provider.dart';
+import '../l10n/app_localizations.dart';
+import '../providers/app_provider.dart';
 import 'model_configuration_screen.dart';
 
 class ModelSelectionScreen extends StatefulWidget {
-  const ModelSelectionScreen({super.key});
+  final bool isOnboarding;
+
+  const ModelSelectionScreen({super.key, this.isOnboarding = false});
 
   @override
   State<ModelSelectionScreen> createState() => _ModelSelectionScreenState();
@@ -23,7 +29,7 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
 
   Future<void> _loadSelectedModel() async {
     try {
-      final activeModel = await ModelStorageService.getActiveModel();
+      final activeModel = await getIt<ModelStorageService>().getActiveModel();
       setState(() {
         _selectedModel = activeModel?.type ?? ModelType.gemini;
       });
@@ -50,22 +56,30 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
 
     try {
       // Check if any model of this type is already configured
-      final models = await ModelStorageService.getConfiguredModels();
+      final models = await getIt<ModelStorageService>().getConfiguredModels();
       final isConfigured = models.any((m) => m.type == _selectedModel);
 
       if (isConfigured) {
         // Model is already configured, proceed to main app
+        if (widget.isOnboarding) {
+          if (mounted) {
+            await context.read<AppProvider>().setOnboardingCompleted(true);
+          }
+        }
+
         // We might want to ensure it's active if it's not
-        final activeModel = await ModelStorageService.getActiveModel();
+        final activeModel = await getIt<ModelStorageService>().getActiveModel();
         if (activeModel?.type != _selectedModel) {
           final modelToActivate = models.firstWhere(
             (m) => m.type == _selectedModel,
           );
-          await ModelStorageService.activateModel(modelToActivate.id);
+          await getIt<ModelStorageService>().activateModel(modelToActivate.id);
         }
 
         if (mounted) {
-          Navigator.of(context).pushReplacementNamed('/main');
+          Navigator.of(
+            context,
+          ).pushNamedAndRemoveUntil('/main', (route) => false);
         }
       } else {
         // Navigate to configuration screen
@@ -75,8 +89,10 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
         if (mounted) {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (context) =>
-                  ModelConfigurationScreen(initialType: _selectedModel),
+              builder: (context) => ModelConfigurationScreen(
+                initialType: _selectedModel,
+                isOnboarding: widget.isOnboarding,
+              ),
             ),
           );
         }
@@ -106,7 +122,7 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'Choose Your AI Model',
+                AppLocalizations.of(context)!.onboardingChooseModelTitle,
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -114,7 +130,7 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Select the AI model that best fits your needs',
+                AppLocalizations.of(context)!.onboardingChooseModelSubtitle,
                 style: Theme.of(
                   context,
                 ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
@@ -165,6 +181,29 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
                       : const Text('Continue'),
                 ),
               ),
+              if (widget.isOnboarding) ...[
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 50,
+                  child: TextButton(
+                    onPressed: () async {
+                      if (context.mounted) {
+                        await context
+                            .read<AppProvider>()
+                            .setOnboardingCompleted(true);
+                      }
+                      if (context.mounted) {
+                        Navigator.of(
+                          context,
+                        ).pushNamedAndRemoveUntil('/main', (route) => false);
+                      }
+                    },
+                    child: Text(
+                      AppLocalizations.of(context)!.onboardingConfigLater,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -254,9 +293,9 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
   String _getModelDescription(ModelType modelType) {
     switch (modelType) {
       case ModelType.gemini:
-        return 'Google\'s most advanced model with full multimodal capabilities';
+        return AppLocalizations.of(context)!.geminiModelDescription;
       case ModelType.openaiCompatible:
-        return 'Compatible with OpenAI API endpoints with configurable capabilities';
+        return AppLocalizations.of(context)!.openaiCompatibleModelDescription;
     }
   }
 }

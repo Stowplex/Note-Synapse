@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
+import 'package:sqflite/sqflite.dart';
 import 'package:note_synapse/l10n/app_localizations.dart';
 import '../../services/database_service.dart';
 import '../../utils/file_utils.dart';
@@ -15,19 +16,29 @@ class FileManagerTab extends StatefulWidget {
 }
 
 class _FileManagerTabState extends State<FileManagerTab> {
+  Database? _rawDb;
+  String? _dbConnectionError;
   List<FileSystemEntity> _files = [];
-  Set<String> _usedFileNames = {};
-  Set<String> _selectedFiles = {};
+  final Set<String> _usedFileNames = {};
+  final Set<String> _selectedFiles = {};
   bool _isLoading = true;
   String _currentPath = '';
   String _rootAttachmentsPath = '';
   String _rootCachePath = '';
   bool _isAttachmentsDir = true; // Toggle between Attachments and Cache
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _initPaths();
+  }
+
+  @override
+  void dispose() {
+    _rawDb?.close();
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _initPaths() async {
@@ -37,6 +48,27 @@ class _FileManagerTabState extends State<FileManagerTab> {
 
       final cacheDir = await getTemporaryDirectory();
       _rootCachePath = cacheDir.path;
+
+      // Open raw database connection for file usage checking
+      try {
+        final dbPath = await DatabaseService().getDatabasePath();
+        _rawDb = await openDatabase(dbPath);
+        _dbConnectionError = null;
+      } catch (e) {
+        _dbConnectionError = e.toString();
+        LoggerService.error(
+          'Could not connect to database for usage check: $e',
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Database connection failed: $e'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
 
       _currentPath = _rootAttachmentsPath;
       await _loadFiles();
@@ -91,20 +123,26 @@ class _FileManagerTabState extends State<FileManagerTab> {
 
   Future<void> _checkFileUsage() async {
     _usedFileNames.clear();
+    if (_rawDb == null) {
+      // Cannot check usage without DB connection
+      return;
+    }
     try {
-      final db = await DatabaseService().database;
+      final db = _rawDb!;
 
-      // Check attachments table
+      // Check attachments table - check BOTH filePath and fileName columns
+      // for consistency with _showFileUsageDetails query
       final attachments = await db.query(
         'attachments',
-        columns: ['filePath', 'isRelativePath'],
+        columns: ['filePath', 'fileName'],
       );
       for (final row in attachments) {
         final filePath = row['filePath'] as String;
-        final isRelative = (row['isRelativePath'] as int) == 1;
-        if (isRelative) {
-          // Extract filename from relative path (e.g., attachments/filename.ext)
-          final fileName = path.basename(filePath);
+        final fileName = row['fileName'] as String?;
+        // Add basename from filePath (works for both relative and absolute paths)
+        _usedFileNames.add(path.basename(filePath));
+        // Also add fileName directly if present
+        if (fileName != null && fileName.isNotEmpty) {
           _usedFileNames.add(fileName);
         }
       }
@@ -112,13 +150,13 @@ class _FileManagerTabState extends State<FileManagerTab> {
       // Check conversation_attachments table
       final convAttachments = await db.query(
         'conversation_attachments',
-        columns: ['filePath', 'isRelativePath'],
+        columns: ['filePath', 'fileName'],
       );
       for (final row in convAttachments) {
         final filePath = row['filePath'] as String;
-        final isRelative = (row['isRelativePath'] as int) == 1;
-        if (isRelative) {
-          final fileName = path.basename(filePath);
+        final fileName = row['fileName'] as String?;
+        _usedFileNames.add(path.basename(filePath));
+        if (fileName != null && fileName.isNotEmpty) {
           _usedFileNames.add(fileName);
         }
       }
@@ -231,6 +269,146 @@ class _FileManagerTabState extends State<FileManagerTab> {
     }
   }
 
+  Future<void> _showFileUsageDetails(String fileName) async {
+    final l10n = AppLocalizations.of(context)!;
+    if (_rawDb == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.databaseNotConnected),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    List<Map<String, Object?>> noteReferences = [];
+    List<Map<String, Object?>> convReferences = [];
+
+    try {
+      // Query note attachments that reference this file
+      noteReferences = await _rawDb!.rawQuery(
+        '''
+        SELECT n.id, n.title, substr(n.content, 1, 100) as digest
+        FROM attachments a
+        LEFT JOIN notes n ON a.noteId = n.id
+        WHERE a.filePath LIKE ? OR a.fileName = ?
+      ''',
+        ['%$fileName', fileName],
+      );
+
+      // Query conversation attachments that reference this file
+      convReferences = await _rawDb!.rawQuery(
+        '''
+        SELECT ca.messageId, substr(cm.content, 1, 100) as digest
+        FROM conversation_attachments ca
+        LEFT JOIN conversation_messages cm ON ca.messageId = cm.id
+        WHERE ca.filePath LIKE ? OR ca.fileName = ?
+      ''',
+        ['%$fileName', fileName],
+      );
+    } catch (e) {
+      LoggerService.error('Error querying file usage: $e');
+    }
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.fileUsageDetails),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  fileName,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                if (noteReferences.isEmpty && convReferences.isEmpty)
+                  Text(
+                    l10n.noReferencesFound,
+                    style: TextStyle(color: Colors.orange[700]),
+                  )
+                else ...[
+                  if (noteReferences.isNotEmpty) ...[
+                    Text(
+                      l10n.usedByNotes(noteReferences.length),
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 8),
+                    ...noteReferences.map((ref) {
+                      final title = ref['title'] as String?;
+                      final digest = ref['digest'] as String?;
+                      final noteExists = title != null;
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                noteExists ? title : l10n.noteNoLongerExists,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: noteExists ? null : Colors.red,
+                                ),
+                              ),
+                              if (digest != null && digest.isNotEmpty)
+                                Text(
+                                  digest,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                  if (convReferences.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      l10n.usedByConversations(convReferences.length),
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 8),
+                    ...convReferences.map((ref) {
+                      final digest = ref['digest'] as String?;
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Text(
+                            digest ?? l10n.messageNoLongerExists,
+                            style: Theme.of(context).textTheme.bodySmall,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l10n.close),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _renameFile(File file) async {
     final l10n = AppLocalizations.of(context)!;
     final fileName = path.basename(file.path);
@@ -277,6 +455,12 @@ class _FileManagerTabState extends State<FileManagerTab> {
     final l10n = AppLocalizations.of(context)!;
     final root = _isAttachmentsDir ? _rootAttachmentsPath : _rootCachePath;
     final isAtRoot = _currentPath == root;
+
+    final displayedFiles = _files.where((entity) {
+      final searchText = _searchController.text.toLowerCase();
+      if (searchText.isEmpty) return true;
+      return path.basename(entity.path).toLowerCase().contains(searchText);
+    }).toList();
 
     return Column(
       children: [
@@ -329,6 +513,23 @@ class _FileManagerTabState extends State<FileManagerTab> {
             ],
           ),
         ),
+        // Search Bar
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: TextField(
+            controller: _searchController,
+            decoration: const InputDecoration(
+              labelText: 'Search',
+              hintText: 'Search files...',
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            ),
+            onChanged: (value) {
+              setState(() {});
+            },
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Row(
@@ -361,6 +562,24 @@ class _FileManagerTabState extends State<FileManagerTab> {
             ],
           ),
         ),
+        // Warning banner when DB not connected
+        if (_rawDb == null && _isAttachmentsDir)
+          Container(
+            color: Colors.red.withValues(alpha: 0.1),
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                const Icon(Icons.warning, color: Colors.red),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${l10n.databaseNotConnected}. ${l10n.fileUsageUnavailable}\n${_dbConnectionError ?? ""}',
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
+              ],
+            ),
+          ),
         if (_isLoading)
           const Expanded(child: Center(child: CircularProgressIndicator()))
         else if (_files.isEmpty)
@@ -368,9 +587,9 @@ class _FileManagerTabState extends State<FileManagerTab> {
         else
           Expanded(
             child: ListView.builder(
-              itemCount: _files.length,
+              itemCount: displayedFiles.length,
               itemBuilder: (context, index) {
-                final entity = _files[index];
+                final entity = displayedFiles[index];
                 final name = path.basename(entity.path);
                 final isDir = entity is Directory;
                 final isSelected = _selectedFiles.contains(entity.path);
@@ -404,6 +623,12 @@ class _FileManagerTabState extends State<FileManagerTab> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (!isDir && _isAttachmentsDir && isAtRoot)
+                        IconButton(
+                          icon: const Icon(Icons.info_outline),
+                          tooltip: l10n.showDetails,
+                          onPressed: () => _showFileUsageDetails(name),
+                        ),
                       if (!isDir)
                         IconButton(
                           icon: const Icon(Icons.edit),
@@ -420,7 +645,7 @@ class _FileManagerTabState extends State<FileManagerTab> {
                   ),
                   onTap: () {
                     if (isDir) {
-                      _navigateToDirectory(entity as Directory);
+                      _navigateToDirectory(entity);
                     } else {
                       _toggleSelection(entity.path);
                     }

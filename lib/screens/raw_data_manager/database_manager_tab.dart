@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import 'package:note_synapse/l10n/app_localizations.dart';
 import '../../services/database_service.dart';
 import '../../services/ai_service.dart';
+import '../../services/service_locator.dart';
 
 import 'package:note_synapse/widgets/interactive_checkbox_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -38,10 +39,12 @@ class _DatabaseManagerTabState extends State<DatabaseManagerTab> {
   bool _isAiLoading = false;
   int _selectedViewIndex = 0;
 
+  bool _hasInitialized = false;
+
   @override
   void initState() {
     super.initState();
-    _openDefaultDatabase();
+    // Don't call _openDefaultDatabase here - context is not ready
   }
 
   @override
@@ -49,6 +52,11 @@ class _DatabaseManagerTabState extends State<DatabaseManagerTab> {
     super.didChangeDependencies();
     if (_statusMessage.isEmpty) {
       _statusMessage = AppLocalizations.of(context)!.notConnected;
+    }
+    // Initialize database only once, after context is available
+    if (!_hasInitialized) {
+      _hasInitialized = true;
+      _openDefaultDatabase();
     }
   }
 
@@ -108,7 +116,7 @@ class _DatabaseManagerTabState extends State<DatabaseManagerTab> {
       await FileSaver.instance.saveAs(
         name: name,
         bytes: bytes,
-        ext: 'db',
+        fileExtension: 'db',
         mimeType: MimeType.other,
       );
 
@@ -198,7 +206,7 @@ Do NOT execute queries yourself, just suggest them.
 The response shall be in markdown format.
 ''';
 
-      final response = await AIService.chatAI(
+      final response = await getIt<AIService>().chatAI(
         '$systemPrompt\n\nUser Question: $message',
       );
 
@@ -369,9 +377,14 @@ The response shall be in markdown format.
                                         constraints: const BoxConstraints(
                                           maxWidth: 200,
                                         ),
-                                        child: Text(
-                                          v.toString(),
-                                          overflow: TextOverflow.ellipsis,
+                                        child: SingleChildScrollView(
+                                          scrollDirection: Axis.horizontal,
+                                          child: SelectableText(
+                                            v.toString(),
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.bodyMedium,
+                                          ),
                                         ),
                                       ),
                                     ),

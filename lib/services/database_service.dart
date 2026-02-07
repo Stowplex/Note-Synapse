@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 // Conditional imports for platform-specific code
 import 'database_service_io.dart'
@@ -21,8 +23,9 @@ import '../models/attachment.dart';
 import 'logger_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
+import '../utils/global_keys.dart';
+import '../screens/recovery_screen.dart';
 
-// Migration step configuration
 class MigrationStep {
   final String description;
   final Future<void> Function(Database db, {required bool isBackupMigration})
@@ -43,52 +46,55 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 27;
+  static const int DATABASE_VERSION = 36; // Target schema version
+  static const int SQFLITE_VERSION =
+      999; // High value to prevent sqflite onUpgrade
 
   // Table schema constants - single source of truth for all table definitions
   static const String _createNotesTable = '''
       CREATE TABLE notes(
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        content TEXT NOT NULL,
-        type TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL,
-        scheduledAt TEXT,
-        completeBy TEXT,
-        status TEXT,
-        completionPercentage REAL,
-        pinned INTEGER NOT NULL DEFAULT 0,
-        isArchived INTEGER NOT NULL DEFAULT 0
+        id TEXT PRIMARY KEY, -- Unique identifier
+        title TEXT NOT NULL, -- Note title
+        content TEXT NOT NULL, -- Note content
+        type TEXT NOT NULL, -- 'note' or 'task'
+        createdAt INTEGER NOT NULL, -- Creation timestamp
+        updatedAt INTEGER NOT NULL, -- Last update timestamp
+        scheduledAt TEXT, -- Scheduled date (for tasks)
+        completeBy TEXT, -- Due date (for tasks)
+        status TEXT, -- Task status: 'todo', 'inProgress', 'completed', 'cancelled'
+        completionPercentage REAL, -- Task completion percentage
+        pinned INTEGER NOT NULL DEFAULT 0, -- Whether note is pinned
+        isArchived INTEGER NOT NULL DEFAULT 0, -- Whether note is archived
+        recurrenceRule TEXT -- JSON string defining recurrence rules
       )
   ''';
 
   static const String _createSubNotesTable = '''
       CREATE TABLE subnotes(
-        id TEXT PRIMARY KEY,
-        noteId TEXT NOT NULL,
-        name TEXT NOT NULL,
-        content TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
-        isCompleted INTEGER NOT NULL DEFAULT 0,
+        id TEXT PRIMARY KEY, -- Unique identifier
+        noteId TEXT NOT NULL, -- Parent note ID
+        name TEXT NOT NULL, -- Subnote name (task item)
+        content TEXT NOT NULL, -- Subnote content
+        createdAt INTEGER NOT NULL, -- Creation timestamp
+        isCompleted INTEGER NOT NULL DEFAULT 0, -- Completion status
         FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE
       )
   ''';
 
   static const String _createTagsTable = '''
       CREATE TABLE tags(
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        color TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
-        usageCount INTEGER NOT NULL DEFAULT 0
+        id TEXT PRIMARY KEY, -- Unique identifier
+        name TEXT NOT NULL UNIQUE, -- Tag name
+        color TEXT NOT NULL, -- Tag color
+        createdAt INTEGER NOT NULL, -- Creation timestamp
+        usageCount INTEGER NOT NULL DEFAULT 0 -- Usage count
       )
   ''';
 
   static const String _createNoteTagsTable = '''
       CREATE TABLE note_tags(
-        noteId TEXT NOT NULL,
-        tagId TEXT NOT NULL,
+        noteId TEXT NOT NULL, -- Note ID
+        tagId TEXT NOT NULL, -- Tag ID
         PRIMARY KEY (noteId, tagId),
         FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE,
         FOREIGN KEY (tagId) REFERENCES tags (id) ON DELETE CASCADE
@@ -96,9 +102,10 @@ class DatabaseService {
   ''';
 
   static const String _createConversationTagsTable = '''
+      -- conversation_tags table links conversations with tags, so that conversations can be searched / filtered by tag.
       CREATE TABLE conversation_tags(
-        conversationId TEXT NOT NULL,
-        tagId TEXT NOT NULL,
+        conversationId TEXT NOT NULL, -- Conversation ID
+        tagId TEXT NOT NULL, -- Tag ID
         PRIMARY KEY (conversationId, tagId),
         FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE,
         FOREIGN KEY (tagId) REFERENCES tags (id) ON DELETE CASCADE
@@ -106,151 +113,181 @@ class DatabaseService {
   ''';
 
   static const String _createAttachmentsTable = '''
+      -- Attachments are external files associated with notes.
       CREATE TABLE attachments(
-        id TEXT PRIMARY KEY,
-        noteId TEXT NOT NULL,
-        filePath TEXT NOT NULL,
-        fileName TEXT NOT NULL,
-        fileType TEXT NOT NULL,
-        isRelativePath INTEGER NOT NULL DEFAULT 0,
-        createdAt INTEGER NOT NULL,
-        includeInAIContext INTEGER NOT NULL DEFAULT 1,
+        id TEXT PRIMARY KEY, -- Unique identifier
+        noteId TEXT NOT NULL, -- Parent note ID
+        filePath TEXT NOT NULL, -- Path to file
+        fileName TEXT NOT NULL, -- Original file name
+        fileType TEXT NOT NULL, -- MIME type or extension
+        isRelativePath INTEGER NOT NULL DEFAULT 1, -- Whether path is relative to app dir
+        createdAt INTEGER NOT NULL, -- Creation timestamp
+        includeInAIContext INTEGER NOT NULL DEFAULT 1, -- Whether to include in AI context
+        metadata TEXT, -- JSON storage for attachment-specific data (bookmarks, AI context config, etc.)
         FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE
       )
   ''';
 
   static const String _createRelationshipsTable = '''
+      -- Relationships table links notes with a relationship.
       CREATE TABLE relationships(
-        id TEXT PRIMARY KEY,
-        fromNoteId TEXT NOT NULL,
-        toNoteId TEXT NOT NULL,
-        type TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
+        id TEXT PRIMARY KEY, -- Unique identifier
+        fromNoteId TEXT NOT NULL, -- Source note ID
+        toNoteId TEXT NOT NULL, -- Target note ID
+        type TEXT NOT NULL, -- Relationship type (e.g., 'linked', 'parent', 'child')
+        createdAt INTEGER NOT NULL, -- Creation timestamp
         FOREIGN KEY (fromNoteId) REFERENCES notes (id) ON DELETE CASCADE,
         FOREIGN KEY (toNoteId) REFERENCES notes (id) ON DELETE CASCADE
       )
   ''';
 
   static const String _createFiltersTable = '''
+      -- Filters are set of tags and substring conditions to select certain notes.
+      --   Filters can be considered to have hierarchy. A filter that matches tags A and B,
+      --   is a parent filter of a filter that matches tags A, B and C.
       CREATE TABLE filters(
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        includeText TEXT,
-        includeTags TEXT NOT NULL,
-        includeArchived INTEGER NOT NULL DEFAULT 0,
-        isPinned INTEGER NOT NULL DEFAULT 0,
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL
+        id TEXT PRIMARY KEY, -- Unique identifier
+        name TEXT NOT NULL, -- Filter name
+        includeText TEXT, -- Text to search for
+        includeTags TEXT NOT NULL, -- JSON array of tags to include
+        excludeTags TEXT NOT NULL DEFAULT '', -- JSON array of tags to exclude
+        noteTypes TEXT NOT NULL DEFAULT '', -- JSON array of note types
+        includeArchived INTEGER NOT NULL DEFAULT 0, -- Whether to include archived notes
+        isPinned INTEGER NOT NULL DEFAULT 0, -- Whether filter is pinned to top
+        createdAt INTEGER NOT NULL, -- Creation timestamp
+        updatedAt INTEGER NOT NULL -- Last update timestamp
       )
   ''';
 
   static const String _createUserAppsTable = '''
       CREATE TABLE user_apps(
-        id TEXT PRIMARY KEY,
-        uuid TEXT NOT NULL UNIQUE,
-        name TEXT NOT NULL,
-        description TEXT NOT NULL,
-        steps TEXT NOT NULL,
-        htmlContent TEXT NOT NULL,
-        appState TEXT,
-        type TEXT NOT NULL DEFAULT 'normal',
-        selectedRevisionId TEXT,
-      author TEXT DEFAULT "",
-      license TEXT DEFAULT "",
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL
+        id TEXT PRIMARY KEY, -- Unique identifier
+        uuid TEXT NOT NULL UNIQUE, -- Stable UUID across imports/exports
+        name TEXT NOT NULL, -- App name
+        description TEXT NOT NULL, -- App description
+        steps TEXT NOT NULL, -- JSON array of steps/requirements
+        htmlContent TEXT NOT NULL, -- Current HTML content (legacy, use revisions)
+        appState TEXT, -- JSON object storage for app persistence
+        type TEXT NOT NULL DEFAULT 'normal', -- App type: 'normal', 'noteAction', 'aiTool', etc.
+        selectedRevisionId TEXT, -- Currently active revision ID
+        author TEXT DEFAULT "", -- Author name
+        license TEXT DEFAULT "", -- License text
+        createdAt INTEGER NOT NULL, -- Creation timestamp
+        updatedAt INTEGER NOT NULL -- Last update timestamp
       )
   ''';
 
   static const String _createAppRevisionsTable = '''
       CREATE TABLE app_revisions(
-        id TEXT PRIMARY KEY,
-        appId TEXT NOT NULL,
-        revisionNumber INTEGER NOT NULL,
-        revisionTimestamp INTEGER NOT NULL,
-        userPrompt TEXT NOT NULL,
-        aiResponse TEXT NOT NULL,
-        appCode TEXT NOT NULL,
-        attachmentPaths TEXT,
+        id TEXT PRIMARY KEY, -- Unique identifier
+        appId TEXT NOT NULL, -- Parent app ID
+        revisionNumber INTEGER NOT NULL, -- Revision number
+        revisionTimestamp INTEGER NOT NULL, -- Timestamp
+        userPrompt TEXT NOT NULL, -- User instructions causing revision
+        aiResponse TEXT NOT NULL, -- AI explanation/response
+        appCode TEXT NOT NULL, -- Full HTML code of the app
+        attachmentPaths TEXT, -- JSON array of attachment paths
         FOREIGN KEY (appId) REFERENCES user_apps (id) ON DELETE CASCADE
       )
   ''';
 
   static const String _createUserAppLibrariesTable = '''
       CREATE TABLE user_app_libraries(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        app_uuid TEXT NOT NULL,
-        revision_id INTEGER NOT NULL,
-        name TEXT NOT NULL,
-        usage_instructions TEXT,
+        id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier
+        app_uuid TEXT NOT NULL, -- App UUID this library belongs to
+        revision_id INTEGER NOT NULL, -- Revision number this library belongs to
+        name TEXT NOT NULL, -- Library name
+        usage_instructions TEXT, -- Instructions for using the library
         FOREIGN KEY (app_uuid) REFERENCES user_apps (uuid) ON DELETE CASCADE
       )
   ''';
 
   static const String _createUserAppLibraryDependenciesTable = '''
       CREATE TABLE user_app_library_dependencies(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        original_url TEXT,
-        local_path TEXT NOT NULL,
-        bytes BLOB NOT NULL,
-        library_id INTEGER NOT NULL,
+        id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier
+        original_url TEXT, -- Original URL of the library
+        local_path TEXT NOT NULL, -- Local storage path
+        bytes BLOB NOT NULL, -- Raw file content
+        library_id INTEGER NOT NULL, -- Parent library ID
         FOREIGN KEY (library_id) REFERENCES user_app_libraries (id) ON DELETE CASCADE
       )
   ''';
 
   static const String _createConversationsTable = '''
+      -- conversations are threads of messages that represents interactions with AI.
       CREATE TABLE conversations(
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        noteIds TEXT NOT NULL DEFAULT '[]',
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL,
-        isArchived INTEGER NOT NULL DEFAULT 0
+        id TEXT PRIMARY KEY, -- Unique identifier
+        title TEXT NOT NULL, -- Conversation title
+        noteIds TEXT NOT NULL DEFAULT '[]', -- JSON array of linked note IDs (DEPRECATED, use conversation_note_mapping instead)
+        createdAt INTEGER NOT NULL, -- Creation timestamp
+        updatedAt INTEGER NOT NULL, -- Last update timestamp
+        isArchived INTEGER NOT NULL DEFAULT 0 -- Whether archived
       )
   ''';
 
   static const String _createConversationMessagesTable = '''
+      -- conversation_messages represent individual messages that appear in conversations. A message can be associated with multiple conversations
+      -- in NoteSynapse's tree-structured conversation model.
       CREATE TABLE conversation_messages(
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        content TEXT NOT NULL,
-        timestamp INTEGER NOT NULL,
-        modelUsed TEXT,
-        metadata TEXT
+        id TEXT PRIMARY KEY, -- Unique identifier
+        type TEXT NOT NULL, -- Message type: 'user', 'ai'
+        content TEXT NOT NULL, -- Message content
+        timestamp INTEGER NOT NULL, -- Timestamp
+        modelUsed TEXT, -- AI model identifier if applicable
+        metadata TEXT -- JSON string for extra metadata
       )
   ''';
 
   static const String _createConversationAttachmentsTable = '''
       CREATE TABLE conversation_attachments(
-        id TEXT PRIMARY KEY,
-        messageId TEXT NOT NULL,
-        filePath TEXT NOT NULL,
-        fileName TEXT NOT NULL,
-        fileType TEXT NOT NULL,
-        isRelativePath INTEGER NOT NULL DEFAULT 0,
-        createdAt INTEGER NOT NULL,
+        id TEXT PRIMARY KEY, -- Unique identifier
+        messageId TEXT NOT NULL, -- Parent message ID
+        filePath TEXT NOT NULL, -- Path to file
+        fileName TEXT NOT NULL, -- File name
+        fileType TEXT NOT NULL, -- MIME type or extension
+        isRelativePath INTEGER NOT NULL DEFAULT 0, -- Whether path is relative
+        createdAt INTEGER NOT NULL, -- Creation timestamp
         FOREIGN KEY (messageId) REFERENCES conversation_messages (id) ON DELETE CASCADE
       )
   ''';
 
   static const String _createConversationMessageMappingTable = '''
       CREATE TABLE conversation_message_mapping(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        conversationId TEXT NOT NULL,
-        messageId TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
+        id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier
+        conversationId TEXT NOT NULL, -- Conversation ID
+        messageId TEXT NOT NULL, -- Message ID
+        createdAt INTEGER NOT NULL, -- Creation timestamp
         FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE,
         FOREIGN KEY (messageId) REFERENCES conversation_messages (id) ON DELETE CASCADE,
         UNIQUE(conversationId, messageId)
       )
   ''';
 
+  Future<void> insertConversationMessageMappingsBatch(
+    String conversationId,
+    List<String> messageIds,
+  ) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final batch = txn.batch();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      for (final messageId in messageIds) {
+        batch.insert('conversation_message_mapping', {
+          'conversationId': conversationId,
+          'messageId': messageId,
+          'createdAt': now,
+        });
+      }
+      await batch.commit(noResult: true);
+    });
+  }
+
   static const String _createMessageParentsTable = '''
       CREATE TABLE message_parents(
-        id TEXT PRIMARY KEY,
-        messageId TEXT NOT NULL,
-        parentMessageId TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
+        id TEXT PRIMARY KEY, -- Unique identifier
+        messageId TEXT NOT NULL, -- Child message ID
+        parentMessageId TEXT NOT NULL, -- Parent message ID
+        createdAt INTEGER NOT NULL, -- Creation timestamp
         FOREIGN KEY (messageId) REFERENCES conversation_messages (id) ON DELETE CASCADE,
         FOREIGN KEY (parentMessageId) REFERENCES conversation_messages (id) ON DELETE CASCADE,
         UNIQUE(messageId, parentMessageId)
@@ -259,10 +296,10 @@ class DatabaseService {
 
   static const String _createConversationNoteMappingTable = '''
       CREATE TABLE conversation_note_mapping(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        conversationId TEXT NOT NULL,
-        noteId TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
+        id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier
+        conversationId TEXT NOT NULL, -- Conversation ID
+        noteId TEXT NOT NULL, -- Note ID
+        createdAt INTEGER NOT NULL, -- Creation timestamp
         FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE,
         FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE,
         UNIQUE(conversationId, noteId)
@@ -270,9 +307,9 @@ class DatabaseService {
   ''';
   static const String _createMultiFunctionAppsTable = '''
       CREATE TABLE multi_function_apps(
-        appId TEXT PRIMARY KEY,
-        isDefault INTEGER NOT NULL DEFAULT 0,
-        addedAt INTEGER NOT NULL,
+        appId TEXT PRIMARY KEY, -- App ID
+        isDefault INTEGER NOT NULL DEFAULT 0, -- Whether it is the default app
+        addedAt INTEGER NOT NULL, -- Timestamp added
         FOREIGN KEY (appId) REFERENCES user_apps (id) ON DELETE CASCADE
       )
   ''';
@@ -339,6 +376,11 @@ class DatabaseService {
     ];
   }
 
+  /// Returns the complete schema description as a formatted string
+  static String getSchemaDescription() {
+    return getSchema().join('\n\n');
+  }
+
   // For testing, allow creating new instances
   DatabaseService.createNew({String? databaseName})
     : _databaseNameOverride = databaseName ?? _generateTestDatabaseName() {
@@ -357,19 +399,116 @@ class DatabaseService {
   Future<Database> _initDatabase() async {
     final dbName = _databaseNameOverride ?? 'note_synapse.db';
     final path = join(await getDatabasesPath(), dbName);
+
+    // Perform pre-migration backup BEFORE openDatabase
+    // This is critical because _onUpgrade runs inside a transaction
+    // where PRAGMA wal_checkpoint cannot be executed
+    await _performPreMigrationBackupIfNeeded(path);
+
     return await openDatabase(
       path,
-      version: DATABASE_VERSION,
+      version: SQFLITE_VERSION, // High value to prevent sqflite's onUpgrade
       onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
+      // onUpgrade removed - migrations now handled in onOpen via _handleCustomMigrations
       onOpen: _onOpen,
       singleInstance: _databaseNameOverride == null,
     );
   }
 
+  /// Check if migration is needed and create a backup before openDatabase
+  /// This runs outside any transaction, allowing WAL checkpoint to succeed
+  Future<void> _performPreMigrationBackupIfNeeded(String dbPath) async {
+    final dbFile = File(dbPath);
+    if (!await dbFile.exists()) {
+      // New database, no backup needed
+      return;
+    }
+
+    // Open database read-only to check version, without triggering migration
+    Database? checkDb;
+    try {
+      checkDb = await openDatabase(
+        dbPath,
+        readOnly: true,
+        singleInstance: false,
+      );
+      final versionResult = await checkDb.rawQuery('PRAGMA user_version');
+      final currentVersion = versionResult.isNotEmpty
+          ? versionResult.first['user_version'] as int
+          : 0;
+
+      if (currentVersion < DATABASE_VERSION && currentVersion > 0) {
+        // Migration is needed, create backup
+        LoggerService.info(
+          'Migration needed from version $currentVersion to $DATABASE_VERSION. Creating backup...',
+        );
+        await checkDb.close();
+        checkDb = null;
+
+        // Now create backup with a fresh connection that can do WAL checkpoint
+        await _createPreMigrationBackup(dbPath, currentVersion);
+      }
+    } catch (e) {
+      LoggerService.error('Error checking database version: $e', error: e);
+      // If we can't check the version, we'll let openDatabase handle it
+    } finally {
+      if (checkDb != null && checkDb.isOpen) {
+        await checkDb.close();
+      }
+    }
+  }
+
+  /// Create a backup of the database before migration
+  /// Called outside any transaction, so WAL checkpoint should succeed
+  Future<void> _createPreMigrationBackup(String dbPath, int fromVersion) async {
+    Database? backupDb;
+    try {
+      LoggerService.info('Starting pre-migration backup...');
+
+      // Open a fresh connection (not read-only) to do the checkpoint
+      backupDb = await openDatabase(dbPath, singleInstance: false);
+
+      // Force checkpoint to ensure WAL is merged
+      await backupDb.rawQuery('PRAGMA wal_checkpoint(FULL)');
+      await backupDb.close();
+      backupDb = null;
+
+      // Now copy the file
+      final dbFile = File(dbPath);
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final backupPath = join(
+        dirname(dbPath),
+        'backup_v${fromVersion}_pre_migration_$timestamp.db',
+      );
+
+      await dbFile.copy(backupPath);
+      LoggerService.info('Pre-migration backup created at: $backupPath');
+    } catch (e) {
+      LoggerService.error(
+        'Failed to create pre-migration backup: $e',
+        error: e,
+      );
+      // Rethrow to let the caller handle it - migration should not proceed without backup
+      rethrow;
+    } finally {
+      if (backupDb != null && backupDb.isOpen) {
+        await backupDb.close();
+      }
+    }
+  }
+
   Future<void> _onCreate(Database db, int version) async {
     // Enable foreign key constraints for new databases
     await db.execute('PRAGMA foreign_keys = ON');
+
+    // Create schema version tracking table
+    await db.execute('''
+      CREATE TABLE _schema_version (
+        version INTEGER NOT NULL
+      )
+    ''');
+    // Initialize with current schema version for new databases
+    await db.insert('_schema_version', {'version': DATABASE_VERSION});
 
     // Create all tables using schema constants
     await db.execute(_createNotesTable);
@@ -403,19 +542,114 @@ class DatabaseService {
     // Enable foreign key constraints every time the database is opened
     // This is required because SQLite disables foreign keys by default
     await db.execute('PRAGMA foreign_keys = ON');
+
+    // Custom schema version tracking - migrations only run onOpen, not onUpgrade
+    await _handleCustomMigrations(db);
   }
 
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    await _executeMigrations(
-      db,
-      oldVersion,
-      newVersion,
-      isBackupMigration: false,
+  /// Handles migrations using custom _schema_version table
+  /// Version is only updated AFTER successful migration
+  Future<void> _handleCustomMigrations(Database db) async {
+    // Check if _schema_version table exists (might be legacy DB)
+    final tableCheck = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='_schema_version'",
     );
+
+    int currentVersion;
+    if (tableCheck.isEmpty) {
+      // Legacy database - create version table and get version from PRAGMA
+      await db.execute('''
+        CREATE TABLE _schema_version (
+          version INTEGER NOT NULL
+        )
+      ''');
+      // Get current version from sqflite's PRAGMA
+      final pragmaVersion = await db.rawQuery('PRAGMA user_version');
+      currentVersion = pragmaVersion.isNotEmpty
+          ? pragmaVersion.first['user_version'] as int
+          : 0;
+      if (currentVersion == 0)
+        currentVersion = 19; // Assume min supported version
+      await db.insert('_schema_version', {'version': currentVersion});
+      LoggerService.info(
+        'Created _schema_version table, initialized from PRAGMA: v$currentVersion',
+      );
+    } else {
+      // Read current version from custom table
+      final versionResult = await db.query('_schema_version');
+      currentVersion = versionResult.isNotEmpty
+          ? versionResult.first['version'] as int
+          : 0;
+    }
+
+    if (currentVersion >= DATABASE_VERSION) {
+      return; // No migration needed
+    }
+
+    LoggerService.info(
+      'Migration needed: v$currentVersion -> v$DATABASE_VERSION',
+    );
+
+    // Run migrations
+    bool migrationSuccess = true;
+    for (
+      int version = currentVersion + 1;
+      version <= DATABASE_VERSION;
+      version++
+    ) {
+      final migrationStep = _migrationSteps[version];
+      if (migrationStep == null) {
+        LoggerService.warning('No migration step defined for version $version');
+        continue;
+      }
+
+      try {
+        LoggerService.info(
+          'Executing migration to version $version: ${migrationStep.description}',
+        );
+        await migrationStep.execute(db, isBackupMigration: false);
+        LoggerService.info('Successfully migrated to version $version');
+      } catch (e) {
+        LoggerService.error(
+          'Migration to version $version failed: $e',
+          error: e,
+        );
+        migrationSuccess = false;
+
+        // Navigate to RecoveryScreen with error
+        _navigateToRecoveryScreen('Migration failed at version $version: $e');
+        break; // Stop migration on error
+      }
+    }
+
+    // Only update version if ALL migrations succeeded
+    if (migrationSuccess) {
+      await db.update('_schema_version', {'version': DATABASE_VERSION});
+      LoggerService.info('Schema version updated to $DATABASE_VERSION');
+    }
   }
+
+  /// Navigate to RecoveryScreen with error message
+  void _navigateToRecoveryScreen(String error) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = navigatorKey.currentContext;
+      if (context != null) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => RecoveryScreen(error: error)),
+          (route) => false, // Remove all previous routes
+        );
+      } else {
+        LoggerService.error(
+          'Navigator context is null, cannot navigate to recovery screen. Error: $error',
+        );
+      }
+    });
+  }
+
+  // Note: _onUpgrade removed - migrations now in _handleCustomMigrations
 
   // Migration configuration structure
-  // All clients are now on version 20 or later, so only keep version 20 migration for edge cases
+  // All clients are now on version 20 or later
   static const Map<int, MigrationStep> _migrationSteps = {
     20: MigrationStep(
       description:
@@ -448,322 +682,109 @@ class DatabaseService {
       description: 'Add isPinned column to filters table',
       execute: _migrateToVersion27,
     ),
+    28: MigrationStep(
+      description: 'Add excludeTags and noteTypes columns to filters table',
+      execute: _migrateToVersion28,
+    ),
+    29: MigrationStep(
+      description: 'Ensure multi_function_apps table exists',
+      execute: _migrateToVersion29,
+    ),
+    30: MigrationStep(
+      description: 'Add recurrenceRule column to notes table',
+      execute: _migrateToVersion30,
+    ),
+    31: MigrationStep(
+      description: 'Create notes_fts virtual table and tag_ai_configs table',
+      execute: _migrateToVersion31,
+    ),
+    32: MigrationStep(
+      description:
+          'Add metadata column to attachments table for PDF bookmarks and AI context config',
+      execute: _migrateToVersion32,
+    ),
+    36: MigrationStep(
+      description:
+          'Fix notes_fts FTS5 table by removing incorrect content_rowid option',
+      execute: _migrateToVersion36,
+    ),
   };
 
-  // Main migration execution method
-  Future<void> _executeMigrations(
-    Database db,
-    int oldVersion,
-    int newVersion, {
-    required bool isBackupMigration,
-  }) async {
-    for (int version = oldVersion + 1; version <= newVersion; version++) {
-      final migrationStep = _migrationSteps[version];
-      if (migrationStep == null) {
-        LoggerService.warning('No migration step defined for version $version');
-        continue;
-      }
-
-      try {
-        LoggerService.info(
-          'Executing migration to version $version: ${migrationStep.description}',
-        );
-        await migrationStep.execute(db, isBackupMigration: isBackupMigration);
-        LoggerService.info('Successfully migrated to version $version');
-      } catch (e) {
-        LoggerService.error(
-          'Migration to version $version failed: $e',
-          error: e,
-        );
-
-        // Apply granular error handling based on the specific migration
-        await _handleMigrationError(
-          db,
-          version,
-          e,
-          isBackupMigration: isBackupMigration,
-        );
-        break; // Stop migration on error
-      }
-    }
-  }
-
-  // Handle migration errors with granular table recreation
-  Future<void> _handleMigrationError(
-    Database db,
-    int version,
-    dynamic error, {
-    required bool isBackupMigration,
-  }) async {
-    switch (version) {
-      case 2:
-        // Notes table migration failed - recreate notes and related tables
-        LoggerService.error(
-          'Recreating notes table and related tables due to migration failure',
-        );
-        await _recreateNotesTables(db, isBackupMigration: isBackupMigration);
-        break;
-
-      case 3:
-      case 4:
-      case 5:
-        // Notes table column additions failed - recreate notes table
-        LoggerService.error(
-          'Recreating notes table due to column addition failure',
-        );
-        await _recreateNotesTable(db, isBackupMigration: isBackupMigration);
-        break;
-
-      case 6:
-        // Filters table creation failed - recreate filters table
-        LoggerService.error('Recreating filters table due to creation failure');
-        await _recreateFiltersTable(db, isBackupMigration: isBackupMigration);
-        break;
-
-      case 7:
-      case 8:
-        // User apps table operations failed - recreate user_apps table
-        LoggerService.error(
-          'Recreating user_apps table due to operation failure',
-        );
-        await _recreateUserAppsTable(db, isBackupMigration: isBackupMigration);
-        break;
-
-      case 9:
-        // App revisions table creation failed - recreate app_revisions table
-        LoggerService.error(
-          'Recreating app_revisions table due to creation failure',
-        );
-        await _recreateAppRevisionsTable(
-          db,
-          isBackupMigration: isBackupMigration,
-        );
-        break;
-
-      case 10:
-      case 11:
-      case 14:
-        // User apps table modifications failed - recreate user_apps table
-        LoggerService.error(
-          'Recreating user_apps table due to modification failure',
-        );
-        await _recreateUserAppsTable(db, isBackupMigration: isBackupMigration);
-        break;
-
-      case 15:
-        // Library tables creation failed - recreate library tables
-        LoggerService.error(
-          'Recreating library tables due to creation failure',
-        );
-        await _recreateLibraryTables(db, isBackupMigration: isBackupMigration);
-        break;
-
-      case 12:
-      case 13:
-      case 16:
-      case 17:
-        // These are safe operations - log warning but don't recreate anything
-        LoggerService.warning(
-          'Migration $version failed but is considered safe - continuing',
-        );
-        break;
-
-      case 23:
-        // User apps table UNIQUE constraint addition failed - recreate user_apps table
-        LoggerService.error(
-          'Recreating user_apps table due to UNIQUE constraint addition failure',
-        );
-        await _recreateUserAppsTable(db, isBackupMigration: isBackupMigration);
-        break;
-
-      case 25:
-        // Attachments table modification failed - recreate notes tables (which includes attachments)
-        LoggerService.error(
-          'Recreating notes tables due to attachments table modification failure',
-        );
-        await _recreateNotesTables(db, isBackupMigration: isBackupMigration);
-        break;
-
-      case 26:
-        // Multi-function apps table creation failed - recreate the table
-        LoggerService.error(
-          'Recreating multi_function_apps table due to creation failure',
-        );
-        await _recreateMultiFunctionAppsTable(
-          db,
-          isBackupMigration: isBackupMigration,
-        );
-        break;
-
-      default:
-        // Unknown migration - fall back to full database recreation
-        LoggerService.error(
-          'Unknown migration $version failed - recreating entire database',
-        );
-        if (isBackupMigration) {
-          await _recreateBackupDatabase(db, version);
-        } else {
-          await _recreateMainDatabase(db, version);
-        }
-    }
-  }
-
-  // Granular table recreation methods
-  Future<void> _recreateNotesTables(
+  static Future<void> _migrateToVersion28(
     Database db, {
     required bool isBackupMigration,
   }) async {
-    // Drop notes and related tables
-    await db.execute('DROP TABLE IF EXISTS relationships');
-    await db.execute('DROP TABLE IF EXISTS attachments');
-    await db.execute('DROP TABLE IF EXISTS note_tags');
-    await db.execute('DROP TABLE IF EXISTS subnotes');
-    await db.execute('DROP TABLE IF EXISTS notes');
-
-    // Recreate tables using schema constants
-    await db.execute(_createNotesTable);
-    await db.execute(_createSubNotesTable);
-    await db.execute(_createAttachmentsTable);
-    await db.execute(_createRelationshipsTable);
-
-    // Recreate relevant indexes
-    await db.execute('CREATE INDEX idx_notes_type ON notes(type)');
-    await db.execute('CREATE INDEX idx_notes_createdAt ON notes(createdAt)');
+    // Add new columns to filters table
     await db.execute(
-      'CREATE INDEX idx_notes_scheduledAt ON notes(scheduledAt)',
-    );
-    await db.execute('CREATE INDEX idx_notes_completeBy ON notes(completeBy)');
-    await db.execute('CREATE INDEX idx_notes_pinned ON notes(pinned)');
-    await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
-    await db.execute(
-      'CREATE INDEX idx_relationships_fromNoteId ON relationships(fromNoteId)',
+      "ALTER TABLE filters ADD COLUMN excludeTags TEXT NOT NULL DEFAULT ''",
     );
     await db.execute(
-      'CREATE INDEX idx_relationships_toNoteId ON relationships(toNoteId)',
+      "ALTER TABLE filters ADD COLUMN noteTypes TEXT NOT NULL DEFAULT ''",
     );
   }
 
-  Future<void> _recreateNotesTable(
+  static Future<void> _migrateToVersion30(
     Database db, {
     required bool isBackupMigration,
   }) async {
-    // Drop and recreate only the notes table
-    await db.execute('DROP TABLE IF EXISTS notes');
-    await db.execute(_createNotesTable);
-
-    // Recreate indexes
-    await db.execute('CREATE INDEX idx_notes_type ON notes(type)');
-    await db.execute('CREATE INDEX idx_notes_createdAt ON notes(createdAt)');
-    await db.execute(
-      'CREATE INDEX idx_notes_scheduledAt ON notes(scheduledAt)',
-    );
-    await db.execute('CREATE INDEX idx_notes_completeBy ON notes(completeBy)');
-    await db.execute('CREATE INDEX idx_notes_pinned ON notes(pinned)');
-    await db.execute('CREATE INDEX idx_notes_isArchived ON notes(isArchived)');
+    // Add recurrenceRule column to notes table
+    await db.execute("ALTER TABLE notes ADD COLUMN recurrenceRule TEXT");
   }
 
-  Future<void> _recreateFiltersTable(
+  static Future<void> _migrateToVersion31(
     Database db, {
     required bool isBackupMigration,
   }) async {
-    await db.execute('DROP TABLE IF EXISTS filters');
-    await db.execute(_createFiltersTable);
-  }
+    // 1. Create notes_fts virtual table using FTS4 (universally supported on all platforms)
+    await db.execute('''
+      CREATE VIRTUAL TABLE notes_fts USING fts4(
+        title, 
+        content
+      );
+    ''');
 
-  Future<void> _recreateUserAppsTable(
-    Database db, {
-    required bool isBackupMigration,
-  }) async {
-    // Drop dependent tables first (reverse dependency order)
-    // user_app_library_dependencies depends on user_app_libraries
-    await db.execute('DROP TABLE IF EXISTS user_app_library_dependencies');
-    // user_app_libraries depends on user_apps
-    await db.execute('DROP TABLE IF EXISTS user_app_libraries');
-    // app_revisions depends on user_apps
-    await db.execute('DROP TABLE IF EXISTS app_revisions');
-    // Now we can drop user_apps
-    await db.execute('DROP TABLE IF EXISTS user_apps');
+    // 2. Populate notes_fts with existing data
+    await db.execute('''
+      INSERT INTO notes_fts(docid, title, content)
+      SELECT rowid, title, content FROM notes;
+    ''');
 
-    // Recreate tables in dependency order
-    await db.execute(_createUserAppsTable);
-    await db.execute(_createAppRevisionsTable);
-    await db.execute(_createUserAppLibrariesTable);
-    await db.execute(_createUserAppLibraryDependenciesTable);
+    // 3. Create Triggers to keep notes_fts in sync
+    // INSERT Trigger
+    await db.execute('''
+      CREATE TRIGGER notes_ai_insert AFTER INSERT ON notes
+      BEGIN
+        INSERT INTO notes_fts(docid, title, content)
+        VALUES(new.rowid, new.title, new.content);
+      END;
+    ''');
 
-    // Recreate indexes for library tables
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_user_app_libraries_app_uuid ON user_app_libraries(app_uuid)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)',
-    );
-  }
+    // DELETE Trigger
+    await db.execute('''
+      CREATE TRIGGER notes_ai_delete AFTER DELETE ON notes
+      BEGIN
+        DELETE FROM notes_fts WHERE docid = old.rowid;
+      END;
+    ''');
 
-  Future<void> _recreateAppRevisionsTable(
-    Database db, {
-    required bool isBackupMigration,
-  }) async {
-    await db.execute('DROP TABLE IF EXISTS app_revisions');
-    await db.execute(_createAppRevisionsTable);
-  }
+    // UPDATE Trigger
+    await db.execute('''
+      CREATE TRIGGER notes_ai_update AFTER UPDATE ON notes
+      BEGIN
+        DELETE FROM notes_fts WHERE docid = old.rowid;
+        INSERT INTO notes_fts(docid, title, content)
+        VALUES(new.rowid, new.title, new.content);
+      END;
+    ''');
 
-  Future<void> _recreateLibraryTables(
-    Database db, {
-    required bool isBackupMigration,
-  }) async {
-    await db.execute('DROP TABLE IF EXISTS user_app_library_dependencies');
-    await db.execute('DROP TABLE IF EXISTS user_app_libraries');
-
-    await db.execute(_createUserAppLibrariesTable);
-    await db.execute(_createUserAppLibraryDependenciesTable);
-
-    // Create indexes
-    await db.execute(
-      'CREATE INDEX idx_user_app_libraries_app_uuid ON user_app_libraries(app_uuid)',
-    );
-    await db.execute(
-      'CREATE INDEX idx_user_app_libraries_revision_id ON user_app_libraries(revision_id)',
-    );
-    await db.execute(
-      'CREATE INDEX idx_user_app_library_dependencies_library_id ON user_app_library_dependencies(library_id)',
-    );
-    await db.execute(
-      'CREATE INDEX idx_user_app_library_dependencies_local_path ON user_app_library_dependencies(local_path)',
-    );
-  }
-
-  Future<void> _recreateMultiFunctionAppsTable(
-    Database db, {
-    required bool isBackupMigration,
-  }) async {
-    await db.execute('DROP TABLE IF EXISTS multi_function_apps');
-    await db.execute(_createMultiFunctionAppsTable);
-  }
-
-  // Recreate main database tables
-  Future<void> _recreateMainDatabase(Database db, int newVersion) async {
-    // Drop all tables
-    await db.execute('DROP TABLE IF EXISTS relationships');
-    await db.execute('DROP TABLE IF EXISTS attachments');
-    await db.execute('DROP TABLE IF EXISTS note_tags');
-    await db.execute('DROP TABLE IF EXISTS subnotes');
-    await db.execute('DROP TABLE IF EXISTS notes');
-    await db.execute('DROP TABLE IF EXISTS tags');
-    await db.execute('DROP TABLE IF EXISTS filters');
-    await db.execute('DROP TABLE IF EXISTS user_apps');
-    await db.execute('DROP TABLE IF EXISTS app_revisions');
-    await db.execute('DROP TABLE IF EXISTS user_app_libraries');
-    await db.execute('DROP TABLE IF EXISTS user_app_library_dependencies');
-    await db.execute('DROP TABLE IF EXISTS multi_function_apps');
-
-    // Recreate all tables using schema constants
-    await _onCreate(db, newVersion);
+    // 4. Create tag_ai_configs table
+    await db.execute('''
+      CREATE TABLE tag_ai_configs (
+        tagId TEXT PRIMARY KEY,
+        extractionPrompt TEXT,
+        FOREIGN KEY (tagId) REFERENCES tags (id) ON DELETE CASCADE
+      )
+    ''');
   }
 
   // Individual migration methods
@@ -1109,6 +1130,125 @@ class DatabaseService {
     await db.execute(_createMultiFunctionAppsTable);
   }
 
+  static Future<void> _migrateToVersion29(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    // Ensure multi_function_apps table exists
+    // We use a safe creation check
+    final tables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='multi_function_apps'",
+    );
+
+    if (tables.isEmpty) {
+      LoggerService.info('Creating multi_function_apps table (migration v29)');
+      await db.execute(_createMultiFunctionAppsTable);
+    } else {
+      LoggerService.info(
+        'multi_function_apps table already exists (migration v29)',
+      );
+    }
+  }
+
+  static Future<void> _migrateToVersion32(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    LoggerService.info(
+      'Starting migration to version 32: Adding metadata column to attachments table',
+    );
+
+    try {
+      // Check if column already exists
+      final tableInfo = await db.rawQuery('PRAGMA table_info(attachments)');
+      final hasColumn = tableInfo.any((column) => column['name'] == 'metadata');
+
+      if (!hasColumn) {
+        await db.execute('ALTER TABLE attachments ADD COLUMN metadata TEXT');
+        LoggerService.info(
+          'Successfully added metadata column to attachments table',
+        );
+      } else {
+        LoggerService.info(
+          'metadata column already exists in attachments table',
+        );
+      }
+    } catch (e) {
+      LoggerService.error('Error in migration to version 32: $e', error: e);
+      rethrow;
+    }
+  }
+
+  // Migration to version 36: Fix notes_fts table by recreating it with FTS4
+  // The original migration had issues (FTS5 with incorrect content_rowid option on iOS,
+  // and mixed FTS4/FTS5 code paths). This migration drops and recreates the FTS table
+  // using only FTS4 for cross-platform compatibility.
+  static Future<void> _migrateToVersion36(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    LoggerService.info(
+      'Starting migration to version 33: Recreating notes_fts as FTS4',
+    );
+
+    try {
+      // Drop existing triggers first (they may reference wrong FTS variant)
+      await db.execute('DROP TRIGGER IF EXISTS notes_ai_insert');
+      await db.execute('DROP TRIGGER IF EXISTS notes_ai_delete');
+      await db.execute('DROP TRIGGER IF EXISTS notes_ai_update');
+
+      // Drop existing FTS table (could be FTS4 or FTS5)
+      await db.execute('DROP TABLE IF EXISTS notes_fts');
+
+      // Create FTS4 table (universally supported)
+      await db.execute('''
+        CREATE VIRTUAL TABLE notes_fts USING fts4(
+          title, 
+          content
+        );
+      ''');
+
+      // Repopulate notes_fts with existing data
+      await db.execute('''
+        INSERT INTO notes_fts(docid, title, content)
+        SELECT rowid, title, content FROM notes;
+      ''');
+
+      // Create triggers for FTS4
+      // INSERT Trigger
+      await db.execute('''
+        CREATE TRIGGER notes_ai_insert AFTER INSERT ON notes
+        BEGIN
+          INSERT INTO notes_fts(docid, title, content)
+          VALUES(new.rowid, new.title, new.content);
+        END;
+      ''');
+
+      // DELETE Trigger
+      await db.execute('''
+        CREATE TRIGGER notes_ai_delete AFTER DELETE ON notes
+        BEGIN
+          DELETE FROM notes_fts WHERE docid = old.rowid;
+        END;
+      ''');
+
+      // UPDATE Trigger
+      await db.execute('''
+        CREATE TRIGGER notes_ai_update AFTER UPDATE ON notes
+        BEGIN
+          DELETE FROM notes_fts WHERE docid = old.rowid;
+          INSERT INTO notes_fts(docid, title, content)
+          VALUES(new.rowid, new.title, new.content);
+        END;
+      ''');
+
+      LoggerService.info('Successfully recreated notes_fts table using FTS4');
+    } catch (e) {
+      LoggerService.error('Error in migration to version 33: $e', error: e);
+      rethrow;
+    }
+  }
+
   // Migrate existing conversation data to new structure
 
   // Migration helper method to create initial revisions for existing apps
@@ -1171,10 +1311,21 @@ class DatabaseService {
     // Insert attachments
     for (final attachmentPath in note.attachmentPaths) {
       // Check if path is relative (starts with 'attachments/')
-      final isRelativePath = attachmentPath.startsWith('attachments/');
+      bool isRelativePath = attachmentPath.startsWith('attachments/');
+      String finalPath = attachmentPath;
+
+      if (!isRelativePath) {
+        // Try to convert absolute path to relative if it's in the app dir
+        final relativePath = await FileUtils.getRelativePath(attachmentPath);
+        if (relativePath != null) {
+          finalPath = relativePath;
+          isRelativePath = true;
+        }
+      }
+
       await _insertAttachment(
         note.id,
-        attachmentPath,
+        finalPath,
         isRelativePath: isRelativePath,
       );
     }
@@ -1186,29 +1337,174 @@ class DatabaseService {
   Future<List<Note>> getAllNotes() async {
     final db = await database;
     LoggerService.info('Querying notes table...');
-    final List<Map<String, dynamic>> maps = await db.query(
-      'notes',
-      orderBy: 'pinned DESC, createdAt DESC',
-    );
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+    SELECT 
+      id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived, recurrenceRule,
+      CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+      length(content) as _contentLength
+    FROM notes
+    ORDER BY pinned DESC, createdAt DESC
+  ''');
     LoggerService.info('Found ${maps.length} notes in database');
 
-    final List<Note> notes = [];
-    for (final map in maps) {
+    return await _batchLoadNotes(maps);
+  }
+
+  Future<List<Note>> _batchLoadNotes(
+    List<Map<String, dynamic>> noteMaps,
+  ) async {
+    if (noteMaps.isEmpty) return [];
+
+    final db = await database;
+    final notes = <Note>[];
+    final noteIds = noteMaps.map((m) => m['id'] as String).toList();
+
+    // Batch fetch associated data
+    // Chunking to avoid "too many variables" SQLite error (limit is usually 999)
+    const chunkSize = 500;
+    final Map<String, List<SubNote>> subNotesMap = {};
+    final Map<String, List<String>> tagsMap = {};
+    final Map<String, List<String>> attachmentsMap = {};
+
+    for (var i = 0; i < noteIds.length; i += chunkSize) {
+      final end = (i + chunkSize < noteIds.length)
+          ? i + chunkSize
+          : noteIds.length;
+      final chunkIds = noteIds.sublist(i, end);
+      final placeholders = List.filled(chunkIds.length, '?').join(',');
+
+      // Fetch SubNotes
+      final subNoteResults = await db.rawQuery('''
+      SELECT 
+        id, noteId, name, createdAt, isCompleted,
+        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+        length(content) as _contentLength
+      FROM subnotes
+      WHERE noteId IN ($placeholders)
+      ORDER BY createdAt ASC
+      ''', chunkIds);
+
+      for (final row in subNoteResults) {
+        final noteId = row['noteId'] as String;
+        String content = row['content'] as String? ?? '';
+        if (content.isEmpty && (row['_contentLength'] as int? ?? 0) > 0) {
+          content = await _readLargeString(
+            db,
+            'subnotes',
+            'content',
+            row['id'] as String,
+          );
+        }
+
+        final subNote = SubNote(
+          id: row['id'] as String,
+          name: row['name'] as String,
+          content: content,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(
+            row['createdAt'] as int,
+          ),
+          isCompleted: (row['isCompleted'] as int) == 1,
+        );
+
+        if (!subNotesMap.containsKey(noteId)) {
+          subNotesMap[noteId] = [];
+        }
+        subNotesMap[noteId]!.add(subNote);
+      }
+
+      // Fetch Tags
+      final tagResults = await db.rawQuery('''
+      SELECT nt.noteId, t.name 
+      FROM tags t 
+      JOIN note_tags nt ON t.id = nt.tagId 
+      WHERE nt.noteId IN ($placeholders)
+      ''', chunkIds);
+
+      for (final row in tagResults) {
+        final noteId = row['noteId'] as String;
+        final tagName = row['name'] as String;
+
+        if (!tagsMap.containsKey(noteId)) {
+          tagsMap[noteId] = [];
+        }
+        tagsMap[noteId]!.add(tagName);
+      }
+
+      // Fetch Attachments
+      final attachmentResults = await db.query(
+        'attachments',
+        where: 'noteId IN ($placeholders)',
+        whereArgs: chunkIds,
+      );
+
+      for (final row in attachmentResults) {
+        final noteId = row['noteId'] as String;
+        final filePath = row['filePath'] as String;
+        final isRelativePath = (row['isRelativePath'] as int) == 1;
+
+        String finalPath;
+        if (isRelativePath) {
+          finalPath = await FileUtils.getFullFilePath(filePath, true);
+        } else {
+          finalPath = filePath;
+        }
+
+        if (!attachmentsMap.containsKey(noteId)) {
+          attachmentsMap[noteId] = [];
+        }
+        attachmentsMap[noteId]!.add(finalPath);
+      }
+    }
+
+    // Assemble Notes
+    for (final map in noteMaps) {
       try {
-        LoggerService.info('Mapping note with id: ${map['id']}');
-        final note = await _mapToNote(map);
+        final noteId = map['id'] as String;
+        String content = map['content'] as String? ?? '';
+        if (content.isEmpty && (map['_contentLength'] as int? ?? 0) > 0) {
+          content = await _readLargeString(db, 'notes', 'content', noteId);
+        }
+
+        final note = Note(
+          id: noteId,
+          title: map['title'] as String,
+          content: content,
+          type: map['type'] != null
+              ? NoteType.values.firstWhere(
+                  (e) => e.toString().split('.').last == map['type'],
+                  orElse: () => NoteType.note,
+                )
+              : NoteType.note,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(
+            map['createdAt'] as int,
+          ),
+          updatedAt: DateTime.fromMillisecondsSinceEpoch(
+            map['updatedAt'] as int,
+          ),
+          subNotes: subNotesMap[noteId] ?? [],
+          tags: tagsMap[noteId] ?? [],
+          attachmentPaths: attachmentsMap[noteId] ?? [],
+          scheduledAt: map['scheduledAt'] as String?,
+          completeBy: map['completeBy'] as String?,
+          status: map['status'] != null
+              ? _stringToTaskStatus(map['status'] as String)
+              : null,
+          completionPercentage: map['completionPercentage'] as double?,
+          pinned: (map['pinned'] as int? ?? 0) == 1,
+          isArchived: (map['isArchived'] as int? ?? 0) == 1,
+          recurrenceRule: map['recurrenceRule'] as String?,
+        );
         notes.add(note);
       } catch (e) {
         LoggerService.error(
-          'Error mapping note with id ${map['id']}: $e',
+          'Error assembling note with id ${map['id']}: $e',
           error: e,
         );
-        LoggerService.error('Note data: $map');
-        // Skip corrupted notes instead of crashing
-        continue;
+        // Skip corrupted notes
       }
     }
-    LoggerService.info('Successfully mapped ${notes.length} notes');
+
+    LoggerService.info('Successfully batch loaded ${notes.length} notes');
     return notes;
   }
 
@@ -1251,92 +1547,65 @@ class DatabaseService {
     List<dynamic> whereArgs = [];
 
     if (isArchived != null) {
-      whereClause = 'isArchived = ?';
+      whereClause = 'WHERE isArchived = ?';
       whereArgs.add(isArchived ? 1 : 0);
     }
 
-    final List<Map<String, dynamic>> maps = await db.query(
-      'notes',
-      where: whereClause.isEmpty ? null : whereClause,
-      whereArgs: whereArgs.isEmpty ? null : whereArgs,
-      orderBy: 'pinned DESC, createdAt DESC',
-    );
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT 
+        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived,
+        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+        length(content) as _contentLength
+      FROM notes
+      $whereClause
+      ORDER BY pinned DESC, createdAt DESC
+      ''', whereArgs);
 
-    final List<Note> notes = [];
-    for (final map in maps) {
-      try {
-        final note = await _mapToNote(map);
-        notes.add(note);
-      } catch (e) {
-        LoggerService.error(
-          'Error mapping note with id ${map['id']}: $e',
-          error: e,
-        );
-        // Skip corrupted notes instead of crashing
-        continue;
-      }
-    }
-    return notes;
+    return await _batchLoadNotes(maps);
   }
 
   Future<List<Note>> getPinnedNotes() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'notes',
-      where: 'pinned = ? AND isArchived = ?',
-      whereArgs: [1, 0],
-      orderBy: 'createdAt DESC',
-    );
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT 
+        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived,
+        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+        length(content) as _contentLength
+      FROM notes
+      WHERE pinned = 1 AND isArchived = 0
+      ORDER BY createdAt DESC
+    ''');
 
-    final List<Note> notes = [];
-    for (final map in maps) {
-      try {
-        final note = await _mapToNote(map);
-        notes.add(note);
-      } catch (e) {
-        LoggerService.error(
-          'Error mapping note with id ${map['id']}: $e',
-          error: e,
-        );
-        // Skip corrupted notes instead of crashing
-        continue;
-      }
-    }
-    return notes;
+    return await _batchLoadNotes(maps);
   }
 
   Future<List<Note>> getArchivedNotes() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'notes',
-      where: 'isArchived = ?',
-      whereArgs: [1],
-      orderBy: 'createdAt DESC',
-    );
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT 
+        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived,
+        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+        length(content) as _contentLength
+      FROM notes
+      WHERE isArchived = 1
+      ORDER BY createdAt DESC
+    ''');
 
-    final List<Note> notes = [];
-    for (final map in maps) {
-      try {
-        final note = await _mapToNote(map);
-        notes.add(note);
-      } catch (e) {
-        LoggerService.error(
-          'Error mapping note with id ${map['id']}: $e',
-          error: e,
-        );
-        // Skip corrupted notes instead of crashing
-        continue;
-      }
-    }
-    return notes;
+    return await _batchLoadNotes(maps);
   }
 
   Future<Note?> getNote(String id) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'notes',
-      where: 'id = ?',
-      whereArgs: [id],
+    final List<Map<String, dynamic>> maps = await db.rawQuery(
+      '''
+      SELECT 
+        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived, recurrenceRule,
+        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+        length(content) as _contentLength
+      FROM notes
+      WHERE id = ?
+      ''',
+      [id],
     );
 
     if (maps.isEmpty) return null;
@@ -1350,27 +1619,16 @@ class DatabaseService {
     final db = await database;
     // Use WHERE IN clause for efficient batch retrieval
     final placeholders = List.filled(noteIds.length, '?').join(',');
-    final List<Map<String, dynamic>> maps = await db.query(
-      'notes',
-      where: 'id IN ($placeholders)',
-      whereArgs: noteIds,
-    );
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT 
+        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived, recurrenceRule,
+        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+        length(content) as _contentLength
+      FROM notes
+      WHERE id IN ($placeholders)
+      ''', noteIds);
 
-    final List<Note> notes = [];
-    for (final map in maps) {
-      try {
-        final note = await _mapToNote(map);
-        notes.add(note);
-      } catch (e) {
-        LoggerService.error(
-          'Error mapping note with id ${map['id']}: $e',
-          error: e,
-        );
-        // Skip corrupted notes instead of crashing
-        continue;
-      }
-    }
-    return notes;
+    return await _batchLoadNotes(maps);
   }
 
   Future<void> updateNote(Note note) async {
@@ -1419,14 +1677,27 @@ class DatabaseService {
     await db.delete('attachments', where: 'noteId = ?', whereArgs: [note.id]);
     for (final attachmentPath in note.attachmentPaths) {
       // Check if path is relative (starts with 'attachments/')
-      final isRelativePath = attachmentPath.startsWith('attachments/');
+      bool isRelativePath = attachmentPath.startsWith('attachments/');
+      String finalPath = attachmentPath;
+
+      if (!isRelativePath) {
+        // Try to convert absolute path to relative if it's in the app dir
+        final relativePath = await FileUtils.getRelativePath(attachmentPath);
+        if (relativePath != null) {
+          finalPath = relativePath;
+          isRelativePath = true;
+        }
+      }
 
       // Preserve includeInAIContext if it existed, otherwise default to true
-      final includeInAIContext = existingContextMap[attachmentPath] ?? true;
+      final includeInAIContext =
+          existingContextMap[finalPath] ??
+          existingContextMap[attachmentPath] ??
+          true;
 
       await _insertAttachment(
         note.id,
-        attachmentPath,
+        finalPath,
         isRelativePath: isRelativePath,
         includeInAIContext: includeInAIContext,
       );
@@ -1446,6 +1717,59 @@ class DatabaseService {
       where: 'noteId = ? AND filePath = ?',
       whereArgs: [noteId, filePath],
     );
+  }
+
+  /// Updates the metadata JSON for a specific attachment
+  Future<void> updateAttachmentMetadata(
+    String attachmentId,
+    Map<String, dynamic>? metadata,
+  ) async {
+    final db = await database;
+    await db.update(
+      'attachments',
+      {'metadata': metadata != null ? jsonEncode(metadata) : null},
+      where: 'id = ?',
+      whereArgs: [attachmentId],
+    );
+  }
+
+  /// Updates just the lastViewedPage in attachment metadata
+  /// Preserves other metadata fields
+  Future<void> updateLastViewedPage(String attachmentId, int pageNumber) async {
+    try {
+      // Ensure metadata column exists
+      final db = await database;
+      final tableInfo = await db.rawQuery('PRAGMA table_info(attachments)');
+      final hasColumn = tableInfo.any((column) => column['name'] == 'metadata');
+      if (!hasColumn) {
+        LoggerService.warning(
+          'metadata column missing from attachments table - applying migration',
+        );
+        await db.execute('ALTER TABLE attachments ADD COLUMN metadata TEXT');
+      }
+
+      final attachment = await getAttachmentById(attachmentId);
+      if (attachment == null) return;
+
+      final metadata = Map<String, dynamic>.from(attachment.metadata ?? {});
+      metadata['lastViewedPage'] = pageNumber;
+
+      await updateAttachmentMetadata(attachmentId, metadata);
+    } catch (e) {
+      LoggerService.warning('Failed to update last viewed page: $e');
+    }
+  }
+
+  /// Gets an attachment by its ID
+  Future<Attachment?> getAttachmentById(String attachmentId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'attachments',
+      where: 'id = ?',
+      whereArgs: [attachmentId],
+    );
+    if (maps.isEmpty) return null;
+    return Attachment.fromDatabase(maps.first);
   }
 
   /// Gets all attachments for a specific note
@@ -1483,22 +1807,42 @@ class DatabaseService {
 
   Future<List<SubNote>> getSubNotes(String noteId) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'subnotes',
-      where: 'noteId = ?',
-      whereArgs: [noteId],
-      orderBy: 'createdAt ASC',
+    final List<Map<String, dynamic>> maps = await db.rawQuery(
+      '''
+      SELECT 
+        id, noteId, name, createdAt, isCompleted,
+        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
+        length(content) as _contentLength
+      FROM subnotes
+      WHERE noteId = ?
+      ORDER BY createdAt ASC
+      ''',
+      [noteId],
     );
 
-    return List.generate(maps.length, (i) {
-      return SubNote(
-        id: maps[i]['id'],
-        name: maps[i]['name'],
-        content: maps[i]['content'],
-        createdAt: DateTime.fromMillisecondsSinceEpoch(maps[i]['createdAt']),
-        isCompleted: maps[i]['isCompleted'] == 1,
+    final List<SubNote> subNotes = [];
+    for (final map in maps) {
+      String content = map['content'] as String? ?? '';
+      if (content.isEmpty && (map['_contentLength'] as int? ?? 0) > 0) {
+        content = await _readLargeString(
+          db,
+          'subnotes',
+          'content',
+          map['id'] as String,
+        );
+      }
+
+      subNotes.add(
+        SubNote(
+          id: map['id'],
+          name: map['name'],
+          content: content,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt']),
+          isCompleted: map['isCompleted'] == 1,
+        ),
       );
-    });
+    }
+    return subNotes;
   }
 
   // Tags CRUD
@@ -1615,8 +1959,27 @@ class DatabaseService {
     );
 
     // For each note, add the new tag if it doesn't already exist
+    // For each note, add the new tag if it doesn't already exist
     for (final noteTagMap in noteTagMaps) {
       final noteId = noteTagMap['noteId'] as String;
+
+      // Verify note exists to avoid Foreign Key violations (orphaned tags)
+      final noteExists = await db.query(
+        'notes',
+        columns: ['id'],
+        where: 'id = ?',
+        whereArgs: [noteId],
+        limit: 1,
+      );
+
+      if (noteExists.isEmpty) {
+        // Cleanup orphan
+        LoggerService.warning(
+          'Found orphaned note_tag for noteId: $noteId. Cleaning up.',
+        );
+        await db.delete('note_tags', where: 'noteId = ?', whereArgs: [noteId]);
+        continue;
+      }
 
       // Check if this note already has the new tag
       final existingNewTag = await db.query(
@@ -1627,7 +1990,10 @@ class DatabaseService {
 
       // Only insert if the note doesn't already have the new tag
       if (existingNewTag.isEmpty) {
-        await db.insert('note_tags', {'noteId': noteId, 'tagId': newTagId});
+        await db.insert('note_tags', {
+          'noteId': noteId,
+          'tagId': newTagId,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
       }
     }
 
@@ -1811,10 +2177,22 @@ class DatabaseService {
     final tags = await _getNoteTags(map['id']);
     final attachments = await _getNoteAttachments(map['id']);
 
+    String content = map['content'] as String? ?? '';
+    if (content.isEmpty && (map['_contentLength'] as int? ?? 0) > 0) {
+      // Content was too large and skipped in initial query, fetch it now in chunks
+      final db = await database;
+      content = await _readLargeString(
+        db,
+        'notes',
+        'content',
+        map['id'] as String,
+      );
+    }
+
     return Note(
       id: map['id'],
       title: map['title'],
-      content: map['content'],
+      content: content,
       type: NoteType.values.firstWhere(
         (e) => e.toString().split('.').last == map['type'],
         orElse: () => NoteType.note,
@@ -1830,6 +2208,7 @@ class DatabaseService {
       completionPercentage: map['completionPercentage'],
       pinned: (map['pinned'] ?? 0) == 1,
       isArchived: (map['isArchived'] ?? 0) == 1,
+      recurrenceRule: map['recurrenceRule'],
     );
   }
 
@@ -1975,7 +2354,10 @@ class DatabaseService {
     );
 
     if (existingLink.isEmpty) {
-      await db.insert('note_tags', {'noteId': noteId, 'tagId': tagId});
+      await db.insert('note_tags', {
+        'noteId': noteId,
+        'tagId': tagId,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
   }
 
@@ -2034,41 +2416,29 @@ class DatabaseService {
     LoggerService.info(
       'Migrating backup database from version $oldVersion to $newVersion',
     );
-    await _executeMigrations(
-      db,
-      oldVersion,
-      newVersion,
-      isBackupMigration: true,
-    );
-  }
 
-  Future<void> _createBackupDatabaseTables(Database db, int version) async {
-    // Create all tables using schema constants (same as main database)
-    await _onCreate(db, version);
-  }
+    // Inline migration execution for backup databases (no RecoveryScreen navigation)
+    for (int version = oldVersion + 1; version <= newVersion; version++) {
+      final migrationStep = _migrationSteps[version];
+      if (migrationStep == null) {
+        LoggerService.warning('No migration step defined for version $version');
+        continue;
+      }
 
-  Future<void> _recreateBackupDatabase(Database db, int newVersion) async {
-    // Drop all tables and recreate using schema constants
-    await db.execute('DROP TABLE IF EXISTS relationships');
-    await db.execute('DROP TABLE IF EXISTS attachments');
-    await db.execute('DROP TABLE IF EXISTS note_tags');
-    await db.execute('DROP TABLE IF EXISTS subnotes');
-    await db.execute('DROP TABLE IF EXISTS notes');
-    await db.execute('DROP TABLE IF EXISTS tags');
-    await db.execute('DROP TABLE IF EXISTS filters');
-    await db.execute('DROP TABLE IF EXISTS user_apps');
-    await db.execute('DROP TABLE IF EXISTS app_revisions');
-    await db.execute('DROP TABLE IF EXISTS user_app_libraries');
-    await db.execute('DROP TABLE IF EXISTS user_app_library_dependencies');
-    await db.execute('DROP TABLE IF EXISTS conversation_tags');
-    await db.execute('DROP TABLE IF EXISTS conversation_note_mapping');
-    await db.execute('DROP TABLE IF EXISTS conversation_message_mapping');
-    await db.execute('DROP TABLE IF EXISTS message_parents');
-    await db.execute('DROP TABLE IF EXISTS conversation_attachments');
-    await db.execute('DROP TABLE IF EXISTS conversation_messages');
-    await db.execute('DROP TABLE IF EXISTS conversations');
-
-    await _createBackupDatabaseTables(db, newVersion);
+      try {
+        LoggerService.info(
+          'Executing backup migration to version $version: ${migrationStep.description}',
+        );
+        await migrationStep.execute(db, isBackupMigration: true);
+        LoggerService.info('Successfully migrated backup to version $version');
+      } catch (e) {
+        LoggerService.error(
+          'Backup migration to version $version failed: $e',
+          error: e,
+        );
+        break; // Stop on error
+      }
+    }
   }
 
   // Clear all data
@@ -2126,6 +2496,10 @@ class DatabaseService {
       'name': filter.name,
       'includeText': filter.includeText,
       'includeTags': filter.includeTags.join(','),
+      'excludeTags': filter.excludeTags.join(','),
+      'noteTypes': filter.noteTypes
+          .map((t) => t.toString().split('.').last)
+          .join(','),
       'includeArchived': filter.includeArchived ? 1 : 0,
       'isPinned': filter.isPinned ? 1 : 0,
       'createdAt': filter.createdAt.millisecondsSinceEpoch,
@@ -2149,11 +2523,29 @@ class DatabaseService {
           ? <String>[]
           : includeTagsString.split(',');
 
+      final excludeTagsString = maps[i]['excludeTags'] as String? ?? '';
+      final excludeTags = excludeTagsString.isEmpty
+          ? <String>[]
+          : excludeTagsString.split(',');
+
+      final noteTypesString = maps[i]['noteTypes'] as String? ?? '';
+      final noteTypes = noteTypesString.isEmpty
+          ? NoteType
+                .values // Default to all types if empty (backward compatibility)
+          : noteTypesString.split(',').map((e) {
+              return NoteType.values.firstWhere(
+                (type) => type.toString().split('.').last == e,
+                orElse: () => NoteType.note,
+              );
+            }).toList();
+
       return Filter(
         id: maps[i]['id'],
         name: maps[i]['name'],
         includeText: maps[i]['includeText'],
         includeTags: includeTags,
+        excludeTags: excludeTags,
+        noteTypes: noteTypes,
         includeArchived: (maps[i]['includeArchived'] ?? 0) == 1,
         isPinned: (maps[i]['isPinned'] ?? 0) == 1,
         createdAt: _validateTimestamp(
@@ -2186,11 +2578,29 @@ class DatabaseService {
         ? <String>[]
         : includeTagsString.split(',');
 
+    final excludeTagsString = map['excludeTags'] as String? ?? '';
+    final excludeTags = excludeTagsString.isEmpty
+        ? <String>[]
+        : excludeTagsString.split(',');
+
+    final noteTypesString = map['noteTypes'] as String? ?? '';
+    final noteTypes = noteTypesString.isEmpty
+        ? NoteType
+              .values // Default to all types
+        : noteTypesString.split(',').map((e) {
+            return NoteType.values.firstWhere(
+              (type) => type.toString().split('.').last == e,
+              orElse: () => NoteType.note,
+            );
+          }).toList();
+
     return Filter(
       id: map['id'],
       name: map['name'],
       includeText: map['includeText'],
       includeTags: includeTags,
+      excludeTags: excludeTags,
+      noteTypes: noteTypes,
       includeArchived: (map['includeArchived'] ?? 0) == 1,
       isPinned: (map['isPinned'] ?? 0) == 1,
       createdAt: _validateTimestamp(map['createdAt'], 'createdAt', map['id']),
@@ -2207,6 +2617,10 @@ class DatabaseService {
       'name': filter.name,
       'includeText': filter.includeText,
       'includeTags': filter.includeTags.join(','),
+      'excludeTags': filter.excludeTags.join(','),
+      'noteTypes': filter.noteTypes
+          .map((t) => t.toString().split('.').last)
+          .join(','),
       'includeArchived': filter.includeArchived ? 1 : 0,
       'isPinned': filter.isPinned ? 1 : 0,
       'createdAt': filter.createdAt.millisecondsSinceEpoch,
@@ -2225,11 +2639,7 @@ class DatabaseService {
   Future<List<Map<String, dynamic>>> executeRawQuery(String sql) async {
     final db = await database;
     try {
-      // Basic security check - only allow SELECT queries
       final trimmedSql = sql.trim().toLowerCase();
-      if (!trimmedSql.startsWith('select')) {
-        throw Exception('Only SELECT queries are allowed');
-      }
 
       // Execute the query
       final result = await db.rawQuery(sql);
@@ -2271,7 +2681,14 @@ class DatabaseService {
 
   Future<List<UserApp>> getAllUserApps() async {
     final db = await database;
-    final maps = await db.query('user_apps', orderBy: 'createdAt DESC');
+    // Exclude appState to avoid CursorWindow issues with large state data.
+    // App state should be loaded on-demand via getUserAppState().
+    final maps = await db.rawQuery('''
+      SELECT id, uuid, name, description, steps, htmlContent, type, 
+             selectedRevisionId, author, license, createdAt, updatedAt
+      FROM user_apps
+      ORDER BY createdAt DESC
+    ''');
     LoggerService.debug(
       'DatabaseService.getAllUserApps: Found ${maps.length} user apps',
     );
@@ -2280,7 +2697,17 @@ class DatabaseService {
 
   Future<UserApp?> getUserApp(String id) async {
     final db = await database;
-    final maps = await db.query('user_apps', where: 'id = ?', whereArgs: [id]);
+    // Explicitly select columns excluding appState to avoid CursorWindow size limits
+    final maps = await db.rawQuery(
+      '''
+      SELECT id, uuid, name, description, steps, htmlContent, type, 
+             selectedRevisionId, author, license, createdAt, updatedAt
+      FROM user_apps
+      WHERE id = ?
+    ''',
+      [id],
+    );
+
     if (maps.isNotEmpty) {
       return _userAppFromMap(maps.first);
     }
@@ -2297,7 +2724,6 @@ class DatabaseService {
       'description': app.description,
       'steps': app.steps.join('|'), // Store steps as pipe-separated string
       'htmlContent': app.htmlContent,
-      'appState': app.appState != null ? jsonEncode(app.appState) : null,
       'type': app.type.toString().split('.').last, // Store enum as string
       'selectedRevisionId': app.selectedRevisionId,
       'author': app.author,
@@ -2305,6 +2731,10 @@ class DatabaseService {
       'createdAt': app.createdAt.millisecondsSinceEpoch,
       'updatedAt': app.updatedAt.millisecondsSinceEpoch,
     };
+
+    if (app.appState != null) {
+      json['appState'] = jsonEncode(app.appState);
+    }
 
     await db.update('user_apps', json, where: 'id = ?', whereArgs: [app.id]);
   }
@@ -2367,7 +2797,7 @@ class DatabaseService {
 
     // Read TEXT data in chunks to avoid cursor window issues
     try {
-      final textData = await _readTextInChunks(db, id);
+      final textData = await _readLargeString(db, 'user_apps', 'appState', id);
       if (textData.isEmpty) {
         return null;
       }
@@ -2445,11 +2875,17 @@ class DatabaseService {
 
   Future<List<AppRevision>> getAppRevisions(String appId) async {
     final db = await database;
-    final maps = await db.query(
-      'app_revisions',
-      where: 'appId = ?',
-      whereArgs: [appId],
-      orderBy: 'revisionNumber ASC',
+    final maps = await db.rawQuery(
+      '''
+      SELECT 
+        id, appId, revisionNumber, revisionTimestamp, userPrompt, aiResponse, attachmentPaths,
+        CASE WHEN length(appCode) < 500000 THEN appCode ELSE NULL END as appCode,
+        length(appCode) as _appCodeLength
+      FROM app_revisions
+      WHERE appId = ?
+      ORDER BY revisionNumber ASC
+      ''',
+      [appId],
     );
     LoggerService.debug(
       'DatabaseService.getAppRevisions: Found ${maps.length} revisions for app $appId',
@@ -2457,7 +2893,12 @@ class DatabaseService {
     if (maps.isNotEmpty) {
       LoggerService.debug('First revision data: ${maps.first}');
     }
-    final revisions = maps.map((map) => _appRevisionFromMap(map)).toList();
+
+    final List<AppRevision> revisions = [];
+    for (final map in maps) {
+      revisions.add(await _appRevisionFromMap(map));
+    }
+
     if (revisions.isNotEmpty) {
       LoggerService.debug(
         'First revision appCode length: ${revisions.first.appCode.length}',
@@ -2468,13 +2909,19 @@ class DatabaseService {
 
   Future<AppRevision?> getAppRevision(String id) async {
     final db = await database;
-    final maps = await db.query(
-      'app_revisions',
-      where: 'id = ?',
-      whereArgs: [id],
+    final maps = await db.rawQuery(
+      '''
+      SELECT 
+        id, appId, revisionNumber, revisionTimestamp, userPrompt, aiResponse, attachmentPaths,
+        CASE WHEN length(appCode) < 500000 THEN appCode ELSE NULL END as appCode,
+        length(appCode) as _appCodeLength
+      FROM app_revisions
+      WHERE id = ?
+      ''',
+      [id],
     );
     if (maps.isNotEmpty) {
-      return _appRevisionFromMap(maps.first);
+      return await _appRevisionFromMap(maps.first);
     }
     return null;
   }
@@ -2542,16 +2989,36 @@ class DatabaseService {
   Future<AppRevision?> getLatestAppRevision(String appId) async {
     final db = await database;
     final result = await db.rawQuery(
-      'SELECT * FROM app_revisions WHERE appId = ? ORDER BY revisionNumber DESC LIMIT 1',
+      '''
+      SELECT 
+        id, appId, revisionNumber, revisionTimestamp, userPrompt, aiResponse, attachmentPaths,
+        CASE WHEN length(appCode) < 500000 THEN appCode ELSE NULL END as appCode,
+        length(appCode) as _appCodeLength
+      FROM app_revisions 
+      WHERE appId = ? 
+      ORDER BY revisionNumber DESC 
+      LIMIT 1
+      ''',
       [appId],
     );
     if (result.isNotEmpty) {
-      return _appRevisionFromMap(result.first);
+      return await _appRevisionFromMap(result.first);
     }
     return null;
   }
 
-  AppRevision _appRevisionFromMap(Map<String, dynamic> map) {
+  Future<AppRevision> _appRevisionFromMap(Map<String, dynamic> map) async {
+    String appCode = map['appCode'] as String? ?? '';
+    if (appCode.isEmpty && (map['_appCodeLength'] as int? ?? 0) > 0) {
+      final db = await database;
+      appCode = await _readLargeString(
+        db,
+        'app_revisions',
+        'appCode',
+        map['id'] as String,
+      );
+    }
+
     final revision = AppRevision(
       id: map['id'] as String,
       appId: map['appId'] as String,
@@ -2561,7 +3028,7 @@ class DatabaseService {
       ),
       userPrompt: map['userPrompt'] as String,
       aiResponse: map['aiResponse'] as String,
-      appCode: map['appCode'] as String,
+      appCode: appCode,
       attachmentPaths: map['attachmentPaths'] != null
           ? (map['attachmentPaths'] as String)
                 .split('|')
@@ -2665,7 +3132,12 @@ class DatabaseService {
       // Read BLOB data in chunks to avoid cursor window issues
       if (map['has_blob'] != null) {
         try {
-          final blobData = await _readBlobInChunks(db, map['id'] as int);
+          final blobData = await _readLargeBlob(
+            db,
+            'user_app_library_dependencies',
+            'bytes',
+            map['id'] as int,
+          );
           newMap['bytes'] = blobData;
         } catch (e) {
           LoggerService.error(
@@ -2709,7 +3181,12 @@ class DatabaseService {
       // Read BLOB data in chunks to avoid cursor window issues
       if (result['has_blob'] != null) {
         try {
-          final blobData = await _readBlobInChunks(db, result['id'] as int);
+          final blobData = await _readLargeBlob(
+            db,
+            'user_app_library_dependencies',
+            'bytes',
+            result['id'] as int,
+          );
           result['bytes'] = blobData;
         } catch (e) {
           LoggerService.error(
@@ -2763,7 +3240,12 @@ class DatabaseService {
       // Read BLOB data in chunks to avoid cursor window issues
       if (result['has_blob'] != null) {
         try {
-          final blobData = await _readBlobInChunks(db, result['id'] as int);
+          final blobData = await _readLargeBlob(
+            db,
+            'user_app_library_dependencies',
+            'bytes',
+            result['id'] as int,
+          );
           result['bytes'] = blobData;
         } catch (e) {
           LoggerService.error(
@@ -2781,70 +3263,22 @@ class DatabaseService {
     return null;
   }
 
-  // Helper method to read BLOB data in chunks to avoid cursor window issues
-  Future<List<int>> _readBlobInChunks(Database db, int dependencyId) async {
-    const int chunkSize = 1024 * 1024; // 1MB chunks
-    final List<int> allBytes = [];
-
-    try {
-      // Get the total size of the BLOB
-      final sizeResult = await db.rawQuery(
-        '''
-        SELECT length(bytes) as blob_size 
-        FROM user_app_library_dependencies 
-        WHERE id = ?
-      ''',
-        [dependencyId],
-      );
-
-      if (sizeResult.isEmpty) {
-        return <int>[];
-      }
-
-      final int totalSize = sizeResult.first['blob_size'] as int;
-
-      // Read BLOB in chunks
-      for (int offset = 0; offset < totalSize; offset += chunkSize) {
-        final int currentChunkSize = (offset + chunkSize > totalSize)
-            ? totalSize - offset
-            : chunkSize;
-
-        final chunkResult = await db.rawQuery(
-          '''
-          SELECT substr(bytes, ?, ?) as chunk
-          FROM user_app_library_dependencies 
-          WHERE id = ?
-        ''',
-          [offset + 1, currentChunkSize, dependencyId],
-        );
-
-        if (chunkResult.isNotEmpty && chunkResult.first['chunk'] != null) {
-          final chunk = chunkResult.first['chunk'] as Uint8List;
-          allBytes.addAll(chunk);
-        }
-      }
-
-      return allBytes;
-    } catch (e) {
-      LoggerService.error('Error reading BLOB in chunks: $e', error: e);
-      return <int>[];
-    }
-  }
-
   // Helper method to read TEXT data in chunks to avoid cursor window issues
-  Future<String> _readTextInChunks(Database db, String appId) async {
-    const int chunkSize = 1024 * 1024; // 1MB chunks
+  Future<String> _readLargeString(
+    Database db,
+    String table,
+    String column,
+    String id, {
+    String idColumn = 'id',
+    int chunkSize = 1024 * 1024, // 1MB
+  }) async {
     final StringBuffer allText = StringBuffer();
 
     try {
       // Get the total size of the TEXT
       final sizeResult = await db.rawQuery(
-        '''
-        SELECT length(appState) as text_size 
-        FROM user_apps 
-        WHERE id = ?
-      ''',
-        [appId],
+        'SELECT length($column) as text_size FROM $table WHERE $idColumn = ?',
+        [id],
       );
 
       if (sizeResult.isEmpty) {
@@ -2863,12 +3297,8 @@ class DatabaseService {
             : chunkSize;
 
         final chunkResult = await db.rawQuery(
-          '''
-          SELECT substr(appState, ?, ?) as chunk
-          FROM user_apps 
-          WHERE id = ?
-        ''',
-          [offset + 1, currentChunkSize, appId],
+          'SELECT substr($column, ?, ?) as chunk FROM $table WHERE $idColumn = ?',
+          [offset + 1, currentChunkSize, id],
         );
 
         if (chunkResult.isNotEmpty && chunkResult.first['chunk'] != null) {
@@ -2879,8 +3309,61 @@ class DatabaseService {
 
       return allText.toString();
     } catch (e) {
-      LoggerService.error('Error reading TEXT in chunks: $e', error: e);
+      LoggerService.error(
+        'Error reading large string from $table.$column: $e',
+        error: e,
+      );
       return '';
+    }
+  }
+
+  Future<List<int>> _readLargeBlob(
+    Database db,
+    String table,
+    String column,
+    int id, {
+    String idColumn = 'id',
+    int chunkSize = 1024 * 1024, // 1MB
+  }) async {
+    final List<int> allBytes = [];
+
+    try {
+      // Get the total size of the BLOB
+      final sizeResult = await db.rawQuery(
+        'SELECT length($column) as blob_size FROM $table WHERE $idColumn = ?',
+        [id],
+      );
+
+      if (sizeResult.isEmpty) {
+        return <int>[];
+      }
+
+      final int totalSize = sizeResult.first['blob_size'] as int;
+
+      // Read BLOB in chunks
+      for (int offset = 0; offset < totalSize; offset += chunkSize) {
+        final int currentChunkSize = (offset + chunkSize > totalSize)
+            ? totalSize - offset
+            : chunkSize;
+
+        final chunkResult = await db.rawQuery(
+          'SELECT substr($column, ?, ?) as chunk FROM $table WHERE $idColumn = ?',
+          [offset + 1, currentChunkSize, id],
+        );
+
+        if (chunkResult.isNotEmpty && chunkResult.first['chunk'] != null) {
+          final chunk = chunkResult.first['chunk'] as Uint8List;
+          allBytes.addAll(chunk);
+        }
+      }
+
+      return allBytes;
+    } catch (e) {
+      LoggerService.error(
+        'Error reading large blob from $table.$column: $e',
+        error: e,
+      );
+      return <int>[];
     }
   }
 
@@ -2902,6 +3385,7 @@ class DatabaseService {
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
+    bool includeEmpty = true,
   }) async {
     final db = await database;
 
@@ -2924,6 +3408,15 @@ class DatabaseService {
       final whereSegments = <String>['t.name IN ($tagPlaceholders)'];
       whereSegments.addAll(filters);
 
+      if (!includeEmpty) {
+        whereSegments.add('''
+          EXISTS (
+            SELECT 1 FROM conversation_message_mapping cmm
+            WHERE cmm.conversationId = c.id
+          )
+        ''');
+      }
+
       final query =
           '''
         SELECT c.*
@@ -2942,8 +3435,21 @@ class DatabaseService {
       return maps.map((map) => _mapToConversation(map)).toList();
     }
 
-    final whereClause = filters.isNotEmpty
-        ? filters.map((clause) => clause.replaceAll('c.', '')).join(' AND ')
+    // Prepare simple query filters
+    var queryFilters = List<String>.from(filters);
+    if (!includeEmpty) {
+      queryFilters.add('''
+        EXISTS (
+          SELECT 1 FROM conversation_message_mapping cmm
+          WHERE cmm.conversationId = conversations.id
+        )
+      ''');
+    }
+
+    final whereClause = queryFilters.isNotEmpty
+        ? queryFilters
+              .map((clause) => clause.replaceAll('c.', ''))
+              .join(' AND ')
         : null;
 
     final List<Map<String, dynamic>> maps = await db.query(
@@ -2954,6 +3460,58 @@ class DatabaseService {
     );
 
     return maps.map((map) => _mapToConversation(map)).toList();
+  }
+
+  /// Gets the first and last message of a conversation for preview purposes
+  /// efficiently using LIMIT 1 queries.
+  Future<List<ConversationMessage>> getConversationPreviewMessages(
+    String conversationId,
+  ) async {
+    final db = await database;
+
+    // Get the first message
+    final firstMsgMaps = await db.rawQuery(
+      '''
+      SELECT cm.*
+      FROM conversation_messages cm
+      JOIN conversation_message_mapping cmm ON cm.id = cmm.messageId
+      WHERE cmm.conversationId = ?
+      ORDER BY cm.timestamp ASC
+      LIMIT 1
+      ''',
+      [conversationId],
+    );
+
+    if (firstMsgMaps.isEmpty) return [];
+
+    // Get the last message
+    final lastMsgMaps = await db.rawQuery(
+      '''
+      SELECT cm.*
+      FROM conversation_messages cm
+      JOIN conversation_message_mapping cmm ON cm.id = cmm.messageId
+      WHERE cmm.conversationId = ?
+      ORDER BY cm.timestamp DESC
+      LIMIT 1
+      ''',
+      [conversationId],
+    );
+
+    final messages = <ConversationMessage>[];
+    messages.add(_mapToConversationMessage(firstMsgMaps.first, conversationId));
+
+    // Only add last message if it's different from the first
+    if (lastMsgMaps.isNotEmpty) {
+      final lastMsg = _mapToConversationMessage(
+        lastMsgMaps.first,
+        conversationId,
+      );
+      if (lastMsg.id != messages.first.id) {
+        messages.add(lastMsg);
+      }
+    }
+
+    return messages;
   }
 
   Future<Conversation?> getConversation(String id) async {
@@ -3882,4 +4440,222 @@ class DatabaseService {
       rethrow;
     }
   }
+
+  /// Batch fetch messages for multiple conversations efficiently
+  Future<List<ConversationMessage>> getMessagesForConversations(
+    List<String> conversationIds,
+  ) async {
+    if (conversationIds.isEmpty) return [];
+
+    final db = await database;
+    // SQLite has a limit on variables, so we chunk requests if necessary
+    const chunkSize = 500;
+    final messages = <ConversationMessage>[];
+
+    for (var i = 0; i < conversationIds.length; i += chunkSize) {
+      final end = (i + chunkSize < conversationIds.length)
+          ? i + chunkSize
+          : conversationIds.length;
+      final chunk = conversationIds.sublist(i, end);
+      final placeholders = List.filled(chunk.length, '?').join(',');
+
+      final results = await db.rawQuery('''
+        SELECT 
+          cm.id, 
+          cm.type, 
+          cm.content, 
+          cm.timestamp, 
+          cm.modelUsed, 
+          cmm.conversationId
+        FROM conversation_messages cm
+        JOIN conversation_message_mapping cmm ON cm.id = cmm.messageId
+        WHERE cmm.conversationId IN ($placeholders)
+        ORDER BY cm.timestamp ASC
+        ''', chunk);
+
+      for (final map in results) {
+        messages.add(
+          _mapToConversationMessage(map, map['conversationId'] as String),
+        );
+      }
+    }
+
+    return messages;
+  }
+
+  /// Batch fetch conversation IDs for multiple messages
+  /// Returns a map of messageId -> List<conversationId>
+  Future<Map<String, List<String>>> getConversationIdsForMessages(
+    List<String> messageIds,
+  ) async {
+    if (messageIds.isEmpty) return {};
+
+    final db = await database;
+    final result = <String, List<String>>{};
+
+    // Chunking to avoid variable limit
+    const chunkSize = 500;
+
+    for (var i = 0; i < messageIds.length; i += chunkSize) {
+      final end = (i + chunkSize < messageIds.length)
+          ? i + chunkSize
+          : messageIds.length;
+      final chunk = messageIds.sublist(i, end);
+      final placeholders = List.filled(chunk.length, '?').join(',');
+
+      final rows = await db.rawQuery('''
+        SELECT messageId, conversationId
+        FROM conversation_message_mapping
+        WHERE messageId IN ($placeholders)
+        ''', chunk);
+
+      for (final row in rows) {
+        final messageId = row['messageId'] as String;
+        final conversationId = row['conversationId'] as String;
+
+        if (!result.containsKey(messageId)) {
+          result[messageId] = [];
+        }
+        result[messageId]!.add(conversationId);
+      }
+    }
+
+    return result;
+  }
+  // --- Agent / AI Features ---
+
+  /// Search notes using Full-Text Search
+  Future<List<Note>> searchNotesFTS(String query, {List<String>? tags}) async {
+    final db = await database;
+    // FTS5 match query
+    // We sanitize the query to prevent syntax errors in FTS match expression
+    final sanitizedQuery = '"$query"';
+    final hasTags = tags != null && tags.isNotEmpty;
+
+    try {
+      String sql = '''
+        SELECT n.* 
+        FROM notes_fts fts
+        JOIN notes n ON fts.rowid = n.rowid
+        WHERE notes_fts MATCH ?
+      ''';
+
+      List<Object?> args = [sanitizedQuery];
+
+      // Add tag filtering
+      // Since tags are stored as a JSON string or comma-separated string in 'tags' column (TEXT),
+      // we can use LIKE. Assuming tags is a JSON array string like "['tag1', 'tag2']".
+      // Or if it's a simple string. The Note model says List<String> tags.
+      // In DB creation (checked before), tags is TEXT.
+      // We will perform a crude check using LIKE for each tag.
+      // Ideally we should normalize tags table, but for now:
+      if (hasTags) {
+        for (final tag in tags) {
+          sql += ' AND n.tags LIKE ?';
+          args.add('%"$tag"%'); // Assuming JSON format "tag"
+        }
+      }
+
+      sql += ' ORDER BY rank LIMIT 50';
+
+      final results = await db.rawQuery(sql, args);
+      return await _batchLoadNotes(results);
+    } catch (e) {
+      // If FTS5 'rank' column is missing (FTS4 fallback), try without ordering by rank
+      if (e.toString().contains('no such column: rank')) {
+        try {
+          String sql = '''
+            SELECT n.* 
+            FROM notes_fts fts
+            JOIN notes n ON fts.rowid = n.rowid
+            WHERE notes_fts MATCH ?
+          ''';
+          List<Object?> args = [sanitizedQuery];
+
+          if (hasTags) {
+            for (final tag in tags) {
+              sql += ' AND n.tags LIKE ?';
+              args.add('%"$tag"%');
+            }
+          }
+
+          sql += ' LIMIT 50';
+
+          final results = await db.rawQuery(sql, args);
+          return await _batchLoadNotes(results);
+        } catch (e2) {
+          LoggerService.error('FTS Search failed: $e2');
+          return [];
+        }
+      }
+      LoggerService.error('FTS Search failed: $e');
+      return [];
+    }
+  }
+
+  /// Executes a raw SQL query. USE WITH CAUTION.
+  Future<List<Map<String, dynamic>>> runRawQuery(
+    String query, [
+    List<Object?>? arguments,
+  ]) async {
+    final db = await database;
+    return await db.rawQuery(query, arguments);
+  }
+
+  /// Fallback search using LIKE
+  Future<List<Note>> searchNotes(String query) async {
+    final db = await database;
+    final results = await db.query(
+      'notes',
+      where: 'title LIKE ? OR content LIKE ?',
+      whereArgs: ['%$query%', '%$query%'],
+      orderBy: 'updatedAt DESC',
+      limit: 50,
+    );
+    return await _batchLoadNotes(results);
+  }
+
+  /// Get the AI extraction prompt for a specific tag
+  Future<String?> getTagExtractionPrompt(String tagId) async {
+    final db = await database;
+    try {
+      final results = await db.query(
+        'tag_ai_configs',
+        columns: ['extractionPrompt'],
+        where: 'tagId = ?',
+        whereArgs: [tagId],
+      );
+
+      if (results.isNotEmpty) {
+        return results.first['extractionPrompt'] as String?;
+      }
+    } catch (e) {
+      // Table might not exist yet if migration hasn't run or dev mode
+      LoggerService.warning('Failed to get tag config: $e');
+    }
+    return null;
+  }
+
+  /// Update or Insert the AI extraction prompt for a tag
+  Future<void> updateTagExtractionPrompt(String tagId, String? prompt) async {
+    final db = await database;
+    if (prompt == null || prompt.isEmpty) {
+      await db.delete('tag_ai_configs', where: 'tagId = ?', whereArgs: [tagId]);
+    } else {
+      await db.insert('tag_ai_configs', {
+        'tagId': tagId,
+        'extractionPrompt': prompt,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+  }
+
+  Future<Note?> getNoteById(String id) async {
+    final db = await database;
+    final results = await db.query('notes', where: 'id = ?', whereArgs: [id]);
+    if (results.isEmpty) return null;
+    final notes = await _batchLoadNotes(results);
+    return notes.isNotEmpty ? notes.first : null;
+  }
+
+  // --- End Agent / AI Features ---
 }

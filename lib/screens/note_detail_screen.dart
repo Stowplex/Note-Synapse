@@ -9,6 +9,7 @@ import 'package:re_editor/re_editor.dart';
 
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
+import '../widgets/drawing_editor.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
@@ -17,9 +18,14 @@ import '../models/relationship.dart';
 import '../services/audio_recording_service.dart';
 import '../services/ai_service.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
+import '../widgets/interactive_checkbox_component.dart';
 import '../widgets/share_dialog.dart';
 import '../widgets/tag_selection_dialog.dart';
 import '../widgets/synapse_note_editor.dart';
+import '../widgets/block_editor_dialog.dart';
+import '../utils/markdown_block_tracker.dart';
+import '../widgets/block_markdown_body.dart';
+import '../widgets/block_selection_menu.dart';
 
 import '../utils/date_utils.dart';
 import '../utils/file_utils.dart';
@@ -32,12 +38,18 @@ import '../services/logger_service.dart';
 import '../services/database_service.dart';
 import '../services/conversation_service.dart';
 import '../services/media_attachment_service.dart';
+import '../services/content_ingestion_service.dart';
+import '../services/service_locator.dart';
 import '../models/conversation.dart';
+import '../widgets/pdf_ai_context_dialog.dart';
+import 'package:pdfrx/pdfrx.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'conversation_tree_screen.dart';
 import 'immersive_note_screen.dart';
 import 'conversation_chat_screen.dart';
 import '../utils/remote_image_utils.dart';
+import '../models/recurrence_rule.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final Note note;
@@ -63,7 +75,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Timer? _autoSaveTimer;
   DateTime? _scheduledAt;
   DateTime? _completeBy;
+
   String? _dateValidationError;
+
+  // Recurrence state
+  RecurrenceRule? _recurrenceRule;
+  RecurrenceType _recurrenceType = RecurrenceType.none;
+  List<int> _selectedRecurrenceDays = [];
+  final TextEditingController _recurrenceIntervalController =
+      TextEditingController();
+
   List<Relationship> _relationships = [];
   List<Note> _linkedNotes = [];
   final DatabaseService _databaseService = DatabaseService();
@@ -78,6 +99,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   // Attachment metadata state
   Map<String, Attachment> _attachmentsMap = {};
+
+  // Multi-block selection state
+  bool _isSelectionMode = false;
+  Set<int> _selectedBlockIndices = {};
+  List<MarkdownBlock> _parsedBlocks = [];
+  Offset? _selectionMenuPosition;
 
   Future<void> _loadAttachments() async {
     if (widget.isNewNote) return;
@@ -116,9 +143,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       _completeBy = widget.note.completeBy != null
           ? DateTime.tryParse(widget.note.completeBy!)
           : null;
+
+      // Initialize recurrence state
+      _recurrenceRule = RecurrenceRule.decode(widget.note.recurrenceRule);
+      if (_recurrenceRule != null) {
+        _recurrenceType = _recurrenceRule!.type;
+        _selectedRecurrenceDays = _recurrenceRule!.daysOfWeek ?? [];
+        _recurrenceIntervalController.text =
+            _recurrenceRule!.intervalDays?.toString() ?? '';
+      }
     }
 
-    _titleController.addListener(_onTextChanged);
     _titleController.addListener(_onTextChanged);
     _codeController.addListener(_onTextChanged);
 
@@ -282,6 +317,163 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
+  void _handleBlocksParsed(List<MarkdownBlock> blocks) {
+    _parsedBlocks = blocks;
+  }
+
+  void _handleBlockDropped(
+    int index,
+    MarkdownBlock block,
+    Offset globalPosition,
+  ) {
+    if (!mounted) return;
+
+    RenderBox? box = context.findRenderObject() as RenderBox?;
+    Offset localPosition = box?.globalToLocal(globalPosition) ?? globalPosition;
+
+    // Adjust y to account for app bar if needed?
+    // globalToLocal converts to the coordinate space of the render object.
+    // If render object is NoteDetailScreen, it starts below status bar?
+    // Let's rely on globalToLocal.
+
+    setState(() {
+      _isSelectionMode = true;
+      _selectedBlockIndices = {index};
+      _selectionMenuPosition = localPosition;
+    });
+  }
+
+  void _clearSelection() {
+    if (!mounted) return;
+    setState(() {
+      _isSelectionMode = false;
+      _selectedBlockIndices = {};
+      _selectionMenuPosition = null;
+    });
+  }
+
+  void _expandSelectionAbove() {
+    if (_selectedBlockIndices.isEmpty) return;
+    final minIndex = _selectedBlockIndices.reduce((a, b) => a < b ? a : b);
+    if (minIndex > 0) {
+      setState(() {
+        _selectedBlockIndices.add(minIndex - 1);
+      });
+    }
+  }
+
+  void _contractSelectionAbove() {
+    if (_selectedBlockIndices.length <= 1) return;
+    final minIndex = _selectedBlockIndices.reduce((a, b) => a < b ? a : b);
+    setState(() {
+      _selectedBlockIndices.remove(minIndex);
+    });
+  }
+
+  void _expandSelectionBelow() {
+    if (_selectedBlockIndices.isEmpty) return;
+    final maxIndex = _selectedBlockIndices.reduce((a, b) => a > b ? a : b);
+    if (_parsedBlocks.isNotEmpty && maxIndex < _parsedBlocks.length - 1) {
+      setState(() {
+        _selectedBlockIndices.add(maxIndex + 1);
+      });
+    }
+  }
+
+  void _contractSelectionBelow() {
+    if (_selectedBlockIndices.length <= 1) return;
+    final maxIndex = _selectedBlockIndices.reduce((a, b) => a > b ? a : b);
+    setState(() {
+      _selectedBlockIndices.remove(maxIndex);
+    });
+  }
+
+  Future<void> _handleEditSelection() async {
+    if (_selectedBlockIndices.isEmpty) return;
+
+    final sortedIndices = _selectedBlockIndices.toList()..sort();
+    final blocksToEdit = sortedIndices.map((i) => _parsedBlocks[i]).toList();
+
+    // Consolidate content
+    final tracker = MarkdownBlockTracker();
+    // Using \n\n to preserve block separation.
+    final initialContent = blocksToEdit.map((b) => b.content).join('\n\n');
+
+    final result = await BlockEditorDialog.show(
+      context,
+      initialContent,
+      onPickImage: () => _pickImageAndReturnMarkdown(context),
+    );
+
+    if (result == null || !mounted) return;
+
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+    final currentNote = appProvider.notes.firstWhere(
+      (n) => n.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+
+    if (result.result == BlockEditorResult.saved &&
+        result.editedContent != null) {
+      final newContent = tracker.replaceBlockRange(
+        currentNote.content,
+        blocksToEdit,
+        result.editedContent!,
+      );
+      _updateNoteContent(newContent);
+      _clearSelection();
+    } else if (result.result == BlockEditorResult.deleted) {
+      final newContent = tracker.deleteBlockRange(
+        currentNote.content,
+        blocksToEdit,
+      );
+      _updateNoteContent(newContent);
+      _clearSelection();
+    }
+  }
+
+  Future<void> _handleDeleteSelection() async {
+    if (_selectedBlockIndices.isEmpty) return;
+    final l10n = AppLocalizations.of(context)!;
+
+    final sortedIndices = _selectedBlockIndices.toList()..sort();
+    final blocksToDelete = sortedIndices.map((i) => _parsedBlocks[i]).toList();
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.deleteSelection),
+        content: Text(l10n.confirmDeleteBlocks(blocksToDelete.length)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l10n.delete),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      final appProvider = Provider.of<AppProvider>(context, listen: false);
+      final currentNote = appProvider.notes.firstWhere(
+        (n) => n.id == widget.note.id,
+        orElse: () => widget.note,
+      );
+
+      final tracker = MarkdownBlockTracker();
+      final newContent = tracker.deleteBlockRange(
+        currentNote.content,
+        blocksToDelete,
+      );
+      _updateNoteContent(newContent);
+      _clearSelection();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -326,9 +518,34 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     ),
                   ),
                 ] else ...[
-                  IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: _startEditing,
+                  LongPressDraggable<String>(
+                    data: kBlockEditDragData,
+                    feedback: Material(
+                      elevation: 4.0,
+                      shape: const CircleBorder(),
+                      child: CircleAvatar(
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.primaryContainer,
+                        child: Icon(
+                          Icons.edit,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ),
+                    childWhenDragging: IconButton(
+                      icon: Icon(
+                        Icons.edit,
+                        color: Theme.of(context).disabledColor,
+                      ),
+                      onPressed: null,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.edit),
+                      onPressed: _startEditing,
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.psychology),
@@ -544,6 +761,72 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
+  /// Similar to _showImagePicker but returns the markdown string instead of inserting
+  Future<String?> _pickImageAndReturnMarkdown(BuildContext context) async {
+    // Load existing image attachments
+    final attachments = widget.isNewNote
+        ? <Attachment>[]
+        : await _databaseService.getAttachmentsForNote(widget.note.id);
+
+    final imageAttachments = attachments.where((a) {
+      final lower = a.filePath.toLowerCase();
+      return lower.endsWith('.jpg') ||
+          lower.endsWith('.png') ||
+          lower.endsWith('.jpeg') ||
+          lower.endsWith('.webp') ||
+          lower.endsWith('.gif');
+    }).toList();
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => _ImagePickerDialog(
+        initialAltText: '',
+        existingAttachments: imageAttachments,
+        onSaveNote: () async {
+          // Save note if new with no title
+          if (widget.isNewNote && !_hasBeenSaved) {
+            final l10n = AppLocalizations.of(context)!;
+            if (_titleController.text.trim().isEmpty) {
+              _titleController.text = l10n.untitled;
+            }
+            await _autoSave();
+          }
+          return widget.note.id;
+        },
+        onAddAttachment: (File imageFile, String fileName) async {
+          // Use existing attachment logic
+          final bytes = await imageFile.readAsBytes();
+          final relativePath = await FileUtils.saveFileToPrivateStorage(
+            bytes,
+            fileName,
+          );
+
+          // Add to note's attachments
+          if (!context.mounted) return relativePath;
+          final currentNote = context.read<AppProvider>().notes.firstWhere(
+            (note) => note.id == widget.note.id,
+            orElse: () => widget.note,
+          );
+          final updatedAttachmentPaths = List<String>.from(
+            currentNote.attachmentPaths,
+          )..add(relativePath);
+          final updatedNote = currentNote.copyWith(
+            attachmentPaths: updatedAttachmentPaths,
+            updatedAt: DateTime.now(),
+          );
+          await context.read<AppProvider>().updateNote(updatedNote);
+
+          return relativePath;
+        },
+      ),
+    );
+
+    if (result != null) {
+      return '![${result['alt']}](${result['src']})';
+    }
+    return null;
+  }
+
   void _insertText(String text, {int selectionOffset = 0}) {
     final selection = _codeController.selection;
     final codeLines = _codeController.value.codeLines;
@@ -597,408 +880,422 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Widget _buildViewingView(Note currentNote, AppLocalizations l10n) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return NotificationListener<ScrollNotification>(
+      onNotification: (scrollNotification) {
+        if (_isSelectionMode &&
+            scrollNotification is ScrollUpdateNotification) {
+          _clearSelection();
+        }
+        return false;
+      },
+      child: Stack(
         children: [
-          if (currentNote.isTask) ...[
-            _buildTaskStatus(currentNote),
-            const SizedBox(height: 16),
-          ],
-          SelectableText(
-            currentNote.title,
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
-          SelectionArea(
-            child: InteractiveCheckboxMarkdown(
-              key: ValueKey('note_${currentNote.id}'),
-              noteId: currentNote.id,
-              originalContent: currentNote.content,
-              onContentChanged: _updateNoteContent,
-              style: Theme.of(context).textTheme.bodyLarge,
-              textDirection: TextDirection.ltr,
-              onLinkTap: _handleLinkTap,
-              // No truncation in detail view - show full content
-              maxLines: null,
-              overflow: null,
-            ),
-          ),
-          if (currentNote.subNotes.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            Row(
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  l10n.subNotes,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                if (currentNote.isTask) ...[
+                  _buildTaskStatus(currentNote),
+                  const SizedBox(height: 16),
+                ],
+                SelectableText(
+                  currentNote.title,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.add),
-                  onPressed: () => _addSubNote(currentNote),
-                  tooltip: l10n.addSubNote,
+                const SizedBox(height: 16),
+                SelectionArea(
+                  child: BlockMarkdownBody(
+                    key: ValueKey('note_${currentNote.id}'),
+                    noteId: currentNote.id,
+                    content: currentNote.content,
+                    onContentChanged: _updateNoteContent,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                    onLinkTap: _handleLinkTap,
+                    onBlockEditRequested: _handleBlockEditRequest,
+                    selectedBlockIndices: _selectedBlockIndices,
+                    onBlocksParsed: _handleBlocksParsed,
+                    onBlockDropped: _handleBlockDropped,
+                  ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ...currentNote.subNotes.map(
-              (subNote) => Card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header with completed toggle and three dot menu
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16.0,
-                        vertical: 8.0,
+                if (currentNote.subNotes.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Text(
+                        l10n.subNotes,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
-                      child: Row(
-                        children: [
-                          // Completed status toggle
-                          IconButton(
-                            icon: Icon(
-                              subNote.isCompleted
-                                  ? Icons.check_circle
-                                  : Icons.radio_button_unchecked,
-                              color: subNote.isCompleted
-                                  ? Colors.green
-                                  : Colors.grey,
-                            ),
-                            onPressed: () => _toggleSubNoteCompletion(subNote),
-                            tooltip: subNote.isCompleted
-                                ? l10n.markIncomplete
-                                : l10n.markComplete,
-                          ),
-                          const Spacer(),
-                          // Three dot menu
-                          PopupMenuButton(
-                            itemBuilder: (context) => [
-                              PopupMenuItem(
-                                value: 'edit',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.edit, size: 16),
-                                    const SizedBox(width: 8),
-                                    Text(l10n.editSubNote),
-                                  ],
-                                ),
-                              ),
-                              PopupMenuItem(
-                                value: 'toggle',
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      subNote.isCompleted
-                                          ? Icons.undo
-                                          : Icons.check,
-                                      size: 16,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      subNote.isCompleted
-                                          ? l10n.markIncomplete
-                                          : l10n.markComplete,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              PopupMenuItem(
-                                value: 'reparent',
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.move_to_inbox, size: 16),
-                                    const SizedBox(width: 8),
-                                    Text(l10n.reparentSubNote),
-                                  ],
-                                ),
-                              ),
-                              PopupMenuItem(
-                                value: 'delete',
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.delete,
-                                      color: Colors.red,
-                                      size: 16,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      l10n.deleteSubNote,
-                                      style: TextStyle(color: Colors.red),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                            onSelected: (value) {
-                              switch (value) {
-                                case 'edit':
-                                  _editSubNote(currentNote, subNote);
-                                  break;
-                                case 'toggle':
-                                  _toggleSubNoteCompletion(subNote);
-                                  break;
-                                case 'reparent':
-                                  _reparentSubNote(currentNote, subNote);
-                                  break;
-                                case 'delete':
-                                  _deleteSubNote(currentNote, subNote);
-                                  break;
-                              }
-                            },
-                          ),
-                        ],
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.add),
+                        onPressed: () => _addSubNote(currentNote),
+                        tooltip: l10n.addSubNote,
                       ),
-                    ),
-                    // Full width content area
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16.0, 0.0, 16.0, 16.0),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...currentNote.subNotes.map(
+                    (subNote) => Card(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Subnote name
-                          if (subNote.name.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 8.0),
-                              child: SelectableText(
-                                subNote.name,
-                                style: Theme.of(context).textTheme.titleSmall
-                                    ?.copyWith(fontWeight: FontWeight.bold),
-                              ),
+                          // Header with completed toggle and three dot menu
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4.0,
                             ),
-                          // Subnote content
-                          SelectionArea(
-                            child: InteractiveCheckboxMarkdown(
-                              key: ValueKey('subnote_${subNote.id}'),
-                              noteId: currentNote.id,
-                              originalContent: subNote.content,
-                              onContentChanged: (newContent) =>
-                                  _updateSubNoteContent(subNote, newContent),
-                              style: Theme.of(context).textTheme.bodyMedium,
-                              textDirection: TextDirection.ltr,
-                              onLinkTap: _handleLinkTap,
+                            child: Row(
+                              children: [
+                                // Completed status toggle
+                                IconButton(
+                                  icon: Icon(
+                                    subNote.isCompleted
+                                        ? Icons.check_circle
+                                        : Icons.radio_button_unchecked,
+                                    color: subNote.isCompleted
+                                        ? Colors.green
+                                        : Colors.grey,
+                                  ),
+                                  onPressed: () =>
+                                      _toggleSubNoteCompletion(subNote),
+                                  tooltip: subNote.isCompleted
+                                      ? l10n.markIncomplete
+                                      : l10n.markComplete,
+                                ),
+                                const Spacer(),
+                                // Three dot menu
+                                PopupMenuButton(
+                                  itemBuilder: (context) => [
+                                    PopupMenuItem(
+                                      value: 'edit',
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.edit),
+                                          const SizedBox(width: 8),
+                                          Text(l10n.edit),
+                                        ],
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'reparent',
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.move_to_inbox),
+                                          const SizedBox(width: 8),
+                                          Text(l10n.reparentSubNote),
+                                        ],
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'delete',
+                                      child: Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.delete,
+                                            color: Colors.red,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            l10n.delete,
+                                            style: const TextStyle(
+                                              color: Colors.red,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  onSelected: (value) {
+                                    if (value == 'edit') {
+                                      _editSubNote(currentNote, subNote);
+                                    } else if (value == 'reparent') {
+                                      _reparentSubNote(currentNote, subNote);
+                                    } else if (value == 'delete') {
+                                      _deleteSubNote(currentNote, subNote);
+                                    }
+                                  },
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          // Created date
-                          Text(
-                            '${l10n.created} ${AppDateUtils.formatDateNumeric(subNote.createdAt, context)}',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurface.withOpacity(0.5),
-                                  fontSize: 11,
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              16.0,
+                              0.0,
+                              16.0,
+                              16.0,
+                            ),
+                            child: Text(
+                              subNote.name,
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    decoration: subNote.isCompleted
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                    color: subNote.isCompleted
+                                        ? Colors.grey
+                                        : null,
+                                  ),
+                            ),
+                          ),
+                          if (subNote.content.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                16.0,
+                                0.0,
+                                16.0,
+                                16.0,
+                              ),
+                              child: SelectionArea(
+                                child: InteractiveCheckboxMarkdown(
+                                  key: ValueKey('subnote_${subNote.id}'),
+                                  noteId: currentNote.id,
+                                  originalContent: subNote.content,
+                                  onContentChanged: (newContent) =>
+                                      _updateSubNoteContent(
+                                        subNote,
+                                        newContent,
+                                      ),
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                  textDirection: TextDirection.ltr,
+                                  onLinkTap: _handleLinkTap,
                                 ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Text(
+                        l10n.subNotes,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.add),
+                        onPressed: () => _addSubNote(currentNote),
+                        tooltip: l10n.addSubNote,
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Text(
+                      l10n.tags,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: () => _showAddTagDialog(currentNote),
+                      icon: const Icon(Icons.add, size: 16),
+                      label: Text(l10n.addTag),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (currentNote.tags.isNotEmpty)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: currentNote.tags
+                        .map(
+                          (tag) => Chip(
+                            label: Text(tag),
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.primary.withOpacity(0.1),
+                            labelStyle: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            deleteIcon: const Icon(Icons.close, size: 16),
+                            onDeleted: () => _removeTag(currentNote, tag),
+                          ),
+                        )
+                        .toList(),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.label_outline, color: Colors.grey[400]),
+                        const SizedBox(width: 8),
+                        Text(
+                          l10n.noTagsYet,
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (currentNote.attachmentPaths.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  Text(
+                    l10n.attachments,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ...currentNote.attachmentPaths.map(
+                    (path) => _buildAttachmentCard(path, currentNote),
+                  ),
+                ],
+                if (_linkedNotes.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Text(
+                        l10n.linkedNotes,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: _addLinkedNote,
+                        icon: const Icon(Icons.add, size: 16),
+                        label: Text(l10n.addLink),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ..._buildLinkedNotesList(currentNote),
+                ] else ...[
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Text(
+                        l10n.linkedNotes,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: _addLinkedNote,
+                        icon: const Icon(Icons.add, size: 16),
+                        label: Text(l10n.addLink),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Icon(Icons.link_off, color: Colors.grey[400]),
+                          const SizedBox(width: 8),
+                          Text(
+                            l10n.noLinkedNotesYet,
+                            style: TextStyle(color: Colors.grey[600]),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-          ] else if (!_isEditing) ...[
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Text(
-                  l10n.subNotes,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.add),
-                  onPressed: () => _addSubNote(currentNote),
-                  tooltip: 'Add sub-note',
-                ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Text(
-                l10n.tags,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: () => _showAddTagDialog(currentNote),
-                icon: const Icon(Icons.add, size: 16),
-                label: Text(l10n.addTag),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (currentNote.tags.isNotEmpty)
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: currentNote.tags
-                  .map(
-                    (tag) => Chip(
-                      label: Text(tag),
-                      backgroundColor: Theme.of(
-                        context,
-                      ).colorScheme.primary.withOpacity(0.1),
-                      labelStyle: TextStyle(
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      deleteIcon: const Icon(Icons.close, size: 16),
-                      onDeleted: () => _removeTag(currentNote, tag),
-                    ),
-                  )
-                  .toList(),
-            )
-          else
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey[300]!),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.label_outline, color: Colors.grey[400]),
-                  const SizedBox(width: 8),
-                  Text(
-                    l10n.noTagsYet,
-                    style: TextStyle(color: Colors.grey[600]),
                   ),
                 ],
-              ),
-            ),
-          if (currentNote.attachmentPaths.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            Text(
-              l10n.attachments,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            ...currentNote.attachmentPaths.map(
-              (path) => _buildAttachmentCard(path, currentNote),
-            ),
-          ],
-          if (_linkedNotes.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Text(
-                  l10n.linkedNotes,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: _addLinkedNote,
-                  icon: const Icon(Icons.add, size: 16),
-                  label: Text(l10n.addLink),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ..._buildLinkedNotesList(currentNote),
-          ] else ...[
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Text(
-                  l10n.linkedNotes,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: _addLinkedNote,
-                  icon: const Icon(Icons.add, size: 16),
-                  label: Text(l10n.addLink),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
+                const SizedBox(height: 24),
+                Row(
                   children: [
-                    Icon(Icons.link_off, color: Colors.grey[400]),
-                    const SizedBox(width: 8),
                     Text(
-                      l10n.noLinkedNotesYet,
-                      style: TextStyle(color: Colors.grey[600]),
+                      l10n.conversations,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    FutureBuilder<int>(
+                      future: context
+                          .read<AppProvider>()
+                          .getNoteConversationCount(currentNote.id),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData) {
+                          final count = snapshot.data!;
+                          if (count > 0) {
+                            return TextButton.icon(
+                              onPressed: _showConversationsDialog,
+                              icon: const Icon(Icons.chat, size: 16),
+                              label: Text(l10n.conversationCount(count)),
+                            );
+                          } else {
+                            return Text(
+                              l10n.noConversations,
+                              style: TextStyle(color: Colors.grey[600]),
+                            );
+                          }
+                        } else {
+                          return Text(
+                            'Loading...',
+                            style: TextStyle(color: Colors.grey[600]),
+                          );
+                        }
+                      },
                     ),
                   ],
                 ),
-              ),
-            ),
-          ],
-          // Conversation count section
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Text(
-                l10n.conversations,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const Spacer(),
-              FutureBuilder<int>(
-                future: context.read<AppProvider>().getNoteConversationCount(
-                  currentNote.id,
+                const SizedBox(height: 24),
+                SelectableText(
+                  '${l10n.created}: ${_formatDate(currentNote.createdAt)}',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                 ),
-                builder: (context, snapshot) {
-                  if (snapshot.hasData) {
-                    final count = snapshot.data!;
-                    if (count > 0) {
-                      return TextButton.icon(
-                        onPressed: _showConversationsDialog,
-                        icon: const Icon(Icons.chat, size: 16),
-                        label: Text(l10n.conversationCount(count)),
-                      );
-                    } else {
-                      return Text(
-                        l10n.noConversations,
-                        style: TextStyle(color: Colors.grey[600]),
-                      );
-                    }
-                  } else {
-                    return Text(
-                      'Loading...',
-                      style: TextStyle(color: Colors.grey[600]),
-                    );
-                  }
-                },
+                if (currentNote.updatedAt != currentNote.createdAt)
+                  SelectableText(
+                    '${l10n.updated}: ${_formatDate(currentNote.updatedAt)}',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                  ),
+              ],
+            ),
+          ),
+          if (_isSelectionMode && _selectionMenuPosition != null)
+            Positioned(
+              left: (_selectionMenuPosition!.dx - 150).clamp(
+                0.0,
+                MediaQuery.of(context).size.width - 320,
+              ), // Center-ish logic needs refinement
+              top: (_selectionMenuPosition!.dy - 60).clamp(
+                0.0,
+                MediaQuery.of(context).size.height - 100,
               ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          SelectableText(
-            '${l10n.created}: ${_formatDate(currentNote.createdAt)}',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-          ),
-          if (currentNote.updatedAt != currentNote.createdAt)
-            SelectableText(
-              '${l10n.updated}: ${_formatDate(currentNote.updatedAt)}',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+              child: BlockSelectionMenu(
+                onExpandAbove: _expandSelectionAbove,
+                onContractAbove: _contractSelectionAbove,
+                onExpandBelow: _expandSelectionBelow,
+                onContractBelow: _contractSelectionBelow,
+                onEdit: () => _handleEditSelection(),
+                onDelete: () => _handleDeleteSelection(),
+                onExit: _clearSelection,
+                canExpandAbove:
+                    _selectedBlockIndices.isNotEmpty &&
+                    _selectedBlockIndices.reduce((a, b) => a < b ? a : b) > 0,
+                canContractAbove: _selectedBlockIndices.length > 1,
+                canExpandBelow:
+                    _selectedBlockIndices.isNotEmpty &&
+                    _parsedBlocks.isNotEmpty &&
+                    _selectedBlockIndices.reduce((a, b) => a > b ? a : b) <
+                        _parsedBlocks.length - 1,
+                canContractBelow: _selectedBlockIndices.length > 1,
+              ),
             ),
         ],
       ),
@@ -1024,18 +1321,45 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           if (widget.note.isTask) ...[
             _buildDateSelectionFields(),
             const SizedBox(height: 16),
+            _buildRecurrenceFields(),
+            const SizedBox(height: 16),
           ],
           Expanded(
             child: SynapseNoteEditor(
               controller: _codeController,
               focusNode: _codeFocusNode,
               onPickImage: () => _showImagePicker(context),
+              onPickNoteLink: () => _showNoteLinkPicker(context),
               language: 'markdown',
             ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _showNoteLinkPicker(BuildContext context) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => _NoteLinkPickerDialog(
+        existingLinkedNotes: _linkedNotes,
+        onLinkNote: (newNote) async {
+          await _addRelationship(newNote.id);
+        },
+      ),
+    );
+
+    if (result != null) {
+      _insertText(result);
+    }
+  }
+
+  Future<void> _addRelationship(String otherNoteId) async {
+    final appProvider = context.read<AppProvider>();
+    await appProvider.createNoteRelationships(widget.note.id, [
+      otherNoteId,
+    ], 'references');
+    await _loadRelationships();
   }
 
   void _handleToolbarImageAdded(String imagePath) async {
@@ -1178,6 +1502,96 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         ],
       ],
     );
+  }
+
+  Widget _buildRecurrenceFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<RecurrenceType>(
+          value: _recurrenceType,
+          items: RecurrenceType.values.map((type) {
+            String label;
+            switch (type) {
+              case RecurrenceType.none:
+                label = 'No Recurrence'; // Todo: l10n
+                break;
+              case RecurrenceType.weekly:
+                label = 'Weekly'; // Todo: l10n
+                break;
+              case RecurrenceType.interval:
+                label = 'Repeat every X days'; // Todo: l10n
+                break;
+            }
+            return DropdownMenuItem(value: type, child: Text(label));
+          }).toList(),
+          onChanged: (value) {
+            setState(() {
+              _recurrenceType = value!;
+              _hasChanges = true;
+            });
+            _autoSave();
+          },
+          decoration: InputDecoration(
+            labelText: 'Recurrence', // Todo: l10n
+            border: OutlineInputBorder(),
+          ),
+        ),
+        if (_recurrenceType == RecurrenceType.weekly) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Days of week',
+            style: Theme.of(context).textTheme.titleSmall,
+          ), // Todo: l10n
+          Wrap(
+            spacing: 8,
+            children: [
+              for (int i = 1; i <= 7; i++)
+                FilterChip(
+                  label: Text(_getDayLabel(i)),
+                  selected: _selectedRecurrenceDays.contains(i),
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) {
+                        if (!_selectedRecurrenceDays.contains(i)) {
+                          _selectedRecurrenceDays.add(i);
+                        }
+                      } else {
+                        _selectedRecurrenceDays.remove(i);
+                      }
+                      _selectedRecurrenceDays.sort();
+                      _hasChanges = true;
+                    });
+                    _autoSave();
+                  },
+                ),
+            ],
+          ),
+        ],
+        if (_recurrenceType == RecurrenceType.interval) ...[
+          const SizedBox(height: 8),
+          TextField(
+            controller: _recurrenceIntervalController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: 'Interval (Days)',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (_) {
+              setState(() {
+                _hasChanges = true;
+              });
+              _autoSave();
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  String _getDayLabel(int day) {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return days[day - 1];
   }
 
   Widget _buildTaskStatus(Note currentNote) {
@@ -1480,6 +1894,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       _completeBy = currentNote.completeBy != null
           ? DateTime.tryParse(currentNote.completeBy!)
           : null;
+
+      // Initialize recurrence state
+      _recurrenceRule = RecurrenceRule.decode(currentNote.recurrenceRule);
+      if (_recurrenceRule != null) {
+        _recurrenceType = _recurrenceRule!.type;
+        _selectedRecurrenceDays = _recurrenceRule!.daysOfWeek ?? [];
+        _recurrenceIntervalController.text =
+            _recurrenceRule!.intervalDays?.toString() ?? '';
+      } else {
+        _recurrenceType = RecurrenceType.none;
+        _selectedRecurrenceDays = [];
+        _recurrenceIntervalController.clear();
+      }
     }
 
     setState(() {
@@ -1510,6 +1937,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         _completeBy = currentNote.completeBy != null
             ? DateTime.tryParse(currentNote.completeBy!)
             : null;
+
+        // Reset recurrence state
+        _recurrenceRule = RecurrenceRule.decode(currentNote.recurrenceRule);
+        if (_recurrenceRule != null) {
+          _recurrenceType = _recurrenceRule!.type;
+          _selectedRecurrenceDays = _recurrenceRule!.daysOfWeek ?? [];
+          _recurrenceIntervalController.text =
+              _recurrenceRule!.intervalDays?.toString() ?? '';
+        } else {
+          _recurrenceType = RecurrenceType.none;
+          _selectedRecurrenceDays = [];
+          _recurrenceIntervalController.clear();
+        }
       }
     });
   }
@@ -1533,16 +1973,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       orElse: () => widget.note,
     );
 
+    // We no longer automatically download images here to prevent unwanted data usage.
+    RemoteImageDownloadReport? downloadReport;
+    /*
     final remoteImages = RemoteImageUtils.extractRemoteImages(
       _codeController.text,
     );
-    RemoteImageDownloadReport? downloadReport;
     if (remoteImages.isNotEmpty) {
       downloadReport = await MediaAttachmentService.downloadRemoteImages(
         noteId: currentNote.id,
         imageUrls: remoteImages.map((image) => image.url),
       );
     }
+    */
 
     final updatedNote = currentNote.copyWith(
       title: _titleController.text.trim().isEmpty
@@ -1556,11 +1999,24 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       completeBy: _completeBy != null
           ? AppDateUtils.formatDateOnly(_completeBy!)
           : null,
+      recurrenceRule: RecurrenceRule.encode(
+        RecurrenceRule(
+          type: _recurrenceType,
+          daysOfWeek: _recurrenceType == RecurrenceType.weekly
+              ? _selectedRecurrenceDays
+              : null,
+          intervalDays: _recurrenceType == RecurrenceType.interval
+              ? int.tryParse(_recurrenceIntervalController.text)
+              : null,
+        ),
+      ),
       attachmentPaths: _mergeAttachmentPaths(
         currentNote.attachmentPaths,
         downloadReport?.urlToRelativePath.values ?? const [],
       ),
     );
+
+    final bool isFirstSave = !_hasBeenSaved;
 
     try {
       if (!_hasBeenSaved) {
@@ -1584,6 +2040,46 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             ),
             backgroundColor: Colors.orange,
           ),
+        );
+      }
+
+      // Trigger AI Ingestion ONLY on first save (new note) AND if summary doesn't exist
+      if (isFirstSave && !updatedNote.content.contains('> [!SUMMARY]')) {
+        getIt<ContentIngestionService>().processNote(
+          updatedNote,
+          appProvider,
+          onMessage: (msg) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(msg),
+                  duration: const Duration(seconds: 4),
+                ),
+              );
+            }
+          },
+          onError: (err) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(err), backgroundColor: Colors.red),
+              );
+            }
+          },
+          onSuccess: () {
+            if (mounted) {
+              // Refresh local state if content changed
+              setState(() {
+                // We need to fetch the updated content from provider
+                final freshNote = appProvider.notes.firstWhere(
+                  (n) => n.id == updatedNote.id,
+                  orElse: () => updatedNote,
+                );
+                if (freshNote.content != _codeController.text) {
+                  _codeController.text = freshNote.content;
+                }
+              });
+            }
+          },
         );
       }
     } catch (e, stackTrace) {
@@ -1999,8 +2495,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     final isCurrentlyPlaying =
         _isPlaying && _currentPlayingPath == attachmentPath;
 
+    // Check if this PDF has a custom AI context config
+    final hasCustomAiContext =
+        fileName.toLowerCase().endsWith('.pdf') &&
+        _attachmentsMap[attachmentPath]?.getAiContextConfig() != null;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
+      shape: hasCustomAiContext
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 2,
+              ),
+            )
+          : null,
       child: InkWell(
         onTap: fileExists && !isAudioFile
             ? () => FileUtils.openFile(attachmentPath, context)
@@ -2023,17 +2533,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        SelectableText(
                           fileName,
                           style: TextStyle(
                             color: fileExists ? null : Colors.grey,
                             fontSize: 16,
                           ),
                           maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
-                        Text(
+                        SelectableText(
                           fileExists
                               ? _formatFileSize(file.lengthSync())
                               : 'File not found',
@@ -2084,91 +2593,113 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                             minHeight: 40,
                           ),
                         ),
-                      ] else if (fileExists)
-                        IconButton(
-                          icon: const Icon(Icons.open_in_new),
-                          onPressed: () =>
-                              FileUtils.openFile(attachmentPath, context),
-                          tooltip: 'Open with default application',
-                          padding: const EdgeInsets.all(8),
-                          constraints: const BoxConstraints(
-                            minWidth: 40,
-                            minHeight: 40,
-                          ),
+                      ],
+                      // Unified popup menu for all attachments
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert),
+                        tooltip: 'Options',
+                        padding: const EdgeInsets.all(8),
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
                         ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.psychology,
-                          color:
-                              (_attachmentsMap[attachmentPath]
-                                      ?.includeInAIContext ??
-                                  true)
-                              ? Theme.of(context).colorScheme.primary
-                              : Colors.grey,
-                        ),
-                        onPressed: () async {
-                          final currentAttachment =
-                              _attachmentsMap[attachmentPath];
-                          final currentStatus =
-                              currentAttachment?.includeInAIContext ?? true;
-                          final newStatus = !currentStatus;
-
-                          LoggerService.debug(
-                            'Toggling AI Context for ${attachmentPath.split('/').last}: $currentStatus -> $newStatus',
-                          );
-
-                          // Optimistic update
-                          setState(() {
-                            if (currentAttachment != null) {
-                              _attachmentsMap[attachmentPath] =
-                                  currentAttachment.copyWith(
-                                    includeInAIContext: newStatus,
-                                  );
-                            }
-                          });
-
-                          try {
-                            if (currentAttachment != null) {
-                              await _databaseService.updateAttachmentAIContext(
-                                widget.note.id,
-                                currentAttachment
-                                    .filePath, // Use the DB stored path
-                                newStatus,
+                        onSelected: (value) async {
+                          switch (value) {
+                            case 'open':
+                              FileUtils.openFile(attachmentPath, context);
+                              break;
+                            case 'toggle_ai':
+                              await _toggleAiContext(attachmentPath);
+                              break;
+                            case 'configure_ai_range':
+                              await _showPdfAiContextDialog(attachmentPath);
+                              break;
+                            case 'delete':
+                              await _removeAttachment(
+                                attachmentPath,
+                                currentNote,
                               );
-                            }
-                          } catch (e) {
-                            LoggerService.error(
-                              'Failed to update database: $e',
-                            );
-                            // Revert optimistic update on error
-                            setState(() {
-                              if (currentAttachment != null) {
-                                _attachmentsMap[attachmentPath] =
-                                    currentAttachment;
-                              }
-                            });
+                              break;
                           }
-
-                          // Reload to ensure consistency
-                          await _loadAttachments();
                         },
-                        tooltip: 'Include in AI Context',
-                        padding: const EdgeInsets.all(8),
-                        constraints: const BoxConstraints(
-                          minWidth: 40,
-                          minHeight: 40,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () =>
-                            _removeAttachment(attachmentPath, currentNote),
-                        tooltip: l10n.removeAttachmentTooltip,
-                        padding: const EdgeInsets.all(8),
-                        constraints: const BoxConstraints(
-                          minWidth: 40,
-                          minHeight: 40,
-                        ),
+                        itemBuilder: (context) {
+                          final includeInAI =
+                              _attachmentsMap[attachmentPath]
+                                  ?.includeInAIContext ??
+                              true;
+                          final isPdf = fileName.toLowerCase().endsWith('.pdf');
+                          final hasCustomAiRange =
+                              _attachmentsMap[attachmentPath]
+                                  ?.getAiContextConfig() !=
+                              null;
+
+                          return [
+                            if (fileExists && !isAudioFile)
+                              const PopupMenuItem<String>(
+                                value: 'open',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.open_in_new),
+                                    SizedBox(width: 12),
+                                    Text('Open'),
+                                  ],
+                                ),
+                              ),
+                            PopupMenuItem<String>(
+                              value: 'toggle_ai',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    includeInAI
+                                        ? Icons.check_box
+                                        : Icons.check_box_outline_blank,
+                                    color: includeInAI
+                                        ? Theme.of(context).colorScheme.primary
+                                        : null,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  const Text('Include in AI Context'),
+                                ],
+                              ),
+                            ),
+                            if (isPdf)
+                              PopupMenuItem<String>(
+                                value: 'configure_ai_range',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.tune,
+                                      color: hasCustomAiRange
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.primary
+                                          : null,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      hasCustomAiRange
+                                          ? 'Edit AI Context Range'
+                                          : 'Configure AI Context Range',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            const PopupMenuDivider(),
+                            PopupMenuItem<String>(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.delete, color: Colors.red),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    l10n.removeAttachmentTooltip,
+                                    style: const TextStyle(color: Colors.red),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ];
+                        },
                       ),
                     ],
                   ),
@@ -2310,6 +2841,128 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _toggleAiContext(String attachmentPath) async {
+    final currentAttachment = _attachmentsMap[attachmentPath];
+    final currentStatus = currentAttachment?.includeInAIContext ?? true;
+    final newStatus = !currentStatus;
+
+    LoggerService.debug(
+      'Toggling AI Context for ${attachmentPath.split('/').last}: $currentStatus -> $newStatus',
+    );
+
+    // Optimistic update
+    setState(() {
+      if (currentAttachment != null) {
+        _attachmentsMap[attachmentPath] = currentAttachment.copyWith(
+          includeInAIContext: newStatus,
+        );
+      }
+    });
+
+    try {
+      if (currentAttachment != null) {
+        await _databaseService.updateAttachmentAIContext(
+          widget.note.id,
+          currentAttachment.filePath,
+          newStatus,
+        );
+      }
+    } catch (e) {
+      LoggerService.error('Failed to update database: $e');
+      // Revert optimistic update on error
+      setState(() {
+        if (currentAttachment != null) {
+          _attachmentsMap[attachmentPath] = currentAttachment;
+        }
+      });
+    }
+
+    // Reload to ensure consistency
+    await _loadAttachments();
+  }
+
+  Future<void> _showPdfAiContextDialog(String attachmentPath) async {
+    final attachment = _attachmentsMap[attachmentPath];
+    if (attachment == null) return;
+
+    final currentConfig = attachment.getAiContextConfig();
+
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    // Load the PDF to get outline and page count
+    PdfDocument? pdfDocument;
+    List<PdfOutlineNode>? outline;
+    int totalPages = 0;
+
+    try {
+      final absPath = await attachment.getAbsolutePath();
+      LoggerService.debug('Loading PDF for AI context dialog: $absPath');
+
+      // Ensure Pdfrx cache directory is set (required for programmatic PDF loading)
+      Pdfrx.getCacheDirectory ??= () async {
+        final tempDir = await getTemporaryDirectory();
+        return tempDir.path;
+      };
+
+      pdfDocument = await PdfDocument.openFile(absPath);
+      totalPages = pdfDocument.pages.length;
+      outline = await pdfDocument.loadOutline();
+      LoggerService.debug(
+        'PDF loaded: $totalPages pages, outline has ${outline?.length ?? 0} items',
+      );
+      if (outline != null && outline.isNotEmpty) {
+        LoggerService.debug('First outline item: ${outline.first.title}');
+      }
+    } catch (e) {
+      LoggerService.error('Failed to load PDF for AI context dialog: $e');
+    }
+
+    // Close loading indicator
+    if (mounted) Navigator.pop(context);
+    if (!mounted) {
+      pdfDocument?.dispose();
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => PdfAiContextDialog(
+        attachment: attachment,
+        currentConfig: currentConfig,
+        outline: outline,
+        totalPages: totalPages,
+        onSave: (config) async {
+          // Build new metadata
+          final currentMetadata = Map<String, dynamic>.from(
+            attachment.metadata ?? {},
+          );
+          if (config == null) {
+            currentMetadata.remove('aiContextConfig');
+          } else {
+            currentMetadata['aiContextConfig'] = config.toJson();
+          }
+
+          // Update database
+          await _databaseService.updateAttachmentMetadata(
+            attachment.id,
+            currentMetadata.isEmpty ? null : currentMetadata,
+          );
+
+          // Reload attachments
+          await _loadAttachments();
+        },
+      ),
+    );
+
+    // Dispose PDF document after dialog is closed
+    pdfDocument?.dispose();
   }
 
   Future<void> _addAttachment() async {
@@ -2696,6 +3349,49 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       for (final tagName in tagNames) {
         await appProvider.addTagToNote(currentNote.id, tagName);
       }
+
+      if (mounted) {
+        final updatedNote = context.read<AppProvider>().notes.firstWhere(
+          (n) => n.id == currentNote.id,
+          orElse: () => currentNote,
+        );
+
+        getIt<ContentIngestionService>().processNote(
+          updatedNote,
+          appProvider,
+          onMessage: (msg) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(msg),
+                  duration: const Duration(seconds: 4),
+                ),
+              );
+            }
+          },
+          onError: (err) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(err), backgroundColor: Colors.red),
+              );
+            }
+          },
+          onSuccess: () {
+            if (mounted) {
+              setState(() {
+                // Refresh state if needed, though provider update should handle it
+                final freshNote = appProvider.notes.firstWhere(
+                  (n) => n.id == updatedNote.id,
+                  orElse: () => updatedNote,
+                );
+                if (freshNote.content != _codeController.text) {
+                  _codeController.text = freshNote.content;
+                }
+              });
+            }
+          },
+        );
+      }
     });
   }
 
@@ -2915,7 +3611,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         ),
       );
 
-      final transcription = await AIService.transcribeAudio(audioPath);
+      final transcription = await getIt<AIService>().transcribeAudio(audioPath);
 
       // Close loading dialog
       Navigator.of(context).pop();
@@ -3036,6 +3732,53 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
+  /// Handle block edit request from drag-and-drop
+  Future<void> _handleBlockEditRequest(MarkdownBlock block) async {
+    debugPrint(
+      '_handleBlockEditRequest: type=${block.type}, content=${block.content}',
+    );
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+    final currentNote = appProvider.notes.firstWhere(
+      (n) => n.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+
+    final result = await BlockEditorDialog.show(
+      context,
+      block.content,
+      onPickImage: () => _pickImageAndReturnMarkdown(context),
+    );
+    if (result == null || result.result == BlockEditorResult.cancelled) {
+      return;
+    }
+
+    // We can assume the tracker used by BlockMarkdownBody (which passed us this block)
+    // produced valid offsets for the content AS IT WAS when rendered.
+    // However, if the note content changed asynchronously, these offsets might be stale.
+    // In a real-time collaborative app this is hard, but here:
+    // We get 'block' from the current render.
+    // We should treat the current note content as the source of truth but verify?
+    // BlockMarkdownBody takes 'content' as input.
+    // If we assume 'currentNote.content' hasn't changed since render, we are good.
+    // But relying on offsets directly is safer if we trust BlockMarkdownBody to rebuild on change.
+
+    // We need a tracker instance to perform operations.
+    final tracker = MarkdownBlockTracker();
+
+    if (result.result == BlockEditorResult.deleted) {
+      final newContent = tracker.deleteBlock(currentNote.content, block);
+      _updateNoteContent(newContent);
+    } else if (result.result == BlockEditorResult.saved &&
+        result.editedContent != null) {
+      final newContent = tracker.replaceBlock(
+        currentNote.content,
+        block,
+        result.editedContent!,
+      );
+      _updateNoteContent(newContent);
+    }
+  }
+
   // Update subnote content when checkboxes are toggled
   void _updateSubNoteContent(SubNote subNote, String newContent) async {
     if (mounted) {
@@ -3074,7 +3817,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   // Link handling function
-  void _handleLinkTap(String url, String text) {
+  void _handleLinkTap(String url, String? text) {
     // Note: gpt_markdown passes parameters in reverse order
     // First parameter is the actual URL, second is the display text
     _launchUrl(url);
@@ -3144,6 +3887,11 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     _filteredNotes = _getAvailableNotes();
   }
 
@@ -3505,7 +4253,7 @@ class _NoteConversationsDialog extends StatefulWidget {
 
 class _NoteConversationsDialogState extends State<_NoteConversationsDialog> {
   late List<Conversation> _conversations;
-  final ConversationService _conversationService = ConversationService();
+  ConversationService get _conversationService => getIt<ConversationService>();
 
   @override
   void initState() {
@@ -4011,6 +4759,68 @@ class _ImagePickerDialogState extends State<_ImagePickerDialog> {
               : const Text('Pick'),
         ),
         TextButton(
+          onPressed: _isImporting
+              ? null
+              : () async {
+                  setState(() {
+                    _isImporting = true;
+                  });
+                  try {
+                    // Ensure note is saved first
+                    await widget.onSaveNote();
+
+                    final File? drawnFile = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const DrawingEditor(),
+                      ),
+                    );
+
+                    if (drawnFile != null) {
+                      // Generate timestamp for filename
+                      final timestamp = DateTime.now().millisecondsSinceEpoch;
+                      final fileName = 'drawing_$timestamp.png';
+
+                      // Save attachment using callback
+                      final relativePath = await widget.onAddAttachment(
+                        drawnFile,
+                        fileName,
+                      );
+
+                      // Update UI
+                      setState(() {
+                        _selectedAttachmentPath = relativePath;
+                        _srcController.text = relativePath.replaceFirst(
+                          'attachments/',
+                          '',
+                        );
+                        _isImporting = false;
+                      });
+                    } else {
+                      setState(() {
+                        _isImporting = false;
+                      });
+                    }
+                  } catch (e) {
+                    setState(() {
+                      _isImporting = false;
+                    });
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to save drawing: $e')),
+                      );
+                    }
+                  }
+                },
+          child: _isImporting
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Draw'),
+        ),
+        TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text(l10n.cancel),
         ),
@@ -4024,6 +4834,169 @@ class _ImagePickerDialogState extends State<_ImagePickerDialog> {
                   });
                 },
           child: const Text('OK'),
+        ),
+      ],
+    );
+  }
+}
+
+class _NoteLinkPickerDialog extends StatefulWidget {
+  final List<Note> existingLinkedNotes;
+  final Future<void> Function(Note newNote) onLinkNote;
+
+  const _NoteLinkPickerDialog({
+    required this.existingLinkedNotes,
+    required this.onLinkNote,
+  });
+
+  @override
+  State<_NoteLinkPickerDialog> createState() => _NoteLinkPickerDialogState();
+}
+
+class _NoteLinkPickerDialogState extends State<_NoteLinkPickerDialog> {
+  Note? _selectedNote;
+  final TextEditingController _linkTextController = TextEditingController();
+
+  @override
+  void dispose() {
+    _linkTextController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickNewNote() async {
+    await showDialog(
+      context: context,
+      builder: (context) => NoteSelectionDialog(
+        title: 'Select Note to Link',
+        singleSelection: true,
+        onNotesSelected: (notes) async {
+          if (notes.isNotEmpty) {
+            Navigator.of(context).pop();
+            final note = notes.first;
+            // Link the note if not already linked
+            if (!widget.existingLinkedNotes.any((n) => n.id == note.id)) {
+              await widget.onLinkNote(note);
+            }
+            setState(() {
+              _selectedNote = note;
+              _linkTextController.text = note.title.length > 50
+                  ? '${note.title.substring(0, 50)}...'
+                  : note.title;
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+
+    // Combine existing linked notes and the newly selected one if it's new
+    final notesToShow = [...widget.existingLinkedNotes];
+    if (_selectedNote != null &&
+        !notesToShow.any((n) => n.id == _selectedNote!.id)) {
+      notesToShow.insert(0, _selectedNote!);
+    }
+
+    return AlertDialog(
+      title: const Text('Insert Note Link'),
+      content: SizedBox(
+        width: MediaQuery.of(context).size.width * 0.8,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (notesToShow.isNotEmpty) ...[
+              Text('Linked Notes', style: theme.textTheme.titleSmall),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 120,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: notesToShow.length,
+                  itemBuilder: (context, index) {
+                    final note = notesToShow[index];
+                    final isSelected = _selectedNote?.id == note.id;
+
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedNote = note;
+                          _linkTextController.text = note.title.length > 50
+                              ? '${note.title.substring(0, 50)}...'
+                              : note.title;
+                        });
+                      },
+                      child: Container(
+                        width: 100,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceVariant,
+                          border: Border.all(
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : Colors.transparent,
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.all(8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              note.title,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            TextField(
+              controller: _linkTextController,
+              decoration: const InputDecoration(
+                labelText: 'Link Text',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: ElevatedButton.icon(
+                onPressed: _pickNewNote,
+                icon: const Icon(Icons.search),
+                label: const Text('Pick Note'),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(l10n.cancel),
+        ),
+        TextButton(
+          onPressed: _selectedNote == null
+              ? null
+              : () {
+                  final text = _linkTextController.text.isEmpty
+                      ? _selectedNote!.title
+                      : _linkTextController.text;
+                  final markdown =
+                      '[$text](synapseresource://note/${_selectedNote!.id})';
+                  Navigator.of(context).pop(markdown);
+                },
+          child: const Text('Insert'),
         ),
       ],
     );

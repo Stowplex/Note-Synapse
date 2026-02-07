@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/model_config.dart';
 import '../services/model_storage_service.dart';
+import '../services/service_locator.dart';
 
 class ModelSelectorButton extends StatefulWidget {
   final Function(ModelConfig?) onModelSelected;
@@ -32,8 +33,8 @@ class _ModelSelectorButtonState extends State<ModelSelectorButton> {
 
   Future<void> _loadModels() async {
     try {
-      final models = await ModelStorageService.getConfiguredModels();
-      final activeModel = await ModelStorageService.getActiveModel();
+      final models = await getIt<ModelStorageService>().getConfiguredModels();
+      final activeModel = await getIt<ModelStorageService>().getActiveModel();
       if (mounted) {
         setState(() {
           _availableModels = models;

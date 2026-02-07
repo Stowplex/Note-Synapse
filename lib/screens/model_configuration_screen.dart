@@ -6,6 +6,7 @@ import '../models/model_type.dart';
 import '../models/model_config.dart';
 import '../models/model_capabilities.dart';
 import '../services/model_storage_service.dart';
+import '../services/service_locator.dart';
 import '../services/model_selector.dart';
 import '../services/model_preset_service.dart';
 import '../providers/app_provider.dart';
@@ -14,8 +15,14 @@ import '../l10n/app_localizations.dart';
 class ModelConfigurationScreen extends StatefulWidget {
   final ModelConfig? config; // If provided, we are editing
   final ModelType? initialType; // If adding, start with this type
+  final bool isOnboarding;
 
-  const ModelConfigurationScreen({super.key, this.config, this.initialType});
+  const ModelConfigurationScreen({
+    super.key,
+    this.config,
+    this.initialType,
+    this.isOnboarding = false,
+  });
 
   @override
   State<ModelConfigurationScreen> createState() =>
@@ -42,6 +49,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   bool _supportsDocuments = false;
   bool _supportsAudio = false;
   bool _supportsVideo = false;
+  bool _supportsImageGeneration = false;
+  bool _supportsCodeGeneration = false;
 
   List<ModelConfig> _presets = [];
   ModelConfig? _selectedPreset;
@@ -176,6 +185,10 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           preset.customCapabilitiesObject?.supportsDocuments ?? false;
       _supportsAudio = preset.customCapabilitiesObject?.supportsAudio ?? false;
       _supportsVideo = preset.customCapabilitiesObject?.supportsVideo ?? false;
+      _supportsImageGeneration =
+          preset.customCapabilitiesObject?.supportsImageGeneration ?? false;
+      _supportsCodeGeneration =
+          preset.customCapabilitiesObject?.supportsCodeGeneration ?? false;
       _supportedAttachmentMimeTypesController.text =
           preset.supportedAttachmentMimeTypes?.join(', ') ?? '';
 
@@ -195,7 +208,9 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     try {
       final config = widget.config!;
       // Load API key using ID
-      final apiKey = await ModelStorageService.getModelApiKey(config.id);
+      final apiKey = await getIt<ModelStorageService>().getModelApiKey(
+        config.id,
+      );
 
       if (mounted) {
         setState(() {
@@ -215,6 +230,10 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               config.customCapabilitiesObject?.supportsAudio ?? false;
           _supportsVideo =
               config.customCapabilitiesObject?.supportsVideo ?? false;
+          _supportsImageGeneration =
+              config.customCapabilitiesObject?.supportsImageGeneration ?? false;
+          _supportsCodeGeneration =
+              config.customCapabilitiesObject?.supportsCodeGeneration ?? false;
           _supportedAttachmentMimeTypesController.text =
               config.supportedAttachmentMimeTypes?.join(', ') ?? '';
           _existingModelFeatures = config.modelFeatures;
@@ -261,6 +280,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         supportsDocuments: _supportsDocuments,
         supportsAudio: _supportsAudio,
         supportsVideo: _supportsVideo,
+        supportsImageGeneration: _supportsImageGeneration,
+        supportsCodeGeneration: _supportsCodeGeneration,
       );
 
       // If editing, use existing ID. If adding, ModelConfig constructor generates new ID.
@@ -295,24 +316,24 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
 
       // Save configuration
       if (_isEditing) {
-        await ModelStorageService.updateModel(config);
+        await getIt<ModelStorageService>().updateModel(config);
       } else {
-        await ModelStorageService.addModel(config);
+        await getIt<ModelStorageService>().addModel(config);
       }
 
       // Save API Key securely
       if (apiKey.isNotEmpty) {
-        await ModelStorageService.saveModelApiKey(config.id, apiKey);
+        await getIt<ModelStorageService>().saveModelApiKey(config.id, apiKey);
       }
 
       // If this is the first model or user wants to use it, we could activate it.
       // For now, let's just save it. The user can activate it from the list.
       // But if we are editing the active model, we should probably reload it.
-      final activeModel = await ModelStorageService.getActiveModel();
+      final activeModel = await getIt<ModelStorageService>().getActiveModel();
       if (activeModel?.id == config.id) {
         final appProvider = Provider.of<AppProvider>(context, listen: false);
         appProvider.updateModelConfig(config);
-        await ModelSelector.instance.switchToModel(config);
+        await getIt<ModelSelector>().switchToModel(config);
       }
 
       if (mounted) {
@@ -824,6 +845,30 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               onChanged: (value) {
                 setState(() {
                   _supportsVideo = value ?? false;
+                });
+              },
+            ),
+            CheckboxListTile(
+              title: const Text('Generate Image'),
+              subtitle: const Text(
+                'Model can generate images from text prompts',
+              ),
+              value: _supportsImageGeneration,
+              onChanged: (value) {
+                setState(() {
+                  _supportsImageGeneration = value ?? false;
+                });
+              },
+            ),
+            CheckboxListTile(
+              title: const Text('Code Generation'),
+              subtitle: const Text(
+                'Model is optimized for writing and debugging code',
+              ),
+              value: _supportsCodeGeneration,
+              onChanged: (value) {
+                setState(() {
+                  _supportsCodeGeneration = value ?? false;
                 });
               },
             ),

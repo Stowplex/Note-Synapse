@@ -165,6 +165,7 @@ class _SubNoteEditScreenState extends State<SubNoteEditScreen> {
               controller: _contentController,
               focusNode: _contentFocusNode,
               onPickImage: null, // No image picker for subnotes
+              onPickNoteLink: null, // No note linker for subnotes
               language: 'markdown',
             ),
           ),

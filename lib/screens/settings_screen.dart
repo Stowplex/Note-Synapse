@@ -6,6 +6,7 @@ import '../providers/app_provider.dart';
 import '../services/secure_storage_service.dart';
 import '../services/logger_service.dart';
 import '../services/model_storage_service.dart';
+import '../services/service_locator.dart';
 import '../services/model_selector.dart';
 import '../models/model_type.dart';
 import 'setup_screen.dart';
@@ -13,10 +14,18 @@ import 'model_configuration_screen.dart';
 import 'recovery_screen.dart';
 import 'mcp_settings_screen.dart';
 import 'prompt_settings_screen.dart';
+import 'agentic_settings_screen.dart';
 import 'getting_started_screen.dart';
+import 'model_preference_screen.dart';
 import '../services/conversation_settings_service.dart';
 import '../models/model_config.dart';
 import 'settings/user_app_settings_screen.dart';
+import '../services/wake_lock_service.dart' as wake_lock;
+import '../services/network_settings_service.dart';
+import '../services/network_provider.dart';
+import 'settings/about_screen.dart';
+import 'package:flutter/foundation.dart';
+import 'settings/debug_menu_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -45,36 +54,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => const GettingStartedScreen(),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.palette),
-              title: Text(l10n.appearance),
-              subtitle: Text(l10n.appearanceSubtitle),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const AppearanceSettingsScreen(),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.language),
-              title: Text(l10n.language),
-              subtitle: Text(l10n.languageSubtitle),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const LanguageSettingsScreen(),
                 ),
               ),
             ),
@@ -112,14 +91,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           Card(
             child: ListTile(
-              leading: const Icon(Icons.repeat),
-              title: Text(l10n.aiConversationSettings),
-              subtitle: Text(l10n.aiConversationSettingsSubtitle),
+              leading: const Icon(Icons.apps),
+              title: const Text('User App'),
+              subtitle: const Text('Manage user app settings and libraries'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const AiConversationSettingsScreen(),
+                  builder: (context) => const UserAppSettingsScreen(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.settings_applications),
+              title: Text(l10n.system),
+              subtitle: Text(l10n.systemSubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SystemSettingsScreen(),
                 ),
               ),
             ),
@@ -137,21 +131,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.apps),
-              title: const Text('User App'),
-              subtitle: const Text('Manage user app settings and libraries'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const UserAppSettingsScreen(),
+          if (kDebugMode) ...[
+            const SizedBox(height: 8),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.bug_report),
+                title: Text(l10n.debugMenu),
+                subtitle: Text(l10n.debugMenuSubtitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const DebugMenuScreen(),
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -274,8 +270,8 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
       _isLoading = true;
     });
     try {
-      final models = await ModelStorageService.getConfiguredModels();
-      final activeModel = await ModelStorageService.getActiveModel();
+      final models = await getIt<ModelStorageService>().getConfiguredModels();
+      final activeModel = await getIt<ModelStorageService>().getActiveModel();
 
       if (mounted) {
         setState(() {
@@ -300,7 +296,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
     });
 
     try {
-      await ModelSelector.instance.switchToModel(config);
+      await getIt<ModelSelector>().switchToModel(config);
 
       if (mounted) {
         // Force refresh of model config in provider to update UI
@@ -368,7 +364,7 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
 
     if (confirmed == true) {
       try {
-        await ModelStorageService.deleteModel(config.id);
+        await getIt<ModelStorageService>().deleteModel(config.id);
         await _loadData();
 
         if (mounted) {
@@ -409,10 +405,6 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.aiModelSettings)),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _openModelConfiguration(),
-        child: const Icon(Icons.add),
-      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -433,13 +425,69 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 8),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.repeat),
+                    title: Text(l10n.aiConversationSettings),
+                    subtitle: Text(l10n.aiConversationSettingsSubtitle),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const AiConversationSettingsScreen(),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.account_tree_rounded),
+                    title: Text(l10n.agenticSettings),
+                    subtitle: Text(l10n.agenticSettingsSubtitle),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AgenticSettingsScreen(),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.sort_rounded),
+                    title: const Text('Model Preferences'),
+                    subtitle: const Text('Set capability-based model priority'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ModelPreferenceScreen(),
+                      ),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 16),
 
-                Text(
-                  'Configured Models',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Configured Models',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add),
+                      onPressed: () => _openModelConfiguration(),
+                      tooltip: 'Add Model',
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
 
@@ -1165,6 +1213,46 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
   Widget _buildDataSection(String title, dynamic data) {
     final theme = Theme.of(context);
 
+    final jsonViewTheme = JsonViewTheme(
+      backgroundColor: Colors.transparent,
+      keyStyle: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: theme.colorScheme.primary,
+      ),
+      stringStyle: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 12,
+        color: theme.textTheme.bodyMedium?.color,
+      ),
+      intStyle: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 12,
+        color: theme.colorScheme.secondary,
+      ),
+      doubleStyle: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 12,
+        color: theme.colorScheme.secondary,
+      ),
+      boolStyle: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 12,
+        color: theme.colorScheme.tertiary,
+      ),
+      openIcon: Icon(
+        Icons.arrow_drop_down,
+        size: 20,
+        color: theme.iconTheme.color,
+      ),
+      closeIcon: Icon(
+        Icons.arrow_right,
+        size: 20,
+        color: theme.iconTheme.color,
+      ),
+    );
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -1190,87 +1278,10 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
             child: data is Map
                 ? JsonView.map(
                     Map<String, dynamic>.from(data),
-                    theme: JsonViewTheme(
-                      keyStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.primary,
-                      ),
-                      stringStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: theme.textTheme.bodyMedium?.color,
-                      ),
-                      intStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: theme.colorScheme.secondary,
-                      ),
-                      doubleStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: theme.colorScheme.secondary,
-                      ),
-                      boolStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: theme.colorScheme.tertiary,
-                      ),
-                      openIcon: Icon(
-                        Icons.arrow_drop_down,
-                        size: 20,
-                        color: theme.iconTheme.color,
-                      ),
-                      closeIcon: Icon(
-                        Icons.arrow_right,
-                        size: 20,
-                        color: theme.iconTheme.color,
-                      ),
-                    ),
+                    theme: jsonViewTheme,
                   )
                 : data is List
-                ? JsonView.map(
-                    {'items': data},
-                    theme: JsonViewTheme(
-                      keyStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.primary,
-                      ),
-                      stringStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: theme.textTheme.bodyMedium?.color,
-                      ),
-                      intStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: theme.colorScheme.secondary,
-                      ),
-                      doubleStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: theme.colorScheme.secondary,
-                      ),
-                      boolStyle: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: theme.colorScheme.tertiary,
-                      ),
-                      openIcon: Icon(
-                        Icons.arrow_drop_down,
-                        size: 20,
-                        color: theme.iconTheme.color,
-                      ),
-                      closeIcon: Icon(
-                        Icons.arrow_right,
-                        size: 20,
-                        color: theme.iconTheme.color,
-                      ),
-                    ),
-                  )
+                ? JsonView.map({'items': data}, theme: jsonViewTheme)
                 : SelectableText(
                     data.toString(),
                     style: TextStyle(
@@ -1282,6 +1293,665 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class SystemSettingsScreen extends StatefulWidget {
+  const SystemSettingsScreen({super.key});
+
+  @override
+  State<SystemSettingsScreen> createState() => _SystemSettingsScreenState();
+}
+
+class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
+  bool _keepScreenOn = false;
+  int _maxLogEntries = LoggerService.defaultMaxLogEntries;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreference();
+  }
+
+  Future<void> _loadPreference() async {
+    final enabled = await wake_lock.isWakeLockEnabled();
+    final maxLogEntries = await LoggerService.getMaxLogEntries();
+    if (mounted) {
+      setState(() {
+        _keepScreenOn = enabled;
+        _maxLogEntries = maxLogEntries;
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _toggleKeepScreenOn(bool value) async {
+    setState(() {
+      _keepScreenOn = value;
+    });
+    await wake_lock.setWakeLock(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.system)),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                // Dark Mode
+                Card(
+                  child: Consumer<AppProvider>(
+                    builder: (context, appProvider, child) {
+                      return SwitchListTile(
+                        title: Text(l10n.darkMode),
+                        subtitle: Text(l10n.darkModeSubtitle),
+                        value: appProvider.isDarkMode,
+                        onChanged: (value) {
+                          appProvider.toggleTheme();
+                        },
+                        secondary: const Icon(Icons.dark_mode),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Keep Screen On
+                Card(
+                  child: SwitchListTile(
+                    title: Text(l10n.keepScreenOn),
+                    subtitle: Text(l10n.keepScreenOnSubtitle),
+                    value: _keepScreenOn,
+                    onChanged: _toggleKeepScreenOn,
+                    secondary: const Icon(Icons.brightness_7),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Network
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.wifi),
+                    title: Text(l10n.network),
+                    subtitle: Text(l10n.networkSubtitle),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const NetworkSettingsScreen(),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Language
+                Card(
+                  child: Consumer<AppProvider>(
+                    builder: (context, appProvider, child) {
+                      return ListTile(
+                        leading: const Icon(Icons.language),
+                        title: Text(l10n.language),
+                        subtitle: Text(
+                          _getLanguageLabel(appProvider.locale, l10n),
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () =>
+                            _showLanguageDialog(context, appProvider, l10n),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // AI Log Entries Limit
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.article_outlined),
+                    title: Text(l10n.aiLogEntriesLimit),
+                    subtitle: Text(l10n.aiLogEntriesLimitDescription),
+                    trailing: DropdownButton<int>(
+                      value: _maxLogEntries,
+                      underline: const SizedBox(),
+                      onChanged: (value) async {
+                        if (value != null) {
+                          setState(() => _maxLogEntries = value);
+                          await LoggerService.setMaxLogEntries(value);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(l10n.settingsSaved)),
+                            );
+                          }
+                        }
+                      },
+                      items: [
+                        DropdownMenuItem(
+                          value: 0,
+                          child: Text(l10n.aiLogEntriesDisabled),
+                        ),
+                        const DropdownMenuItem(value: 100, child: Text('100')),
+                        const DropdownMenuItem(value: 300, child: Text('300')),
+                        const DropdownMenuItem(value: 500, child: Text('500')),
+                        DropdownMenuItem(
+                          value: -1,
+                          child: Text(l10n.aiLogEntriesUnlimited),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // About
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.info_outline),
+                    title: Text(l10n.about),
+                    subtitle: Text(l10n.aboutSubtitle),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AboutScreen(),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  String _getLanguageLabel(Locale? locale, AppLocalizations l10n) {
+    if (locale == null) return l10n.english;
+    if (locale.languageCode == 'zh') return l10n.chineseSimplified;
+    return l10n.english;
+  }
+
+  void _showLanguageDialog(
+    BuildContext context,
+    AppProvider appProvider,
+    AppLocalizations l10n,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.language),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<Locale>(
+              title: Text(l10n.english),
+              value: const Locale('en', ''),
+              groupValue: appProvider.locale,
+              onChanged: (Locale? value) {
+                if (value != null) {
+                  appProvider.changeLanguage(value);
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(l10n.languageChanged),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+            ),
+            RadioListTile<Locale>(
+              title: Text(l10n.chineseSimplified),
+              value: const Locale('zh', ''),
+              groupValue: appProvider.locale,
+              onChanged: (Locale? value) {
+                if (value != null) {
+                  appProvider.changeLanguage(value);
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(l10n.languageChanged),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class NetworkSettingsScreen extends StatefulWidget {
+  const NetworkSettingsScreen({super.key});
+
+  @override
+  State<NetworkSettingsScreen> createState() => _NetworkSettingsScreenState();
+}
+
+class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
+  NetworkProtocolPreference _protocolPreference =
+      NetworkSettingsService.defaultProtocolPreference;
+  int _retryCount = NetworkSettingsService.defaultRetryCount;
+  int _backoffBase = NetworkSettingsService.defaultBackoffBase;
+  int _timeout = NetworkSettingsService.defaultTimeout;
+  int _connectTimeout = NetworkSettingsService.defaultConnectTimeout;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final protocol = await NetworkSettingsService.getProtocolPreference();
+    final retryCount = await NetworkSettingsService.getRetryCount();
+    final backoffBase = await NetworkSettingsService.getBackoffBase();
+    final timeout = await NetworkSettingsService.getTimeout();
+    final connectTimeout = await NetworkSettingsService.getConnectTimeout();
+    if (mounted) {
+      setState(() {
+        _protocolPreference = protocol;
+        _retryCount = retryCount;
+        _backoffBase = backoffBase;
+        _timeout = timeout;
+        _connectTimeout = connectTimeout;
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _updateProtocolPreference(
+    NetworkProtocolPreference preference,
+  ) async {
+    setState(() {
+      _protocolPreference = preference;
+    });
+    await NetworkSettingsService.setProtocolPreference(preference);
+    await NetworkProvider.instance.reloadSettings();
+  }
+
+  Future<void> _updateRetryCount(int count) async {
+    setState(() {
+      _retryCount = count;
+    });
+    await NetworkSettingsService.setRetryCount(count);
+    await NetworkProvider.instance.reloadSettings();
+  }
+
+  Future<void> _updateBackoffBase(int seconds) async {
+    setState(() {
+      _backoffBase = seconds;
+    });
+    await NetworkSettingsService.setBackoffBase(seconds);
+    await NetworkProvider.instance.reloadSettings();
+  }
+
+  Future<void> _updateTimeout(int seconds) async {
+    setState(() {
+      _timeout = seconds;
+    });
+    await NetworkSettingsService.setTimeout(seconds);
+    await NetworkProvider.instance.reloadSettings();
+  }
+
+  Future<void> _updateConnectTimeout(int seconds) async {
+    setState(() {
+      _connectTimeout = seconds;
+    });
+    await NetworkSettingsService.setConnectTimeout(seconds);
+    await NetworkProvider.instance.reloadSettings();
+  }
+
+  String _getProtocolLabel(NetworkProtocolPreference preference) {
+    final l10n = AppLocalizations.of(context)!;
+    switch (preference) {
+      case NetworkProtocolPreference.auto:
+        return l10n.protocolAuto;
+      case NetworkProtocolPreference.http3Only:
+        return l10n.protocolHttp3Only;
+      case NetworkProtocolPreference.http11Only:
+        return l10n.protocolHttp11Only;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.network)),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                // Protocol Preference
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.speed),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    l10n.protocolPreference,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    l10n.protocolPreferenceSubtitle,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<NetworkProtocolPreference>(
+                          value: _protocolPreference,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          items: NetworkProtocolPreference.values
+                              .map(
+                                (p) => DropdownMenuItem(
+                                  value: p,
+                                  child: Text(_getProtocolLabel(p)),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              _updateProtocolPreference(value);
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Retry Count
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.repeat),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    l10n.retryCount,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    l10n.retryCountSubtitle,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '$_retryCount',
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Slider(
+                          value: _retryCount.toDouble(),
+                          min: NetworkSettingsService.minRetryCount.toDouble(),
+                          max: NetworkSettingsService.maxRetryCount.toDouble(),
+                          divisions:
+                              NetworkSettingsService.maxRetryCount -
+                              NetworkSettingsService.minRetryCount,
+                          label: '$_retryCount',
+                          onChanged: (value) {
+                            setState(() {
+                              _retryCount = value.round();
+                            });
+                          },
+                          onChangeEnd: (value) =>
+                              _updateRetryCount(value.round()),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Backoff Base
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.timer),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    l10n.backoffBase,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    l10n.backoffBaseSubtitle,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '${_backoffBase}s',
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Slider(
+                          value: _backoffBase.toDouble(),
+                          min: NetworkSettingsService.minBackoffBase.toDouble(),
+                          max: NetworkSettingsService.maxBackoffBase.toDouble(),
+                          divisions:
+                              NetworkSettingsService.maxBackoffBase -
+                              NetworkSettingsService.minBackoffBase,
+                          label: '${_backoffBase}s',
+                          onChanged: (value) {
+                            setState(() {
+                              _backoffBase = value.round();
+                            });
+                          },
+                          onChangeEnd: (value) =>
+                              _updateBackoffBase(value.round()),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          l10n.retryPattern(
+                            _backoffBase.toString(),
+                            (_backoffBase * 2).toString(),
+                            (_backoffBase * 4).toString(),
+                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacity(0.7),
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Request Timeout
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.timer),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Request Timeout',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Maximum duration for network requests',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '${_timeout}s',
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Slider(
+                          value: _timeout.toDouble(),
+                          min: NetworkSettingsService.minTimeout.toDouble(),
+                          max: NetworkSettingsService.maxTimeout.toDouble(),
+                          divisions:
+                              (NetworkSettingsService.maxTimeout -
+                                  NetworkSettingsService.minTimeout) ~/
+                              30,
+                          label: '${_timeout}s',
+                          onChanged: (value) {
+                            setState(() {
+                              _timeout = value.round();
+                            });
+                          },
+                          onChangeEnd: (value) => _updateTimeout(value.round()),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Connect Timeout
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.timer_outlined),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Connect Timeout',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Maximum duration for establishing connection',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '${_connectTimeout}s',
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Slider(
+                          value: _connectTimeout.toDouble(),
+                          min: NetworkSettingsService.minConnectTimeout
+                              .toDouble(),
+                          max: NetworkSettingsService.maxConnectTimeout
+                              .toDouble(),
+                          divisions:
+                              (NetworkSettingsService.maxConnectTimeout -
+                                  NetworkSettingsService.minConnectTimeout) ~/
+                              5,
+                          label: '${_connectTimeout}s',
+                          onChanged: (value) {
+                            setState(() {
+                              _connectTimeout = value.round();
+                            });
+                          },
+                          onChangeEnd: (value) =>
+                              _updateConnectTimeout(value.round()),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 }

@@ -8,6 +8,7 @@ import '../models/dedup_rule.dart';
 import '../services/ai_service.dart';
 import '../widgets/tag_detail_dialog.dart';
 import '../utils/dedup_suggestion_utils.dart';
+import '../services/service_locator.dart';
 
 class TagManagementScreen extends StatefulWidget {
   const TagManagementScreen({super.key});
@@ -20,6 +21,8 @@ class _TagManagementScreenState extends State<TagManagementScreen>
     with TickerProviderStateMixin {
   List<TagWithUsage> _tagsWithUsage = [];
   bool _isLoading = true;
+  String _deleteTagsQuery = '';
+  late TextEditingController _searchController;
   late TabController _tabController;
 
   // Dedup rules state
@@ -29,12 +32,14 @@ class _TagManagementScreenState extends State<TagManagementScreen>
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController();
     _tabController = TabController(length: 2, vsync: this);
     _loadTagsWithUsage();
   }
 
   @override
   void dispose() {
+    _searchController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -187,7 +192,14 @@ class _TagManagementScreenState extends State<TagManagementScreen>
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_tagsWithUsage.isEmpty) {
+    final filteredTags = _tagsWithUsage.where((tagWithUsage) {
+      if (_deleteTagsQuery.isEmpty) return true;
+      return tagWithUsage.tag.name.toLowerCase().contains(
+        _deleteTagsQuery.toLowerCase(),
+      );
+    }).toList();
+
+    if (filteredTags.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -205,54 +217,90 @@ class _TagManagementScreenState extends State<TagManagementScreen>
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _tagsWithUsage.length,
-      itemBuilder: (context, index) {
-        final tagWithUsage = _tagsWithUsage[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: Color(
-                  int.parse(tagWithUsage.tag.color.replaceFirst('#', '0xFF')),
-                ),
-                shape: BoxShape.circle,
-              ),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: l10n.searchTags,
+              prefixIcon: const Icon(Icons.search),
+              border: const OutlineInputBorder(),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              suffixIcon: _deleteTagsQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        setState(() {
+                          _searchController.clear();
+                          _deleteTagsQuery = '';
+                        });
+                      },
+                    )
+                  : null,
             ),
-            title: Text(
-              tagWithUsage.tag.name,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-            subtitle: Text(
-              l10n.tagUsageCount(
-                tagWithUsage.conversationUsageCount,
-                tagWithUsage.noteUsageCount,
-              ),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.info_outline),
-                  onPressed: () => _showTagDetail(tagWithUsage),
-                  tooltip: 'View details',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () => _deleteTag(tagWithUsage),
-                  tooltip: l10n.deleteTag,
-                ),
-              ],
-            ),
-            onTap: () => _showTagDetail(tagWithUsage),
+            onChanged: (value) {
+              setState(() {
+                _deleteTagsQuery = value;
+              });
+            },
           ),
-        );
-      },
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+            itemCount: filteredTags.length,
+            itemBuilder: (context, index) {
+              final tagWithUsage = filteredTags[index];
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: Color(
+                        int.parse(
+                          tagWithUsage.tag.color.replaceFirst('#', '0xFF'),
+                        ),
+                      ),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  title: Text(
+                    tagWithUsage.tag.name,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  subtitle: Text(
+                    l10n.tagUsageCount(
+                      tagWithUsage.conversationUsageCount,
+                      tagWithUsage.noteUsageCount,
+                    ),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.info_outline),
+                        onPressed: () => _showTagDetail(tagWithUsage),
+                        tooltip: 'View details',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _deleteTag(tagWithUsage),
+                        tooltip: l10n.deleteTag,
+                      ),
+                    ],
+                  ),
+                  onTap: () => _showTagDetail(tagWithUsage),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -605,14 +653,15 @@ class _TagManagementScreenState extends State<TagManagementScreen>
       }
       final filterTags = filterTagSet.toList();
 
-      final suggestions = await AIService.suggestDedupRules(
+      final suggestions = await getIt<AIService>().suggestDedupRules(
         tagNames,
         protectedTags: filterTags,
       );
 
       if (mounted && suggestions.isNotEmpty) {
-        final existingTags =
-            _tagsWithUsage.map((tagWithUsage) => tagWithUsage.tag.name).toList();
+        final existingTags = _tagsWithUsage
+            .map((tagWithUsage) => tagWithUsage.tag.name)
+            .toList();
         final normalizedSuggestions = DedupSuggestionUtils.normalizeSuggestions(
           suggestions,
           existingTags,
@@ -626,7 +675,8 @@ class _TagManagementScreenState extends State<TagManagementScreen>
             ),
           );
         } else {
-          final skippedCount = suggestions.length - normalizedSuggestions.length;
+          final skippedCount =
+              suggestions.length - normalizedSuggestions.length;
 
           setState(() {
             _dedupRules.addAll(normalizedSuggestions);

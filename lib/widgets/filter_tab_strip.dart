@@ -304,11 +304,13 @@ class _FilterTabStripState extends State<FilterTabStrip> {
     List<Filter> hierarchyFilteredUnpinned = unpinnedFilters;
     if (isHierarchyEnabled) {
       hierarchyFilteredUnpinned = unpinnedFilters.where((f) {
-        // Show if it is NOT a child of any other filter in the unpinned list
-        return !unpinnedFilters.any((other) {
+        // Show if it is NOT a child of any other filter (pinned or unpinned)
+        return !widget.customFilters.any((other) {
           if (f == other) return false;
           if (!f.isChildOf(other)) return false;
           if (other.isChildOf(f)) {
+            // Tie-breaker for circular dependency (shouldn't happen ideally)
+            // If mutual child, show the one with larger ID (or smaller? arbitrary stable sort)
             return f.id.compareTo(other.id) > 0;
           }
           return true;

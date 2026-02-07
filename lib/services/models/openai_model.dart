@@ -1,12 +1,14 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:http/http.dart' as http;
+
 import 'package:file_picker/file_picker.dart';
 import 'ai_model.dart';
 import '../attachment_preprocessor.dart';
 import '../model_storage_service.dart';
+import '../service_locator.dart';
 import '../logger_service.dart';
 import '../prompts/prompt_models.dart';
+import '../network_provider.dart';
 import '../../models/model_type.dart';
 import '../../models/model_config.dart';
 import '../../utils/file_type_utils.dart';
@@ -33,7 +35,7 @@ class OpenAIModel implements AIModel {
       if (_config == null) return false;
       final apiKey =
           _config?.apiKey ??
-          await ModelStorageService.getModelApiKey(_config!.id);
+          await getIt<ModelStorageService>().getModelApiKey(_config!.id);
       return apiKey != null && apiKey.isNotEmpty;
     } catch (e) {
       LoggerService.error('OpenAIModel: Error checking readiness: $e');
@@ -59,7 +61,7 @@ class OpenAIModel implements AIModel {
       );
     } else {
       // If no config provided, try to get the active model if it matches this type
-      final activeModel = await ModelStorageService.getActiveModel();
+      final activeModel = await getIt<ModelStorageService>().getActiveModel();
       if (activeModel?.type == ModelType.openaiCompatible) {
         _config = activeModel;
         LoggerService.debug(
@@ -80,7 +82,7 @@ class OpenAIModel implements AIModel {
 
     if (_config?.apiKey == null || _config!.apiKey!.isEmpty) {
       // Try to fetch from storage using ID
-      final storedKey = await ModelStorageService.getModelApiKey(_config!.id);
+      final storedKey = await getIt<ModelStorageService>().getModelApiKey(_config!.id);
       if (storedKey != null && storedKey.isNotEmpty) {
         _config = _config!.copyWith(apiKey: storedKey);
       } else {
@@ -517,6 +519,28 @@ class OpenAIModel implements AIModel {
             },
           );
         }
+      } else if (file.path != null &&
+          (file.path!.startsWith('http') || file.path!.startsWith('gs://'))) {
+        // Handle URI attachments
+        final extension = FileTypeUtils.getFileExtension(file.name);
+        final category = FileTypeUtils.getFileCategory(extension);
+
+        supportedFiles.add(fileName);
+
+        if (category == 'image') {
+          contentParts.add({
+            'type': 'image_url',
+            'image_url': {'url': file.path},
+          });
+        } else {
+          // For non-image files, use input_file with file_url
+          contentParts.add({'type': 'input_file', 'file_url': file.path});
+        }
+
+        LoggerService.debug(
+          'URI attachment added',
+          error: {'fileName': fileName, 'category': category, 'uri': file.path},
+        );
       } else {
         unsupportedFiles.add(fileName);
         unsupportedByType.putIfAbsent(category, () => []).add(fileName);
@@ -662,7 +686,7 @@ class OpenAIModel implements AIModel {
       requestId: requestId,
     );
 
-    final response = await http.post(
+    final response = await NetworkProvider.post(
       Uri.parse(_config!.endpoint!),
       headers: {
         'Content-Type': 'application/json',
@@ -741,7 +765,7 @@ class OpenAIModel implements AIModel {
       requestId: requestId,
     );
 
-    final response = await http.post(
+    final response = await NetworkProvider.post(
       Uri.parse(_config!.endpoint!),
       headers: {
         'Content-Type': 'application/json',
@@ -793,7 +817,12 @@ class OpenAIModel implements AIModel {
             } catch (_) {
               parsedArgs = {};
             }
-            return {'name': fn['name'], 'args': parsedArgs};
+            return {
+              'name': fn['name'],
+              'args': parsedArgs,
+              'id':
+                  tc['id'], // Preserve tool call ID for proper message threading
+            };
           }).toList();
 
           return {

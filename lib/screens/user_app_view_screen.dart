@@ -1,20 +1,25 @@
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+import '../services/database_service.dart'; // Add DatabaseService import
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import '../models/note.dart';
+import '../services/approval_service.dart';
 import '../services/user_app_service.dart';
 import '../services/logger_service.dart';
 import '../services/user_app_runtime_bridge.dart';
+import '../services/sql_query_service.dart';
 import '../services/global_library_service.dart';
 import '../utils/file_utils.dart';
+import '../widgets/approval_dialog.dart';
 import 'user_app_edit_screen.dart';
 import 'note_detail_screen.dart';
 import 'conversation_chat_screen.dart';
@@ -52,11 +57,62 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
   AppRevision? _selectedRevision;
   bool _showRevisionDetails = false;
 
+  String _getQueryTypeDescription(SqlQueryType queryType) {
+    switch (queryType) {
+      case SqlQueryType.insert:
+        return 'INSERT (add data)';
+      case SqlQueryType.update:
+        return 'UPDATE (modify data)';
+      case SqlQueryType.delete:
+        return 'DELETE (remove data)';
+      case SqlQueryType.createTable:
+        return 'CREATE TABLE';
+      case SqlQueryType.createIndex:
+        return 'CREATE INDEX';
+      case SqlQueryType.createTrigger:
+        return 'CREATE TRIGGER';
+      case SqlQueryType.createView:
+        return 'CREATE VIEW';
+      case SqlQueryType.dropTable:
+        return 'DROP TABLE';
+      case SqlQueryType.dropIndex:
+        return 'DROP INDEX';
+      case SqlQueryType.dropTrigger:
+        return 'DROP TRIGGER';
+      case SqlQueryType.dropView:
+        return 'DROP VIEW';
+      case SqlQueryType.alterTable:
+        return 'ALTER TABLE';
+      case SqlQueryType.select:
+      case SqlQueryType.pragma:
+      case SqlQueryType.other:
+        return 'SQL';
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _validateNoteActionApp();
     _loadRevisions();
+  }
+
+  @override
+  void didUpdateWidget(UserAppViewScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.app.id != oldWidget.app.id) {
+      LoggerService.debug(
+        'UserAppViewScreen: App ID changed from ${oldWidget.app.id} to ${widget.app.id}',
+      );
+      setState(() {
+        _consoleOutput.clear();
+        _isLoading = true;
+        _selectedRevision = null;
+        _showRevisionDetails = false;
+      });
+      _validateNoteActionApp();
+      _loadRevisions();
+    }
   }
 
   @override
@@ -553,6 +609,100 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
           ),
         );
       },
+      onModificationRequest: (source, noteId, modification) async {
+        if (!mounted) return false;
+
+        // Fetch note details
+        String? title;
+        String? snippet;
+        try {
+          final db = DatabaseService();
+          final note = await db.getNote(noteId);
+          if (note != null) {
+            title = note.title;
+            final content = note.content;
+            snippet = content.length > 200
+                ? '${content.substring(0, 200)}...'
+                : content;
+          }
+        } catch (e) {
+          LoggerService.warning('Failed to fetch note details: $e');
+        }
+
+        final request = ApprovalRequest.noteModification(
+          noteId: noteId,
+          modification: modification,
+          source: 'App: ${widget.app.name}',
+          noteTitle: title,
+          noteSnippet: snippet,
+        );
+        final result = await ApprovalDialog.showWithContext(context, request);
+
+        if (result.approved) {
+          if (result.approvedForSession) {
+            source.approveSession();
+          }
+          return true;
+        }
+        return false;
+      },
+      onSqlWriteApprovalRequest: (source, sql, queryType) async {
+        if (!mounted) return false;
+
+        final request = ApprovalRequest.sqlWrite(
+          sql: sql,
+          queryType: queryType,
+          queryTypeDescription: _getQueryTypeDescription(queryType),
+          source: 'App: ${widget.app.name}',
+        );
+        final result = await ApprovalDialog.showWithContext(context, request);
+
+        if (result.approved) {
+          if (result.approvedForSession) {
+            source.approveSqlWritesForSession();
+          }
+          return true;
+        }
+        return false;
+      },
+      onDeletionApprovalRequest: (source, noteIds) async {
+        if (!mounted) return false;
+
+        // Fetch note details
+        final noteDetails = <Map<String, String>>[];
+        try {
+          final db = DatabaseService();
+          final notes = await db.getNotesByIds(noteIds);
+          for (final note in notes) {
+            final content = note.content;
+            final snippet = content.length > 100
+                ? '${content.substring(0, 100)}...'
+                : content;
+            noteDetails.add({
+              'id': note.id,
+              'title': note.title,
+              'snippet': snippet,
+            });
+          }
+        } catch (e) {
+          LoggerService.warning('Failed to fetch note details: $e');
+        }
+
+        final request = ApprovalRequest.noteDeletion(
+          noteIds: noteIds,
+          source: 'App: ${widget.app.name}',
+          noteDetails: noteDetails,
+        );
+        final result = await ApprovalDialog.showWithContext(context, request);
+
+        if (result.approved) {
+          if (result.approvedForSession) {
+            source.approveDeletionsForSession();
+          }
+          return true;
+        }
+        return false;
+      },
     );
 
     return Stack(
@@ -643,6 +793,20 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
             }
             return null;
           },
+          shouldOverrideUrlLoading: (controller, request) async {
+            final url = request.request.url;
+            if (url == null) return NavigationActionPolicy.CANCEL;
+
+            final scheme = url.scheme.toLowerCase();
+            if (scheme == 'about' || scheme == 'data') {
+              return NavigationActionPolicy.ALLOW;
+            }
+
+            if (scheme == 'http' || scheme == 'https') {
+              launchUrl(url.uriValue);
+            }
+            return NavigationActionPolicy.CANCEL;
+          },
           initialUserScripts: UnmodifiableListView<UserScript>([
             bridge.buildBootstrapScript(),
           ]),
@@ -702,7 +866,7 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
           },
           onReceivedError: (controller, request, error) {
             setState(() {
-              _consoleOutput.add('ERROR: ${error.description}');
+              _consoleOutput.add('ERROR: ${error.toJson()}');
             });
           },
         ),

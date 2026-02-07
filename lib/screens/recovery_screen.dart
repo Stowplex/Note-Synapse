@@ -2,10 +2,11 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:archive/archive.dart';
+import 'package:archive/archive_io.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
@@ -16,7 +17,9 @@ import '../providers/app_provider.dart';
 import 'raw_data_manager/raw_data_manager_screen.dart';
 
 class RecoveryScreen extends StatefulWidget {
-  const RecoveryScreen({super.key});
+  final String? error;
+
+  const RecoveryScreen({super.key, this.error});
 
   @override
   State<RecoveryScreen> createState() => _RecoveryScreenState();
@@ -284,37 +287,54 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   }
 
   Future<void> _createZipArchive(Directory sourceDir, File zipFile) async {
-    final archive = Archive();
+    final start = DateTime.now();
+    _addLog('Starting zip creation...');
 
-    await for (final entity in sourceDir.list(recursive: true)) {
-      if (entity is File) {
-        final relativePath = entity.path.substring(sourceDir.path.length + 1);
-        final fileBytes = await entity.readAsBytes();
-        archive.addFile(ArchiveFile(relativePath, fileBytes.length, fileBytes));
+    try {
+      final encoder = ZipFileEncoder();
+      encoder.create(zipFile.path);
+
+      await for (final entity in sourceDir.list(recursive: true)) {
+        if (entity is File) {
+          final relativePath = entity.path.substring(sourceDir.path.length + 1);
+          await encoder.addFile(entity, relativePath);
+        }
       }
-    }
 
-    final zipData = ZipEncoder().encode(archive);
-    if (zipData != null) {
-      await zipFile.writeAsBytes(zipData);
-    } else {
-      throw Exception('Failed to create zip archive');
+      await encoder.close();
+
+      final end = DateTime.now();
+      final duration = end.difference(start);
+      _addLog('Zip creation took ${duration.inSeconds}s');
+    } catch (e) {
+      _addLog('Error creating zip: $e');
+      rethrow;
     }
   }
 
+  static const platform = MethodChannel('com.github.kkspeed/share');
+
   Future<void> _saveToExternalStorage(File zipFile) async {
     try {
-      final bytes = await zipFile.readAsBytes();
       final fileName = zipFile.path.split('/').last;
 
-      await FileSaver.instance.saveAs(
-        name: fileName,
-        bytes: bytes,
-        ext: 'zip',
-        mimeType: MimeType.zip,
-      );
-
-      _addLog('File saved to external storage: $fileName');
+      if (Platform.isAndroid || Platform.isIOS) {
+        await platform.invokeMethod('saveFileToExternalStorage', {
+          'filePath': zipFile.path,
+          'fileName': fileName,
+          'mimeType': 'application/zip',
+        });
+        _addLog('File save initiated: $fileName');
+      } else {
+        // Fallback for other platforms (e.g. desktop debug)
+        await FileSaver.instance.saveAs(
+          name: fileName.replaceAll('.zip', ''),
+          filePath: zipFile.path,
+          fileExtension: 'zip',
+          mimeType: MimeType.zip,
+        );
+        _addLog('File saved via fallback: $fileName');
+      }
     } catch (e) {
       _addLog('Error saving to external storage: $e');
     }
@@ -458,23 +478,28 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         throw Exception(l10n.invalidBackupFile);
       }
 
-      final zipBytes = await backupFile.readAsBytes();
-      final archive = ZipDecoder().decodeBytes(zipBytes);
+      final inputStream = InputFileStream(backupFilePath);
+      final archive = ZipDecoder().decodeStream(inputStream);
 
       // Step 2: Extract the zip to a temp directory
       final extractDir = Directory('${tempDir.path}/extract_$timestamp');
       await extractDir.create(recursive: true);
 
-      for (final file in archive) {
+      for (final file in archive.files) {
         final filePath = '${extractDir.path}/${file.name}';
+        // Ensure parent directory exists
         final fileDir = Directory(path.dirname(filePath));
         await fileDir.create(recursive: true);
 
         if (file.isFile) {
-          final fileData = file.content as List<int>;
-          await File(filePath).writeAsBytes(fileData);
+          final outputStream = OutputFileStream(filePath);
+          file.writeContent(outputStream);
+          outputStream.close();
+          await Future.delayed(Duration.zero); // Yield to UI
         }
       }
+
+      inputStream.close();
 
       _addImportLog(l10n.validatingBackupDatabase);
       _updateImportProgress(0.2);
@@ -621,6 +646,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
       _addImportLog(l10n.swappingDatabases);
       _updateImportProgress(0.94);
+
+      // Force cleanup of staging DB connection before copying
+      await stagingDb.close(); // Ensure strictly closed
 
       // Step 16: Copy staging DB to app's DB directory
       await stagingDbFile.copy(currentDbPath);
@@ -846,24 +874,36 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     final backupFilters = await backupDb.query('filters');
 
     for (final filter in backupFilters) {
-      // Handle nulls - convert to appropriate defaults for whereArgs
-      // SQLite doesn't accept null in whereArgs directly
-      final name = filter['name'] as String? ?? '';
-      final includeText = filter['includeText'] as String? ?? '';
-      final includeTags = filter['includeTags'] as String? ?? '';
-      final includeArchived = filter['includeArchived'] as int? ?? 0;
+      final id = filter['id'] as String;
+      final backupUpdatedAt = filter['updatedAt'] as int;
 
-      // Check if filter exists in staging (unique on name, includeText, includeTags, includeArchived)
-      // Use COALESCE for nullable fields to handle null comparisons properly
+      // Check if filter exists in staging by ID
       final existingFilters = await stagingDb.query(
         'filters',
-        where:
-            'name = ? AND COALESCE(includeText, \'\') = ? AND includeTags = ? AND includeArchived = ?',
-        whereArgs: [name, includeText, includeTags, includeArchived],
+        where: 'id = ?',
+        whereArgs: [id],
       );
 
-      if (existingFilters.isEmpty) {
-        // Insert new filter - filter to only existing columns
+      if (existingFilters.isNotEmpty) {
+        final existingFilter = existingFilters.first;
+        final existingUpdatedAt = existingFilter['updatedAt'] as int;
+
+        // If backup is newer, update the existing filter
+        if (backupUpdatedAt > existingUpdatedAt) {
+          final filteredData = await _filterDataForTable(
+            stagingDb,
+            'filters',
+            filter,
+          );
+          await stagingDb.update(
+            'filters',
+            filteredData,
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+        }
+      } else {
+        // Insert new filter
         final filteredData = await _filterDataForTable(
           stagingDb,
           'filters',
@@ -1127,6 +1167,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
           'attachments',
           newAttachment,
         );
+        filteredAttachment.remove('id');
         await stagingDb.insert('attachments', filteredAttachment);
       }
     }
@@ -1186,25 +1227,111 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     Database stagingDb,
     Database backupDb,
   ) async {
-    final backupMessages = await backupDb.query('conversation_messages');
+    // Process messages in batches to avoid CursorWindow size limits
+    int offset = 0;
+    const int limit = 50;
+    bool hasMore = true;
 
-    for (final message in backupMessages) {
-      // Check if message exists in staging by id
-      final existingMessages = await stagingDb.query(
-        'conversation_messages',
-        where: 'id = ?',
-        whereArgs: [message['id']],
+    while (hasMore) {
+      // Select all columns except 'content' and 'metadata', which can be huge
+      final batch = await backupDb.rawQuery(
+        '''
+        SELECT id, type, timestamp, modelUsed, length(content) as content_length, length(metadata) as metadata_length
+        FROM conversation_messages
+        LIMIT ? OFFSET ?
+        ''',
+        [limit, offset],
       );
 
-      if (existingMessages.isEmpty) {
-        // Insert new message - filter to only existing columns (removes conversationId if present)
-        final filteredData = await _filterDataForTable(
-          stagingDb,
-          'conversation_messages',
-          message,
-        );
-        await stagingDb.insert('conversation_messages', filteredData);
+      if (batch.isEmpty) {
+        hasMore = false;
+        break;
       }
+
+      for (final row in batch) {
+        final messageId = row['id'] as String;
+        final contentLength = (row['content_length'] as int?) ?? 0;
+        final metadataLength = (row['metadata_length'] as int?) ?? 0;
+
+        // Check if message exists in staging by id
+        final existingMessages = await stagingDb.query(
+          'conversation_messages',
+          where: 'id = ?',
+          whereArgs: [messageId],
+        );
+
+        if (existingMessages.isEmpty) {
+          String content = '';
+          String?
+          metadata; // metadata is nullable in schema, treating as String?
+
+          // --- Handle Content ---
+          // If content is small (< 1MB), read it normally
+          // Otherwise read in chunks
+          if (contentLength < 1024 * 1024) {
+            final contentResult = await backupDb.query(
+              'conversation_messages',
+              columns: ['content'],
+              where: 'id = ?',
+              whereArgs: [messageId],
+            );
+            if (contentResult.isNotEmpty) {
+              content = contentResult.first['content'] as String;
+            }
+          } else {
+            // Large content, read in chunks
+            content = await _readStringInChunks(
+              backupDb,
+              messageId,
+              'content',
+              contentLength,
+            );
+          }
+
+          // --- Handle Metadata ---
+          // Metadata can be null or empty string in DB, usually stored as text
+          if (metadataLength > 0) {
+            if (metadataLength < 1024 * 1024) {
+              final metaResult = await backupDb.query(
+                'conversation_messages',
+                columns: ['metadata'],
+                where: 'id = ?',
+                whereArgs: [messageId],
+              );
+              if (metaResult.isNotEmpty) {
+                metadata = metaResult.first['metadata'] as String?;
+              }
+            } else {
+              // Large metadata, read in chunks
+              metadata = await _readStringInChunks(
+                backupDb,
+                messageId,
+                'metadata',
+                metadataLength,
+              );
+            }
+          }
+
+          // Construct full message map
+          final message = Map<String, dynamic>.from(row);
+          message['content'] = content;
+          message['metadata'] = metadata;
+          message.remove('content_length'); // Remove the helper column
+          message.remove('metadata_length'); // Remove the helper column
+
+          // Insert new message - filter to only existing columns
+          final filteredData = await _filterDataForTable(
+            stagingDb,
+            'conversation_messages',
+            message,
+          );
+          await stagingDb.insert('conversation_messages', filteredData);
+        }
+      }
+
+      offset += limit;
+      // Yield to event loop to prevent UI freeze during large imports
+      await Future.delayed(Duration.zero);
     }
   }
 
@@ -1517,363 +1644,441 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.recovery)),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Backup section
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.backupAllNotes,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    l10n.backupAllNotesDescription,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _isBackingUp ? null : _backupAllNotes,
-                      icon: _isBackingUp
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.download),
-                      label: Text(
-                        _isBackingUp
-                            ? l10n.creatingBackup
-                            : l10n.backupAllNotes,
-                      ),
-                    ),
-                  ),
-                  if (_isBackingUp) ...[
-                    const SizedBox(height: 16),
-                    LinearProgressIndicator(
-                      value: _backupProgress,
-                      backgroundColor: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${(_backupProgress * 100).toInt()}%',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Import section
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.importBackup,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    l10n.importBackupDescription,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _isImporting ? null : _importBackup,
-                      icon: _isImporting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.upload),
-                      label: Text(
-                        _isImporting ? l10n.importingBackup : l10n.importBackup,
-                      ),
-                    ),
-                  ),
-                  if (_isImporting) ...[
-                    const SizedBox(height: 16),
-                    LinearProgressIndicator(
-                      value: _importProgress,
-                      backgroundColor: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${(_importProgress * 100).toInt()}%',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-
-          // Raw Data Manager
-          const SizedBox(height: 16),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.build_circle_outlined),
-              title: Text(l10n.rawDataManagerTitle),
-              subtitle: Text(l10n.rawDataManagerSubtitle),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const RawDataManagerScreen(),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // Available undo options section
-          if (_availableRecoveries.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(
-              'Available Undo Options',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            ..._availableRecoveries.map(
-              (recovery) => Card(
-                child: ListTile(
-                  leading: const Icon(Icons.undo),
-                  title: Text('Database Backup'),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Created: ${recovery['date'] ?? ''}'),
-                      Text(_formatFileSize(recovery['size'] ?? 0)),
-                    ],
-                  ),
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'recover') {
-                        _recoverFromBackup(recovery);
-                      } else if (value == 'delete') {
-                        _deleteRecovery(recovery);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'recover',
-                        child: Row(
+      appBar: AppBar(
+        title: Text(l10n.recoveryManager),
+        leading: widget.error != null
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () {
+                  // Should we allow closing?
+                  // If it's a critical error, maybe not, but user might want to try restarting app.
+                  // Let's allow exiting to main screen, maybe app will crash again if DB is broken,
+                  // but at least they are not trapped.
+                  Navigator.of(context).pop();
+                },
+              )
+            : const BackButton(),
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (widget.error != null) ...[
+                Card(
+                  color: theme.colorScheme.errorContainer,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
-                            const Icon(Icons.undo),
+                            Icon(
+                              Icons.error_outline,
+                              color: theme.colorScheme.onErrorContainer,
+                            ),
                             const SizedBox(width: 8),
-                            Text('Undo Import'),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.delete),
-                            const SizedBox(width: 8),
-                            Text(l10n.delete),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-          if (_backupLogs.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.backupLogs,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 200,
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.outline.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(8),
-                        itemCount: _backupLogs.length,
-                        itemBuilder: (context, index) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Text(
-                              _backupLogs[index],
-                              style: TextStyle(
-                                fontFamily: 'monospace',
-                                fontSize: 12,
-                                color: Theme.of(context).colorScheme.onSurface,
+                            Expanded(
+                              child: Text(
+                                'Database Migration Failed', // Use l10n in real app
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  color: theme.colorScheme.onErrorContainer,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-
-          if (_importLogs.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.importLogs,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 200,
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.outline.withValues(alpha: 0.3),
+                          ],
                         ),
-                      ),
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(8),
-                        itemCount: _importLogs.length,
-                        itemBuilder: (context, index) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Text(
-                              _importLogs[index],
-                              style: TextStyle(
-                                fontFamily: 'monospace',
-                                fontSize: 12,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                        const SizedBox(height: 8),
+                        Text(
+                          widget.error!,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onErrorContainer,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'The database schema upgrade failed. A backup was created before the attempt. You can try to restore a previous backup below, or if this persists, contact support.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onErrorContainer,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ],
-          if (_backups.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(
-              l10n.previousBackups,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            ..._backups.map(
-              (backup) => Card(
-                child: ListTile(
-                  leading: const Icon(Icons.archive),
-                  title: Text(backup['name'] ?? l10n.backup),
-                  subtitle: Column(
+                const SizedBox(height: 24),
+              ],
+              _buildSectionTitle(l10n.backupAndRestore),
+              const SizedBox(height: 16),
+              // Backup section
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(backup['date'] ?? ''),
-                      Text(_formatFileSize(backup['size'] ?? 0)),
-                    ],
-                  ),
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'save') {
-                        _saveBackupAgain(backup);
-                      } else if (value == 'delete') {
-                        _deleteBackup(backup);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'save',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.download),
-                            const SizedBox(width: 8),
-                            Text(l10n.saveAgain),
-                          ],
+                      Text(
+                        l10n.backupAllNotes,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        l10n.backupAllNotesDescription,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            const Icon(Icons.delete),
-                            const SizedBox(width: 8),
-                            Text(l10n.delete),
-                          ],
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _isBackingUp ? null : _backupAllNotes,
+                          icon: _isBackingUp
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.download),
+                          label: Text(
+                            _isBackingUp
+                                ? l10n.creatingBackup
+                                : l10n.backupAllNotes,
+                          ),
                         ),
                       ),
+                      if (_isBackingUp) ...[
+                        const SizedBox(height: 16),
+                        LinearProgressIndicator(
+                          value: _backupProgress,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${(_backupProgress * 100).toInt()}%',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ),
-            ),
-          ],
-        ],
+
+              const SizedBox(height: 16),
+
+              // Import section
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.importBackup,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        l10n.importBackupDescription,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _isImporting ? null : _importBackup,
+                          icon: _isImporting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.upload),
+                          label: Text(
+                            _isImporting
+                                ? l10n.importingBackup
+                                : l10n.importBackup,
+                          ),
+                        ),
+                      ),
+                      if (_isImporting) ...[
+                        const SizedBox(height: 16),
+                        LinearProgressIndicator(
+                          value: _importProgress,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${(_importProgress * 100).toInt()}%',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+
+              // Raw Data Manager
+              const SizedBox(height: 16),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.build_circle_outlined),
+                  title: Text(l10n.rawDataManagerTitle),
+                  subtitle: Text(l10n.rawDataManagerSubtitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const RawDataManagerScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // Available undo options section
+              if (_availableRecoveries.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Available Undo Options',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ..._availableRecoveries.map(
+                  (recovery) => Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.undo),
+                      title: Text('Database Backup'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Created: ${recovery['date'] ?? ''}'),
+                          Text(_formatFileSize(recovery['size'] ?? 0)),
+                        ],
+                      ),
+                      trailing: PopupMenuButton<String>(
+                        onSelected: (value) {
+                          if (value == 'recover') {
+                            _recoverFromBackup(recovery);
+                          } else if (value == 'delete') {
+                            _deleteRecovery(recovery);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          PopupMenuItem(
+                            value: 'recover',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.undo),
+                                const SizedBox(width: 8),
+                                Text('Undo Import'),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.delete),
+                                const SizedBox(width: 8),
+                                Text(l10n.delete),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              if (_backupLogs.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.backupLogs,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 200,
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outline.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(8),
+                            itemCount: _backupLogs.length,
+                            itemBuilder: (context, index) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2,
+                                ),
+                                child: SelectableText(
+                                  _backupLogs[index],
+                                  style: TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 12,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+
+              if (_importLogs.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.importLogs,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 200,
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outline.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(8),
+                            itemCount: _importLogs.length,
+                            itemBuilder: (context, index) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2,
+                                ),
+                                child: SelectableText(
+                                  _importLogs[index],
+                                  style: TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 12,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              if (_backups.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text(
+                  l10n.previousBackups,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ..._backups.map(
+                  (backup) => Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.archive),
+                      title: Text(backup['name'] ?? l10n.backup),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(backup['date'] ?? ''),
+                          Text(_formatFileSize(backup['size'] ?? 0)),
+                        ],
+                      ),
+                      trailing: PopupMenuButton<String>(
+                        onSelected: (value) {
+                          if (value == 'save') {
+                            _saveBackupAgain(backup);
+                          } else if (value == 'delete') {
+                            _deleteBackup(backup);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          PopupMenuItem(
+                            value: 'save',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.download),
+                                const SizedBox(width: 8),
+                                Text(l10n.saveAgain),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.delete),
+                                const SizedBox(width: 8),
+                                Text(l10n.delete),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1926,5 +2131,61 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       LoggerService.error('Error reading BLOB in chunks: $e', error: e);
       return <int>[];
     }
+  }
+
+  // Helper method to read String data in chunks to avoid cursor window issues
+  Future<String> _readStringInChunks(
+    Database db,
+    String messageId,
+    String columnName,
+    int totalSize,
+  ) async {
+    // const int chunkSize = 1024 * 1024; // 1MB chunks (unused)
+    final StringBuffer buffer = StringBuffer();
+
+    try {
+      // Read String in chunks using substr
+      // SQLite substr is 1-based, and operates on characters/codepoints.
+      // Note: If the text contains multi-byte characters, 'length' is in characters (usually).
+      // However, CursorWindow limit is in BYTES (2MB).
+      // So reading 1 million CHARACTERS might exceed 2MB bytes if they are multi-byte.
+      // But for safety locally, we can read smaller chunks if needed.
+      // 500k chars is safer for UTF-8 (max 4 bytes per char = 2MB).
+      const int safeCharChunkSize = 500 * 1024;
+
+      for (int offset = 0; offset < totalSize; offset += safeCharChunkSize) {
+        final int currentChunkSize = (offset + safeCharChunkSize > totalSize)
+            ? totalSize - offset
+            : safeCharChunkSize;
+
+        final chunkResult = await db.rawQuery(
+          '''
+          SELECT substr($columnName, ?, ?) as chunk
+          FROM conversation_messages 
+          WHERE id = ?
+        ''',
+          [offset + 1, currentChunkSize, messageId],
+        );
+
+        if (chunkResult.isNotEmpty && chunkResult.first['chunk'] != null) {
+          final chunk = chunkResult.first['chunk'] as String;
+          buffer.write(chunk);
+        }
+      }
+
+      return buffer.toString();
+    } catch (e) {
+      LoggerService.error('Error reading String in chunks: $e', error: e);
+      return '';
+    }
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Text(
+      title,
+      style: Theme.of(
+        context,
+      ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+    );
   }
 }

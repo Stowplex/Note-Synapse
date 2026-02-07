@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:rhttp/rhttp.dart';
 
 import 'l10n/app_localizations.dart';
 import 'providers/app_provider.dart';
@@ -8,19 +11,38 @@ import 'screens/setup_screen.dart';
 import 'screens/main_screen.dart';
 import 'screens/share_screen.dart';
 import 'screens/model_selection_screen.dart';
+import 'screens/onboarding/welcome_screen.dart';
 import 'services/secure_storage_service.dart';
 import 'services/ai_service.dart';
 import 'services/share_service.dart';
 import 'services/prompts/prompt_configuration_bootstrapper.dart';
 import 'services/global_library_service.dart';
+import 'services/agent_service.dart';
+import 'services/background_agent_service.dart';
+import 'services/service_locator.dart';
+import 'services/wake_lock_service.dart' as wake_lock;
+import 'services/network_provider.dart';
+import 'utils/global_keys.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize rhttp Rust bindings (must be first)
+  await Rhttp.init();
+
+  // Initialize network provider
+  await NetworkProvider.init();
 
   // Initialize secure storage
   await SecureStorageService.initialize();
   await PromptConfigurationBootstrapper.initialize();
   await GlobalLibraryService().init();
+
+  // Initialize service locator for dependency injection
+  setupServiceLocator();
+
+  // Initialize background agent service for Android foreground service
+  await BackgroundAgentService.init();
 
   runApp(const NoteSynapseApp());
 }
@@ -30,8 +52,11 @@ class NoteSynapseApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => AppProvider(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => AppProvider()),
+        ChangeNotifierProvider.value(value: getIt<AgentService>()),
+      ], // ...
       child: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
           return MaterialApp(
@@ -47,7 +72,7 @@ class NoteSynapseApp extends StatelessWidget {
               Locale('zh', ''), // Chinese Simplified
             ],
             locale: appProvider.locale,
-            navigatorKey: ShareService.navigatorKey,
+            navigatorKey: navigatorKey,
             theme: ThemeData(
               colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
               useMaterial3: true,
@@ -109,8 +134,11 @@ class _AppWrapperState extends State<AppWrapper> {
     await appProvider.loadLanguagePreference();
     await appProvider.loadData();
 
-    await AIService.initialize(appProvider);
+    await getIt<AIService>().initialize(appProvider);
     await ShareService.init(appProvider);
+
+    // Initialize wake lock if it was enabled in settings
+    await wake_lock.initializeWakeLock();
 
     final modelConfig = appProvider.modelConfig;
     final isConfigured = modelConfig?.isConfigured ?? false;
@@ -127,10 +155,24 @@ class _AppWrapperState extends State<AppWrapper> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final appProvider = context.watch<AppProvider>();
+
+    // Only show onboarding if it's not completed AND we are not in a state where model is already configured
+    // (backward compatibility: if model is configured, we assume they are an existing user,
+    // BUT user asked for "show it once", so we primarily trust the flag.
+    // However, to be safe, if they have a model, we might want to auto-set the flag?
+    // Re-reading plan: "I will treat 'Model Configured' as a proxy... OR just show it once."
+    // User approval: "Show it once is OK."
+    // So we stricly check the flag.
+
+    if (!appProvider.onboardingCompleted) {
+      return const WelcomeScreen();
+    }
+
     if (_isModelConfigured) {
       return const MainScreen();
     } else {
-      return ModelSelectionScreen();
+      return const ModelSelectionScreen();
     }
   }
 }

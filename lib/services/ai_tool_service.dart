@@ -63,16 +63,24 @@ class AiToolRuntime {
   AiToolRuntime({
     required this.bundle,
     required this.appProvider,
+    this.onModificationRequest,
+    this.onSqlWriteApprovalRequest,
   });
 
   final AiToolAppBundle bundle;
   final AppProvider appProvider;
 
+  /// Optional callback for note modification approval.
+  final ModificationRequestCallback? onModificationRequest;
+
+  /// Optional callback for SQL write approval.
+  final SqlWriteApprovalCallback? onSqlWriteApprovalRequest;
+
   HeadlessInAppWebView? _headlessWebView;
   InAppWebViewController? _controller;
   UserAppRuntimeBridge? _bridge;
   Completer<void>? _loadCompleter;
-  
+
   // Console log collection for invoke operations
   bool _isCollectingConsoleLogs = false;
   final List<String> _consoleLogBuffer = [];
@@ -96,6 +104,8 @@ class AiToolRuntime {
       revisionNumber: bundle.revision.revisionNumber,
       isInteractive: false,
       selectedNotes: const <Note>[],
+      onModificationRequest: onModificationRequest,
+      onSqlWriteApprovalRequest: onSqlWriteApprovalRequest,
     );
 
     _headlessWebView = HeadlessInAppWebView(
@@ -122,7 +132,11 @@ class AiToolRuntime {
         _loadCompleter?.complete();
       },
       onLoadError: (controller, url, code, message) {
-        _loadCompleter?.completeError(Exception('Failed to load AI tool ${bundle.app.name}: $message ($code)'));
+        _loadCompleter?.completeError(
+          Exception(
+            'Failed to load AI tool ${bundle.app.name}: $message ($code)',
+          ),
+        );
       },
       onConsoleMessage: (controller, consoleMessage) {
         final levelLabel = consoleMessage.messageLevel
@@ -131,12 +145,12 @@ class AiToolRuntime {
             .last
             .toUpperCase();
         final logMessage = '[$levelLabel] ${consoleMessage.message}';
-        
+
         // If we're collecting logs for an invoke operation, add to buffer
         if (_isCollectingConsoleLogs) {
           _consoleLogBuffer.add(logMessage);
         }
-        
+
         LoggerService.debug('[AiTool.${bundle.app.name}] $logMessage');
       },
       onLoadResourceWithCustomScheme: (controller, request) async {
@@ -181,7 +195,9 @@ class AiToolRuntime {
     await _ensureRunning();
     final controller = _controller;
     if (controller == null) {
-      throw Exception('AI tool runtime controller not available for ${bundle.app.name}');
+      throw Exception(
+        'AI tool runtime controller not available for ${bundle.app.name}',
+      );
     }
 
     // Start collecting console logs
@@ -195,29 +211,26 @@ class AiToolRuntime {
       final jsResult = await controller.callAsyncJavaScript(
         functionBody:
             'return window.Synapse && window.Synapse.tool && window.Synapse.tool.invoke ? window.Synapse.tool.invoke(toolName, params) : null;',
-        arguments: {
-          'toolName': toolName,
-          'params': params,
-        },
+        arguments: {'toolName': toolName, 'params': params},
       );
 
       final value = jsResult?.value;
       final result = value == null
           ? 'null'
           : value is String
-              ? value
-              : (() {
-                  try {
-                    return const JsonEncoder.withIndent('  ').convert(value);
-                  } catch (_) {
-                    return value.toString();
-                  }
-                })();
+          ? value
+          : (() {
+              try {
+                return const JsonEncoder.withIndent('  ').convert(value);
+              } catch (_) {
+                return value.toString();
+              }
+            })();
 
       // Stop collecting and log all console messages as one entry
       _isCollectingConsoleLogs = false;
       final duration = DateTime.now().difference(startTime);
-      
+
       if (_consoleLogBuffer.isNotEmpty) {
         final concatenatedLogs = _consoleLogBuffer.join('\n');
         LoggerService.logAiConsole(
@@ -227,14 +240,14 @@ class AiToolRuntime {
           duration: duration,
         );
       }
-      
+
       _consoleLogBuffer.clear();
       return result;
     } catch (e) {
       // Stop collecting even on error
       _isCollectingConsoleLogs = false;
       final duration = DateTime.now().difference(startTime);
-      
+
       // Log console messages if any were collected
       if (_consoleLogBuffer.isNotEmpty) {
         final concatenatedLogs = _consoleLogBuffer.join('\n');
@@ -245,7 +258,7 @@ class AiToolRuntime {
           duration: duration,
         );
       }
-      
+
       _consoleLogBuffer.clear();
       rethrow;
     }
@@ -259,7 +272,9 @@ class AiToolRuntime {
         }
       }
     } catch (e) {
-      LoggerService.warning('Error disposing AI tool runtime for ${bundle.app.name}: $e');
+      LoggerService.warning(
+        'Error disposing AI tool runtime for ${bundle.app.name}: $e',
+      );
     } finally {
       _headlessWebView = null;
       _controller = null;
@@ -275,21 +290,29 @@ class AiToolService {
     required AppRevision revision,
   }) async {
     final html = revision.appCode;
-    final toolSpecPattern = RegExp(r'<!\[CDATA\[\s*tool_spec\s*(.*?)\]\]>', dotAll: true);
+    final toolSpecPattern = RegExp(
+      r'<!\[CDATA\[\s*tool_spec(.*?)\]\]>',
+      dotAll: true,
+    );
     final toolSpecMatch = toolSpecPattern.firstMatch(html);
     if (toolSpecMatch == null) {
-      LoggerService.warning('AI tool "${app.name}" is missing CDATA tool_spec block.');
+      LoggerService.warning(
+        'AI tool "${app.name}" is missing CDATA tool_spec block.',
+      );
       return null;
     }
 
-    final yamlText = toolSpecMatch.group(1)!.trim();
+    final yamlText = _dedent(toolSpecMatch.group(1)!);
     if (yamlText.isEmpty) {
-      LoggerService.warning('AI tool "${app.name}" CDATA tool_spec block is empty.');
+      LoggerService.warning(
+        'AI tool "${app.name}" CDATA tool_spec block is empty.',
+      );
       return null;
     }
 
     if (!RegExp(r'-\s*name\s*:').hasMatch(yamlText)) {
-      final errorMessage = 'AI tool "${app.name}" tool_spec block does not contain any tool definitions.';
+      final errorMessage =
+          'AI tool "${app.name}" tool_spec block does not contain any tool definitions.';
       LoggerService.warning(errorMessage);
       LoggerService.logAiError(
         error: errorMessage,
@@ -311,7 +334,8 @@ class AiToolService {
     }
 
     if (parsedYaml is! YamlList) {
-      final errorMessage = 'AI tool "${app.name}" YAML header must be a list of tools.';
+      final errorMessage =
+          'AI tool "${app.name}" YAML header must be a list of tools.';
       LoggerService.warning(errorMessage);
       LoggerService.logAiError(
         error: errorMessage,
@@ -331,7 +355,9 @@ class AiToolService {
 
       final description = entry['description']?.toString().trim() ?? '';
       final parameterSchema = _buildParameterSchema(entry['input_params']);
-      final outputSchema = _buildOptionalParameterSchema(entry['output_params']);
+      final outputSchema = _buildOptionalParameterSchema(
+        entry['output_params'],
+      );
 
       toolDefinitions.add(
         AiToolDefinition(
@@ -346,7 +372,9 @@ class AiToolService {
     }
 
     if (toolDefinitions.isEmpty) {
-      LoggerService.warning('AI tool "${app.name}" did not define any callable tools.');
+      LoggerService.warning(
+        'AI tool "${app.name}" did not define any callable tools.',
+      );
       return null;
     }
 
@@ -375,7 +403,11 @@ class AiToolService {
     final properties = <String, dynamic>{};
     final requiredFields = <String>[];
 
-    void addParam(String name, Map<String, dynamic> schema, {required bool optional}) {
+    void addParam(
+      String name,
+      Map<String, dynamic> schema, {
+      required bool optional,
+    }) {
       properties[name] = schema;
       if (!optional) {
         requiredFields.add(name);
@@ -498,8 +530,9 @@ class AiToolService {
 
       if (propertiesSpec != null) {
         final nestedSchema = _buildParameterSchema(propertiesSpec);
-        schema['properties'] =
-            Map<String, dynamic>.from(nestedSchema['properties'] ?? <String, dynamic>{});
+        schema['properties'] = Map<String, dynamic>.from(
+          nestedSchema['properties'] ?? <String, dynamic>{},
+        );
 
         final nestedRequired = nestedSchema['required'];
         if (nestedRequired is List) {
@@ -559,11 +592,55 @@ class AiToolService {
       case 'boolean':
         return {'type': 'boolean'};
       case 'array':
-        return {'type': 'array', 'items': {'type': 'string'}};
+        return {
+          'type': 'array',
+          'items': {'type': 'string'},
+        };
       case 'object':
         return {'type': 'object', 'properties': <String, dynamic>{}};
       default:
         return {'type': 'string'};
     }
+  }
+
+  static String _dedent(String text) {
+    if (text.trim().isEmpty) return '';
+
+    final lines = text.split('\n');
+    int? minIndent;
+
+    for (final line in lines) {
+      if (line.trim().isEmpty) continue;
+
+      int indent = 0;
+      for (int i = 0; i < line.length; i++) {
+        if (line[i] != ' ') break;
+        indent++;
+      }
+
+      if (minIndent == null || indent < minIndent) {
+        minIndent = indent;
+      }
+    }
+
+    if (minIndent == null || minIndent == 0) return text.trim();
+
+    final buffer = StringBuffer();
+    for (final line in lines) {
+      if (line.length >= minIndent) {
+        if (line.trim().isEmpty) {
+          buffer.writeln('');
+        } else {
+          buffer.writeln(line.substring(minIndent));
+        }
+      } else {
+        if (line.trim().isEmpty) {
+          buffer.writeln('');
+        } else {
+          buffer.writeln(line);
+        }
+      }
+    }
+    return buffer.toString().trim();
   }
 }

@@ -1,6 +1,9 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
+import 'package:pdfrx/pdfrx.dart';
 
 import '../../models/note.dart';
 import '../../models/attachment.dart';
@@ -282,17 +285,33 @@ class NotePromptBuilder {
     final indent = '  ' * depth;
     // Quote title to prevent injection
     final safeTitle = PromptInjectionProtection.formatTitleAsData(note.title);
-    buffer.writeln('$indent- Title: $safeTitle (${note.type.name})');
+    buffer.writeln('$indent- Title: $safeTitle');
+
+    // Metadata section
+    buffer.writeln('$indent  Metadata:');
+    buffer.writeln('$indent    ID: ${note.id}');
+    buffer.writeln('$indent    Type: ${note.type.name}');
+
+    if (note.tags.isNotEmpty) {
+      buffer.writeln('$indent    Tags: ${note.tags.join(', ')}');
+    }
+
+    if (note.isTask) {
+      buffer.writeln('$indent    Status: ${note.status?.name ?? 'unknown'}');
+      if (note.scheduledAt != null) {
+        buffer.writeln('$indent    Scheduled: ${note.scheduledAt}');
+      }
+      if (note.completeBy != null) {
+        buffer.writeln('$indent    Complete By: ${note.completeBy}');
+      }
+    }
+
     if (note.content.trim().isNotEmpty) {
       // Quote content as data to prevent prompt injection
-      buffer.writeln('$indent  Content (data only):');
+      buffer.writeln('$indent  Content:');
       buffer.writeln(
         '$indent  ${PromptInjectionProtection.formatNoteContentAsData(note.content.trim())}',
       );
-    }
-
-    if (note.tags.isNotEmpty) {
-      buffer.writeln('$indent  Tags: ${note.tags.join(', ')}');
     }
 
     if (note.subNotes.isNotEmpty) {
@@ -302,7 +321,7 @@ class NotePromptBuilder {
         final safeSubNoteContent =
             PromptInjectionProtection.formatNoteContentAsData(subNote.content);
         buffer.writeln(
-          '$indent    - ${subNote.name}${subNote.isCompleted ? " (completed)" : ''}:',
+          '$indent    - ${subNote.name} (ID: ${subNote.id}${subNote.isCompleted ? ", completed" : ''}):',
         );
         buffer.writeln('$indent      $safeSubNoteContent');
       }
@@ -364,12 +383,21 @@ class NotePromptBuilder {
   }
 
   /// Load note attachments into [PlatformFile]s, avoiding duplicates.
-  Future<List<PlatformFile>> loadNoteAttachments(List<Note> notes) async {
+  /// [currentPdfPage] is used for "window" mode AI context to focus on nearby pages.
+  Future<List<PlatformFile>> loadNoteAttachments(
+    List<Note> notes, {
+    int? currentPdfPage,
+  }) async {
     final platformFiles = <PlatformFile>[];
     final processed = <String>{};
 
     for (final note in notes) {
-      await _addNoteAttachments(platformFiles, note, processed);
+      await _addNoteAttachments(
+        platformFiles,
+        note,
+        processed,
+        currentPdfPage: currentPdfPage,
+      );
 
       final relationships = await _getRelationships(note.id);
       for (final rel in relationships) {
@@ -380,18 +408,23 @@ class NotePromptBuilder {
         if (linkedNote == null) {
           continue;
         }
-        await _addNoteAttachments(platformFiles, linkedNote, processed);
+        await _addNoteAttachments(
+          platformFiles,
+          linkedNote,
+          processed,
+          currentPdfPage: currentPdfPage,
+        );
       }
     }
-
     return platformFiles;
   }
 
   Future<void> _addNoteAttachments(
     List<PlatformFile> target,
     Note note,
-    Set<String> processed,
-  ) async {
+    Set<String> processed, {
+    int? currentPdfPage, // For window mode: current page being viewed
+  }) async {
     try {
       final attachments = await _databaseService.getAttachmentsForNote(note.id);
 
@@ -410,15 +443,234 @@ class NotePromptBuilder {
           final file = File(fullPath);
           if (!file.existsSync()) continue;
 
-          final bytes = await file.readAsBytes();
-          target.add(
-            PlatformFile(
-              name: attachment.fileName,
-              path: fullPath,
-              size: bytes.length,
-              bytes: bytes,
-            ),
-          );
+          // Check for PDF-specific AI context config
+          final isPdf = attachment.fileName.toLowerCase().endsWith('.pdf');
+          final aiConfig = isPdf ? attachment.getAiContextConfig() : null;
+
+          // Determine page range for window mode
+          int? startPage;
+          int? endPage;
+          bool extractPages = false;
+
+          if (aiConfig != null && isPdf) {
+            if (aiConfig.mode == 'window' && currentPdfPage != null) {
+              final windowSize = aiConfig.windowSize ?? 10;
+              final half = windowSize ~/ 2;
+              startPage = (currentPdfPage - half + 1).clamp(1, 9999);
+              endPage = currentPdfPage + half + 1;
+              extractPages = true;
+            } else if (aiConfig.mode == 'chapters' &&
+                aiConfig.selectedChapters != null &&
+                aiConfig.selectedChapters!.isNotEmpty) {
+              // For chapters mode, extract pages from selected chapters
+              try {
+                final pdfDoc = await PdfDocument.openFile(fullPath);
+                final outline = await pdfDoc.loadOutline();
+
+                if (outline != null && outline.isNotEmpty) {
+                  // Find page ranges for selected chapters
+                  final pageRanges = _getChapterPageRanges(
+                    outline,
+                    aiConfig.selectedChapters!,
+                    pdfDoc.pages.length,
+                  );
+
+                  if (pageRanges.isNotEmpty) {
+                    LoggerService.debug(
+                      'Extracting chapter pages: $pageRanges from ${attachment.fileName}',
+                    );
+
+                    // Extract pages from each range
+                    for (final range in pageRanges) {
+                      for (
+                        int pageNum = range.start;
+                        pageNum <= range.end;
+                        pageNum++
+                      ) {
+                        await _extractAndAddPage(
+                          pdfDoc,
+                          pageNum,
+                          attachment.fileName,
+                          target,
+                        );
+                      }
+                    }
+                    pdfDoc.dispose();
+                    continue; // Done with this attachment
+                  }
+                }
+                pdfDoc.dispose();
+
+                // Fallback if outline not found or chapters not matched
+                LoggerService.warning(
+                  'Could not find chapters in PDF outline, sending full PDF',
+                );
+              } catch (e) {
+                LoggerService.warning('Failed to extract chapter pages: $e');
+              }
+
+              // Fallback: send full PDF with hint
+              final chapters = aiConfig.selectedChapters!.join(', ');
+              target.add(
+                PlatformFile(
+                  name: '${attachment.fileName}_context.txt',
+                  path: null,
+                  size: 0,
+                  bytes: Uint8List.fromList(
+                    '[Focus on chapters: $chapters]'.codeUnits,
+                  ),
+                ),
+              );
+              final bytes = await file.readAsBytes();
+              target.add(
+                PlatformFile(
+                  name: attachment.fileName,
+                  path: fullPath,
+                  size: bytes.length,
+                  bytes: bytes,
+                ),
+              );
+              continue; // Skip to next attachment
+            } else if (aiConfig.mode == 'bookmarks' &&
+                aiConfig.selectedBookmarks != null &&
+                aiConfig.selectedBookmarks!.isNotEmpty) {
+              // Bookmarks mode
+              try {
+                final pdfDoc = await PdfDocument.openFile(fullPath);
+                final totalPages = pdfDoc.pages.length;
+                final bookmarkWindow = aiConfig.bookmarkWindowSize ?? 1;
+
+                // Calculate ranges from bookmarks
+                final ranges = <_PageRange>[];
+                for (final bookmark in aiConfig.selectedBookmarks!) {
+                  // Bookmarks are 0-indexed, pdfrx pages are 1-indexed (in this logic)
+                  // Wait, earlier code converted 1-indexed to 0-indexed?
+                  // No, pdfrx pages getter is 0-indexed access, but logic seems to use 1-based startPage/endPage vars.
+                  // Let's verify: `_extractAndAddPage` takes `pageNum`.
+                  // `_extractAndAddPage`: `if (pageNum < 1 || pageNum > pdfDoc.pages.length) return;`
+                  // So `_extractAndAddPage` expects 1-based index.
+
+                  // `PdfBookmark.pageNumber` is 0-indexed (as per ImmersiveNoteScreen usage).
+                  final centerPage = bookmark.pageNumber + 1;
+                  final start = (centerPage - bookmarkWindow).clamp(
+                    1,
+                    totalPages,
+                  );
+                  final end = (centerPage + bookmarkWindow).clamp(
+                    1,
+                    totalPages,
+                  );
+
+                  ranges.add(_PageRange(start, end));
+                }
+
+                final mergedRanges = _mergeRanges(ranges);
+
+                if (mergedRanges.isNotEmpty) {
+                  LoggerService.debug(
+                    'Extracting bookmark pages: $mergedRanges from ${attachment.fileName}',
+                  );
+
+                  for (final range in mergedRanges) {
+                    for (
+                      int pageNum = range.start;
+                      pageNum <= range.end;
+                      pageNum++
+                    ) {
+                      await _extractAndAddPage(
+                        pdfDoc,
+                        pageNum,
+                        attachment.fileName,
+                        target,
+                      );
+                    }
+                  }
+                  pdfDoc.dispose();
+                  continue; // Done
+                }
+                pdfDoc.dispose();
+              } catch (e) {
+                LoggerService.warning('Failed to extract bookmark pages: $e');
+              }
+            }
+            // mode == 'all' means send full PDF
+          }
+
+          if (extractPages && startPage != null && endPage != null) {
+            // Extract pages as images
+            try {
+              final pdfDoc = await PdfDocument.openFile(fullPath);
+              final totalPages = pdfDoc.pages.length;
+              final actualEndPage = endPage.clamp(1, totalPages);
+              final actualStartPage = startPage.clamp(1, totalPages);
+
+              LoggerService.debug(
+                'Extracting PDF pages $actualStartPage-$actualEndPage from ${attachment.fileName}',
+              );
+
+              for (
+                int pageNum = actualStartPage;
+                pageNum <= actualEndPage;
+                pageNum++
+              ) {
+                final page = pdfDoc.pages[pageNum - 1]; // 0-indexed
+
+                // Render at reasonable resolution (2x for clarity)
+                final renderWidth = (page.width * 2).toInt();
+                final renderHeight = (page.height * 2).toInt();
+
+                final pdfImage = await page.render(
+                  width: renderWidth,
+                  height: renderHeight,
+                );
+
+                if (pdfImage != null) {
+                  // Convert to PNG bytes
+                  final uiImage = await pdfImage.createImage();
+                  final byteData = await uiImage.toByteData(
+                    format: ui.ImageByteFormat.png,
+                  );
+
+                  if (byteData != null) {
+                    final pngBytes = byteData.buffer.asUint8List();
+                    target.add(
+                      PlatformFile(
+                        name: '${attachment.fileName}_page$pageNum.png',
+                        path: null,
+                        size: pngBytes.length,
+                        bytes: pngBytes,
+                      ),
+                    );
+                  }
+                  uiImage.dispose();
+                }
+              }
+              pdfDoc.dispose();
+            } catch (e) {
+              LoggerService.warning('Failed to extract PDF pages: $e');
+              // Fallback: send full PDF
+              final bytes = await file.readAsBytes();
+              target.add(
+                PlatformFile(
+                  name: attachment.fileName,
+                  path: fullPath,
+                  size: bytes.length,
+                  bytes: bytes,
+                ),
+              );
+            }
+          } else {
+            // Send full PDF (mode == 'all' or no config)
+            final bytes = await file.readAsBytes();
+            target.add(
+              PlatformFile(
+                name: attachment.fileName,
+                path: fullPath,
+                size: bytes.length,
+                bytes: bytes,
+              ),
+            );
+          }
         } catch (e) {
           LoggerService.warning('Failed to read attachment $fullPath: $e');
         }
@@ -442,6 +694,16 @@ class NotePromptBuilder {
       return;
     }
 
+    // Load attachments for this note to check includeInAIContext flag
+    List<Attachment> noteAttachments = [];
+    try {
+      noteAttachments = await _databaseService.getAttachmentsForNote(note.id);
+    } catch (e) {
+      LoggerService.warning(
+        'Failed to load attachments for remote image filtering: $e',
+      );
+    }
+
     for (final image in remoteImages) {
       try {
         final absolutePath = await RemoteImageStorage.resolveAbsolutePath(
@@ -455,11 +717,33 @@ class NotePromptBuilder {
         if (!await file.exists()) {
           continue;
         }
+
+        // Check if this remote image has a corresponding attachment in the DB
+        // and if so, respect its includeInAIContext flag
+        final fileName = absolutePath.split('/').last;
+        final matchingAttachment = noteAttachments
+            .cast<Attachment?>()
+            .firstWhere(
+              (a) =>
+                  a?.fileName == fileName ||
+                  a?.filePath.endsWith(fileName) == true,
+              orElse: () => null,
+            );
+
+        if (matchingAttachment != null &&
+            !matchingAttachment.includeInAIContext) {
+          // Skip this image as user has explicitly excluded it from AI context
+          LoggerService.debug(
+            'Skipping remote image $fileName from AI context (includeInAIContext=false)',
+          );
+          continue;
+        }
+
         processed.add(absolutePath);
         final bytes = await file.readAsBytes();
         target.add(
           PlatformFile(
-            name: absolutePath.split('/').last,
+            name: fileName,
             path: absolutePath,
             size: bytes.length,
             bytes: bytes,
@@ -475,9 +759,16 @@ class NotePromptBuilder {
 
   /// Build a context message that contains the aggregated notes and optional
   /// attachments.
-  Future<PromptMessage> buildContextMessage(List<Note> notes) async {
+  /// [currentPdfPage] is used for "window" mode AI context to focus on nearby pages.
+  Future<PromptMessage> buildContextMessage(
+    List<Note> notes, {
+    int? currentPdfPage,
+  }) async {
     final context = await buildNoteContext(notes);
-    final attachments = await loadNoteAttachments(notes);
+    final attachments = await loadNoteAttachments(
+      notes,
+      currentPdfPage: currentPdfPage,
+    );
 
     return PromptMessage(
       role: PromptRole.user,
@@ -488,4 +779,129 @@ class NotePromptBuilder {
       isContext: true,
     );
   }
+
+  /// Find page ranges for selected chapters by matching titles against PDF outline
+  List<_PageRange> _getChapterPageRanges(
+    List<PdfOutlineNode> outline,
+    List<String> selectedChapters,
+    int totalPages,
+  ) {
+    final ranges = <_PageRange>[];
+    final flatNodes = _flattenOutline(outline);
+
+    for (int i = 0; i < flatNodes.length; i++) {
+      final node = flatNodes[i];
+      // Check if this node's title matches any selected chapter
+      if (selectedChapters.any(
+        (title) =>
+            node.title.toLowerCase().contains(title.toLowerCase()) ||
+            title.toLowerCase().contains(node.title.toLowerCase()),
+      )) {
+        // Start page from this node's destination
+        final startPage = node.dest?.pageNumber ?? 1;
+
+        // End page is either the next node's start or end of document
+        int endPage;
+        if (i + 1 < flatNodes.length) {
+          endPage = (flatNodes[i + 1].dest?.pageNumber ?? totalPages) - 1;
+        } else {
+          endPage = totalPages;
+        }
+
+        if (startPage <= endPage) {
+          ranges.add(_PageRange(startPage, endPage));
+        }
+      }
+    }
+
+    // Merge overlapping ranges
+    return _mergeRanges(ranges);
+  }
+
+  /// Flatten a nested outline into a linear list
+  List<PdfOutlineNode> _flattenOutline(List<PdfOutlineNode> nodes) {
+    final result = <PdfOutlineNode>[];
+    for (final node in nodes) {
+      result.add(node);
+      if (node.children.isNotEmpty) {
+        result.addAll(_flattenOutline(node.children));
+      }
+    }
+    return result;
+  }
+
+  /// Merge overlapping page ranges
+  List<_PageRange> _mergeRanges(List<_PageRange> ranges) {
+    if (ranges.isEmpty) return [];
+
+    ranges.sort((a, b) => a.start.compareTo(b.start));
+    final merged = <_PageRange>[ranges.first];
+
+    for (int i = 1; i < ranges.length; i++) {
+      final current = ranges[i];
+      final last = merged.last;
+
+      if (current.start <= last.end + 1) {
+        // Overlapping or adjacent, extend
+        merged[merged.length - 1] = _PageRange(
+          last.start,
+          current.end > last.end ? current.end : last.end,
+        );
+      } else {
+        merged.add(current);
+      }
+    }
+
+    return merged;
+  }
+
+  /// Extract a single page from PDF and add as PNG image
+  Future<void> _extractAndAddPage(
+    PdfDocument pdfDoc,
+    int pageNum,
+    String fileName,
+    List<PlatformFile> target,
+  ) async {
+    if (pageNum < 1 || pageNum > pdfDoc.pages.length) return;
+
+    final page = pdfDoc.pages[pageNum - 1]; // 0-indexed
+
+    // Render at reasonable resolution (2x for clarity)
+    final renderWidth = (page.width * 2).toInt();
+    final renderHeight = (page.height * 2).toInt();
+
+    final pdfImage = await page.render(
+      width: renderWidth,
+      height: renderHeight,
+    );
+
+    if (pdfImage != null) {
+      final uiImage = await pdfImage.createImage();
+      final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.png);
+
+      if (byteData != null) {
+        final pngBytes = byteData.buffer.asUint8List();
+        target.add(
+          PlatformFile(
+            name: '${fileName}_page$pageNum.png',
+            path: null,
+            size: pngBytes.length,
+            bytes: pngBytes,
+          ),
+        );
+      }
+      uiImage.dispose();
+    }
+  }
+}
+
+/// Simple page range helper
+class _PageRange {
+  final int start;
+  final int end;
+
+  _PageRange(this.start, this.end);
+
+  @override
+  String toString() => '$start-$end';
 }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/conversation.dart';
 import '../models/conversation_attachment.dart';
@@ -8,24 +9,18 @@ import 'database_service.dart';
 import 'logger_service.dart';
 
 class ConversationService {
-  static final ConversationService _instance = ConversationService._internal();
-  factory ConversationService() => _instance;
-  ConversationService._internal({DatabaseService? databaseService})
-    : _databaseService = databaseService ?? DatabaseService();
-
   final DatabaseService _databaseService;
   final Uuid _uuid = const Uuid();
 
-  // For testing - allow injection of mock database service
-  static ConversationService _testInstance = ConversationService._internal();
-  static void setTestInstance(ConversationService instance) {
-    _testInstance = instance;
-  }
+  /// Creates a ConversationService.
+  ///
+  /// [databaseService] - The database service for conversation persistence.
+  ConversationService(this._databaseService);
 
-  static ConversationService getTestInstance() => _testInstance;
-
+  /// Creates a ConversationService for testing with injected dependencies.
+  @visibleForTesting
   static ConversationService createForTesting(DatabaseService databaseService) {
-    return ConversationService._internal(databaseService: databaseService);
+    return ConversationService(databaseService);
   }
 
   // Create a new conversation
@@ -99,12 +94,10 @@ class ConversationService {
 
     // Copy message IDs from root to fork point (inclusive)
     final messagesToCopy = originalMessages.take(forkIndex + 1);
-    for (final message in messagesToCopy) {
-      await _databaseService.insertConversationMessageMapping(
-        conversationId: forkedConversation.id,
-        messageId: message.id,
-      );
-    }
+    await _databaseService.insertConversationMessageMappingsBatch(
+      forkedConversation.id,
+      messagesToCopy.map((m) => m.id).toList(),
+    );
 
     // Parent relationships for copied messages already exist from the original conversation
     // They are inherited since we're copying message IDs, not creating new messages
@@ -112,9 +105,6 @@ class ConversationService {
     LoggerService.info(
       'Forked conversation $originalConversationId to ${forkedConversation.id} from message $forkFromMessageId',
     );
-
-    // Refresh the conversation tree to include the new forked conversation
-    await refreshConversationTree();
 
     return forkedConversation.copyWith(noteIds: copiedNoteIds);
   }
@@ -211,12 +201,10 @@ class ConversationService {
 
     // Copy message IDs from root to fork point (inclusive)
     final messagesToCopy = originalMessages.take(forkIndex + 1);
-    for (final message in messagesToCopy) {
-      await _databaseService.insertConversationMessageMapping(
-        conversationId: forkedConversation.id,
-        messageId: message.id,
-      );
-    }
+    await _databaseService.insertConversationMessageMappingsBatch(
+      forkedConversation.id,
+      messagesToCopy.map((m) => m.id).toList(),
+    );
 
     // Parent relationships for copied messages already exist from the original conversation
     // They are inherited since we're copying message IDs, not creating new messages
@@ -227,9 +215,6 @@ class ConversationService {
     LoggerService.info(
       'Forked conversation ${selectedContext.conversationId} to ${forkedConversation.id} from message $forkFromMessageId with selected context',
     );
-
-    // Refresh the conversation tree to include the new forked conversation
-    await refreshConversationTree();
 
     return forkedConversation;
   }
@@ -295,6 +280,12 @@ class ConversationService {
       final fileName = attachmentPath.split('/').last;
       final fileType = fileName.split('.').last;
 
+      // Check if it's a URI
+      final isUri =
+          attachmentPath.startsWith('http://') ||
+          attachmentPath.startsWith('https://') ||
+          attachmentPath.startsWith('gs://');
+
       final attachment = ConversationAttachment(
         id: _uuid.v4(),
         messageId: message.id,
@@ -302,6 +293,7 @@ class ConversationService {
         fileName: fileName,
         fileType: fileType,
         createdAt: DateTime.now(),
+        isRelativePath: !isUri, // URIs are absolute paths
       );
       await _databaseService.insertConversationAttachment(attachment);
     }
@@ -367,9 +359,6 @@ class ConversationService {
 
     LoggerService.info('Added AI response to conversation: $conversationId');
 
-    // Refresh the conversation tree to include the new interaction
-    await refreshConversationTree();
-
     return message;
   }
 
@@ -384,11 +373,22 @@ class ConversationService {
     Duration? maxAge,
     List<String>? tagNames,
     List<String>? conversationIds,
+    bool includeEmpty = true,
   }) async {
     return await _databaseService.getAllConversations(
       maxAge: maxAge,
       tagNames: tagNames,
       conversationIds: conversationIds,
+      includeEmpty: includeEmpty,
+    );
+  }
+
+  // Get preview messages (first and last) for a conversation efficiently
+  Future<List<ConversationMessage>> getConversationPreviewMessages(
+    String conversationId,
+  ) async {
+    return await _databaseService.getConversationPreviewMessages(
+      conversationId,
     );
   }
 
@@ -487,11 +487,30 @@ class ConversationService {
     // Sort conversations by creation time
     conversations.sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
+    // Batch fetch all messages for these conversations
+    final allMessages = await _databaseService.getMessagesForConversations(
+      conversations.map((c) => c.id).toList(),
+    );
+
+    // Group messages by conversation ID
+    final messagesByConversation = <String, List<ConversationMessage>>{};
+    for (final msg in allMessages) {
+      if (!messagesByConversation.containsKey(msg.conversationId)) {
+        messagesByConversation[msg.conversationId] = [];
+      }
+      messagesByConversation[msg.conversationId]!.add(msg);
+    }
+
     // Build tree nodes for each conversation
     // The parent-child relationships are automatically established
     // based on message parent relationships
     for (final conversation in conversations) {
-      await _buildConversationTreeNodes(conversation, nodes, parentMap);
+      await _buildConversationTreeNodes(
+        conversation,
+        nodes,
+        parentMap,
+        messagesByConversation[conversation.id] ?? [],
+      );
     }
 
     // Connect root-level messages to root node
@@ -548,10 +567,8 @@ class ConversationService {
     Conversation conversation,
     Map<String, ConversationTreeNode> nodes,
     Map<String, String> parentMap,
+    List<ConversationMessage> messages,
   ) async {
-    final messages = await _databaseService.getConversationMessages(
-      conversation.id,
-    );
     if (messages.isEmpty) return;
 
     // Group messages into User-AI interaction pairs for display
@@ -676,17 +693,11 @@ class ConversationService {
   // Delete a message and its entire subtree
   Future<void> deleteMessageWithSubtree(String messageId) async {
     await _databaseService.deleteMessageWithSubtree(messageId);
-
-    // Refresh the conversation tree after deletion
-    await refreshConversationTree();
   }
 
   // Delete messages using tree node traversal (for UI efficiency)
   Future<void> deleteMessagesFromTreeNodes(List<String> messageIds) async {
     await _databaseService.deleteMessagesFromTreeNodes(messageIds);
-
-    // Refresh the conversation tree after deletion
-    await refreshConversationTree();
   }
 
   // Get all message IDs in a tree node's subtree using proper tree traversal

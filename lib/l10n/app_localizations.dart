@@ -131,13 +131,13 @@ abstract class AppLocalizations {
   /// No description provided for @aiApi.
   ///
   /// In en, this message translates to:
-  /// **'AI API'**
+  /// **'AI Settings'**
   String get aiApi;
 
   /// No description provided for @aiApiSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Configure your AI API key'**
+  /// **'Configure AI models and settings'**
   String get aiApiSubtitle;
 
   /// No description provided for @aiPrompts.
@@ -242,6 +242,126 @@ abstract class AppLocalizations {
   /// **'Iteration limit updated to {count}'**
   String iterationLimitUpdated(Object count);
 
+  /// No description provided for @settingsSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings saved'**
+  String get settingsSaved;
+
+  /// No description provided for @agenticSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Agentic Settings'**
+  String get agenticSettings;
+
+  /// No description provided for @agenticSettingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure agent mode parameters'**
+  String get agenticSettingsSubtitle;
+
+  /// No description provided for @compactionThreshold.
+  ///
+  /// In en, this message translates to:
+  /// **'Compaction Threshold'**
+  String get compactionThreshold;
+
+  /// No description provided for @compactionThresholdDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum tokens before context compaction. Runtime uses min(this value, model\'s context window).'**
+  String get compactionThresholdDescription;
+
+  /// No description provided for @findingLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Finding Limit'**
+  String get findingLimit;
+
+  /// No description provided for @findingLimitDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum number of findings to extract per task for synthesis.'**
+  String get findingLimitDescription;
+
+  /// No description provided for @findingMaxWords.
+  ///
+  /// In en, this message translates to:
+  /// **'Finding Detail Words'**
+  String get findingMaxWords;
+
+  /// No description provided for @findingMaxWordsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum words per finding\'s bullet point details.'**
+  String get findingMaxWordsDescription;
+
+  /// No description provided for @maxTurns.
+  ///
+  /// In en, this message translates to:
+  /// **'Max Turns'**
+  String get maxTurns;
+
+  /// No description provided for @maxTurnsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum number of iterations allowed per task.'**
+  String get maxTurnsDescription;
+
+  /// No description provided for @turnIncrement.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn Increment'**
+  String get turnIncrement;
+
+  /// No description provided for @turnIncrementDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Number of turns to add when resuming a paused task.'**
+  String get turnIncrementDescription;
+
+  /// No description provided for @turnsValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} turns'**
+  String turnsValue(Object count);
+
+  /// No description provided for @maxSubtaskDepth.
+  ///
+  /// In en, this message translates to:
+  /// **'Max Subtask Depth'**
+  String get maxSubtaskDepth;
+
+  /// No description provided for @maxSubtaskDepthDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum nesting depth for spawning subtasks. Set to 0 to disable spawning.'**
+  String get maxSubtaskDepthDescription;
+
+  /// No description provided for @aiLogEntriesLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Log Entries Limit'**
+  String get aiLogEntriesLimit;
+
+  /// No description provided for @aiLogEntriesLimitDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum number of AI log entries to keep.'**
+  String get aiLogEntriesLimitDescription;
+
+  /// No description provided for @aiLogEntriesDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled'**
+  String get aiLogEntriesDisabled;
+
+  /// No description provided for @aiLogEntriesUnlimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited'**
+  String get aiLogEntriesUnlimited;
+
   /// No description provided for @darkMode.
   ///
   /// In en, this message translates to:
@@ -331,6 +451,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cancel'**
   String get cancel;
+
+  /// No description provided for @checkIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Check-in'**
+  String get checkIn;
+
+  /// No description provided for @enterCheckInNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter check-in note'**
+  String get enterCheckInNote;
 
   /// No description provided for @update.
   ///
@@ -722,6 +854,108 @@ abstract class AppLocalizations {
   /// **'Language changed successfully'**
   String get languageChanged;
 
+  /// No description provided for @system.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get system;
+
+  /// No description provided for @systemSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'System behavior settings'**
+  String get systemSubtitle;
+
+  /// No description provided for @keepScreenOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Screen On'**
+  String get keepScreenOn;
+
+  /// No description provided for @keepScreenOnSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Prevent screen from turning off automatically'**
+  String get keepScreenOnSubtitle;
+
+  /// No description provided for @network.
+  ///
+  /// In en, this message translates to:
+  /// **'Network'**
+  String get network;
+
+  /// No description provided for @networkSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP protocol and retry settings'**
+  String get networkSubtitle;
+
+  /// No description provided for @protocolPreference.
+  ///
+  /// In en, this message translates to:
+  /// **'Protocol Preference'**
+  String get protocolPreference;
+
+  /// No description provided for @protocolPreferenceSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose HTTP protocol mode for network requests'**
+  String get protocolPreferenceSubtitle;
+
+  /// No description provided for @protocolAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto (Upgrade to HTTP/3)'**
+  String get protocolAuto;
+
+  /// No description provided for @protocolHttp3Only.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP/3 Only'**
+  String get protocolHttp3Only;
+
+  /// No description provided for @protocolHttp11Only.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP/1.1 Only'**
+  String get protocolHttp11Only;
+
+  /// No description provided for @retryCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry Count'**
+  String get retryCount;
+
+  /// No description provided for @retryCountSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Number of retry attempts for failed requests (0-5)'**
+  String get retryCountSubtitle;
+
+  /// No description provided for @backoffBase.
+  ///
+  /// In en, this message translates to:
+  /// **'Backoff Base'**
+  String get backoffBase;
+
+  /// No description provided for @backoffBaseSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Base delay for exponential backoff in seconds (1-10)'**
+  String get backoffBaseSubtitle;
+
+  /// No description provided for @retryPattern.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry delays: {base}s → {second}s → {third}s'**
+  String retryPattern(String base, String second, String third);
+
+  /// No description provided for @networkSettingsUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Network settings updated'**
+  String get networkSettingsUpdated;
+
   /// No description provided for @errorChangingLanguage.
   ///
   /// In en, this message translates to:
@@ -1070,6 +1304,24 @@ abstract class AppLocalizations {
   /// **'Attach files'**
   String get attachFiles;
 
+  /// No description provided for @attachFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach File'**
+  String get attachFile;
+
+  /// No description provided for @selectFromDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Select from Device'**
+  String get selectFromDevice;
+
+  /// No description provided for @enterUri.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter URI'**
+  String get enterUri;
+
   /// No description provided for @answerOnlyFromNotes.
   ///
   /// In en, this message translates to:
@@ -1135,6 +1387,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add Files'**
   String get addFiles;
+
+  /// No description provided for @add.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get add;
 
   /// No description provided for @processingRequest.
   ///
@@ -2975,7 +3233,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDebugOverlay.
   ///
   /// In en, this message translates to:
-  /// **'AI Debug Overlay'**
+  /// **'AI Debug Log'**
   String get aiDebugOverlay;
 
   /// No description provided for @aiDebugOverlaySubtitle.
@@ -3365,7 +3623,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiModelSettings.
   ///
   /// In en, this message translates to:
-  /// **'AI Model Settings'**
+  /// **'AI Settings'**
   String get aiModelSettings;
 
   /// No description provided for @currentModel.
@@ -4220,6 +4478,12 @@ abstract class AppLocalizations {
   /// **'Include query params for auth if needed (e.g., Smithery)'**
   String get baseUrlHelperText;
 
+  /// No description provided for @builtInTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in Tools'**
+  String get builtInTools;
+
   /// No description provided for @transportType.
   ///
   /// In en, this message translates to:
@@ -4286,11 +4550,281 @@ abstract class AppLocalizations {
   /// **'Error deleting endpoint: {error}'**
   String errorDeletingEndpoint(Object error);
 
+  /// No description provided for @onboardingWelcomeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to Note Synapse'**
+  String get onboardingWelcomeTitle;
+
+  /// No description provided for @onboardingWelcomeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your AI second brain'**
+  String get onboardingWelcomeSubtitle;
+
+  /// No description provided for @onboardingChooseModelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose Your AI Model'**
+  String get onboardingChooseModelTitle;
+
+  /// No description provided for @onboardingChooseModelSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select the AI model that best fits your needs'**
+  String get onboardingChooseModelSubtitle;
+
+  /// No description provided for @onboardingStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Get Started'**
+  String get onboardingStart;
+
+  /// No description provided for @onboardingNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get onboardingNext;
+
+  /// No description provided for @onboardingSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get onboardingSkip;
+
+  /// No description provided for @onboardingLicenseTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'License Agreement'**
+  String get onboardingLicenseTitle;
+
+  /// No description provided for @onboardingLicenseSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Please read and accept the license'**
+  String get onboardingLicenseSubtitle;
+
+  /// No description provided for @onboardingPrivacyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy Policy'**
+  String get onboardingPrivacyTitle;
+
+  /// No description provided for @onboardingPrivacySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'How we handle your data'**
+  String get onboardingPrivacySubtitle;
+
+  /// No description provided for @onboardingAccept.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept & Continue'**
+  String get onboardingAccept;
+
+  /// No description provided for @onboardingConfigLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Config Later'**
+  String get onboardingConfigLater;
+
+  /// No description provided for @about.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get about;
+
+  /// No description provided for @aboutSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'License, privacy, and version'**
+  String get aboutSubtitle;
+
+  /// No description provided for @version.
+  ///
+  /// In en, this message translates to:
+  /// **'Version'**
+  String get version;
+
+  /// No description provided for @info.
+  ///
+  /// In en, this message translates to:
+  /// **'Info'**
+  String get info;
+
+  /// No description provided for @applicationInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Application Information'**
+  String get applicationInfo;
+
+  /// No description provided for @githubPage.
+  ///
+  /// In en, this message translates to:
+  /// **'GitHub Page'**
+  String get githubPage;
+
+  /// No description provided for @viewLicense.
+  ///
+  /// In en, this message translates to:
+  /// **'View License'**
+  String get viewLicense;
+
+  /// No description provided for @viewPrivacyPolicy.
+  ///
+  /// In en, this message translates to:
+  /// **'View Privacy Policy'**
+  String get viewPrivacyPolicy;
+
+  /// No description provided for @stowplexCopyright.
+  ///
+  /// In en, this message translates to:
+  /// **'Stowplex LLC & Bruce Li All Rights Reserved'**
+  String get stowplexCopyright;
+
+  /// No description provided for @noWarranty.
+  ///
+  /// In en, this message translates to:
+  /// **'NO WARRANTY'**
+  String get noWarranty;
+
+  /// No description provided for @debugMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug Menu'**
+  String get debugMenu;
+
+  /// No description provided for @debugMenuSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Developer options'**
+  String get debugMenuSubtitle;
+
+  /// No description provided for @resetOnboarding.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset Onboarding Flag'**
+  String get resetOnboarding;
+
+  /// No description provided for @resetOnboardingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset Onboarding Flag'**
+  String get resetOnboardingTitle;
+
+  /// No description provided for @resetOnboardingSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Onboarding flag reset'**
+  String get resetOnboardingSuccess;
+
+  /// No description provided for @dependencyLicenses.
+  ///
+  /// In en, this message translates to:
+  /// **'Dependency Library Licenses'**
+  String get dependencyLicenses;
+
   /// No description provided for @refreshedToolsFor.
   ///
   /// In en, this message translates to:
   /// **'Refreshed tools for {name}'**
   String refreshedToolsFor(Object name);
+
+  /// No description provided for @bookmarkPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmark Page'**
+  String get bookmarkPage;
+
+  /// No description provided for @page.
+  ///
+  /// In en, this message translates to:
+  /// **'Page'**
+  String get page;
+
+  /// No description provided for @removeBookmark.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove Bookmark'**
+  String get removeBookmark;
+
+  /// No description provided for @bookmarks.
+  ///
+  /// In en, this message translates to:
+  /// **'Bookmarks'**
+  String get bookmarks;
+
+  /// No description provided for @addBookmark.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Bookmark'**
+  String get addBookmark;
+
+  /// No description provided for @editBookmark.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Bookmark'**
+  String get editBookmark;
+
+  /// No description provided for @bookmarkAnnotationHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter annotation (max 200 chars)'**
+  String get bookmarkAnnotationHint;
+
+  /// No description provided for @noBookmarksYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No bookmarks yet'**
+  String get noBookmarksYet;
+
+  /// No description provided for @aiContextBookmarks.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Context: Bookmarks'**
+  String get aiContextBookmarks;
+
+  /// No description provided for @configureAiContext.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure AI Context'**
+  String get configureAiContext;
+
+  /// No description provided for @aiContext.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Context: {mode}'**
+  String aiContext(String mode);
+
+  /// No description provided for @aiContextFullPdf.
+  ///
+  /// In en, this message translates to:
+  /// **'Full PDF'**
+  String get aiContextFullPdf;
+
+  /// No description provided for @aiContextWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Window'**
+  String get aiContextWindow;
+
+  /// No description provided for @aiContextChapters.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapters'**
+  String get aiContextChapters;
+
+  /// No description provided for @windowSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Window Size'**
+  String get windowSize;
+
+  /// No description provided for @pagesBeforeAfter.
+  ///
+  /// In en, this message translates to:
+  /// **'Pages before/after'**
+  String get pagesBeforeAfter;
 
   /// No description provided for @errorRefreshingTools.
   ///
@@ -4303,6 +4837,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tools'**
   String get tools;
+
+  /// No description provided for @markAllAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark all as'**
+  String get markAllAs;
+
+  /// No description provided for @archiveAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive All'**
+  String get archiveAll;
+
+  /// No description provided for @unarchiveAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Unarchive All'**
+  String get unarchiveAll;
+
+  /// No description provided for @selectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get selectAll;
+
+  /// No description provided for @deselectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Deselect All'**
+  String get deselectAll;
+
+  /// No description provided for @noteType.
+  ///
+  /// In en, this message translates to:
+  /// **'Note Type'**
+  String get noteType;
+
+  /// No description provided for @excludeTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude Tags'**
+  String get excludeTags;
+
+  /// No description provided for @excludeTagsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Select tags to exclude'**
+  String get excludeTagsHint;
+
+  /// No description provided for @selectTagsToExclude.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Tags to Exclude'**
+  String get selectTagsToExclude;
 
   /// No description provided for @toolsFor.
   ///
@@ -4397,7 +4985,7 @@ abstract class AppLocalizations {
   /// No description provided for @rawDataManagerSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Advanced tools for file and database management'**
+  /// **'Inspect and modify raw database data'**
   String get rawDataManagerSubtitle;
 
   /// No description provided for @files.
@@ -6230,12 +6818,6 @@ abstract class AppLocalizations {
   /// **'Choose which images to download locally for offline use.'**
   String get mediaDownloadsDescription;
 
-  /// No description provided for @selectAll.
-  ///
-  /// In en, this message translates to:
-  /// **'Select all'**
-  String get selectAll;
-
   /// No description provided for @clearAll.
   ///
   /// In en, this message translates to:
@@ -6457,12 +7039,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} {count, plural, one {app} other {apps}} selected'**
   String appsSelected(int count);
-
-  /// No description provided for @deselectAll.
-  ///
-  /// In en, this message translates to:
-  /// **'Deselect All'**
-  String get deselectAll;
 
   /// No description provided for @proceedWithInstallation.
   ///
@@ -6739,6 +7315,270 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Export DB'**
   String get exportDbTooltip;
+
+  /// No description provided for @undo.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get undo;
+
+  /// No description provided for @taskRescheduled.
+  ///
+  /// In en, this message translates to:
+  /// **'Task rescheduled'**
+  String get taskRescheduled;
+
+  /// No description provided for @recoveryManager.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery Manager'**
+  String get recoveryManager;
+
+  /// No description provided for @backupAndRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup & Restore'**
+  String get backupAndRestore;
+
+  /// No description provided for @databaseNotConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Database not connected'**
+  String get databaseNotConnected;
+
+  /// No description provided for @fileUsageUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'File usage status unavailable'**
+  String get fileUsageUnavailable;
+
+  /// No description provided for @fileUsageDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'File Usage Details'**
+  String get fileUsageDetails;
+
+  /// No description provided for @noReferencesFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No references found in database'**
+  String get noReferencesFound;
+
+  /// No description provided for @usedByNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Used by {count} note(s)'**
+  String usedByNotes(int count);
+
+  /// No description provided for @usedByConversations.
+  ///
+  /// In en, this message translates to:
+  /// **'Used in {count} conversation message(s)'**
+  String usedByConversations(int count);
+
+  /// No description provided for @noteNoLongerExists.
+  ///
+  /// In en, this message translates to:
+  /// **'Note no longer exists'**
+  String get noteNoLongerExists;
+
+  /// No description provided for @messageNoLongerExists.
+  ///
+  /// In en, this message translates to:
+  /// **'Message no longer exists'**
+  String get messageNoLongerExists;
+
+  /// No description provided for @showDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Details'**
+  String get showDetails;
+
+  /// No description provided for @saveFindings.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Findings'**
+  String get saveFindings;
+
+  /// No description provided for @saveFindingsToNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Save findings to note'**
+  String get saveFindingsToNote;
+
+  /// No description provided for @attachNotesToPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach Notes to Plan'**
+  String get attachNotesToPlan;
+
+  /// No description provided for @attachNotesToTask.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach Notes to Task'**
+  String get attachNotesToTask;
+
+  /// No description provided for @globalContextNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Global Context Notes'**
+  String get globalContextNotes;
+
+  /// No description provided for @taskContextNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Task Context Notes'**
+  String get taskContextNotes;
+
+  /// No description provided for @globalContextDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'These notes will be included as context for all tasks'**
+  String get globalContextDescription;
+
+  /// No description provided for @taskContextDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'These notes will be included as context for this task only'**
+  String get taskContextDescription;
+
+  /// No description provided for @notesAttachedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No notes attached} =1{1 note attached} other{{count} notes attached}}'**
+  String notesAttachedCount(int count);
+
+  /// No description provided for @agentRunningNotificationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent Running'**
+  String get agentRunningNotificationTitle;
+
+  /// No description provided for @agentRunningNotificationBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Working on: {objective}'**
+  String agentRunningNotificationBody(String objective);
+
+  /// No description provided for @agentCompleteNotificationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent Complete'**
+  String get agentCompleteNotificationTitle;
+
+  /// No description provided for @agentCompleteNotificationBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to view results'**
+  String get agentCompleteNotificationBody;
+
+  /// No description provided for @agentPauseExecution.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get agentPauseExecution;
+
+  /// No description provided for @agentResumeExecution.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get agentResumeExecution;
+
+  /// No description provided for @agentStopExecution.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get agentStopExecution;
+
+  /// No description provided for @agentPausedStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get agentPausedStatus;
+
+  /// No description provided for @agentConflictTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent Already Running'**
+  String get agentConflictTitle;
+
+  /// No description provided for @agentConflictMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'An agent is currently {status} in another conversation. You can stop it to start a new one, or switch to that conversation.'**
+  String agentConflictMessage(String status);
+
+  /// No description provided for @agentConflictStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Agent'**
+  String get agentConflictStop;
+
+  /// No description provided for @agentConflictSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to Conversation'**
+  String get agentConflictSwitch;
+
+  /// No description provided for @editBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Block'**
+  String get editBlock;
+
+  /// No description provided for @deleteBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Block'**
+  String get deleteBlock;
+
+  /// No description provided for @deleteBlockConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete this block? This action cannot be undone.'**
+  String get deleteBlockConfirmation;
+
+  /// No description provided for @expandSelectionAbove.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand Above'**
+  String get expandSelectionAbove;
+
+  /// No description provided for @contractSelectionAbove.
+  ///
+  /// In en, this message translates to:
+  /// **'Contract Above'**
+  String get contractSelectionAbove;
+
+  /// No description provided for @expandSelectionBelow.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand Below'**
+  String get expandSelectionBelow;
+
+  /// No description provided for @contractSelectionBelow.
+  ///
+  /// In en, this message translates to:
+  /// **'Contract Below'**
+  String get contractSelectionBelow;
+
+  /// No description provided for @editSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get editSelection;
+
+  /// No description provided for @deleteSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Blocks'**
+  String get deleteSelection;
+
+  /// No description provided for @confirmDeleteBlocks.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete {count} blocks?'**
+  String confirmDeleteBlocks(int count);
 }
 
 class _AppLocalizationsDelegate

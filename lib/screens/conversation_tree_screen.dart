@@ -6,6 +6,7 @@ import '../services/conversation_service.dart';
 import '../services/database_service.dart';
 import '../services/fork_service.dart';
 import '../services/logger_service.dart';
+import '../services/service_locator.dart';
 import '../l10n/app_localizations.dart';
 import 'conversation_chat_screen.dart';
 import '../widgets/add_note_dialog.dart';
@@ -35,7 +36,7 @@ class ConversationTreeScreen extends StatefulWidget {
 }
 
 class _ConversTreeScreenState extends State<ConversationTreeScreen> {
-  final ConversationService _conversationService = ConversationService();
+  ConversationService get _conversationService => getIt<ConversationService>();
   final DatabaseService _databaseService = DatabaseService();
   final ForkService _forkService = ForkService();
   final GraphViewController _graphController = GraphViewController();
@@ -121,12 +122,21 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
   Future<void> _fetchNodeConversationIds() async {
     if (_tree == null) return;
 
+    final messageIds = _tree!.nodes.values
+        .where((node) => node.messageId != null)
+        .map((node) => node.messageId!)
+        .toList();
+
+    if (messageIds.isEmpty) return;
+
+    final conversationIdsMap = await _databaseService
+        .getConversationIdsForMessages(messageIds);
+
     final newMap = <String, List<String>>{};
     for (final node in _tree!.nodes.values) {
-      if (node.messageId != null) {
-        final conversationIds = await _databaseService
-            .getConversationsContainingMessage(node.messageId!);
-        newMap[node.id] = conversationIds;
+      if (node.messageId != null &&
+          conversationIdsMap.containsKey(node.messageId)) {
+        newMap[node.id] = conversationIdsMap[node.messageId]!;
       }
     }
 

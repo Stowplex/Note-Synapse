@@ -6,6 +6,7 @@ import '../models/note.dart';
 import '../models/conversation.dart';
 import '../models/tag.dart';
 import '../services/conversation_service.dart';
+import '../services/service_locator.dart';
 import '../screens/conversation_chat_screen.dart';
 import '../screens/note_detail_screen.dart';
 
@@ -13,26 +14,31 @@ class TagDetailDialog extends StatefulWidget {
   final String tagName;
   final Tag tag;
 
-  const TagDetailDialog({
-    super.key,
-    required this.tagName,
-    required this.tag,
-  });
+  const TagDetailDialog({super.key, required this.tagName, required this.tag});
 
   @override
   State<TagDetailDialog> createState() => _TagDetailDialogState();
 }
 
 class _TagDetailDialogState extends State<TagDetailDialog> {
-  final ConversationService _conversationService = ConversationService();
+  ConversationService get _conversationService => getIt<ConversationService>();
   List<Note> _notes = [];
   List<Conversation> _conversations = [];
   bool _isLoading = true;
+  final TextEditingController _promptController = TextEditingController();
+  bool _isSavingPrompt = false;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _loadPrompt();
+  }
+
+  @override
+  void dispose() {
+    _promptController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -43,11 +49,11 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
     try {
       final appProvider = context.read<AppProvider>();
       final notes = appProvider.getNotesByTag(widget.tagName);
-      
+
       final conversations = await _conversationService.getAllConversations(
         tagNames: [widget.tagName],
       );
-      
+
       // Filter out conversations without messages
       final List<Conversation> conversationsWithMessages = [];
       for (final conversation in conversations) {
@@ -77,6 +83,43 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _loadPrompt() async {
+    final appProvider = context.read<AppProvider>();
+    final prompt = await appProvider.getTagExtractionPrompt(widget.tag.id);
+    if (mounted && prompt != null) {
+      setState(() {
+        _promptController.text = prompt;
+      });
+    }
+  }
+
+  Future<void> _savePrompt() async {
+    setState(() => _isSavingPrompt = true);
+    try {
+      final appProvider = context.read<AppProvider>();
+      await appProvider.updateTagExtractionPrompt(
+        widget.tag.id,
+        _promptController.text,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('AI Extraction Prompt saved')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving prompt: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSavingPrompt = false);
     }
   }
 
@@ -194,7 +237,58 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                 ],
               ),
             ),
-            
+
+            // AI Prompt Section
+            ExpansionTile(
+              title: Row(
+                children: [
+                  const Icon(Icons.psychology, size: 20),
+                  const SizedBox(width: 8),
+                  const Text('AI Extraction Prompt'),
+                ],
+              ),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Instructions for the AI when importing documents with this tag (e.g., "Summarize key findings")',
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _promptController,
+                        decoration: InputDecoration(
+                          hintText: 'Enter prompt...',
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: _isSavingPrompt
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.save),
+                            onPressed: _savePrompt,
+                          ),
+                        ),
+                        maxLines: 3,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
             // Content with divider
             Expanded(
               child: _isLoading
@@ -226,7 +320,8 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                                     Text(
                                       '${l10n.notes} (${_notes.length})',
                                       style: Theme.of(context)
-                                          .textTheme.titleMedium
+                                          .textTheme
+                                          .titleMedium
                                           ?.copyWith(
                                             fontWeight: FontWeight.bold,
                                           ),
@@ -250,7 +345,8 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                                             Text(
                                               l10n.noNotesAvailable,
                                               style: Theme.of(context)
-                                                  .textTheme.bodyMedium
+                                                  .textTheme
+                                                  .bodyMedium
                                                   ?.copyWith(
                                                     color: Colors.grey[600],
                                                   ),
@@ -274,14 +370,14 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                             ],
                           ),
                         ),
-                        
+
                         // Divider
                         Container(
                           height: 1,
                           color: Colors.grey[300],
                           margin: const EdgeInsets.symmetric(horizontal: 16),
                         ),
-                        
+
                         // Conversations section
                         Expanded(
                           flex: 1,
@@ -302,13 +398,16 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                                 ),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.chat_bubble_outline,
-                                        size: 20),
+                                    const Icon(
+                                      Icons.chat_bubble_outline,
+                                      size: 20,
+                                    ),
                                     const SizedBox(width: 8),
                                     Text(
                                       '${l10n.conversations} (${_conversations.length})',
                                       style: Theme.of(context)
-                                          .textTheme.titleMedium
+                                          .textTheme
+                                          .titleMedium
                                           ?.copyWith(
                                             fontWeight: FontWeight.bold,
                                           ),
@@ -332,7 +431,8 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                                             Text(
                                               'No conversations found',
                                               style: Theme.of(context)
-                                                  .textTheme.bodyMedium
+                                                  .textTheme
+                                                  .bodyMedium
                                                   ?.copyWith(
                                                     color: Colors.grey[600],
                                                   ),
@@ -373,9 +473,7 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
   ) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () {
           Navigator.of(context).pop();
@@ -404,9 +502,7 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                         Expanded(
                           child: Text(
                             note.title,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
+                            style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(
                                   fontWeight: FontWeight.bold,
                                   decoration: note.isCompleted
@@ -422,9 +518,9 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                     const SizedBox(height: 8),
                     Text(
                       note.content,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[600],
-                      ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -433,20 +529,23 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                       Wrap(
                         spacing: 4,
                         runSpacing: 4,
-                        children: note.tags.take(3).map((tag) => Chip(
-                              label: Text(
-                                tag,
-                                style: const TextStyle(fontSize: 12),
+                        children: note.tags
+                            .take(3)
+                            .map(
+                              (tag) => Chip(
+                                label: Text(
+                                  tag,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                backgroundColor: Theme.of(
+                                  context,
+                                ).colorScheme.primary.withOpacity(0.1),
+                                labelStyle: TextStyle(
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
                               ),
-                              backgroundColor: Theme.of(context)
-                                  .colorScheme
-                                  .primary
-                                  .withOpacity(0.1),
-                              labelStyle: TextStyle(
-                                color:
-                                    Theme.of(context).colorScheme.primary,
-                              ),
-                            )).toList(),
+                            )
+                            .toList(),
                       ),
                     ],
                   ],
@@ -511,7 +610,11 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                       tooltip: 'Open conversation',
                     ),
                     IconButton(
-                      icon: const Icon(Icons.link_off, size: 20, color: Colors.red),
+                      icon: const Icon(
+                        Icons.link_off,
+                        size: 20,
+                        color: Colors.red,
+                      ),
                       onPressed: () => _unlinkConversation(conversation),
                       tooltip: 'Remove tag',
                     ),
@@ -525,8 +628,7 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                 conversation.id,
               ),
               builder: (context, snapshot) {
-                if (!snapshot.hasData ||
-                    snapshot.data!.messages.isEmpty) {
+                if (!snapshot.hasData || snapshot.data!.messages.isEmpty) {
                   return const SizedBox.shrink();
                 }
                 final messages = snapshot.data!.messages;
@@ -541,11 +643,7 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Container(
-                      width: 1,
-                      height: 40,
-                      color: Colors.grey,
-                    ),
+                    Container(width: 1, height: 40, color: Colors.grey),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
