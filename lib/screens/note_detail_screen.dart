@@ -2667,6 +2667,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                             case 'open':
                               FileUtils.openFile(attachmentPath, context);
                               break;
+                            case 'open_immersive':
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => ImmersiveNoteScreen(
+                                    notes: [currentNote],
+                                    initialAttachmentPath: attachmentPath,
+                                  ),
+                                ),
+                              );
+                              break;
                             case 'toggle_ai':
                               await _toggleAiContext(attachmentPath);
                               break;
@@ -2701,6 +2711,25 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                                     Icon(Icons.open_in_new),
                                     SizedBox(width: 12),
                                     Text('Open'),
+                                  ],
+                                ),
+                              ),
+                            if (fileExists &&
+                                (FileTypeUtils.getFileCategory(
+                                          FileTypeUtils.getFileExtension(
+                                            fileName,
+                                          ),
+                                        ) ==
+                                        'image' ||
+                                    FileTypeUtils.getFileExtension(fileName) ==
+                                        'pdf'))
+                              PopupMenuItem<String>(
+                                value: 'open_immersive',
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.chrome_reader_mode),
+                                    const SizedBox(width: 12),
+                                    Text(l10n.immersiveMode),
                                   ],
                                 ),
                               ),
