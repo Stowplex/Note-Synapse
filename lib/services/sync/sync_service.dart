@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -24,6 +24,28 @@ import 'sync_spec_generator.dart';
 import 'sync_staging.dart';
 import 'snapshot_version_service.dart';
 import 'sync_storage_provider.dart';
+
+enum SyncPhase { idle, pulling, pushing, syncingAttachments }
+
+class SyncStatus {
+  final SyncPhase phase;
+  final SyncResult? lastResult;
+  final String? error;
+
+  const SyncStatus({
+    this.phase = SyncPhase.idle,
+    this.lastResult,
+    this.error,
+  });
+
+  SyncStatus copyWith({SyncPhase? phase, SyncResult? lastResult, String? error}) {
+    return SyncStatus(
+      phase: phase ?? this.phase,
+      lastResult: lastResult ?? this.lastResult,
+      error: error,
+    );
+  }
+}
 
 /// Result of a sync operation containing statistics.
 class SyncResult {
@@ -61,6 +83,8 @@ class SyncService {
 
   SyncStorageProvider? _provider;
   SyncEncryptionService? _encryption;
+
+  final ValueNotifier<SyncStatus> status = ValueNotifier(const SyncStatus());
 
   /// Threshold for oplog file count before triggering compaction.
   static const int _compactionThreshold = 50;
@@ -178,6 +202,7 @@ class SyncService {
       }
 
       // ---- Snapshot merge (if remote snapshot is newer) ----
+      status.value = const SyncStatus(phase: SyncPhase.pulling);
       await _mergeRemoteSnapshotIfNeeded(
         provider: provider,
         schemaVersion: schemaVersion,
@@ -195,6 +220,7 @@ class SyncService {
       conflictsCreated = pullResult.conflictsCreated;
 
       // ---- Push phase ----
+      status.value = const SyncStatus(phase: SyncPhase.pushing);
       opsPushed = await _push(
         provider: provider,
         deviceId: deviceId,
@@ -203,6 +229,7 @@ class SyncService {
       );
 
       // ---- Attachment sync ----
+      status.value = const SyncStatus(phase: SyncPhase.syncingAttachments);
       int attachmentsUploaded = 0;
       int attachmentsDownloaded = 0;
       try {
@@ -233,7 +260,7 @@ class SyncService {
         warnings: warnings,
       );
 
-      return SyncResult(
+      final result = SyncResult(
         opsPulled: opsPulled,
         opsPushed: opsPushed,
         conflictsCreated: conflictsCreated,
@@ -242,16 +269,20 @@ class SyncService {
         warnings: warnings,
         success: true,
       );
+      status.value = SyncStatus(phase: SyncPhase.idle, lastResult: result);
+      return result;
     } catch (e, stack) {
       LoggerService.error('Sync failed', error: e, stackTrace: stack);
       warnings.add('Sync failed: $e');
-      return SyncResult(
+      final result = SyncResult(
         opsPulled: opsPulled,
         opsPushed: opsPushed,
         conflictsCreated: conflictsCreated,
         warnings: warnings,
         success: false,
       );
+      status.value = SyncStatus(phase: SyncPhase.idle, lastResult: result, error: '$e');
+      return result;
     }
   }
 
