@@ -14,6 +14,25 @@ library;
 
 import '../database_service.dart';
 
+/// Tables ordered by foreign key dependencies (parents before children).
+/// Used when merging data from one DB into another so that parent rows
+/// exist before child rows reference them.
+const List<String> syncedTablesInMergeOrder = [
+  'notes',
+  'tags',
+  'conversations',
+  'subnotes',
+  'relationships',
+  'conversation_messages',
+  'note_tags',
+  'conversation_tags',
+  'conversation_note_mapping',
+  'conversation_message_mapping',
+  'message_parents',
+  'attachments',
+  'conversation_attachments',
+];
+
 /// The set of table names that participate in oplog-based cloud sync.
 const Set<String> syncedTables = {
   'notes',

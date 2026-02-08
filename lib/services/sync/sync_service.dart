@@ -13,6 +13,7 @@ import 'package:path/path.dart' as p;
 
 import 'attachment_sync_service.dart';
 import 'device_identity_service.dart';
+import 'field_version_registry.dart';
 import 'folder_sync_provider.dart';
 import 'android_saf_sync_provider.dart';
 import 'merge_engine.dart';
@@ -553,6 +554,285 @@ class SyncService {
 
     // Configure the service with the new provider + encryption
     configure(provider: provider, encryption: encryption);
+  }
+
+  /// Joins an existing sync root, merging this device's data with remote data.
+  ///
+  /// Unlike [initializeSyncRoot], this does NOT create a new sync config.
+  /// Instead it:
+  /// 1. Validates the sync config and encryption
+  /// 2. Pulls remote state (snapshot + oplog) into a staging DB
+  /// 3. Enables sync triggers on staging
+  /// 4. Merges local data into staging (triggers capture INSERTs)
+  /// 5. Atomic swaps staging -> live
+  /// 6. Pushes this device's unique data as oplog
+  /// 7. Writes combined snapshot and increments version
+  /// 8. Registers device in registry
+  Future<void> joinSyncRoot({
+    required SyncStorageProvider provider,
+    String? passphrase,
+  }) async {
+    // 1. Read and validate sync config
+    const configPath = 'sync-config.json';
+    final configBytes = await provider.readFile(configPath);
+    final configJson =
+        jsonDecode(utf8.decode(configBytes)) as Map<String, dynamic>;
+    final config = SyncConfig.fromJson(configJson);
+
+    // 2. Set up encryption if needed
+    SyncEncryptionService? encryption;
+    if (config.isEncrypted) {
+      if (passphrase == null || passphrase.isEmpty) {
+        throw StateError(
+          'Sync root is encrypted but no passphrase provided.',
+        );
+      }
+      encryption = await SyncEncryptionService.create(
+        passphrase: passphrase,
+        cipherId: config.encryption,
+        salt: config.salt,
+        kdfMemory: config.kdfParams.memory,
+        kdfIterations: config.kdfParams.iterations,
+        kdfParallelism: config.kdfParams.parallelism,
+      );
+
+      // Validate passphrase by trying to decrypt device registry
+      _encryption = encryption;
+      _provider = provider;
+      try {
+        await _readDeviceRegistry();
+      } catch (e) {
+        _encryption = null;
+        _provider = null;
+        throw StateError(
+            'Invalid passphrase: could not decrypt device registry.');
+      }
+
+      // Store derived key
+      final keyBytes = await encryption.getDerivedKeyBytes();
+      await _identity.setEncryptionKey(keyBytes);
+    }
+
+    // Configure temporarily for helper methods
+    _provider = provider;
+    _encryption = encryption;
+
+    final deviceId = await _identity.getDeviceId();
+    final schemaVersion = DatabaseService.DATABASE_VERSION;
+
+    // 3. Pull remote state into staging
+    final snapshotService = SnapshotService(
+      db: _db,
+      provider: provider,
+      encryption: encryption,
+    );
+    final snapshot = await snapshotService.readSnapshot();
+
+    final staging = SyncStaging(db: _db);
+    final stagingPath = await staging.createStagingCopy();
+
+    try {
+      final stagingDb = await staging.openStagingDb(stagingPath);
+
+      try {
+        // Apply remote snapshot to staging (replaces local data for synced tables)
+        if (snapshot != null) {
+          await snapshotService.applySnapshotToDb(snapshot, stagingDb);
+        }
+
+        // Apply any oplog entries on top of snapshot
+        final reader = OplogReader(
+          provider: provider,
+          encryption: encryption,
+          ownDeviceId: deviceId,
+          currentSchemaVersion: schemaVersion,
+        );
+        final readResult =
+            await reader.readNewOperations(<String, int>{});
+
+        if (readResult.applicableOps.isNotEmpty) {
+          // Ensure sync_conflicts table exists for merge engine
+          await stagingDb.execute('''
+            CREATE TABLE IF NOT EXISTS sync_conflicts (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              table_name TEXT NOT NULL,
+              row_id TEXT NOT NULL,
+              field_name TEXT NOT NULL,
+              local_value TEXT,
+              remote_value TEXT,
+              remote_device_id TEXT NOT NULL,
+              remote_timestamp TEXT NOT NULL,
+              resolved INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL
+            )
+          ''');
+
+          final mergeEngine = MergeEngine(
+            db: stagingDb,
+            currentSchemaVersion: schemaVersion,
+          );
+          await mergeEngine.applyOperations(readResult.applicableOps);
+        }
+
+        // 4. Enable sync triggers on staging so merging local data is captured
+        await _createSyncTriggersOnDb(stagingDb);
+
+        // 5. Merge local data into staging (triggers capture the INSERTs)
+        final localDb = await _db.database;
+        for (final tableName in syncedTablesInMergeOrder) {
+          final localRows = await localDb.query(tableName);
+          for (final row in localRows) {
+            await stagingDb.insert(
+              tableName,
+              row,
+              conflictAlgorithm: ConflictAlgorithm.ignore,
+            );
+          }
+        }
+
+        // Validate staging
+        final isValid = await staging.validateStagingDb(stagingDb);
+        if (!isValid) {
+          throw Exception('Staging DB validation failed after join merge');
+        }
+
+        await stagingDb.close();
+
+        // 6. Atomic swap
+        await staging.atomicSwap(stagingPath);
+      } catch (e) {
+        try {
+          await stagingDb.close();
+        } catch (_) {}
+        rethrow;
+      }
+    } catch (e) {
+      _provider = null;
+      _encryption = null;
+      rethrow;
+    }
+
+    // 7. Push this device's unique data (captured by triggers in step 5)
+    final warnings = <String>[];
+    final opsPushed = await _push(
+      provider: provider,
+      deviceId: deviceId,
+      schemaVersion: schemaVersion,
+      warnings: warnings,
+    );
+
+    // Upload attachments
+    await _uploadInitialAttachments(provider, encryption);
+
+    // 8. Write combined snapshot and increment version
+    final combinedSnapshotService = SnapshotService(
+      db: _db,
+      provider: provider,
+      encryption: encryption,
+    );
+    await combinedSnapshotService.writeSnapshot(schemaVersion);
+
+    final versionService = SnapshotVersionService(provider: provider);
+    final newVersion = await versionService.incrementVersion();
+    await _identity.setLastSnapshotVersion(newVersion);
+
+    // 9. Register device
+    var registry = await _readDeviceRegistry();
+    registry =
+        registry.registerDevice(deviceId, schemaVersion: schemaVersion);
+    if (opsPushed > 0) {
+      final seq = await _identity.getLastSequence();
+      registry = registry.updateSequence(deviceId, seq);
+    }
+    await _writeDeviceRegistry(registry);
+
+    // Store encryption config
+    await _identity.setEncryptionEnabled(encryption != null);
+    if (encryption != null) {
+      await _identity.setCipherId(config.encryption);
+    }
+
+    // Enable sync triggers on the live DB
+    await _db.enableSyncTriggers();
+
+    // Finalize configuration
+    configure(provider: provider, encryption: encryption);
+
+    LoggerService.info(
+      'Joined sync root: pushed $opsPushed ops, snapshot version $newVersion',
+    );
+  }
+
+  /// Creates sync triggers directly on a [Database] instance (for staging DB).
+  /// Mirrors the logic in [DatabaseService.enableSyncTriggers] but works on
+  /// an arbitrary database connection.
+  Future<void> _createSyncTriggersOnDb(Database db) async {
+    // Create sync_changelog table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_changelog (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_name TEXT NOT NULL,
+        row_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        changed_fields TEXT,
+        old_values TEXT,
+        timestamp TEXT NOT NULL,
+        pushed INTEGER DEFAULT 0
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_sync_changelog_pushed
+      ON sync_changelog(pushed)
+    ''');
+
+    const primaryKeys = {
+      'notes': ['id'],
+      'subnotes': ['id'],
+      'tags': ['id'],
+      'note_tags': ['noteId', 'tagId'],
+      'relationships': ['id'],
+      'conversations': ['id'],
+      'conversation_messages': ['id'],
+      'conversation_message_mapping': ['conversationId', 'messageId'],
+      'message_parents': ['id'],
+      'conversation_note_mapping': ['conversationId', 'noteId'],
+      'conversation_tags': ['conversationId', 'tagId'],
+      'attachments': ['id'],
+      'conversation_attachments': ['id'],
+    };
+
+    for (final table in primaryKeys.keys) {
+      final pk = primaryKeys[table]!;
+      final newRowId = pk.length == 1
+          ? 'NEW.${pk.first}'
+          : pk.map((c) => 'NEW.$c').join(" || '-' || ");
+      final oldRowId = pk.length == 1
+          ? 'OLD.${pk.first}'
+          : pk.map((c) => 'OLD.$c').join(" || '-' || ");
+
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS sync_insert_$table
+        AFTER INSERT ON $table
+        BEGIN
+          INSERT INTO sync_changelog (table_name, row_id, action, timestamp)
+          VALUES ('$table', $newRowId, 'insert', datetime('now'));
+        END
+      ''');
+
+      await db.execute('''
+        CREATE TRIGGER IF NOT EXISTS sync_delete_$table
+        AFTER DELETE ON $table
+        BEGIN
+          INSERT INTO sync_changelog (table_name, row_id, action, timestamp)
+          VALUES ('$table', $oldRowId, 'delete', datetime('now'));
+        END
+      ''');
+    }
+  }
+
+  /// Checks if a sync root already exists at the given provider.
+  Future<bool> syncRootExists(SyncStorageProvider provider) async {
+    return await provider.exists('sync-config.json');
   }
 
   /// Nuclear option: replace all remote data with this device's state.
