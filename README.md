@@ -9,35 +9,50 @@ Note Synapse is a local-first, open-source note-taking app built for developers,
 
 ## Features
 
-### 1. "Vibe Code" Your Tools
-Don't wait for a feature. **Description-to-App** generation is built-in.
-1. Clip an API doc using the Web Clipper.
-2. Tell Synapse: "Make me a dashboard using this API."
-3. Result: A fully functional HTML/JS app running inside your notes with full SQL & AI access.
-[Read Developer Docs](doc/developer/user_apps.md)
+### Expansive Thought Processing
+Thoughts are expansive, and your chat interface should reflect that. Note Synapse features **tree-structured AI conversations**, allowing you to branch logic paths and explore alternatives without losing the original thread.
 
-### 2. Tag Algebra (Virtual Folders)
-Stop moving files. Use math.
-- Logic: `Tag A` + `Tag B` = `Tag B` is a sub-folder of `A`.
-- Result: Fluid, self-organizing hierarchy. `AI Learn/LLM` is automatically created just by using tags.
+![tree conversation](doc/media/tree_conversation.gif)
 
-### 3. Git for Chat (Tree Conversations)
-LLMs hallucinate. Don't let a bad turn ruin a good chat.
-- **Forking**: Branch any conversation at any message.
-- **Pruning**: Mute verbose tool outputs (like SQL dumps) to save context tokens while keeping the reasoning.
+### Immersive Focus
+Facilitate deep reading in an era of "AI summaries." Note Synapse's **Immersive Mode** enables in-context conversation with AI directly alongside your content. Use **Circle-to-Ask** to instantly query specific text or formulas without breaking flow.
 
-### 4. Agentic Core
-- **Background Agents**: Run deep research tasks on Android as Foreground Services. They work while you sleep.
-- **MCP Support**: Use standard **Model Context Protocol** tools used by Claude/Cursor.
-- **Github Exploration**: Agents can clone, read, and analyze repos to answer your questions.
+![immersive mode](doc/media/immersive_mode.gif)
 
-### 5. Immersive Study
-- **Circle-to-Ask**: Circle a formula with your finger and ask the AI to explain it.
-- **Context Handling**: Pinpoint control. "Include read position +/- 5 pages."
+### Precise Context Management
+Master your AI's attention with granular context control.
+- **Context Composition**: Select specific conversation turns to branch new dialogues or extract key insights, keeping your workspace clean and focused.
+- **Token Economy**: Manually exclude verbose tool outputs or intermediate thought chains to optimize context windows.
+- **Attachment Targeting**: Selectively include or exclude note attachments. For PDFs, precisely target the full document, current reading window, bookmarked pages, or specific chapters.
 
-### 6. Hackable Architecture
-- **Direct SQL Access**: User Apps can run `window.Synapse.runQuery('SELECT * FROM notes')`.
-- **Local First**: SQLite database. Plain files. **No Cloud. No Tracking.**
+![flexible context PDF](doc/media/pdf_context.png)
+
+### Natural Language Extensibility
+Create and refine powerful **Mini Apps and AI Tools** entirely within the app using natural language.
+- **Educational Tools**: Generate pop quizzes, flashcards, and guided learning apps.
+- **Custom Interfaces**: Build bespoke dashboards and knowledge graph visualizations.
+- **Interactive Media**: Embed custom tools, from data analyzers to NES emulators, directly into your notes.
+
+### Hierarchical Tagging
+Enjoy the best of both worlds with a system that merges the flexibility of tags with the structure of folders. Tag sets naturally form a hierarchy, organizing your knowledge base intuitively.
+
+![tag_filter](doc/media/tag_filter.png)
+![tag_pin](doc/media/tag_pin.png)
+
+### Agentic Core & MCP Support
+Deploy autonomous agents for complex planning and execution tasks with user-selectable tools.
+- **Deep Research**: Utilize search-focused MCP servers for comprehensive web analysis.
+- **Repository Analysis**: Dive deep into GitHub repositories with specialized tools.
+- **Information Synthesis**: Analyze notes and synthesize insights across your library with built-in tools.
+
+### Sovereign Data Architecture
+- **Local-First Storage**: All data is stored locally with flexible export options. (Encrypted cloud sync on roadmap).
+- **BYOK Privacy**: Bring Your Own Key (BYOK) model ensures zero data collection and zero telemetry. You retain full control over your data and AI provider choices.
+
+### Intuitive Interactions
+- **Focus Mode Editing**: Drag the edit icon to any paragraph to edit just that block—perfect for quick corrections.
+- **Gestural Calendar**: Fluid task editing with a drag and pinch.
+
 
 ---
 
