@@ -25,7 +25,7 @@ Master your AI's attention with granular context control.
 - **Token Economy**: Manually exclude verbose tool outputs or intermediate thought chains to optimize context windows.
 - **Attachment Targeting**: Selectively include or exclude note attachments. For PDFs, precisely target the full document, current reading window, bookmarked pages, or specific chapters.
 
-![flexible context PDF](doc/media/pdf_context.png | width=320)
+![flexible context PDF](doc/media/pdf_context.png)
 
 ### Natural Language Extensibility
 Create and refine powerful **Mini Apps and AI Tools** entirely within the app using natural language.
@@ -36,8 +36,8 @@ Create and refine powerful **Mini Apps and AI Tools** entirely within the app us
 ### Hierarchical Tagging
 Enjoy the best of both worlds with a system that merges the flexibility of tags with the structure of folders. Tag sets naturally form a hierarchy, organizing your knowledge base intuitively.
 
-![tag_filter](doc/media/tag_filter.png | width=320)
-![tag_pin](doc/media/tag_pin.png | width=320)
+![tag_filter](doc/media/tag_filter.png)
+![tag_pin](doc/media/tag_pin.png)
 
 ### Agentic Core & MCP Support
 Deploy autonomous agents for complex planning and execution tasks with user-selectable tools.
