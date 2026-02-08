@@ -1387,17 +1387,17 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       );
 
       if (existingMappings.isEmpty) {
-        // Insert new mapping - filter to only existing columns, remove id if auto-increment
-        var filteredData = await _filterDataForTable(
+        // Insert new mapping - filter to only existing columns
+        final filteredData = await _filterDataForTable(
           stagingDb,
           'conversation_message_mapping',
           mapping,
         );
-        // Remove id if it's auto-increment to let SQLite generate a new one
-        if (filteredData.containsKey('id') && mapping['id'] is int) {
-          filteredData.remove('id');
-        }
-        await stagingDb.insert('conversation_message_mapping', filteredData);
+        await stagingDb.insert(
+          'conversation_message_mapping',
+          filteredData,
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
       }
     }
   }
@@ -1468,17 +1468,17 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       );
 
       if (existingMappings.isEmpty) {
-        // Insert new mapping - filter to only existing columns, remove id if auto-increment
-        var filteredData = await _filterDataForTable(
+        // Insert new mapping - filter to only existing columns
+        final filteredData = await _filterDataForTable(
           stagingDb,
           'conversation_note_mapping',
           mapping,
         );
-        // Remove id if it's auto-increment to let SQLite generate a new one
-        if (filteredData.containsKey('id') && mapping['id'] is int) {
-          filteredData.remove('id');
-        }
-        await stagingDb.insert('conversation_note_mapping', filteredData);
+        await stagingDb.insert(
+          'conversation_note_mapping',
+          filteredData,
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
       }
     }
   }

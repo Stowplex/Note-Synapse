@@ -46,7 +46,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 37; // Target schema version
+  static const int DATABASE_VERSION = 38; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -253,13 +253,12 @@ class DatabaseService {
 
   static const String _createConversationMessageMappingTable = '''
       CREATE TABLE conversation_message_mapping(
-        id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier
-        conversationId TEXT NOT NULL, -- Conversation ID
-        messageId TEXT NOT NULL, -- Message ID
-        createdAt INTEGER NOT NULL, -- Creation timestamp
+        conversationId TEXT NOT NULL,
+        messageId TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        PRIMARY KEY (conversationId, messageId),
         FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE,
-        FOREIGN KEY (messageId) REFERENCES conversation_messages (id) ON DELETE CASCADE,
-        UNIQUE(conversationId, messageId)
+        FOREIGN KEY (messageId) REFERENCES conversation_messages (id) ON DELETE CASCADE
       )
   ''';
 
@@ -276,7 +275,7 @@ class DatabaseService {
           'conversationId': conversationId,
           'messageId': messageId,
           'createdAt': now,
-        });
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
       }
       await batch.commit(noResult: true);
     });
@@ -296,13 +295,12 @@ class DatabaseService {
 
   static const String _createConversationNoteMappingTable = '''
       CREATE TABLE conversation_note_mapping(
-        id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique identifier
-        conversationId TEXT NOT NULL, -- Conversation ID
-        noteId TEXT NOT NULL, -- Note ID
-        createdAt INTEGER NOT NULL, -- Creation timestamp
+        conversationId TEXT NOT NULL,
+        noteId TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        PRIMARY KEY (conversationId, noteId),
         FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE,
-        FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE,
-        UNIQUE(conversationId, noteId)
+        FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE
       )
   ''';
   static const String _createMultiFunctionAppsTable = '''
@@ -728,6 +726,10 @@ class DatabaseService {
       description: 'Create sync_conflicts table for sync conflict resolution',
       execute: _migrateToVersion37,
     ),
+    38: MigrationStep(
+      description: 'Migrate conversation_message_mapping and conversation_note_mapping to composite primary keys',
+      execute: _migrateToVersion38,
+    ),
   };
 
   static Future<void> _migrateToVersion28(
@@ -812,6 +814,57 @@ class DatabaseService {
   }) async {
     // Create sync_conflicts table
     await db.execute(_createSyncConflictsTable);
+  }
+
+  static Future<void> _migrateToVersion38(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    LoggerService.info(
+      'Starting migration to version 38: Composite PKs for mapping tables',
+    );
+
+    // Migrate conversation_message_mapping
+    await db.execute('''
+      CREATE TABLE conversation_message_mapping_new(
+        conversationId TEXT NOT NULL,
+        messageId TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        PRIMARY KEY (conversationId, messageId),
+        FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE,
+        FOREIGN KEY (messageId) REFERENCES conversation_messages (id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      INSERT OR IGNORE INTO conversation_message_mapping_new(conversationId, messageId, createdAt)
+      SELECT conversationId, messageId, createdAt FROM conversation_message_mapping
+    ''');
+    await db.execute('DROP TABLE conversation_message_mapping');
+    await db.execute('ALTER TABLE conversation_message_mapping_new RENAME TO conversation_message_mapping');
+    await db.execute('CREATE INDEX idx_conversation_message_mapping_conversationId ON conversation_message_mapping(conversationId)');
+    await db.execute('CREATE INDEX idx_conversation_message_mapping_messageId ON conversation_message_mapping(messageId)');
+
+    // Migrate conversation_note_mapping
+    await db.execute('''
+      CREATE TABLE conversation_note_mapping_new(
+        conversationId TEXT NOT NULL,
+        noteId TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        PRIMARY KEY (conversationId, noteId),
+        FOREIGN KEY (conversationId) REFERENCES conversations (id) ON DELETE CASCADE,
+        FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      INSERT OR IGNORE INTO conversation_note_mapping_new(conversationId, noteId, createdAt)
+      SELECT conversationId, noteId, createdAt FROM conversation_note_mapping
+    ''');
+    await db.execute('DROP TABLE conversation_note_mapping');
+    await db.execute('ALTER TABLE conversation_note_mapping_new RENAME TO conversation_note_mapping');
+    await db.execute('CREATE INDEX idx_conversation_note_mapping_conversationId ON conversation_note_mapping(conversationId)');
+    await db.execute('CREATE INDEX idx_conversation_note_mapping_noteId ON conversation_note_mapping(noteId)');
+
+    LoggerService.info('Migration to version 38 complete');
   }
 
   // Individual migration methods
@@ -4047,12 +4100,12 @@ class DatabaseService {
     required String messageId,
   }) async {
     final db = await database;
-    final result = await db.insert('conversation_message_mapping', {
+    await db.insert('conversation_message_mapping', {
       'conversationId': conversationId,
       'messageId': messageId,
       'createdAt': DateTime.now().millisecondsSinceEpoch,
-    });
-    return result.toString();
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    return '$conversationId-$messageId';
   }
 
   Future<List<Map<String, dynamic>>> getConversationMessageMappings(
@@ -4063,7 +4116,7 @@ class DatabaseService {
       'conversation_message_mapping',
       where: 'conversationId = ?',
       whereArgs: [conversationId],
-      orderBy: 'id ASC', // Use auto-increment ID for canonical ordering
+      orderBy: 'createdAt ASC, rowid ASC',
     );
   }
 

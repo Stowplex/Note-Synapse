@@ -95,7 +95,6 @@ const Map<String, Map<String, int>> fieldVersionRegistry = {
     'metadata': 1,
   },
   'conversation_message_mapping': {
-    'id': 20,
     'conversationId': 20,
     'messageId': 20,
     'createdAt': 20,
@@ -107,7 +106,6 @@ const Map<String, Map<String, int>> fieldVersionRegistry = {
     'createdAt': 20,
   },
   'conversation_note_mapping': {
-    'id': 21,
     'conversationId': 21,
     'noteId': 21,
     'createdAt': 21,
