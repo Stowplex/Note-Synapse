@@ -33,6 +33,9 @@ Create and refine powerful **Mini Apps and AI Tools** entirely within the app us
 - **Custom Interfaces**: Build bespoke dashboards and knowledge graph visualizations.
 - **Interactive Media**: Embed custom tools, from data analyzers to NES emulators, directly into your notes.
 
+![vibe_code](doc/media/vibe_code.png)
+![mini_app](doc/media/mini_app.gif)
+
 ### Hierarchical Tagging
 Enjoy the best of both worlds with a system that merges the flexibility of tags with the structure of folders. Tag sets naturally form a hierarchy, organizing your knowledge base intuitively.
 
@@ -45,13 +48,20 @@ Deploy autonomous agents for complex planning and execution tasks with user-sele
 - **Repository Analysis**: Dive deep into GitHub repositories with specialized tools.
 - **Information Synthesis**: Analyze notes and synthesize insights across your library with built-in tools.
 
+![agent_mode](doc/media/agent_mode.png)
+
 ### Sovereign Data Architecture
 - **Local-First Storage**: All data is stored locally with flexible export options. (Encrypted cloud sync on roadmap).
 - **BYOK Privacy**: Bring Your Own Key (BYOK) model ensures zero data collection and zero telemetry. You retain full control over your data and AI provider choices.
 
 ### Intuitive Interactions
 - **Focus Mode Editing**: Drag the edit icon to any paragraph to edit just that block—perfect for quick corrections.
+
+![drag_edit](doc/media/drag_edit.gif)
+
 - **Gestural Calendar**: Fluid task editing with a drag and pinch.
+
+![pinch](doc/media/pinch_calendar.gif)
 
 
 ---
