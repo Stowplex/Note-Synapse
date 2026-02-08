@@ -20,6 +20,7 @@ import 'snapshot_service.dart';
 import 'sync_encryption_service.dart';
 import 'sync_spec_generator.dart';
 import 'sync_staging.dart';
+import 'snapshot_version_service.dart';
 import 'sync_storage_provider.dart';
 
 /// Result of a sync operation containing statistics.
@@ -410,6 +411,11 @@ class SyncService {
       );
       await snapshotService.writeSnapshot(schemaVersion);
 
+      // Increment snapshot version so other devices know to re-merge
+      final versionService = SnapshotVersionService(provider: provider);
+      final newVersion = await versionService.incrementVersion();
+      await _identity.setLastSnapshotVersion(newVersion);
+
       // Delete old oplog files
       for (final file in oplogFiles) {
         await provider.deleteFile(file.path);
@@ -518,6 +524,11 @@ class SyncService {
     );
     await snapshotService.writeSnapshot(schemaVersion);
 
+    // Set initial snapshot version
+    final versionService = SnapshotVersionService(provider: provider);
+    final newVersion = await versionService.incrementVersion();
+    await _identity.setLastSnapshotVersion(newVersion);
+
     // Identify and upload referenced attachments
     // We read the snapshot we just wrote (or just re-query) to find attachments.
     // Efficient way: re-query just the attachment paths from DB since we are local.
@@ -556,6 +567,11 @@ class SyncService {
       encryption: _encryption,
     );
     await snapshotService.writeSnapshot(schemaVersion);
+
+    // Increment snapshot version
+    final versionService = SnapshotVersionService(provider: provider);
+    final newVersion = await versionService.incrementVersion();
+    await _identity.setLastSnapshotVersion(newVersion);
 
     // Delete all oplog files
     final reader = OplogReader(

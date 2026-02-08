@@ -25,6 +25,7 @@ class DeviceIdentityService {
   static const _cipherIdKey = 'sync_cipher_id';
   static const _providerTypeKey = 'sync_provider_type';
   static const _providerUriKey = 'sync_provider_uri';
+  static const _lastSnapshotVersionKey = 'sync_last_snapshot_version';
 
   /// Returns the persistent device ID, generating one on first call.
   Future<String> getDeviceId() async {
@@ -124,6 +125,21 @@ class DeviceIdentityService {
     }
   }
 
+  /// Returns the last-seen snapshot version, defaulting to 0.
+  Future<int> getLastSnapshotVersion() async {
+    final value = await _secureStorage.read(key: _lastSnapshotVersionKey);
+    if (value == null) return 0;
+    return int.tryParse(value) ?? 0;
+  }
+
+  /// Stores the last-seen snapshot version.
+  Future<void> setLastSnapshotVersion(int version) async {
+    await _secureStorage.write(
+      key: _lastSnapshotVersionKey,
+      value: version.toString(),
+    );
+  }
+
   /// Clears all sync-related keys from secure storage.
   Future<void> clearSyncIdentity() async {
     await _secureStorage.delete(key: _deviceIdKey);
@@ -132,5 +148,6 @@ class DeviceIdentityService {
     await _secureStorage.delete(key: _cipherIdKey);
     await _secureStorage.delete(key: _providerTypeKey);
     await _secureStorage.delete(key: _providerUriKey);
+    await _secureStorage.delete(key: _lastSnapshotVersionKey);
   }
 }
