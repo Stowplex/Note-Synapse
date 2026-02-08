@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:path_provider/path_provider.dart';
+import 'package:sqflite/sqflite.dart';
 
 import '../../models/sync_config.dart';
 import '../../models/sync_operation.dart';
@@ -174,6 +175,13 @@ class SyncService {
           'Please unlock sync in settings.',
         );
       }
+
+      // ---- Snapshot merge (if remote snapshot is newer) ----
+      await _mergeRemoteSnapshotIfNeeded(
+        provider: provider,
+        schemaVersion: schemaVersion,
+        warnings: warnings,
+      );
 
       // ---- Pull phase ----
       final pullResult = await _pull(
@@ -805,6 +813,155 @@ class SyncService {
     final random = Random.secure();
     return List<int>.generate(length, (_) => random.nextInt(256));
   }
+
+  /// Checks if the remote snapshot is newer than our last known version.
+  /// If so, merges the remote snapshot into our local DB using staging.
+  ///
+  /// Returns true if a snapshot merge occurred.
+  Future<bool> _mergeRemoteSnapshotIfNeeded({
+    required SyncStorageProvider provider,
+    required int schemaVersion,
+    required List<String> warnings,
+  }) async {
+    final versionService = SnapshotVersionService(provider: provider);
+    final remoteVersion = await versionService.readVersion();
+    final localVersion = await _identity.getLastSnapshotVersion();
+
+    if (remoteVersion <= localVersion) return false;
+
+    LoggerService.info(
+      'Snapshot version changed: local=$localVersion remote=$remoteVersion. Merging.',
+    );
+
+    // Read remote snapshot
+    final snapshotService = SnapshotService(
+      db: _db,
+      provider: provider,
+      encryption: _encryption,
+    );
+    final snapshot = await snapshotService.readSnapshot();
+    if (snapshot == null) {
+      warnings.add('Snapshot version incremented but no snapshot found');
+      await _identity.setLastSnapshotVersion(remoteVersion);
+      return false;
+    }
+
+    // Create staging from local DB
+    final staging = SyncStaging(db: _db);
+    final stagingPath = await staging.createStagingCopy();
+
+    try {
+      final stagingDb = await staging.openStagingDb(stagingPath);
+
+      try {
+        // Merge snapshot rows into staging
+        await _mergeSnapshotIntoDb(snapshot, stagingDb);
+
+        // Validate
+        final isValid = await staging.validateStagingDb(stagingDb);
+        if (!isValid) {
+          throw Exception('Staging DB validation failed after snapshot merge');
+        }
+
+        await stagingDb.close();
+        await staging.atomicSwap(stagingPath);
+
+        await _identity.setLastSnapshotVersion(remoteVersion);
+        LoggerService.info('Snapshot merge completed (version $remoteVersion)');
+        return true;
+      } catch (e) {
+        try {
+          await stagingDb.close();
+        } catch (_) {}
+        rethrow;
+      }
+    } catch (e) {
+      LoggerService.error('Snapshot merge failed', error: e);
+      warnings.add('Snapshot merge failed: $e');
+      return false;
+    }
+  }
+
+  /// Merges rows from a remote snapshot into a staging DB.
+  ///
+  /// For each table in the snapshot:
+  /// - If row doesn't exist locally -> INSERT
+  /// - If row exists and table has updatedAt -> keep the row with newer timestamp
+  /// - If row exists and no updatedAt -> skip (already present)
+  Future<void> _mergeSnapshotIntoDb(
+      Snapshot snapshot, Database stagingDb) async {
+    // Tables that have an updatedAt column for timestamp comparison
+    const tablesWithUpdatedAt = {'notes', 'conversations'};
+
+    for (final entry in snapshot.tables.entries) {
+      final tableName = entry.key;
+      final rows = entry.value;
+
+      for (final row in rows) {
+        // Check if row exists
+        final pkWhere = _buildPkWhere(tableName, row);
+        final existing = await stagingDb.query(
+          tableName,
+          where: pkWhere.where,
+          whereArgs: pkWhere.args,
+          limit: 1,
+        );
+
+        if (existing.isEmpty) {
+          // New row from remote — insert
+          await stagingDb.insert(tableName, row,
+              conflictAlgorithm: ConflictAlgorithm.ignore);
+        } else if (tablesWithUpdatedAt.contains(tableName)) {
+          // Row exists, compare timestamps
+          final localUpdatedAt = existing.first['updatedAt'] as int?;
+          final remoteUpdatedAt = row['updatedAt'] as int?;
+          if (remoteUpdatedAt != null &&
+              localUpdatedAt != null &&
+              remoteUpdatedAt > localUpdatedAt) {
+            // Remote is newer — update
+            await stagingDb.update(
+              tableName,
+              row,
+              where: pkWhere.where,
+              whereArgs: pkWhere.args,
+            );
+          }
+        }
+        // else: row exists, no updatedAt, skip
+      }
+    }
+  }
+
+  /// Builds a WHERE clause from a row's primary key columns.
+  _SnapshotWhereClause _buildPkWhere(
+      String tableName, Map<String, dynamic> row) {
+    const primaryKeys = {
+      'notes': ['id'],
+      'subnotes': ['id'],
+      'tags': ['id'],
+      'note_tags': ['noteId', 'tagId'],
+      'relationships': ['id'],
+      'conversations': ['id'],
+      'conversation_messages': ['id'],
+      'conversation_message_mapping': ['conversationId', 'messageId'],
+      'message_parents': ['id'],
+      'conversation_note_mapping': ['conversationId', 'noteId'],
+      'conversation_tags': ['conversationId', 'tagId'],
+      'attachments': ['id'],
+      'conversation_attachments': ['id'],
+    };
+    final pk = primaryKeys[tableName] ?? ['id'];
+    final conditions = pk.map((c) => '$c = ?').join(' AND ');
+    final args = pk.map((c) => row[c]).toList();
+    return _SnapshotWhereClause(where: conditions, args: args);
+  }
+}
+
+/// Helper for building PK-based WHERE clauses during snapshot merge.
+class _SnapshotWhereClause {
+  final String where;
+  final List<dynamic> args;
+  _SnapshotWhereClause({required this.where, required this.args});
 }
 
 /// Internal pull result.
