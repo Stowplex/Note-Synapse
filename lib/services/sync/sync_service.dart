@@ -202,6 +202,29 @@ class SyncService {
         warnings: warnings,
       );
 
+      // ---- Attachment sync ----
+      int attachmentsUploaded = 0;
+      int attachmentsDownloaded = 0;
+      try {
+        final attachmentService = AttachmentSyncService(
+          provider: provider,
+          encryption: _encryption,
+        );
+        final db = await _db.database;
+        final appDocDir = await getApplicationDocumentsDirectory();
+
+        attachmentsDownloaded = await attachmentService.downloadMissingFromDb(
+          db,
+          appDocDir.path,
+        );
+        attachmentsUploaded = await attachmentService.uploadMissingFromDb(
+          db,
+          appDocDir.path,
+        );
+      } catch (e) {
+        warnings.add('Attachment sync failed (non-fatal): $e');
+      }
+
       // ---- Compaction (optional) ----
       await _maybeCompact(
         provider: provider,
@@ -214,6 +237,8 @@ class SyncService {
         opsPulled: opsPulled,
         opsPushed: opsPushed,
         conflictsCreated: conflictsCreated,
+        attachmentsUploaded: attachmentsUploaded,
+        attachmentsDownloaded: attachmentsDownloaded,
         warnings: warnings,
         success: true,
       );
