@@ -578,56 +578,37 @@ class _InteractiveCheckboxMarkdownState
               );
             }
 
-            // Bypass FileImage cache by reading bytes directly
-            return FutureBuilder<Uint8List>(
-              future: imageFile.readAsBytes(),
-              builder: (context, byteSnapshot) {
-                if (byteSnapshot.hasData) {
-                  if (kDebugMode) {
-                    debugPrint(
-                      'InteractiveCheckboxMarkdown: Read ${byteSnapshot.data!.length} bytes from disk for $url',
-                    );
-                  }
-                  return wrapWithDragTarget(
-                    _wrapImageWithInfoBar(
-                      image: SizedBox(
-                        width: effectiveWidth,
-                        height: effectiveHeight,
-                        child: Image.memory(
-                          byteSnapshot.data!,
-                          key: ValueKey('${url}${_imageVersions[url] ?? 0}'),
-                          fit: effectiveFit,
-                          errorBuilder: (context, error, stackTrace) {
-                            return wrapWithDragTarget(
-                              _buildPlaceholder(
-                                effectiveWidth,
-                                effectiveHeight,
-                                'Failed to render local image bytes',
-                              ),
-                            );
-                          },
+            // Use Image.file to leverage Flutter's image cache
+            return wrapWithDragTarget(
+              _wrapImageWithInfoBar(
+                image: SizedBox(
+                  width: effectiveWidth,
+                  height: effectiveHeight,
+                  child: Image.file(
+                    imageFile,
+                    key: ValueKey('${url}${_imageVersions[url] ?? 0}'),
+                    fit: effectiveFit,
+                    errorBuilder: (context, error, stackTrace) {
+                      return wrapWithDragTarget(
+                        _buildPlaceholder(
+                          effectiveWidth,
+                          effectiveHeight,
+                          'Failed to render local image file',
                         ),
-                      ),
-                      imageUrl: url,
-                      isSvg: false,
-                      onFullscreen: () {
-                        _FullscreenViewer.show(
-                          context,
-                          imageWidget: Image.memory(
-                            byteSnapshot.data!,
-                            fit: BoxFit.contain,
-                          ),
-                          title: 'Image',
-                        );
-                      },
-                    ),
+                      );
+                    },
+                  ),
+                ),
+                imageUrl: url,
+                isSvg: false,
+                onFullscreen: () {
+                  _FullscreenViewer.show(
+                    context,
+                    imageWidget: Image.file(imageFile, fit: BoxFit.contain),
+                    title: 'Image',
                   );
-                }
-                return _buildLoadingPlaceholder(
-                  effectiveWidth,
-                  effectiveHeight,
-                );
-              },
+                },
+              ),
             );
           }
           return buildFallback();
