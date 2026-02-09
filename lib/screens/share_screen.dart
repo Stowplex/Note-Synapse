@@ -22,6 +22,8 @@ import '../services/network_provider.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/remote_image_utils.dart';
+import '../utils/html_rules.dart';
+import '../utils/markdown_cleaner.dart';
 import 'note_selection_dialog.dart';
 
 class ShareScreen extends StatefulWidget {
@@ -2377,8 +2379,18 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
 
     try {
       final htmlContent = await _getCurrentPageBodyHtml();
-      final markdownContent = convert(htmlContent, ignore: ['script', 'style']);
-      String finalContent = markdownContent;
+
+      // Use custom rules for better extraction and force fenced code blocks
+      final markdownContent = convert(
+        htmlContent,
+        ignore: ['script', 'style'],
+        styleOptions: {'codeBlockStyle': 'fenced'},
+        rules: HtmlRules.customRules,
+      );
+
+      // Clean up spurious backslashes and other artifacts
+      String finalContent = MarkdownCleaner.clean(markdownContent);
+
       var title = await _getCurrentPageTitle();
       if (title.isEmpty) {
         title = 'Web Content - ${DateTime.now().toString().substring(0, 16)}';
@@ -2390,13 +2402,14 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       }
 
       if (useAI) {
+        // Use the cleaned content as input for AI processing
         final aiResult = await getIt<AIService>().extractContentFromText(
-          markdownContent,
+          finalContent,
           'web_content',
           title,
         );
         if (aiResult['success'] == true) {
-          finalContent = aiResult['content'] ?? markdownContent;
+          finalContent = aiResult['content'] ?? finalContent;
           tags.add('ai_processed');
         }
       } else {
