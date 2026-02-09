@@ -69,5 +69,11 @@ void main() {
         expect(matches.last.group(0), equals('[link2](url2)'));
       },
     );
+    test('does NOT match standard image syntax with base64', () {
+      const input =
+          '![img](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5E5rkJggg==)';
+      final match = regex.firstMatch(input);
+      expect(match, isNull);
+    });
   });
 }

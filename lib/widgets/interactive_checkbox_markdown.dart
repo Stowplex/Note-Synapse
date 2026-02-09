@@ -1112,6 +1112,18 @@ class _InteractiveCheckboxMarkdownState
   Widget build(BuildContext context) {
     // Basic inline components
     final inlineComponents = [
+      CustomImageMd(
+        onImage: (url, alt) {
+          return _customImageBuilder(
+            context,
+            url,
+            alt: alt,
+            // Use defaults or whatever logic GptMarkdown would usually apply for dimensions
+            // Since we don't have the constraints passed from GptMarkdown's internal parser here easily,
+            // we let _customImageBuilder handle it.
+          );
+        },
+      ),
       CustomATagMd(),
       _EmbeddedWebViewMd(
         defaultSize: widget.defaultWebViewSize,
@@ -3140,5 +3152,42 @@ class CustomATagMd extends ATagMd {
     );
     var textSpan = TextSpan(children: [child, ...endingSpans]);
     return textSpan;
+  }
+}
+
+/// Custom Image Markdown component to handle data URIs with newlines/encoding.
+class CustomImageMd extends InlineMd {
+  final Widget Function(String url, String? alt)? onImage;
+
+  CustomImageMd({this.onImage});
+
+  @override
+  // Match ![alt](url) but allow newlines/spaces in URL part
+  RegExp get exp => RegExp(r"!\[([^\]]*)\]\(([^)]*)\)");
+
+  @override
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
+    var match = exp.firstMatch(text.trim());
+    if (match == null) return TextSpan(text: text);
+
+    var alt = match.group(1);
+    var url = match.group(2) ?? "";
+
+    // Clean up the URL if it looks like a data URI
+    // Use loose check for data: because sometimes it might have spaces before it
+    if (url.trim().contains('data:')) {
+      try {
+        url = Uri.decodeFull(url);
+      } catch (_) {}
+      url = url.replaceAll(RegExp(r'\s'), '');
+    }
+
+    if (onImage != null) {
+      return WidgetSpan(
+        alignment: PlaceholderAlignment.bottom,
+        child: onImage!(url, alt),
+      );
+    }
+    return TextSpan(text: text);
   }
 }
