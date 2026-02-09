@@ -4162,6 +4162,12 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get forceRefetchImages => 'Force Refetch Images';
+
+  @override
+  String get fetchingImage => 'Fetching image...';
+
+  @override
   String get syncSetupTitle => '设置云同步';
 
   @override
@@ -4249,7 +4255,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncInitSuccess => '同步初始化成功！';
 
   @override
-  String syncInitFailed(String error) {
+  String syncInitFailed(Object error) {
     return '同步初始化失败：$error';
   }
 
@@ -4272,7 +4278,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncSyncing => '正在同步...';
 
   @override
-  String syncLastSynced(String timestamp) {
+  String syncLastSynced(Object timestamp) {
     return '上次同步：$timestamp';
   }
 
@@ -4280,22 +4286,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNeverSynced => '从未同步';
 
   @override
-  String syncPendingChanges(int count) {
+  String syncPendingChanges(Object count) {
     return '$count 个待同步的本地更改';
   }
 
   @override
-  String syncUnresolvedConflicts(int count) {
+  String syncUnresolvedConflicts(Object count) {
     return '$count 个未解决的冲突';
   }
 
   @override
-  String syncResultSummary(int pulled, int pushed, int conflicts) {
+  String syncResultSummary(Object conflicts, Object pulled, Object pushed) {
     return '拉取 $pulled 项，推送 $pushed 项，$conflicts 个冲突';
   }
 
   @override
-  String syncCurrentCipher(String cipher) {
+  String syncCurrentCipher(Object cipher) {
     return '加密算法：$cipher';
   }
 
@@ -4348,12 +4354,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncJustNow => '刚刚';
 
   @override
-  String syncMinutesAgo(int count) {
+  String syncMinutesAgo(Object count) {
     return '$count 分钟前';
   }
 
   @override
-  String syncHoursAgo(int count) {
+  String syncHoursAgo(Object count) {
     return '$count 小时前';
   }
 
@@ -4361,10 +4367,32 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncConflictsTitle => '同步冲突';
 
   @override
-  String get syncConflictsEmpty => '没有需要解决的冲突';
+  String syncConflictsSubtitle(Object count) {
+    return '$count unresolved conflicts';
+  }
 
   @override
-  String get syncConflictRowId => '行 ID';
+  String syncConflictsBadge(Object count) {
+    return '$count';
+  }
+
+  @override
+  String get syncConflictsNone => 'No sync conflicts to resolve.';
+
+  @override
+  String syncConflictTable(Object table) {
+    return 'Table: $table';
+  }
+
+  @override
+  String syncConflictRow(Object rowId) {
+    return 'Row: $rowId';
+  }
+
+  @override
+  String syncConflictField(Object field) {
+    return 'Field: $field';
+  }
 
   @override
   String get syncConflictLocalValue => '本地值';
@@ -4373,10 +4401,46 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncConflictRemoteValue => '远程值';
 
   @override
+  String syncConflictRemoteDevice(Object deviceId) {
+    return 'Device: $deviceId';
+  }
+
+  @override
+  String syncConflictRemoteTimestamp(Object timestamp) {
+    return 'Changed: $timestamp';
+  }
+
+  @override
   String get syncConflictKeepLocal => '保留本地';
 
   @override
   String get syncConflictKeepRemote => '保留远程';
+
+  @override
+  String get syncConflictResolved => 'Conflict resolved';
+
+  @override
+  String get syncConflictResolveAll => 'Resolve All';
+
+  @override
+  String get syncConflictResolveAllLocal => 'Keep All Mine';
+
+  @override
+  String get syncConflictResolveAllRemote => 'Keep All Theirs';
+
+  @override
+  String get syncConflictResolveAllTitle => 'Resolve All Conflicts?';
+
+  @override
+  String syncConflictResolveAllBody(Object count) {
+    return 'This will resolve all $count conflicts at once.';
+  }
+
+  @override
+  String get syncConflictsEmpty => '没有需要解决的冲突';
+
+  @override
+  String get syncConflictRowId => '行 ID';
 
   @override
   String get syncConflictResolvedLocal => '冲突已解决 — 保留了本地值。';
@@ -4389,6 +4453,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncConflictTapToExpand => '点击展开';
+
+  @override
+  String get syncRotateCipher => 'Rotate Encryption Cipher';
+
+  @override
+  String get syncRotateCipherDescription =>
+      'Re-encrypt all sync data with a new cipher.';
 
   @override
   String get syncBundleImportTitle => '导入同步包';

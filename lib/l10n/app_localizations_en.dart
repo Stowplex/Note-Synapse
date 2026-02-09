@@ -4356,6 +4356,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get forceRefetchImages => 'Force Refetch Images';
+
+  @override
+  String get fetchingImage => 'Fetching image...';
+
+  @override
   String get syncSetupTitle => 'Set Up Cloud Sync';
 
   @override
@@ -4447,7 +4453,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncInitSuccess => 'Sync initialized successfully!';
 
   @override
-  String syncInitFailed(String error) {
+  String syncInitFailed(Object error) {
     return 'Sync initialization failed: $error';
   }
 
@@ -4471,7 +4477,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncSyncing => 'Syncing...';
 
   @override
-  String syncLastSynced(String timestamp) {
+  String syncLastSynced(Object timestamp) {
     return 'Last synced: $timestamp';
   }
 
@@ -4479,22 +4485,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncNeverSynced => 'Never synced';
 
   @override
-  String syncPendingChanges(int count) {
+  String syncPendingChanges(Object count) {
     return '$count pending local changes';
   }
 
   @override
-  String syncUnresolvedConflicts(int count) {
+  String syncUnresolvedConflicts(Object count) {
     return '$count unresolved conflicts';
   }
 
   @override
-  String syncResultSummary(int pulled, int pushed, int conflicts) {
+  String syncResultSummary(Object conflicts, Object pulled, Object pushed) {
     return 'Pulled $pulled, pushed $pushed, $conflicts conflicts';
   }
 
   @override
-  String syncCurrentCipher(String cipher) {
+  String syncCurrentCipher(Object cipher) {
     return 'Cipher: $cipher';
   }
 
@@ -4551,12 +4557,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncJustNow => 'just now';
 
   @override
-  String syncMinutesAgo(int count) {
+  String syncMinutesAgo(Object count) {
     return '$count minutes ago';
   }
 
   @override
-  String syncHoursAgo(int count) {
+  String syncHoursAgo(Object count) {
     return '$count hours ago';
   }
 
@@ -4564,22 +4570,80 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncConflictsTitle => 'Sync Conflicts';
 
   @override
-  String get syncConflictsEmpty => 'No conflicts to resolve';
+  String syncConflictsSubtitle(Object count) {
+    return '$count unresolved conflicts';
+  }
+
+  @override
+  String syncConflictsBadge(Object count) {
+    return '$count';
+  }
+
+  @override
+  String get syncConflictsNone => 'No sync conflicts to resolve.';
+
+  @override
+  String syncConflictTable(Object table) {
+    return 'Table: $table';
+  }
+
+  @override
+  String syncConflictRow(Object rowId) {
+    return 'Row: $rowId';
+  }
+
+  @override
+  String syncConflictField(Object field) {
+    return 'Field: $field';
+  }
+
+  @override
+  String get syncConflictLocalValue => 'This Device';
+
+  @override
+  String get syncConflictRemoteValue => 'Other Device';
+
+  @override
+  String syncConflictRemoteDevice(Object deviceId) {
+    return 'Device: $deviceId';
+  }
+
+  @override
+  String syncConflictRemoteTimestamp(Object timestamp) {
+    return 'Changed: $timestamp';
+  }
+
+  @override
+  String get syncConflictKeepLocal => 'Keep Mine';
+
+  @override
+  String get syncConflictKeepRemote => 'Keep Theirs';
+
+  @override
+  String get syncConflictResolved => 'Conflict resolved';
+
+  @override
+  String get syncConflictResolveAll => 'Resolve All';
+
+  @override
+  String get syncConflictResolveAllLocal => 'Keep All Mine';
+
+  @override
+  String get syncConflictResolveAllRemote => 'Keep All Theirs';
+
+  @override
+  String get syncConflictResolveAllTitle => 'Resolve All Conflicts?';
+
+  @override
+  String syncConflictResolveAllBody(Object count) {
+    return 'This will resolve all $count conflicts at once.';
+  }
+
+  @override
+  String get syncConflictsEmpty => 'No sync conflicts to resolve.';
 
   @override
   String get syncConflictRowId => 'Row ID';
-
-  @override
-  String get syncConflictLocalValue => 'Local value';
-
-  @override
-  String get syncConflictRemoteValue => 'Remote value';
-
-  @override
-  String get syncConflictKeepLocal => 'Keep Local';
-
-  @override
-  String get syncConflictKeepRemote => 'Keep Remote';
 
   @override
   String get syncConflictResolvedLocal =>
@@ -4594,6 +4658,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncConflictTapToExpand => 'Tap to expand';
+
+  @override
+  String get syncRotateCipher => 'Rotate Encryption Cipher';
+
+  @override
+  String get syncRotateCipherDescription =>
+      'Re-encrypt all sync data with a new cipher.';
 
   @override
   String get syncBundleImportTitle => 'Import Sync Bundle';

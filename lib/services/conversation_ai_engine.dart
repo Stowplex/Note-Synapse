@@ -329,7 +329,9 @@ class ConversationAiEngine {
             final assistantMetadata = <String, dynamic>{
               'function_calls': functionCalls, // Keep for legacy
               'parts_history': runningPartsHistory, // Updated history
-              'modelUsed': getIt<ModelSelector>().currentModelConfig?.id,
+              'modelUsed':
+                  response?['modelUsed'] ??
+                  getIt<ModelSelector>().currentModelConfig?.id,
             };
 
             if (toolCallsWithResults.isNotEmpty) {
@@ -343,8 +345,10 @@ class ConversationAiEngine {
               metadata: assistantMetadata,
             );
             lastAssistantMetadata = assistantMetadata;
-            if (getIt<ModelSelector>().currentModelConfig?.type ==
-                ModelType.openaiCompatible) {
+            final currentModelConfig =
+                generationContext.modelOverride ??
+                getIt<ModelSelector>().currentModelConfig;
+            if (currentModelConfig?.type == ModelType.openaiCompatible) {
               final toolMessages = toolCallsWithResults
                   .map(
                     (toolCall) => PromptMessage(
@@ -428,7 +432,10 @@ class ConversationAiEngine {
             if (lastAssistantMetadata != null) ...lastAssistantMetadata,
             if (functionCalls != null) 'function_calls': functionCalls,
             'parts_history': finalPartsHistory,
-            'modelUsed': getIt<ModelSelector>().currentModelConfig?.id,
+            'modelUsed': textResponse != null || partsHistory != null
+                ? (response?['modelUsed'] ??
+                      getIt<ModelSelector>().currentModelConfig?.id)
+                : getIt<ModelSelector>().currentModelConfig?.id,
           };
 
           return ConversationAiResponse(

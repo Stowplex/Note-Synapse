@@ -74,7 +74,10 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
     return Dialog(
       child: Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
+          maxHeight:
+              MediaQuery.of(context).size.height -
+              MediaQuery.of(context).viewInsets.bottom -
+              40,
           maxWidth: 600,
         ),
         child: Column(

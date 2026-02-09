@@ -2190,6 +2190,20 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                           ),
                         ),
                       ),
+                      if (_isBackingUp) ...[
+                        const SizedBox(height: 16),
+                        LinearProgressIndicator(
+                          value: _backupProgress,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${(_backupProgress * 100).toInt()}%',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                     ],
                   ),
                 ),

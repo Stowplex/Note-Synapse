@@ -7580,6 +7580,18 @@ abstract class AppLocalizations {
   /// **'Are you sure you want to delete {count} blocks?'**
   String confirmDeleteBlocks(int count);
 
+  /// No description provided for @forceRefetchImages.
+  ///
+  /// In en, this message translates to:
+  /// **'Force Refetch Images'**
+  String get forceRefetchImages;
+
+  /// No description provided for @fetchingImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetching image...'**
+  String get fetchingImage;
+
   /// No description provided for @syncSetupTitle.
   ///
   /// In en, this message translates to:
@@ -7752,7 +7764,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Sync initialization failed: {error}'**
-  String syncInitFailed(String error);
+  String syncInitFailed(Object error);
 
   /// No description provided for @syncSettingsTitle.
   ///
@@ -7794,7 +7806,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Last synced: {timestamp}'**
-  String syncLastSynced(String timestamp);
+  String syncLastSynced(Object timestamp);
 
   /// No description provided for @syncNeverSynced.
   ///
@@ -7806,25 +7818,25 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{count} pending local changes'**
-  String syncPendingChanges(int count);
+  String syncPendingChanges(Object count);
 
   /// No description provided for @syncUnresolvedConflicts.
   ///
   /// In en, this message translates to:
   /// **'{count} unresolved conflicts'**
-  String syncUnresolvedConflicts(int count);
+  String syncUnresolvedConflicts(Object count);
 
   /// No description provided for @syncResultSummary.
   ///
   /// In en, this message translates to:
   /// **'Pulled {pulled}, pushed {pushed}, {conflicts} conflicts'**
-  String syncResultSummary(int pulled, int pushed, int conflicts);
+  String syncResultSummary(Object conflicts, Object pulled, Object pushed);
 
   /// No description provided for @syncCurrentCipher.
   ///
   /// In en, this message translates to:
   /// **'Cipher: {cipher}'**
-  String syncCurrentCipher(String cipher);
+  String syncCurrentCipher(Object cipher);
 
   /// No description provided for @syncEncryptionNone.
   ///
@@ -7926,13 +7938,13 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{count} minutes ago'**
-  String syncMinutesAgo(int count);
+  String syncMinutesAgo(Object count);
 
   /// No description provided for @syncHoursAgo.
   ///
   /// In en, this message translates to:
   /// **'{count} hours ago'**
-  String syncHoursAgo(int count);
+  String syncHoursAgo(Object count);
 
   /// No description provided for @syncConflictsTitle.
   ///
@@ -7940,10 +7952,118 @@ abstract class AppLocalizations {
   /// **'Sync Conflicts'**
   String get syncConflictsTitle;
 
+  /// No description provided for @syncConflictsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} unresolved conflicts'**
+  String syncConflictsSubtitle(Object count);
+
+  /// No description provided for @syncConflictsBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}'**
+  String syncConflictsBadge(Object count);
+
+  /// No description provided for @syncConflictsNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No sync conflicts to resolve.'**
+  String get syncConflictsNone;
+
+  /// No description provided for @syncConflictTable.
+  ///
+  /// In en, this message translates to:
+  /// **'Table: {table}'**
+  String syncConflictTable(Object table);
+
+  /// No description provided for @syncConflictRow.
+  ///
+  /// In en, this message translates to:
+  /// **'Row: {rowId}'**
+  String syncConflictRow(Object rowId);
+
+  /// No description provided for @syncConflictField.
+  ///
+  /// In en, this message translates to:
+  /// **'Field: {field}'**
+  String syncConflictField(Object field);
+
+  /// No description provided for @syncConflictLocalValue.
+  ///
+  /// In en, this message translates to:
+  /// **'This Device'**
+  String get syncConflictLocalValue;
+
+  /// No description provided for @syncConflictRemoteValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Other Device'**
+  String get syncConflictRemoteValue;
+
+  /// No description provided for @syncConflictRemoteDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Device: {deviceId}'**
+  String syncConflictRemoteDevice(Object deviceId);
+
+  /// No description provided for @syncConflictRemoteTimestamp.
+  ///
+  /// In en, this message translates to:
+  /// **'Changed: {timestamp}'**
+  String syncConflictRemoteTimestamp(Object timestamp);
+
+  /// No description provided for @syncConflictKeepLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Mine'**
+  String get syncConflictKeepLocal;
+
+  /// No description provided for @syncConflictKeepRemote.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Theirs'**
+  String get syncConflictKeepRemote;
+
+  /// No description provided for @syncConflictResolved.
+  ///
+  /// In en, this message translates to:
+  /// **'Conflict resolved'**
+  String get syncConflictResolved;
+
+  /// No description provided for @syncConflictResolveAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolve All'**
+  String get syncConflictResolveAll;
+
+  /// No description provided for @syncConflictResolveAllLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep All Mine'**
+  String get syncConflictResolveAllLocal;
+
+  /// No description provided for @syncConflictResolveAllRemote.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep All Theirs'**
+  String get syncConflictResolveAllRemote;
+
+  /// No description provided for @syncConflictResolveAllTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolve All Conflicts?'**
+  String get syncConflictResolveAllTitle;
+
+  /// No description provided for @syncConflictResolveAllBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This will resolve all {count} conflicts at once.'**
+  String syncConflictResolveAllBody(Object count);
+
   /// No description provided for @syncConflictsEmpty.
   ///
   /// In en, this message translates to:
-  /// **'No conflicts to resolve'**
+  /// **'No sync conflicts to resolve.'**
   String get syncConflictsEmpty;
 
   /// No description provided for @syncConflictRowId.
@@ -7951,30 +8071,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Row ID'**
   String get syncConflictRowId;
-
-  /// No description provided for @syncConflictLocalValue.
-  ///
-  /// In en, this message translates to:
-  /// **'Local value'**
-  String get syncConflictLocalValue;
-
-  /// No description provided for @syncConflictRemoteValue.
-  ///
-  /// In en, this message translates to:
-  /// **'Remote value'**
-  String get syncConflictRemoteValue;
-
-  /// No description provided for @syncConflictKeepLocal.
-  ///
-  /// In en, this message translates to:
-  /// **'Keep Local'**
-  String get syncConflictKeepLocal;
-
-  /// No description provided for @syncConflictKeepRemote.
-  ///
-  /// In en, this message translates to:
-  /// **'Keep Remote'**
-  String get syncConflictKeepRemote;
 
   /// No description provided for @syncConflictResolvedLocal.
   ///
@@ -7999,6 +8095,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tap to expand'**
   String get syncConflictTapToExpand;
+
+  /// No description provided for @syncRotateCipher.
+  ///
+  /// In en, this message translates to:
+  /// **'Rotate Encryption Cipher'**
+  String get syncRotateCipher;
+
+  /// No description provided for @syncRotateCipherDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Re-encrypt all sync data with a new cipher.'**
+  String get syncRotateCipherDescription;
 
   /// No description provided for @syncBundleImportTitle.
   ///

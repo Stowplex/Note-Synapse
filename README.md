@@ -1,51 +1,66 @@
 # Note Synapse
-> **The Hackable, Agentic Second Brain.**
+> **Extensible study companion for Android and iOS.**
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+Note Synapse is a local-first, open-source note-taking app built for developers, researchers, and power users who want to **program their thoughts**.
 
-Note Synapse is a local-first, open-source note-taking app built for developers, researchers, and power users who want to **program their thoughts**. It is not just a container for text; it is a runtime for your intelligence.
-
-### 📥 [Download Nightly Build (Dev Key)](https://github.com/active-stack/Note-Synapse/releases)
+### [Download Nightly Debug Build APK (Dev Key)](https://github.com/kkspeed/Note-Synapse/releases)
 
 ---
 
-## ⚡ The "Synapse 14" (Why this is different)
+## Features
 
-### 1. "Vibe Code" Your Tools
-Don't wait for a feature. **Description-to-App** generation is built-in.
-1. Clip an API doc using the Web Clipper.
-2. Tell Synapse: "Make me a dashboard using this API."
-3. Result: A fully functional HTML/JS app running inside your notes with full SQL & AI access.
-[Read Developer Docs](doc/developer/user_apps.md)
+### Expansive Thought Processing
+Thoughts are expansive, and your chat interface should reflect that. Note Synapse features **tree-structured AI conversations**, allowing you to branch logic paths and explore alternatives without losing the original thread.
 
-### 2. Tag Algebra (Virtual Folders)
-Stop moving files. Use math.
-- Logic: `Tag A` + `Tag B` = `Tag B` is a sub-folder of `A`.
-- Result: Fluid, self-organizing hierarchy. `AI Learn/LLM` is automatically created just by using tags.
+[Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#philosophy)
 
-### 3. Git for Chat (Tree Conversations)
-LLMs hallucinate. Don't let a bad turn ruin a good chat.
-- **Forking**: Branch any conversation at any message.
-- **Pruning**: Mute verbose tool outputs (like SQL dumps) to save context tokens while keeping the reasoning.
+### Immersive Focus
+Facilitate deep reading in an era of "AI summaries." Note Synapse's **Immersive Mode** enables in-context conversation with AI directly alongside your content. Use **Circle-to-Ask** to instantly query specific text or formulas without breaking flow.
 
-### 4. Agentic Core
-- **Background Agents**: Run deep research tasks on Android as Foreground Services. They work while you sleep.
-- **MCP Support**: Use standard **Model Context Protocol** tools used by Claude/Cursor.
-- **Github Exploration**: Agents can clone, read, and analyze repos to answer your questions.
+[Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#focus)
 
-### 5. Immersive Study
-- **Circle-to-Ask**: Reading a PDF? Circle a formula with your finger and ask the AI to explain it.
-- **Context Handling**: Pinpoint control. "Include read position +/- 5 pages."
+### Precise Context Management
+Master your AI's attention with granular context control.
+- **Context Composition**: Select specific conversation turns to branch new dialogues or extract key insights, keeping your workspace clean and focused.
+- **Token Economy**: Manually exclude verbose tool outputs or intermediate thought chains to optimize context windows.
+- **Attachment Targeting**: Selectively include or exclude note attachments. For PDFs, precisely target the full document, current reading window, bookmarked pages, or specific chapters.
 
-### 6. Hackable Architecture
-- **Direct SQL Access**: User Apps can run `window.Synapse.runQuery('SELECT * FROM notes')`.
-- **HTTP/3 Stack**: Custom Rust-based networking layer for bulletproof inference on flaky 5G.
-- **Local First**: SQLite database. Plain files. **No Cloud. No Tracking.**
+[Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#focus)
+
+### Natural Language Extensibility
+Create and refine powerful **Mini Apps and AI Tools** entirely within the app using natural language.
+- **Educational Tools**: Generate pop quizzes, flashcards, and guided learning apps.
+- **Custom Interfaces**: Build bespoke dashboards and knowledge graph visualizations.
+- **Interactive Media**: Embed custom tools, from data analyzers to NES emulators, directly into your notes.
+
+[Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#extensibility)
+
+### Hierarchical Tagging
+Enjoy the best of both worlds with a system that merges the flexibility of tags with the structure of folders. Tag sets naturally form a hierarchy, organizing your knowledge base intuitively.
+
+[Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#organization)
+
+### Agentic Core & MCP Support
+Deploy autonomous agents for complex planning and execution tasks with user-selectable tools.
+- **Deep Research**: Utilize search-focused MCP servers for comprehensive web analysis.
+- **Repository Analysis**: Dive deep into GitHub repositories with specialized tools.
+- **Information Synthesis**: Analyze notes and synthesize insights across your library with built-in tools.
+
+[Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#agency)
+
+### Sovereign Data Architecture
+- **Local-First Storage**: All data is stored locally with flexible export options. (Encrypted cloud sync on roadmap).
+- **BYOK Privacy**: Bring Your Own Key (BYOK) model ensures zero data collection and zero telemetry. You retain full control over your data and AI provider choices.
+
+### Intuitive Interactions
+- **Focus Mode Editing**: Drag the edit icon to any paragraph to edit just that block—perfect for quick corrections.
+- **Gestural Calendar**: Fluid task editing with a drag and pinch.
+
+[Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#interaction)
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Flutter SDK 3.x
@@ -59,14 +74,13 @@ flutter pub get
 flutter run
 ```
 
-## 📚 Documentation
+## Documentation
 
-- **[Core Concepts](doc/guides/core_concepts.md)**: Tag Algebra, Block Editing, Privacy.
+- **[Core Concepts](doc/guides/core_concepts.md)**: Tag Algebra, Block Editing.
 - **[Productivity Guide](doc/guides/productivity.md)**: Web Clipper, Calendar, Immersive Reading.
 - **[AI Power User](doc/guides/ai_conversations.md)**: Tree Chats, Agentic Mode, Prompt Engineering.
-- **[Developer API](doc/developer/user_apps.md)**: `window.Synapse` reference, Vibe Coding workflows.
+- **[Developer API](doc/developer/user_apps.md)**: `window.Synapse` API reference, Vibe Coding workflows.
 - **[Architecture](doc/developer/architecture.md)**: How the HTTP/3 stack works.
 
 ## License
-AGPL v3 + Private Commons.
-See [LICENSE](LICENSE) for details.
+Dual license: AGPL v3 & Proprietary. See [LICENSE](LICENSE) for details.

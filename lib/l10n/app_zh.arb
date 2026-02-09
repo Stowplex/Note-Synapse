@@ -1724,14 +1724,6 @@
   "syncInitializing": "正在初始化...",
   "syncInitSuccess": "同步初始化成功！",
   "syncInitFailed": "同步初始化失败：{error}",
-  "@syncInitFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
-
   "syncSettingsTitle": "同步设置",
   "syncSettingsSubtitle": "设置或管理跨设备云同步",
   "syncStatusSection": "同步状态",
@@ -1739,52 +1731,11 @@
   "syncNotConfigured": "未配置",
   "syncSyncing": "正在同步...",
   "syncLastSynced": "上次同步：{timestamp}",
-  "@syncLastSynced": {
-    "placeholders": {
-      "timestamp": {
-        "type": "String"
-      }
-    }
-  },
   "syncNeverSynced": "从未同步",
   "syncPendingChanges": "{count} 个待同步的本地更改",
-  "@syncPendingChanges": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "syncUnresolvedConflicts": "{count} 个未解决的冲突",
-  "@syncUnresolvedConflicts": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "syncResultSummary": "拉取 {pulled} 项，推送 {pushed} 项，{conflicts} 个冲突",
-  "@syncResultSummary": {
-    "placeholders": {
-      "pulled": {
-        "type": "int"
-      },
-      "pushed": {
-        "type": "int"
-      },
-      "conflicts": {
-        "type": "int"
-      }
-    }
-  },
   "syncCurrentCipher": "加密算法：{cipher}",
-  "@syncCurrentCipher": {
-    "placeholders": {
-      "cipher": {
-        "type": "String"
-      }
-    }
-  },
   "syncEncryptionNone": "无（未加密）",
   "syncEncryptionUnknown": "未知",
   "syncDangerZone": "危险操作",
@@ -1802,21 +1753,7 @@
   "syncDisableSuccess": "同步已禁用。",
   "syncJustNow": "刚刚",
   "syncMinutesAgo": "{count} 分钟前",
-  "@syncMinutesAgo": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "syncHoursAgo": "{count} 小时前",
-  "@syncHoursAgo": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "syncConflictsTitle": "同步冲突",
   "syncConflictsEmpty": "没有需要解决的冲突",
   "syncConflictRowId": "行 ID",
@@ -1828,7 +1765,6 @@
   "syncConflictResolvedRemote": "冲突已解决 — 已应用远程值。",
   "syncConflictValueEmpty": "（空）",
   "syncConflictTapToExpand": "点击展开",
-
   "syncBundleImportTitle": "导入同步包",
   "syncBundleImportDescription": "导入同步包 zip 文件以进行一次性数据迁移（如 iOS 到 Android），无需设置持续同步。",
   "syncBundleExtracting": "正在解压...",

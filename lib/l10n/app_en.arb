@@ -1755,6 +1755,8 @@
       }
     }
   },
+  "forceRefetchImages": "Force Refetch Images",
+  "fetchingImage": "Fetching image...",
   "syncSetupTitle": "Set Up Cloud Sync",
   "syncSetupDescription": "Configure cloud sync to keep your notes synchronized across devices.",
   "syncProviderSelection": "Sync Provider",
@@ -1784,14 +1786,6 @@
   "syncInitializing": "Initializing...",
   "syncInitSuccess": "Sync initialized successfully!",
   "syncInitFailed": "Sync initialization failed: {error}",
-  "@syncInitFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
-
   "syncSettingsTitle": "Sync Settings",
   "syncSettingsSubtitle": "Set up or manage cloud sync across devices",
   "syncStatusSection": "Sync Status",
@@ -1799,52 +1793,11 @@
   "syncNotConfigured": "Not configured",
   "syncSyncing": "Syncing...",
   "syncLastSynced": "Last synced: {timestamp}",
-  "@syncLastSynced": {
-    "placeholders": {
-      "timestamp": {
-        "type": "String"
-      }
-    }
-  },
   "syncNeverSynced": "Never synced",
   "syncPendingChanges": "{count} pending local changes",
-  "@syncPendingChanges": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "syncUnresolvedConflicts": "{count} unresolved conflicts",
-  "@syncUnresolvedConflicts": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "syncResultSummary": "Pulled {pulled}, pushed {pushed}, {conflicts} conflicts",
-  "@syncResultSummary": {
-    "placeholders": {
-      "pulled": {
-        "type": "int"
-      },
-      "pushed": {
-        "type": "int"
-      },
-      "conflicts": {
-        "type": "int"
-      }
-    }
-  },
   "syncCurrentCipher": "Cipher: {cipher}",
-  "@syncCurrentCipher": {
-    "placeholders": {
-      "cipher": {
-        "type": "String"
-      }
-    }
-  },
   "syncEncryptionNone": "None (unencrypted)",
   "syncEncryptionUnknown": "Unknown",
   "syncDangerZone": "Danger Zone",
@@ -1862,33 +1815,34 @@
   "syncDisableSuccess": "Sync has been disabled.",
   "syncJustNow": "just now",
   "syncMinutesAgo": "{count} minutes ago",
-  "@syncMinutesAgo": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "syncHoursAgo": "{count} hours ago",
-  "@syncHoursAgo": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "syncConflictsTitle": "Sync Conflicts",
-  "syncConflictsEmpty": "No conflicts to resolve",
+  "syncConflictsSubtitle": "{count} unresolved conflicts",
+  "syncConflictsBadge": "{count}",
+  "syncConflictsNone": "No sync conflicts to resolve.",
+  "syncConflictTable": "Table: {table}",
+  "syncConflictRow": "Row: {rowId}",
+  "syncConflictField": "Field: {field}",
+  "syncConflictLocalValue": "This Device",
+  "syncConflictRemoteValue": "Other Device",
+  "syncConflictRemoteDevice": "Device: {deviceId}",
+  "syncConflictRemoteTimestamp": "Changed: {timestamp}",
+  "syncConflictKeepLocal": "Keep Mine",
+  "syncConflictKeepRemote": "Keep Theirs",
+  "syncConflictResolved": "Conflict resolved",
+  "syncConflictResolveAll": "Resolve All",
+  "syncConflictResolveAllLocal": "Keep All Mine",
+  "syncConflictResolveAllRemote": "Keep All Theirs",
+  "syncConflictResolveAllTitle": "Resolve All Conflicts?",
+  "syncConflictResolveAllBody": "This will resolve all {count} conflicts at once.",
+  "syncConflictsEmpty": "No sync conflicts to resolve.",
   "syncConflictRowId": "Row ID",
-  "syncConflictLocalValue": "Local value",
-  "syncConflictRemoteValue": "Remote value",
-  "syncConflictKeepLocal": "Keep Local",
-  "syncConflictKeepRemote": "Keep Remote",
   "syncConflictResolvedLocal": "Conflict resolved — kept local value.",
   "syncConflictResolvedRemote": "Conflict resolved — applied remote value.",
   "syncConflictValueEmpty": "(empty)",
   "syncConflictTapToExpand": "Tap to expand",
-
+  "syncRotateCipher": "Rotate Encryption Cipher",
+  "syncRotateCipherDescription": "Re-encrypt all sync data with a new cipher.",
   "syncBundleImportTitle": "Import Sync Bundle",
   "syncBundleImportDescription": "Import a sync bundle zip file for one-time data transfer (e.g., iOS to Android migration) without setting up continuous sync.",
   "syncBundleExtracting": "Extracting bundle...",

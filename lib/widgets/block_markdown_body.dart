@@ -34,7 +34,10 @@ class BlockMarkdownBody extends StatefulWidget {
     this.selectedBlockIndices = const {},
     this.onBlocksParsed,
     this.onBlockDropped,
+    this.onFetchImage,
   });
+
+  final Function(String)? onFetchImage;
 
   @override
   State<BlockMarkdownBody> createState() => _BlockMarkdownBodyState();
@@ -132,6 +135,7 @@ class _BlockMarkdownBodyState extends State<BlockMarkdownBody> {
             style: widget.style,
             maxLines: null,
             overflow: null,
+            onFetchImage: widget.onFetchImage,
           ),
         );
       },

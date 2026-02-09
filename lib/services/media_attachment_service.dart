@@ -49,6 +49,7 @@ class MediaAttachmentService {
   static Future<RemoteImageDownloadReport> downloadRemoteImages({
     required String noteId,
     required Iterable<String> imageUrls,
+    bool force = false,
   }) async {
     final uniqueUrls = {
       for (final url in imageUrls)
@@ -64,13 +65,15 @@ class MediaAttachmentService {
     final List<String> failures = [];
 
     for (final url in uniqueUrls) {
-      final existing = await RemoteImageStorage.resolveRelativePath(
-        noteId: noteId,
-        imageUrl: url,
-      );
-      if (existing != null) {
-        resolvedPaths[url] = existing;
-        continue;
+      if (!force) {
+        final existing = await RemoteImageStorage.resolveRelativePath(
+          noteId: noteId,
+          imageUrl: url,
+        );
+        if (existing != null) {
+          resolvedPaths[url] = existing;
+          continue;
+        }
       }
 
       try {

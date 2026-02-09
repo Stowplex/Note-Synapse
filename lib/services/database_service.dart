@@ -799,6 +799,7 @@ class DatabaseService {
       END;
     ''');
 
+    // 4. Create tag_ai_configs table
     await db.execute('''
       CREATE TABLE tag_ai_configs (
         tagId TEXT PRIMARY KEY,
