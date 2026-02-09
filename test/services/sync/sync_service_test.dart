@@ -67,6 +67,7 @@ void main() {
   late SyncService syncService;
 
   setUpAll(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfiNoIsolate;
   });
@@ -265,6 +266,8 @@ void main() {
     test('handles empty sync root gracefully', () async {
       // Configure without initializing (simulate empty remote)
       syncService.configure(provider: provider);
+      // Enable sync triggers so sync_changelog exists
+      await db.enableSyncTriggers();
 
       // Sync should not crash
       final result = await syncService.sync();
@@ -332,6 +335,8 @@ void main() {
   group('configure', () {
     test('sets provider for subsequent sync calls', () async {
       syncService.configure(provider: provider);
+      // Enable sync triggers so sync_changelog exists
+      await db.enableSyncTriggers();
 
       // Should be able to sync without crashing
       final result = await syncService.sync();
