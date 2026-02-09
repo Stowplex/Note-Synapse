@@ -436,7 +436,7 @@ class ModelSelector {
       );
     }
 
-    return await modelToUse.generateWithToolsAndMessages(
+    final response = await modelToUse.generateWithToolsAndMessages(
       messages,
       tools,
       temperature: temperature,
@@ -445,6 +445,12 @@ class ModelSelector {
       maxOutputTokens: maxOutputTokens,
       generationContext: context,
     );
+
+    // Inject the actual model ID used into the response metadata
+    // This ensures we track overrides correctly
+    final mutableResponse = Map<String, dynamic>.from(response);
+    mutableResponse['modelUsed'] = modelToUse.id;
+    return mutableResponse;
   }
 
   /// Helper to auto-select a model based on capabilities found in messages

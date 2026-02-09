@@ -13,13 +13,10 @@ PROPRIETARY LICENSE
 1. Grant of License
    Stowplex LLC and Bruce Li hereby grant the user the ability to use this software (the "Software"), subject to the terms herein.
 
-2. Intellectual Property & Trademark
-   Stowplex LLC and Bruce Li retain all ownership, title, and intellectual property rights in and to the Software, including explicitly the "Note Synapse" trademark.
-
-3. Derivative Works & Dual Licensing
+2. Derivative Works & Dual Licensing
    Any derived work, modification, or redistribution of the Software shall be licensed under the GNU Affero General Public License, version 3 (AGPL v3), unless otherwise permitted by Stowplex LLC and/or Bruce Li in specific situations (e.g. App Store releases by the owners).
 
-4. Disclaimer of Warranty
+3. Disclaimer of Warranty
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 -------

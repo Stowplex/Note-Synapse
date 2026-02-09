@@ -199,7 +199,7 @@ class _TagManagementScreenState extends State<TagManagementScreen>
       );
     }).toList();
 
-    if (filteredTags.isEmpty) {
+    if (_tagsWithUsage.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -248,57 +248,79 @@ class _TagManagementScreenState extends State<TagManagementScreen>
           ),
         ),
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-            itemCount: filteredTags.length,
-            itemBuilder: (context, index) {
-              final tagWithUsage = filteredTags[index];
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  leading: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: Color(
-                        int.parse(
-                          tagWithUsage.tag.color.replaceFirst('#', '0xFF'),
-                        ),
-                      ),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  title: Text(
-                    tagWithUsage.tag.name,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                  subtitle: Text(
-                    l10n.tagUsageCount(
-                      tagWithUsage.conversationUsageCount,
-                      tagWithUsage.noteUsageCount,
-                    ),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
+          child: filteredTags.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.info_outline),
-                        onPressed: () => _showTagDetail(tagWithUsage),
-                        tooltip: 'View details',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _deleteTag(tagWithUsage),
-                        tooltip: l10n.deleteTag,
+                      Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+                      const SizedBox(height: 16),
+                      Text(
+                        l10n.noTagsAvailable,
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(color: Colors.grey[600]),
                       ),
                     ],
                   ),
-                  onTap: () => _showTagDetail(tagWithUsage),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    bottom: 16,
+                  ),
+                  itemCount: filteredTags.length,
+                  itemBuilder: (context, index) {
+                    final tagWithUsage = filteredTags[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: Color(
+                              int.parse(
+                                tagWithUsage.tag.color.replaceFirst(
+                                  '#',
+                                  '0xFF',
+                                ),
+                              ),
+                            ),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        title: Text(
+                          tagWithUsage.tag.name,
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        subtitle: Text(
+                          l10n.tagUsageCount(
+                            tagWithUsage.conversationUsageCount,
+                            tagWithUsage.noteUsageCount,
+                          ),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.info_outline),
+                              onPressed: () => _showTagDetail(tagWithUsage),
+                              tooltip: 'View details',
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _deleteTag(tagWithUsage),
+                              tooltip: l10n.deleteTag,
+                            ),
+                          ],
+                        ),
+                        onTap: () => _showTagDetail(tagWithUsage),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
-          ),
         ),
       ],
     );

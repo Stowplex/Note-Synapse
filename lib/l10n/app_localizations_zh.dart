@@ -4160,4 +4160,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String confirmDeleteBlocks(int count) {
     return '确定要删除 $count 个区块吗？';
   }
+
+  @override
+  String get forceRefetchImages => 'Force Refetch Images';
+
+  @override
+  String get fetchingImage => 'Fetching image...';
 }

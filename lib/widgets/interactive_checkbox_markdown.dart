@@ -60,9 +60,11 @@ class InteractiveCheckboxMarkdown extends StatefulWidget {
     this.noteId,
     this.defaultWebViewSize = const Size(640, 400),
     this.hasWebViewNotifier,
+    this.onFetchImage,
   });
 
   final ValueNotifier<bool>? hasWebViewNotifier;
+  final Function(String)? onFetchImage;
 
   @override
   State<InteractiveCheckboxMarkdown> createState() =>
@@ -361,6 +363,9 @@ class _InteractiveCheckboxMarkdownState
     String url, {
     double? width,
     double? height,
+    String? title,
+    String? alt,
+    Function(String)? onFetch,
   }) {
     Widget wrapWithDragTarget(Widget child) {
       return child;
@@ -477,6 +482,7 @@ class _InteractiveCheckboxMarkdownState
                   title: 'Image',
                 );
               },
+              onFetch: onFetch != null ? () => onFetch(url) : null,
             ),
           );
         }
@@ -543,6 +549,7 @@ class _InteractiveCheckboxMarkdownState
                   title: 'Image',
                 );
               },
+              onFetch: onFetch != null ? () => onFetch(url) : null,
             );
           }
 
@@ -746,6 +753,7 @@ class _InteractiveCheckboxMarkdownState
     required bool isSvg,
     VoidCallback? onBackgroundToggle,
     VoidCallback? onFullscreen,
+    VoidCallback? onFetch,
   }) {
     return FutureBuilder<_ImageSourceType>(
       future: _determineImageSourceTypeCached(imageUrl),
@@ -836,6 +844,7 @@ class _InteractiveCheckboxMarkdownState
               }
             }
           },
+          onFetch: onFetch,
         );
       },
     );
@@ -1103,6 +1112,7 @@ class _InteractiveCheckboxMarkdownState
   Widget build(BuildContext context) {
     // Basic inline components
     final inlineComponents = [
+      CustomATagMd(),
       _EmbeddedWebViewMd(
         defaultSize: widget.defaultWebViewSize,
         noteId: widget.noteId,
@@ -1164,7 +1174,29 @@ class _InteractiveCheckboxMarkdownState
         maxLines: widget.maxLines,
         overflow: widget.overflow,
         latexBuilder: _customLatexBuilder,
-        imageBuilder: _customImageBuilder,
+        imageBuilder: (context, url, {alt, height, title, width}) {
+          return _customImageBuilder(
+            context,
+            url,
+            width: width,
+            height: height,
+            title: title,
+            alt: alt,
+            onFetch: (url) async {
+              await widget.onFetchImage?.call(url);
+              if (mounted) {
+                // Invalidate caches so the image source type is re-evaluated
+                _imageSourceTypeFutures.remove(url);
+                _localImageFutures.remove(url);
+                setState(() {
+                  // Force rebuild of specific image key if needed, or just setState
+                  // Update version to force new key for image widget
+                  _imageVersions[url] = (_imageVersions[url] ?? 0) + 1;
+                });
+              }
+            },
+          );
+        },
         codeBuilder: _buildCodeBlock,
         components: components,
         inlineComponents: inlineComponents,
@@ -2072,6 +2104,7 @@ class _ImageInfoBar extends StatelessWidget {
     this.onBackgroundToggle,
     this.onFullscreen,
     this.onEdit,
+    this.onFetch,
   });
 
   final _ImageSourceType sourceType;
@@ -2079,6 +2112,7 @@ class _ImageInfoBar extends StatelessWidget {
   final VoidCallback? onBackgroundToggle;
   final VoidCallback? onFullscreen;
   final VoidCallback? onEdit;
+  final VoidCallback? onFetch;
 
   @override
   Widget build(BuildContext context) {
@@ -2101,13 +2135,25 @@ class _ImageInfoBar extends StatelessWidget {
         child: Row(
           // Remove mainAxisSize: MainAxisSize.min to allow Spacer to work
           children: [
-            Icon(
-              sourceType == _ImageSourceType.local
-                  ? Icons.storage
-                  : Icons.cloud,
-              size: 22,
-              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-            ),
+            if (sourceType == _ImageSourceType.remote && onFetch != null)
+              GestureDetector(
+                onTap: onFetch,
+                child: Icon(
+                  Icons.cloud_download,
+                  size: 22,
+                  color: colorScheme
+                      .primary, // Use primary color to indicate action
+                ),
+              )
+            else
+              Icon(
+                sourceType == _ImageSourceType.local
+                    ? Icons.storage
+                    : Icons
+                          .cloud_off, // Use cloud_off to indicate not fetched/offline
+                size: 22,
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+              ),
             if (onBackgroundToggle != null) ...[
               const SizedBox(width: 12),
               GestureDetector(
@@ -2159,6 +2205,7 @@ class _ImageWithInfoBar extends StatefulWidget {
     this.onBackgroundToggle,
     this.onFullscreen,
     this.onEdit,
+    this.onFetch,
   });
 
   final Widget image;
@@ -2167,6 +2214,7 @@ class _ImageWithInfoBar extends StatefulWidget {
   final VoidCallback? onBackgroundToggle;
   final VoidCallback? onFullscreen;
   final VoidCallback? onEdit;
+  final VoidCallback? onFetch;
 
   @override
   State<_ImageWithInfoBar> createState() => _ImageWithInfoBarState();
@@ -2218,6 +2266,7 @@ class _ImageWithInfoBarState extends State<_ImageWithInfoBar> {
                     : null),
             onFullscreen: widget.onFullscreen,
             onEdit: widget.onEdit,
+            onFetch: widget.onFetch,
           ),
         ],
       ),
@@ -2981,7 +3030,7 @@ class _FullscreenImageWidgetState extends State<_FullscreenImageWidget> {
 
 class CustomATagMd extends ATagMd {
   @override
-  RegExp get exp => RegExp(r"(?<!\!)\[[^\]]*\]\([^\s]*\)");
+  RegExp get exp => RegExp(r"(?<!\!)\[[^\]]+\]\([^\s]*\)");
 
   @override
   InlineSpan span(
@@ -3007,12 +3056,6 @@ class CustomATagMd extends ATagMd {
     if (end + 1 >= text.length || text[end + 1] != '(') {
       return const TextSpan();
     }
-
-    // First try to find the basic pattern
-    // final basicMatch = RegExp(r'(?<!\!)\[(.*)\]\(').firstMatch(text.trim());
-    // if (basicMatch == null) {
-    //   return const TextSpan();
-    // }
 
     final linkText = text.substring(start, end);
     final urlStart = end + 2;

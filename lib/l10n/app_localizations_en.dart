@@ -4354,4 +4354,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String confirmDeleteBlocks(int count) {
     return 'Are you sure you want to delete $count blocks?';
   }
+
+  @override
+  String get forceRefetchImages => 'Force Refetch Images';
+
+  @override
+  String get fetchingImage => 'Fetching image...';
 }

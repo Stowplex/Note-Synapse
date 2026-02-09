@@ -6,20 +6,12 @@ void main() {
     final atag = CustomATagMd();
     final regex = atag.exp;
 
-    const input = '[1] [the text](link)';
+    const input = '[1] [hello](www.google.com)';
     final match = regex.firstMatch(input);
 
     expect(match, isNotNull);
-    // The match should be just '[the text](link)'
-    // Wait, regex is unanchored.
-    // [1] matches `\[.*?\]`?
-    // [1] is `[` + `1` + `]`.
-    // But does it match `\(`? No.
-    // So `[1]` fails.
-    // Next attempt: `[the text](link)`.
-    // Matches.
-
-    expect(match!.group(0), equals('[the text](link)'));
+    // Should match '[hello](www.google.com)' not '[1] [hello](www.google.com)'
+    expect(match!.group(0), equals('[hello](www.google.com)'));
   });
 
   test('CustomATagMd regex matches standard link', () {

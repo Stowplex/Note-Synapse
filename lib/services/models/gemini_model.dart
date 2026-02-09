@@ -64,7 +64,9 @@ class GeminiModel implements AIModel {
 
     if (_config?.apiKey == null || _config!.apiKey!.isEmpty) {
       // Try to fetch from storage using ID
-      final storedKey = await getIt<ModelStorageService>().getModelApiKey(_config!.id);
+      final storedKey = await getIt<ModelStorageService>().getModelApiKey(
+        _config!.id,
+      );
       if (storedKey != null && storedKey.isNotEmpty) {
         _config = _config!.copyWith(apiKey: storedKey);
       } else {
@@ -516,13 +518,57 @@ class GeminiModel implements AIModel {
           break;
         case PromptRole.assistant:
           // Filter out client-generated error messages
-          // Filter out client-generated error messages
           if (message.metadata?['is_client_synthetic'] == true) {
             continue;
           }
 
           final parts = <Map<String, dynamic>>[];
           final partsHistory = message.metadata?['parts_history'] as List?;
+
+          // Check for model mismatch
+          final modelUsed = message.metadata?['modelUsed'];
+          final configId = _config?.id ?? '';
+          final configName = _config?.modelName ?? '';
+          final isModelMatch =
+              modelUsed == configId ||
+              modelUsed == configName ||
+              (modelUsed != null &&
+                  (modelUsed.endsWith('/$configId') ||
+                      configId.endsWith('/$modelUsed')));
+
+          // Check if we need to fallback a message from another model.
+          // STRICT SAFETY: If the model doesn't match, we must convert the entire
+          // message to a USER message with text description. This prevents:
+          // 1. Sending 'role': 'model' with text-only tool calls (confuses Gemini)
+          // 2. Leaking thoughtSignatures from one model to another (hallucination risk)
+          // 3. Breaking basic text messages that might have unsupported metadata
+          if (!isModelMatch && partsHistory != null) {
+            final buffer = StringBuffer();
+            buffer.writeln('(Previous model output: $modelUsed)');
+
+            for (final part in partsHistory) {
+              if (part is! Map) continue;
+              if (part['is_included'] == false) continue;
+
+              final type = part['type'];
+
+              if (type == 'text') {
+                buffer.writeln(part['text']);
+              } else if (type == 'tool_call') {
+                final name = part['function_call']?['name'] ?? 'unknown';
+                final args = part['function_call']?['args'] ?? {};
+                buffer.writeln('Tool Call: $name($args)');
+              }
+            }
+
+            contents.add({
+              'role': 'user',
+              'parts': [
+                {'text': buffer.toString()},
+              ],
+            });
+            break; // Done with this message
+          }
 
           if (partsHistory != null) {
             for (final part in partsHistory) {
@@ -531,17 +577,6 @@ class GeminiModel implements AIModel {
 
               final type = part['type'];
               final thoughtSignature = part['thought_signature'];
-
-              // Strict model matching
-              final modelUsed = message.metadata?['modelUsed'];
-              final configId = _config?.id ?? '';
-              final configName = _config?.modelName ?? '';
-              final isModelMatch =
-                  modelUsed == configId ||
-                  modelUsed == configName ||
-                  (modelUsed != null &&
-                      (modelUsed.endsWith('/$configId') ||
-                          configId.endsWith('/$modelUsed')));
 
               if (type == 'text') {
                 if (isModelMatch && thoughtSignature != null) {
@@ -570,6 +605,11 @@ class GeminiModel implements AIModel {
                     'Added tool call with thoughtSignature: ${thoughtSignature.substring(0, 10)}...',
                   );
                 } else {
+                  // This branch should theoretically not be reached if hasToolCall logic above works,
+                  // unless isModelMatch is true (handled above) or no mismatch fallback needed?
+                  // No, if isModelMatch is TRUE, we end up here (top of checks).
+                  // If isModelMatch is FALSE, we handled it in the big if block above IF hasToolCall is true.
+                  // So this minimal fallback is only for cases where logic might fall through or for safety.
                   LoggerService.debug(
                     'Skipping thoughtSignature. Match: $isModelMatch, Sig: ${thoughtSignature != null}',
                   );

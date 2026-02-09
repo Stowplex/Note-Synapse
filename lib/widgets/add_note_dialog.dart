@@ -51,6 +51,7 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
     final l10n = AppLocalizations.of(context)!;
 
     return AlertDialog(
+      scrollable: true,
       title: Text(l10n.addNoteDialogTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -233,6 +234,7 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
     final title = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: Text(l10n.noteTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,

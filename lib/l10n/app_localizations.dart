@@ -7579,6 +7579,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Are you sure you want to delete {count} blocks?'**
   String confirmDeleteBlocks(int count);
+
+  /// No description provided for @forceRefetchImages.
+  ///
+  /// In en, this message translates to:
+  /// **'Force Refetch Images'**
+  String get forceRefetchImages;
+
+  /// No description provided for @fetchingImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetching image...'**
+  String get fetchingImage;
 }
 
 class _AppLocalizationsDelegate
