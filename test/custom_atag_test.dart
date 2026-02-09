@@ -1,8 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/widgets/interactive_checkbox_markdown.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
 
 void main() {
   group('CustomATagMd', () {
+    test('Debug: List all inline components', () {
+      print('Inline Components:');
+      for (var c in MarkdownComponent.inlineComponents) {
+        print(c.runtimeType);
+      }
+    });
+
     final atag = CustomATagMd();
     final regex = atag.exp;
 
@@ -74,6 +82,12 @@ void main() {
           '![img](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5E5rkJggg==)';
       final match = regex.firstMatch(input);
       expect(match, isNull);
+    });
+    test('matches link embedded in simple paragraph', () {
+      const input = 'This is a [link](https://google.com) in text.';
+      final match = regex.firstMatch(input);
+      expect(match, isNotNull);
+      expect(match!.group(0), equals('[link](https://google.com)'));
     });
   });
 }

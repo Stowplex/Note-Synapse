@@ -1118,7 +1118,7 @@ class _InteractiveCheckboxMarkdownState
         // GptMarkdown handles that.
         // We'll use the standard ones implicitly by NOT passing them in 'inlineComponents'
         // except for the custom one.
-        ...MarkdownComponent.inlineComponents,
+        ...MarkdownComponent.inlineComponents.where((e) => e is! ATagMd),
     ];
 
     // Check if we need to add standard ATagMd back if we excluded it?
@@ -2708,7 +2708,7 @@ class _FullscreenViewer extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: Colors.black.withOpacity(0.7),
+        backgroundColor: Colors.black.withValues(alpha: 0.7),
         foregroundColor: Colors.white,
         elevation: 0,
         title: title != null ? Text(title!) : null,
@@ -2765,12 +2765,13 @@ class _FullscreenSvgWebViewState extends State<_FullscreenSvgWebView> {
     if (_webViewController == null) return;
     final backgroundColor = _isDarkBackground ? '#1e1e1e' : '#ffffff';
     _webViewController!.evaluateJavascript(
-      source: '''
+      source:
+          '''
       (function() {
         const iframe = document.querySelector('iframe');
         if (iframe && iframe.contentWindow) {
           try {
-            iframe.contentWindow.postMessage({type: 'setBackground', color: '\$backgroundColor'}, '*');
+            iframe.contentWindow.postMessage({type: 'setBackground', color: '$backgroundColor'}, '*');
           } catch (e) {
             console.log('Cannot set background:', e);
           }
@@ -3093,12 +3094,54 @@ class CustomATagMd extends ATagMd {
       false,
     );
     var theme = GptMarkdownTheme.of(context);
+    final linkColor = Theme.of(context).colorScheme.primary;
+    // Strip common formatting chars that might surround the number
+    final cleanText = linkText.replaceAll(RegExp(r'[\[\]\s_]'), '');
+    final isNumericLink = RegExp(r'^\d+$').hasMatch(cleanText);
+    // Generate children with the link style enforced
+    var children = MarkdownComponent.generate(context, linkText, config, false);
+    // Force style on children if they are TextSpans to ensure color sticks
+    children = children.map((span) {
+      if (span is TextSpan) {
+        return TextSpan(
+          text: span.text,
+          children: span.children,
+          style: (span.style ?? config.style ?? const TextStyle()).copyWith(
+            color: linkColor,
+            decoration: isNumericLink
+                ? TextDecoration.none
+                : TextDecoration.underline,
+            decorationColor: linkColor,
+          ),
+          recognizer: span.recognizer,
+          mouseCursor: span.mouseCursor,
+          onEnter: span.onEnter,
+          onExit: span.onExit,
+          semanticsLabel: span.semanticsLabel,
+          locale: span.locale,
+          spellOut: span.spellOut,
+        );
+      }
+      return span;
+    }).toList();
+
     var linkTextSpan = TextSpan(
-      children: MarkdownComponent.generate(context, linkText, config, false),
-      style: config.style?.copyWith(
-        color: theme.linkColor,
-        decorationColor: theme.linkColor,
-      ),
+      children: children,
+      style:
+          config.style?.copyWith(
+            color: linkColor,
+            decoration: isNumericLink
+                ? TextDecoration.none
+                : TextDecoration.underline,
+            decorationColor: linkColor,
+          ) ??
+          TextStyle(
+            color: linkColor,
+            decoration: isNumericLink
+                ? TextDecoration.none
+                : TextDecoration.underline,
+            decorationColor: linkColor,
+          ),
     );
 
     // Use custom builder if provided
