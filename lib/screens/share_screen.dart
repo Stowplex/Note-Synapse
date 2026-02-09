@@ -24,6 +24,7 @@ import '../utils/file_type_utils.dart';
 import '../utils/remote_image_utils.dart';
 import '../utils/html_rules.dart';
 import '../utils/markdown_cleaner.dart';
+import '../utils/web_content_processor.dart';
 import 'note_selection_dialog.dart';
 
 class ShareScreen extends StatefulWidget {
@@ -100,13 +101,18 @@ class _ShareScreenState extends State<ShareScreen> {
     }
   }
 
-  void _applyPreparedNote(Note? note) {
+  void _applyPreparedNote(
+    Note? note, {
+    List<RemoteImageReference>? precomputedImages,
+  }) {
     _preparedNote = note;
     if (note == null) {
       _remoteImages = const [];
       _selectedImageUrls.clear();
     } else {
-      _remoteImages = RemoteImageUtils.extractRemoteImages(note.content);
+      _remoteImages =
+          precomputedImages ??
+          RemoteImageUtils.extractRemoteImages(note.content);
       _selectedImageUrls
         ..clear()
         ..addAll(_remoteImages.map((image) => image.url));
@@ -847,6 +853,9 @@ class _ShareScreenState extends State<ShareScreen> {
 
       if (result['success'] == true) {
         final note = result['note'] as Note;
+        final precomputedImages =
+            result['precomputedImages'] as List<RemoteImageReference>?;
+
         // Handle downloaded file path - only track it for cleanup, don't add it again if already in note
         if (result['downloadedFilePath'] != null) {
           _downloadedFilePath = result['downloadedFilePath'] as String;
@@ -860,19 +869,22 @@ class _ShareScreenState extends State<ShareScreen> {
               attachmentPaths: [...note.attachmentPaths, _downloadedFilePath!],
             );
             setState(() {
-              _applyPreparedNote(noteWithAttachment);
+              _applyPreparedNote(
+                noteWithAttachment,
+                precomputedImages: precomputedImages,
+              );
               _isExtracting = false;
             });
           } else {
             // Already in note, just use the note as-is
             setState(() {
-              _applyPreparedNote(note);
+              _applyPreparedNote(note, precomputedImages: precomputedImages);
               _isExtracting = false;
             });
           }
         } else {
           setState(() {
-            _applyPreparedNote(note);
+            _applyPreparedNote(note, precomputedImages: precomputedImages);
             _isExtracting = false;
           });
         }
@@ -2380,16 +2392,11 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     try {
       final htmlContent = await _getCurrentPageBodyHtml();
 
-      // Use custom rules for better extraction and force fenced code blocks
-      final markdownContent = convert(
+      // Run heavy parsing in background isolate
+      String finalContent = await compute(
+        WebContentProcessor.processHtml,
         htmlContent,
-        ignore: ['script', 'style'],
-        styleOptions: {'codeBlockStyle': 'fenced'},
-        rules: HtmlRules.customRules,
       );
-
-      // Clean up spurious backslashes and other artifacts
-      String finalContent = MarkdownCleaner.clean(markdownContent);
 
       var title = await _getCurrentPageTitle();
       if (title.isEmpty) {
@@ -2436,12 +2443,19 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           ? title
           : 'Web content extracted from ${widget.url}';
 
+      // Extract remote images in background isolate
+      final remoteImages = await compute(
+        WebContentProcessor.extractImages,
+        finalContent,
+      );
+
       widget.onComplete({
         'success': true,
         'note': note,
         'contentType': 'web',
         'preview': preview,
         'url': widget.url,
+        'precomputedImages': remoteImages,
       });
     } catch (e) {
       if (!mounted) {
