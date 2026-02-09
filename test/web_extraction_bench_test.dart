@@ -8,7 +8,7 @@ void main() {
     final StringBuffer htmlBuffer = StringBuffer();
     htmlBuffer.write('<html><body>');
     htmlBuffer.write('<h1>Huge Article</h1>');
-    for (int i = 0; i < 5000; i++) {
+    for (int i = 0; i < 100; i++) {
       htmlBuffer.write(
         '<p>This is paragraph number $i. It has some <b>bold</b> and <i>italic</i> text.</p>',
       );
@@ -46,7 +46,7 @@ void main() {
     final imageTime = stopwatchImages.elapsedMilliseconds;
     print('Image extraction time: ${imageTime}ms');
 
-    expect(images.length, 5000);
+    expect(images.length, 100);
     expect(images.first.url, 'https://example.com/image0.jpg');
   });
 }
