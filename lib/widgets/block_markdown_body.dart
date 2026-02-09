@@ -73,14 +73,13 @@ class _BlockMarkdownBodyState extends State<BlockMarkdownBody> {
   @override
   Widget build(BuildContext context) {
     if (_blocks.isEmpty) {
-      return const SizedBox.shrink();
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: _blocks.asMap().entries.map((entry) {
-        return _buildBlockItem(entry.key, entry.value);
-      }).toList(),
+    return SliverList(
+      delegate: SliverChildBuilderDelegate((context, index) {
+        return _buildBlockItem(index, _blocks[index]);
+      }, childCount: _blocks.length),
     );
   }
 
