@@ -12,12 +12,12 @@ Note Synapse is a local-first, open-source note-taking app built for developers,
 ### Expansive Thought Processing
 Thoughts are expansive, and your chat interface should reflect that. Note Synapse features **tree-structured AI conversations**, allowing you to branch logic paths and explore alternatives without losing the original thread.
 
-![tree conversation](doc/media/tree_conversation.gif)
+[Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#philosophy)
 
 ### Immersive Focus
 Facilitate deep reading in an era of "AI summaries." Note Synapse's **Immersive Mode** enables in-context conversation with AI directly alongside your content. Use **Circle-to-Ask** to instantly query specific text or formulas without breaking flow.
 
-![immersive mode](doc/media/immersive_mode.gif)
+[Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#focus)
 
 ### Precise Context Management
 Master your AI's attention with granular context control.
@@ -25,7 +25,7 @@ Master your AI's attention with granular context control.
 - **Token Economy**: Manually exclude verbose tool outputs or intermediate thought chains to optimize context windows.
 - **Attachment Targeting**: Selectively include or exclude note attachments. For PDFs, precisely target the full document, current reading window, bookmarked pages, or specific chapters.
 
-![flexible context PDF](doc/media/pdf_context.png)
+[Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#focus)
 
 ### Natural Language Extensibility
 Create and refine powerful **Mini Apps and AI Tools** entirely within the app using natural language.
@@ -33,14 +33,12 @@ Create and refine powerful **Mini Apps and AI Tools** entirely within the app us
 - **Custom Interfaces**: Build bespoke dashboards and knowledge graph visualizations.
 - **Interactive Media**: Embed custom tools, from data analyzers to NES emulators, directly into your notes.
 
-![vibe_code](doc/media/vibe_code.png)
-![mini_app](doc/media/mini_app.gif)
+[Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#extensibility)
 
 ### Hierarchical Tagging
 Enjoy the best of both worlds with a system that merges the flexibility of tags with the structure of folders. Tag sets naturally form a hierarchy, organizing your knowledge base intuitively.
 
-![tag_filter](doc/media/tag_filter.png)
-![tag_pin](doc/media/tag_pin.png)
+[Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#organization)
 
 ### Agentic Core & MCP Support
 Deploy autonomous agents for complex planning and execution tasks with user-selectable tools.
@@ -48,7 +46,7 @@ Deploy autonomous agents for complex planning and execution tasks with user-sele
 - **Repository Analysis**: Dive deep into GitHub repositories with specialized tools.
 - **Information Synthesis**: Analyze notes and synthesize insights across your library with built-in tools.
 
-![agent_mode](doc/media/agent_mode.png)
+[Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#agency)
 
 ### Sovereign Data Architecture
 - **Local-First Storage**: All data is stored locally with flexible export options. (Encrypted cloud sync on roadmap).
@@ -56,13 +54,9 @@ Deploy autonomous agents for complex planning and execution tasks with user-sele
 
 ### Intuitive Interactions
 - **Focus Mode Editing**: Drag the edit icon to any paragraph to edit just that block—perfect for quick corrections.
-
-![drag_edit](doc/media/drag_edit.gif)
-
 - **Gestural Calendar**: Fluid task editing with a drag and pinch.
 
-![pinch](doc/media/pinch_calendar.gif)
-
+[Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#interaction)
 
 ---
 
