@@ -3030,7 +3030,9 @@ class _FullscreenImageWidgetState extends State<_FullscreenImageWidget> {
 
 class CustomATagMd extends ATagMd {
   @override
-  RegExp get exp => RegExp(r"(?<!\!)\[[^\]]+\]\([^\s]*\)");
+  RegExp get exp => RegExp(
+    r"(?<!\!)\[(?:[^\[\]]|\[[^\[\]]*\])*\]\((?:[^()]*)(?:\((?:[^()]*)(?:\([^()]*\)[^()]*)*\)[^()]*)*\)",
+  );
 
   @override
   InlineSpan span(
