@@ -46,7 +46,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 36; // Target schema version
+  static const int DATABASE_VERSION = 41; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -88,6 +88,14 @@ class DatabaseService {
         color TEXT NOT NULL, -- Tag color
         createdAt INTEGER NOT NULL, -- Creation timestamp
         usageCount INTEGER NOT NULL DEFAULT 0 -- Usage count
+      )
+  ''';
+
+  static const String _createTagImagesTable = '''
+      CREATE TABLE tag_images(
+        tagId TEXT PRIMARY KEY,
+        imagePath TEXT NOT NULL,
+        FOREIGN KEY (tagId) REFERENCES tags(id) ON DELETE CASCADE
       )
   ''';
 
@@ -514,6 +522,7 @@ class DatabaseService {
     await db.execute(_createNotesTable);
     await db.execute(_createSubNotesTable);
     await db.execute(_createTagsTable);
+    await db.execute(_createTagImagesTable);
     await db.execute(_createNoteTagsTable);
     await db.execute(_createAttachmentsTable);
     await db.execute(_createRelationshipsTable);
@@ -707,6 +716,10 @@ class DatabaseService {
       description:
           'Fix notes_fts FTS5 table by removing incorrect content_rowid option',
       execute: _migrateToVersion36,
+    ),
+    41: MigrationStep(
+      description: 'Create tag_images table for image-augmented tags',
+      execute: _migrateToVersion41,
     ),
   };
 
@@ -1247,6 +1260,19 @@ class DatabaseService {
       LoggerService.error('Error in migration to version 33: $e', error: e);
       rethrow;
     }
+  }
+
+  static Future<void> _migrateToVersion41(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS tag_images (
+        tagId TEXT PRIMARY KEY,
+        imagePath TEXT NOT NULL,
+        FOREIGN KEY (tagId) REFERENCES tags(id) ON DELETE CASCADE
+      )
+    ''');
   }
 
   // Migrate existing conversation data to new structure
