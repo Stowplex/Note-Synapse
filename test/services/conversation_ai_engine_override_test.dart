@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
-import 'package:mockito/annotations.dart';
 import 'package:note_synapse/models/generation_context.dart';
 import 'package:note_synapse/models/model_config.dart';
 import 'package:note_synapse/models/model_type.dart';
@@ -47,7 +46,6 @@ class MockModelSelector extends Mock implements ModelSelector {
           as Future<Map<String, dynamic>>;
 }
 
-@GenerateMocks([ModelSelector])
 void main() {
   final getIt = GetIt.instance;
   late MockModelSelector mockModelSelector;

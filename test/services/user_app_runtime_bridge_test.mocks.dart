@@ -119,6 +119,15 @@ class MockAppProvider extends _i1.Mock implements _i9.AppProvider {
           as bool);
 
   @override
+  bool get onboardingCompleted =>
+      (super.noSuchMethod(
+            Invocation.getter(#onboardingCompleted),
+            returnValue: false,
+            returnValueForMissingStub: false,
+          )
+          as bool);
+
+  @override
   List<_i8.Note> get notes =>
       (super.noSuchMethod(
             Invocation.getter(#notes),
@@ -574,6 +583,15 @@ class MockAppProvider extends _i1.Mock implements _i9.AppProvider {
     Invocation.method(#toggleHierarchy, []),
     returnValueForMissingStub: null,
   );
+
+  @override
+  _i12.Future<void> setOnboardingCompleted(bool? completed) =>
+      (super.noSuchMethod(
+            Invocation.method(#setOnboardingCompleted, [completed]),
+            returnValue: _i12.Future<void>.value(),
+            returnValueForMissingStub: _i12.Future<void>.value(),
+          )
+          as _i12.Future<void>);
 
   @override
   _i12.Future<void> clearAllData() =>
@@ -1670,6 +1688,46 @@ class MockDatabaseService extends _i1.Mock implements _i19.DatabaseService {
             returnValueForMissingStub: _i12.Future<void>.value(),
           )
           as _i12.Future<void>);
+
+  @override
+  _i12.Future<void> setTagImage(String? tagId, String? imagePath) =>
+      (super.noSuchMethod(
+            Invocation.method(#setTagImage, [tagId, imagePath]),
+            returnValue: _i12.Future<void>.value(),
+            returnValueForMissingStub: _i12.Future<void>.value(),
+          )
+          as _i12.Future<void>);
+
+  @override
+  _i12.Future<void> removeTagImage(String? tagId) =>
+      (super.noSuchMethod(
+            Invocation.method(#removeTagImage, [tagId]),
+            returnValue: _i12.Future<void>.value(),
+            returnValueForMissingStub: _i12.Future<void>.value(),
+          )
+          as _i12.Future<void>);
+
+  @override
+  _i12.Future<Map<String, String>> getAllTagImages() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllTagImages, []),
+            returnValue: _i12.Future<Map<String, String>>.value(
+              <String, String>{},
+            ),
+            returnValueForMissingStub: _i12.Future<Map<String, String>>.value(
+              <String, String>{},
+            ),
+          )
+          as _i12.Future<Map<String, String>>);
+
+  @override
+  _i12.Future<String?> getTagImage(String? tagId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getTagImage, [tagId]),
+            returnValue: _i12.Future<String?>.value(),
+            returnValueForMissingStub: _i12.Future<String?>.value(),
+          )
+          as _i12.Future<String?>);
 
   @override
   _i12.Future<void> replaceTag(String? oldTagName, String? newTagName) =>

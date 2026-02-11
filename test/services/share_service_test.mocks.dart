@@ -66,6 +66,14 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
           as bool);
 
   @override
+  bool get onboardingCompleted =>
+      (super.noSuchMethod(
+            Invocation.getter(#onboardingCompleted),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
   List<_i6.Note> get notes =>
       (super.noSuchMethod(Invocation.getter(#notes), returnValue: <_i6.Note>[])
           as List<_i6.Note>);
@@ -459,6 +467,15 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
     Invocation.method(#toggleHierarchy, []),
     returnValueForMissingStub: null,
   );
+
+  @override
+  _i9.Future<void> setOnboardingCompleted(bool? completed) =>
+      (super.noSuchMethod(
+            Invocation.method(#setOnboardingCompleted, [completed]),
+            returnValue: _i9.Future<void>.value(),
+            returnValueForMissingStub: _i9.Future<void>.value(),
+          )
+          as _i9.Future<void>);
 
   @override
   _i9.Future<void> clearAllData() =>
