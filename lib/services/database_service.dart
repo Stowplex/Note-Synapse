@@ -577,8 +577,14 @@ class DatabaseService {
       currentVersion = pragmaVersion.isNotEmpty
           ? pragmaVersion.first['user_version'] as int
           : 0;
-      if (currentVersion == 0)
+      // SQFLITE_VERSION (999) is a sentinel value passed to openDatabase()
+      // to prevent sqflite's built-in onUpgrade. If we read it back here,
+      // it means this is a legacy DB that was already opened with the new
+      // system but never had _schema_version created. Fall back to the
+      // last known pre-custom-migration version.
+      if (currentVersion == 0 || currentVersion >= SQFLITE_VERSION) {
         currentVersion = 19; // Assume min supported version
+      }
       await db.insert('_schema_version', {'version': currentVersion});
       LoggerService.info(
         'Created _schema_version table, initialized from PRAGMA: v$currentVersion',
@@ -589,6 +595,17 @@ class DatabaseService {
       currentVersion = versionResult.isNotEmpty
           ? versionResult.first['version'] as int
           : 0;
+      // Fix corrupted version: if _schema_version was set to the SQFLITE_VERSION
+      // sentinel (999) due to the legacy PRAGMA fallback bug, reset it to the
+      // actual DATABASE_VERSION and re-run any missing migrations.
+      if (currentVersion >= SQFLITE_VERSION) {
+        LoggerService.warning(
+          'Detected corrupted _schema_version ($currentVersion), resetting to run missing migrations',
+        );
+        // Determine actual version by checking which tables/columns exist
+        currentVersion = await _detectActualSchemaVersion(db);
+        await db.update('_schema_version', {'version': currentVersion});
+      }
     }
 
     if (currentVersion >= DATABASE_VERSION) {
@@ -636,6 +653,48 @@ class DatabaseService {
       await db.update('_schema_version', {'version': DATABASE_VERSION});
       LoggerService.info('Schema version updated to $DATABASE_VERSION');
     }
+  }
+
+  /// Detect the actual schema version by probing for tables/columns
+  /// introduced in known migration steps. Returns the highest version
+  /// whose schema changes are present.
+  static Future<int> _detectActualSchemaVersion(Database db) async {
+    int detected = 19; // Minimum supported version
+
+    // Check for tag_images table (v41)
+    final tagImagesCheck = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='tag_images'",
+    );
+    if (tagImagesCheck.isNotEmpty) detected = 41;
+
+    // Check for notes_fts table (v31/v36)
+    if (detected < 36) {
+      final ftsCheck = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='notes_fts'",
+      );
+      if (ftsCheck.isNotEmpty) detected = 36;
+    }
+
+    // Check for metadata column in attachments (v32)
+    if (detected < 32) {
+      final attachCols = await db.rawQuery("PRAGMA table_info('attachments')");
+      if (attachCols.any((c) => c['name'] == 'metadata')) detected = 32;
+    }
+
+    // Check for recurrenceRule in notes (v30)
+    if (detected < 30) {
+      final notesCols = await db.rawQuery("PRAGMA table_info('notes')");
+      if (notesCols.any((c) => c['name'] == 'recurrenceRule')) detected = 30;
+    }
+
+    // Check for excludeTags in filters (v28)
+    if (detected < 28) {
+      final filtersCols = await db.rawQuery("PRAGMA table_info('filters')");
+      if (filtersCols.any((c) => c['name'] == 'excludeTags')) detected = 28;
+    }
+
+    LoggerService.info('Detected actual schema version: $detected');
+    return detected;
   }
 
   /// Navigate to RecoveryScreen with error message
