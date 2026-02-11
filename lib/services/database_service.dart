@@ -1938,6 +1938,41 @@ class DatabaseService {
     await db.delete('tags', where: 'id = ?', whereArgs: [tagId]);
   }
 
+  /// Set or update the image for a tag.
+  Future<void> setTagImage(String tagId, String imagePath) async {
+    final db = await database;
+    await db.insert(
+      'tag_images',
+      {'tagId': tagId, 'imagePath': imagePath},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Remove the image for a tag.
+  Future<void> removeTagImage(String tagId) async {
+    final db = await database;
+    await db.delete('tag_images', where: 'tagId = ?', whereArgs: [tagId]);
+  }
+
+  /// Get all tag images as a map of tagId -> imagePath.
+  Future<Map<String, String>> getAllTagImages() async {
+    final db = await database;
+    final rows = await db.query('tag_images');
+    return {
+      for (final row in rows)
+        row['tagId'] as String: row['imagePath'] as String
+    };
+  }
+
+  /// Get the image path for a specific tag.
+  Future<String?> getTagImage(String tagId) async {
+    final db = await database;
+    final rows =
+        await db.query('tag_images', where: 'tagId = ?', whereArgs: [tagId]);
+    if (rows.isEmpty) return null;
+    return rows.first['imagePath'] as String;
+  }
+
   Future<void> replaceTag(String oldTagName, String newTagName) async {
     final db = await database;
 
