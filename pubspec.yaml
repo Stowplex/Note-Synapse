@@ -214,6 +214,7 @@ flutter:
     - assets/model_presets/
     - assets/starter/
     - assets/starter/apps/
+    - assets/tag_images/
 
   # Internationalization
   generate: true
