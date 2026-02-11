@@ -38,17 +38,23 @@ class TagImageService {
       // path_provider unavailable (e.g. in unit tests)
     }
 
-    final tagImages = await _db.getAllTagImages(); // tagId -> imagePath
-    final allTags = await _db.getAllTags();
+    try {
+      final tagImages = await _db.getAllTagImages(); // tagId -> imagePath
+      final allTags = await _db.getAllTags();
 
-    _tagIdToName = {for (final tag in allTags) tag.id: tag.name};
+      _tagIdToName = {for (final tag in allTags) tag.id: tag.name};
 
-    _tagNameToImage = {};
-    for (final entry in tagImages.entries) {
-      final tagName = _tagIdToName[entry.key];
-      if (tagName != null) {
-        _tagNameToImage[tagName] = entry.value;
+      _tagNameToImage = {};
+      for (final entry in tagImages.entries) {
+        final tagName = _tagIdToName[entry.key];
+        if (tagName != null) {
+          _tagNameToImage[tagName] = entry.value;
+        }
       }
+    } catch (e) {
+      // tag_images table may not exist yet on older DB versions
+      _tagNameToImage = {};
+      _tagIdToName = {};
     }
   }
 
