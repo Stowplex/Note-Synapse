@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/utils/file_utils.dart';
+import 'package:path_provider/path_provider.dart';
 
 class TagImageService {
   final DatabaseService _db;
@@ -16,6 +17,10 @@ class TagImageService {
   /// Revision counter — widgets listen to this for rebuilds.
   final ValueNotifier<int> revision = ValueNotifier(0);
 
+  /// Cached application documents directory path (set during loadAll).
+  String? _appDocsPath;
+  String? get appDocsPath => _appDocsPath;
+
   /// Built-in image names (without path prefix).
   /// Update this list when adding new built-in images to assets/tag_images/.
   static const List<String> builtinImages = [
@@ -26,6 +31,13 @@ class TagImageService {
 
   /// Load all tag-image mappings from DB. Call once at startup.
   Future<void> loadAll() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      _appDocsPath = dir.path;
+    } catch (_) {
+      // path_provider unavailable (e.g. in unit tests)
+    }
+
     final tagImages = await _db.getAllTagImages(); // tagId -> imagePath
     final allTags = await _db.getAllTags();
 
@@ -48,10 +60,9 @@ class TagImageService {
   /// Get up to 2 image paths for a list of tag names.
   /// Filters to tags that have images, sorts alphabetically, returns first 2.
   List<String> getImagePathsForTags(List<String> tagNames) {
-    final withImages = tagNames
-        .where((name) => _tagNameToImage.containsKey(name))
-        .toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final withImages =
+        tagNames.where((name) => _tagNameToImage.containsKey(name)).toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
     return withImages.take(2).map((name) => _tagNameToImage[name]!).toList();
   }

@@ -1,7 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../models/note.dart';
+import '../services/service_locator.dart';
+import '../services/tag_image_service.dart';
 import '../utils/date_utils.dart';
 import '../services/logger_service.dart';
 import 'interactive_checkbox_markdown.dart';
@@ -37,9 +41,12 @@ class NoteCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final tagImageService = getIt<TagImageService>();
+    final tagImagePaths = tagImageService.getImagePathsForTags(note.tags);
 
     return Card(
       elevation: isSelected ? 8 : 2,
+      clipBehavior: Clip.antiAlias,
       color: isSelected
           ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
           : null,
@@ -47,180 +54,124 @@ class NoteCard extends StatelessWidget {
         onTap: onTap,
         onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  if (note.isTask) ...[
-                    _buildStatusIcon(note),
-                    const SizedBox(width: 8),
-                  ],
-                  Expanded(
-                    child: Text(
-                      note.title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        decoration: note.isCompleted
-                            ? TextDecoration.lineThrough
-                            : null,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (onPinToggle != null)
-                    IconButton(
-                      icon: Icon(
-                        note.pinned ? Icons.push_pin : Icons.push_pin_outlined,
-                        color: note.pinned
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withOpacity(0.6),
-                        size: 20,
-                      ),
-                      onPressed: onPinToggle,
-                      tooltip: note.pinned ? l10n.unpinNote : l10n.pinNote,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  if (onShare != null)
-                    IconButton(
-                      icon: Icon(
-                        Icons.share,
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withOpacity(0.6),
-                        size: 20,
-                      ),
-                      onPressed: onShare,
-                      tooltip: l10n.share,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  if (onArchiveToggle != null)
-                    IconButton(
-                      icon: Icon(
-                        note.isArchived
-                            ? Icons.archive
-                            : Icons.archive_outlined,
-                        color: note.isArchived
-                            ? Theme.of(context).colorScheme.secondary
-                            : Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withOpacity(0.6),
-                        size: 20,
-                      ),
-                      onPressed: onArchiveToggle,
-                      tooltip: note.isArchived
-                          ? l10n.unarchiveNote
-                          : l10n.archiveNote,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  if (note.isTask && onStatusChanged != null)
-                    _buildStatusDropdown(note, context),
-                  if (isSelected)
-                    Icon(
-                      Icons.check_circle,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                ],
+        child: Stack(
+          children: [
+            if (tagImagePaths.isNotEmpty)
+              Positioned.fill(
+                child: Opacity(
+                  opacity: 0.12,
+                  child: _buildTagImage(tagImagePaths[0]),
+                ),
               ),
-              const SizedBox(height: 8),
-              _buildSafeMarkdown(note, context),
-              if (note.subNotes.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.list,
-                      size: 16,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${note.subNotes.length} sub-notes',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                    ),
-                    if (note.isTask && note.subNotes.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        '(${note.subNotes.where((sn) => sn.isCompleted).length}/${note.subNotes.length} completed)',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withOpacity(0.6),
+            if (tagImagePaths.length > 1)
+              Positioned.fill(
+                child: Opacity(
+                  opacity: 0.10,
+                  child: _buildTagImage(tagImagePaths[1]),
+                ),
+              ),
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      if (note.isTask) ...[
+                        _buildStatusIcon(note),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(
+                        child: Text(
+                          note.title,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                decoration: note.isCompleted
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                              ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ],
-                  ],
-                ),
-              ],
-              if (note.tags.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: note.tags
-                      .take(3)
-                      .map(
-                        (tag) => Chip(
-                          label: Text(
-                            tag,
-                            style: const TextStyle(fontSize: 12),
+                      if (onPinToggle != null)
+                        IconButton(
+                          icon: Icon(
+                            note.pinned
+                                ? Icons.push_pin
+                                : Icons.push_pin_outlined,
+                            color: note.pinned
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.6),
+                            size: 20,
                           ),
-                          backgroundColor: Theme.of(
-                            context,
-                          ).colorScheme.primary.withOpacity(0.1),
-                          labelStyle: TextStyle(
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
+                          onPressed: onPinToggle,
+                          tooltip: note.pinned ? l10n.unpinNote : l10n.pinNote,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
                         ),
-                      )
-                      .toList(),
-                ),
-              ],
-              const SizedBox(height: 8),
-              // Use LayoutBuilder to determine if we have enough space for horizontal layout
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  // Check if we have enough space for horizontal layout
-                  final hasTaskDates =
-                      note.isTask &&
-                      (note.scheduledAt != null || note.completeBy != null);
-                  double estimatedWidth = 200.0; // Base width for created date
-                  if (hasTaskDates) {
-                    if (note.scheduledAt != null) estimatedWidth += 120.0;
-                    if (note.completeBy != null) estimatedWidth += 120.0;
-                  }
-                  final useHorizontalLayout =
-                      constraints.maxWidth > estimatedWidth;
-
-                  if (useHorizontalLayout) {
-                    // Horizontal layout when there's enough space
-                    return Row(
-                      children: [
-                        // Created date
+                      if (onShare != null)
+                        IconButton(
+                          icon: Icon(
+                            Icons.share,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.6),
+                            size: 20,
+                          ),
+                          onPressed: onShare,
+                          tooltip: l10n.share,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      if (onArchiveToggle != null)
+                        IconButton(
+                          icon: Icon(
+                            note.isArchived
+                                ? Icons.archive
+                                : Icons.archive_outlined,
+                            color: note.isArchived
+                                ? Theme.of(context).colorScheme.secondary
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.6),
+                            size: 20,
+                          ),
+                          onPressed: onArchiveToggle,
+                          tooltip: note.isArchived
+                              ? l10n.unarchiveNote
+                              : l10n.archiveNote,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      if (note.isTask && onStatusChanged != null)
+                        _buildStatusDropdown(note, context),
+                      if (isSelected)
                         Icon(
-                          Icons.access_time,
-                          size: 14,
+                          Icons.check_circle,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _buildSafeMarkdown(note, context),
+                  if (note.subNotes.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.list,
+                          size: 16,
                           color: Theme.of(
                             context,
                           ).colorScheme.onSurface.withOpacity(0.6),
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          _formatDate(note.createdAt, context),
+                          '${note.subNotes.length} sub-notes',
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
                                 color: Theme.of(
@@ -228,72 +179,67 @@ class NoteCard extends StatelessWidget {
                                 ).colorScheme.onSurface.withOpacity(0.6),
                               ),
                         ),
-                        // Task dates
-                        if (hasTaskDates) ...[
-                          const SizedBox(width: 16),
-                          if (note.scheduledAt != null) ...[
-                            Icon(
-                              Icons.play_arrow,
-                              size: 14,
-                              color: Colors.green[600],
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Start: ${AppDateUtils.formatDateForDisplayLocalized(note.scheduledAt, context)}',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: Colors.green[600],
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                            ),
-                          ],
-                          if (note.completeBy != null) ...[
-                            const SizedBox(width: 16),
-                            Icon(
-                              Icons.schedule,
-                              size: 14,
-                              color: Colors.orange[600],
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Due: ${AppDateUtils.formatDateForDisplayLocalized(note.completeBy, context)}',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: Colors.orange[600],
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                            ),
-                          ],
+                        if (note.isTask && note.subNotes.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            '(${note.subNotes.where((sn) => sn.isCompleted).length}/${note.subNotes.length} completed)',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.6),
+                                ),
+                          ),
                         ],
-                        const Spacer(),
-                        // Action buttons
-                        if (onAddSubNote != null)
-                          IconButton(
-                            icon: const Icon(Icons.add, size: 16),
-                            onPressed: onAddSubNote,
-                            tooltip: 'Add sub-note',
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                        if (showAttachmentIndicator &&
-                            note.attachmentPaths.isNotEmpty)
-                          Icon(
-                            Icons.attach_file,
-                            size: 16,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withOpacity(0.6),
-                          ),
                       ],
-                    );
-                  } else {
-                    // Vertical layout when space is limited
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Created date row
-                        Row(
+                    ),
+                  ],
+                  if (note.tags.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: note.tags
+                          .take(3)
+                          .map(
+                            (tag) => Chip(
+                              label: Text(
+                                tag,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.primary.withOpacity(0.1),
+                              labelStyle: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  // Use LayoutBuilder to determine if we have enough space for horizontal layout
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Check if we have enough space for horizontal layout
+                      final hasTaskDates =
+                          note.isTask &&
+                          (note.scheduledAt != null || note.completeBy != null);
+                      double estimatedWidth =
+                          200.0; // Base width for created date
+                      if (hasTaskDates) {
+                        if (note.scheduledAt != null) estimatedWidth += 120.0;
+                        if (note.completeBy != null) estimatedWidth += 120.0;
+                      }
+                      final useHorizontalLayout =
+                          constraints.maxWidth > estimatedWidth;
+
+                      if (useHorizontalLayout) {
+                        // Horizontal layout when there's enough space
+                        return Row(
                           children: [
+                            // Created date
                             Icon(
                               Icons.access_time,
                               size: 14,
@@ -311,6 +257,43 @@ class NoteCard extends StatelessWidget {
                                     ).colorScheme.onSurface.withOpacity(0.6),
                                   ),
                             ),
+                            // Task dates
+                            if (hasTaskDates) ...[
+                              const SizedBox(width: 16),
+                              if (note.scheduledAt != null) ...[
+                                Icon(
+                                  Icons.play_arrow,
+                                  size: 14,
+                                  color: Colors.green[600],
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Start: ${AppDateUtils.formatDateForDisplayLocalized(note.scheduledAt, context)}',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: Colors.green[600],
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                ),
+                              ],
+                              if (note.completeBy != null) ...[
+                                const SizedBox(width: 16),
+                                Icon(
+                                  Icons.schedule,
+                                  size: 14,
+                                  color: Colors.orange[600],
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Due: ${AppDateUtils.formatDateForDisplayLocalized(note.completeBy, context)}',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: Colors.orange[600],
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                ),
+                              ],
+                            ],
                             const Spacer(),
                             // Action buttons
                             if (onAddSubNote != null)
@@ -331,61 +314,134 @@ class NoteCard extends StatelessWidget {
                                 ).colorScheme.onSurface.withOpacity(0.6),
                               ),
                           ],
-                        ),
-                        // Task dates in separate rows if needed
-                        if (hasTaskDates) ...[
-                          const SizedBox(height: 4),
-                          if (note.scheduledAt != null)
+                        );
+                      } else {
+                        // Vertical layout when space is limited
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Created date row
                             Row(
                               children: [
                                 Icon(
-                                  Icons.play_arrow,
+                                  Icons.access_time,
                                   size: 14,
-                                  color: Colors.green[600],
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.6),
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  'Start: ${AppDateUtils.formatDateForDisplayLocalized(note.scheduledAt, context)}',
+                                  _formatDate(note.createdAt, context),
                                   style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(
-                                        color: Colors.green[600],
-                                        fontWeight: FontWeight.bold,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface
+                                            .withOpacity(0.6),
                                       ),
                                 ),
+                                const Spacer(),
+                                // Action buttons
+                                if (onAddSubNote != null)
+                                  IconButton(
+                                    icon: const Icon(Icons.add, size: 16),
+                                    onPressed: onAddSubNote,
+                                    tooltip: 'Add sub-note',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                if (showAttachmentIndicator &&
+                                    note.attachmentPaths.isNotEmpty)
+                                  Icon(
+                                    Icons.attach_file,
+                                    size: 16,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withOpacity(0.6),
+                                  ),
                               ],
                             ),
-                          if (note.completeBy != null) ...[
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.schedule,
-                                  size: 14,
-                                  color: Colors.orange[600],
+                            // Task dates in separate rows if needed
+                            if (hasTaskDates) ...[
+                              const SizedBox(height: 4),
+                              if (note.scheduledAt != null)
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.play_arrow,
+                                      size: 14,
+                                      color: Colors.green[600],
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Start: ${AppDateUtils.formatDateForDisplayLocalized(note.scheduledAt, context)}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: Colors.green[600],
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Due: ${AppDateUtils.formatDateForDisplayLocalized(note.completeBy, context)}',
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(
-                                        color: Colors.orange[600],
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                              if (note.completeBy != null) ...[
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.schedule,
+                                      size: 14,
+                                      color: Colors.orange[600],
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Due: ${AppDateUtils.formatDateForDisplayLocalized(note.completeBy, context)}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: Colors.orange[600],
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                    ),
+                                  ],
                                 ),
                               ],
-                            ),
+                            ],
                           ],
-                        ],
-                      ],
-                    );
-                  }
-                },
+                        );
+                      }
+                    },
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  Widget _buildTagImage(String imagePath) {
+    if (TagImageService.isBuiltin(imagePath)) {
+      return Image.asset(
+        TagImageService.builtinAssetPath(
+          TagImageService.builtinName(imagePath),
+        ),
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+      );
+    } else {
+      final appDocsPath = getIt<TagImageService>().appDocsPath;
+      if (appDocsPath == null) return const SizedBox.shrink();
+      return Image.file(
+        File('$appDocsPath/$imagePath'),
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+      );
+    }
   }
 
   Widget _buildStatusIcon(Note note) {
