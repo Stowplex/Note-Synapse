@@ -172,6 +172,17 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       }
       _updateProgress(0.5);
 
+      // 4b. Copy tag_images directory to temp directory
+      final appDocsDir = await getApplicationDocumentsDirectory();
+      final tagImagesDir = Directory('${appDocsDir.path}/tag_images');
+      final destTagImagesDir = Directory('${exportDir.path}/tag_images');
+      if (await tagImagesDir.exists()) {
+        await _copyDirectory(tagImagesDir, destTagImagesDir);
+        _addLog('Tag images directory copied successfully');
+      } else {
+        _addLog('No tag images directory found');
+      }
+
       // 5. Open copied DB and update absolute paths to relative paths
       _addLog(l10n.updatingAttachmentPathsInCopiedDatabase);
       await _updateAttachmentPathsInCopiedDatabase(destDbFile.path);
@@ -559,6 +570,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       // Step 3: Insert all tags
       await _mergeTags(stagingDb, migratedBackupDb);
 
+      _addImportLog('Merging tag images...');
+      await _mergeTagImages(stagingDb, migratedBackupDb);
+
       _addImportLog('Merging note-tag relationships...');
       _updateImportProgress(0.24);
 
@@ -591,6 +605,16 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       if (await attachmentsDir.exists()) {
         final appAttachmentsDir = await FileUtils.getPrivateStorageDirectory();
         await _copyDirectory(attachmentsDir, appAttachmentsDir);
+      }
+
+      // Copy tag images
+      final tagImagesDir = Directory('${extractDir.path}/tag_images');
+      if (await tagImagesDir.exists()) {
+        final appDocsDir = await getApplicationDocumentsDirectory();
+        final appTagImagesDir = Directory('${appDocsDir.path}/tag_images');
+        await appTagImagesDir.create(recursive: true);
+        await _copyDirectory(tagImagesDir, appTagImagesDir);
+        _addImportLog('Tag images copied successfully');
       }
 
       _addImportLog('Merging attachments...');
@@ -813,6 +837,41 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
             whereArgs: [backupTagId],
           );
         }
+      }
+    }
+  }
+
+  Future<void> _mergeTagImages(Database stagingDb, Database backupDb) async {
+    // Check if tag_images table exists in backup DB
+    final tableCheck = await backupDb.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='tag_images'",
+    );
+    if (tableCheck.isEmpty) return; // Old backup without tag_images
+
+    final backupTagImages = await backupDb.query('tag_images');
+
+    for (final tagImage in backupTagImages) {
+      final tagId = tagImage['tagId'] as String;
+
+      // Only import if the tag exists in staging
+      final existingTag = await stagingDb.query(
+        'tags',
+        where: 'id = ?',
+        whereArgs: [tagId],
+      );
+      if (existingTag.isEmpty) continue;
+
+      // Only import if no image already set for this tag
+      final existing = await stagingDb.query(
+        'tag_images',
+        where: 'tagId = ?',
+        whereArgs: [tagId],
+      );
+      if (existing.isEmpty) {
+        await stagingDb.insert('tag_images', {
+          'tagId': tagId,
+          'imagePath': tagImage['imagePath'] as String,
+        });
       }
     }
   }
