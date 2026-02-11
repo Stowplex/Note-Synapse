@@ -35,6 +35,7 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
   final TextEditingController _promptController = TextEditingController();
   bool _isSavingPrompt = false;
   bool _isImportingImage = false;
+  int _imageVersion = 0;
   String? _appDocsPath;
 
   @override
@@ -229,13 +230,20 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
         await File(destPath).writeAsBytes(pngBytes);
       }
 
+      // Evict cached FileImage so Flutter reloads the new file
+      final destFile = File('${tagImagesDir.path}/${widget.tag.id}.png');
+      FileImage(destFile).evict();
+
       await _tagImageService.setTagImage(
         widget.tag.id,
         'tag_images/${widget.tag.id}.png',
       );
 
       if (mounted) {
-        setState(() => _isImportingImage = false);
+        setState(() {
+          _isImportingImage = false;
+          _imageVersion++;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -252,12 +260,17 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
 
   Future<void> _setBuiltinImage(String name) async {
     await _tagImageService.setTagImage(widget.tag.id, 'builtin:$name');
-    if (mounted) setState(() {});
+    if (mounted) setState(() => _imageVersion++);
   }
 
   Future<void> _removeTagImage() async {
+    // Evict cached FileImage before removing
+    if (_appDocsPath != null) {
+      final file = File('$_appDocsPath/tag_images/${widget.tag.id}.png');
+      FileImage(file).evict();
+    }
     await _tagImageService.removeTagImage(widget.tag.id);
-    if (mounted) setState(() {});
+    if (mounted) setState(() => _imageVersion++);
   }
 
   Widget _buildTagImageSection() {
@@ -289,6 +302,7 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
     } else if (_appDocsPath != null) {
       imageWidget = Image.file(
         File('$_appDocsPath/$imagePath'),
+        key: ValueKey('tag_image_${widget.tag.id}_$_imageVersion'),
         width: 150,
         height: 100,
         fit: BoxFit.cover,
