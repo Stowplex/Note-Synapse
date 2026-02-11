@@ -1,9 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../screens/tag_management_screen.dart';
+import '../services/service_locator.dart';
+import '../services/tag_image_service.dart';
 import 'hierarchy_dialog.dart';
 
 class TagSelectionDialog extends StatefulWidget {
@@ -39,6 +44,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
   final Set<String> _selectedTags = {};
   final Set<String> _filterDerivedTags = {}; // Tags added via "Add from Filter"
   String _tagSearchQuery = '';
+  String? _appDocsPath;
 
   @override
   void initState() {
@@ -49,6 +55,16 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
         _tagSearchQuery = _searchController.text;
       });
     });
+    _initAppDocsPath();
+  }
+
+  Future<void> _initAppDocsPath() async {
+    final dir = await getApplicationDocumentsDirectory();
+    if (mounted) {
+      setState(() {
+        _appDocsPath = dir.path;
+      });
+    }
   }
 
   @override
@@ -140,6 +156,27 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
     return l10n.addTagsWithCount(count);
   }
 
+  Widget? _buildTagAvatar(String tagName) {
+    final tagImageService = getIt<TagImageService>();
+    final imagePath = tagImageService.getImagePathForTag(tagName);
+    if (imagePath == null) return null;
+
+    ImageProvider imageProvider;
+    if (TagImageService.isBuiltin(imagePath)) {
+      imageProvider = AssetImage(TagImageService.builtinAssetPath(
+          TagImageService.builtinName(imagePath)));
+    } else if (_appDocsPath != null) {
+      imageProvider = FileImage(File('$_appDocsPath/$imagePath'));
+    } else {
+      return null;
+    }
+
+    return CircleAvatar(
+      radius: 8,
+      backgroundImage: imageProvider,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -150,8 +187,16 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
 
     return Consumer<AppProvider>(
       builder: (context, appProvider, child) {
+        final tagImageService = getIt<TagImageService>();
         final allTags = appProvider.tags.map((tag) => tag.name).toList()
-          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+          ..sort((a, b) {
+            final aHasImage =
+                tagImageService.getImagePathForTag(a) != null;
+            final bHasImage =
+                tagImageService.getImagePathForTag(b) != null;
+            if (aHasImage != bHasImage) return aHasImage ? -1 : 1;
+            return a.toLowerCase().compareTo(b.toLowerCase());
+          });
 
         final availableTags = allTags.where((tag) {
           if (widget.excludedTags.contains(tag)) return false;
@@ -207,6 +252,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
                                   tag,
                                 );
                                 return Chip(
+                                  avatar: _buildTagAvatar(tag),
                                   label: Text(tag),
                                   backgroundColor: isDerived
                                       ? Colors.purple.withOpacity(0.1)
@@ -306,6 +352,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
                                 // Use ActionChip for regular tag selection (add-only mode)
                                 if (widget.allowEmptySelection) {
                                   return FilterChip(
+                                    avatar: _buildTagAvatar(tag),
                                     label: Text(tag),
                                     selected: isSelected,
                                     onSelected: (selected) {
@@ -314,6 +361,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
                                   );
                                 } else {
                                   return ActionChip(
+                                    avatar: _buildTagAvatar(tag),
                                     label: Text(tag),
                                     onPressed: () {
                                       setState(() {
