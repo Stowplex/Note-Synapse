@@ -59,14 +59,14 @@ class NoteCard extends StatelessWidget {
             if (tagImagePaths.isNotEmpty)
               Positioned.fill(
                 child: Opacity(
-                  opacity: 0.12,
+                  opacity: 0.25,
                   child: _buildTagImage(tagImagePaths[0]),
                 ),
               ),
             if (tagImagePaths.length > 1)
               Positioned.fill(
                 child: Opacity(
-                  opacity: 0.10,
+                  opacity: 0.15,
                   child: _buildTagImage(tagImagePaths[1]),
                 ),
               ),

@@ -721,6 +721,7 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                                         child: Column(
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
+                                          mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Icon(
                                               Icons.chat_bubble_outline,

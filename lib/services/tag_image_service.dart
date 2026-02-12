@@ -24,7 +24,25 @@ class TagImageService {
   /// Built-in image names (without path prefix).
   /// Update this list when adding new built-in images to assets/tag_images/.
   static const List<String> builtinImages = [
-    // Placeholder - will be populated when user provides actual images
+    "festive-light",
+    "landscape-paintedhills",
+    "landscape-sunset",
+    "mystery-insect",
+    "mystery-milkyway",
+    "mystery-underwater",
+    "night-liuzhou",
+    "night-moon",
+    "routine-coffee",
+    "tech-ai",
+    "tech-chips",
+    "texture-granite",
+    "texture-leaves",
+    "texture-seascape",
+    "texture-succulent",
+    "texture-water",
+    "vintage-keyboard",
+    "vintage-newspaper",
+    "work-coding",
   ];
 
   TagImageService(this._db);
