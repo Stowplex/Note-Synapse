@@ -176,7 +176,7 @@ class _AppWrapperState extends State<AppWrapper> {
     if (_isModelConfigured) {
       return const MainScreen();
     } else {
-      return const ModelSelectionScreen();
+      return const ModelSelectionScreen(isOnboarding: true);
     }
   }
 }
