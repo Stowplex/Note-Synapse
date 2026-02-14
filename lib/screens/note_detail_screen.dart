@@ -34,6 +34,7 @@ import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
 import 'note_action_app_selection_screen.dart';
 import 'note_selection_dialog.dart';
+import '../widgets/insert_attachment_link_dialog.dart';
 import '../services/logger_service.dart';
 import '../services/database_service.dart';
 import '../services/conversation_service.dart';
@@ -1392,6 +1393,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               focusNode: _codeFocusNode,
               onPickImage: () => _showImagePicker(context),
               onPickNoteLink: () => _showNoteLinkPicker(context),
+              onPickAttachmentLink: () => _showAttachmentLinkPicker(context),
               language: 'markdown',
             ),
           ),
@@ -1409,6 +1411,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           await _addRelationship(newNote.id);
         },
       ),
+    );
+
+    if (result != null) {
+      _insertText(result);
+    }
+  }
+
+  Future<void> _showAttachmentLinkPicker(BuildContext context) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => const InsertAttachmentLinkDialog(),
     );
 
     if (result != null) {

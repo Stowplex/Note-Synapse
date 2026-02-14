@@ -22,8 +22,10 @@ import 'package:re_highlight/styles/atom-one-light.dart';
 import 'package:crypto/crypto.dart';
 import '../utils/synapse_temp_utils.dart';
 import '../utils/synapse_resource_uri.dart';
+import '../services/attachment_link_service.dart';
 import '../services/database_service.dart';
 import '../services/network_provider.dart';
+import '../screens/immersive_note_screen.dart';
 import '../screens/note_detail_screen.dart';
 import '../screens/conversation_chat_screen.dart';
 import '../utils/remote_image_storage.dart';
@@ -121,6 +123,28 @@ class _InteractiveCheckboxMarkdownState
                   ConversationChatScreen(conversationId: link.id),
             ),
           );
+        }
+      case SynapseResourceType.attachment:
+        final service = AttachmentLinkService(DatabaseService());
+        final result = await service.resolveAttachmentLink(link.id);
+        if (result != null && mounted) {
+          final path = await result.attachment.getAbsolutePath();
+          final pageStr = link.queryParameters['page'];
+          final page = pageStr != null ? int.tryParse(pageStr) : null;
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => ImmersiveNoteScreen(
+                notes: [result.note],
+                initialAttachmentPath: path,
+                initialPage: page,
+              ),
+            ),
+          );
+        } else if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(
+              const SnackBar(content: Text('Attachment not found')));
         }
     }
   }

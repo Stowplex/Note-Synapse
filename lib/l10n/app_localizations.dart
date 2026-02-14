@@ -1994,6 +1994,48 @@ abstract class AppLocalizations {
   /// **'Add Link'**
   String get addLink;
 
+  /// No description provided for @insertAttachmentLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert Attachment Link'**
+  String get insertAttachmentLink;
+
+  /// No description provided for @selectAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Attachment'**
+  String get selectAttachment;
+
+  /// No description provided for @selectLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Location'**
+  String get selectLocation;
+
+  /// No description provided for @noAttachments.
+  ///
+  /// In en, this message translates to:
+  /// **'No attachments'**
+  String get noAttachments;
+
+  /// No description provided for @linkText.
+  ///
+  /// In en, this message translates to:
+  /// **'Link Text'**
+  String get linkText;
+
+  /// No description provided for @pageN.
+  ///
+  /// In en, this message translates to:
+  /// **'Page {n}'**
+  String pageN(int n);
+
+  /// No description provided for @noSpecificPage.
+  ///
+  /// In en, this message translates to:
+  /// **'No specific page'**
+  String get noSpecificPage;
+
   /// No description provided for @attach.
   ///
   /// In en, this message translates to:
