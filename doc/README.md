@@ -1,5 +1,8 @@
 # Note Synapse Documentation
 
+## 🚀 Getting Started
+-   **[Setup Guide](guides/ai/onboarding.md)**: Setting up your first model and API keys.
+
 ## ✍️ Editor & Writing
 -   **[Block-Based Editing](guides/editor/block_editing.md)**: The "hidden" drag gesture, reordering, and block types.
 -   **[Note Editing](guides/editor/note_editing.md)**: Using the note editor.

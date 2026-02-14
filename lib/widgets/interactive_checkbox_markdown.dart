@@ -1099,9 +1099,19 @@ class _InteractiveCheckboxMarkdownState
             context,
             url,
             alt: alt,
-            // Use defaults or whatever logic GptMarkdown would usually apply for dimensions
-            // Since we don't have the constraints passed from GptMarkdown's internal parser here easily,
-            // we let _customImageBuilder handle it.
+            onFetch: (url) async {
+              await widget.onFetchImage?.call(url);
+              if (mounted) {
+                // Invalidate caches so the image source type is re-evaluated
+                _imageSourceTypeFutures.remove(url);
+                _localImageFutures.remove(url);
+                setState(() {
+                  // Force rebuild of specific image key if needed, or just setState
+                  // Update version to force new key for image widget
+                  _imageVersions[url] = (_imageVersions[url] ?? 0) + 1;
+                });
+              }
+            },
           );
         },
       ),
