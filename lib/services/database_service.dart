@@ -322,6 +322,46 @@ class DatabaseService {
       )
   ''';
 
+  static const String _createTagAiConfigsTable = '''
+      CREATE TABLE tag_ai_configs (
+        tagId TEXT PRIMARY KEY,
+        extractionPrompt TEXT,
+        FOREIGN KEY (tagId) REFERENCES tags (id) ON DELETE CASCADE
+      )
+  ''';
+
+  // FTS4 is universally supported on all platforms (Android, iOS, macOS, Windows, Linux)
+  static const String _createNotesFtsTable = '''
+      CREATE VIRTUAL TABLE notes_fts USING fts4(
+        title, 
+        content
+      );
+  ''';
+
+  static const String _createNotesFtsInsertTrigger = '''
+      CREATE TRIGGER notes_ai_insert AFTER INSERT ON notes
+      BEGIN
+        INSERT INTO notes_fts(docid, title, content)
+        VALUES(new.rowid, new.title, new.content);
+      END;
+  ''';
+
+  static const String _createNotesFtsDeleteTrigger = '''
+      CREATE TRIGGER notes_ai_delete AFTER DELETE ON notes
+      BEGIN
+        DELETE FROM notes_fts WHERE docid = old.rowid;
+      END;
+  ''';
+
+  static const String _createNotesFtsUpdateTrigger = '''
+      CREATE TRIGGER notes_ai_update AFTER UPDATE ON notes
+      BEGIN
+        DELETE FROM notes_fts WHERE docid = old.rowid;
+        INSERT INTO notes_fts(docid, title, content)
+        VALUES(new.rowid, new.title, new.content);
+      END;
+  ''';
+
   // Index creation constants
   static const List<String> _createIndexes = [
     'CREATE INDEX idx_notes_type ON notes(type)',
@@ -540,6 +580,15 @@ class DatabaseService {
     await db.execute(_createConversationNoteMappingTable);
     await db.execute(_createConversationTagsTable);
     await db.execute(_createMultiFunctionAppsTable);
+
+    // Create AI-related tables (missing in previous versions' onCreate)
+    await db.execute(_createTagAiConfigsTable);
+
+    // Create FTS table and triggers
+    await db.execute(_createNotesFtsTable);
+    await db.execute(_createNotesFtsInsertTrigger);
+    await db.execute(_createNotesFtsDeleteTrigger);
+    await db.execute(_createNotesFtsUpdateTrigger);
 
     // Create all indexes
     for (final indexSql in _createIndexes) {
@@ -2000,11 +2049,10 @@ class DatabaseService {
   /// Set or update the image for a tag.
   Future<void> setTagImage(String tagId, String imagePath) async {
     final db = await database;
-    await db.insert(
-      'tag_images',
-      {'tagId': tagId, 'imagePath': imagePath},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('tag_images', {
+      'tagId': tagId,
+      'imagePath': imagePath,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   /// Remove the image for a tag.
@@ -2019,15 +2067,18 @@ class DatabaseService {
     final rows = await db.query('tag_images');
     return {
       for (final row in rows)
-        row['tagId'] as String: row['imagePath'] as String
+        row['tagId'] as String: row['imagePath'] as String,
     };
   }
 
   /// Get the image path for a specific tag.
   Future<String?> getTagImage(String tagId) async {
     final db = await database;
-    final rows =
-        await db.query('tag_images', where: 'tagId = ?', whereArgs: [tagId]);
+    final rows = await db.query(
+      'tag_images',
+      where: 'tagId = ?',
+      whereArgs: [tagId],
+    );
     if (rows.isEmpty) return null;
     return rows.first['imagePath'] as String;
   }
