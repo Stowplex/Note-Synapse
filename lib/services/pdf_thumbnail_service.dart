@@ -64,6 +64,8 @@ class PdfThumbnailService {
         final pdfImage = await pdfPage.render(
           width: renderWidth,
           height: renderHeight,
+          fullWidth: renderWidth.toDouble(),
+          fullHeight: renderHeight.toDouble(),
         );
         if (pdfImage == null) return null;
 
@@ -74,9 +76,7 @@ class PdfThumbnailService {
           );
           if (byteData == null) return null;
 
-          final pngBytes = Uint8List.fromList(
-            byteData.buffer.asUint8List(),
-          );
+          final pngBytes = Uint8List.fromList(byteData.buffer.asUint8List());
 
           // Add to cache, evicting oldest if full
           if (_cache.length >= maxCacheSize) {

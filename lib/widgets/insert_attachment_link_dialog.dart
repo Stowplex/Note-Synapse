@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdfrx/pdfrx.dart' as pdfrx;
 import '../models/attachment.dart';
 import '../models/note.dart';
-import '../providers/app_provider.dart';
+import '../screens/note_selection_dialog.dart';
 import '../services/attachment_link_service.dart';
 import '../services/database_service.dart';
 import '../services/service_locator.dart';
 import '../widgets/attachment_picker_widget.dart';
 import '../widgets/pdf_location_picker.dart';
 
-enum _Step { selectNote, selectAttachment, selectLocation, confirm }
+enum _Step { selectAttachment, selectLocation, confirm }
 
 /// A multi-step wizard dialog that guides the user through:
-/// 1. Select a note
+/// 1. Select a note (via NoteSelectionDialog sub-dialog)
 /// 2. Select an attachment from that note
-/// 3. (PDF only) Select a page/location
-/// 4. Confirm link text
+/// 3. (PDF) Visual page picker with preview, or (non-PDF) confirm link text
 ///
 /// Returns the generated markdown link string, or null if cancelled.
 class InsertAttachmentLinkDialog extends StatefulWidget {
@@ -28,78 +28,148 @@ class InsertAttachmentLinkDialog extends StatefulWidget {
 
 class _InsertAttachmentLinkDialogState
     extends State<InsertAttachmentLinkDialog> {
-  _Step _currentStep = _Step.selectNote;
+  _Step _currentStep = _Step.selectAttachment;
 
-  // Step 1 state
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
-
-  // Step 2 state
+  // Note state (selected via sub-dialog)
   Note? _selectedNote;
 
-  // Step 3 state
+  // Attachment state
   Attachment? _selectedAttachment;
-  PdfLocationSelection? _pdfLocation;
 
-  // Step 4 state
+  // PDF loading state
+  bool _loadingPdf = false;
+  int? _pdfTotalPages;
+  List<PdfOutlineNode>? _pdfOutline;
+  String? _pdfAbsPath;
+
+  // Confirm state (non-PDF)
   final TextEditingController _linkTextController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showNoteSelectionDialog();
+    });
+  }
+
+  @override
   void dispose() {
-    _searchController.dispose();
     _linkTextController.dispose();
     super.dispose();
+  }
+
+  Future<void> _showNoteSelectionDialog() async {
+    if (!mounted) return;
+    final selectedNotes = await showDialog<List<Note>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => NoteSelectionDialog(
+        singleSelection: true,
+        title: 'Select Note',
+        onNotesSelected: (notes) =>
+            Navigator.of(dialogContext).pop(notes),
+      ),
+    );
+
+    if (!mounted) return;
+    if (selectedNotes == null || selectedNotes.isEmpty) {
+      // User cancelled note selection → close main dialog
+      Navigator.of(context).pop(null);
+      return;
+    }
+
+    setState(() {
+      _selectedNote = selectedNotes.first;
+      _currentStep = _Step.selectAttachment;
+    });
   }
 
   void _goBack() {
     setState(() {
       switch (_currentStep) {
-        case _Step.selectNote:
-          Navigator.of(context).pop(null);
-          return;
         case _Step.selectAttachment:
+          // Go back to note selection
           _selectedNote = null;
-          _currentStep = _Step.selectNote;
+          _showNoteSelectionDialog();
         case _Step.selectLocation:
           _selectedAttachment = null;
-          _pdfLocation = null;
+          _pdfTotalPages = null;
+          _pdfOutline = null;
+          _pdfAbsPath = null;
           _currentStep = _Step.selectAttachment;
         case _Step.confirm:
-          if (_selectedAttachment != null &&
-              _selectedAttachment!.fileName.endsWith('.pdf')) {
-            _pdfLocation = null;
-            _currentStep = _Step.selectLocation;
-          } else {
-            _selectedAttachment = null;
-            _currentStep = _Step.selectAttachment;
-          }
+          _selectedAttachment = null;
+          _currentStep = _Step.selectAttachment;
       }
     });
   }
 
-  void _onNoteSelected(Note note) {
-    setState(() {
-      _selectedNote = note;
-      _currentStep = _Step.selectAttachment;
-    });
-  }
-
-  void _onAttachmentSelected(Attachment attachment) {
-    setState(() {
-      _selectedAttachment = attachment;
-      if (attachment.fileName.endsWith('.pdf')) {
+  void _onAttachmentSelected(Attachment attachment) async {
+    if (attachment.fileName.endsWith('.pdf')) {
+      setState(() {
+        _selectedAttachment = attachment;
+        _loadingPdf = true;
         _currentStep = _Step.selectLocation;
-      } else {
+      });
+      await _loadPdfData(attachment);
+    } else {
+      setState(() {
+        _selectedAttachment = attachment;
         _prepareConfirmStep();
-      }
-    });
+      });
+    }
   }
 
-  void _onLocationSelected(PdfLocationSelection? location) {
-    setState(() {
-      _pdfLocation = location;
-      _prepareConfirmStep();
-    });
+  Future<void> _loadPdfData(Attachment attachment) async {
+    try {
+      final absPath = await attachment.getAbsolutePath();
+
+      pdfrx.Pdfrx.getCacheDirectory ??= () async {
+        final tempDir = await getTemporaryDirectory();
+        return tempDir.path;
+      };
+
+      final document = await pdfrx.PdfDocument.openFile(absPath);
+      final totalPages = document.pages.length;
+      final rawOutline = await document.loadOutline();
+      document.dispose();
+
+      final outline = rawOutline.isNotEmpty
+          ? _convertOutline(rawOutline, totalPages)
+          : <PdfOutlineNode>[];
+
+      if (mounted) {
+        setState(() {
+          _pdfTotalPages = totalPages;
+          _pdfOutline = outline;
+          _pdfAbsPath = absPath;
+          _loadingPdf = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadingPdf = false;
+        });
+      }
+    }
+  }
+
+  List<PdfOutlineNode> _convertOutline(
+      List<pdfrx.PdfOutlineNode> nodes, int totalPages) {
+    return nodes.map((node) {
+      final pageNum = node.dest?.pageNumber != null
+          ? (node.dest!.pageNumber + 1).clamp(1, totalPages)
+          : 1;
+      return PdfOutlineNode(
+        title: node.title,
+        page: pageNum,
+        children: node.children.isNotEmpty
+            ? _convertOutline(node.children, totalPages)
+            : const [],
+      );
+    }).toList();
   }
 
   void _prepareConfirmStep() {
@@ -107,12 +177,6 @@ class _InsertAttachmentLinkDialogState
     final linkService = AttachmentLinkService(getIt<DatabaseService>());
     final defaultText = linkService.defaultLinkText(
       fileName: attachment.fileName,
-      page: _pdfLocation?.page,
-      bookmarkTitle: null,
-      chapterTitle: _pdfLocation?.displayText != null &&
-              _pdfLocation!.displayText != 'Page ${_pdfLocation!.page}'
-          ? _pdfLocation!.displayText
-          : null,
     );
     _linkTextController.text = defaultText;
     _currentStep = _Step.confirm;
@@ -124,15 +188,12 @@ class _InsertAttachmentLinkDialogState
     final markdownLink = linkService.generateMarkdownLink(
       attachmentId: attachment.id,
       linkText: _linkTextController.text,
-      page: _pdfLocation?.page,
     );
     Navigator.of(context).pop(markdownLink);
   }
 
   String _stepTitle() {
     switch (_currentStep) {
-      case _Step.selectNote:
-        return 'Select Note';
       case _Step.selectAttachment:
         return 'Select Attachment';
       case _Step.selectLocation:
@@ -144,6 +205,11 @@ class _InsertAttachmentLinkDialogState
 
   @override
   Widget build(BuildContext context) {
+    // Don't render the dialog body until we have a note selected
+    if (_selectedNote == null) {
+      return const SizedBox.shrink();
+    }
+
     return Dialog(
       child: SizedBox(
         width: MediaQuery.of(context).size.width * 0.8,
@@ -155,12 +221,11 @@ class _InsertAttachmentLinkDialogState
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  if (_currentStep != _Step.selectNote)
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: _goBack,
-                      tooltip: 'Back',
-                    ),
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: _goBack,
+                    tooltip: 'Back',
+                  ),
                   Expanded(
                     child: Text(
                       _stepTitle(),
@@ -186,8 +251,6 @@ class _InsertAttachmentLinkDialogState
 
   Widget _buildStepContent() {
     switch (_currentStep) {
-      case _Step.selectNote:
-        return _buildNoteSelection();
       case _Step.selectAttachment:
         return _buildAttachmentSelection();
       case _Step.selectLocation:
@@ -195,58 +258,6 @@ class _InsertAttachmentLinkDialogState
       case _Step.confirm:
         return _buildConfirmation();
     }
-  }
-
-  Widget _buildNoteSelection() {
-    final notes = context.watch<AppProvider>().notes;
-    final filteredNotes = _searchQuery.isEmpty
-        ? notes
-        : notes.where((note) {
-            final query = _searchQuery.toLowerCase();
-            return note.title.toLowerCase().contains(query) ||
-                note.content.toLowerCase().contains(query);
-          }).toList();
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: TextField(
-            controller: _searchController,
-            decoration: const InputDecoration(
-              hintText: 'Search notes...',
-              prefixIcon: Icon(Icons.search),
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (value) {
-              setState(() {
-                _searchQuery = value;
-              });
-            },
-          ),
-        ),
-        Expanded(
-          child: filteredNotes.isEmpty
-              ? const Center(child: Text('No notes found'))
-              : ListView.builder(
-                  itemCount: filteredNotes.length,
-                  itemBuilder: (context, index) {
-                    final note = filteredNotes[index];
-                    return ListTile(
-                      leading: const Icon(Icons.note),
-                      title: Text(note.title),
-                      subtitle: Text(
-                        note.content,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      onTap: () => _onNoteSelected(note),
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
   }
 
   Widget _buildAttachmentSelection() {
@@ -257,12 +268,22 @@ class _InsertAttachmentLinkDialogState
   }
 
   Widget _buildLocationSelection() {
-    final attachment = _selectedAttachment!;
-    final bookmarks = attachment.getBookmarks();
+    if (_loadingPdf) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
+    final attachment = _selectedAttachment!;
     return PdfLocationPicker(
-      bookmarks: bookmarks,
-      onSelected: _onLocationSelected,
+      totalPages: _pdfTotalPages,
+      bookmarks: attachment.getBookmarks(),
+      outline: _pdfOutline,
+      pdfPath: _pdfAbsPath,
+      attachmentId: attachment.id,
+      fileName: attachment.fileName,
+      onInsert: (markdownLink) {
+        Navigator.of(context).pop(markdownLink);
+      },
+      onCancel: () => Navigator.of(context).pop(null),
     );
   }
 
@@ -272,7 +293,6 @@ class _InsertAttachmentLinkDialogState
     final preview = linkService.generateMarkdownLink(
       attachmentId: attachment.id,
       linkText: _linkTextController.text,
-      page: _pdfLocation?.page,
     );
 
     return Padding(

@@ -1,324 +1,283 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:note_synapse/widgets/pdf_location_picker.dart';
+import 'package:mockito/annotations.dart';
 import 'package:note_synapse/models/attachment.dart';
+import 'package:note_synapse/services/database_service.dart';
+import 'package:note_synapse/services/service_locator.dart';
+import 'package:note_synapse/widgets/pdf_location_picker.dart';
+
+@GenerateMocks([DatabaseService])
+import 'pdf_location_picker_test.mocks.dart';
 
 void main() {
-  group('PdfLocationPicker', () {
-    test('PdfLocationSelection holds page and displayText', () {
+  late MockDatabaseService mockDb;
+
+  setUp(() async {
+    await resetForTesting();
+    mockDb = MockDatabaseService();
+    getIt.registerSingleton<DatabaseService>(mockDb);
+  });
+
+  tearDown(() async {
+    await resetForTesting();
+  });
+
+  group('PdfLocationSelection model', () {
+    test('holds page and displayText', () {
       const sel = PdfLocationSelection(page: 5, displayText: 'Chapter 1');
       expect(sel.page, 5);
       expect(sel.displayText, 'Chapter 1');
     });
 
-    test('PdfLocationSelection displayText is optional', () {
+    test('displayText is optional', () {
       const sel = PdfLocationSelection(page: 3);
       expect(sel.page, 3);
       expect(sel.displayText, isNull);
     });
+  });
 
-    testWidgets('shows page number input field', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PdfLocationPicker(
-              totalPages: 100,
-              onSelected: (_) {},
-            ),
+  group('PdfLocationPicker', () {
+    Widget buildPicker({
+      int? totalPages,
+      List<PdfBookmark> bookmarks = const [],
+      List<PdfOutlineNode>? outline,
+      String? pdfPath,
+      String attachmentId = 'att-1',
+      String fileName = 'test.pdf',
+      Function(String)? onInsert,
+      VoidCallback? onCancel,
+    }) {
+      return MaterialApp(
+        home: Scaffold(
+          body: PdfLocationPicker(
+            totalPages: totalPages,
+            bookmarks: bookmarks,
+            outline: outline,
+            pdfPath: pdfPath,
+            attachmentId: attachmentId,
+            fileName: fileName,
+            onInsert: onInsert,
+            onCancel: onCancel,
           ),
         ),
       );
+    }
 
-      expect(find.text('Go to page'), findsOneWidget);
-      expect(find.byType(TextField), findsOneWidget);
-      expect(find.text('Go'), findsOneWidget);
+    testWidgets('shows prev/next buttons and page input', (tester) async {
+      await tester.pumpWidget(buildPicker(totalPages: 10));
+
+      expect(find.byIcon(Icons.chevron_left), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+      // Page input field with "1" as initial value
+      expect(find.text('1'), findsOneWidget);
     });
 
-    testWidgets('page input validates range - 0 shows error', (tester) async {
-      PdfLocationSelection? captured;
+    testWidgets('prev button is disabled on page 1', (tester) async {
+      await tester.pumpWidget(buildPicker(totalPages: 10));
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PdfLocationPicker(
-              totalPages: 100,
-              onSelected: (selection) {
-                captured = selection;
-              },
-            ),
-          ),
-        ),
+      final prevButton = tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.chevron_left),
       );
+      expect(prevButton.onPressed, isNull);
+    });
 
-      await tester.enterText(find.byType(TextField), '0');
-      await tester.tap(find.text('Go'));
+    testWidgets('next button navigates to next page', (tester) async {
+      await tester.pumpWidget(buildPicker(totalPages: 10));
+
+      await tester.tap(find.byIcon(Icons.chevron_right));
       await tester.pump();
 
-      expect(find.text('Page must be between 1 and 100'), findsOneWidget);
-      expect(captured, isNull);
+      // Page input should now show "2"
+      expect(find.text('2'), findsOneWidget);
     });
 
-    testWidgets('page input validates range - exceeding totalPages shows error',
-        (tester) async {
-      PdfLocationSelection? captured;
+    testWidgets('next button is disabled on last page', (tester) async {
+      await tester.pumpWidget(buildPicker(totalPages: 1));
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PdfLocationPicker(
-              totalPages: 50,
-              onSelected: (selection) {
-                captured = selection;
-              },
-            ),
-          ),
-        ),
+      final nextButton = tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.chevron_right),
       );
+      expect(nextButton.onPressed, isNull);
+    });
 
-      await tester.enterText(find.byType(TextField), '51');
-      await tester.tap(find.text('Go'));
+    testWidgets('page input navigates to entered page', (tester) async {
+      await tester.pumpWidget(buildPicker(totalPages: 50));
+
+      // Clear and enter a page number
+      final textField = find.byType(TextField).first;
+      await tester.enterText(textField, '25');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pump();
 
-      expect(find.text('Page must be between 1 and 50'), findsOneWidget);
-      expect(captured, isNull);
+      expect(find.text('25'), findsOneWidget);
     });
 
-    testWidgets('valid page input calls onSelected', (tester) async {
-      PdfLocationSelection? captured;
-      int? pageChanged;
+    testWidgets('shows ToC dropdown when outline provided', (tester) async {
+      final outline = [
+        PdfOutlineNode(title: 'Introduction', page: 1),
+        PdfOutlineNode(title: 'Methods', page: 20),
+      ];
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PdfLocationPicker(
-              totalPages: 100,
-              onSelected: (selection) {
-                captured = selection;
-              },
-              onPageChanged: (page) {
-                pageChanged = page;
-              },
-            ),
-          ),
-        ),
-      );
+      await tester.pumpWidget(buildPicker(
+        totalPages: 50,
+        outline: outline,
+      ));
 
-      await tester.enterText(find.byType(TextField), '42');
-      await tester.tap(find.text('Go'));
-      await tester.pump();
-
-      expect(captured, isNotNull);
-      expect(captured!.page, 42);
-      expect(captured!.displayText, 'Page 42');
-      expect(pageChanged, 42);
+      expect(find.text('ToC'), findsOneWidget);
     });
 
-    testWidgets('shows bookmarks section when bookmarks exist',
+    testWidgets('ToC dropdown not shown when no outline', (tester) async {
+      await tester.pumpWidget(buildPicker(totalPages: 50));
+
+      expect(find.text('ToC'), findsNothing);
+    });
+
+    testWidgets('shows Bookmarks dropdown when bookmarks exist',
         (tester) async {
       final bookmarks = [
         PdfBookmark(
-          title: 'Important Section',
+          title: 'Important',
           pageNumber: 10,
           createdAt: DateTime(2026, 1, 1),
         ),
-        PdfBookmark(
-          title: 'Reference',
-          pageNumber: 25,
-          createdAt: DateTime(2026, 1, 2),
-        ),
       ];
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PdfLocationPicker(
-              totalPages: 100,
-              bookmarks: bookmarks,
-              onSelected: (_) {},
-            ),
-          ),
-        ),
-      );
+      await tester.pumpWidget(buildPicker(
+        totalPages: 50,
+        bookmarks: bookmarks,
+      ));
 
       expect(find.text('Bookmarks'), findsOneWidget);
-      expect(find.text('Important Section'), findsOneWidget);
-      expect(find.text('Reference'), findsOneWidget);
-      expect(find.text('Page 10'), findsOneWidget);
-      expect(find.text('Page 25'), findsOneWidget);
     });
 
-    testWidgets('does not show bookmarks section when bookmarks empty',
-        (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PdfLocationPicker(
-              totalPages: 100,
-              bookmarks: const [],
-              onSelected: (_) {},
-            ),
-          ),
-        ),
-      );
+    testWidgets('Bookmarks dropdown not shown when empty', (tester) async {
+      await tester.pumpWidget(buildPicker(totalPages: 50));
 
       expect(find.text('Bookmarks'), findsNothing);
     });
 
-    testWidgets('tapping bookmark selects it', (tester) async {
-      PdfLocationSelection? captured;
-      int? pageChanged;
-
+    testWidgets('bookmark annotation shows in dropdown subtitle',
+        (tester) async {
       final bookmarks = [
         PdfBookmark(
-          title: 'My Bookmark',
-          pageNumber: 15,
+          title: 'Chapter 3',
+          pageNumber: 42,
+          createdAt: DateTime(2026, 1, 1),
+          annotation: 'This section covers the basics of neural networks',
+        ),
+      ];
+
+      await tester.pumpWidget(buildPicker(
+        totalPages: 100,
+        bookmarks: bookmarks,
+      ));
+
+      // Open the bookmarks dropdown
+      await tester.tap(find.text('Bookmarks'));
+      await tester.pumpAndSettle();
+
+      // Should show bookmark title and annotation in subtitle
+      expect(find.text('Chapter 3'), findsOneWidget);
+      expect(
+        find.textContaining('This section covers the basics of neural networks'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Page 42'), findsOneWidget);
+    });
+
+    testWidgets('bookmark without annotation shows only page in subtitle',
+        (tester) async {
+      final bookmarks = [
+        PdfBookmark(
+          title: 'Page 5',
+          pageNumber: 5,
           createdAt: DateTime(2026, 1, 1),
         ),
       ];
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PdfLocationPicker(
-              totalPages: 100,
-              bookmarks: bookmarks,
-              onSelected: (selection) {
-                captured = selection;
-              },
-              onPageChanged: (page) {
-                pageChanged = page;
-              },
-            ),
-          ),
-        ),
-      );
+      await tester.pumpWidget(buildPicker(
+        totalPages: 100,
+        bookmarks: bookmarks,
+      ));
 
-      await tester.tap(find.text('My Bookmark'));
-      await tester.pump();
+      // Open the bookmarks dropdown
+      await tester.tap(find.text('Bookmarks'));
+      await tester.pumpAndSettle();
 
-      expect(captured, isNotNull);
-      expect(captured!.page, 15);
-      expect(captured!.displayText, 'My Bookmark');
-      expect(pageChanged, 15);
+      expect(find.text('Page 5'), findsWidgets);
     });
 
-    testWidgets('shows chapters section when outline provided',
+    testWidgets('shows link text field and insert/cancel buttons',
         (tester) async {
+      await tester.pumpWidget(buildPicker(totalPages: 10));
+
+      expect(find.text('Link text'), findsOneWidget);
+      expect(find.text('Insert Link'), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
+    });
+
+    testWidgets('cancel button calls onCancel', (tester) async {
+      bool cancelled = false;
+
+      await tester.pumpWidget(buildPicker(
+        totalPages: 10,
+        onCancel: () => cancelled = true,
+      ));
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pump();
+
+      expect(cancelled, isTrue);
+    });
+
+    testWidgets('insert button calls onInsert with markdown link',
+        (tester) async {
+      String? result;
+
+      await tester.pumpWidget(buildPicker(
+        totalPages: 10,
+        attachmentId: 'att-42',
+        fileName: 'report.pdf',
+        onInsert: (link) => result = link,
+      ));
+
+      // The link text should be pre-filled; tap Insert
+      await tester.tap(find.text('Insert Link'));
+      await tester.pump();
+
+      expect(result, isNotNull);
+      expect(result, contains('synapseresource://attachment/att-42'));
+      expect(result, contains('page=1'));
+    });
+
+    testWidgets('shows PDF icon when no pdfPath provided (no preview)',
+        (tester) async {
+      await tester.pumpWidget(buildPicker(totalPages: 10));
+
+      expect(find.byIcon(Icons.picture_as_pdf), findsOneWidget);
+      expect(find.text('Page 1'), findsOneWidget);
+    });
+
+    testWidgets('selecting ToC item navigates to that page', (tester) async {
       final outline = [
-        PdfOutlineNode(title: 'Introduction', page: 1),
-        PdfOutlineNode(title: 'Methods', page: 20),
-        PdfOutlineNode(title: 'Results', page: 45),
+        PdfOutlineNode(title: 'Results', page: 30),
       ];
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PdfLocationPicker(
-              totalPages: 100,
-              outline: outline,
-              onSelected: (_) {},
-            ),
-          ),
-        ),
-      );
+      await tester.pumpWidget(buildPicker(
+        totalPages: 50,
+        outline: outline,
+      ));
 
-      expect(find.text('Chapters'), findsOneWidget);
-      expect(find.text('Introduction'), findsOneWidget);
-      expect(find.text('Methods'), findsOneWidget);
-      expect(find.text('Results'), findsOneWidget);
-    });
+      // Open ToC dropdown
+      await tester.tap(find.text('ToC'));
+      await tester.pumpAndSettle();
 
-    testWidgets('does not show chapters section when outline is null',
-        (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PdfLocationPicker(
-              totalPages: 100,
-              onSelected: (_) {},
-            ),
-          ),
-        ),
-      );
+      // Select the item
+      await tester.tap(find.text('Results · p.30'));
+      await tester.pumpAndSettle();
 
-      expect(find.text('Chapters'), findsNothing);
-    });
-
-    testWidgets('does not show chapters section when outline is empty',
-        (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PdfLocationPicker(
-              totalPages: 100,
-              outline: const [],
-              onSelected: (_) {},
-            ),
-          ),
-        ),
-      );
-
-      expect(find.text('Chapters'), findsNothing);
-    });
-
-    testWidgets('tapping chapter selects it', (tester) async {
-      PdfLocationSelection? captured;
-      int? pageChanged;
-
-      final outline = [
-        PdfOutlineNode(title: 'Chapter 3: Discussion', page: 30),
-      ];
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PdfLocationPicker(
-              totalPages: 100,
-              outline: outline,
-              onSelected: (selection) {
-                captured = selection;
-              },
-              onPageChanged: (page) {
-                pageChanged = page;
-              },
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Chapter 3: Discussion'));
-      await tester.pump();
-
-      expect(captured, isNotNull);
-      expect(captured!.page, 30);
-      expect(captured!.displayText, 'Chapter 3: Discussion');
-      expect(pageChanged, 30);
-    });
-
-    testWidgets('"No specific page" option returns null selection',
-        (tester) async {
-      bool wasCalled = false;
-      PdfLocationSelection? captured = PdfLocationSelection(page: -1);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: PdfLocationPicker(
-              totalPages: 100,
-              onSelected: (selection) {
-                wasCalled = true;
-                captured = selection;
-              },
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('No specific page'));
-      await tester.pump();
-
-      expect(wasCalled, isTrue);
-      expect(captured, isNull);
+      // Page should now be 30
+      expect(find.text('30'), findsOneWidget);
     });
   });
 }

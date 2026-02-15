@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:note_synapse/models/attachment.dart';
+import 'package:note_synapse/services/attachment_link_service.dart';
+import 'package:note_synapse/services/database_service.dart';
+import 'package:note_synapse/services/pdf_thumbnail_service.dart';
+import 'package:note_synapse/services/service_locator.dart';
 
 /// Represents a selected location within a PDF.
 class PdfLocationSelection {
@@ -23,22 +27,32 @@ class PdfOutlineNode {
   });
 }
 
-/// A widget that lets the user pick a location in a PDF by entering a page
-/// number, selecting a bookmark, or selecting a chapter from the outline.
+/// A widget that provides a full PDF location picker with page preview,
+/// navigation controls, ToC/bookmark dropdowns, and link text + insert button.
+///
+/// Returns a markdown link string via [onInsert], or calls [onCancel].
 class PdfLocationPicker extends StatefulWidget {
   final int? totalPages;
   final List<PdfBookmark> bookmarks;
   final List<PdfOutlineNode>? outline;
-  final Function(PdfLocationSelection?) onSelected;
-  final Function(int)? onPageChanged;
+  final String? pdfPath;
+  final String attachmentId;
+  final String fileName;
+  final PdfThumbnailService? thumbnailService;
+  final Function(String markdownLink)? onInsert;
+  final VoidCallback? onCancel;
 
   const PdfLocationPicker({
     super.key,
     this.totalPages,
     this.bookmarks = const [],
     this.outline,
-    required this.onSelected,
-    this.onPageChanged,
+    this.pdfPath,
+    required this.attachmentId,
+    required this.fileName,
+    this.thumbnailService,
+    this.onInsert,
+    this.onCancel,
   });
 
   @override
@@ -46,176 +60,298 @@ class PdfLocationPicker extends StatefulWidget {
 }
 
 class _PdfLocationPickerState extends State<PdfLocationPicker> {
-  final TextEditingController _pageController = TextEditingController();
-  String? _pageError;
+  int _currentPage = 1;
+  final TextEditingController _pageInputController = TextEditingController();
+  final TextEditingController _linkTextController = TextEditingController();
+  Uint8List? _thumbnailBytes;
+  bool _loadingThumbnail = false;
+
+  PdfThumbnailService get _thumbnailService =>
+      widget.thumbnailService ?? PdfThumbnailService();
+
+  @override
+  void initState() {
+    super.initState();
+    _pageInputController.text = '1';
+    _updateLinkText();
+    _loadThumbnail();
+  }
 
   @override
   void dispose() {
-    _pageController.dispose();
+    _pageInputController.dispose();
+    _linkTextController.dispose();
     super.dispose();
   }
 
-  void _submitPage() {
-    final text = _pageController.text.trim();
-    if (text.isEmpty) {
-      setState(() {
-        _pageError = 'Please enter a page number';
-      });
-      return;
-    }
+  void _updateLinkText({String? chapterTitle, String? bookmarkTitle}) {
+    final linkService = AttachmentLinkService(getIt<DatabaseService>());
+    _linkTextController.text = linkService.defaultLinkText(
+      fileName: widget.fileName,
+      page: _currentPage,
+      bookmarkTitle: bookmarkTitle,
+      chapterTitle: chapterTitle,
+    );
+  }
 
-    final page = int.tryParse(text);
-    if (page == null) {
-      setState(() {
-        _pageError = 'Invalid number';
-      });
-      return;
-    }
-
-    if (widget.totalPages != null && (page < 1 || page > widget.totalPages!)) {
-      setState(() {
-        _pageError = 'Page must be between 1 and ${widget.totalPages}';
-      });
-      return;
-    }
-
-    if (page < 1) {
-      setState(() {
-        _pageError = 'Page must be at least 1';
-      });
-      return;
-    }
-
+  Future<void> _loadThumbnail() async {
+    if (widget.pdfPath == null) return;
     setState(() {
-      _pageError = null;
+      _loadingThumbnail = true;
     });
+    final bytes = await _thumbnailService.renderPage(
+      pdfPath: widget.pdfPath!,
+      page: _currentPage - 1, // 0-indexed
+      width: 400,
+    );
+    if (mounted) {
+      setState(() {
+        _thumbnailBytes = bytes;
+        _loadingThumbnail = false;
+      });
+    }
+  }
 
-    widget.onSelected(PdfLocationSelection(page: page, displayText: 'Page $page'));
-    widget.onPageChanged?.call(page);
+  void _goToPage(int page) {
+    final maxPage = widget.totalPages ?? page;
+    final clamped = page.clamp(1, maxPage);
+    if (clamped == _currentPage) return;
+    setState(() {
+      _currentPage = clamped;
+      _pageInputController.text = '$clamped';
+    });
+    _updateLinkText();
+    _loadThumbnail();
+  }
+
+  void _onPageInputSubmitted(String text) {
+    final page = int.tryParse(text.trim());
+    if (page != null) {
+      _goToPage(page);
+    }
   }
 
   void _selectBookmark(PdfBookmark bookmark) {
-    widget.onSelected(PdfLocationSelection(
-      page: bookmark.pageNumber,
-      displayText: bookmark.title,
-    ));
-    widget.onPageChanged?.call(bookmark.pageNumber);
+    _goToPage(bookmark.pageNumber);
+    _updateLinkText(bookmarkTitle: bookmark.title);
   }
 
-  void _selectChapter(PdfOutlineNode node) {
-    widget.onSelected(PdfLocationSelection(
-      page: node.page,
-      displayText: node.title,
-    ));
-    widget.onPageChanged?.call(node.page);
+  void _selectOutlineNode(PdfOutlineNode node) {
+    _goToPage(node.page);
+    _updateLinkText(chapterTitle: node.title);
   }
 
-  void _selectNoPage() {
-    widget.onSelected(null);
+  List<PdfOutlineNode> _flattenOutline(
+    List<PdfOutlineNode> nodes, [
+    int depth = 0,
+  ]) {
+    final result = <PdfOutlineNode>[];
+    for (final node in nodes) {
+      result.add(node);
+      if (node.children.isNotEmpty) {
+        result.addAll(_flattenOutline(node.children, depth + 1));
+      }
+    }
+    return result;
+  }
+
+  void _insertLink() {
+    final linkService = AttachmentLinkService(getIt<DatabaseService>());
+    final markdownLink = linkService.generateMarkdownLink(
+      attachmentId: widget.attachmentId,
+      linkText: _linkTextController.text,
+      page: _currentPage,
+    );
+    widget.onInsert?.call(markdownLink);
+  }
+
+  String _abbreviate(String text, int maxLen) {
+    if (text.length <= maxLen) return text;
+    return '${text.substring(0, maxLen - 1)}…';
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final maxPage = widget.totalPages ?? 1;
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Page input section
-          Text('Go to page', style: theme.textTheme.titleSmall),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _pageController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: InputDecoration(
-                    hintText: widget.totalPages != null
-                        ? '1 - ${widget.totalPages}'
-                        : 'Page number',
-                    errorText: _pageError,
-                    isDense: true,
-                    border: const OutlineInputBorder(),
+    return Column(
+      children: [
+        // Top toolbar
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Prev page
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  tooltip: 'Previous page',
+                  onPressed: _currentPage > 1
+                      ? () => _goToPage(_currentPage - 1)
+                      : null,
+                ),
+                // Page input
+                SizedBox(
+                  width: 60,
+                  child: TextField(
+                    controller: _pageInputController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    textAlign: TextAlign.center,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 8,
+                      ),
+                      border: const OutlineInputBorder(),
+                      suffixText: '/ $maxPage',
+                      suffixStyle: theme.textTheme.bodySmall,
+                    ),
+                    onSubmitted: _onPageInputSubmitted,
                   ),
-                  onSubmitted: (_) => _submitPage(),
+                ),
+                const SizedBox(width: 4),
+                // ToC dropdown
+                if (widget.outline != null && widget.outline!.isNotEmpty)
+                  PopupMenuButton<PdfOutlineNode>(
+                    tooltip: 'Table of Contents',
+                    itemBuilder: (context) {
+                      final flat = _flattenOutline(widget.outline!);
+                      return flat.map((node) {
+                        return PopupMenuItem<PdfOutlineNode>(
+                          value: node,
+                          child: Text(
+                            '${node.title} · p.${node.page}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList();
+                    },
+                    onSelected: _selectOutlineNode,
+                    child: Chip(
+                      avatar: const Icon(Icons.list, size: 18),
+                      visualDensity: VisualDensity.compact,
+                      label: const Text('ToC'),
+                    ),
+                  ),
+                // Bookmarks dropdown
+                if (widget.bookmarks.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  PopupMenuButton<PdfBookmark>(
+                    tooltip: 'Bookmarks',
+                    itemBuilder: (context) {
+                      return widget.bookmarks.map((bookmark) {
+                        final hasAnnotation =
+                            bookmark.annotation != null &&
+                            bookmark.annotation!.isNotEmpty;
+                        final subtitle = hasAnnotation
+                            ? '${_abbreviate(bookmark.annotation!, 80)} · Page ${bookmark.pageNumber}'
+                            : 'Page ${bookmark.pageNumber}';
+                        return PopupMenuItem<PdfBookmark>(
+                          value: bookmark,
+                          child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(bookmark.title),
+                            subtitle: Text(
+                              subtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        );
+                      }).toList();
+                    },
+                    onSelected: _selectBookmark,
+                    child: Chip(
+                      avatar: const Icon(Icons.bookmark, size: 18),
+                      visualDensity: VisualDensity.compact,
+                      label: const Text('Bookmarks'),
+                    ),
+                  ),
+                ],
+                // Next page
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  tooltip: 'Next page',
+                  onPressed: _currentPage < maxPage
+                      ? () => _goToPage(_currentPage + 1)
+                      : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const Divider(height: 1),
+        // PDF page preview
+        Expanded(child: Center(child: _buildPreview())),
+        const Divider(height: 1),
+        // Bottom area: link text + buttons
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _linkTextController,
+                decoration: const InputDecoration(
+                  labelText: 'Link text',
+                  border: OutlineInputBorder(),
+                  isDense: true,
                 ),
               ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: _submitPage,
-                child: const Text('Go'),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: widget.onCancel,
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _linkTextController.text.isNotEmpty
+                        ? _insertLink
+                        : null,
+                    child: const Text('Insert Link'),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 16),
-
-          // No specific page option
-          OutlinedButton.icon(
-            onPressed: _selectNoPage,
-            icon: const Icon(Icons.link),
-            label: const Text('No specific page'),
-          ),
-
-          // Bookmarks section
-          if (widget.bookmarks.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text('Bookmarks', style: theme.textTheme.titleSmall),
-            const SizedBox(height: 8),
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: widget.bookmarks.length,
-              itemBuilder: (context, index) {
-                final bookmark = widget.bookmarks[index];
-                return ListTile(
-                  dense: true,
-                  leading: const Icon(Icons.bookmark, size: 20),
-                  title: Text(bookmark.title),
-                  subtitle: Text('Page ${bookmark.pageNumber}'),
-                  onTap: () => _selectBookmark(bookmark),
-                );
-              },
-            ),
-          ],
-
-          // Chapters / outline section
-          if (widget.outline != null && widget.outline!.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text('Chapters', style: theme.textTheme.titleSmall),
-            const SizedBox(height: 8),
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: widget.outline!.length,
-              itemBuilder: (context, index) {
-                final node = widget.outline![index];
-                return _buildOutlineNode(node, 0);
-              },
-            ),
-          ],
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _buildOutlineNode(PdfOutlineNode node, int depth) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ListTile(
-          dense: true,
-          contentPadding: EdgeInsets.only(left: 16.0 + depth * 16.0),
-          leading: const Icon(Icons.article, size: 20),
-          title: Text(node.title),
-          subtitle: Text('Page ${node.page}'),
-          onTap: () => _selectChapter(node),
-        ),
-        ...node.children.map((child) => _buildOutlineNode(child, depth + 1)),
-      ],
-    );
+  Widget _buildPreview() {
+    if (widget.pdfPath == null) {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.picture_as_pdf, size: 64, color: Colors.grey),
+          const SizedBox(height: 8),
+          Text(
+            'Page $_currentPage',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ],
+      );
+    }
+    if (_loadingThumbnail) {
+      return const CircularProgressIndicator();
+    }
+    if (_thumbnailBytes != null) {
+      return InteractiveViewer(
+        minScale: 1.0,
+        maxScale: 4.0,
+        child: Image.memory(_thumbnailBytes!, fit: BoxFit.contain),
+      );
+    }
+    return const Text('Preview not available');
   }
 }
