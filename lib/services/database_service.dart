@@ -1793,22 +1793,25 @@ class DatabaseService {
     }
 
     // Update attachments
-    // Update attachments
-    // First, get existing attachments to preserve metadata (like includeInAIContext)
-    final existingAttachments = await db.query(
+    // Get existing attachments to preserve IDs and metadata
+    final existingAttachmentsRows = await db.query(
       'attachments',
       columns: ['filePath', 'includeInAIContext'],
       where: 'noteId = ?',
       whereArgs: [note.id],
     );
 
+    final existingPaths = <String>{};
     final Map<String, bool> existingContextMap = {};
-    for (final row in existingAttachments) {
-      existingContextMap[row['filePath'] as String] =
-          (row['includeInAIContext'] as int?) != 0;
+
+    for (final row in existingAttachmentsRows) {
+      final path = row['filePath'] as String;
+      existingPaths.add(path);
+      existingContextMap[path] = (row['includeInAIContext'] as int?) != 0;
     }
 
-    await db.delete('attachments', where: 'noteId = ?', whereArgs: [note.id]);
+    final pathsToKeep = <String>{};
+
     for (final attachmentPath in note.attachmentPaths) {
       // Check if path is relative (starts with 'attachments/')
       bool isRelativePath = attachmentPath.startsWith('attachments/');
@@ -1823,18 +1826,36 @@ class DatabaseService {
         }
       }
 
-      // Preserve includeInAIContext if it existed, otherwise default to true
-      final includeInAIContext =
-          existingContextMap[finalPath] ??
-          existingContextMap[attachmentPath] ??
-          true;
+      if (existingPaths.contains(finalPath)) {
+        // Attachment exists, keep it
+        pathsToKeep.add(finalPath);
+      } else {
+        // New attachment, insert it
+        // Preserve includeInAIContext if it existed in some form (robustness), otherwise default to true
+        final includeInAIContext =
+            existingContextMap[finalPath] ??
+            existingContextMap[attachmentPath] ??
+            true;
 
-      await _insertAttachment(
-        note.id,
-        finalPath,
-        isRelativePath: isRelativePath,
-        includeInAIContext: includeInAIContext,
-      );
+        await _insertAttachment(
+          note.id,
+          finalPath,
+          isRelativePath: isRelativePath,
+          includeInAIContext: includeInAIContext,
+        );
+      }
+    }
+
+    // Delete attachments that are no longer in the note
+    // We do this by checking which existing paths were NOT in the new list
+    for (final existingPath in existingPaths) {
+      if (!pathsToKeep.contains(existingPath)) {
+        await db.delete(
+          'attachments',
+          where: 'noteId = ? AND filePath = ?',
+          whereArgs: [note.id, existingPath],
+        );
+      }
     }
   }
 
