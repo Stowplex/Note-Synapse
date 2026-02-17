@@ -1,6 +1,6 @@
 # External Development: The `.nsapp` Workflow
 
-While the in-app editor is great for Vibe Coding, you might prefer a proper IDE (VS Code, Cursor, etc.) for complex applications.
+While the in-app editor can handle simple apps, you might prefer a proper IDE (VS Code, Cursor, etc.) for complex applications.
 
 Note Synapse apps can be imported from a standard YAML format.
 
