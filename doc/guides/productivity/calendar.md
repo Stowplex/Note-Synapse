@@ -12,14 +12,14 @@ You can quickly move tasks between days without opening any menus.
 *   **Action**: Long-press any task in the bottom list.
 *   **Move**: Drag it onto any date in the calendar grid.
 *   **Result**: The task is instantly rescheduled to that date.
-    *   *Visual Cue*: The target date highlights in **Blue**.
-    *   *Source Cue*: The original date highlights in **Purple**.
 
 ### 2. Multi-Day Task Sizing (Two-Finger Gesture)
 Adjust the duration of a task while you are dragging it.
 *   **Action**: While dragging a task with one finger...
 *   **Resize**: Use a **second finger** to pinch (shrink) or spread (expand) on the bottom half of the screen (outside the calendar grid).
 *   **Result**: The "ghost" of the task will grow to cover multiple days (e.g., 3 days). Dropping it will set the task to start on the target date and last for the new duration.
+
+![](../../media/calendar/calendar_screen.png)
 
 ### Creating Tasks
 *   **New Task**: Tap the **+ New Task** button next to the date header.
@@ -47,4 +47,8 @@ The colored bar under each date show the density of tasks:
 *   **Grey**: Cancelled
 
 > [!TIP]
-> **Timeline View**: Switch to "Timeline" view using the view icon (top right) to see a vertical scrollable list of all upcoming tasks, great for a glimpse of the future!
+> **Timeline View**: Switch to "Timeline" view using the view icon (top right) to see a vertical scrollable list of all tasks, centered at today -- great for a glimpse of the future.
+
+![](../../media/calendar/calendar_timeline.png)
+![](../../media/calendar/timeline_view.png)
+

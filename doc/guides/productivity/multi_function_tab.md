@@ -15,6 +15,8 @@ You can replace the Calendar with any "Global" User App (e.g., a Weather Dashboa
     *   **[Your Global Apps]** (e.g., "Weather")
 3.  **Tap** an app to select it.
 
+![](../../media/calendar/multi_function_tab.png)
+
 ### Restoring the Calendar
 To go back to the calendar:
 1.  **Long Press** the tab again.
@@ -26,3 +28,6 @@ Only **Global Apps** appear in this list.
 *   **AI Tools** (headless apps) do **not** appear here.
 
 Create a new User App and ensure its type is set to **Normal** (Global). See [User Apps & Vibe Coding](../../power_user/overview.md) for details. Click the three dot menu beside the app, and select "Add to multi-function tab". Then it will appear when you long press the multi-function tag.
+
+![](../../media/calendar/multi_function.png)
+
