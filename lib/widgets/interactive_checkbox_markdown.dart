@@ -130,7 +130,10 @@ class _InteractiveCheckboxMarkdownState
         if (result != null && mounted) {
           final path = await result.attachment.getAbsolutePath();
           final pageStr = link.queryParameters['page'];
-          final page = pageStr != null ? int.tryParse(pageStr) : null;
+          final pageRaw = pageStr != null ? int.tryParse(pageStr) : null;
+          // Convert 1-based page number (from URL) to 0-based index (for internal use)
+          final page = pageRaw != null ? (pageRaw > 0 ? pageRaw - 1 : 0) : null;
+
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => ImmersiveNoteScreen(
@@ -143,8 +146,7 @@ class _InteractiveCheckboxMarkdownState
         } else if (mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(
-              const SnackBar(content: Text('Attachment not found')));
+          ).showSnackBar(const SnackBar(content: Text('Attachment not found')));
         }
     }
   }

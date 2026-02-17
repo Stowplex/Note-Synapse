@@ -132,12 +132,14 @@ class _PdfLocationPickerState extends State<PdfLocationPicker> {
   }
 
   void _selectBookmark(PdfBookmark bookmark) {
-    _goToPage(bookmark.pageNumber);
+    // defined bookmarks are 0-indexed, so we add 1 for UI
+    _goToPage(bookmark.pageNumber + 1);
     _updateLinkText(bookmarkTitle: bookmark.title);
   }
 
   void _selectOutlineNode(PdfOutlineNode node) {
-    _goToPage(node.page);
+    // outline nodes are 0-indexed, so we add 1 for UI
+    _goToPage(node.page + 1);
     _updateLinkText(chapterTitle: node.title);
   }
 
@@ -225,7 +227,7 @@ class _PdfLocationPickerState extends State<PdfLocationPicker> {
                         return PopupMenuItem<PdfOutlineNode>(
                           value: node,
                           child: Text(
-                            '${node.title} · p.${node.page}',
+                            '${node.title} · p.${node.page + 1}',
                             overflow: TextOverflow.ellipsis,
                           ),
                         );
@@ -249,8 +251,8 @@ class _PdfLocationPickerState extends State<PdfLocationPicker> {
                             bookmark.annotation != null &&
                             bookmark.annotation!.isNotEmpty;
                         final subtitle = hasAnnotation
-                            ? '${_abbreviate(bookmark.annotation!, 80)} · Page ${bookmark.pageNumber}'
-                            : 'Page ${bookmark.pageNumber}';
+                            ? '${_abbreviate(bookmark.annotation!, 80)} · Page ${bookmark.pageNumber + 1}'
+                            : 'Page ${bookmark.pageNumber + 1}';
                         return PopupMenuItem<PdfBookmark>(
                           value: bookmark,
                           child: ListTile(
