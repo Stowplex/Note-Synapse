@@ -44,5 +44,3 @@ You don't need to be a master programmer. Synapse includes a built-in **App Stud
 **Next Steps:**
 *   **[App Development Guide](app_development.md)**: The complete API reference and workflow guide.
 *   **[Build a Geocoding AI Tool](ai_tools.md)**: Teach your AI new tricks.
-*   **[Build a Note Summarizer](user_apps.md)**: Process your notes with custom logic.
-*   **[External Development](external_development.md)**: Coding in VS Code & Python scripts.

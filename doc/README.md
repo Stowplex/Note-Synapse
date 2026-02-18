@@ -25,13 +25,11 @@
 
 ---
 
-## Power User / Vibe Coding
+## Power User / Create Your Own Tool.
 Build your own apps and tools *inside* Synapse without touching the app source code.
 
 -   **[Overview](power_user/overview.md)**: Global Apps vs Note Actions vs AI Tools.
 -   **[AI Tools](power_user/ai_tools.md)**: Create headless tools for the LLM (e.g., Geocoding).
--   **[User Apps](power_user/user_apps.md)**: Create UI-based apps for dashboards or note processing.
--   **[External Dev](power_user/external_development.md)**: Build apps in VS Code using YAML & Python.
 
 ---
 
