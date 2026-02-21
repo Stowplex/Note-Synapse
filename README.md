@@ -76,11 +76,13 @@ flutter run
 
 ## Documentation
 
-- **[Core Concepts](doc/guides/core_concepts.md)**: Tag Algebra, Block Editing.
-- **[Productivity Guide](doc/guides/productivity.md)**: Web Clipper, Calendar, Immersive Reading.
-- **[AI Power User](doc/guides/ai_conversations.md)**: Tree Chats, Agentic Mode, Prompt Engineering.
-- **[Developer API](doc/developer/user_apps.md)**: `window.Synapse` API reference, Vibe Coding workflows.
-- **[Architecture](doc/developer/architecture.md)**: How the HTTP/3 stack works.
+Read the full documentation at **[doc/README.md](doc/README.md)**.
+
+- **[Tag Organization](doc/README.md#organization)**: Tag Algebra, Tag Filters, Tag Images.
+- **[Productivity Guide](doc/README.md#productivity)**: Web Clipper, Calendar, Dashboards.
+- **[AI & Thinking](doc/README.md#ai--thinking)**: Immersive Reading, Smart Model Matching, MCP Tools.
+- **[Power User](doc/README.md#power-user--create-your-own-tool)**: Build your own apps and tools inside Synapse.
+- **[Developer Architecture](doc/README.md#contributor)**: How the HTTP/3 stack works.
 
 ## License
 Dual license: AGPL v3 & Proprietary. See [LICENSE](LICENSE) for details.

@@ -1,64 +1,48 @@
-# Hands-On: Immersive Reading (PDFs)
+# Tutorial: Immersive Reading Mode
 
-Study complex papers without leaving your flow.
+The immersive mode allows you to focus on reading materials and can precisely interact with AI about the content. For example you can circle a formula on a research paper and ask AI to explain it.
 
-## The "Circle to Ask" Gesture
-### Problem
-You are reading a PDF about Quantum Mechanics. You see a formula `H(t) |ψ(t)>`. You have no idea what `H(t)` specificially means in *this* context.
+![](../../media/image_1771266612915_cf681633-c40d-431e-b7ac-7d69c99aa9b5.png)
 
-## Entering Immersive Mode
-1.  **Open any Note**.
-2.  Tap the **Book Icon** (`chrome_reader_mode`) in the top toolbar.
-3.  **Result**: You enter a unified viewing experience where the distractions of the editor are removed.
+![](../../media/image_1771266627191_bde6fcaa-3e26-4bd5-9cd6-b9243c8f215f.png)
 
-## Working with PDFs
-Immersive Mode is designed for deep reading of attached PDFs.
+## Enter Immersive Mode
+To enter immersive mode, you either click the immersive mode button, or select the immersive mode on the attachment's three dot menu.
 
-### 1. Opening a PDF
-*This is the tricky part.* By default, Immersive Mode shows the note text.
-1.  Tap the **Outline Icon** (`format_list_bulleted`) in the top-right.
-2.  You will see a list of sections.
-3.  **Select the PDF**: If your note has a PDF attachment, it appears here. Tap it to switch the view to the PDF.
+![](../../media/image_1771269612467_7be91277-6fcf-4ef6-9db7-faf93726a714.png)
 
-### 2. The Side Handle (AI Panel)
-You will see a small "Handle" floating on the side or bottom of the screen.
--   **Tap** to expand the AI Chat panel.
--   **Drag** to resize the panel (give yourself more reading space vs. chat space).
--   **Context**: The AI in this panel automatically sees what you are reading.
+![](../../media/image_1771269729148_3e7e22ff-c66b-4691-8782-9f2f9b389794.png)
+If immersive mode is entered through the top immersive button, by default it's showing the main content of the note. You need to click the outline button again to open the attachments (image, PDF etc).
 
-## The "Circle to Ask" Gesture
-### Problem
-You are reading a critical formula `H(t) |ψ(t)>` and need an explanation.
+![](../../media/image_1771269818793_5ed8b03c-0a87-4fb7-8096-2f921b5d918d.png)
 
-### Walkthrough
-1.  In Immersive Mode (with PDF open), select the **Pen Tool** (or just use your Apple Pencil).
-2.  **Draw a Red Circle** around the formula.
-3.  Write in the prompt: "Explain this parameter".
-4.  **Result**: The AI analyzes the *pixels* inside your circle to understand symbols that normal text extraction misses.
+After the PDF is opened, the outline button will further bring up the PDF's table of contents when available.
 
+![](../../media/image_1771269889928_00cb088c-654a-40f0-b81e-48a7781bce53.png)
 
-## The Scratchpad
-### Problem
-You are reading and have a flash of insight, or need to jot down key terms, but you don't want to leave the reading view or start a full chat session.
+## Interact with AI
+In immersive mode, you can use the pen icon to circle stuff on the screen, and ask AI about them in detail.
 
-### Solution
-The Scratchpad is a temporary buffer that sits "between" your reading and your permanent note.
+![](../../media/image_1771270067751_6628c65b-5c4c-4f4a-ac3f-7ee197c0008b.png)
 
-1.  **Toggle**: Tap the **Note Icon** inside the AI Panel (near the input bar) to switch from "Chat Mode" to "Scratchpad Mode".
-    *   *Indicator*: The input bar hint changes to "Send to scratchpad".
-2.  **Capture**: Type notes, copy-paste snippets from the PDF, or even scribble with the pen.
-3.  **Use It**:
-    *   **Context for AI**: Check the box **"Include scratchpad in chat context"**. Now, when you switch back to Chat, the AI knows everything you just jotted down.
-    *   **Save to Note**: Tap **"Add to Note"** to append your scratchpad items permanently to the underlying note.
+The left handle can be hold and dragged. You can also click the up / down icon to open the AI conversation panel in two different locations.This avoids the panel obscuring the content.
 
-> **Screenshot Placeholder:** [Image of the AI Panel in 'Scratchpad Mode', showing a list of bullet points and the 'Include in Chat' checkbox.]
+![](../../media/image_1771270191546_b674caf4-bd02-4630-a765-c676df8756b5.png)
 
-## Hands-On: Limiting Context Scope
-### Problem
-You are asking the AI to summarize Chapter 5, but it keeps hallucinating facts from Chapter 1.
+![](../../media/image_1771270206711_3e0c0645-8a52-4d0d-84a4-d19e3abda45f.png)
 
-### Walkthrough
-1.  In the Immersive Chat, tap the **Context Settings** icon (Gear/Page symbol).
-2.  **Scope**: Switch from "Whole Document" to **"Current Chapter"**.
-3.  **Range**: Set the page slider to **"+/- 0 pages"**.
-4.  **Result**: The AI is now blind to everything except exactly what you are looking at. Hallucinations drop to near zero.
+## Optimize Context
+Immersive mode allows you to focus your interaction with the AI. But there is a catch -- sometimes it's not efficient to send full file (could be thousands of pages) to AI LLM. You can select from the 3-dot menu -> configure AI context. And it allows you to choose between full file, current page plus or minus a few pages, particular chapters, or bookmarked pages.
+
+![](../../media/image_1771272218162_37f7a491-d82f-4db4-baed-f877e3ee17ca.png)
+
+![](../../media/image_1771272229846_22aaebd3-96be-4a83-9519-926184abef3e.png)
+
+## Use the Scratch Pad
+The immersive mode has a ScratchPad that allows you to take quick notes, stash content along the way. You can enable it by selecting the scratchpad icon below the pen icon in the AI interaction box. When it's toggled on, your messages are sent to the scratchpad. 
+
+![](../../media/image_1771272402215_917e6489-864d-4558-9285-d77e774bc23a.png)
+
+You can choose to include scratchpad in the conversation context, or save it to a note. 
+
+The scratchpad will be cleared when you leave the immersive reading view and any unsaved changes will be lost.

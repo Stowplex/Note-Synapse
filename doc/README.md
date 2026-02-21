@@ -8,7 +8,8 @@
 -   **[Note Editing](guides/editor/note_editing.md)**: Using the note editor.
 
 ## Organization
--   **[Tag Algebra](guides/organize/tag_algebra.md)**: Creating virtual folder hierarchies (`Tag A` + `Tag B`).
+-   **[Tag Filter](guides/organize/tag_filter.md)**: Filter notes by combining multiple tags into hierarchies.
+-   **[Tag Image](guides/organize/tag_image.md)**: Add images to visualize your tags.
 -   **[Tag Manager & Dedup](guides/organize/tag_manager.md)**: Bulk delete and Merge tags (Manual & AI).
 
 ## AI & Thinking
@@ -17,6 +18,7 @@
 -   **[Immersive Reading](guides/ai/immersive_reading.md)**: Circle-to-ask on PDFs and precision context scope.
 -   **[Smart Model Matching](guides/ai/smart_model_matching.md)**: Automatically switch models based on capabilities (Images, Logic).
 -   **[MCP Tools](guides/ai/mcp.md)**: Connect Note Synapse to external tools (Google Drive, Slack, etc).
+-   **[Tag Prompts](guides/ai/tag_prompts.md)**: Associate pre-defined prompts with tags.
 
 ## Productivity
 -   **[Web Clipper](guides/productivity/web_clipper.md)**: Readability vs Raw HTML (for Vibe Coding).
