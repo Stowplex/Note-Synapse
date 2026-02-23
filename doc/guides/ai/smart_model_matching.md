@@ -1,11 +1,9 @@
 # Smart Model Matching (Multi-Capability Selection)
 
-Note Synapse solves the "Model Dilemma": *Do I use the cheap, fast model (e.g., Gemini Flash) or the smart, expensive one (e.g., GPT-4o)?*
-
-With **Smart Matching**, you don't have to choose. You set a default (cheap) model, and Synapse automatically swaps in a powerful model **only when required**.
+With **Smart Matching**, you set a default (cheap) model, and Synapse automatically swaps in a powerful model **only when required**.
 
 ## Problem
-You default to a text-only or lightweight model (e.g., local Llama on your Mac, or Gemini Flash) for speed and cost. But occasionally, you drag in an **Image** or a **PDF**, or ask for **Code Generation**. Your default model fails or gives poor results.
+You default to a text-only or lightweight model (e.g., local Llama on your Mac, or GLM-4.5) for speed and cost. But occasionally, you need multi-modal capabilities for **Image** or a **PDF**, or ask for **Code Generation**. Your default model fails or gives poor results.
 
 ## Solution: Capability-Based Priority
 You define a "Priority List" of models. When you send a message, Synapse analyzes it:
@@ -13,7 +11,7 @@ You define a "Priority List" of models. When you send a message, Synapse analyze
 
 It then scans your models in order:
 1.  **Active Model** (Default): Does it support Images + Code? -> No.
-2.  **Priority 1** (e.g., Claude 3.5 Sonnet): Does it support Images + Code? -> **Yes**.
+2.  **Priority 1** (e.g., Gemini 3 Flash): Does it support Images + Code? -> **Yes**.
 3.  **Result**: Synapse automatically uses Priority 1 for *this specific turn*.
 
 The next message (text only) reverts to your lightweight default.
@@ -22,10 +20,10 @@ The next message (text only) reverts to your lightweight default.
 1.  Go to **Settings -> AI Settings -> Model Preference**.
 2.  **Defaults**: Set your "Active Model" (main chat screen) to your preferred daily driver (e.g., Flash).
 3.  **Priority List**: Drag and drop powerful models from "Available" to "Priority List".
-    *   *Recommendation*: Put your most capable "Swiss Army Knife" model at the top (e.g., GPT-4o or Claude 3.5 Sonnet).
+    *   *Recommendation*: Put your most capable "Swiss Army Knife" model at the top, next to your cost-effective everyday model.
     *   *Recommendation*: Put specialized models below (e.g., a dedicated Image Generator).
 
-> **Screenshot Placeholder:** [Image of Model Preference screen showing a 'Priority List' with 'Gemini Pro' above 'DALL-E 3', and 'Llama Local' as the active default.]
+![](../../media/model/model_switch.png)
 
 ## Matching Logic
 The selector follows this strict order:
@@ -39,5 +37,5 @@ The selector follows this strict order:
 *   📄 **Documents**: Reading PDFs or text files.
 *   🎥 **Video**: Analyzing video files.
 *   🎙️ **Audio**: Listening to voice notes.
-*   🎨 **Image Gen**: Creating images (DALL-E / Imagen).
+*   🎨 **Image Gen**: Creating images (Gemini 3 Pro Nano Banana).
 *   💻 **Code Gen**: Writing complex code.

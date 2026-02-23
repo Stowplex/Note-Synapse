@@ -1,4 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
@@ -7,6 +12,7 @@ import '../models/conversation.dart';
 import '../models/tag.dart';
 import '../services/conversation_service.dart';
 import '../services/service_locator.dart';
+import '../services/tag_image_service.dart';
 import '../screens/conversation_chat_screen.dart';
 import '../screens/note_detail_screen.dart';
 
@@ -22,17 +28,22 @@ class TagDetailDialog extends StatefulWidget {
 
 class _TagDetailDialogState extends State<TagDetailDialog> {
   ConversationService get _conversationService => getIt<ConversationService>();
+  TagImageService get _tagImageService => getIt<TagImageService>();
   List<Note> _notes = [];
   List<Conversation> _conversations = [];
   bool _isLoading = true;
   final TextEditingController _promptController = TextEditingController();
   bool _isSavingPrompt = false;
+  bool _isImportingImage = false;
+  int _imageVersion = 0;
+  String? _appDocsPath;
 
   @override
   void initState() {
     super.initState();
     _loadData();
     _loadPrompt();
+    _initAppDocsPath();
   }
 
   @override
@@ -185,6 +196,292 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
     }
   }
 
+  Future<void> _initAppDocsPath() async {
+    final dir = await getApplicationDocumentsDirectory();
+    if (mounted) {
+      setState(() {
+        _appDocsPath = dir.path;
+      });
+    }
+  }
+
+  Future<void> _importImageFromGallery() async {
+    setState(() => _isImportingImage = true);
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile == null) {
+        if (mounted) setState(() => _isImportingImage = false);
+        return;
+      }
+
+      final appDocsDir = await getApplicationDocumentsDirectory();
+      final tagImagesDir = Directory('${appDocsDir.path}/tag_images');
+      if (!await tagImagesDir.exists()) {
+        await tagImagesDir.create(recursive: true);
+      }
+
+      final bytes = await pickedFile.readAsBytes();
+      final decoded = img.decodeImage(bytes);
+      if (decoded != null) {
+        final resized = img.copyResize(decoded, width: 300, height: 200);
+        final pngBytes = img.encodePng(resized);
+        final destPath = '${tagImagesDir.path}/${widget.tag.id}.png';
+        await File(destPath).writeAsBytes(pngBytes);
+      }
+
+      // Evict cached FileImage so Flutter reloads the new file
+      final destFile = File('${tagImagesDir.path}/${widget.tag.id}.png');
+      FileImage(destFile).evict();
+
+      await _tagImageService.setTagImage(
+        widget.tag.id,
+        'tag_images/${widget.tag.id}.png',
+      );
+
+      if (mounted) {
+        setState(() {
+          _isImportingImage = false;
+          _imageVersion++;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isImportingImage = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error importing image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _setBuiltinImage(String name) async {
+    await _tagImageService.setTagImage(widget.tag.id, 'builtin:$name');
+    if (mounted) setState(() => _imageVersion++);
+  }
+
+  Future<void> _removeTagImage() async {
+    // Evict cached FileImage before removing
+    if (_appDocsPath != null) {
+      final file = File('$_appDocsPath/tag_images/${widget.tag.id}.png');
+      FileImage(file).evict();
+    }
+    await _tagImageService.removeTagImage(widget.tag.id);
+    if (mounted) setState(() => _imageVersion++);
+  }
+
+  Widget _buildTagImageSection() {
+    final imagePath = _tagImageService.getImagePathForTag(widget.tag.name);
+
+    if (imagePath != null) {
+      return _buildCurrentImagePreview(imagePath);
+    } else {
+      return _buildImagePicker();
+    }
+  }
+
+  Widget _buildCurrentImagePreview(String imagePath) {
+    Widget imageWidget;
+    if (TagImageService.isBuiltin(imagePath)) {
+      final name = TagImageService.builtinName(imagePath);
+      imageWidget = Image.asset(
+        TagImageService.builtinAssetPath(name),
+        width: 150,
+        height: 100,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          width: 150,
+          height: 100,
+          color: Colors.grey[300],
+          child: const Icon(Icons.broken_image, size: 32),
+        ),
+      );
+    } else if (_appDocsPath != null) {
+      imageWidget = Image.file(
+        File('$_appDocsPath/$imagePath'),
+        key: ValueKey('tag_image_${widget.tag.id}_$_imageVersion'),
+        width: 150,
+        height: 100,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          width: 150,
+          height: 100,
+          color: Colors.grey[300],
+          child: const Icon(Icons.broken_image, size: 32),
+        ),
+      );
+    } else {
+      imageWidget = Container(
+        width: 150,
+        height: 100,
+        color: Colors.grey[300],
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.image, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Tag Image',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: imageWidget,
+              ),
+              const SizedBox(width: 12),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton.icon(
+                    onPressed: _isImportingImage
+                        ? null
+                        : _importImageFromGallery,
+                    icon: const Icon(Icons.swap_horiz, size: 18),
+                    label: const Text('Change'),
+                  ),
+                  TextButton.icon(
+                    onPressed: _removeTagImage,
+                    icon: const Icon(Icons.delete_outline, size: 18,
+                        color: Colors.red),
+                    label: const Text('Remove',
+                        style: TextStyle(color: Colors.red)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImagePicker() {
+    final builtins = TagImageService.builtinImages;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.image, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Tag Image',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 80,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                ...builtins.map((name) => Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: GestureDetector(
+                        onTap: () => _setBuiltinImage(name),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.asset(
+                            TagImageService.builtinAssetPath(name),
+                            width: 100,
+                            height: 70,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              width: 100,
+                              height: 70,
+                              color: Colors.grey[300],
+                              child: const Icon(Icons.broken_image),
+                            ),
+                          ),
+                        ),
+                      ),
+                    )),
+                _isImportingImage
+                    ? Container(
+                        width: 100,
+                        height: 70,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      )
+                    : InkWell(
+                        onTap: _importImageFromGallery,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          width: 100,
+                          height: 70,
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .outline
+                                  .withValues(alpha: 0.5),
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.add_photo_alternate_outlined,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Gallery',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -237,6 +534,9 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                 ],
               ),
             ),
+
+            // Tag Image Section
+            _buildTagImageSection(),
 
             // AI Prompt Section
             ExpansionTile(
@@ -421,6 +721,7 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                                         child: Column(
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
+                                          mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Icon(
                                               Icons.chat_bubble_outline,

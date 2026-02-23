@@ -9,6 +9,7 @@ class SynapseNoteEditor extends StatefulWidget {
   final FocusNode? focusNode;
   final VoidCallback? onPickImage;
   final VoidCallback? onPickNoteLink;
+  final VoidCallback? onPickAttachmentLink;
   final String? language;
 
   const SynapseNoteEditor({
@@ -17,6 +18,7 @@ class SynapseNoteEditor extends StatefulWidget {
     this.focusNode,
     this.onPickImage,
     this.onPickNoteLink,
+    this.onPickAttachmentLink,
     this.language,
   });
 
@@ -77,6 +79,7 @@ class _SynapseNoteEditorState extends State<SynapseNoteEditor> {
         ),
         Builder(
           builder: (context) => IconButton(
+            key: const ValueKey('editor_checkbox_btn'),
             icon: const Icon(Icons.check_box_outlined, size: 20),
             onPressed: () => _showCheckboxMenu(context),
             tooltip: 'Checkbox',
@@ -105,6 +108,12 @@ class _SynapseNoteEditorState extends State<SynapseNoteEditor> {
             icon: const Icon(Icons.note_add, size: 20),
             onPressed: widget.onPickNoteLink,
             tooltip: l10n.addLink,
+          ),
+        if (widget.onPickAttachmentLink != null)
+          IconButton(
+            icon: const Icon(Icons.attach_file, size: 20),
+            onPressed: widget.onPickAttachmentLink,
+            tooltip: l10n.insertAttachmentLink,
           ),
       ],
     );
@@ -520,11 +529,16 @@ class _SynapseNoteEditorState extends State<SynapseNoteEditor> {
   Future<void> _showCheckboxMenu(BuildContext context) async {
     final selection = widget.controller.selection;
     final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
+    if (renderBox == null) {
+      return;
+    }
 
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (overlay == null) return;
+    if (overlay == null) {
+      return;
+    }
+    debugPrint('_showCheckboxMenu rendering popup...');
 
     final position = renderBox.localToGlobal(Offset.zero, ancestor: overlay);
 

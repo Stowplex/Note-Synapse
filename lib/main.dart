@@ -20,6 +20,7 @@ import 'services/global_library_service.dart';
 import 'services/agent_service.dart';
 import 'services/background_agent_service.dart';
 import 'services/service_locator.dart';
+import 'services/tag_image_service.dart';
 import 'services/wake_lock_service.dart' as wake_lock;
 import 'services/network_provider.dart';
 import 'utils/global_keys.dart';
@@ -40,6 +41,9 @@ void main() async {
 
   // Initialize service locator for dependency injection
   setupServiceLocator();
+
+  // Load tag image mappings into memory
+  await getIt<TagImageService>().loadAll();
 
   // Initialize background agent service for Android foreground service
   await BackgroundAgentService.init();
@@ -172,7 +176,7 @@ class _AppWrapperState extends State<AppWrapper> {
     if (_isModelConfigured) {
       return const MainScreen();
     } else {
-      return const ModelSelectionScreen();
+      return const ModelSelectionScreen(isOnboarding: true);
     }
   }
 }

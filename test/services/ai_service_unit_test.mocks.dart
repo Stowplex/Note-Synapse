@@ -294,6 +294,42 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i4.Future<void>);
 
   @override
+  _i4.Future<void> setTagImage(String? tagId, String? imagePath) =>
+      (super.noSuchMethod(
+            Invocation.method(#setTagImage, [tagId, imagePath]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> removeTagImage(String? tagId) =>
+      (super.noSuchMethod(
+            Invocation.method(#removeTagImage, [tagId]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<Map<String, String>> getAllTagImages() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllTagImages, []),
+            returnValue: _i4.Future<Map<String, String>>.value(
+              <String, String>{},
+            ),
+          )
+          as _i4.Future<Map<String, String>>);
+
+  @override
+  _i4.Future<String?> getTagImage(String? tagId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getTagImage, [tagId]),
+            returnValue: _i4.Future<String?>.value(),
+          )
+          as _i4.Future<String?>);
+
+  @override
   _i4.Future<void> replaceTag(String? oldTagName, String? newTagName) =>
       (super.noSuchMethod(
             Invocation.method(#replaceTag, [oldTagName, newTagName]),

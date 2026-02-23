@@ -1,31 +1,33 @@
-# Web Clipper
+# Tutorial: Clipping the web content
 
-The Web Clipper allows you to save content from your browser or other apps directly into Note Synapse. It supports intelligent extraction, readability enhancement, and file handling.
+With Note Synapse, you can clip and save content from the web for offline reading.
 
-## How to Clip
-1.  **Share**: In your browser (e.g., Chrome, Safari), tap the **Share** button.
-2.  **Select Synapse**: Choose **Note Synapse** from the list of apps.
-3.  **Choose Mode**: The clipper will analyze the content and offer the best saving method.
+You can copy the URL, then select the [+] button on the note main page. Select New Note from Clipboard.
 
-## 1. Web Pages (Readability)
-When sharing a standard URL, Synapse behaves like a "Read-it-Later" app.
+Note Synapse will detect the URL and prompt for web extraction.
 
-### Readability Toggle
-*   **The Problem**: Many websites are cluttered with ads, popups, and broken layouts.
-*   **The Fix**: Toggle **Readability Mode** (Book icon) in the clipper preview.
-    *   **On**: Applies a clean, distraction-free layout, strips navigation/ads, and converts *only the article content* to Markdown.
-    *   **Off**: Captures the raw HTML structure (useful for "Vibe Coding" where you want the exact DOM).
+![](../../media/image_1771217967305_83fa62ce-4f98-4bd0-a669-ec97ce5052d3.png)
 
-> ![Screenshot: The Web Clipper popup showing the Readability toggle button](placeholder_images/clipper_readability.png)
+Here if you select As-Is the URL will be saved as text. We select "Extract" to save the web content.
 
-### Image Scraper
-You don't have to save every banner ad.
-*   **Detection**: Synapse validates all images on the page.
-*   **Select**: You can check/uncheck purely decorative images before saving.
-*   **Save**: Selected images are downloaded and attached locally to your note, ensuring they don't break if the original website goes down.
+By default, NoteSynapse loads the page inside a webview, then it applies Readability script to strip the irrelevant information.
 
-## 2. Auto-Download (PDFs & Files)
-If you share a link to a file (e.g., an academic paper PDF, a ZIP file, or a Doc), Synapse automatically detects the **MIME Type**.
-*   **Action**: Instead of saving the *link*, it downloads the actual **File**.
-*   **Storage**: The file is saved to your local attachment storage.
-*   **Note**: A new note is created with the file attached, tagged as `#download`.
+This most of the time does a good job but sometimes it can be too aggressive or inaccurate. In our case, if omits the content in the expandable region, which are loaded just-in-time. Hence we need tap the Readability toggle to temporarily disable it.
+
+![](../../media/image_1771218195518_7878fba9-6c8d-47c6-b0a4-a1f12086d61a.png)
+
+When Readability is toggled off, you can scroll the page, expanding the collapsible area.
+
+![](../../media/image_1771222293840_8d07adad-7b97-4c37-8bef-337eab7230b2.png)
+
+Once these sections are expanded, you can toggle Readability back on and press extract. Note that extract with AI will by default give a summary, which is not useful for our case.
+
+Then adjust the tags, select which media to download to local, and click create note.
+
+You have successfully clipped a web page.
+
+If Note Synapse detects that the URL points to a blob file, it will download it and add as attachment.
+
+![](../../media/image_1771223366339_59302e78-3e21-4957-bb2f-b7ba3a0797bc.png)
+
+![](../../media/image_1771223381613_8706a110-96c3-41fb-9a0a-a70d512eea08.png)

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<!-- 
+  AI Tools require a tool_spec definition in YAML format inside a CDATA block.
+  This tells the AI planner how to use your tool.
+-->
+<script>
+<![CDATA[
+tool_spec:
+  - name: weather_lookup
+    description: Gets the current weather for a city.
+    input_params:
+      city:
+        type: string
+        description: The city name.
+    output_params:
+      temperature:
+        type: number
+      condition:
+        type: string
+]]>
+</script>
+
+<script>
+  // Implement the logic
+  // Ensure we define the Synapse tool structure
+  window.Synapse.tool = window.Synapse.tool || {};
+  window.Synapse.tool.registered = window.Synapse.tool.registered || {};
+
+  // Register the function matching the 'name' in tool_spec
+  window.Synapse.tool.registered.weather_lookup = async ({ city }) => {
+    try {
+      console.log(`Fetching weather for ${city}...`);
+      
+      // In a real app, you would use a real API key.
+      // For this example, we'll use Open-Meteo as it requires no key, 
+      // but the principle of using proxyFetch is the same.
+      
+      // 1. Geocode
+      const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`;
+      const geoResp = await window.Synapse.proxyFetch(geoUrl);
+      
+      if (geoResp.status !== 'success') {
+          throw new Error(`Geocoding failed: ${geoResp.error}`);
+      }
+      
+      const geoData = JSON.parse(geoResp.content.data);
+      if (!geoData.results || geoData.results.length === 0) {
+          return { error: "City not found" };
+      }
+      
+      const { latitude, longitude, name, country } = geoData.results[0];
+      
+      // 2. Weather
+      const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`;
+      const weatherResp = await window.Synapse.proxyFetch(weatherUrl);
+       
+      if (weatherResp.status !== 'success') {
+          throw new Error(`Weather fetch failed: ${weatherResp.error}`);
+      }
+
+      const weatherData = JSON.parse(weatherResp.content.data);
+      
+      return {
+        location: `${name}, ${country}`,
+        temperature: weatherData.current_weather.temperature,
+        condition: "Unknown (Open-Meteo basic API doesn't return text condition)",
+        wind_speed: weatherData.current_weather.windspeed
+      };
+      
+    } catch (e) {
+      console.error("Weather tool error:", e);
+      return { error: e.toString() };
+    }
+  };
+</script>

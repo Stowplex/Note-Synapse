@@ -13,6 +13,7 @@ import 'context_manager_service.dart';
 import 'ai_service.dart';
 import 'agent_service.dart';
 import 'mcp_service.dart';
+import 'tag_image_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -64,6 +65,12 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<ConversationService>()) {
     getIt.registerLazySingleton<ConversationService>(
       () => ConversationService(getIt<DatabaseService>()),
+    );
+  }
+
+  if (!getIt.isRegistered<TagImageService>()) {
+    getIt.registerLazySingleton<TagImageService>(
+      () => TagImageService(getIt<DatabaseService>()),
     );
   }
 
