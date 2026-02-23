@@ -43,10 +43,12 @@ void main() {
 
   group('loadAll', () {
     test('loads tag images and builds name-to-path map', () async {
-      when(mockDb.getAllTagImages()).thenAnswer((_) async => {
-            'tag1': 'builtin:nature',
-            'tag2': 'attachments/custom.png',
-          });
+      when(mockDb.getAllTagImages()).thenAnswer(
+        (_) async => {
+          'tag1': 'builtin:nature',
+          'tag2': 'attachments/custom.png',
+        },
+      );
       when(mockDb.getAllTags()).thenAnswer((_) async => testTags);
 
       await service.loadAll();
@@ -57,10 +59,9 @@ void main() {
     });
 
     test('skips tag images for tags that no longer exist', () async {
-      when(mockDb.getAllTagImages()).thenAnswer((_) async => {
-            'tag1': 'builtin:nature',
-            'deleted_tag': 'builtin:old',
-          });
+      when(mockDb.getAllTagImages()).thenAnswer(
+        (_) async => {'tag1': 'builtin:nature', 'deleted_tag': 'builtin:old'},
+      );
       when(mockDb.getAllTags()).thenAnswer((_) async => testTags);
 
       await service.loadAll();
@@ -72,11 +73,13 @@ void main() {
 
   group('getImagePathsForTags', () {
     setUp(() async {
-      when(mockDb.getAllTagImages()).thenAnswer((_) async => {
-            'tag1': 'builtin:nature',
-            'tag2': 'attachments/custom.png',
-            'tag3': 'builtin:work',
-          });
+      when(mockDb.getAllTagImages()).thenAnswer(
+        (_) async => {
+          'tag1': 'builtin:nature',
+          'tag2': 'attachments/custom.png',
+          'tag3': 'builtin:work',
+        },
+      );
       when(mockDb.getAllTags()).thenAnswer((_) async => testTags);
       await service.loadAll();
     });
@@ -92,10 +95,9 @@ void main() {
 
     test('skips tags without images', () {
       // Only Alpha and Gamma have images; Beta is not in the query
-      when(mockDb.getAllTagImages()).thenAnswer((_) async => {
-            'tag1': 'builtin:nature',
-            'tag3': 'builtin:work',
-          });
+      when(mockDb.getAllTagImages()).thenAnswer(
+        (_) async => {'tag1': 'builtin:nature', 'tag3': 'builtin:work'},
+      );
 
       // Use existing cache from setUp (all 3 tags have images)
       // Let's test with a tag that doesn't have an image
@@ -114,10 +116,12 @@ void main() {
 
   group('setTagImage', () {
     test('updates cache after setting image and increments revision', () async {
-      when(mockDb.setTagImage('tag1', 'builtin:ocean'))
-          .thenAnswer((_) async {});
-      when(mockDb.getAllTagImages())
-          .thenAnswer((_) async => {'tag1': 'builtin:ocean'});
+      when(
+        mockDb.setTagImage('tag1', 'builtin:ocean'),
+      ).thenAnswer((_) async {});
+      when(
+        mockDb.getAllTagImages(),
+      ).thenAnswer((_) async => {'tag1': 'builtin:ocean'});
       when(mockDb.getAllTags()).thenAnswer((_) async => testTags);
 
       final initialRevision = service.revision.value;
@@ -132,15 +136,17 @@ void main() {
   group('removeTagImage', () {
     test('updates cache after removing builtin image', () async {
       // Set up initial state
-      when(mockDb.getAllTagImages())
-          .thenAnswer((_) async => {'tag1': 'builtin:nature'});
+      when(
+        mockDb.getAllTagImages(),
+      ).thenAnswer((_) async => {'tag1': 'builtin:nature'});
       when(mockDb.getAllTags()).thenAnswer((_) async => testTags);
       await service.loadAll();
       expect(service.getImagePathForTag('Alpha'), 'builtin:nature');
 
       // Now remove it
-      when(mockDb.getTagImage('tag1'))
-          .thenAnswer((_) async => 'builtin:nature');
+      when(
+        mockDb.getTagImage('tag1'),
+      ).thenAnswer((_) async => 'builtin:nature');
       when(mockDb.removeTagImage('tag1')).thenAnswer((_) async {});
       when(mockDb.getAllTagImages()).thenAnswer((_) async => {});
 
@@ -154,9 +160,9 @@ void main() {
   });
 
   group('builtinImages', () {
-    test('returns list (currently empty)', () {
+    test('returns non-empty list of builtins', () {
       expect(TagImageService.builtinImages, isA<List<String>>());
-      expect(TagImageService.builtinImages, isEmpty);
+      expect(TagImageService.builtinImages, isNotEmpty);
     });
   });
 

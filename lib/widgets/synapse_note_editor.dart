@@ -79,6 +79,7 @@ class _SynapseNoteEditorState extends State<SynapseNoteEditor> {
         ),
         Builder(
           builder: (context) => IconButton(
+            key: const ValueKey('editor_checkbox_btn'),
             icon: const Icon(Icons.check_box_outlined, size: 20),
             onPressed: () => _showCheckboxMenu(context),
             tooltip: 'Checkbox',
@@ -528,11 +529,16 @@ class _SynapseNoteEditorState extends State<SynapseNoteEditor> {
   Future<void> _showCheckboxMenu(BuildContext context) async {
     final selection = widget.controller.selection;
     final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
+    if (renderBox == null) {
+      return;
+    }
 
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (overlay == null) return;
+    if (overlay == null) {
+      return;
+    }
+    debugPrint('_showCheckboxMenu rendering popup...');
 
     final position = renderBox.localToGlobal(Offset.zero, ancestor: overlay);
 

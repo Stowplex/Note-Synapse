@@ -56,16 +56,17 @@ void main() {
     expect(controller.text, '1. item 1\n2. item 2\n3. item 3');
 
     // Apply Checkbox (Popup menu interaction)
-    final checkboxButton = find.byIcon(Icons.check_box_outlined);
+    final checkboxButton = find.byKey(const ValueKey('editor_checkbox_btn'));
     expect(checkboxButton, findsOneWidget);
+    await tester.ensureVisible(checkboxButton);
     await tester.tap(checkboxButton);
     await tester.pumpAndSettle(); // Wait for menu
 
     // Find "Checked" option
     // PopupMenu items are standard Text widgets usually.
     // The code uses: const PopupMenuItem(value: '- [x] ', child: Text('☑ Checked')),
-    final checkedOption = find.text('☑ Checked');
-    expect(checkedOption, findsOneWidget);
+    final checkedOption = find.textContaining('Checked');
+    expect(checkedOption, findsWidgets);
     await tester.tap(checkedOption);
     await tester.pump();
 

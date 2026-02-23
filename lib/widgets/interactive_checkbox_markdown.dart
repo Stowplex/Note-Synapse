@@ -534,6 +534,8 @@ class _InteractiveCheckboxMarkdownState
     if (widget.noteId != null &&
         (SynapseTempUtils.isSynapseTempUri(url) ||
             _isHttpUrl(url) ||
+            url.startsWith('file://') ||
+            url.startsWith('/') ||
             (!url.contains(':') &&
                 !url.contains('/') &&
                 !url.contains('\\')))) {
@@ -721,6 +723,13 @@ class _InteractiveCheckboxMarkdownState
     double? height, {
     BoxFit fit = BoxFit.contain,
   }) {
+    if (url.startsWith('/') || url.startsWith('file://')) {
+      return _buildPlaceholder(
+        width,
+        height,
+        'Invalid network URL (local path used as network): \$url',
+      );
+    }
     return SizedBox(
       width: width,
       height: height,
@@ -1032,6 +1041,26 @@ class _InteractiveCheckboxMarkdownState
         final filePath = p.join(dir.path, url);
         final file = File(filePath);
 
+        if (await file.exists()) {
+          final extension = p.extension(filePath).toLowerCase();
+          if (extension == '.svg') {
+            final content = await file.readAsString();
+            return _LocalImageSource(
+              path: filePath,
+              extension: extension,
+              svgContent: content,
+            );
+          }
+          return _LocalImageSource(path: filePath, extension: extension);
+        }
+      }
+
+      // Handle absolute paths and file:// URIs (e.g. for testing)
+      if (url.startsWith('file://') || url.startsWith('/')) {
+        final filePath = url.startsWith('file://')
+            ? Uri.parse(url).toFilePath()
+            : url;
+        final file = File(filePath);
         if (await file.exists()) {
           final extension = p.extension(filePath).toLowerCase();
           if (extension == '.svg') {

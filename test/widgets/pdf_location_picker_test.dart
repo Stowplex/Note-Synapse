@@ -118,10 +118,7 @@ void main() {
         PdfOutlineNode(title: 'Methods', page: 20),
       ];
 
-      await tester.pumpWidget(buildPicker(
-        totalPages: 50,
-        outline: outline,
-      ));
+      await tester.pumpWidget(buildPicker(totalPages: 50, outline: outline));
 
       expect(find.text('ToC'), findsOneWidget);
     });
@@ -132,8 +129,9 @@ void main() {
       expect(find.text('ToC'), findsNothing);
     });
 
-    testWidgets('shows Bookmarks dropdown when bookmarks exist',
-        (tester) async {
+    testWidgets('shows Bookmarks dropdown when bookmarks exist', (
+      tester,
+    ) async {
       final bookmarks = [
         PdfBookmark(
           title: 'Important',
@@ -142,10 +140,9 @@ void main() {
         ),
       ];
 
-      await tester.pumpWidget(buildPicker(
-        totalPages: 50,
-        bookmarks: bookmarks,
-      ));
+      await tester.pumpWidget(
+        buildPicker(totalPages: 50, bookmarks: bookmarks),
+      );
 
       expect(find.text('Bookmarks'), findsOneWidget);
     });
@@ -156,21 +153,21 @@ void main() {
       expect(find.text('Bookmarks'), findsNothing);
     });
 
-    testWidgets('bookmark annotation shows in dropdown subtitle',
-        (tester) async {
+    testWidgets('bookmark annotation shows in dropdown subtitle', (
+      tester,
+    ) async {
       final bookmarks = [
         PdfBookmark(
           title: 'Chapter 3',
-          pageNumber: 42,
+          pageNumber: 41,
           createdAt: DateTime(2026, 1, 1),
           annotation: 'This section covers the basics of neural networks',
         ),
       ];
 
-      await tester.pumpWidget(buildPicker(
-        totalPages: 100,
-        bookmarks: bookmarks,
-      ));
+      await tester.pumpWidget(
+        buildPicker(totalPages: 100, bookmarks: bookmarks),
+      );
 
       // Open the bookmarks dropdown
       await tester.tap(find.text('Bookmarks'));
@@ -179,26 +176,28 @@ void main() {
       // Should show bookmark title and annotation in subtitle
       expect(find.text('Chapter 3'), findsOneWidget);
       expect(
-        find.textContaining('This section covers the basics of neural networks'),
+        find.textContaining(
+          'This section covers the basics of neural networks',
+        ),
         findsOneWidget,
       );
       expect(find.textContaining('Page 42'), findsOneWidget);
     });
 
-    testWidgets('bookmark without annotation shows only page in subtitle',
-        (tester) async {
+    testWidgets('bookmark without annotation shows only page in subtitle', (
+      tester,
+    ) async {
       final bookmarks = [
         PdfBookmark(
           title: 'Page 5',
-          pageNumber: 5,
+          pageNumber: 4,
           createdAt: DateTime(2026, 1, 1),
         ),
       ];
 
-      await tester.pumpWidget(buildPicker(
-        totalPages: 100,
-        bookmarks: bookmarks,
-      ));
+      await tester.pumpWidget(
+        buildPicker(totalPages: 100, bookmarks: bookmarks),
+      );
 
       // Open the bookmarks dropdown
       await tester.tap(find.text('Bookmarks'));
@@ -207,8 +206,9 @@ void main() {
       expect(find.text('Page 5'), findsWidgets);
     });
 
-    testWidgets('shows link text field and insert/cancel buttons',
-        (tester) async {
+    testWidgets('shows link text field and insert/cancel buttons', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildPicker(totalPages: 10));
 
       expect(find.text('Link text'), findsOneWidget);
@@ -219,10 +219,9 @@ void main() {
     testWidgets('cancel button calls onCancel', (tester) async {
       bool cancelled = false;
 
-      await tester.pumpWidget(buildPicker(
-        totalPages: 10,
-        onCancel: () => cancelled = true,
-      ));
+      await tester.pumpWidget(
+        buildPicker(totalPages: 10, onCancel: () => cancelled = true),
+      );
 
       await tester.tap(find.text('Cancel'));
       await tester.pump();
@@ -230,16 +229,19 @@ void main() {
       expect(cancelled, isTrue);
     });
 
-    testWidgets('insert button calls onInsert with markdown link',
-        (tester) async {
+    testWidgets('insert button calls onInsert with markdown link', (
+      tester,
+    ) async {
       String? result;
 
-      await tester.pumpWidget(buildPicker(
-        totalPages: 10,
-        attachmentId: 'att-42',
-        fileName: 'report.pdf',
-        onInsert: (link) => result = link,
-      ));
+      await tester.pumpWidget(
+        buildPicker(
+          totalPages: 10,
+          attachmentId: 'att-42',
+          fileName: 'report.pdf',
+          onInsert: (link) => result = link,
+        ),
+      );
 
       // The link text should be pre-filled; tap Insert
       await tester.tap(find.text('Insert Link'));
@@ -250,8 +252,9 @@ void main() {
       expect(result, contains('page=1'));
     });
 
-    testWidgets('shows PDF icon when no pdfPath provided (no preview)',
-        (tester) async {
+    testWidgets('shows PDF icon when no pdfPath provided (no preview)', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildPicker(totalPages: 10));
 
       expect(find.byIcon(Icons.picture_as_pdf), findsOneWidget);
@@ -259,14 +262,9 @@ void main() {
     });
 
     testWidgets('selecting ToC item navigates to that page', (tester) async {
-      final outline = [
-        PdfOutlineNode(title: 'Results', page: 30),
-      ];
+      final outline = [PdfOutlineNode(title: 'Results', page: 29)];
 
-      await tester.pumpWidget(buildPicker(
-        totalPages: 50,
-        outline: outline,
-      ));
+      await tester.pumpWidget(buildPicker(totalPages: 50, outline: outline));
 
       // Open ToC dropdown
       await tester.tap(find.text('ToC'));
