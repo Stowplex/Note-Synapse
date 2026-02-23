@@ -1,14 +1,12 @@
 # Multi-Function Tab
 
-The second tab in Note Synapse (represented by the **Dashboard** or **Calendar** icon) is a versatile workspace. By default, it shows your **Calendar**, but it can be transformed into a home for any **Global User App**.
+The second tab in Note Synapse is a versatile workspace. By default, it shows your **Calendar**, but it can be transformed into a home for any **Global User App**.
 
 ## Default View: Calendar
-Out of the box, this tab displays the **Calendar**.
-*   **Drag & Drop**: Drag notes onto dates to schedule them.
-*   **Task Management**: View and manage your scheduled tasks.
+Out of the box, this tab displays the [Calendar](./calendar.md).
 
 ## Customizing the View
-You can replace the Calendar with any "Global" User App (e.g., a Weather Dashboard, Habit Tracker, or Flashcards).
+You can replace the Calendar with any "Global" User App (e.g., a Weather Dashboard, Habit Tracker, RSS Reader etc).
 
 ### How to Switch Views
 1.  **Long Press** the tab icon in the bottom navigation bar.
@@ -17,7 +15,7 @@ You can replace the Calendar with any "Global" User App (e.g., a Weather Dashboa
     *   **[Your Global Apps]** (e.g., "Weather")
 3.  **Tap** an app to select it.
 
-The icon will update to reflect your choice (e.g., switching to a generic App icon if a custom app is selected), and this will become your new default view for this tab.
+![](../../media/calendar/multi_function_tab.png)
 
 ### Restoring the Calendar
 To go back to the calendar:
@@ -29,4 +27,7 @@ Only **Global Apps** appear in this list.
 *   **Note Actions** (apps that run on specific notes) do **not** appear here.
 *   **AI Tools** (headless apps) do **not** appear here.
 
-To build a dashboard for this tab, create a new User App and ensure its type is set to **Normal** (Global). See [User Apps & Vibe Coding](../../power_user/overview.md) for details.
+Create a new User App and ensure its type is set to **Normal** (Global). See [User Apps & Vibe Coding](../../power_user/overview.md) for details. Click the three dot menu beside the app, and select "Add to multi-function tab". Then it will appear when you long press the multi-function tag.
+
+![](../../media/calendar/multi_function.png)
+

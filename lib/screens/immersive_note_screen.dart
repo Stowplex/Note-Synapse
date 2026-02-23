@@ -87,12 +87,14 @@ class ImmersiveNoteScreen extends StatefulWidget {
     super.key,
     required this.notes,
     this.initialAttachmentPath,
+    this.initialPage,
     this.initialConversation,
     this.initialMessages = const [],
   }) : assert(notes.length > 0, 'Immersive mode requires at least one note.');
 
   final List<Note> notes;
   final String? initialAttachmentPath;
+  final int? initialPage;
   final Conversation? initialConversation;
   final List<ConversationMessage> initialMessages;
 
@@ -235,6 +237,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       );
       if (index != null) {
         _activeNoteIndex = index;
+      }
+      if (widget.initialPage != null) {
+        _pdfCurrentPages[widget.initialAttachmentPath!] = widget.initialPage!;
       }
       _loadPdfContextConfig(widget.initialAttachmentPath!);
     }

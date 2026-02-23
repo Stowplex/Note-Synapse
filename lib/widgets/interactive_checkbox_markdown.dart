@@ -22,8 +22,10 @@ import 'package:re_highlight/styles/atom-one-light.dart';
 import 'package:crypto/crypto.dart';
 import '../utils/synapse_temp_utils.dart';
 import '../utils/synapse_resource_uri.dart';
+import '../services/attachment_link_service.dart';
 import '../services/database_service.dart';
 import '../services/network_provider.dart';
+import '../screens/immersive_note_screen.dart';
 import '../screens/note_detail_screen.dart';
 import '../screens/conversation_chat_screen.dart';
 import '../utils/remote_image_storage.dart';
@@ -121,6 +123,30 @@ class _InteractiveCheckboxMarkdownState
                   ConversationChatScreen(conversationId: link.id),
             ),
           );
+        }
+      case SynapseResourceType.attachment:
+        final service = AttachmentLinkService(DatabaseService());
+        final result = await service.resolveAttachmentLink(link.id);
+        if (result != null && mounted) {
+          final path = await result.attachment.getAbsolutePath();
+          final pageStr = link.queryParameters['page'];
+          final pageRaw = pageStr != null ? int.tryParse(pageStr) : null;
+          // Convert 1-based page number (from URL) to 0-based index (for internal use)
+          final page = pageRaw != null ? (pageRaw > 0 ? pageRaw - 1 : 0) : null;
+
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => ImmersiveNoteScreen(
+                notes: [result.note],
+                initialAttachmentPath: path,
+                initialPage: page,
+              ),
+            ),
+          );
+        } else if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Attachment not found')));
         }
     }
   }
@@ -508,6 +534,8 @@ class _InteractiveCheckboxMarkdownState
     if (widget.noteId != null &&
         (SynapseTempUtils.isSynapseTempUri(url) ||
             _isHttpUrl(url) ||
+            url.startsWith('file://') ||
+            url.startsWith('/') ||
             (!url.contains(':') &&
                 !url.contains('/') &&
                 !url.contains('\\')))) {
@@ -578,56 +606,37 @@ class _InteractiveCheckboxMarkdownState
               );
             }
 
-            // Bypass FileImage cache by reading bytes directly
-            return FutureBuilder<Uint8List>(
-              future: imageFile.readAsBytes(),
-              builder: (context, byteSnapshot) {
-                if (byteSnapshot.hasData) {
-                  if (kDebugMode) {
-                    debugPrint(
-                      'InteractiveCheckboxMarkdown: Read ${byteSnapshot.data!.length} bytes from disk for $url',
-                    );
-                  }
-                  return wrapWithDragTarget(
-                    _wrapImageWithInfoBar(
-                      image: SizedBox(
-                        width: effectiveWidth,
-                        height: effectiveHeight,
-                        child: Image.memory(
-                          byteSnapshot.data!,
-                          key: ValueKey('${url}${_imageVersions[url] ?? 0}'),
-                          fit: effectiveFit,
-                          errorBuilder: (context, error, stackTrace) {
-                            return wrapWithDragTarget(
-                              _buildPlaceholder(
-                                effectiveWidth,
-                                effectiveHeight,
-                                'Failed to render local image bytes',
-                              ),
-                            );
-                          },
+            // Use Image.file to leverage Flutter's image cache
+            return wrapWithDragTarget(
+              _wrapImageWithInfoBar(
+                image: SizedBox(
+                  width: effectiveWidth,
+                  height: effectiveHeight,
+                  child: Image.file(
+                    imageFile,
+                    key: ValueKey('${url}${_imageVersions[url] ?? 0}'),
+                    fit: effectiveFit,
+                    errorBuilder: (context, error, stackTrace) {
+                      return wrapWithDragTarget(
+                        _buildPlaceholder(
+                          effectiveWidth,
+                          effectiveHeight,
+                          'Failed to render local image file',
                         ),
-                      ),
-                      imageUrl: url,
-                      isSvg: false,
-                      onFullscreen: () {
-                        _FullscreenViewer.show(
-                          context,
-                          imageWidget: Image.memory(
-                            byteSnapshot.data!,
-                            fit: BoxFit.contain,
-                          ),
-                          title: 'Image',
-                        );
-                      },
-                    ),
+                      );
+                    },
+                  ),
+                ),
+                imageUrl: url,
+                isSvg: false,
+                onFullscreen: () {
+                  _FullscreenViewer.show(
+                    context,
+                    imageWidget: Image.file(imageFile, fit: BoxFit.contain),
+                    title: 'Image',
                   );
-                }
-                return _buildLoadingPlaceholder(
-                  effectiveWidth,
-                  effectiveHeight,
-                );
-              },
+                },
+              ),
             );
           }
           return buildFallback();
@@ -714,6 +723,13 @@ class _InteractiveCheckboxMarkdownState
     double? height, {
     BoxFit fit = BoxFit.contain,
   }) {
+    if (url.startsWith('/') || url.startsWith('file://')) {
+      return _buildPlaceholder(
+        width,
+        height,
+        'Invalid network URL (local path used as network): \$url',
+      );
+    }
     return SizedBox(
       width: width,
       height: height,
@@ -1039,6 +1055,26 @@ class _InteractiveCheckboxMarkdownState
         }
       }
 
+      // Handle absolute paths and file:// URIs (e.g. for testing)
+      if (url.startsWith('file://') || url.startsWith('/')) {
+        final filePath = url.startsWith('file://')
+            ? Uri.parse(url).toFilePath()
+            : url;
+        final file = File(filePath);
+        if (await file.exists()) {
+          final extension = p.extension(filePath).toLowerCase();
+          if (extension == '.svg') {
+            final content = await file.readAsString();
+            return _LocalImageSource(
+              path: filePath,
+              extension: extension,
+              svgContent: content,
+            );
+          }
+          return _LocalImageSource(path: filePath, extension: extension);
+        }
+      }
+
       final absolutePath = await RemoteImageStorage.resolveAbsolutePath(
         noteId: widget.noteId!,
         imageUrl: url,
@@ -1112,6 +1148,28 @@ class _InteractiveCheckboxMarkdownState
   Widget build(BuildContext context) {
     // Basic inline components
     final inlineComponents = [
+      CustomImageMd(
+        onImage: (url, alt) {
+          return _customImageBuilder(
+            context,
+            url,
+            alt: alt,
+            onFetch: (url) async {
+              await widget.onFetchImage?.call(url);
+              if (mounted) {
+                // Invalidate caches so the image source type is re-evaluated
+                _imageSourceTypeFutures.remove(url);
+                _localImageFutures.remove(url);
+                setState(() {
+                  // Force rebuild of specific image key if needed, or just setState
+                  // Update version to force new key for image widget
+                  _imageVersions[url] = (_imageVersions[url] ?? 0) + 1;
+                });
+              }
+            },
+          );
+        },
+      ),
       CustomATagMd(),
       _EmbeddedWebViewMd(
         defaultSize: widget.defaultWebViewSize,
@@ -1125,7 +1183,7 @@ class _InteractiveCheckboxMarkdownState
         // GptMarkdown handles that.
         // We'll use the standard ones implicitly by NOT passing them in 'inlineComponents'
         // except for the custom one.
-        ...MarkdownComponent.inlineComponents,
+        ...MarkdownComponent.inlineComponents.where((e) => e is! ATagMd),
     ];
 
     // Check if we need to add standard ATagMd back if we excluded it?
@@ -2715,7 +2773,7 @@ class _FullscreenViewer extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: Colors.black.withOpacity(0.7),
+        backgroundColor: Colors.black.withValues(alpha: 0.7),
         foregroundColor: Colors.white,
         elevation: 0,
         title: title != null ? Text(title!) : null,
@@ -2772,12 +2830,13 @@ class _FullscreenSvgWebViewState extends State<_FullscreenSvgWebView> {
     if (_webViewController == null) return;
     final backgroundColor = _isDarkBackground ? '#1e1e1e' : '#ffffff';
     _webViewController!.evaluateJavascript(
-      source: '''
+      source:
+          '''
       (function() {
         const iframe = document.querySelector('iframe');
         if (iframe && iframe.contentWindow) {
           try {
-            iframe.contentWindow.postMessage({type: 'setBackground', color: '\$backgroundColor'}, '*');
+            iframe.contentWindow.postMessage({type: 'setBackground', color: '$backgroundColor'}, '*');
           } catch (e) {
             console.log('Cannot set background:', e);
           }
@@ -3030,7 +3089,9 @@ class _FullscreenImageWidgetState extends State<_FullscreenImageWidget> {
 
 class CustomATagMd extends ATagMd {
   @override
-  RegExp get exp => RegExp(r"(?<!\!)\[[^\]]+\]\([^\s]*\)");
+  RegExp get exp => RegExp(
+    r"(?<!\!)\[(?:[^\[\]]|\[[^\[\]]*\])*\]\((?:[^()]*)(?:\((?:[^()]*)(?:\([^()]*\)[^()]*)*\)[^()]*)*\)",
+  );
 
   @override
   InlineSpan span(
@@ -3098,12 +3159,54 @@ class CustomATagMd extends ATagMd {
       false,
     );
     var theme = GptMarkdownTheme.of(context);
+    final linkColor = Theme.of(context).colorScheme.primary;
+    // Strip common formatting chars that might surround the number
+    final cleanText = linkText.replaceAll(RegExp(r'[\[\]\s_]'), '');
+    final isNumericLink = RegExp(r'^\d+$').hasMatch(cleanText);
+    // Generate children with the link style enforced
+    var children = MarkdownComponent.generate(context, linkText, config, false);
+    // Force style on children if they are TextSpans to ensure color sticks
+    children = children.map((span) {
+      if (span is TextSpan) {
+        return TextSpan(
+          text: span.text,
+          children: span.children,
+          style: (span.style ?? config.style ?? const TextStyle()).copyWith(
+            color: linkColor,
+            decoration: isNumericLink
+                ? TextDecoration.none
+                : TextDecoration.underline,
+            decorationColor: linkColor,
+          ),
+          recognizer: span.recognizer,
+          mouseCursor: span.mouseCursor,
+          onEnter: span.onEnter,
+          onExit: span.onExit,
+          semanticsLabel: span.semanticsLabel,
+          locale: span.locale,
+          spellOut: span.spellOut,
+        );
+      }
+      return span;
+    }).toList();
+
     var linkTextSpan = TextSpan(
-      children: MarkdownComponent.generate(context, linkText, config, false),
-      style: config.style?.copyWith(
-        color: theme.linkColor,
-        decorationColor: theme.linkColor,
-      ),
+      children: children,
+      style:
+          config.style?.copyWith(
+            color: linkColor,
+            decoration: isNumericLink
+                ? TextDecoration.none
+                : TextDecoration.underline,
+            decorationColor: linkColor,
+          ) ??
+          TextStyle(
+            color: linkColor,
+            decoration: isNumericLink
+                ? TextDecoration.none
+                : TextDecoration.underline,
+            decorationColor: linkColor,
+          ),
     );
 
     // Use custom builder if provided
@@ -3138,5 +3241,42 @@ class CustomATagMd extends ATagMd {
     );
     var textSpan = TextSpan(children: [child, ...endingSpans]);
     return textSpan;
+  }
+}
+
+/// Custom Image Markdown component to handle data URIs with newlines/encoding.
+class CustomImageMd extends InlineMd {
+  final Widget Function(String url, String? alt)? onImage;
+
+  CustomImageMd({this.onImage});
+
+  @override
+  // Match ![alt](url) but allow newlines/spaces in URL part
+  RegExp get exp => RegExp(r"!\[([^\]]*)\]\(([^)]*)\)");
+
+  @override
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
+    var match = exp.firstMatch(text.trim());
+    if (match == null) return TextSpan(text: text);
+
+    var alt = match.group(1);
+    var url = match.group(2) ?? "";
+
+    // Clean up the URL if it looks like a data URI
+    // Use loose check for data: because sometimes it might have spaces before it
+    if (url.trim().contains('data:')) {
+      try {
+        url = Uri.decodeFull(url);
+      } catch (_) {}
+      url = url.replaceAll(RegExp(r'\s'), '');
+    }
+
+    if (onImage != null) {
+      return WidgetSpan(
+        alignment: PlaceholderAlignment.bottom,
+        child: onImage!(url, alt),
+      );
+    }
+    return TextSpan(text: text);
   }
 }

@@ -1035,6 +1035,29 @@ class AppLocalizationsZh extends AppLocalizations {
   String get addLink => '添加链接';
 
   @override
+  String get insertAttachmentLink => '插入附件链接';
+
+  @override
+  String get selectAttachment => '选择附件';
+
+  @override
+  String get selectLocation => '选择位置（可选）';
+
+  @override
+  String get noAttachments => '该笔记没有附件';
+
+  @override
+  String get linkText => '链接文本';
+
+  @override
+  String pageN(int n) {
+    return '第 $n 页';
+  }
+
+  @override
+  String get noSpecificPage => '不指定页面';
+
+  @override
   String get attach => '附加';
 
   @override

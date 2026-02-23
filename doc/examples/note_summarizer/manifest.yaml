@@ -1,0 +1,6 @@
+name: Quick Summarizer
+app_type: note_action
+description: Summarizes selected notes into a single sentence using the configured LLM.
+author: Note Synapse Team
+license: MIT
+libraries: []

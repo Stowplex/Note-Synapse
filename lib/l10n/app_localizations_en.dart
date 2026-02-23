@@ -1060,6 +1060,29 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addLink => 'Add Link';
 
   @override
+  String get insertAttachmentLink => 'Insert Attachment Link';
+
+  @override
+  String get selectAttachment => 'Select Attachment';
+
+  @override
+  String get selectLocation => 'Select Location';
+
+  @override
+  String get noAttachments => 'No attachments';
+
+  @override
+  String get linkText => 'Link Text';
+
+  @override
+  String pageN(int n) {
+    return 'Page $n';
+  }
+
+  @override
+  String get noSpecificPage => 'No specific page';
+
+  @override
   String get attach => 'Attach';
 
   @override

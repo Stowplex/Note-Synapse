@@ -321,6 +321,20 @@
   "tags": "标签",
   "linkedNotes": "关联笔记",
   "addLink": "添加链接",
+  "insertAttachmentLink": "插入附件链接",
+  "selectAttachment": "选择附件",
+  "selectLocation": "选择位置（可选）",
+  "noAttachments": "该笔记没有附件",
+  "linkText": "链接文本",
+  "pageN": "第 {n} 页",
+  "@pageN": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "noSpecificPage": "不指定页面",
   "aiActions": "AI操作",
   "attach": "附加",
   "recordAudio": "录制音频",

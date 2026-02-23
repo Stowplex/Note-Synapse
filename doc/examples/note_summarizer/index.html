@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #111;
+            color: #eee;
+            padding: 20px;
+        }
+
+        .card {
+            background: #222;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #4af;
+        }
+
+        h1 {
+            font-size: 1.5em;
+            margin-bottom: 1em;
+        }
+
+        h3 {
+            margin-top: 0;
+            color: #4af;
+            font-size: 1.1em;
+        }
+
+        p {
+            line-height: 1.4;
+            color: #ccc;
+        }
+
+        .loading {
+            font-style: italic;
+            color: #888;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>📝 Note Summaries</h1>
+    <div id="container">
+        <div class="loading">Reading selected notes...</div>
+    </div>
+
+    <script>
+        async function run() {
+            const container = document.getElementById('container');
+
+            // 'Notes' is automatically populated by Synapse for Note Action apps
+            const notes = window.Synapse.Notes;
+
+            if (!notes || notes.length === 0) {
+                container.innerHTML = "<p>No notes selected. Please long-press notes in the list and select this action.</p>";
+                return;
+            }
+
+            container.innerHTML = "";
+
+            for (const note of notes) {
+                // Create UI placeholder
+                const div = document.createElement('div');
+                div.className = 'card';
+                div.innerHTML = `<h3>${note.title}</h3><p class="loading">Generating summary...</p>`;
+                container.appendChild(div);
+
+                try {
+                    // Call AI
+                    // We use a high temperature for creative summaries, or low for factual.
+                    const response = await window.Synapse.chatAI(
+                        `Summarize the following content in exactly one concise sentence:\n\n${note.content}`,
+                        { temperature: 0.3 }
+                    );
+
+                    div.querySelector('p').innerText = response.response;
+                    div.querySelector('p').classList.remove('loading');
+                } catch (e) {
+                    div.querySelector('p').innerText = "Error: " + e.toString();
+                    div.querySelector('p').style.color = "red";
+                }
+            }
+        }
+
+        // Start immediately
+        run();
+    </script>
+</body>
+
+</html>

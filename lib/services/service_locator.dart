@@ -13,8 +13,9 @@ import 'context_manager_service.dart';
 import 'ai_service.dart';
 import 'agent_service.dart';
 import 'mcp_service.dart';
-import 'package:note_synapse/services/sync/sync_service.dart';
-import 'package:note_synapse/services/sync/device_identity_service.dart';
+import 'sync/sync_service.dart';
+import 'sync/device_identity_service.dart';
+import 'tag_image_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -75,6 +76,12 @@ void setupServiceLocator() {
         db: getIt<DatabaseService>(),
         identity: DeviceIdentityService(),
       ),
+    );
+  }
+
+  if (!getIt.isRegistered<TagImageService>()) {
+    getIt.registerLazySingleton<TagImageService>(
+      () => TagImageService(getIt<DatabaseService>()),
     );
   }
 

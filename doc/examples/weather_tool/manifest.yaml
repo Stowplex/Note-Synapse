@@ -1,0 +1,7 @@
+name: Weather Lookup
+app_type: ai_tool
+description: An AI tool that allows the assistant to look up current weather for a city.
+author: Note Synapse Team
+license: MIT
+# No external libraries needed for this simple tool
+libraries: []

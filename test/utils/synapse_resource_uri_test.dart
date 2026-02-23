@@ -63,10 +63,42 @@ void main() {
         expect(link.id, 'xyz-456');
       });
 
+      test('parses attachment URI', () {
+        final link = SynapseResourceUri.parse(
+          'synapseresource://attachment/abc-123',
+        );
+        expect(link, isNotNull);
+        expect(link!.type, SynapseResourceType.attachment);
+        expect(link.id, 'abc-123');
+        expect(link.queryParameters, isEmpty);
+      });
+
+      test('parses attachment URI with page query param', () {
+        final link = SynapseResourceUri.parse(
+          'synapseresource://attachment/abc-123?page=5',
+        );
+        expect(link, isNotNull);
+        expect(link!.type, SynapseResourceType.attachment);
+        expect(link.id, 'abc-123');
+        expect(link.queryParameters, {'page': '5'});
+      });
+
       test('parses URI with uppercase scheme', () {
         final link = SynapseResourceUri.parse('SYNAPSERESOURCE://note/abc');
         expect(link, isNotNull);
         expect(link!.type, SynapseResourceType.note);
+      });
+
+      test('existing note/conversation URIs have empty queryParameters', () {
+        final noteLink = SynapseResourceUri.parse(
+          'synapseresource://note/abc',
+        );
+        expect(noteLink!.queryParameters, isEmpty);
+
+        final convoLink = SynapseResourceUri.parse(
+          'synapseresource://conversation/abc',
+        );
+        expect(convoLink!.queryParameters, isEmpty);
       });
 
       test('returns null for unknown resource type', () {
@@ -115,6 +147,22 @@ void main() {
       });
     });
 
+    group('attachmentUri', () {
+      test('generates correct attachment URI without page', () {
+        expect(
+          SynapseResourceUri.attachmentUri('att-1'),
+          'synapseresource://attachment/att-1',
+        );
+      });
+
+      test('generates correct attachment URI with page', () {
+        expect(
+          SynapseResourceUri.attachmentUri('att-1', page: 5),
+          'synapseresource://attachment/att-1?page=5',
+        );
+      });
+    });
+
     group('roundtrip', () {
       test('noteUri can be parsed back', () {
         const noteId = 'test-note-123';
@@ -132,6 +180,26 @@ void main() {
         expect(parsed, isNotNull);
         expect(parsed!.type, SynapseResourceType.conversation);
         expect(parsed.id, conversationId);
+      });
+
+      test('attachmentUri can be parsed back', () {
+        const attachmentId = 'test-att-789';
+        final uri = SynapseResourceUri.attachmentUri(attachmentId);
+        final parsed = SynapseResourceUri.parse(uri);
+        expect(parsed, isNotNull);
+        expect(parsed!.type, SynapseResourceType.attachment);
+        expect(parsed.id, attachmentId);
+        expect(parsed.queryParameters, isEmpty);
+      });
+
+      test('attachmentUri with page can be parsed back', () {
+        const attachmentId = 'test-att-789';
+        final uri = SynapseResourceUri.attachmentUri(attachmentId, page: 42);
+        final parsed = SynapseResourceUri.parse(uri);
+        expect(parsed, isNotNull);
+        expect(parsed!.type, SynapseResourceType.attachment);
+        expect(parsed.id, attachmentId);
+        expect(parsed.queryParameters['page'], '42');
       });
     });
 
@@ -171,6 +239,35 @@ void main() {
           id: 'xyz',
         );
         expect(link1, isNot(link2));
+      });
+
+      test('different queryParameters are not equal', () {
+        final link1 = SynapseResourceLink(
+          type: SynapseResourceType.attachment,
+          id: 'abc',
+          queryParameters: {'page': '1'},
+        );
+        final link2 = SynapseResourceLink(
+          type: SynapseResourceType.attachment,
+          id: 'abc',
+          queryParameters: {'page': '2'},
+        );
+        expect(link1, isNot(link2));
+      });
+
+      test('same queryParameters are equal', () {
+        final link1 = SynapseResourceLink(
+          type: SynapseResourceType.attachment,
+          id: 'abc',
+          queryParameters: {'page': '5'},
+        );
+        final link2 = SynapseResourceLink(
+          type: SynapseResourceType.attachment,
+          id: 'abc',
+          queryParameters: {'page': '5'},
+        );
+        expect(link1, link2);
+        expect(link1.hashCode, link2.hashCode);
       });
     });
   });

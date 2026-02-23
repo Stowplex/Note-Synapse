@@ -307,6 +307,42 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i7.Future<void>);
 
   @override
+  _i7.Future<void> setTagImage(String? tagId, String? imagePath) =>
+      (super.noSuchMethod(
+            Invocation.method(#setTagImage, [tagId, imagePath]),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
+          )
+          as _i7.Future<void>);
+
+  @override
+  _i7.Future<void> removeTagImage(String? tagId) =>
+      (super.noSuchMethod(
+            Invocation.method(#removeTagImage, [tagId]),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
+          )
+          as _i7.Future<void>);
+
+  @override
+  _i7.Future<Map<String, String>> getAllTagImages() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllTagImages, []),
+            returnValue: _i7.Future<Map<String, String>>.value(
+              <String, String>{},
+            ),
+          )
+          as _i7.Future<Map<String, String>>);
+
+  @override
+  _i7.Future<String?> getTagImage(String? tagId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getTagImage, [tagId]),
+            returnValue: _i7.Future<String?>.value(),
+          )
+          as _i7.Future<String?>);
+
+  @override
   _i7.Future<void> replaceTag(String? oldTagName, String? newTagName) =>
       (super.noSuchMethod(
             Invocation.method(#replaceTag, [oldTagName, newTagName]),
@@ -1398,6 +1434,14 @@ class MockAppProvider extends _i1.Mock implements _i16.AppProvider {
           as bool);
 
   @override
+  bool get onboardingCompleted =>
+      (super.noSuchMethod(
+            Invocation.getter(#onboardingCompleted),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
   List<_i8.Note> get notes =>
       (super.noSuchMethod(Invocation.getter(#notes), returnValue: <_i8.Note>[])
           as List<_i8.Note>);
@@ -1791,6 +1835,15 @@ class MockAppProvider extends _i1.Mock implements _i16.AppProvider {
     Invocation.method(#toggleHierarchy, []),
     returnValueForMissingStub: null,
   );
+
+  @override
+  _i7.Future<void> setOnboardingCompleted(bool? completed) =>
+      (super.noSuchMethod(
+            Invocation.method(#setOnboardingCompleted, [completed]),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
+          )
+          as _i7.Future<void>);
 
   @override
   _i7.Future<void> clearAllData() =>

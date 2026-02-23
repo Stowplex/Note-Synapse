@@ -46,7 +46,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 38; // Target schema version
+  static const int DATABASE_VERSION = 42; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -88,6 +88,14 @@ class DatabaseService {
         color TEXT NOT NULL, -- Tag color
         createdAt INTEGER NOT NULL, -- Creation timestamp
         usageCount INTEGER NOT NULL DEFAULT 0 -- Usage count
+      )
+  ''';
+
+  static const String _createTagImagesTable = '''
+      CREATE TABLE tag_images(
+        tagId TEXT PRIMARY KEY,
+        imagePath TEXT NOT NULL,
+        FOREIGN KEY (tagId) REFERENCES tags(id) ON DELETE CASCADE
       )
   ''';
 
@@ -327,6 +335,46 @@ class DatabaseService {
       )
   ''';
 
+  static const String _createTagAiConfigsTable = '''
+      CREATE TABLE tag_ai_configs (
+        tagId TEXT PRIMARY KEY,
+        extractionPrompt TEXT,
+        FOREIGN KEY (tagId) REFERENCES tags (id) ON DELETE CASCADE
+      )
+  ''';
+
+  // FTS4 is universally supported on all platforms (Android, iOS, macOS, Windows, Linux)
+  static const String _createNotesFtsTable = '''
+      CREATE VIRTUAL TABLE notes_fts USING fts4(
+        title, 
+        content
+      );
+  ''';
+
+  static const String _createNotesFtsInsertTrigger = '''
+      CREATE TRIGGER notes_ai_insert AFTER INSERT ON notes
+      BEGIN
+        INSERT INTO notes_fts(docid, title, content)
+        VALUES(new.rowid, new.title, new.content);
+      END;
+  ''';
+
+  static const String _createNotesFtsDeleteTrigger = '''
+      CREATE TRIGGER notes_ai_delete AFTER DELETE ON notes
+      BEGIN
+        DELETE FROM notes_fts WHERE docid = old.rowid;
+      END;
+  ''';
+
+  static const String _createNotesFtsUpdateTrigger = '''
+      CREATE TRIGGER notes_ai_update AFTER UPDATE ON notes
+      BEGIN
+        DELETE FROM notes_fts WHERE docid = old.rowid;
+        INSERT INTO notes_fts(docid, title, content)
+        VALUES(new.rowid, new.title, new.content);
+      END;
+  ''';
+
   // Index creation constants
   static const List<String> _createIndexes = [
     'CREATE INDEX idx_notes_type ON notes(type)',
@@ -527,6 +575,7 @@ class DatabaseService {
     await db.execute(_createNotesTable);
     await db.execute(_createSubNotesTable);
     await db.execute(_createTagsTable);
+    await db.execute(_createTagImagesTable);
     await db.execute(_createNoteTagsTable);
     await db.execute(_createAttachmentsTable);
     await db.execute(_createRelationshipsTable);
@@ -545,6 +594,15 @@ class DatabaseService {
     await db.execute(_createConversationTagsTable);
     await db.execute(_createMultiFunctionAppsTable);
     await db.execute(_createSyncConflictsTable);
+
+    // Create AI-related tables (missing in previous versions' onCreate)
+    await db.execute(_createTagAiConfigsTable);
+
+    // Create FTS table and triggers
+    await db.execute(_createNotesFtsTable);
+    await db.execute(_createNotesFtsInsertTrigger);
+    await db.execute(_createNotesFtsDeleteTrigger);
+    await db.execute(_createNotesFtsUpdateTrigger);
 
     // Create all indexes
     for (final indexSql in _createIndexes) {
@@ -582,8 +640,14 @@ class DatabaseService {
       currentVersion = pragmaVersion.isNotEmpty
           ? pragmaVersion.first['user_version'] as int
           : 0;
-      if (currentVersion == 0)
+      // SQFLITE_VERSION (999) is a sentinel value passed to openDatabase()
+      // to prevent sqflite's built-in onUpgrade. If we read it back here,
+      // it means this is a legacy DB that was already opened with the new
+      // system but never had _schema_version created. Fall back to the
+      // last known pre-custom-migration version.
+      if (currentVersion == 0 || currentVersion >= SQFLITE_VERSION) {
         currentVersion = 19; // Assume min supported version
+      }
       await db.insert('_schema_version', {'version': currentVersion});
       LoggerService.info(
         'Created _schema_version table, initialized from PRAGMA: v$currentVersion',
@@ -594,6 +658,17 @@ class DatabaseService {
       currentVersion = versionResult.isNotEmpty
           ? versionResult.first['version'] as int
           : 0;
+      // Fix corrupted version: if _schema_version was set to the SQFLITE_VERSION
+      // sentinel (999) due to the legacy PRAGMA fallback bug, reset it to the
+      // actual DATABASE_VERSION and re-run any missing migrations.
+      if (currentVersion >= SQFLITE_VERSION) {
+        LoggerService.warning(
+          'Detected corrupted _schema_version ($currentVersion), resetting to run missing migrations',
+        );
+        // Determine actual version by checking which tables/columns exist
+        currentVersion = await _detectActualSchemaVersion(db);
+        await db.update('_schema_version', {'version': currentVersion});
+      }
     }
 
     if (currentVersion >= DATABASE_VERSION) {
@@ -641,6 +716,48 @@ class DatabaseService {
       await db.update('_schema_version', {'version': DATABASE_VERSION});
       LoggerService.info('Schema version updated to $DATABASE_VERSION');
     }
+  }
+
+  /// Detect the actual schema version by probing for tables/columns
+  /// introduced in known migration steps. Returns the highest version
+  /// whose schema changes are present.
+  static Future<int> _detectActualSchemaVersion(Database db) async {
+    int detected = 19; // Minimum supported version
+
+    // Check for tag_images table (v41)
+    final tagImagesCheck = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='tag_images'",
+    );
+    if (tagImagesCheck.isNotEmpty) detected = 41;
+
+    // Check for notes_fts table (v31/v36)
+    if (detected < 36) {
+      final ftsCheck = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='notes_fts'",
+      );
+      if (ftsCheck.isNotEmpty) detected = 36;
+    }
+
+    // Check for metadata column in attachments (v32)
+    if (detected < 32) {
+      final attachCols = await db.rawQuery("PRAGMA table_info('attachments')");
+      if (attachCols.any((c) => c['name'] == 'metadata')) detected = 32;
+    }
+
+    // Check for recurrenceRule in notes (v30)
+    if (detected < 30) {
+      final notesCols = await db.rawQuery("PRAGMA table_info('notes')");
+      if (notesCols.any((c) => c['name'] == 'recurrenceRule')) detected = 30;
+    }
+
+    // Check for excludeTags in filters (v28)
+    if (detected < 28) {
+      final filtersCols = await db.rawQuery("PRAGMA table_info('filters')");
+      if (filtersCols.any((c) => c['name'] == 'excludeTags')) detected = 28;
+    }
+
+    LoggerService.info('Detected actual schema version: $detected');
+    return detected;
   }
 
   /// Navigate to RecoveryScreen with error message
@@ -722,14 +839,17 @@ class DatabaseService {
           'Fix notes_fts FTS5 table by removing incorrect content_rowid option',
       execute: _migrateToVersion36,
     ),
-    37: MigrationStep(
+    41: MigrationStep(
+      description: 'Create tag_images table for image-augmented tags',
+      execute: _migrateToVersion41,
+    ),
+    42: MigrationStep(
       description: 'Create sync_conflicts table for sync conflict resolution',
       execute: _migrateToVersion37,
     ),
-    38: MigrationStep(
+    42: MigrationStep(
       description: 'Migrate conversation_message_mapping and conversation_note_mapping to composite primary keys',
       execute: _migrateToVersion38,
-    ),
   };
 
   static Future<void> _migrateToVersion28(
@@ -1330,6 +1450,19 @@ class DatabaseService {
     }
   }
 
+  static Future<void> _migrateToVersion41(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS tag_images (
+        tagId TEXT PRIMARY KEY,
+        imagePath TEXT NOT NULL,
+        FOREIGN KEY (tagId) REFERENCES tags(id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
   // Migrate existing conversation data to new structure
 
   // Migration helper method to create initial revisions for existing apps
@@ -1740,22 +1873,25 @@ class DatabaseService {
     }
 
     // Update attachments
-    // Update attachments
-    // First, get existing attachments to preserve metadata (like includeInAIContext)
-    final existingAttachments = await db.query(
+    // Get existing attachments to preserve IDs and metadata
+    final existingAttachmentsRows = await db.query(
       'attachments',
       columns: ['filePath', 'includeInAIContext'],
       where: 'noteId = ?',
       whereArgs: [note.id],
     );
 
+    final existingPaths = <String>{};
     final Map<String, bool> existingContextMap = {};
-    for (final row in existingAttachments) {
-      existingContextMap[row['filePath'] as String] =
-          (row['includeInAIContext'] as int?) != 0;
+
+    for (final row in existingAttachmentsRows) {
+      final path = row['filePath'] as String;
+      existingPaths.add(path);
+      existingContextMap[path] = (row['includeInAIContext'] as int?) != 0;
     }
 
-    await db.delete('attachments', where: 'noteId = ?', whereArgs: [note.id]);
+    final pathsToKeep = <String>{};
+
     for (final attachmentPath in note.attachmentPaths) {
       // Check if path is relative (starts with 'attachments/')
       bool isRelativePath = attachmentPath.startsWith('attachments/');
@@ -1770,18 +1906,36 @@ class DatabaseService {
         }
       }
 
-      // Preserve includeInAIContext if it existed, otherwise default to true
-      final includeInAIContext =
-          existingContextMap[finalPath] ??
-          existingContextMap[attachmentPath] ??
-          true;
+      if (existingPaths.contains(finalPath)) {
+        // Attachment exists, keep it
+        pathsToKeep.add(finalPath);
+      } else {
+        // New attachment, insert it
+        // Preserve includeInAIContext if it existed in some form (robustness), otherwise default to true
+        final includeInAIContext =
+            existingContextMap[finalPath] ??
+            existingContextMap[attachmentPath] ??
+            true;
 
-      await _insertAttachment(
-        note.id,
-        finalPath,
-        isRelativePath: isRelativePath,
-        includeInAIContext: includeInAIContext,
-      );
+        await _insertAttachment(
+          note.id,
+          finalPath,
+          isRelativePath: isRelativePath,
+          includeInAIContext: includeInAIContext,
+        );
+      }
+    }
+
+    // Delete attachments that are no longer in the note
+    // We do this by checking which existing paths were NOT in the new list
+    for (final existingPath in existingPaths) {
+      if (!pathsToKeep.contains(existingPath)) {
+        await db.delete(
+          'attachments',
+          where: 'noteId = ? AND filePath = ?',
+          whereArgs: [note.id, existingPath],
+        );
+      }
     }
   }
 
@@ -1991,6 +2145,43 @@ class DatabaseService {
 
     // Delete the tag itself
     await db.delete('tags', where: 'id = ?', whereArgs: [tagId]);
+  }
+
+  /// Set or update the image for a tag.
+  Future<void> setTagImage(String tagId, String imagePath) async {
+    final db = await database;
+    await db.insert('tag_images', {
+      'tagId': tagId,
+      'imagePath': imagePath,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Remove the image for a tag.
+  Future<void> removeTagImage(String tagId) async {
+    final db = await database;
+    await db.delete('tag_images', where: 'tagId = ?', whereArgs: [tagId]);
+  }
+
+  /// Get all tag images as a map of tagId -> imagePath.
+  Future<Map<String, String>> getAllTagImages() async {
+    final db = await database;
+    final rows = await db.query('tag_images');
+    return {
+      for (final row in rows)
+        row['tagId'] as String: row['imagePath'] as String,
+    };
+  }
+
+  /// Get the image path for a specific tag.
+  Future<String?> getTagImage(String tagId) async {
+    final db = await database;
+    final rows = await db.query(
+      'tag_images',
+      where: 'tagId = ?',
+      whereArgs: [tagId],
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['imagePath'] as String;
   }
 
   Future<void> replaceTag(String oldTagName, String newTagName) async {

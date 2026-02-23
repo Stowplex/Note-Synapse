@@ -326,6 +326,20 @@
   "tags": "Tags",
   "linkedNotes": "Linked Notes",
   "addLink": "Add Link",
+  "insertAttachmentLink": "Insert Attachment Link",
+  "selectAttachment": "Select Attachment",
+  "selectLocation": "Select Location",
+  "noAttachments": "No attachments",
+  "linkText": "Link Text",
+  "pageN": "Page {n}",
+  "@pageN": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "noSpecificPage": "No specific page",
   "aiActions": "AI Actions",
   "attach": "Attach",
   "recordAudio": "Record Audio",

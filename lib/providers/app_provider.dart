@@ -16,6 +16,7 @@ import '../services/conversation_service.dart';
 import '../services/logger_service.dart';
 import '../services/service_locator.dart';
 import '../services/model_storage_service.dart';
+import '../services/tag_image_service.dart';
 import '../models/generation_context.dart';
 
 class AppProvider extends ChangeNotifier {
@@ -430,6 +431,15 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> deleteTag(String tagName) async {
     try {
+      // Clean up tag image file before deleting the tag
+      final tagImageService = getIt<TagImageService>();
+      final tag = _tags.firstWhere(
+        (t) => t.name == tagName,
+        orElse: () => throw Exception('Tag not found'),
+      );
+      // removeTagImage handles file deletion and DB cleanup
+      await tagImageService.removeTagImage(tag.id);
+
       await _databaseService.deleteTag(tagName);
 
       // Remove the tag from all notes in local state
@@ -457,6 +467,16 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> replaceTag(String oldTagName, String newTagName) async {
     try {
+      // Migrate image from old tag to new tag if new tag has no image
+      final tagImageService = getIt<TagImageService>();
+      final oldTagImage = tagImageService.getImagePathForTag(oldTagName);
+      final newTagImage = tagImageService.getImagePathForTag(newTagName);
+
+      if (oldTagImage != null && newTagImage == null) {
+        final newTag = _tags.firstWhere((t) => t.name == newTagName);
+        await tagImageService.setTagImage(newTag.id, oldTagImage);
+      }
+
       await _databaseService.replaceTag(oldTagName, newTagName);
 
       // Update the tag in all notes in local state

@@ -34,6 +34,7 @@ import 'ai_action_screen.dart';
 import 'subnote_edit_screen.dart';
 import 'note_action_app_selection_screen.dart';
 import 'note_selection_dialog.dart';
+import '../widgets/insert_attachment_link_dialog.dart';
 import '../services/logger_service.dart';
 import '../services/database_service.dart';
 import '../services/conversation_service.dart';
@@ -902,24 +903,36 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       },
       child: Stack(
         children: [
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (currentNote.isTask) ...[
-                  _buildTaskStatus(currentNote),
-                  const SizedBox(height: 16),
-                ],
-                SelectableText(
-                  currentNote.title,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
+          SelectionArea(
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      top: 16,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (currentNote.isTask) ...[
+                          _buildTaskStatus(currentNote),
+                          const SizedBox(height: 16),
+                        ],
+                        SelectableText(
+                          currentNote.title,
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                SelectionArea(
-                  child: BlockMarkdownBody(
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  sliver: BlockMarkdownBody(
                     key: ValueKey('note_${currentNote.id}'),
                     noteId: currentNote.id,
                     content: currentNote.content,
@@ -933,350 +946,387 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     onFetchImage: _handleImageFetch,
                   ),
                 ),
-                if (currentNote.subNotes.isNotEmpty) ...[
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      Text(
-                        l10n.subNotes,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.add),
-                        onPressed: () => _addSubNote(currentNote),
-                        tooltip: l10n.addSubNote,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ...currentNote.subNotes.map(
-                    (subNote) => Card(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Header with completed toggle and three dot menu
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4.0,
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      bottom: 16,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (currentNote.subNotes.isNotEmpty) ...[
+                          const SizedBox(height: 24),
+                          Row(
+                            children: [
+                              Text(
+                                l10n.subNotes,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                              const Spacer(),
+                              IconButton(
+                                icon: const Icon(Icons.add),
+                                onPressed: () => _addSubNote(currentNote),
+                                tooltip: l10n.addSubNote,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          ...currentNote.subNotes.map(
+                            (subNote) => Card(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Header with completed toggle and three dot menu
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4.0,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        // Completed status toggle
+                                        IconButton(
+                                          icon: Icon(
+                                            subNote.isCompleted
+                                                ? Icons.check_circle
+                                                : Icons.radio_button_unchecked,
+                                            color: subNote.isCompleted
+                                                ? Colors.green
+                                                : Colors.grey,
+                                          ),
+                                          onPressed: () =>
+                                              _toggleSubNoteCompletion(subNote),
+                                          tooltip: subNote.isCompleted
+                                              ? l10n.markIncomplete
+                                              : l10n.markComplete,
+                                        ),
+                                        const Spacer(),
+                                        // Three dot menu
+                                        PopupMenuButton(
+                                          itemBuilder: (context) => [
+                                            PopupMenuItem(
+                                              value: 'edit',
+                                              child: Row(
+                                                children: [
+                                                  const Icon(Icons.edit),
+                                                  const SizedBox(width: 8),
+                                                  Text(l10n.edit),
+                                                ],
+                                              ),
+                                            ),
+                                            PopupMenuItem(
+                                              value: 'reparent',
+                                              child: Row(
+                                                children: [
+                                                  const Icon(
+                                                    Icons.move_to_inbox,
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Text(l10n.reparentSubNote),
+                                                ],
+                                              ),
+                                            ),
+                                            PopupMenuItem(
+                                              value: 'delete',
+                                              child: Row(
+                                                children: [
+                                                  const Icon(
+                                                    Icons.delete,
+                                                    color: Colors.red,
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Text(
+                                                    l10n.delete,
+                                                    style: const TextStyle(
+                                                      color: Colors.red,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                          onSelected: (value) {
+                                            if (value == 'edit') {
+                                              _editSubNote(
+                                                currentNote,
+                                                subNote,
+                                              );
+                                            } else if (value == 'reparent') {
+                                              _reparentSubNote(
+                                                currentNote,
+                                                subNote,
+                                              );
+                                            } else if (value == 'delete') {
+                                              _deleteSubNote(
+                                                currentNote,
+                                                subNote,
+                                              );
+                                            }
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16.0,
+                                      0.0,
+                                      16.0,
+                                      16.0,
+                                    ),
+                                    child: Text(
+                                      subNote.name,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            decoration: subNote.isCompleted
+                                                ? TextDecoration.lineThrough
+                                                : null,
+                                            color: subNote.isCompleted
+                                                ? Colors.grey
+                                                : null,
+                                          ),
+                                    ),
+                                  ),
+                                  if (subNote.content.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        16.0,
+                                        0.0,
+                                        16.0,
+                                        16.0,
+                                      ),
+                                      child: SelectionArea(
+                                        child: InteractiveCheckboxMarkdown(
+                                          key: ValueKey(
+                                            'subnote_${subNote.id}',
+                                          ),
+                                          noteId: currentNote.id,
+                                          originalContent: subNote.content,
+                                          onContentChanged: (newContent) =>
+                                              _updateSubNoteContent(
+                                                subNote,
+                                                newContent,
+                                              ),
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.bodyMedium,
+                                          textDirection: TextDirection.ltr,
+                                          onLinkTap: _handleLinkTap,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ] else ...[
+                          const SizedBox(height: 24),
+                          Row(
+                            children: [
+                              Text(
+                                l10n.subNotes,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                              const Spacer(),
+                              IconButton(
+                                icon: const Icon(Icons.add),
+                                onPressed: () => _addSubNote(currentNote),
+                                tooltip: l10n.addSubNote,
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            Text(
+                              l10n.tags,
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                            const Spacer(),
+                            TextButton.icon(
+                              onPressed: () => _showAddTagDialog(currentNote),
+                              icon: const Icon(Icons.add, size: 16),
+                              label: Text(l10n.addTag),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        if (currentNote.tags.isNotEmpty)
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: currentNote.tags
+                                .map(
+                                  (tag) => Chip(
+                                    label: Text(tag),
+                                    backgroundColor: Theme.of(
+                                      context,
+                                    ).colorScheme.primary.withOpacity(0.1),
+                                    labelStyle: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                    ),
+                                    deleteIcon: const Icon(
+                                      Icons.close,
+                                      size: 16,
+                                    ),
+                                    onDeleted: () =>
+                                        _removeTag(currentNote, tag),
+                                  ),
+                                )
+                                .toList(),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey[300]!),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
                               children: [
-                                // Completed status toggle
-                                IconButton(
-                                  icon: Icon(
-                                    subNote.isCompleted
-                                        ? Icons.check_circle
-                                        : Icons.radio_button_unchecked,
-                                    color: subNote.isCompleted
-                                        ? Colors.green
-                                        : Colors.grey,
-                                  ),
-                                  onPressed: () =>
-                                      _toggleSubNoteCompletion(subNote),
-                                  tooltip: subNote.isCompleted
-                                      ? l10n.markIncomplete
-                                      : l10n.markComplete,
+                                Icon(
+                                  Icons.label_outline,
+                                  color: Colors.grey[400],
                                 ),
-                                const Spacer(),
-                                // Three dot menu
-                                PopupMenuButton(
-                                  itemBuilder: (context) => [
-                                    PopupMenuItem(
-                                      value: 'edit',
-                                      child: Row(
-                                        children: [
-                                          const Icon(Icons.edit),
-                                          const SizedBox(width: 8),
-                                          Text(l10n.edit),
-                                        ],
-                                      ),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'reparent',
-                                      child: Row(
-                                        children: [
-                                          const Icon(Icons.move_to_inbox),
-                                          const SizedBox(width: 8),
-                                          Text(l10n.reparentSubNote),
-                                        ],
-                                      ),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'delete',
-                                      child: Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.delete,
-                                            color: Colors.red,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            l10n.delete,
-                                            style: const TextStyle(
-                                              color: Colors.red,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                  onSelected: (value) {
-                                    if (value == 'edit') {
-                                      _editSubNote(currentNote, subNote);
-                                    } else if (value == 'reparent') {
-                                      _reparentSubNote(currentNote, subNote);
-                                    } else if (value == 'delete') {
-                                      _deleteSubNote(currentNote, subNote);
-                                    }
-                                  },
+                                const SizedBox(width: 8),
+                                Text(
+                                  l10n.noTagsYet,
+                                  style: TextStyle(color: Colors.grey[600]),
                                 ),
                               ],
                             ),
                           ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(
-                              16.0,
-                              0.0,
-                              16.0,
-                              16.0,
-                            ),
-                            child: Text(
-                              subNote.name,
-                              style: Theme.of(context).textTheme.titleSmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    decoration: subNote.isCompleted
-                                        ? TextDecoration.lineThrough
-                                        : null,
-                                    color: subNote.isCompleted
-                                        ? Colors.grey
-                                        : null,
-                                  ),
-                            ),
+                        if (currentNote.attachmentPaths.isNotEmpty) ...[
+                          const SizedBox(height: 24),
+                          Text(
+                            l10n.attachments,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
                           ),
-                          if (subNote.content.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                16.0,
-                                0.0,
-                                16.0,
-                                16.0,
-                              ),
-                              child: SelectionArea(
-                                child: InteractiveCheckboxMarkdown(
-                                  key: ValueKey('subnote_${subNote.id}'),
-                                  noteId: currentNote.id,
-                                  originalContent: subNote.content,
-                                  onContentChanged: (newContent) =>
-                                      _updateSubNoteContent(
-                                        subNote,
-                                        newContent,
-                                      ),
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                  textDirection: TextDirection.ltr,
-                                  onLinkTap: _handleLinkTap,
-                                ),
-                              ),
-                            ),
+                          const SizedBox(height: 8),
+                          ...currentNote.attachmentPaths.map(
+                            (path) => _buildAttachmentCard(path, currentNote),
+                          ),
                         ],
-                      ),
-                    ),
-                  ),
-                ] else ...[
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      Text(
-                        l10n.subNotes,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.add),
-                        onPressed: () => _addSubNote(currentNote),
-                        tooltip: l10n.addSubNote,
-                      ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Text(
-                      l10n.tags,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Spacer(),
-                    TextButton.icon(
-                      onPressed: () => _showAddTagDialog(currentNote),
-                      icon: const Icon(Icons.add, size: 16),
-                      label: Text(l10n.addTag),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                if (currentNote.tags.isNotEmpty)
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: currentNote.tags
-                        .map(
-                          (tag) => Chip(
-                            label: Text(tag),
-                            backgroundColor: Theme.of(
-                              context,
-                            ).colorScheme.primary.withOpacity(0.1),
-                            labelStyle: TextStyle(
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            deleteIcon: const Icon(Icons.close, size: 16),
-                            onDeleted: () => _removeTag(currentNote, tag),
+                        if (_linkedNotes.isNotEmpty) ...[
+                          const SizedBox(height: 24),
+                          Row(
+                            children: [
+                              Text(
+                                l10n.linkedNotes,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                              const Spacer(),
+                              TextButton.icon(
+                                onPressed: _addLinkedNote,
+                                icon: const Icon(Icons.add, size: 16),
+                                label: Text(l10n.addLink),
+                              ),
+                            ],
                           ),
-                        )
-                        .toList(),
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[300]!),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.label_outline, color: Colors.grey[400]),
-                        const SizedBox(width: 8),
-                        Text(
-                          l10n.noTagsYet,
-                          style: TextStyle(color: Colors.grey[600]),
+                          const SizedBox(height: 8),
+                          ..._buildLinkedNotesList(currentNote),
+                        ] else ...[
+                          const SizedBox(height: 24),
+                          Row(
+                            children: [
+                              Text(
+                                l10n.linkedNotes,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                              const Spacer(),
+                              TextButton.icon(
+                                onPressed: _addLinkedNote,
+                                icon: const Icon(Icons.add, size: 16),
+                                label: Text(l10n.addLink),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.link_off, color: Colors.grey[400]),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    l10n.noLinkedNotesYet,
+                                    style: TextStyle(color: Colors.grey[600]),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            Text(
+                              l10n.conversations,
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                            const Spacer(),
+                            FutureBuilder<int>(
+                              future: context
+                                  .read<AppProvider>()
+                                  .getNoteConversationCount(currentNote.id),
+                              builder: (context, snapshot) {
+                                if (snapshot.hasData) {
+                                  final count = snapshot.data!;
+                                  if (count > 0) {
+                                    return TextButton.icon(
+                                      onPressed: _showConversationsDialog,
+                                      icon: const Icon(Icons.chat, size: 16),
+                                      label: Text(
+                                        l10n.conversationCount(count),
+                                      ),
+                                    );
+                                  } else {
+                                    return Text(
+                                      l10n.noConversations,
+                                      style: TextStyle(color: Colors.grey[600]),
+                                    );
+                                  }
+                                } else {
+                                  return Text(
+                                    'Loading...',
+                                    style: TextStyle(color: Colors.grey[600]),
+                                  );
+                                }
+                              },
+                            ),
+                          ],
                         ),
+                        const SizedBox(height: 24),
+                        SelectableText(
+                          '${l10n.created}: ${_formatDate(currentNote.createdAt)}',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: Colors.grey[600]),
+                        ),
+                        if (currentNote.updatedAt != currentNote.createdAt)
+                          SelectableText(
+                            '${l10n.updated}: ${_formatDate(currentNote.updatedAt)}',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: Colors.grey[600]),
+                          ),
                       ],
                     ),
                   ),
-                if (currentNote.attachmentPaths.isNotEmpty) ...[
-                  const SizedBox(height: 24),
-                  Text(
-                    l10n.attachments,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ...currentNote.attachmentPaths.map(
-                    (path) => _buildAttachmentCard(path, currentNote),
-                  ),
-                ],
-                if (_linkedNotes.isNotEmpty) ...[
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      Text(
-                        l10n.linkedNotes,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const Spacer(),
-                      TextButton.icon(
-                        onPressed: _addLinkedNote,
-                        icon: const Icon(Icons.add, size: 16),
-                        label: Text(l10n.addLink),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ..._buildLinkedNotesList(currentNote),
-                ] else ...[
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      Text(
-                        l10n.linkedNotes,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const Spacer(),
-                      TextButton.icon(
-                        onPressed: _addLinkedNote,
-                        icon: const Icon(Icons.add, size: 16),
-                        label: Text(l10n.addLink),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Icon(Icons.link_off, color: Colors.grey[400]),
-                          const SizedBox(width: 8),
-                          Text(
-                            l10n.noLinkedNotesYet,
-                            style: TextStyle(color: Colors.grey[600]),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Text(
-                      l10n.conversations,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Spacer(),
-                    FutureBuilder<int>(
-                      future: context
-                          .read<AppProvider>()
-                          .getNoteConversationCount(currentNote.id),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          final count = snapshot.data!;
-                          if (count > 0) {
-                            return TextButton.icon(
-                              onPressed: _showConversationsDialog,
-                              icon: const Icon(Icons.chat, size: 16),
-                              label: Text(l10n.conversationCount(count)),
-                            );
-                          } else {
-                            return Text(
-                              l10n.noConversations,
-                              style: TextStyle(color: Colors.grey[600]),
-                            );
-                          }
-                        } else {
-                          return Text(
-                            'Loading...',
-                            style: TextStyle(color: Colors.grey[600]),
-                          );
-                        }
-                      },
-                    ),
-                  ],
                 ),
-                const SizedBox(height: 24),
-                SelectableText(
-                  '${l10n.created}: ${_formatDate(currentNote.createdAt)}',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                ),
-                if (currentNote.updatedAt != currentNote.createdAt)
-                  SelectableText(
-                    '${l10n.updated}: ${_formatDate(currentNote.updatedAt)}',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                  ),
               ],
             ),
           ),
@@ -1343,6 +1393,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               focusNode: _codeFocusNode,
               onPickImage: () => _showImagePicker(context),
               onPickNoteLink: () => _showNoteLinkPicker(context),
+              onPickAttachmentLink: () => _showAttachmentLinkPicker(context),
               language: 'markdown',
             ),
           ),
@@ -1360,6 +1411,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           await _addRelationship(newNote.id);
         },
       ),
+    );
+
+    if (result != null) {
+      _insertText(result);
+    }
+  }
+
+  Future<void> _showAttachmentLinkPicker(BuildContext context) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => const InsertAttachmentLinkDialog(),
     );
 
     if (result != null) {
