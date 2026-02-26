@@ -1,7 +1,7 @@
 model_type: gemini
 model_endpoint: https://generativelanguage.googleapis.com/v1beta
-model_name: gemini-3-pro-image-preview
-model_display_name: Gemini 3 Pro Image Preview
+model_name: gemini-3.1-pro-image-preview
+model_display_name: Gemini 3.1 Pro Image Preview
 api_key_url: https://aistudio.google.com/app/apikey
 model_capabilities:
   - support_audio
