@@ -28,7 +28,7 @@ Master your AI's attention with granular context control.
 [Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#focus)
 
 ### Natural Language Extensibility
-Create and refine powerful **Mini Apps and AI Tools** entirely within the app using natural language.
+Create and refine powerful **Mini Apps and AI Tools** within the app using natural language.
 - **Educational Tools**: Generate pop quizzes, flashcards, and guided learning apps.
 - **Custom Interfaces**: Build bespoke dashboards and knowledge graph visualizations.
 - **Interactive Media**: Embed custom tools, from data analyzers to NES emulators, directly into your notes.
@@ -41,10 +41,7 @@ Enjoy the best of both worlds with a system that merges the flexibility of tags 
 [Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#organization)
 
 ### Agentic Core & MCP Support
-Deploy autonomous agents for complex planning and execution tasks with user-selectable tools.
-- **Deep Research**: Utilize search-focused MCP servers for comprehensive web analysis.
-- **Repository Analysis**: Dive deep into GitHub repositories with specialized tools.
-- **Information Synthesis**: Analyze notes and synthesize insights across your library with built-in tools.
+AI tasks execution with user-selectable tools and external MCPs. Built-in agent mode to carry out complex tasks that require multiple steps.
 
 [Demo](https://stowplex.github.io/Note-Synapse-Site/index.html#agency)
 
@@ -77,12 +74,6 @@ flutter run
 ## Documentation
 
 Read the full documentation at **[doc/README.md](doc/README.md)**.
-
-- **[Tag Organization](doc/README.md#organization)**: Tag Algebra, Tag Filters, Tag Images.
-- **[Productivity Guide](doc/README.md#productivity)**: Web Clipper, Calendar, Dashboards.
-- **[AI & Thinking](doc/README.md#ai--thinking)**: Immersive Reading, Smart Model Matching, MCP Tools.
-- **[Power User](doc/README.md#power-user--create-your-own-tool)**: Build your own apps and tools inside Synapse.
-- **[Developer Architecture](doc/README.md#contributor)**: How the HTTP/3 stack works.
 
 ## License
 Dual license: AGPL v3 & Proprietary. See [LICENSE](LICENSE) for details.
