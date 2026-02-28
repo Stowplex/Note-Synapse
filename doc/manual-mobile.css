@@ -1,0 +1,174 @@
+/**
+ * Custom CSS for mobile-friendly PDF manual generation using md-to-pdf.
+ */
+
+:root {
+    --bg-color: #ffffff;
+    --text-color: #1a1a1a;
+    --heading-color: #000000;
+    --link-color: #0066cc;
+    --border-color: #e1e4e8;
+    --code-bg: #f6f8fa;
+}
+
+body,
+.markdown-body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    /* Larger base font for mobile readability */
+    line-height: 1.6;
+    color: var(--text-color);
+    background-color: var(--bg-color);
+    word-wrap: break-word;
+    /* Override default md-to-pdf github styles that center text in a narrow column */
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+@page {
+    /* Very narrow margins to maximize content area on small phone screens */
+    margin: 4mm 4mm;
+    size: 90mm 180mm;
+    /* A modern mobile phone aspect ratio layout */
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    color: var(--heading-color);
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+}
+
+h1 {
+    font-size: 2.2em;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.3em;
+    page-break-before: always;
+    /* Start new major sections on a new page */
+}
+
+/* Don't break before the very first h1 */
+body>h1:first-child {
+    page-break-before: avoid;
+}
+
+h2 {
+    font-size: 1.8em;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.3em;
+}
+
+h3 {
+    font-size: 1.5em;
+}
+
+h4 {
+    font-size: 1.25em;
+}
+
+p {
+    margin-top: 0;
+    margin-bottom: 1em;
+}
+
+a {
+    color: var(--link-color);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* Lists */
+ul,
+ol {
+    padding-left: 2em;
+    margin-top: 0;
+    margin-bottom: 1em;
+}
+
+li {
+    margin-bottom: 0.25em;
+}
+
+/* Code blocks */
+/* Prevent code blocks from breaking across pages if possible */
+pre {
+    background-color: var(--code-bg);
+    border-radius: 6px;
+    padding: 16px;
+    overflow: auto;
+    font-size: 85%;
+    line-height: 1.45;
+    page-break-inside: avoid;
+    white-space: pre-wrap;
+    /* Wrap code so it doesn't overflow horizontally on narrow pages */
+    word-break: break-all;
+}
+
+code {
+    background-color: rgba(27, 31, 35, 0.05);
+    border-radius: 3px;
+    font-size: 85%;
+    margin: 0;
+    padding: 0.2em 0.4em;
+    font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre>code {
+    background-color: transparent;
+    padding: 0;
+    font-size: 100%;
+}
+
+/* Images */
+img {
+    max-width: 100%;
+    max-height: 45vh;
+    /* Restrict image height so it doesn't take up the entire page */
+    object-fit: contain;
+    display: block;
+    margin: 1.5rem auto;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    /* Subtle shadow to make images pop */
+}
+
+/* Blockquotes */
+blockquote {
+    margin: 0 0 1em 0;
+    padding: 0 1em;
+    color: #6a737d;
+    border-left: 0.25em solid #dfe2e5;
+}
+
+/* Tables */
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 1em;
+    page-break-inside: avoid;
+}
+
+table th,
+table td {
+    border: 1px solid var(--border-color);
+    padding: 8px 12px;
+}
+
+table th {
+    background-color: #f6f8fa;
+    font-weight: 600;
+}
+
+/* Utility to ensure elements don't get awkwardly split */
+.no-break {
+    page-break-inside: avoid;
+}

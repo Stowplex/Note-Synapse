@@ -35,3 +35,10 @@ For developers modifying the Core Dart/Flutter codebase.
 
 -   **[Architecture](developer/architecture.md)**
 
+### Regenerating the Manual
+To regenerate the `USER_MANUAL.pdf` included in the app assets, run the build script from the `doc/` directory:
+```bash
+cd doc
+./build_manual.sh
+```
+This requires `npx` (Node.js) to be installed on your system.
