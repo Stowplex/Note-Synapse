@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 class DriveFileInfo {
@@ -76,6 +77,54 @@ class GoogleDriveApiClient {
         statusCode: response.statusCode,
       );
     }
+  }
+
+  Future<Uint8List> downloadFile(String fileId) async {
+    final uri = Uri.parse('$_baseUrl/drive/v3/files/$fileId')
+        .replace(queryParameters: {'alt': 'media'});
+    final response = await _httpClient.get(uri, headers: await _authHeaders());
+    _checkStatus(response);
+    return response.bodyBytes;
+  }
+
+  Future<DriveFileInfo> uploadFile({
+    required String name,
+    required String parentId,
+    required Uint8List content,
+    String mimeType = 'application/octet-stream',
+  }) async {
+    final boundary = 'boundary_${DateTime.now().millisecondsSinceEpoch}';
+    final metadataJson = jsonEncode({'name': name, 'parents': [parentId]});
+
+    final bodyPrefix = utf8.encode(
+      '--$boundary\r\n'
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n'
+      '$metadataJson\r\n'
+      '--$boundary\r\n'
+      'Content-Type: $mimeType\r\n\r\n',
+    );
+    final bodySuffix = utf8.encode('\r\n--$boundary--');
+    final fullBody = Uint8List(
+        bodyPrefix.length + content.length + bodySuffix.length)
+      ..setRange(0, bodyPrefix.length, bodyPrefix)
+      ..setRange(bodyPrefix.length, bodyPrefix.length + content.length, content)
+      ..setRange(bodyPrefix.length + content.length,
+          bodyPrefix.length + content.length + bodySuffix.length, bodySuffix);
+
+    final uri = Uri.parse('$_baseUrl/upload/drive/v3/files').replace(
+      queryParameters: {
+        'uploadType': 'multipart',
+        'fields': 'id,name,mimeType,size,modifiedTime',
+      },
+    );
+
+    final headers = await _authHeaders();
+    headers['content-type'] = 'multipart/related; boundary=$boundary';
+    final response =
+        await _httpClient.post(uri, headers: headers, body: fullBody);
+    _checkStatus(response);
+    return DriveFileInfo.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<List<DriveFileInfo>> listChildren(String parentId) async {

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -132,6 +133,57 @@ void main() {
       expect(files[0].id, equals('f1'));
       expect(files[1].id, equals('f2'));
       expect(callCount, equals(2));
+    });
+  });
+
+  group('GoogleDriveApiClient.downloadFile', () {
+    test('returns file bytes with correct URL and auth header', () async {
+      final expected = Uint8List.fromList([1, 2, 3, 4]);
+      final client = GoogleDriveApiClient(
+        getAccessToken: () async => 'test-token',
+        httpClient: MockClient((request) async {
+          expect(request.url.queryParameters['alt'], equals('media'));
+          expect(request.url.path, contains('file-xyz'));
+          expect(request.headers['Authorization'], equals('Bearer test-token'));
+          return http.Response.bytes(expected, 200);
+        }),
+      );
+
+      final bytes = await client.downloadFile('file-xyz');
+      expect(bytes, equals(expected));
+    });
+  });
+
+  group('GoogleDriveApiClient.uploadFile', () {
+    test('sends multipart request and returns DriveFileInfo', () async {
+      final client = GoogleDriveApiClient(
+        getAccessToken: () async => 'tok',
+        httpClient: MockClient((request) async {
+          expect(request.url.queryParameters['uploadType'], equals('multipart'));
+          expect(
+            request.headers['content-type'],
+            contains('multipart/related'),
+          );
+          // Verify metadata is in body
+          final bodyStr = String.fromCharCodes(request.bodyBytes);
+          expect(bodyStr, contains('snapshot.db'));
+          expect(bodyStr, contains('parent-id'));
+          return http.Response(
+            jsonEncode({'id': 'new-id', 'name': 'snapshot.db'}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final info = await client.uploadFile(
+        name: 'snapshot.db',
+        parentId: 'parent-id',
+        content: Uint8List.fromList([10, 20, 30]),
+      );
+
+      expect(info.id, equals('new-id'));
+      expect(info.name, equals('snapshot.db'));
     });
   });
 }
