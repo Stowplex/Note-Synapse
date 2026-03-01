@@ -11,11 +11,16 @@ import '../database_service.dart';
 import '../logger_service.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:note_synapse/models/google_oauth_config.dart';
+import 'package:note_synapse/services/oauth_token_manager.dart';
+
 import 'attachment_sync_service.dart';
 import 'device_identity_service.dart';
 import 'field_version_registry.dart';
 import 'folder_sync_provider.dart';
 import 'android_saf_sync_provider.dart';
+import 'google_drive_api_client.dart';
+import 'google_drive_sync_provider.dart';
 import 'merge_engine.dart';
 import 'oplog_service.dart';
 import 'snapshot_service.dart';
@@ -129,6 +134,28 @@ class SyncService {
           provider = AndroidSafSyncProvider(treeUri: providerUri);
         } else if (providerType == 'folder') {
           provider = FolderSyncProvider(rootPath: providerUri);
+        } else if (providerType == 'gdrive') {
+          final tokenManager = OAuthTokenManager(
+            endpointId: 'gdrive',
+            config: kGoogleDriveOAuthConfig,
+          );
+          final apiClient = GoogleDriveApiClient(
+            getAccessToken: () async {
+              final token = await tokenManager.getAccessToken();
+              if (token == null) {
+                throw GoogleDriveAuthException(
+                  'No token — reconnect Google Account',
+                );
+              }
+              return token;
+            },
+          );
+          final gdriveProvider = GoogleDriveSyncProvider(
+            client: apiClient,
+            syncRootName: providerUri, // syncRootName stored in providerUri field
+          );
+          await gdriveProvider.initialize();
+          provider = gdriveProvider;
         }
 
         if (provider != null) {
