@@ -1,11 +1,16 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const readline = require('readline');
+const YAML = require('yaml');
 
 const DOC_DIR = __dirname;
+const PROJECT_ROOT = path.join(DOC_DIR, '..');
 const README_PATH = path.join(DOC_DIR, 'README.md');
 const COMPILED_MD_PATH = path.join(DOC_DIR, 'USER_MANUAL_COMPILED.md');
-const OUTPUT_PDF_PATH = path.join(DOC_DIR, '..', 'assets', 'starter', 'USER_MANUAL.pdf');
+const OUTPUT_PDF_PATH = path.join(PROJECT_ROOT, 'assets', 'starter', 'USER_MANUAL.pdf');
+const METADATA_PATH = path.join(PROJECT_ROOT, 'assets', 'starter', 'USER_MANUAL.yaml');
+const PUBSPEC_PATH = path.join(PROJECT_ROOT, 'pubspec.yaml');
 const CSS_PATH = path.join(DOC_DIR, 'manual-mobile.css');
 
 /**
@@ -121,6 +126,62 @@ function processMarkdownFile(fileInfo, allFiles) {
     return content;
 }
 
+/**
+ * Prompts user for a changelog description via stdin.
+ */
+function promptUserForChangelog() {
+    return new Promise((resolve) => {
+        const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout
+        });
+        rl.question('\nEnter changelog description for this update (leave empty to skip adding to log): ', (answer) => {
+            rl.close();
+            resolve(answer.trim());
+        });
+    });
+}
+
+/**
+ * Updates the assets/starter/USER_MANUAL.yaml file.
+ */
+async function updateUserManualMetadata() {
+    console.log('\n--- Updating USER_MANUAL.yaml ---');
+
+    // 1. Get current version from pubspec.yaml
+    const pubspecContent = fs.readFileSync(PUBSPEC_PATH, 'utf-8');
+    const pubspec = YAML.parse(pubspecContent);
+    const version = pubspec.version;
+    console.log(`Current app version: ${version}`);
+
+    // 2. Prepare today's date formatted as "Feb 28, 2026"
+    const dateOpts = { month: 'short', day: 'numeric', year: 'numeric' };
+    const todayStr = new Intl.DateTimeFormat('en-US', dateOpts).format(new Date());
+
+    // 3. Prompt user for changelog entry
+    const changeDescription = await promptUserForChangelog();
+
+    // 4. Update the YAML file
+    const metaStr = fs.existsSync(METADATA_PATH) ? fs.readFileSync(METADATA_PATH, 'utf-8') : 'version: ""\nupdate_date: ""\nchange_log: []';
+    const metadata = YAML.parse(metaStr);
+
+    metadata.version = version;
+    metadata.update_date = todayStr;
+
+    if (changeDescription) {
+        if (!metadata.change_log) {
+            metadata.change_log = [];
+        }
+        metadata.change_log.push({
+            date: todayStr,
+            change: changeDescription
+        });
+    }
+
+    fs.writeFileSync(METADATA_PATH, YAML.stringify(metadata));
+    console.log(`✅ Updated ${METADATA_PATH}`);
+}
+
 async function main() {
     console.log('1. Analyzing documentation structure from README.md...');
     const documents = getDocumentOrder();
@@ -188,6 +249,10 @@ async function main() {
         fs.unlinkSync(COMPILED_MD_PATH);
 
         console.log('\n✅ Manual generation complete!');
+
+        // At the very end, update the metadata YAML
+        await updateUserManualMetadata();
+
     } catch (error) {
         console.error('\n❌ Failed to generate PDF.');
         console.error(error.message);
