@@ -158,6 +158,149 @@ void main() {
     });
   });
 
+  group('writeFile', () {
+    setUp(() async {
+      when(mockClient.listChildren('root')).thenAnswer((_) async => [
+            DriveFileInfo(id: 'root-folder', name: 'Test Sync'),
+          ]);
+      await provider.initialize();
+    });
+
+    test('updates existing file via updateFile when path is cached', () async {
+      // Pre-populate cache via listFiles
+      when(mockClient.listChildren('root-folder')).thenAnswer((_) async => [
+            DriveFileInfo(id: 'existing-id', name: 'snapshot.db'),
+          ]);
+      await provider.listFiles(''); // populates _idCache['snapshot.db'] = 'existing-id'
+
+      when(mockClient.updateFile(
+        fileId: 'existing-id',
+        content: anyNamed('content'),
+      )).thenAnswer((_) async {});
+
+      await provider.writeFile('snapshot.db', Uint8List.fromList([9, 8]));
+
+      verify(mockClient.updateFile(
+        fileId: 'existing-id',
+        content: anyNamed('content'),
+      )).called(1);
+      verifyNever(mockClient.uploadFile(
+        name: anyNamed('name'),
+        parentId: anyNamed('parentId'),
+        content: anyNamed('content'),
+      ));
+    });
+
+    test('uploads new file when path is not in cache', () async {
+      when(mockClient.listChildren('root-folder')).thenAnswer((_) async => []);
+      when(mockClient.uploadFile(
+        name: 'new-file.bin',
+        parentId: 'root-folder',
+        content: anyNamed('content'),
+      )).thenAnswer((_) async =>
+          DriveFileInfo(id: 'uploaded-id', name: 'new-file.bin'));
+
+      await provider.writeFile('new-file.bin', Uint8List.fromList([1]));
+
+      verify(mockClient.uploadFile(
+        name: 'new-file.bin',
+        parentId: 'root-folder',
+        content: anyNamed('content'),
+      )).called(1);
+      verifyNever(mockClient.updateFile(
+        fileId: anyNamed('fileId'),
+        content: anyNamed('content'),
+      ));
+    });
+
+    test('creates parent subfolder when writing to nested path not yet in Drive', () async {
+      // Writing to 'oplogs/op-001.bin' where 'oplogs' folder doesn't exist yet
+      when(mockClient.listChildren('root-folder')).thenAnswer((_) async => []);
+      when(mockClient.createFolder(name: 'oplogs', parentId: 'root-folder'))
+          .thenAnswer((_) async =>
+              DriveFileInfo(id: 'oplogs-folder-id', name: 'oplogs'));
+      when(mockClient.uploadFile(
+        name: 'op-001.bin',
+        parentId: 'oplogs-folder-id',
+        content: anyNamed('content'),
+      )).thenAnswer((_) async =>
+          DriveFileInfo(id: 'op1-id', name: 'op-001.bin'));
+
+      await provider.writeFile('oplogs/op-001.bin', Uint8List.fromList([42]));
+
+      verify(mockClient.createFolder(
+        name: 'oplogs',
+        parentId: 'root-folder',
+      )).called(1);
+      verify(mockClient.uploadFile(
+        name: 'op-001.bin',
+        parentId: 'oplogs-folder-id',
+        content: anyNamed('content'),
+      )).called(1);
+    });
+  });
+
+  group('deleteFile', () {
+    setUp(() async {
+      when(mockClient.listChildren('root')).thenAnswer((_) async => [
+            DriveFileInfo(id: 'root-folder', name: 'Test Sync'),
+          ]);
+      await provider.initialize();
+    });
+
+    test('trashes file and evicts from cache', () async {
+      when(mockClient.listChildren('root-folder')).thenAnswer((_) async => [
+            DriveFileInfo(id: 'del-id', name: 'old.bin'),
+          ]);
+      await provider.listFiles(''); // populate cache
+
+      when(mockClient.trashFile('del-id')).thenAnswer((_) async {});
+      when(mockClient.listChildren('root-folder'))
+          .thenAnswer((_) async => []); // file no longer in Drive after trash
+
+      await provider.deleteFile('old.bin');
+
+      verify(mockClient.trashFile('del-id')).called(1);
+
+      // After eviction, exists() must re-query Drive and find nothing
+      final stillExists = await provider.exists('old.bin');
+      expect(stillExists, isFalse);
+    });
+
+    test('does nothing when file does not exist', () async {
+      when(mockClient.listChildren('root-folder')).thenAnswer((_) async => []);
+
+      await provider.deleteFile('nonexistent.bin'); // must not throw
+
+      verifyNever(mockClient.trashFile(any));
+    });
+  });
+
+  group('exists', () {
+    setUp(() async {
+      when(mockClient.listChildren('root')).thenAnswer((_) async => [
+            DriveFileInfo(id: 'root-folder', name: 'Test Sync'),
+          ]);
+      await provider.initialize();
+    });
+
+    test('returns true when file exists in Drive', () async {
+      when(mockClient.listChildren('root-folder')).thenAnswer((_) async => [
+            DriveFileInfo(id: 'file-id', name: 'config.json'),
+          ]);
+
+      final result = await provider.exists('config.json');
+      expect(result, isTrue);
+    });
+
+    test('returns false when file does not exist', () async {
+      when(mockClient.listChildren('root-folder')).thenAnswer((_) async => []);
+
+      final result = await provider.exists('missing.json');
+      expect(result, isFalse);
+    });
+  });
+
   group('initialize', () {
     test('uses existing folder when syncRootName found in Drive root', () async {
       when(mockClient.listChildren('root')).thenAnswer((_) async => [
