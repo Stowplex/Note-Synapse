@@ -66,8 +66,8 @@ void main() {
         getAccessToken: () async => 'tok',
         httpClient: MockClient((_) async => http.Response('Unauthorized', 401)),
       );
-      expect(
-        () => client.listChildren('parent'),
+      await expectLater(
+        client.listChildren('parent'),
         throwsA(isA<GoogleDriveAuthException>()),
       );
     });
@@ -77,8 +77,8 @@ void main() {
         getAccessToken: () async => 'tok',
         httpClient: MockClient((_) async => http.Response('Forbidden', 403)),
       );
-      expect(
-        () => client.listChildren('parent'),
+      await expectLater(
+        client.listChildren('parent'),
         throwsA(isA<GoogleDriveQuotaException>()),
       );
     });
@@ -88,8 +88,8 @@ void main() {
         getAccessToken: () async => 'tok',
         httpClient: MockClient((_) async => http.Response('Server Error', 500)),
       );
-      expect(
-        () => client.listChildren('parent'),
+      await expectLater(
+        client.listChildren('parent'),
         throwsA(
           isA<GoogleDriveException>().having(
             (e) => e.statusCode,
