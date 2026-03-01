@@ -1397,6 +1397,71 @@ class MockDatabaseService extends _i1.Mock implements _i4.DatabaseService {
             returnValue: _i5.Future<_i3.Note?>.value(),
           )
           as _i5.Future<_i3.Note?>);
+
+  @override
+  _i5.Future<void> enableSyncTriggers() =>
+      (super.noSuchMethod(
+            Invocation.method(#enableSyncTriggers, []),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> disableSyncTriggers() =>
+      (super.noSuchMethod(
+            Invocation.method(#disableSyncTriggers, []),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<List<Map<String, dynamic>>> getPendingSyncChanges() =>
+      (super.noSuchMethod(
+            Invocation.method(#getPendingSyncChanges, []),
+            returnValue: _i5.Future<List<Map<String, dynamic>>>.value(
+              <Map<String, dynamic>>[],
+            ),
+          )
+          as _i5.Future<List<Map<String, dynamic>>>);
+
+  @override
+  _i5.Future<void> markSyncChangesPushed(List<int>? ids) =>
+      (super.noSuchMethod(
+            Invocation.method(#markSyncChangesPushed, [ids]),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> prunePushedSyncChanges() =>
+      (super.noSuchMethod(
+            Invocation.method(#prunePushedSyncChanges, []),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> ensureSyncConflictsTable() =>
+      (super.noSuchMethod(
+            Invocation.method(#ensureSyncConflictsTable, []),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<List<Map<String, dynamic>>> getSyncConflicts() =>
+      (super.noSuchMethod(
+            Invocation.method(#getSyncConflicts, []),
+            returnValue: _i5.Future<List<Map<String, dynamic>>>.value(
+              <Map<String, dynamic>>[],
+            ),
+          )
+          as _i5.Future<List<Map<String, dynamic>>>);
 }
 
 /// A class which mocks [NoteModificationService].

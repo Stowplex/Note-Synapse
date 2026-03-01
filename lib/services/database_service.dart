@@ -46,7 +46,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 42; // Target schema version
+  static const int DATABASE_VERSION = 43; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -847,9 +847,10 @@ class DatabaseService {
       description: 'Create sync_conflicts table for sync conflict resolution',
       execute: _migrateToVersion37,
     ),
-    42: MigrationStep(
+    43: MigrationStep(
       description: 'Migrate conversation_message_mapping and conversation_note_mapping to composite primary keys',
       execute: _migrateToVersion38,
+    ),
   };
 
   static Future<void> _migrateToVersion28(

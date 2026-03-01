@@ -1391,4 +1391,69 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
             returnValue: _i4.Future<_i5.Note?>.value(),
           )
           as _i4.Future<_i5.Note?>);
+
+  @override
+  _i4.Future<void> enableSyncTriggers() =>
+      (super.noSuchMethod(
+            Invocation.method(#enableSyncTriggers, []),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> disableSyncTriggers() =>
+      (super.noSuchMethod(
+            Invocation.method(#disableSyncTriggers, []),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<Map<String, dynamic>>> getPendingSyncChanges() =>
+      (super.noSuchMethod(
+            Invocation.method(#getPendingSyncChanges, []),
+            returnValue: _i4.Future<List<Map<String, dynamic>>>.value(
+              <Map<String, dynamic>>[],
+            ),
+          )
+          as _i4.Future<List<Map<String, dynamic>>>);
+
+  @override
+  _i4.Future<void> markSyncChangesPushed(List<int>? ids) =>
+      (super.noSuchMethod(
+            Invocation.method(#markSyncChangesPushed, [ids]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> prunePushedSyncChanges() =>
+      (super.noSuchMethod(
+            Invocation.method(#prunePushedSyncChanges, []),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> ensureSyncConflictsTable() =>
+      (super.noSuchMethod(
+            Invocation.method(#ensureSyncConflictsTable, []),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<List<Map<String, dynamic>>> getSyncConflicts() =>
+      (super.noSuchMethod(
+            Invocation.method(#getSyncConflicts, []),
+            returnValue: _i4.Future<List<Map<String, dynamic>>>.value(
+              <Map<String, dynamic>>[],
+            ),
+          )
+          as _i4.Future<List<Map<String, dynamic>>>);
 }
