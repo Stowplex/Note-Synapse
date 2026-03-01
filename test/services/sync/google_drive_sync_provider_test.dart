@@ -202,6 +202,8 @@ void main() {
 
       await provider.writeFile('new-file.bin', Uint8List.fromList([1]));
 
+      // Verifies the cache-miss path: Drive was queried to check for the file
+      verify(mockClient.listChildren('root-folder')).called(1);
       verify(mockClient.uploadFile(
         name: 'new-file.bin',
         parentId: 'root-folder',
@@ -252,7 +254,7 @@ void main() {
       when(mockClient.listChildren('root-folder')).thenAnswer((_) async => [
             DriveFileInfo(id: 'del-id', name: 'old.bin'),
           ]);
-      await provider.listFiles(''); // populate cache
+      await provider.listFiles(''); // populate cache — call #1 to listChildren
 
       when(mockClient.trashFile('del-id')).thenAnswer((_) async {});
       when(mockClient.listChildren('root-folder'))
@@ -262,9 +264,12 @@ void main() {
 
       verify(mockClient.trashFile('del-id')).called(1);
 
-      // After eviction, exists() must re-query Drive and find nothing
+      // After eviction, exists() must re-query Drive (call #2) and find nothing.
+      // If the cache were NOT evicted, exists() would return true from the cached
+      // ID without calling listChildren again — so this verify proves eviction.
       final stillExists = await provider.exists('old.bin');
       expect(stillExists, isFalse);
+      verify(mockClient.listChildren('root-folder')).called(2);
     });
 
     test('does nothing when file does not exist', () async {
