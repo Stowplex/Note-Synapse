@@ -4744,4 +4744,37 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncBundleEnterPassphrase => 'Enter Passphrase';
+
+  @override
+  String get syncProviderGoogleDrive => 'Google Drive';
+
+  @override
+  String get syncProviderGoogleDriveDescription =>
+      'Sync via Google Drive (OAuth2)';
+
+  @override
+  String get syncGoogleDriveFolderName => 'Sync Folder Name';
+
+  @override
+  String get syncGoogleDriveFolderNameRequired => 'Please enter a folder name';
+
+  @override
+  String get syncGoogleDriveConnect => 'Connect Google Account';
+
+  @override
+  String get syncGoogleDriveReconnect => 'Reconnect';
+
+  @override
+  String syncGoogleDriveConnected(String email) {
+    return 'Connected: $email';
+  }
+
+  @override
+  String syncGoogleDriveSyncFolder(String folder) {
+    return 'Sync folder: $folder';
+  }
+
+  @override
+  String get syncGoogleDriveNotConnected =>
+      'Please connect a Google account first';
 }

@@ -4535,4 +4535,35 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncBundleEnterPassphrase => '输入密码短语';
+
+  @override
+  String get syncProviderGoogleDrive => 'Google 云端硬盘';
+
+  @override
+  String get syncProviderGoogleDriveDescription => '通过 Google 云端硬盘同步（OAuth2）';
+
+  @override
+  String get syncGoogleDriveFolderName => '同步文件夹名称';
+
+  @override
+  String get syncGoogleDriveFolderNameRequired => '请输入文件夹名称';
+
+  @override
+  String get syncGoogleDriveConnect => '连接 Google 账号';
+
+  @override
+  String get syncGoogleDriveReconnect => '重新连接';
+
+  @override
+  String syncGoogleDriveConnected(String email) {
+    return '已连接：$email';
+  }
+
+  @override
+  String syncGoogleDriveSyncFolder(String folder) {
+    return '同步文件夹：$folder';
+  }
+
+  @override
+  String get syncGoogleDriveNotConnected => '请先连接 Google 账号';
 }

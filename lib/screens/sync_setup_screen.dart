@@ -1,12 +1,19 @@
+import 'dart:convert';
 import 'dart:io' show Platform;
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:saf_util/saf_util.dart';
 import '../l10n/app_localizations.dart';
+import '../models/google_oauth_config.dart';
+import '../services/oauth_service.dart';
+import '../services/oauth_token_manager.dart';
 import '../services/service_locator.dart';
 import '../services/sync/android_saf_sync_provider.dart';
 import '../services/sync/device_identity_service.dart';
+import '../services/sync/google_drive_api_client.dart';
+import '../services/sync/google_drive_sync_provider.dart';
 import '../services/sync/sync_service.dart';
 import '../services/sync/sync_storage_provider.dart';
 import '../services/sync/folder_sync_provider.dart';
@@ -32,6 +39,11 @@ class _SyncSetupScreenState extends State<SyncSetupScreen> {
   final _webdavUsernameController = TextEditingController();
   final _webdavPasswordController = TextEditingController();
 
+  // Google Drive provider
+  final _syncRootNameController = TextEditingController(text: 'Note Synapse');
+  String? _gdriveEmail;        // set after successful OAuth
+  bool _gdriveConnecting = false;
+
   // Encryption
   final _passphraseController = TextEditingController();
   final _confirmPassphraseController = TextEditingController();
@@ -51,6 +63,7 @@ class _SyncSetupScreenState extends State<SyncSetupScreen> {
     _webdavUrlController.dispose();
     _webdavUsernameController.dispose();
     _webdavPasswordController.dispose();
+    _syncRootNameController.dispose();
     _passphraseController.dispose();
     _confirmPassphraseController.dispose();
     super.dispose();
@@ -107,6 +120,31 @@ class _SyncSetupScreenState extends State<SyncSetupScreen> {
           providerType = 'folder';
           providerUri = _folderPath!;
         }
+      } else if (_selectedProvider == 'gdrive') {
+        if (_gdriveEmail == null) {
+          setState(() => _error = AppLocalizations.of(context)!.syncGoogleDriveNotConnected);
+          return;
+        }
+        final syncRootName = _syncRootNameController.text.trim();
+        final tokenManager = OAuthTokenManager(
+          endpointId: 'gdrive',
+          config: kGoogleDriveOAuthConfig,
+        );
+        final apiClient = GoogleDriveApiClient(
+          getAccessToken: () async {
+            final token = await tokenManager.getAccessToken();
+            if (token == null) throw GoogleDriveAuthException('No token');
+            return token;
+          },
+        );
+        final gdriveProvider = GoogleDriveSyncProvider(
+          client: apiClient,
+          syncRootName: syncRootName,
+        );
+        await gdriveProvider.initialize();
+        provider = gdriveProvider;
+        providerType = 'gdrive';
+        providerUri = syncRootName;  // stored for restoreConfiguration()
       } else {
         throw UnimplementedError('WebDAV provider not yet implemented');
       }
@@ -183,8 +221,10 @@ class _SyncSetupScreenState extends State<SyncSetupScreen> {
                 const SizedBox(height: 8),
                 if (_selectedProvider == 'folder')
                   _buildFolderConfigCard(l10n, theme)
-                else
-                  _buildWebDavConfigCard(l10n, theme),
+                else if (_selectedProvider == 'webdav')
+                  _buildWebDavConfigCard(l10n, theme)
+                else if (_selectedProvider == 'gdrive')
+                  _buildGoogleDriveConfigCard(l10n, theme),
                 const SizedBox(height: 16),
 
                 // Step 3: Encryption
@@ -285,6 +325,14 @@ class _SyncSetupScreenState extends State<SyncSetupScreen> {
               groupValue: _selectedProvider,
               onChanged: (value) =>
                   setState(() => _selectedProvider = value!),
+              contentPadding: EdgeInsets.zero,
+            ),
+            RadioListTile<String>(
+              title: Text(l10n.syncProviderGoogleDrive),
+              subtitle: Text(l10n.syncProviderGoogleDriveDescription),
+              value: 'gdrive',
+              groupValue: _selectedProvider,
+              onChanged: (value) => setState(() => _selectedProvider = value!),
               contentPadding: EdgeInsets.zero,
             ),
           ],
@@ -516,5 +564,124 @@ class _SyncSetupScreenState extends State<SyncSetupScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildGoogleDriveConfigCard(AppLocalizations l10n, ThemeData theme) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextFormField(
+              controller: _syncRootNameController,
+              decoration: InputDecoration(
+                labelText: l10n.syncGoogleDriveFolderName,
+                hintText: 'Note Synapse',
+                border: const OutlineInputBorder(),
+              ),
+              validator: (value) {
+                if (_selectedProvider == 'gdrive' &&
+                    (value == null || value.trim().isEmpty)) {
+                  return l10n.syncGoogleDriveFolderNameRequired;
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            if (_gdriveEmail != null) ...[
+              Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.green),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.syncGoogleDriveConnected(_gdriveEmail!),
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                        Text(
+                          l10n.syncGoogleDriveSyncFolder(
+                              _syncRootNameController.text.trim()),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _gdriveConnecting ? null : _connectGoogleAccount,
+                    child: Text(l10n.syncGoogleDriveReconnect),
+                  ),
+                ],
+              ),
+            ] else ...[
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _gdriveConnecting ? null : _connectGoogleAccount,
+                  icon: _gdriveConnecting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.account_circle),
+                  label: Text(l10n.syncGoogleDriveConnect),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _connectGoogleAccount() async {
+    setState(() {
+      _gdriveConnecting = true;
+      _error = null;
+    });
+    try {
+      final state = base64Url.encode(
+        List<int>.generate(16, (_) => Random.secure().nextInt(256)),
+      );
+      final tokens = await OAuthService.authorizationCodeFlow(
+        config: kGoogleDriveOAuthConfig,
+        state: state,
+      );
+
+      // Store tokens
+      final tokenManager = OAuthTokenManager(
+        endpointId: 'gdrive',
+        config: kGoogleDriveOAuthConfig,
+      );
+      await tokenManager.saveTokens(tokens);
+
+      // Extract email from id_token JWT payload
+      final idToken = tokens['id_token'] as String?;
+      String? email;
+      if (idToken != null) {
+        final parts = idToken.split('.');
+        if (parts.length == 3) {
+          final payload = utf8.decode(
+            base64Url.decode(base64Url.normalize(parts[1])),
+          );
+          final claims = jsonDecode(payload) as Map<String, dynamic>;
+          email = claims['email'] as String?;
+        }
+      }
+
+      if (mounted) {
+        setState(() => _gdriveEmail = email ?? 'Google Account');
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _gdriveConnecting = false);
+    }
   }
 }

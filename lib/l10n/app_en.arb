@@ -1873,5 +1873,28 @@
   "syncBundleImportFailed": "Sync bundle import failed",
   "syncBundleImportComplete": "Import Complete",
   "syncBundleSetupContinuousSync": "Your data has been imported successfully. Would you like to set up continuous sync?",
-  "syncBundleEnterPassphrase": "Enter Passphrase"
+  "syncBundleEnterPassphrase": "Enter Passphrase",
+  "syncProviderGoogleDrive": "Google Drive",
+  "syncProviderGoogleDriveDescription": "Sync via Google Drive (OAuth2)",
+  "syncGoogleDriveFolderName": "Sync Folder Name",
+  "syncGoogleDriveFolderNameRequired": "Please enter a folder name",
+  "syncGoogleDriveConnect": "Connect Google Account",
+  "syncGoogleDriveReconnect": "Reconnect",
+  "syncGoogleDriveConnected": "Connected: {email}",
+  "@syncGoogleDriveConnected": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "syncGoogleDriveSyncFolder": "Sync folder: {folder}",
+  "@syncGoogleDriveSyncFolder": {
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "syncGoogleDriveNotConnected": "Please connect a Google account first"
 }

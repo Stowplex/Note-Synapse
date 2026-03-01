@@ -8251,6 +8251,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enter Passphrase'**
   String get syncBundleEnterPassphrase;
+
+  /// No description provided for @syncProviderGoogleDrive.
+  ///
+  /// In en, this message translates to:
+  /// **'Google Drive'**
+  String get syncProviderGoogleDrive;
+
+  /// No description provided for @syncProviderGoogleDriveDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync via Google Drive (OAuth2)'**
+  String get syncProviderGoogleDriveDescription;
+
+  /// No description provided for @syncGoogleDriveFolderName.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync Folder Name'**
+  String get syncGoogleDriveFolderName;
+
+  /// No description provided for @syncGoogleDriveFolderNameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a folder name'**
+  String get syncGoogleDriveFolderNameRequired;
+
+  /// No description provided for @syncGoogleDriveConnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Google Account'**
+  String get syncGoogleDriveConnect;
+
+  /// No description provided for @syncGoogleDriveReconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnect'**
+  String get syncGoogleDriveReconnect;
+
+  /// No description provided for @syncGoogleDriveConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected: {email}'**
+  String syncGoogleDriveConnected(String email);
+
+  /// No description provided for @syncGoogleDriveSyncFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync folder: {folder}'**
+  String syncGoogleDriveSyncFolder(String folder);
+
+  /// No description provided for @syncGoogleDriveNotConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Please connect a Google account first'**
+  String get syncGoogleDriveNotConnected;
 }
 
 class _AppLocalizationsDelegate

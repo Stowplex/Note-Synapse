@@ -1795,5 +1795,28 @@
   "syncBundleImportFailed": "同步包导入失败",
   "syncBundleImportComplete": "导入完成",
   "syncBundleSetupContinuousSync": "数据已成功导入。是否要设置持续同步？",
-  "syncBundleEnterPassphrase": "输入密码短语"
+  "syncBundleEnterPassphrase": "输入密码短语",
+  "syncProviderGoogleDrive": "Google 云端硬盘",
+  "syncProviderGoogleDriveDescription": "通过 Google 云端硬盘同步（OAuth2）",
+  "syncGoogleDriveFolderName": "同步文件夹名称",
+  "syncGoogleDriveFolderNameRequired": "请输入文件夹名称",
+  "syncGoogleDriveConnect": "连接 Google 账号",
+  "syncGoogleDriveReconnect": "重新连接",
+  "syncGoogleDriveConnected": "已连接：{email}",
+  "@syncGoogleDriveConnected": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "syncGoogleDriveSyncFolder": "同步文件夹：{folder}",
+  "@syncGoogleDriveSyncFolder": {
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "syncGoogleDriveNotConnected": "请先连接 Google 账号"
 }
