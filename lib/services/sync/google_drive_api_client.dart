@@ -127,6 +127,67 @@ class GoogleDriveApiClient {
         jsonDecode(response.body) as Map<String, dynamic>);
   }
 
+  Future<void> updateFile({
+    required String fileId,
+    required Uint8List content,
+    String mimeType = 'application/octet-stream',
+  }) async {
+    final uri = Uri.parse('$_baseUrl/upload/drive/v3/files/$fileId')
+        .replace(queryParameters: {'uploadType': 'media'});
+    final headers = await _authHeaders();
+    headers['content-type'] = mimeType;
+    final response =
+        await _httpClient.patch(uri, headers: headers, body: content);
+    _checkStatus(response);
+  }
+
+  Future<void> trashFile(String fileId) async {
+    final uri = Uri.parse('$_baseUrl/drive/v3/files/$fileId');
+    final headers = await _authHeaders();
+    headers['content-type'] = 'application/json';
+    final response = await _httpClient.patch(
+      uri,
+      headers: headers,
+      body: jsonEncode({'trashed': true}),
+    );
+    _checkStatus(response);
+  }
+
+  Future<DriveFileInfo> createFolder({
+    required String name,
+    required String parentId,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/drive/v3/files').replace(
+      queryParameters: {'fields': 'id,name,mimeType,size,modifiedTime'},
+    );
+    final headers = await _authHeaders();
+    headers['content-type'] = 'application/json';
+    final response = await _httpClient.post(
+      uri,
+      headers: headers,
+      body: jsonEncode({
+        'name': name,
+        'parents': [parentId],
+        'mimeType': 'application/vnd.google-apps.folder',
+      }),
+    );
+    _checkStatus(response);
+    return DriveFileInfo.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<DriveFileInfo?> getFileInfo(String fileId) async {
+    final uri = Uri.parse('$_baseUrl/drive/v3/files/$fileId').replace(
+      queryParameters: {'fields': 'id,name,mimeType,size,modifiedTime'},
+    );
+    final response =
+        await _httpClient.get(uri, headers: await _authHeaders());
+    if (response.statusCode == 404) return null;
+    _checkStatus(response);
+    return DriveFileInfo.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
   Future<List<DriveFileInfo>> listChildren(String parentId) async {
     final results = <DriveFileInfo>[];
     String? pageToken;

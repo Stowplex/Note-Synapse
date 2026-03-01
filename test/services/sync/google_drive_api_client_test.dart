@@ -186,4 +186,79 @@ void main() {
       expect(info.name, equals('snapshot.db'));
     });
   });
+
+  group('GoogleDriveApiClient.updateFile', () {
+    test('sends PATCH with raw bytes to correct URL', () async {
+      bool called = false;
+      final client = GoogleDriveApiClient(
+        getAccessToken: () async => 'tok',
+        httpClient: MockClient((request) async {
+          called = true;
+          expect(request.method, equals('PATCH'));
+          expect(request.url.path, contains('file-to-update'));
+          expect(request.url.queryParameters['uploadType'], equals('media'));
+          expect(request.headers['Authorization'], equals('Bearer tok'));
+          return http.Response('', 200);
+        }),
+      );
+
+      await client.updateFile(
+        fileId: 'file-to-update',
+        content: Uint8List.fromList([5, 6, 7]),
+      );
+
+      expect(called, isTrue);
+    });
+  });
+
+  group('GoogleDriveApiClient.trashFile', () {
+    test('sends PATCH with trashed:true', () async {
+      bool called = false;
+      final client = GoogleDriveApiClient(
+        getAccessToken: () async => 'tok',
+        httpClient: MockClient((request) async {
+          called = true;
+          expect(request.method, equals('PATCH'));
+          expect(request.url.path, contains('file-to-trash'));
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          expect(body['trashed'], isTrue);
+          return http.Response('{}', 200,
+              headers: {'content-type': 'application/json'});
+        }),
+      );
+
+      await client.trashFile('file-to-trash');
+      expect(called, isTrue);
+    });
+  });
+
+  group('GoogleDriveApiClient.createFolder', () {
+    test('creates folder with correct mimeType and parent', () async {
+      final client = GoogleDriveApiClient(
+        getAccessToken: () async => 'tok',
+        httpClient: MockClient((request) async {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          expect(body['name'], equals('Note Synapse'));
+          expect(body['parents'], equals(['root']));
+          expect(
+            body['mimeType'],
+            equals('application/vnd.google-apps.folder'),
+          );
+          return http.Response(
+            jsonEncode({'id': 'folder-id', 'name': 'Note Synapse'}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final info = await client.createFolder(
+        name: 'Note Synapse',
+        parentId: 'root',
+      );
+
+      expect(info.id, equals('folder-id'));
+      expect(info.name, equals('Note Synapse'));
+    });
+  });
 }
