@@ -299,4 +299,47 @@ void main() {
       expect(info, isNull);
     });
   });
+
+  group('GoogleDriveApiClient 401 retry', () {
+    test('retries with fresh token after 401 and succeeds', () async {
+      int callCount = 0;
+      int tokenCallCount = 0;
+
+      final client = GoogleDriveApiClient(
+        getAccessToken: () async {
+          tokenCallCount++;
+          return 'token-$tokenCallCount';
+        },
+        httpClient: MockClient((request) async {
+          callCount++;
+          if (callCount == 1) {
+            return http.Response('Unauthorized', 401);
+          }
+          expect(request.headers['Authorization'], equals('Bearer token-2'));
+          return http.Response(
+            jsonEncode({'files': []}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final files = await client.listChildren('some-parent');
+      expect(files, isEmpty);
+      expect(callCount, equals(2));
+      expect(tokenCallCount, equals(2));
+    });
+
+    test('throws GoogleDriveAuthException after two consecutive 401s', () async {
+      final client = GoogleDriveApiClient(
+        getAccessToken: () async => 'bad-token',
+        httpClient: MockClient((_) async => http.Response('Unauthorized', 401)),
+      );
+
+      await expectLater(
+        client.listChildren('parent'),
+        throwsA(isA<GoogleDriveAuthException>()),
+      );
+    });
+  });
 }

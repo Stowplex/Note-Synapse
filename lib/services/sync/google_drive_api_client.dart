@@ -47,6 +47,13 @@ class GoogleDriveQuotaException extends GoogleDriveException {
   GoogleDriveQuotaException(super.message) : super(statusCode: 403);
 }
 
+/// Thin HTTP wrapper over the Google Drive REST API v3.
+///
+/// Stateless — does not own any path-to-ID cache. The [GoogleDriveSyncProvider]
+/// holds the cache and calls these methods with resolved file IDs.
+///
+/// [getAccessToken] is called before every request (and again on 401 retry)
+/// so the caller controls token refresh strategy.
 class GoogleDriveApiClient {
   static const _baseUrl = 'https://www.googleapis.com';
 
@@ -79,11 +86,54 @@ class GoogleDriveApiClient {
     }
   }
 
+  /// Executes [fn] with auth headers. On 401, fetches a fresh token and retries once.
+  /// Throws [GoogleDriveAuthException] if the retry also returns 401.
+  Future<http.Response> _execute(
+    Future<http.Response> Function(Map<String, String> headers) fn,
+  ) async {
+    final firstHeaders = await _authHeaders();
+    final firstResponse = await fn(firstHeaders);
+    if (firstResponse.statusCode != 401) {
+      _checkStatus(firstResponse);
+      return firstResponse;
+    }
+    // Force-refresh: call _getAccessToken again
+    final freshHeaders = await _authHeaders();
+    final retryResponse = await fn(freshHeaders);
+    _checkStatus(retryResponse);
+    return retryResponse;
+  }
+
+  Future<List<DriveFileInfo>> listChildren(String parentId) async {
+    final results = <DriveFileInfo>[];
+    String? pageToken;
+
+    do {
+      final queryParams = <String, String>{
+        'q': "'$parentId' in parents and trashed=false",
+        'fields': 'nextPageToken,files(id,name,mimeType,size,modifiedTime)',
+        'pageSize': '1000',
+      };
+      if (pageToken != null) queryParams['pageToken'] = pageToken;
+
+      final uri = Uri.parse('$_baseUrl/drive/v3/files')
+          .replace(queryParameters: queryParams);
+      final response = await _execute((h) => _httpClient.get(uri, headers: h));
+
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      final files = json['files'] as List<dynamic>;
+      results.addAll(
+          files.map((f) => DriveFileInfo.fromJson(f as Map<String, dynamic>)));
+      pageToken = json['nextPageToken'] as String?;
+    } while (pageToken != null);
+
+    return results;
+  }
+
   Future<Uint8List> downloadFile(String fileId) async {
     final uri = Uri.parse('$_baseUrl/drive/v3/files/$fileId')
         .replace(queryParameters: {'alt': 'media'});
-    final response = await _httpClient.get(uri, headers: await _authHeaders());
-    _checkStatus(response);
+    final response = await _execute((h) => _httpClient.get(uri, headers: h));
     return response.bodyBytes;
   }
 
@@ -118,11 +168,11 @@ class GoogleDriveApiClient {
       },
     );
 
-    final headers = await _authHeaders();
-    headers['content-type'] = 'multipart/related; boundary=$boundary';
-    final response =
-        await _httpClient.post(uri, headers: headers, body: fullBody);
-    _checkStatus(response);
+    final response = await _execute((h) {
+      final headers = Map<String, String>.from(h);
+      headers['content-type'] = 'multipart/related; boundary=$boundary';
+      return _httpClient.post(uri, headers: headers, body: fullBody);
+    });
     return DriveFileInfo.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
   }
@@ -134,23 +184,24 @@ class GoogleDriveApiClient {
   }) async {
     final uri = Uri.parse('$_baseUrl/upload/drive/v3/files/$fileId')
         .replace(queryParameters: {'uploadType': 'media'});
-    final headers = await _authHeaders();
-    headers['content-type'] = mimeType;
-    final response =
-        await _httpClient.patch(uri, headers: headers, body: content);
-    _checkStatus(response);
+    await _execute((h) {
+      final headers = Map<String, String>.from(h);
+      headers['content-type'] = mimeType;
+      return _httpClient.patch(uri, headers: headers, body: content);
+    });
   }
 
   Future<void> trashFile(String fileId) async {
     final uri = Uri.parse('$_baseUrl/drive/v3/files/$fileId');
-    final headers = await _authHeaders();
-    headers['content-type'] = 'application/json';
-    final response = await _httpClient.patch(
-      uri,
-      headers: headers,
-      body: jsonEncode({'trashed': true}),
-    );
-    _checkStatus(response);
+    await _execute((h) {
+      final headers = Map<String, String>.from(h);
+      headers['content-type'] = 'application/json';
+      return _httpClient.patch(
+        uri,
+        headers: headers,
+        body: jsonEncode({'trashed': true}),
+      );
+    });
   }
 
   Future<DriveFileInfo> createFolder({
@@ -160,18 +211,19 @@ class GoogleDriveApiClient {
     final uri = Uri.parse('$_baseUrl/drive/v3/files').replace(
       queryParameters: {'fields': 'id,name,mimeType,size,modifiedTime'},
     );
-    final headers = await _authHeaders();
-    headers['content-type'] = 'application/json';
-    final response = await _httpClient.post(
-      uri,
-      headers: headers,
-      body: jsonEncode({
-        'name': name,
-        'parents': [parentId],
-        'mimeType': 'application/vnd.google-apps.folder',
-      }),
-    );
-    _checkStatus(response);
+    final response = await _execute((h) {
+      final headers = Map<String, String>.from(h);
+      headers['content-type'] = 'application/json';
+      return _httpClient.post(
+        uri,
+        headers: headers,
+        body: jsonEncode({
+          'name': name,
+          'parents': [parentId],
+          'mimeType': 'application/vnd.google-apps.folder',
+        }),
+      );
+    });
     return DriveFileInfo.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
   }
@@ -180,37 +232,11 @@ class GoogleDriveApiClient {
     final uri = Uri.parse('$_baseUrl/drive/v3/files/$fileId').replace(
       queryParameters: {'fields': 'id,name,mimeType,size,modifiedTime'},
     );
-    final response =
-        await _httpClient.get(uri, headers: await _authHeaders());
+    final firstHeaders = await _authHeaders();
+    final response = await _httpClient.get(uri, headers: firstHeaders);
     if (response.statusCode == 404) return null;
     _checkStatus(response);
     return DriveFileInfo.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
-  }
-
-  Future<List<DriveFileInfo>> listChildren(String parentId) async {
-    final results = <DriveFileInfo>[];
-    String? pageToken;
-
-    do {
-      final queryParams = <String, String>{
-        'q': "'$parentId' in parents and trashed=false",
-        'fields': 'nextPageToken,files(id,name,mimeType,size,modifiedTime)',
-        'pageSize': '1000',
-      };
-      if (pageToken != null) queryParams['pageToken'] = pageToken;
-
-      final uri = Uri.parse('$_baseUrl/drive/v3/files')
-          .replace(queryParameters: queryParams);
-      final response = await _httpClient.get(uri, headers: await _authHeaders());
-      _checkStatus(response);
-
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      final files = json['files'] as List<dynamic>;
-      results.addAll(files.map((f) => DriveFileInfo.fromJson(f as Map<String, dynamic>)));
-      pageToken = json['nextPageToken'] as String?;
-    } while (pageToken != null);
-
-    return results;
   }
 }
