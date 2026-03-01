@@ -198,6 +198,7 @@ void main() {
           expect(request.url.path, contains('file-to-update'));
           expect(request.url.queryParameters['uploadType'], equals('media'));
           expect(request.headers['Authorization'], equals('Bearer tok'));
+          expect(request.headers['content-type'], equals('application/octet-stream'));
           return http.Response('', 200);
         }),
       );
@@ -237,6 +238,7 @@ void main() {
       final client = GoogleDriveApiClient(
         getAccessToken: () async => 'tok',
         httpClient: MockClient((request) async {
+          expect(request.method, equals('POST'));
           final body = jsonDecode(request.body) as Map<String, dynamic>;
           expect(body['name'], equals('Note Synapse'));
           expect(body['parents'], equals(['root']));
@@ -259,6 +261,42 @@ void main() {
 
       expect(info.id, equals('folder-id'));
       expect(info.name, equals('Note Synapse'));
+    });
+  });
+
+  group('GoogleDriveApiClient.getFileInfo', () {
+    test('returns DriveFileInfo for existing file', () async {
+      final client = GoogleDriveApiClient(
+        getAccessToken: () async => 'tok',
+        httpClient: MockClient((request) async {
+          expect(request.url.path, contains('known-file-id'));
+          expect(request.url.queryParameters['fields'], isNotNull);
+          return http.Response(
+            jsonEncode({
+              'id': 'known-file-id',
+              'name': 'snapshot.db',
+              'size': '1024',
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+      );
+
+      final info = await client.getFileInfo('known-file-id');
+      expect(info, isNotNull);
+      expect(info!.id, equals('known-file-id'));
+      expect(info.size, equals(1024));
+    });
+
+    test('returns null for 404', () async {
+      final client = GoogleDriveApiClient(
+        getAccessToken: () async => 'tok',
+        httpClient: MockClient((_) async => http.Response('Not Found', 404)),
+      );
+
+      final info = await client.getFileInfo('missing-id');
+      expect(info, isNull);
     });
   });
 }
