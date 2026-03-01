@@ -79,19 +79,28 @@ class GoogleDriveApiClient {
   }
 
   Future<List<DriveFileInfo>> listChildren(String parentId) async {
-    final uri = Uri.parse('$_baseUrl/drive/v3/files').replace(
-      queryParameters: {
+    final results = <DriveFileInfo>[];
+    String? pageToken;
+
+    do {
+      final queryParams = <String, String>{
         'q': "'$parentId' in parents and trashed=false",
-        'fields': 'files(id,name,mimeType,size,modifiedTime)',
+        'fields': 'nextPageToken,files(id,name,mimeType,size,modifiedTime)',
         'pageSize': '1000',
-      },
-    );
-    final response = await _httpClient.get(uri, headers: await _authHeaders());
-    _checkStatus(response);
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-    final files = json['files'] as List<dynamic>;
-    return files
-        .map((f) => DriveFileInfo.fromJson(f as Map<String, dynamic>))
-        .toList();
+      };
+      if (pageToken != null) queryParams['pageToken'] = pageToken;
+
+      final uri = Uri.parse('$_baseUrl/drive/v3/files')
+          .replace(queryParameters: queryParams);
+      final response = await _httpClient.get(uri, headers: await _authHeaders());
+      _checkStatus(response);
+
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      final files = json['files'] as List<dynamic>;
+      results.addAll(files.map((f) => DriveFileInfo.fromJson(f as Map<String, dynamic>)));
+      pageToken = json['nextPageToken'] as String?;
+    } while (pageToken != null);
+
+    return results;
   }
 }
