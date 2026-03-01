@@ -51,8 +51,8 @@ void main() {
 
     test('throws StateError when methods called before initialize()', () async {
       // provider not yet initialized — _rootFolderId is null
-      expect(
-        () => provider.listFiles('/'),
+      await expectLater(
+        provider.listFiles('/'),
         throwsA(isA<StateError>()),
       );
     });
