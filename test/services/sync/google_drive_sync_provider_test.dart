@@ -71,6 +71,27 @@ void main() {
       verify(mockClient.listChildren('root-folder')).called(1);
       verify(mockClient.downloadFile('snap-id')).called(1);
     });
+
+    test('subdirectory resolution cached — listChildren not repeated on second readFile', () async {
+      // First listFiles('oplogs') — triggers listChildren(root-folder) to resolve
+      // 'oplogs', then listChildren(oplogs-folder) to list its contents.
+      // Second readFile('oplogs/op-001.bin') should use _idCache and skip both calls.
+      when(mockClient.listChildren('root-folder')).thenAnswer((_) async => [
+            DriveFileInfo(id: 'oplogs-folder', name: 'oplogs'),
+          ]);
+      when(mockClient.listChildren('oplogs-folder')).thenAnswer((_) async => [
+            DriveFileInfo(id: 'op1', name: 'op-001.bin', size: 64),
+          ]);
+      when(mockClient.downloadFile('op1'))
+          .thenAnswer((_) async => Uint8List.fromList([9]));
+
+      await provider.listFiles('oplogs');
+      await provider.readFile('oplogs/op-001.bin');
+
+      verify(mockClient.listChildren('root-folder')).called(1);
+      verify(mockClient.listChildren('oplogs-folder')).called(1);
+      verify(mockClient.downloadFile('op1')).called(1);
+    });
   });
 
   group('readFile', () {
