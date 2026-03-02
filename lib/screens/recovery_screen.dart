@@ -257,19 +257,25 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
           );
           final destFile = File('${attachmentsDir.path}/$uniqueFileName');
 
-          // Copy the file to the exported attachments directory
-          await sourceFile.copy(destFile.path);
+          try {
+            // Ensure destination directory exists before copying
+            await destFile.parent.create(recursive: true);
+            // Copy the file to the exported attachments directory
+            await sourceFile.copy(destFile.path);
 
-          // Update the database to use the new relative path
-          final relativePath = 'attachments/$uniqueFileName';
-          await db.update(
-            'attachments',
-            {'filePath': relativePath, 'isRelativePath': 1},
-            where: 'id = ?',
-            whereArgs: [attachment['id']],
-          );
+            // Update the database to use the new relative path
+            final relativePath = 'attachments/$uniqueFileName';
+            await db.update(
+              'attachments',
+              {'filePath': relativePath, 'isRelativePath': 1},
+              where: 'id = ?',
+              whereArgs: [attachment['id']],
+            );
 
-          _addLog(l10n.copiedAndUpdated(originalFileName, uniqueFileName));
+            _addLog(l10n.copiedAndUpdated(originalFileName, uniqueFileName));
+          } catch (e) {
+            _addLog(l10n.warningSourceFileNotFound(originalFilePath));
+          }
         } else {
           _addLog(l10n.warningSourceFileNotFound(originalFilePath));
         }
@@ -289,7 +295,11 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       if (entity is File) {
         final destFile = File(destPath);
         await destFile.parent.create(recursive: true);
-        await entity.copy(destFile.path);
+        try {
+          await entity.copy(destFile.path);
+        } catch (e) {
+          _addLog('Warning: could not copy ${entity.path}: $e');
+        }
       } else if (entity is Directory) {
         final destDir = Directory(destPath);
         await destDir.create(recursive: true);
