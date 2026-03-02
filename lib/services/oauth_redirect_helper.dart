@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 
 /// Helper for determining which redirect URI should be used for OAuth flows
 /// based on the current platform. Mobile platforms use a custom URL scheme so
@@ -15,23 +14,12 @@ class OAuthRedirectHelper {
   /// Loopback redirect used on desktop-style platforms.
   static const String loopbackRedirectUri = 'http://127.0.0.1:51791/callback';
 
-  // Cached at app startup via initialize(). Falls back to 'notesynapse' if
-  // initialize() hasn't been called yet.
-  static String? _cachedScheme;
+  /// Custom scheme name shared between Android and iOS.
+  static const String _customScheme = 'notesynapse';
 
-  static String get _customScheme => _cachedScheme ?? 'notesynapse';
-
-  /// Redirect URI used on mobile platforms via the package-name scheme.
-  /// Format: `<scheme>:/oauthcallback`  (single slash, no host)
-  static String get customSchemeRedirectUri => '$_customScheme:/oauthcallback';
-
-  /// Must be called once during app startup (before any OAuth flow).
-  static Future<void> initialize() async {
-    if (_supportsCustomScheme()) {
-      final info = await PackageInfo.fromPlatform();
-      _cachedScheme = info.packageName;
-    }
-  }
+  /// Redirect URI used on mobile platforms via the custom scheme.
+  static const String customSchemeRedirectUri =
+      '$_customScheme://oauth/callback';
 
   static bool get usesCustomScheme => _supportsCustomScheme();
 
@@ -115,3 +103,4 @@ class OAuthRedirectHelper {
     return host == '127.0.0.1' || host == 'localhost';
   }
 }
+

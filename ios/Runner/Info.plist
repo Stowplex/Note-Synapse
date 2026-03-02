@@ -63,14 +63,6 @@
 				<string>notesynapse</string>
 			</array>
 		</dict>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>com.github.kkspeed.notesynapse.noteSynapse</string>
-			</array>
-		</dict>
 	</array>
 </dict>
 </plist>

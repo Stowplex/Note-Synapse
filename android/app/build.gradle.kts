@@ -50,14 +50,10 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
-            manifestPlaceholders["oauthRedirectScheme"] =
-                "com.github.kkspeed.note_synapse.note_synapse.debug"
         }
 
         release {
             signingConfig = signingConfigs.getByName("release")
-            manifestPlaceholders["oauthRedirectScheme"] =
-                "com.github.kkspeed.note_synapse.note_synapse"
         }
     }
 }
