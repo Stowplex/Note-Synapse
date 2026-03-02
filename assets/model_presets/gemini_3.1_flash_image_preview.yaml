@@ -1,0 +1,28 @@
+model_type: gemini
+model_endpoint: https://generativelanguage.googleapis.com/v1beta
+<<<<<<<< HEAD:assets/model_presets/gemini_3.1_pro_image_preview.yaml
+model_name: gemini-3.1-pro-image-preview
+model_display_name: Gemini 3.1 Pro Image Preview
+========
+model_name: gemini-3.1-flash-image-preview
+model_display_name: Gemini 3.1 Flash Image Preview
+>>>>>>>> 32e7ffe38aee62a1ae58453966b3d2cc1cbf13f2:assets/model_presets/gemini_3.1_flash_image_preview.yaml
+api_key_url: https://aistudio.google.com/app/apikey
+model_capabilities:
+  - support_document_understanding
+  - support_image
+  - generate_image
+max_input_token: 2097152
+max_output_token: 65536
+supported_attachment_mime_types:
+  - image/png
+  - image/jpeg
+  - image/webp
+  - application/pdf
+  - application/msword
+  - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  - text/plain
+warn_premium: true
+model_features:
+  - google_search
+  - code_execution

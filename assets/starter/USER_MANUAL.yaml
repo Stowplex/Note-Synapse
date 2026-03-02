@@ -1,8 +1,9 @@
-version: 1.0.0+15
-update_date: Jan 27, 2026
-change_log:  
+version: 1.0.0+16
+update_date: Feb 28, 2026
+change_log:
   - date: Nov 17, 2025
     change: Initial draft
   - date: Jan 27, 2026
     change: Completely re-write the starter doc
-
+  - date: Feb 28, 2026
+    change: Contents updated with more tutorial
