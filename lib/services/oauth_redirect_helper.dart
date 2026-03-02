@@ -60,6 +60,12 @@ class OAuthRedirectHelper {
         return customSchemeRedirectUri;
       }
 
+      // Google reverse-client-ID scheme — registered in AndroidManifest /
+      // Info.plist; pass through as-is.
+      if (parsed.scheme.startsWith('com.googleusercontent.apps.')) {
+        return parsed.toString();
+      }
+
       // Any other scheme is unsupported because the app is not registered to
       // handle it. Fall back to the known-good custom scheme.
       return customSchemeRedirectUri;

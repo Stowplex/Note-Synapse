@@ -52,12 +52,17 @@ android {
             applicationIdSuffix = ".debug"
             manifestPlaceholders["oauthRedirectScheme"] =
                 "com.github.kkspeed.note_synapse.note_synapse.debug"
+            manifestPlaceholders["googleRedirectScheme"] =
+                "com.googleusercontent.apps.438894533578-i9ecrp6g518tdenpq5fo4dkv90ce2rig"
         }
 
         release {
             signingConfig = signingConfigs.getByName("release")
             manifestPlaceholders["oauthRedirectScheme"] =
                 "com.github.kkspeed.note_synapse.note_synapse"
+            // TODO: replace with Android release OAuth client ID when available
+            manifestPlaceholders["googleRedirectScheme"] =
+                "com.googleusercontent.apps.TODO_ANDROID_RELEASE_CLIENT_ID"
         }
     }
 }

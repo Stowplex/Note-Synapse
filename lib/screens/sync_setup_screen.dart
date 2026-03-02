@@ -128,7 +128,7 @@ class _SyncSetupScreenState extends State<SyncSetupScreen> {
         final syncRootName = _syncRootNameController.text.trim();
         final tokenManager = OAuthTokenManager(
           endpointId: 'gdrive',
-          config: kGoogleDriveOAuthConfig,
+          config: googleDriveOAuthConfig(),
         );
         final apiClient = GoogleDriveApiClient(
           getAccessToken: () async {
@@ -650,14 +650,14 @@ class _SyncSetupScreenState extends State<SyncSetupScreen> {
         List<int>.generate(16, (_) => Random.secure().nextInt(256)),
       );
       final tokens = await OAuthService.authorizationCodeFlow(
-        config: kGoogleDriveOAuthConfig,
+        config: googleDriveOAuthConfig(),
         state: state,
       );
 
       // Store tokens
       final tokenManager = OAuthTokenManager(
         endpointId: 'gdrive',
-        config: kGoogleDriveOAuthConfig,
+        config: googleDriveOAuthConfig(),
       );
       await tokenManager.saveTokens(tokens);
 

@@ -137,7 +137,7 @@ class SyncService {
         } else if (providerType == 'gdrive') {
           final tokenManager = OAuthTokenManager(
             endpointId: 'gdrive',
-            config: kGoogleDriveOAuthConfig,
+            config: googleDriveOAuthConfig(),
           );
           final apiClient = GoogleDriveApiClient(
             getAccessToken: () async {

@@ -947,6 +947,8 @@ class DatabaseService {
     );
 
     // Migrate conversation_message_mapping
+    // Drop leftover temp table in case a previous migration attempt was interrupted
+    await db.execute('DROP TABLE IF EXISTS conversation_message_mapping_new');
     await db.execute('''
       CREATE TABLE conversation_message_mapping_new(
         conversationId TEXT NOT NULL,
@@ -957,9 +959,14 @@ class DatabaseService {
         FOREIGN KEY (messageId) REFERENCES conversation_messages (id) ON DELETE CASCADE
       )
     ''');
+    // Filter orphaned rows: INSERT OR IGNORE does not suppress FK violations in SQLite,
+    // so we explicitly skip rows whose parent references no longer exist.
     await db.execute('''
       INSERT OR IGNORE INTO conversation_message_mapping_new(conversationId, messageId, createdAt)
-      SELECT conversationId, messageId, createdAt FROM conversation_message_mapping
+      SELECT m.conversationId, m.messageId, m.createdAt
+      FROM conversation_message_mapping m
+      WHERE EXISTS (SELECT 1 FROM conversations c WHERE c.id = m.conversationId)
+        AND EXISTS (SELECT 1 FROM conversation_messages msg WHERE msg.id = m.messageId)
     ''');
     await db.execute('DROP TABLE conversation_message_mapping');
     await db.execute('ALTER TABLE conversation_message_mapping_new RENAME TO conversation_message_mapping');
@@ -967,6 +974,8 @@ class DatabaseService {
     await db.execute('CREATE INDEX idx_conversation_message_mapping_messageId ON conversation_message_mapping(messageId)');
 
     // Migrate conversation_note_mapping
+    // Drop leftover temp table in case a previous migration attempt was interrupted
+    await db.execute('DROP TABLE IF EXISTS conversation_note_mapping_new');
     await db.execute('''
       CREATE TABLE conversation_note_mapping_new(
         conversationId TEXT NOT NULL,
@@ -977,9 +986,14 @@ class DatabaseService {
         FOREIGN KEY (noteId) REFERENCES notes (id) ON DELETE CASCADE
       )
     ''');
+    // Filter orphaned rows: INSERT OR IGNORE does not suppress FK violations in SQLite,
+    // so we explicitly skip rows whose parent references no longer exist.
     await db.execute('''
       INSERT OR IGNORE INTO conversation_note_mapping_new(conversationId, noteId, createdAt)
-      SELECT conversationId, noteId, createdAt FROM conversation_note_mapping
+      SELECT m.conversationId, m.noteId, m.createdAt
+      FROM conversation_note_mapping m
+      WHERE EXISTS (SELECT 1 FROM conversations c WHERE c.id = m.conversationId)
+        AND EXISTS (SELECT 1 FROM notes n WHERE n.id = m.noteId)
     ''');
     await db.execute('DROP TABLE conversation_note_mapping');
     await db.execute('ALTER TABLE conversation_note_mapping_new RENAME TO conversation_note_mapping');
