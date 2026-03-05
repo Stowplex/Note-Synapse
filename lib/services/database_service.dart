@@ -46,7 +46,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 43; // Target schema version
+  static const int DATABASE_VERSION = 44; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -65,7 +65,8 @@ class DatabaseService {
         completionPercentage REAL, -- Task completion percentage
         pinned INTEGER NOT NULL DEFAULT 0, -- Whether note is pinned
         isArchived INTEGER NOT NULL DEFAULT 0, -- Whether note is archived
-        recurrenceRule TEXT -- JSON string defining recurrence rules
+        recurrenceRule TEXT, -- JSON string defining recurrence rules
+        metadata TEXT -- JSON metadata (e.g. in-note markers)
       )
   ''';
 
@@ -851,6 +852,10 @@ class DatabaseService {
       description: 'Migrate conversation_message_mapping and conversation_note_mapping to composite primary keys',
       execute: _migrateToVersion38,
     ),
+    44: MigrationStep(
+      description: 'Add metadata column to notes table for in-note markers',
+      execute: _migrateToVersion42,
+    ),
   };
 
   static Future<void> _migrateToVersion28(
@@ -1478,6 +1483,13 @@ class DatabaseService {
     ''');
   }
 
+  static Future<void> _migrateToVersion42(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    await db.execute('ALTER TABLE notes ADD COLUMN metadata TEXT');
+  }
+
   // Migrate existing conversation data to new structure
 
   // Migration helper method to create initial revisions for existing apps
@@ -1981,6 +1993,35 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [attachmentId],
     );
+  }
+
+  /// Updates the metadata JSON for a specific note
+  Future<void> updateNoteMetadata(
+    String noteId,
+    Map<String, dynamic>? metadata,
+  ) async {
+    final db = await database;
+    await db.update(
+      'notes',
+      {'metadata': metadata != null ? jsonEncode(metadata) : null},
+      where: 'id = ?',
+      whereArgs: [noteId],
+    );
+  }
+
+  /// Gets the metadata JSON for a specific note
+  Future<Map<String, dynamic>?> getNoteMetadata(String noteId) async {
+    final db = await database;
+    final rows = await db.query(
+      'notes',
+      columns: ['metadata'],
+      where: 'id = ?',
+      whereArgs: [noteId],
+    );
+    if (rows.isEmpty) return null;
+    final raw = rows.first['metadata'] as String?;
+    if (raw == null) return null;
+    return jsonDecode(raw) as Map<String, dynamic>;
   }
 
   /// Updates just the lastViewedPage in attachment metadata

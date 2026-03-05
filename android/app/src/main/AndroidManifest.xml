@@ -9,14 +9,7 @@
     <!-- Camera permissions for image picker -->
     <uses-permission android:name="android.permission.CAMERA" />
     
-    <!-- Storage permissions for file handling -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
-    
-    <!-- Additional permissions for file picker and media access -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!-- Media access for audio recording playback -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     
     <!-- Wake lock for background processing -->
@@ -31,8 +24,7 @@
         android:label="Note Synapse"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
-        android:usesCleartextTraffic="true"
-        android:requestLegacyExternalStorage="true">
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

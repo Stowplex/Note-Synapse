@@ -16,6 +16,7 @@ import 'mcp_service.dart';
 import 'sync/sync_service.dart';
 import 'sync/device_identity_service.dart';
 import 'tag_image_service.dart';
+import 'note_marker_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -82,6 +83,12 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<TagImageService>()) {
     getIt.registerLazySingleton<TagImageService>(
       () => TagImageService(getIt<DatabaseService>()),
+    );
+  }
+
+  if (!getIt.isRegistered<NoteMarkerService>()) {
+    getIt.registerLazySingleton<NoteMarkerService>(
+      () => NoteMarkerService(getIt<DatabaseService>()),
     );
   }
 

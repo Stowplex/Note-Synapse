@@ -62,12 +62,14 @@ class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
   final List<String>? initialNoteIds;
   final ModelConfig? initialModelOverride;
+  final String? initialMessageId;
 
   const ConversationChatScreen({
     super.key,
     this.conversationId,
     this.initialNoteIds,
     this.initialModelOverride,
+    this.initialMessageId,
   });
 
   @override
@@ -263,6 +265,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         // Initialize model features from config
         _loadModelFeatures();
         setState(() => _isLoading = false);
+        if (widget.initialMessageId != null) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _scrollToMessage(widget.initialMessageId!),
+          );
+        }
         // Sync with agent state (update executor) now that we are initialized
         _onAgentStateChange();
       }
@@ -2283,6 +2290,19 @@ $historyBuffer
         );
       }
     });
+  }
+
+  void _scrollToMessage(String messageId) {
+    final idx = _messages.indexWhere((m) => m.id == messageId);
+    if (idx < 0 || !_scrollController.hasClients) return;
+    const estimatedItemHeight = 120.0;
+    final offset = (idx * estimatedItemHeight)
+        .clamp(0.0, _scrollController.position.maxScrollExtent);
+    _scrollController.animateTo(
+      offset,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+    );
   }
 
   Future<void> _forkConversation(String messageId) async {
