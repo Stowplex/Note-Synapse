@@ -6,6 +6,7 @@ import '../models/conversation_attachment.dart';
 import '../services/database_service.dart';
 import '../services/service_locator.dart';
 import '../screens/conversation_chat_screen.dart';
+import 'interactive_checkbox_markdown.dart';
 
 class InNoteMarkerPreview extends StatefulWidget {
   final InNoteMarker marker;
@@ -80,6 +81,9 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
           break;
         }
       }
+
+      // Fallback: if no attachment matched by extension/fileType, try the first one
+      imageAttachment ??= attachments.isNotEmpty ? attachments.first : null;
 
       if (imageAttachment != null) {
         imagePath = await imageAttachment.getAbsolutePath();
@@ -166,10 +170,8 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
                 ),
           ),
           const SizedBox(height: 4),
-          Text(
+          SelectableText(
             _userMessageContent!,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 12),
@@ -184,16 +186,23 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
               ),
         ),
         const SizedBox(height: 4),
-        Text(
-          _aiReplyContent ?? 'No response yet',
-          maxLines: 4,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: _aiReplyContent == null
-                    ? Theme.of(context).disabledColor
-                    : null,
+        if (_aiReplyContent != null)
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 300),
+            child: SingleChildScrollView(
+              child: InteractiveCheckboxMarkdown(
+                originalContent: _aiReplyContent!,
+                onLinkTap: (url, _) {},
               ),
-        ),
+            ),
+          )
+        else
+          Text(
+            'No response yet',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).disabledColor,
+                ),
+          ),
         const SizedBox(height: 20),
 
         // Open Conversation button
