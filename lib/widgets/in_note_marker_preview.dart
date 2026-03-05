@@ -33,8 +33,9 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
     final db = getIt<DatabaseService>();
 
     // Load user message content.
-    final userMessage =
-        await db.getConversationMessage(widget.marker.messageId);
+    final userMessage = await db.getConversationMessage(
+      widget.marker.messageId,
+    );
     final userContent = userMessage?.content;
 
     // Find AI reply: load all messages for the conversation, find the user
@@ -60,33 +61,17 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
     // Find the first image attachment for the user message.
     String? imagePath;
     try {
-      final attachments = await db.getConversationAttachments(
-        widget.marker.messageId,
-      );
-      const imageExtensions = {'png', 'jpg', 'jpeg'};
-
-      ConversationAttachment? imageAttachment;
-      for (final a in attachments) {
-        final ext = a.fileName.split('.').last.toLowerCase();
-        if (imageExtensions.contains(ext)) {
-          imageAttachment = a;
-          break;
+      if (userMessage != null && userMessage.attachmentPaths.isNotEmpty) {
+        const imageExtensions = {'png', 'jpg', 'jpeg'};
+        for (final path in userMessage.attachmentPaths) {
+          final ext = path.split('.').last.toLowerCase();
+          if (imageExtensions.contains(ext)) {
+            imagePath = path;
+            break;
+          }
         }
-        final ft = a.fileType.toLowerCase();
-        if (ft.contains('png') ||
-            ft.contains('jpg') ||
-            ft.contains('jpeg') ||
-            ft.contains('image')) {
-          imageAttachment = a;
-          break;
-        }
-      }
-
-      // Fallback: if no attachment matched by extension/fileType, try the first one
-      imageAttachment ??= attachments.isNotEmpty ? attachments.first : null;
-
-      if (imageAttachment != null) {
-        imagePath = await imageAttachment.getAbsolutePath();
+        // Fallback: if no attachment matched by extension, try the first one
+        imagePath ??= userMessage.attachmentPaths.first;
       }
     } catch (_) {
       // If attachment loading fails, show placeholder.
@@ -113,9 +98,7 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
         return Container(
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(16),
-            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
           ),
           child: _loading
               ? const Center(child: CircularProgressIndicator())
@@ -149,9 +132,9 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
         // Marker index header
         Text(
           'Marker ${widget.marker.index}',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
 
@@ -160,14 +143,13 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
         const SizedBox(height: 16),
 
         // User message
-        if (_userMessageContent != null &&
-            _userMessageContent!.isNotEmpty) ...[
+        if (_userMessageContent != null && _userMessageContent!.isNotEmpty) ...[
           Text(
             'Your message',
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                  fontWeight: FontWeight.w600,
-                ),
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 4),
           SelectableText(
@@ -181,9 +163,9 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
         Text(
           'AI reply',
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: Theme.of(context).colorScheme.secondary,
-                fontWeight: FontWeight.w600,
-              ),
+            color: Theme.of(context).colorScheme.secondary,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         const SizedBox(height: 4),
         if (_aiReplyContent != null)
@@ -200,8 +182,8 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
           Text(
             'No response yet',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).disabledColor,
-                ),
+              color: Theme.of(context).disabledColor,
+            ),
           ),
         const SizedBox(height: 20),
 
