@@ -2083,7 +2083,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
 
     if (totalBounds == null) return;
-    _pendingMarkerPosition = _computeMarkerPosition(totalBounds!);
+    _pendingMarkerPosition = _computeMarkerPosition(totalBounds);
 
     try {
       final imageBytes = await _captureDrawing(_drawingActions, totalBounds);
