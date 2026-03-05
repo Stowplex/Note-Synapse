@@ -1575,6 +1575,28 @@ class MockDatabaseService extends _i1.Mock implements _i19.DatabaseService {
           as _i12.Future<void>);
 
   @override
+  _i12.Future<void> updateNoteMetadata(
+    String? noteId,
+    Map<String, dynamic>? metadata,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#updateNoteMetadata, [noteId, metadata]),
+            returnValue: _i12.Future<void>.value(),
+            returnValueForMissingStub: _i12.Future<void>.value(),
+          )
+          as _i12.Future<void>);
+
+  @override
+  _i12.Future<Map<String, dynamic>?> getNoteMetadata(String? noteId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getNoteMetadata, [noteId]),
+            returnValue: _i12.Future<Map<String, dynamic>?>.value(),
+            returnValueForMissingStub:
+                _i12.Future<Map<String, dynamic>?>.value(),
+          )
+          as _i12.Future<Map<String, dynamic>?>);
+
+  @override
   _i12.Future<void> updateLastViewedPage(
     String? attachmentId,
     int? pageNumber,
