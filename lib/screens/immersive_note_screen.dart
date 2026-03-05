@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
@@ -3491,7 +3492,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 top: rect.y * constraints.maxHeight,
                 child: InNoteMarkerBadge(
                   index: marker.index,
-                  onTap: () => showInNoteMarkerPreview(context, marker),
+                  onTap: () async {
+                    final deleted = await showInNoteMarkerPreview(
+                      context,
+                      marker,
+                    );
+                    if (deleted == true) {
+                      _deleteMarker(marker);
+                    }
+                  },
                 ),
               );
             }),
@@ -3664,7 +3673,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       top: rect.y * constraints.maxHeight,
                       child: InNoteMarkerBadge(
                         index: marker.index,
-                        onTap: () => showInNoteMarkerPreview(context, marker),
+                        onTap: () async {
+                          final deleted = await showInNoteMarkerPreview(
+                            context,
+                            marker,
+                          );
+                          if (deleted == true) {
+                            _deleteMarker(marker);
+                          }
+                        },
                       ),
                     );
                   }),
@@ -3695,8 +3712,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 controllerMap: _pdfViewerControllers,
                 onError: (message) => LoggerService.error(message),
                 markers: _attachmentMarkers[_activeAttachmentPath] ?? [],
-                onMarkerTap: (marker) =>
-                    showInNoteMarkerPreview(context, marker),
+                onMarkerTap: (marker) async {
+                  final deleted = await showInNoteMarkerPreview(
+                    context,
+                    marker,
+                  );
+                  if (deleted == true) {
+                    _deleteMarker(marker);
+                  }
+                },
                 onDocumentReady: (cacheKey, document, outline) {
                   _pdfDocuments[cacheKey] = document;
                   if (outline != null && outline.isNotEmpty) {
@@ -3737,6 +3761,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
+
         if (!snapshot.hasData || snapshot.hasError) {
           return Center(child: Text(l10n.failedToLoadAttachment));
         }
@@ -4314,6 +4339,50 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l10n.failedToOpenAttachment(e.toString()))),
       );
+    }
+  }
+
+  void _deleteMarker(InNoteMarker marker) async {
+    final note = _conversationNotes[_activeNoteIndex];
+
+    final updatedMarkers = List<InNoteMarker>.from(_noteMarkers[note.id] ?? [])
+      ..removeWhere((m) => m.id == marker.id);
+
+    setState(() {
+      if (updatedMarkers.isEmpty) {
+        _noteMarkers.remove(note.id);
+      } else {
+        _noteMarkers[note.id] = updatedMarkers;
+      }
+
+      // Update attachment markers if necessary
+      if (_activeAttachmentPath != null) {
+        final attachMarkers = List<InNoteMarker>.from(
+          _attachmentMarkers[_activeAttachmentPath!] ?? [],
+        )..removeWhere((m) => m.id == marker.id);
+
+        if (attachMarkers.isEmpty) {
+          _attachmentMarkers.remove(_activeAttachmentPath!);
+        } else {
+          _attachmentMarkers[_activeAttachmentPath!] = attachMarkers;
+        }
+      }
+    });
+
+    final metadataJson = jsonEncode({
+      'inNoteMarkers': updatedMarkers.map((m) => m.toJson()).toList(),
+    });
+
+    final dbService = getIt<DatabaseService>();
+    final updatedNote = note.copyWith(metadata: metadataJson);
+    await dbService.updateNote(updatedNote);
+    if (!mounted) return;
+    context.read<AppProvider>().updateNote(updatedNote);
+
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Marker deleted.')));
     }
   }
 

@@ -80,6 +80,7 @@ class Note {
     bool? pinned,
     bool? isArchived,
     String? recurrenceRule,
+    String? metadata,
   }) {
     return Note(
       id: id ?? this.id,
@@ -98,6 +99,7 @@ class Note {
       pinned: pinned ?? this.pinned,
       isArchived: isArchived ?? this.isArchived,
       recurrenceRule: recurrenceRule ?? this.recurrenceRule,
+      metadata: metadata ?? this.metadata,
     );
   }
 

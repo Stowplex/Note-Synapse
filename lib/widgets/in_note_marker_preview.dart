@@ -195,27 +195,68 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
           ),
         const SizedBox(height: 20),
 
-        // Open Conversation button
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ConversationChatScreen(
-                    conversationId: widget.marker.conversationId,
-                    initialMessageId: widget.marker.messageId,
-                  ),
-                ),
-              );
-            },
-            icon: const Icon(Icons.chat_outlined, size: 18),
-            label: const Text('Open Conversation'),
-          ),
+        // Action buttons
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ConversationChatScreen(
+                        conversationId: widget.marker.conversationId,
+                        initialMessageId: widget.marker.messageId,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.chat_outlined, size: 18),
+                label: const Text('Open Conversation'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: () => _confirmDelete(context),
+              icon: const Icon(Icons.delete_outline),
+              color: Theme.of(context).colorScheme.error,
+              tooltip: 'Delete Marker',
+            ),
+          ],
         ),
       ],
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Marker?'),
+        content: const Text(
+          'This will remove the marker from the note. '
+          'The conversation messages will not be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      // Return true to indicate deletion
+      Navigator.of(context).pop(true);
+    }
   }
 
   Widget _buildImageSection(BuildContext context) {
@@ -262,11 +303,11 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
   }
 }
 
-Future<void> showInNoteMarkerPreview(
+Future<bool?> showInNoteMarkerPreview(
   BuildContext context,
   InNoteMarker marker,
 ) {
-  return showModalBottomSheet(
+  return showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
