@@ -2138,23 +2138,89 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   InNoteMarkerPosition? _computeMarkerPosition(Rect drawBounds) {
-    final renderObject = _noteBoundaryKey.currentContext?.findRenderObject();
-    if (renderObject is! RenderRepaintBoundary) return null;
-    final size = renderObject.size;
-    if (size.isEmpty) return null;
-
-    final norm = NormalizedRect(
-      x: (drawBounds.left / size.width).clamp(0.0, 1.0),
-      y: (drawBounds.top / size.height).clamp(0.0, 1.0),
-      w: (drawBounds.width / size.width).clamp(0.0, 1.0),
-      h: (drawBounds.height / size.height).clamp(0.0, 1.0),
-    );
-
     if (_activeAttachmentPath != null) {
-      final page = _pdfCurrentPages[_activeAttachmentPath!];
-      return InNoteMarkerPosition(normalizedRect: norm, page: page);
+      final path = _activeAttachmentPath!;
+      final extension = path.split('.').last.toLowerCase();
+      if (extension == 'pdf') {
+        final controller = _pdfViewerControllers[path];
+        final currentPage = _pdfCurrentPages[path] ?? 0; // 0-indexed
+        if (controller != null && controller.isReady) {
+          try {
+            final pageLayouts = controller.layout.pageLayouts;
+            if (currentPage < pageLayouts.length) {
+              final visibleRect = controller.visibleRect;
+              final viewSize = controller.viewSize;
+              final scaleX = viewSize.width / visibleRect.width;
+              final scaleY = viewSize.height / visibleRect.height;
+              final pageDocRect = pageLayouts[currentPage];
+              final pageScreenLeft =
+                  (pageDocRect.left - visibleRect.left) * scaleX;
+              final pageScreenTop =
+                  (pageDocRect.top - visibleRect.top) * scaleY;
+              final pageScreenW = pageDocRect.width * scaleX;
+              final pageScreenH = pageDocRect.height * scaleY;
+              if (pageScreenW > 0 && pageScreenH > 0) {
+                final norm = NormalizedRect(
+                  x: ((drawBounds.left - pageScreenLeft) / pageScreenW)
+                      .clamp(0.0, 1.0),
+                  y: ((drawBounds.top - pageScreenTop) / pageScreenH)
+                      .clamp(0.0, 1.0),
+                  w: (drawBounds.width / pageScreenW).clamp(0.0, 1.0),
+                  h: (drawBounds.height / pageScreenH).clamp(0.0, 1.0),
+                );
+                return InNoteMarkerPosition(
+                    normalizedRect: norm, page: currentPage);
+              }
+            }
+          } catch (_) {
+            // fall through to widget-size fallback
+          }
+        }
+        // Fallback: normalize by widget size (used if controller not ready)
+        final renderObject =
+            _noteBoundaryKey.currentContext?.findRenderObject();
+        if (renderObject is! RenderRepaintBoundary ||
+            renderObject.size.isEmpty) return null;
+        final size = renderObject.size;
+        return InNoteMarkerPosition(
+          normalizedRect: NormalizedRect(
+            x: (drawBounds.left / size.width).clamp(0.0, 1.0),
+            y: (drawBounds.top / size.height).clamp(0.0, 1.0),
+            w: (drawBounds.width / size.width).clamp(0.0, 1.0),
+            h: (drawBounds.height / size.height).clamp(0.0, 1.0),
+          ),
+          page: currentPage,
+        );
+      }
+      // Image: normalize by RepaintBoundary widget size (badges in screen coords)
+      final renderObject = _noteBoundaryKey.currentContext?.findRenderObject();
+      if (renderObject is! RenderRepaintBoundary || renderObject.size.isEmpty) {
+        return null;
+      }
+      final size = renderObject.size;
+      return InNoteMarkerPosition(
+        normalizedRect: NormalizedRect(
+          x: (drawBounds.left / size.width).clamp(0.0, 1.0),
+          y: (drawBounds.top / size.height).clamp(0.0, 1.0),
+          w: (drawBounds.width / size.width).clamp(0.0, 1.0),
+          h: (drawBounds.height / size.height).clamp(0.0, 1.0),
+        ),
+      );
     } else {
-      return InNoteMarkerPosition(normalizedRect: norm);
+      // Text note: normalize by widget size
+      final renderObject = _noteBoundaryKey.currentContext?.findRenderObject();
+      if (renderObject is! RenderRepaintBoundary || renderObject.size.isEmpty) {
+        return null;
+      }
+      final size = renderObject.size;
+      return InNoteMarkerPosition(
+        normalizedRect: NormalizedRect(
+          x: (drawBounds.left / size.width).clamp(0.0, 1.0),
+          y: (drawBounds.top / size.height).clamp(0.0, 1.0),
+          w: (drawBounds.width / size.width).clamp(0.0, 1.0),
+          h: (drawBounds.height / size.height).clamp(0.0, 1.0),
+        ),
+      );
     }
   }
 
