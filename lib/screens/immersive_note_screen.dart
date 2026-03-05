@@ -64,6 +64,8 @@ import 'note_action_app_selection_screen.dart';
 import 'settings_screen.dart';
 import '../widgets/model_selector_button.dart';
 import '../services/built_in_tools_service.dart';
+import '../models/in_note_marker.dart';
+import '../services/note_marker_service.dart';
 
 enum DrawingTool { pen, rectangle }
 
@@ -120,6 +122,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   late List<String> _noteOrder;
   final List<ConversationMessage> _messages = [];
   final List<PlatformFile> _pendingAttachments = [];
+  InNoteMarkerPosition? _pendingMarkerPosition;
+  late final NoteMarkerService _noteMarkerService = getIt<NoteMarkerService>();
   final Map<String, Future<_AttachmentSource?>> _attachmentSourceFutures = {};
   final Map<String, int> _pdfCurrentPages = {};
   final Map<String, int> _pdfTotalPages = {};
@@ -1848,11 +1852,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                                 _drawingActions.clear();
                                 _redoStack.clear();
                                 _penStrokePoints.clear();
+                                _pendingMarkerPosition = null;
                               } else {
                                 // Initialize new session
                                 _drawingActions.clear();
                                 _redoStack.clear();
                                 _penStrokePoints.clear();
+                                _pendingMarkerPosition = null;
                               }
                             });
                           },
@@ -2077,6 +2083,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
 
     if (totalBounds == null) return;
+    _pendingMarkerPosition = _computeMarkerPosition(totalBounds!);
 
     try {
       final imageBytes = await _captureDrawing(_drawingActions, totalBounds);
@@ -2106,6 +2113,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         }
       }
     } catch (e, stackTrace) {
+      _pendingMarkerPosition = null;
       LoggerService.error(
         'Failed to capture drawing: $e',
         error: e,
@@ -2116,6 +2124,27 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           SnackBar(content: Text('Failed to capture drawing: $e')),
         );
       }
+    }
+  }
+
+  InNoteMarkerPosition? _computeMarkerPosition(Rect drawBounds) {
+    final renderObject = _noteBoundaryKey.currentContext?.findRenderObject();
+    if (renderObject is! RenderRepaintBoundary) return null;
+    final size = renderObject.size;
+    if (size.isEmpty) return null;
+
+    final norm = NormalizedRect(
+      x: (drawBounds.left / size.width).clamp(0.0, 1.0),
+      y: (drawBounds.top / size.height).clamp(0.0, 1.0),
+      w: (drawBounds.width / size.width).clamp(0.0, 1.0),
+      h: (drawBounds.height / size.height).clamp(0.0, 1.0),
+    );
+
+    if (_activeAttachmentPath != null) {
+      final page = _pdfCurrentPages[_activeAttachmentPath!];
+      return InNoteMarkerPosition(normalizedRect: norm, page: page);
+    } else {
+      return InNoteMarkerPosition(normalizedRect: norm);
     }
   }
 
@@ -4179,6 +4208,44 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
+  Future<void> _saveInNoteMarker(
+    String messageId,
+    String conversationId,
+    InNoteMarkerPosition position,
+  ) async {
+    try {
+      if (_activeAttachmentPath != null) {
+        final attachment = await _resolveAttachment(_activeAttachmentPath!);
+        if (attachment == null) return;
+        final existingMarkers = await _noteMarkerService.getMarkersForAttachment(
+          attachment.id,
+        );
+        final marker = InNoteMarker.forAttachment(
+          index: existingMarkers.length + 1,
+          page: position.page ?? 0,
+          normalizedRect: position.normalizedRect,
+          conversationId: conversationId,
+          messageId: messageId,
+        );
+        await _noteMarkerService.saveMarkerForAttachment(attachment.id, marker);
+      } else {
+        final note = widget.notes[_activeNoteIndex];
+        final existingMarkers = await _noteMarkerService.getMarkersForNote(note.id);
+        final marker = InNoteMarker.forNote(
+          index: existingMarkers.length + 1,
+          charStart: 0,
+          charEnd: 0,
+          conversationId: conversationId,
+          messageId: messageId,
+        );
+        await _noteMarkerService.saveMarkerForNote(note.id, marker);
+      }
+      if (mounted) setState(() {});
+    } catch (e) {
+      LoggerService.error('Failed to save in-note marker: $e', error: e);
+    }
+  }
+
   Future<void> _sendMessage() async {
     final trimmed = _messageController.text.trim();
     if (trimmed.isEmpty &&
@@ -4283,6 +4350,17 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         _messages.add(userMessage);
       });
       _scrollToBottom();
+
+      // Save in-note marker if a drawing was confirmed before this send
+      if (_pendingMarkerPosition != null) {
+        final pendingPos = _pendingMarkerPosition!;
+        _pendingMarkerPosition = null;
+        await _saveInNoteMarker(
+          userMessage.id,
+          _conversation!.id,
+          pendingPos,
+        );
+      }
 
       final response = await _generateAiResponse(
         content,
@@ -5700,4 +5778,11 @@ class _AttachmentOutlineItemState extends State<_AttachmentOutlineItem> {
     }
     return widgets;
   }
+}
+
+/// Transient position captured at draw-confirm time, cleared after save.
+class InNoteMarkerPosition {
+  final NormalizedRect normalizedRect;
+  final int? page; // null for text notes
+  const InNoteMarkerPosition({required this.normalizedRect, this.page});
 }
