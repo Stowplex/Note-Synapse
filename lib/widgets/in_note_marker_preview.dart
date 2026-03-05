@@ -206,6 +206,7 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
                 MaterialPageRoute(
                   builder: (_) => ConversationChatScreen(
                     conversationId: widget.marker.conversationId,
+                    initialMessageId: widget.marker.messageId,
                   ),
                 ),
               );
