@@ -3731,16 +3731,16 @@ class DatabaseService {
     );
 
     final messages = <ConversationMessage>[];
-    messages.add(_mapToConversationMessage(firstMsgMaps.first, conversationId));
+    final firstMap = Map<String, dynamic>.from(firstMsgMaps.first);
+    await _populateMessageAttachmentPaths(db, firstMap);
+    messages.add(_mapToConversationMessage(firstMap, conversationId));
 
     // Only add last message if it's different from the first
     if (lastMsgMaps.isNotEmpty) {
-      final lastMsg = _mapToConversationMessage(
-        lastMsgMaps.first,
-        conversationId,
-      );
-      if (lastMsg.id != messages.first.id) {
-        messages.add(lastMsg);
+      final lastMap = Map<String, dynamic>.from(lastMsgMaps.first);
+      if (lastMap['id'] != firstMap['id']) {
+        await _populateMessageAttachmentPaths(db, lastMap);
+        messages.add(_mapToConversationMessage(lastMap, conversationId));
       }
     }
 
@@ -3851,6 +3851,7 @@ class DatabaseService {
         }
       }
 
+      await _populateMessageAttachmentPaths(db, messageMap);
       messages.add(_mapToConversationMessage(messageMap, conversationId));
     }
 
@@ -3938,6 +3939,7 @@ class DatabaseService {
       }
     }
 
+    await _populateMessageAttachmentPaths(db, messageMap);
     return _mapToConversationMessage(messageMap, conversationId);
   }
 
@@ -4221,6 +4223,31 @@ class DatabaseService {
       updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt'] as int),
       isArchived: (map['isArchived'] ?? 0) == 1,
     );
+  }
+
+  Future<void> _populateMessageAttachmentPaths(
+    Database db,
+    Map<String, dynamic> messageMap,
+  ) async {
+    try {
+      final attachmentRecords = await db.query(
+        'conversation_attachments',
+        columns: ['filePath'],
+        where: 'messageId = ?',
+        whereArgs: [messageMap['id']],
+        orderBy: 'createdAt ASC',
+      );
+      if (attachmentRecords.isNotEmpty) {
+        final paths = attachmentRecords
+            .map((r) => r['filePath'] as String)
+            .toList();
+        messageMap['attachmentPaths'] = jsonEncode(paths);
+      }
+    } catch (e) {
+      LoggerService.error(
+        'Failed to get attachments for message ${messageMap['id']}: $e',
+      );
+    }
   }
 
   ConversationMessage _mapToConversationMessage(
@@ -4707,8 +4734,13 @@ class DatabaseService {
         ''', chunk);
 
       for (final map in results) {
+        final messageMap = Map<String, dynamic>.from(map);
+        await _populateMessageAttachmentPaths(db, messageMap);
         messages.add(
-          _mapToConversationMessage(map, map['conversationId'] as String),
+          _mapToConversationMessage(
+            messageMap,
+            messageMap['conversationId'] as String,
+          ),
         );
       }
     }
