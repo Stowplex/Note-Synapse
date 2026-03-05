@@ -2296,8 +2296,10 @@ $historyBuffer
     final idx = _messages.indexWhere((m) => m.id == messageId);
     if (idx < 0 || !_scrollController.hasClients) return;
     const estimatedItemHeight = 120.0;
-    final offset = (idx * estimatedItemHeight)
-        .clamp(0.0, _scrollController.position.maxScrollExtent);
+    final offset = (idx * estimatedItemHeight).clamp(
+      0.0,
+      _scrollController.position.maxScrollExtent,
+    );
     _scrollController.animateTo(
       offset,
       duration: const Duration(milliseconds: 400),
@@ -3325,7 +3327,15 @@ $historyBuffer
         }
       }
     }
-    await FileUtils.openFile(path, context);
+
+    String finalPath = path;
+    if (!path.startsWith('/') &&
+        !path.startsWith('http') &&
+        !path.startsWith('gs://')) {
+      finalPath = await FileUtils.getFullFilePath(path, true);
+    }
+
+    await FileUtils.openFile(finalPath, context);
   }
 
   void _openNoteActionAppsForContent(ConversationMessage message) {

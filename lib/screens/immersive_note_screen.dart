@@ -2161,15 +2161,21 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
               final pageScreenH = pageDocRect.height * scaleY;
               if (pageScreenW > 0 && pageScreenH > 0) {
                 final norm = NormalizedRect(
-                  x: ((drawBounds.left - pageScreenLeft) / pageScreenW)
-                      .clamp(0.0, 1.0),
-                  y: ((drawBounds.top - pageScreenTop) / pageScreenH)
-                      .clamp(0.0, 1.0),
+                  x: ((drawBounds.left - pageScreenLeft) / pageScreenW).clamp(
+                    0.0,
+                    1.0,
+                  ),
+                  y: ((drawBounds.top - pageScreenTop) / pageScreenH).clamp(
+                    0.0,
+                    1.0,
+                  ),
                   w: (drawBounds.width / pageScreenW).clamp(0.0, 1.0),
                   h: (drawBounds.height / pageScreenH).clamp(0.0, 1.0),
                 );
                 return InNoteMarkerPosition(
-                    normalizedRect: norm, page: currentPage);
+                  normalizedRect: norm,
+                  page: currentPage,
+                );
               }
             }
           } catch (_) {
@@ -2177,10 +2183,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           }
         }
         // Fallback: normalize by widget size (used if controller not ready)
-        final renderObject =
-            _noteBoundaryKey.currentContext?.findRenderObject();
-        if (renderObject is! RenderRepaintBoundary ||
-            renderObject.size.isEmpty) return null;
+        final renderObject = _noteBoundaryKey.currentContext
+            ?.findRenderObject();
+        if (renderObject is! RenderRepaintBoundary || renderObject.size.isEmpty)
+          return null;
         final size = renderObject.size;
         return InNoteMarkerPosition(
           normalizedRect: NormalizedRect(
@@ -4296,7 +4302,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   Future<void> _openAttachment(String path, AppLocalizations l10n) async {
     try {
-      await FileUtils.openFile(path, context);
+      String finalPath = path;
+      if (!path.startsWith('/') &&
+          !path.startsWith('http') &&
+          !path.startsWith('gs://')) {
+        finalPath = await FileUtils.getFullFilePath(path, true);
+      }
+      await FileUtils.openFile(finalPath, context);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4371,9 +4383,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       if (_activeAttachmentPath != null) {
         final attachment = await _resolveAttachment(_activeAttachmentPath!);
         if (attachment == null) return;
-        final existingMarkers = await _noteMarkerService.getMarkersForAttachment(
-          attachment.id,
-        );
+        final existingMarkers = await _noteMarkerService
+            .getMarkersForAttachment(attachment.id);
         final marker = InNoteMarker.forAttachment(
           index: existingMarkers.length + 1,
           page: position.page ?? 0,
@@ -4384,7 +4395,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         await _noteMarkerService.saveMarkerForAttachment(attachment.id, marker);
       } else {
         final note = widget.notes[_activeNoteIndex];
-        final existingMarkers = await _noteMarkerService.getMarkersForNote(note.id);
+        final existingMarkers = await _noteMarkerService.getMarkersForNote(
+          note.id,
+        );
         final marker = InNoteMarker.forNote(
           index: existingMarkers.length + 1,
           charStart: 0,
@@ -4516,11 +4529,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       if (_pendingMarkerPosition != null) {
         final pendingPos = _pendingMarkerPosition!;
         _pendingMarkerPosition = null;
-        await _saveInNoteMarker(
-          userMessage.id,
-          _conversation!.id,
-          pendingPos,
-        );
+        await _saveInNoteMarker(userMessage.id, _conversation!.id, pendingPos);
       }
 
       final response = await _generateAiResponse(
