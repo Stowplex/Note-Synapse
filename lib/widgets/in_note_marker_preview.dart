@@ -6,6 +6,7 @@ import '../models/conversation_attachment.dart';
 import '../services/database_service.dart';
 import '../services/service_locator.dart';
 import '../screens/conversation_chat_screen.dart';
+import '../utils/file_utils.dart';
 import 'interactive_checkbox_markdown.dart';
 
 class InNoteMarkerPreview extends StatefulWidget {
@@ -62,16 +63,23 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
     String? imagePath;
     try {
       if (userMessage != null && userMessage.attachmentPaths.isNotEmpty) {
+        String? selectedPath;
         const imageExtensions = {'png', 'jpg', 'jpeg'};
         for (final path in userMessage.attachmentPaths) {
           final ext = path.split('.').last.toLowerCase();
           if (imageExtensions.contains(ext)) {
-            imagePath = path;
+            selectedPath = path;
             break;
           }
         }
         // Fallback: if no attachment matched by extension, try the first one
-        imagePath ??= userMessage.attachmentPaths.first;
+        selectedPath ??= userMessage.attachmentPaths.first;
+
+        if (!selectedPath.startsWith('http') && !selectedPath.startsWith('/')) {
+          imagePath = await FileUtils.getFullFilePath(selectedPath, true);
+        } else {
+          imagePath = selectedPath;
+        }
       }
     } catch (_) {
       // If attachment loading fails, show placeholder.
