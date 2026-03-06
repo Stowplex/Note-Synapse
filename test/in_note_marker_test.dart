@@ -54,5 +54,63 @@ void main() {
       expect(restored.normalizedRect, isNull);
       expect(restored.page, isNull);
     });
+
+    test('forNote preserves normalizedRect when provided', () {
+      final rect = NormalizedRect(x: 0.1, y: 0.2, w: 0.5, h: 0.3);
+      final marker = InNoteMarker.forNote(
+        index: 1,
+        charStart: 0,
+        charEnd: 0,
+        normalizedRect: rect,
+        conversationId: 'c',
+        messageId: 'm',
+      );
+      expect(marker.normalizedRect, isNotNull);
+      expect(marker.normalizedRect!.x, closeTo(0.1, 0.001));
+
+      // Round-trip
+      final restored = InNoteMarker.fromJson(marker.toJson());
+      expect(restored.normalizedRect, isNotNull);
+      expect(restored.normalizedRect!.y, closeTo(0.2, 0.001));
+    });
+  });
+
+  group('MarkerType', () {
+    test('attachment marker defaults to ai type', () {
+      final m = InNoteMarker.forAttachment(
+        index: 1, page: 0,
+        normalizedRect: NormalizedRect(x: 0, y: 0, w: 1, h: 1),
+        conversationId: 'c', messageId: 'm',
+      );
+      expect(m.type, MarkerType.ai);
+    });
+
+    test('note marker defaults to ai type', () {
+      final m = InNoteMarker.forNote(
+        index: 1, charStart: 0, charEnd: 0,
+        conversationId: 'c', messageId: 'm',
+      );
+      expect(m.type, MarkerType.ai);
+    });
+
+    test('annotation type round-trips through JSON', () {
+      final m = InNoteMarker.forAttachment(
+        index: 1, page: 0,
+        normalizedRect: NormalizedRect(x: 0, y: 0, w: 1, h: 1),
+        conversationId: 'c', messageId: 'm',
+        type: MarkerType.annotation,
+      );
+      final restored = InNoteMarker.fromJson(m.toJson());
+      expect(restored.type, MarkerType.annotation);
+    });
+
+    test('JSON without type field defaults to ai (backward compat)', () {
+      final json = {
+        'id': 'x', 'index': 1, 'conversationId': 'c',
+        'messageId': 'm', 'createdAt': '2026-01-01T00:00:00.000Z',
+      };
+      final m = InNoteMarker.fromJson(json);
+      expect(m.type, MarkerType.ai);
+    });
   });
 }

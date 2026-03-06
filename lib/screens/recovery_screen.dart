@@ -686,6 +686,12 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       // Step 15: Insert all conversation note mapping unique by (noteId, conversationId)
       await _mergeConversationNoteMappings(stagingDb, migratedBackupDb);
 
+      _addImportLog('Merging note annotations...');
+      _updateImportProgress(0.92);
+
+      // Step 16: Merge note_annotations (immutable: insert-or-skip by UUID)
+      await _mergeNoteAnnotations(stagingDb, migratedBackupDb);
+
       await migratedBackupDb.close();
       await stagingDb.close();
 
@@ -695,13 +701,13 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       // Force cleanup of staging DB connection before copying
       await stagingDb.close(); // Ensure strictly closed
 
-      // Step 16: Copy staging DB to app's DB directory
+      // Step 17: Copy staging DB to app's DB directory
       await stagingDbFile.copy(currentDbPath);
 
       _addImportLog(l10n.reloadingData);
       _updateImportProgress(1.0);
 
-      // Step 17: Reload data in the app
+      // Step 18: Reload data in the app
       if (mounted) {
         final appProvider = Provider.of<AppProvider>(context, listen: false);
         await appProvider.loadData();
@@ -782,6 +788,40 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         );
         await stagingDb.insert('notes', filteredData);
       }
+    }
+  }
+
+  Future<void> _mergeNoteAnnotations(
+    Database stagingDb,
+    Database backupDb,
+  ) async {
+    // note_annotations may not exist in older backups — skip gracefully
+    final tables = await backupDb.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='note_annotations'",
+    );
+    if (tables.isEmpty) return;
+
+    final backupAnnotations = await backupDb.query('note_annotations');
+
+    for (final ann in backupAnnotations) {
+      final id = ann['id'] as String;
+      final existing = await stagingDb.query(
+        'note_annotations',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+
+      if (existing.isEmpty) {
+        // Not in staging → insert, filtering to known columns for safety
+        final filteredData = await _filterDataForTable(
+          stagingDb,
+          'note_annotations',
+          ann,
+        );
+        await stagingDb.insert('note_annotations', filteredData);
+      }
+      // Same UUID found → skip (immutable record, idempotent)
     }
   }
 

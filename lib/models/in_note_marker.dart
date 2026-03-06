@@ -20,12 +20,15 @@ class NormalizedRect {
   Map<String, dynamic> toJson() => {'x': x, 'y': y, 'w': w, 'h': h};
 }
 
+enum MarkerType { ai, annotation }
+
 class InNoteMarker {
   final String id;
   final int index;
   final String conversationId;
   final String messageId;
   final DateTime createdAt;
+  final MarkerType type;
 
   // PDF/image fields
   final int? page;
@@ -41,6 +44,7 @@ class InNoteMarker {
     required this.conversationId,
     required this.messageId,
     required this.createdAt,
+    this.type = MarkerType.ai,
     this.page,
     this.normalizedRect,
     this.charStart,
@@ -55,6 +59,7 @@ class InNoteMarker {
     required String conversationId,
     required String messageId,
     DateTime? createdAt,
+    MarkerType type = MarkerType.ai,
   }) => InNoteMarker(
     id: id ?? const Uuid().v4(),
     index: index,
@@ -63,6 +68,7 @@ class InNoteMarker {
     conversationId: conversationId,
     messageId: messageId,
     createdAt: createdAt ?? DateTime.now(),
+    type: type,
   );
 
   factory InNoteMarker.forNote({
@@ -70,27 +76,33 @@ class InNoteMarker {
     required int index,
     required int charStart,
     required int charEnd,
+    NormalizedRect? normalizedRect,
     required String conversationId,
     required String messageId,
     DateTime? createdAt,
+    MarkerType type = MarkerType.ai,
   }) => InNoteMarker(
     id: id ?? const Uuid().v4(),
     index: index,
     charStart: charStart,
     charEnd: charEnd,
+    normalizedRect: normalizedRect,
     conversationId: conversationId,
     messageId: messageId,
     createdAt: createdAt ?? DateTime.now(),
+    type: type,
   );
 
   factory InNoteMarker.fromJson(Map<String, dynamic> json) {
     final rectJson = json['normalizedRect'] as Map<String, dynamic>?;
+    final typeStr = json['type'] as String?;
     return InNoteMarker(
       id: json['id'] as String,
       index: json['index'] as int,
       conversationId: json['conversationId'] as String,
       messageId: json['messageId'] as String,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      type: typeStr == 'annotation' ? MarkerType.annotation : MarkerType.ai,
       page: json['page'] as int?,
       normalizedRect:
           rectJson != null ? NormalizedRect.fromJson(rectJson) : null,
@@ -105,6 +117,7 @@ class InNoteMarker {
     'conversationId': conversationId,
     'messageId': messageId,
     'createdAt': createdAt.toIso8601String(),
+    if (type == MarkerType.annotation) 'type': 'annotation',
     if (page != null) 'page': page,
     if (normalizedRect != null) 'normalizedRect': normalizedRect!.toJson(),
     if (charStart != null) 'charStart': charStart,

@@ -66,9 +66,12 @@ import 'settings_screen.dart';
 import '../widgets/model_selector_button.dart';
 import '../services/built_in_tools_service.dart';
 import '../models/in_note_marker.dart';
+import '../models/note_annotation.dart';
 import '../services/note_marker_service.dart';
+import '../services/note_annotation_service.dart';
 import '../widgets/in_note_marker_badge.dart';
 import '../widgets/in_note_marker_preview.dart';
+import '../widgets/in_note_annotation_preview.dart';
 
 enum DrawingTool { pen, rectangle }
 
@@ -129,6 +132,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final Map<String, List<InNoteMarker>> _attachmentMarkers = {};
   final Map<String, List<InNoteMarker>> _noteMarkers = {};
   late final NoteMarkerService _noteMarkerService = getIt<NoteMarkerService>();
+  late final NoteAnnotationService _noteAnnotationService = getIt<NoteAnnotationService>();
   final Map<String, Future<_AttachmentSource?>> _attachmentSourceFutures = {};
   final Map<String, int> _pdfCurrentPages = {};
   final Map<String, int> _pdfTotalPages = {};
@@ -2944,6 +2948,54 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     );
   }
 
+  Future<void> _showRecallDialog() async {
+    List<NoteAnnotation> annotations;
+    if (_activeAttachmentPath != null) {
+      final attachment = await _resolveAttachment(_activeAttachmentPath!);
+      if (attachment == null) return;
+      annotations = await _noteAnnotationService
+          .getAnnotationsForAttachment(attachment.id);
+    } else {
+      final note = widget.notes[_activeNoteIndex];
+      annotations = await _noteAnnotationService.getAnnotationsForNote(note.id);
+    }
+
+    if (!mounted) return;
+
+    if (annotations.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No past annotations for this note.')),
+      );
+      return;
+    }
+
+    final selected = await showDialog<List<String>>(
+      context: context,
+      builder: (ctx) => _RecallAnnotationsDialog(
+        annotations: annotations,
+        scratchpadIds: _scratchpadItems.map((m) => m.id).toSet(),
+      ),
+    );
+
+    if (selected == null || selected.isEmpty || !mounted) return;
+
+    setState(() {
+      for (final annotation in annotations) {
+        if (selected.contains(annotation.id) &&
+            !_scratchpadItems.any((m) => m.id == annotation.id)) {
+          _scratchpadItems.add(ConversationMessage(
+            id: annotation.id,
+            conversationId: 'scratchpad',
+            content: annotation.content,
+            type: MessageType.user,
+            timestamp: annotation.createdAt,
+            attachmentPaths: annotation.attachmentPaths,
+          ));
+        }
+      }
+    });
+  }
+
   Widget _buildScratchpadActions(AppLocalizations l10n) {
     return Row(
       children: [
@@ -2963,6 +3015,17 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           ),
         ),
         const SizedBox(width: 8),
+        IconButton(
+          onPressed: _showRecallDialog,
+          icon: const Icon(Icons.history, size: 20),
+          tooltip: 'Recall annotations',
+          padding: const EdgeInsets.all(4),
+          constraints: const BoxConstraints(),
+          style: IconButton.styleFrom(
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+        const SizedBox(width: 4),
         // Include in chat toggle
         Tooltip(
           message: 'Include scratchpad in chat context', // TODO: l10n
@@ -3492,15 +3555,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 top: rect.y * constraints.maxHeight,
                 child: InNoteMarkerBadge(
                   index: marker.index,
-                  onTap: () async {
-                    final deleted = await showInNoteMarkerPreview(
-                      context,
-                      marker,
-                    );
-                    if (deleted == true) {
-                      _deleteMarker(marker);
-                    }
-                  },
+                  color: marker.type == MarkerType.annotation
+                      ? Colors.pink[200]!
+                      : Colors.blue,
+                  onTap: () => _handleMarkerTap(marker),
                 ),
               );
             }),
@@ -3673,15 +3731,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       top: rect.y * constraints.maxHeight,
                       child: InNoteMarkerBadge(
                         index: marker.index,
-                        onTap: () async {
-                          final deleted = await showInNoteMarkerPreview(
-                            context,
-                            marker,
-                          );
-                          if (deleted == true) {
-                            _deleteMarker(marker);
-                          }
-                        },
+                        color: marker.type == MarkerType.annotation
+                            ? Colors.pink[200]!
+                            : Colors.blue,
+                        onTap: () => _handleMarkerTap(marker),
                       ),
                     );
                   }),
@@ -3712,15 +3765,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 controllerMap: _pdfViewerControllers,
                 onError: (message) => LoggerService.error(message),
                 markers: _attachmentMarkers[_activeAttachmentPath] ?? [],
-                onMarkerTap: (marker) async {
-                  final deleted = await showInNoteMarkerPreview(
-                    context,
-                    marker,
-                  );
-                  if (deleted == true) {
-                    _deleteMarker(marker);
-                  }
-                },
+                onMarkerTap: (marker) => _handleMarkerTap(marker),
                 onDocumentReady: (cacheKey, document, outline) {
                   _pdfDocuments[cacheKey] = document;
                   if (outline != null && outline.isNotEmpty) {
@@ -4386,6 +4431,75 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
+  Future<void> _handleMarkerTap(InNoteMarker marker) async {
+    if (marker.type == MarkerType.annotation) {
+      final annotation = await _noteAnnotationService.getAnnotation(marker.id);
+      if (annotation == null || !mounted) return;
+      final isInScratchpad = _scratchpadItems.any((m) => m.id == marker.id);
+      final result = await showAnnotationPreview(
+        context,
+        annotation,
+        isInScratchpad: isInScratchpad,
+      );
+      if (!mounted) return;
+      if (result == AnnotationPreviewResult.addToScratchpad) {
+        setState(() {
+          _scratchpadItems.add(ConversationMessage(
+            id: annotation.id,
+            conversationId: 'scratchpad',
+            content: annotation.content,
+            type: MessageType.user,
+            timestamp: annotation.createdAt,
+            attachmentPaths: annotation.attachmentPaths,
+          ));
+        });
+      } else if (result == AnnotationPreviewResult.removed) {
+        await _deleteAnnotationMarker(marker);
+      }
+    } else {
+      final deleted = await showInNoteMarkerPreview(context, marker);
+      if (deleted == true) {
+        _deleteMarker(marker);
+      }
+    }
+  }
+
+  Future<void> _deleteAnnotationMarker(InNoteMarker marker) async {
+    try {
+      if (_activeAttachmentPath != null) {
+        final attachment = await _resolveAttachment(_activeAttachmentPath!);
+        if (attachment != null) {
+          await _noteMarkerService.deleteMarkerForAttachment(
+            attachment.id,
+            marker.id,
+          );
+        }
+      } else {
+        final note = widget.notes[_activeNoteIndex];
+        await _noteMarkerService.deleteMarkerForNote(note.id, marker.id);
+      }
+      await _noteAnnotationService.deleteAnnotation(marker.id);
+
+      if (mounted) {
+        setState(() {
+          _scratchpadItems.removeWhere((m) => m.id == marker.id);
+          if (_activeAttachmentPath != null) {
+            _attachmentMarkers[_activeAttachmentPath!]
+                ?.removeWhere((m) => m.id == marker.id);
+          } else {
+            final note = widget.notes[_activeNoteIndex];
+            _noteMarkers[note.id]?.removeWhere((m) => m.id == marker.id);
+          }
+        });
+      }
+    } catch (e) {
+      LoggerService.error(
+        'Failed to delete annotation marker: $e',
+        error: e,
+      );
+    }
+  }
+
   Future<void> _handleMarkdownLinkTap(String url, AppLocalizations l10n) async {
     final uri = Uri.tryParse(url);
     if (uri == null) {
@@ -4471,6 +4585,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           index: existingMarkers.length + 1,
           charStart: 0,
           charEnd: 0,
+          normalizedRect: position.normalizedRect,
           conversationId: conversationId,
           messageId: messageId,
         );
@@ -4486,6 +4601,75 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
     } catch (e) {
       LoggerService.error('Failed to save in-note marker: $e', error: e);
+    }
+  }
+
+  Future<void> _saveAnnotationMarker(
+    String markerId,
+    String content,
+    List<String> attachmentPaths,
+    InNoteMarkerPosition position,
+  ) async {
+    try {
+      if (_activeAttachmentPath != null) {
+        final attachment = await _resolveAttachment(_activeAttachmentPath!);
+        if (attachment == null) return;
+        final existingMarkers = await _noteMarkerService
+            .getMarkersForAttachment(attachment.id);
+        final marker = InNoteMarker.forAttachment(
+          id: markerId,
+          index: existingMarkers.length + 1,
+          page: position.page ?? 0,
+          normalizedRect: position.normalizedRect,
+          // Annotation markers are not linked to a conversation; the shared
+          // markerId UUID links to NoteAnnotation instead.
+          conversationId: '',
+          messageId: '',
+          type: MarkerType.annotation,
+        );
+        await _noteMarkerService.saveMarkerForAttachment(attachment.id, marker);
+        await _noteAnnotationService.saveAnnotation(NoteAnnotation(
+          id: markerId,
+          attachmentId: attachment.id,
+          content: content,
+          attachmentPaths: attachmentPaths,
+          createdAt: DateTime.now(),
+        ));
+      } else {
+        final note = widget.notes[_activeNoteIndex];
+        final existingMarkers = await _noteMarkerService.getMarkersForNote(
+          note.id,
+        );
+        final marker = InNoteMarker.forNote(
+          id: markerId,
+          index: existingMarkers.length + 1,
+          charStart: 0,
+          charEnd: 0,
+          normalizedRect: position.normalizedRect,
+          // Annotation markers are not linked to a conversation; the shared
+          // markerId UUID links to NoteAnnotation instead.
+          conversationId: '',
+          messageId: '',
+          type: MarkerType.annotation,
+        );
+        await _noteMarkerService.saveMarkerForNote(note.id, marker);
+        await _noteAnnotationService.saveAnnotation(NoteAnnotation(
+          id: markerId,
+          noteId: note.id,
+          content: content,
+          attachmentPaths: attachmentPaths,
+          createdAt: DateTime.now(),
+        ));
+      }
+      if (mounted) {
+        if (_activeAttachmentPath != null) {
+          _loadMarkersForAttachment(_activeAttachmentPath!);
+        } else {
+          _loadMarkersForNote(widget.notes[_activeNoteIndex].id);
+        }
+      }
+    } catch (e) {
+      LoggerService.error('Failed to save annotation marker: $e', error: e);
     }
   }
 
@@ -4533,10 +4717,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     try {
       if (_isScratchpadMode) {
-        // Add to scratchpad
+        final pendingPos = _pendingMarkerPosition;
+        _pendingMarkerPosition = null;
+
+        final markerId = const Uuid().v4();
+
         final message = ConversationMessage(
-          id: const Uuid().v4(), // Need uuid package or generate random string
-          conversationId: _conversation?.id ?? 'scratchpad',
+          id: markerId,
+          conversationId: 'scratchpad',
           content: content,
           type: MessageType.user,
           timestamp: DateTime.now(),
@@ -4548,13 +4736,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _isSending = false;
         });
 
-        // Scroll to bottom of scratchpad?
-        // We might need a separate scroll controller for scratchpad or reuse _chatScrollController if it's swapped.
-        // Since we swap the view, we can reuse _chatScrollController or just let it be.
-        // But _chatScrollController is attached to the ListView in _buildConversationList AND _buildScratchpadList?
-        // Yes, if we reuse it, we should be careful.
-        // Let's check _buildScratchpadList. I didn't assign a controller there.
-        // I should assign _chatScrollController to _buildScratchpadList's ListView as well.
+        if (pendingPos != null) {
+          await _saveAnnotationMarker(
+            markerId,
+            content,
+            attachments.map((f) => f.path!).toList(),
+            pendingPos,
+          );
+        }
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_chatScrollController.hasClients) {
@@ -5670,6 +5859,9 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
                 top: rect.y * pageRectInViewer.height,
                 child: InNoteMarkerBadge(
                   index: marker.index,
+                  color: marker.type == MarkerType.annotation
+                      ? Colors.pink[200]!
+                      : Colors.blue,
                   onTap: () => widget.onMarkerTap(marker),
                 ),
               );
@@ -6055,4 +6247,88 @@ class InNoteMarkerPosition {
   final NormalizedRect normalizedRect;
   final int? page; // null for text notes
   const InNoteMarkerPosition({required this.normalizedRect, this.page});
+}
+
+class _RecallAnnotationsDialog extends StatefulWidget {
+  final List<NoteAnnotation> annotations;
+  final Set<String> scratchpadIds;
+
+  const _RecallAnnotationsDialog({
+    required this.annotations,
+    required this.scratchpadIds,
+  });
+
+  @override
+  State<_RecallAnnotationsDialog> createState() =>
+      _RecallAnnotationsDialogState();
+}
+
+class _RecallAnnotationsDialogState
+    extends State<_RecallAnnotationsDialog> {
+  final Set<String> _selected = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Recall Annotations'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: widget.annotations.length,
+          itemBuilder: (context, index) {
+            final ann = widget.annotations[index];
+            final alreadyIn = widget.scratchpadIds.contains(ann.id);
+            return CheckboxListTile(
+              enabled: !alreadyIn,
+              value: alreadyIn ? true : _selected.contains(ann.id),
+              onChanged: alreadyIn
+                  ? null
+                  : (checked) {
+                      setState(() {
+                        if (checked == true) {
+                          _selected.add(ann.id);
+                        } else {
+                          _selected.remove(ann.id);
+                        }
+                      });
+                    },
+              title: Text(
+                ann.content,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: alreadyIn ? theme.disabledColor : null,
+                ),
+              ),
+              subtitle: Text(
+                alreadyIn ? 'Already in scratchpad' : _formatDate(ann.createdAt),
+                style: theme.textTheme.labelSmall,
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _selected.isEmpty
+              ? null
+              : () => Navigator.of(context).pop(_selected.toList()),
+          child: const Text('Add'),
+        ),
+      ],
+    );
+  }
+
+  String _formatDate(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inDays > 0) return '${diff.inDays}d ago';
+    if (diff.inHours > 0) return '${diff.inHours}h ago';
+    return '${diff.inMinutes}m ago';
+  }
 }
