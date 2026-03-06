@@ -66,7 +66,9 @@ import 'settings_screen.dart';
 import '../widgets/model_selector_button.dart';
 import '../services/built_in_tools_service.dart';
 import '../models/in_note_marker.dart';
+import '../models/note_annotation.dart';
 import '../services/note_marker_service.dart';
+import '../services/note_annotation_service.dart';
 import '../widgets/in_note_marker_badge.dart';
 import '../widgets/in_note_marker_preview.dart';
 
@@ -129,6 +131,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final Map<String, List<InNoteMarker>> _attachmentMarkers = {};
   final Map<String, List<InNoteMarker>> _noteMarkers = {};
   late final NoteMarkerService _noteMarkerService = getIt<NoteMarkerService>();
+  late final NoteAnnotationService _noteAnnotationService = getIt<NoteAnnotationService>();
   final Map<String, Future<_AttachmentSource?>> _attachmentSourceFutures = {};
   final Map<String, int> _pdfCurrentPages = {};
   final Map<String, int> _pdfTotalPages = {};
@@ -4490,6 +4493,71 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
+  Future<void> _saveAnnotationMarker(
+    String markerId,
+    String content,
+    List<String> attachmentPaths,
+    InNoteMarkerPosition position,
+  ) async {
+    try {
+      if (_activeAttachmentPath != null) {
+        final attachment = await _resolveAttachment(_activeAttachmentPath!);
+        if (attachment == null) return;
+        final existingMarkers = await _noteMarkerService
+            .getMarkersForAttachment(attachment.id);
+        final marker = InNoteMarker.forAttachment(
+          id: markerId,
+          index: existingMarkers.length + 1,
+          page: position.page ?? 0,
+          normalizedRect: position.normalizedRect,
+          conversationId: '',
+          messageId: '',
+          type: MarkerType.annotation,
+        );
+        await _noteMarkerService.saveMarkerForAttachment(attachment.id, marker);
+        await _noteAnnotationService.saveAnnotation(NoteAnnotation(
+          id: markerId,
+          attachmentId: attachment.id,
+          content: content,
+          attachmentPaths: attachmentPaths,
+          createdAt: DateTime.now(),
+        ));
+      } else {
+        final note = widget.notes[_activeNoteIndex];
+        final existingMarkers = await _noteMarkerService.getMarkersForNote(
+          note.id,
+        );
+        final marker = InNoteMarker.forNote(
+          id: markerId,
+          index: existingMarkers.length + 1,
+          charStart: 0,
+          charEnd: 0,
+          normalizedRect: position.normalizedRect,
+          conversationId: '',
+          messageId: '',
+          type: MarkerType.annotation,
+        );
+        await _noteMarkerService.saveMarkerForNote(note.id, marker);
+        await _noteAnnotationService.saveAnnotation(NoteAnnotation(
+          id: markerId,
+          noteId: note.id,
+          content: content,
+          attachmentPaths: attachmentPaths,
+          createdAt: DateTime.now(),
+        ));
+      }
+      if (mounted) {
+        if (_activeAttachmentPath != null) {
+          _loadMarkersForAttachment(_activeAttachmentPath!);
+        } else {
+          _loadMarkersForNote(widget.notes[_activeNoteIndex].id);
+        }
+      }
+    } catch (e) {
+      LoggerService.error('Failed to save annotation marker: $e', error: e);
+    }
+  }
+
   Future<void> _sendMessage() async {
     final trimmed = _messageController.text.trim();
     if (trimmed.isEmpty &&
@@ -4534,10 +4602,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     try {
       if (_isScratchpadMode) {
-        // Add to scratchpad
+        final pendingPos = _pendingMarkerPosition;
+        _pendingMarkerPosition = null;
+
+        final markerId = const Uuid().v4();
+
         final message = ConversationMessage(
-          id: const Uuid().v4(), // Need uuid package or generate random string
-          conversationId: _conversation?.id ?? 'scratchpad',
+          id: markerId,
+          conversationId: 'scratchpad',
           content: content,
           type: MessageType.user,
           timestamp: DateTime.now(),
@@ -4549,13 +4621,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _isSending = false;
         });
 
-        // Scroll to bottom of scratchpad?
-        // We might need a separate scroll controller for scratchpad or reuse _chatScrollController if it's swapped.
-        // Since we swap the view, we can reuse _chatScrollController or just let it be.
-        // But _chatScrollController is attached to the ListView in _buildConversationList AND _buildScratchpadList?
-        // Yes, if we reuse it, we should be careful.
-        // Let's check _buildScratchpadList. I didn't assign a controller there.
-        // I should assign _chatScrollController to _buildScratchpadList's ListView as well.
+        if (pendingPos != null) {
+          await _saveAnnotationMarker(
+            markerId,
+            content,
+            attachments.map((f) => f.path!).toList(),
+            pendingPos,
+          );
+        }
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_chatScrollController.hasClients) {
