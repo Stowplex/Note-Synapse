@@ -1422,6 +1422,25 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     final backupAttachments = await backupDb.query('conversation_attachments');
 
     for (final attachment in backupAttachments) {
+      final filePath = attachment['filePath'] as String;
+
+      String finalFilePath = filePath;
+      if (filePath.startsWith('/')) {
+        if (filePath.contains('/attachments/')) {
+          final parts = filePath.split('/attachments/');
+          if (parts.length > 1) {
+            finalFilePath = 'attachments/${parts[1]}';
+          } else {
+            final fileName = attachment['fileName'] as String;
+            finalFilePath = 'attachments/$fileName';
+          }
+        } else {
+          final fileName = attachment['fileName'] as String;
+          final messageId = attachment['messageId'] as String;
+          finalFilePath = 'attachments/${messageId}_$fileName';
+        }
+      }
+
       // Check if attachment exists in staging by id
       final existingAttachments = await stagingDb.query(
         'conversation_attachments',
@@ -1430,11 +1449,15 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       );
 
       if (existingAttachments.isEmpty) {
+        final newAttachment = Map<String, dynamic>.from(attachment);
+        newAttachment['filePath'] = finalFilePath;
+        newAttachment['isRelativePath'] = 1;
+
         // Insert new attachment - filter to only existing columns
         final filteredData = await _filterDataForTable(
           stagingDb,
           'conversation_attachments',
-          attachment,
+          newAttachment,
         );
         await stagingDb.insert('conversation_attachments', filteredData);
       }
