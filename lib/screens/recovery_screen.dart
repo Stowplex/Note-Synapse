@@ -690,13 +690,13 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       // Force cleanup of staging DB connection before copying
       await stagingDb.close(); // Ensure strictly closed
 
-      // Step 16: Copy staging DB to app's DB directory
+      // Step 17: Copy staging DB to app's DB directory
       await stagingDbFile.copy(currentDbPath);
 
       _addImportLog(l10n.reloadingData);
       _updateImportProgress(1.0);
 
-      // Step 17: Reload data in the app
+      // Step 18: Reload data in the app
       if (mounted) {
         final appProvider = Provider.of<AppProvider>(context, listen: false);
         await appProvider.loadData();
