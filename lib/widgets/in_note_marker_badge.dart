@@ -3,8 +3,14 @@ import 'package:flutter/material.dart';
 class InNoteMarkerBadge extends StatefulWidget {
   final int index;
   final VoidCallback onTap;
+  final Color color;
 
-  const InNoteMarkerBadge({super.key, required this.index, required this.onTap});
+  const InNoteMarkerBadge({
+    super.key,
+    required this.index,
+    required this.onTap,
+    this.color = Colors.blue,
+  });
 
   @override
   State<InNoteMarkerBadge> createState() => _InNoteMarkerBadgeState();
@@ -30,7 +36,7 @@ class _InNoteMarkerBadgeState extends State<InNoteMarkerBadge> {
           width: 22,
           height: 22,
           decoration: BoxDecoration(
-            color: Colors.blue,
+            color: widget.color,
             shape: BoxShape.circle,
             boxShadow: const [
               BoxShadow(
