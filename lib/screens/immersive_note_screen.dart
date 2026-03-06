@@ -2948,6 +2948,54 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     );
   }
 
+  Future<void> _showRecallDialog() async {
+    List<NoteAnnotation> annotations;
+    if (_activeAttachmentPath != null) {
+      final attachment = await _resolveAttachment(_activeAttachmentPath!);
+      if (attachment == null) return;
+      annotations = await _noteAnnotationService
+          .getAnnotationsForAttachment(attachment.id);
+    } else {
+      final note = widget.notes[_activeNoteIndex];
+      annotations = await _noteAnnotationService.getAnnotationsForNote(note.id);
+    }
+
+    if (!mounted) return;
+
+    if (annotations.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No past annotations for this note.')),
+      );
+      return;
+    }
+
+    final selected = await showDialog<List<String>>(
+      context: context,
+      builder: (ctx) => _RecallAnnotationsDialog(
+        annotations: annotations,
+        scratchpadIds: _scratchpadItems.map((m) => m.id).toSet(),
+      ),
+    );
+
+    if (selected == null || selected.isEmpty || !mounted) return;
+
+    setState(() {
+      for (final annotation in annotations) {
+        if (selected.contains(annotation.id) &&
+            !_scratchpadItems.any((m) => m.id == annotation.id)) {
+          _scratchpadItems.add(ConversationMessage(
+            id: annotation.id,
+            conversationId: 'scratchpad',
+            content: annotation.content,
+            type: MessageType.user,
+            timestamp: annotation.createdAt,
+            attachmentPaths: annotation.attachmentPaths,
+          ));
+        }
+      }
+    });
+  }
+
   Widget _buildScratchpadActions(AppLocalizations l10n) {
     return Row(
       children: [
@@ -2967,6 +3015,17 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           ),
         ),
         const SizedBox(width: 8),
+        IconButton(
+          onPressed: _showRecallDialog,
+          icon: const Icon(Icons.history, size: 20),
+          tooltip: 'Recall annotations',
+          padding: const EdgeInsets.all(4),
+          constraints: const BoxConstraints(),
+          style: IconButton.styleFrom(
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+        const SizedBox(width: 4),
         // Include in chat toggle
         Tooltip(
           message: 'Include scratchpad in chat context', // TODO: l10n
@@ -6184,4 +6243,88 @@ class InNoteMarkerPosition {
   final NormalizedRect normalizedRect;
   final int? page; // null for text notes
   const InNoteMarkerPosition({required this.normalizedRect, this.page});
+}
+
+class _RecallAnnotationsDialog extends StatefulWidget {
+  final List<NoteAnnotation> annotations;
+  final Set<String> scratchpadIds;
+
+  const _RecallAnnotationsDialog({
+    required this.annotations,
+    required this.scratchpadIds,
+  });
+
+  @override
+  State<_RecallAnnotationsDialog> createState() =>
+      _RecallAnnotationsDialogState();
+}
+
+class _RecallAnnotationsDialogState
+    extends State<_RecallAnnotationsDialog> {
+  final Set<String> _selected = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Recall Annotations'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: widget.annotations.length,
+          itemBuilder: (context, index) {
+            final ann = widget.annotations[index];
+            final alreadyIn = widget.scratchpadIds.contains(ann.id);
+            return CheckboxListTile(
+              enabled: !alreadyIn,
+              value: alreadyIn ? true : _selected.contains(ann.id),
+              onChanged: alreadyIn
+                  ? null
+                  : (checked) {
+                      setState(() {
+                        if (checked == true) {
+                          _selected.add(ann.id);
+                        } else {
+                          _selected.remove(ann.id);
+                        }
+                      });
+                    },
+              title: Text(
+                ann.content,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: alreadyIn ? theme.disabledColor : null,
+                ),
+              ),
+              subtitle: Text(
+                alreadyIn ? 'Already in scratchpad' : _formatDate(ann.createdAt),
+                style: theme.textTheme.labelSmall,
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _selected.isEmpty
+              ? null
+              : () => Navigator.of(context).pop(_selected.toList()),
+          child: const Text('Add'),
+        ),
+      ],
+    );
+  }
+
+  String _formatDate(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inDays > 0) return '${diff.inDays}d ago';
+    if (diff.inHours > 0) return '${diff.inHours}h ago';
+    return '${diff.inMinutes}m ago';
+  }
 }
