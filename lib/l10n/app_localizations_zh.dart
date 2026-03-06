@@ -4278,6 +4278,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncInitSuccess => '同步初始化成功！';
 
   @override
+  String get syncJoinSuccess => '已重新连接到现有同步数据！';
+
+  @override
+  String get syncExistingRootFound => '在此位置发现了现有同步数据，将重新连接而不是覆盖。';
+
+  @override
   String syncInitFailed(Object error) {
     return '同步初始化失败：$error';
   }

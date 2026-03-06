@@ -1737,6 +1737,8 @@
   "syncInitialize": "初始化同步",
   "syncInitializing": "正在初始化...",
   "syncInitSuccess": "同步初始化成功！",
+  "syncJoinSuccess": "已重新连接到现有同步数据！",
+  "syncExistingRootFound": "在此位置发现了现有同步数据，将重新连接而不是覆盖。",
   "syncInitFailed": "同步初始化失败：{error}",
   "syncSettingsTitle": "同步设置",
   "syncSettingsSubtitle": "设置或管理跨设备云同步",

@@ -4476,6 +4476,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncInitSuccess => 'Sync initialized successfully!';
 
   @override
+  String get syncJoinSuccess => 'Reconnected to existing sync data!';
+
+  @override
+  String get syncExistingRootFound =>
+      'Existing sync data found at this location. Reconnecting instead of overwriting.';
+
+  @override
   String syncInitFailed(Object error) {
     return 'Sync initialization failed: $error';
   }

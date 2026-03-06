@@ -155,15 +155,30 @@ class _SyncSetupScreenState extends State<SyncSetupScreen> {
       await identity.setSyncProviderUri(providerUri);
 
       final syncService = getIt<SyncService>();
-      await syncService.initializeSyncRoot(
-        provider: provider,
-        passphrase: _skipEncryption ? null : _passphraseController.text,
-      );
+      final rootExists = await syncService.syncRootExists(provider);
+      final passphrase = _skipEncryption ? null : _passphraseController.text;
+
+      if (rootExists) {
+        await syncService.joinSyncRoot(
+          provider: provider,
+          passphrase: passphrase,
+        );
+      } else {
+        await syncService.initializeSyncRoot(
+          provider: provider,
+          passphrase: passphrase,
+        );
+      }
+
+      if (!mounted) return;
+      final successMessage = rootExists
+          ? AppLocalizations.of(context)!.syncJoinSuccess
+          : AppLocalizations.of(context)!.syncInitSuccess;
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!.syncInitSuccess),
+            content: Text(successMessage),
             backgroundColor: Colors.green,
           ),
         );

@@ -7802,6 +7802,18 @@ abstract class AppLocalizations {
   /// **'Sync initialized successfully!'**
   String get syncInitSuccess;
 
+  /// No description provided for @syncJoinSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnected to existing sync data!'**
+  String get syncJoinSuccess;
+
+  /// No description provided for @syncExistingRootFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Existing sync data found at this location. Reconnecting instead of overwriting.'**
+  String get syncExistingRootFound;
+
   /// No description provided for @syncInitFailed.
   ///
   /// In en, this message translates to:

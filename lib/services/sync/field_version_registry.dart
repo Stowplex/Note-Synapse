@@ -70,6 +70,7 @@ const Map<String, Map<String, int>> fieldVersionRegistry = {
     'pinned': 1,
     'isArchived': 1,
     'recurrenceRule': 30,
+    'metadata': 42,
   },
   'subnotes': {
     'id': 1,

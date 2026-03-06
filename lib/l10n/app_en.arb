@@ -1799,6 +1799,8 @@
   "syncInitialize": "Initialize Sync",
   "syncInitializing": "Initializing...",
   "syncInitSuccess": "Sync initialized successfully!",
+  "syncJoinSuccess": "Reconnected to existing sync data!",
+  "syncExistingRootFound": "Existing sync data found at this location. Reconnecting instead of overwriting.",
   "syncInitFailed": "Sync initialization failed: {error}",
   "syncSettingsTitle": "Sync Settings",
   "syncSettingsSubtitle": "Set up or manage cloud sync across devices",
