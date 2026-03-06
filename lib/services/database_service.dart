@@ -2704,7 +2704,8 @@ class DatabaseService {
 
   // Get database path
   Future<String> getDatabasePath() async {
-    return p.join(await getDatabasesPath(), 'note_synapse.db');
+    final dbName = _databaseNameOverride ?? 'note_synapse.db';
+    return p.join(await getDatabasesPath(), dbName);
   }
 
   // Force database checkpoint
