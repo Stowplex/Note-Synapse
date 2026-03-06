@@ -25,6 +25,7 @@ import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
 import '../utils/global_keys.dart';
 import '../screens/recovery_screen.dart';
+import '../models/note_annotation.dart';
 
 class MigrationStep {
   final String description;
@@ -46,7 +47,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 43; // Target schema version
+  static const int DATABASE_VERSION = 44; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -97,6 +98,17 @@ class DatabaseService {
         tagId TEXT PRIMARY KEY,
         imagePath TEXT NOT NULL,
         FOREIGN KEY (tagId) REFERENCES tags(id) ON DELETE CASCADE
+      )
+  ''';
+
+  static const String _createNoteAnnotationsTable = '''
+      CREATE TABLE IF NOT EXISTS note_annotations (
+        id              TEXT PRIMARY KEY,
+        note_id         TEXT,
+        attachment_id   TEXT,
+        content         TEXT NOT NULL,
+        attachment_paths TEXT,
+        created_at      TEXT NOT NULL
       )
   ''';
 
@@ -581,6 +593,7 @@ class DatabaseService {
     await db.execute(_createConversationNoteMappingTable);
     await db.execute(_createConversationTagsTable);
     await db.execute(_createMultiFunctionAppsTable);
+    await db.execute(_createNoteAnnotationsTable);
 
     // Create AI-related tables (missing in previous versions' onCreate)
     await db.execute(_createTagAiConfigsTable);
@@ -839,6 +852,10 @@ class DatabaseService {
           'Convert absolute paths to relative in conversation_attachments',
       execute: _migrateToVersion43,
     ),
+    44: MigrationStep(
+      description: 'Create note_annotations table for scratchpad annotations',
+      execute: _migrateToVersion44,
+    ),
   };
 
   static Future<void> _migrateToVersion43(
@@ -907,6 +924,13 @@ class DatabaseService {
     LoggerService.info(
       'Migrated $migratedCount absolute paths in conversation_attachments',
     );
+  }
+
+  static Future<void> _migrateToVersion44(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    await db.execute(_createNoteAnnotationsTable);
   }
 
   static Future<void> _migrateToVersion28(
@@ -2001,6 +2025,60 @@ class DatabaseService {
     if (raw == null) return null;
     return jsonDecode(raw) as Map<String, dynamic>;
   }
+
+  // ── NoteAnnotation CRUD ─────────────────────────────────────────────────
+
+  Future<void> saveNoteAnnotation(NoteAnnotation annotation) async {
+    final db = await database;
+    await db.insert(
+      'note_annotations',
+      annotation.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<NoteAnnotation?> getNoteAnnotation(String id) async {
+    final db = await database;
+    final rows = await db.query(
+      'note_annotations',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return NoteAnnotation.fromMap(rows.first);
+  }
+
+  Future<List<NoteAnnotation>> getNoteAnnotationsForNote(String noteId) async {
+    final db = await database;
+    final rows = await db.query(
+      'note_annotations',
+      where: 'note_id = ?',
+      whereArgs: [noteId],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(NoteAnnotation.fromMap).toList();
+  }
+
+  Future<List<NoteAnnotation>> getNoteAnnotationsForAttachment(
+    String attachmentId,
+  ) async {
+    final db = await database;
+    final rows = await db.query(
+      'note_annotations',
+      where: 'attachment_id = ?',
+      whereArgs: [attachmentId],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(NoteAnnotation.fromMap).toList();
+  }
+
+  Future<void> deleteNoteAnnotation(String id) async {
+    final db = await database;
+    await db.delete('note_annotations', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
 
   /// Updates just the lastViewedPage in attachment metadata
   /// Preserves other metadata fields
