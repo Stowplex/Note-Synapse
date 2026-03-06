@@ -71,6 +71,7 @@ import '../services/note_marker_service.dart';
 import '../services/note_annotation_service.dart';
 import '../widgets/in_note_marker_badge.dart';
 import '../widgets/in_note_marker_preview.dart';
+import '../widgets/in_note_annotation_preview.dart';
 
 enum DrawingTool { pen, rectangle }
 
@@ -3495,15 +3496,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 top: rect.y * constraints.maxHeight,
                 child: InNoteMarkerBadge(
                   index: marker.index,
-                  onTap: () async {
-                    final deleted = await showInNoteMarkerPreview(
-                      context,
-                      marker,
-                    );
-                    if (deleted == true) {
-                      _deleteMarker(marker);
-                    }
-                  },
+                  color: marker.type == MarkerType.annotation
+                      ? Colors.pink[200]!
+                      : Colors.blue,
+                  onTap: () => _handleMarkerTap(marker),
                 ),
               );
             }),
@@ -3676,15 +3672,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       top: rect.y * constraints.maxHeight,
                       child: InNoteMarkerBadge(
                         index: marker.index,
-                        onTap: () async {
-                          final deleted = await showInNoteMarkerPreview(
-                            context,
-                            marker,
-                          );
-                          if (deleted == true) {
-                            _deleteMarker(marker);
-                          }
-                        },
+                        color: marker.type == MarkerType.annotation
+                            ? Colors.pink[200]!
+                            : Colors.blue,
+                        onTap: () => _handleMarkerTap(marker),
                       ),
                     );
                   }),
@@ -3715,15 +3706,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 controllerMap: _pdfViewerControllers,
                 onError: (message) => LoggerService.error(message),
                 markers: _attachmentMarkers[_activeAttachmentPath] ?? [],
-                onMarkerTap: (marker) async {
-                  final deleted = await showInNoteMarkerPreview(
-                    context,
-                    marker,
-                  );
-                  if (deleted == true) {
-                    _deleteMarker(marker);
-                  }
-                },
+                onMarkerTap: (marker) => _handleMarkerTap(marker),
                 onDocumentReady: (cacheKey, document, outline) {
                   _pdfDocuments[cacheKey] = document;
                   if (outline != null && outline.isNotEmpty) {
@@ -4386,6 +4369,75 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Marker deleted.')));
+    }
+  }
+
+  Future<void> _handleMarkerTap(InNoteMarker marker) async {
+    if (marker.type == MarkerType.annotation) {
+      final annotation = await _noteAnnotationService.getAnnotation(marker.id);
+      if (annotation == null || !mounted) return;
+      final isInScratchpad = _scratchpadItems.any((m) => m.id == marker.id);
+      final result = await showAnnotationPreview(
+        context,
+        annotation,
+        isInScratchpad: isInScratchpad,
+      );
+      if (!mounted) return;
+      if (result == AnnotationPreviewResult.addToScratchpad) {
+        setState(() {
+          _scratchpadItems.add(ConversationMessage(
+            id: annotation.id,
+            conversationId: 'scratchpad',
+            content: annotation.content,
+            type: MessageType.user,
+            timestamp: annotation.createdAt,
+            attachmentPaths: annotation.attachmentPaths,
+          ));
+        });
+      } else if (result == AnnotationPreviewResult.removed) {
+        await _deleteAnnotationMarker(marker);
+      }
+    } else {
+      final deleted = await showInNoteMarkerPreview(context, marker);
+      if (deleted == true) {
+        _deleteMarker(marker);
+      }
+    }
+  }
+
+  Future<void> _deleteAnnotationMarker(InNoteMarker marker) async {
+    try {
+      if (_activeAttachmentPath != null) {
+        final attachment = await _resolveAttachment(_activeAttachmentPath!);
+        if (attachment != null) {
+          await _noteMarkerService.deleteMarkerForAttachment(
+            attachment.id,
+            marker.id,
+          );
+        }
+      } else {
+        final note = widget.notes[_activeNoteIndex];
+        await _noteMarkerService.deleteMarkerForNote(note.id, marker.id);
+      }
+      await _noteAnnotationService.deleteAnnotation(marker.id);
+
+      if (mounted) {
+        setState(() {
+          _scratchpadItems.removeWhere((m) => m.id == marker.id);
+          if (_activeAttachmentPath != null) {
+            _attachmentMarkers[_activeAttachmentPath!]
+                ?.removeWhere((m) => m.id == marker.id);
+          } else {
+            final note = widget.notes[_activeNoteIndex];
+            _noteMarkers[note.id]?.removeWhere((m) => m.id == marker.id);
+          }
+        });
+      }
+    } catch (e) {
+      LoggerService.error(
+        'Failed to delete annotation marker: $e',
+        error: e,
+      );
     }
   }
 
@@ -5744,6 +5796,9 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
                 top: rect.y * pageRectInViewer.height,
                 child: InNoteMarkerBadge(
                   index: marker.index,
+                  color: marker.type == MarkerType.annotation
+                      ? Colors.pink[200]!
+                      : Colors.blue,
                   onTap: () => widget.onMarkerTap(marker),
                 ),
               );
