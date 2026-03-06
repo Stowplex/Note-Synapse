@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -46,7 +46,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 42; // Target schema version
+  static const int DATABASE_VERSION = 43; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -447,7 +447,7 @@ class DatabaseService {
 
   Future<Database> _initDatabase() async {
     final dbName = _databaseNameOverride ?? 'note_synapse.db';
-    final path = join(await getDatabasesPath(), dbName);
+    final path = p.join(await getDatabasesPath(), dbName);
 
     // Perform pre-migration backup BEFORE openDatabase
     // This is critical because _onUpgrade runs inside a transaction
@@ -525,8 +525,8 @@ class DatabaseService {
       // Now copy the file
       final dbFile = File(dbPath);
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final backupPath = join(
-        dirname(dbPath),
+      final backupPath = p.join(
+        p.dirname(dbPath),
         'backup_v${fromVersion}_pre_migration_$timestamp.db',
       );
 
@@ -834,7 +834,80 @@ class DatabaseService {
       description: 'Add metadata column to notes table for in-note markers',
       execute: _migrateToVersion42,
     ),
+    43: MigrationStep(
+      description:
+          'Convert absolute paths to relative in conversation_attachments',
+      execute: _migrateToVersion43,
+    ),
   };
+
+  static Future<void> _migrateToVersion43(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    LoggerService.info(
+      'Migrating conversation_attachments absolute paths to relative paths (v43)',
+    );
+
+    // Find all conversation_attachments with absolute paths
+    final attachments = await db.query(
+      'conversation_attachments',
+      where: "filePath LIKE '/%'",
+    );
+
+    int migratedCount = 0;
+    for (final attachment in attachments) {
+      final id = attachment['id'] as String;
+      final filePath = attachment['filePath'] as String;
+      final fileName = attachment['fileName'] as String;
+      final messageId = attachment['messageId'] as String;
+
+      String newRelativePath;
+
+      if (filePath.contains('/attachments/')) {
+        // Path is absolute but already points inside attachments/
+        // Just extract the attachments/ part
+        final parts = filePath.split('/attachments/');
+        if (parts.length > 1) {
+          newRelativePath = 'attachments/${parts[1]}';
+        } else {
+          newRelativePath = 'attachments/$fileName';
+        }
+      } else {
+        // Path is completely external (e.g., in synapse_temp)
+        final uniqueName = '${messageId}_$fileName';
+        newRelativePath = 'attachments/$uniqueName';
+
+        try {
+          final file = File(filePath);
+          if (await file.exists()) {
+            final attachmentsDir = await FileUtils.getPrivateStorageDirectory();
+            final targetPath = p.join(attachmentsDir.path, uniqueName);
+            // Don't copy if it's already there (shouldn't happen due to the else branch, but safe to check)
+            if (filePath != targetPath) {
+              await file.copy(targetPath);
+            }
+          }
+        } catch (e) {
+          LoggerService.warning(
+            'Failed to copy attachment during v43 migration: $filePath, error: $e',
+          );
+        }
+      }
+
+      await db.update(
+        'conversation_attachments',
+        {'filePath': newRelativePath, 'isRelativePath': 1},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      migratedCount++;
+    }
+
+    LoggerService.info(
+      'Migrated $migratedCount absolute paths in conversation_attachments',
+    );
+  }
 
   static Future<void> _migrateToVersion28(
     Database db, {
@@ -2631,7 +2704,7 @@ class DatabaseService {
 
   // Get database path
   Future<String> getDatabasePath() async {
-    return join(await getDatabasesPath(), 'note_synapse.db');
+    return p.join(await getDatabasesPath(), 'note_synapse.db');
   }
 
   // Force database checkpoint
