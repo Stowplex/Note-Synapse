@@ -845,21 +845,21 @@ class DatabaseService {
       execute: _migrateToVersion41,
     ),
     42: MigrationStep(
-      description: 'Create sync_conflicts table for sync conflict resolution',
-      execute: _migrateToVersion37,
-    ),
-    43: MigrationStep(
-      description: 'Migrate conversation_message_mapping and conversation_note_mapping to composite primary keys',
-      execute: _migrateToVersion38,
-    ),
-    44: MigrationStep(
       description: 'Add metadata column to notes table for in-note markers',
       execute: _migrateToVersion42,
     ),
-    45: MigrationStep(
+    43: MigrationStep(
       description:
           'Convert absolute paths to relative in conversation_attachments',
       execute: _migrateToVersion43,
+    ),
+    44: MigrationStep(
+      description: 'Create sync_conflicts table for sync conflict resolution',
+      execute: _migrateToVersion44,
+    ),
+    45: MigrationStep(
+      description: 'Migrate conversation_message_mapping and conversation_note_mapping to composite primary keys',
+      execute: _migrateToVersion45,
     ),
   };
 
@@ -1008,7 +1008,7 @@ class DatabaseService {
     ''');
   }
 
-  static Future<void> _migrateToVersion37(
+  static Future<void> _migrateToVersion44(
     Database db, {
     required bool isBackupMigration,
   }) async {
@@ -1016,7 +1016,7 @@ class DatabaseService {
     await db.execute(_createSyncConflictsTable);
   }
 
-  static Future<void> _migrateToVersion38(
+  static Future<void> _migrateToVersion45(
     Database db, {
     required bool isBackupMigration,
   }) async {
