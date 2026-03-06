@@ -54,5 +54,24 @@ void main() {
       expect(restored.normalizedRect, isNull);
       expect(restored.page, isNull);
     });
+
+    test('forNote preserves normalizedRect when provided', () {
+      final rect = NormalizedRect(x: 0.1, y: 0.2, w: 0.5, h: 0.3);
+      final marker = InNoteMarker.forNote(
+        index: 1,
+        charStart: 0,
+        charEnd: 0,
+        normalizedRect: rect,
+        conversationId: 'c',
+        messageId: 'm',
+      );
+      expect(marker.normalizedRect, isNotNull);
+      expect(marker.normalizedRect!.x, closeTo(0.1, 0.001));
+
+      // Round-trip
+      final restored = InNoteMarker.fromJson(marker.toJson());
+      expect(restored.normalizedRect, isNotNull);
+      expect(restored.normalizedRect!.y, closeTo(0.2, 0.001));
+    });
   });
 }

@@ -4471,6 +4471,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           index: existingMarkers.length + 1,
           charStart: 0,
           charEnd: 0,
+          normalizedRect: position.normalizedRect,
           conversationId: conversationId,
           messageId: messageId,
         );
