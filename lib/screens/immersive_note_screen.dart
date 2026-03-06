@@ -4621,6 +4621,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           index: existingMarkers.length + 1,
           page: position.page ?? 0,
           normalizedRect: position.normalizedRect,
+          // Annotation markers are not linked to a conversation; the shared
+          // markerId UUID links to NoteAnnotation instead.
           conversationId: '',
           messageId: '',
           type: MarkerType.annotation,
@@ -4644,6 +4646,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           charStart: 0,
           charEnd: 0,
           normalizedRect: position.normalizedRect,
+          // Annotation markers are not linked to a conversation; the shared
+          // markerId UUID links to NoteAnnotation instead.
           conversationId: '',
           messageId: '',
           type: MarkerType.annotation,

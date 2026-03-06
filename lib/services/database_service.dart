@@ -108,7 +108,8 @@ class DatabaseService {
         attachment_id   TEXT,
         content         TEXT NOT NULL,
         attachment_paths TEXT,
-        created_at      TEXT NOT NULL
+        created_at      TEXT NOT NULL,
+        CHECK (note_id IS NOT NULL OR attachment_id IS NOT NULL)
       )
   ''';
 
