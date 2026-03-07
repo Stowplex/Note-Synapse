@@ -78,9 +78,9 @@ class InNoteAnnotationPreview extends StatelessWidget {
                     child: ElevatedButton.icon(
                       onPressed: isInScratchpad
                           ? null
-                          : () => Navigator.of(context).pop(
-                                AnnotationPreviewResult.addToScratchpad,
-                              ),
+                          : () => Navigator.of(
+                              context,
+                            ).pop(AnnotationPreviewResult.addToScratchpad),
                       icon: const Icon(Icons.playlist_add, size: 18),
                       label: Text(
                         isInScratchpad ? 'In Scratchpad' : 'Add to Scratchpad',
@@ -104,19 +104,12 @@ class InNoteAnnotationPreview extends StatelessWidget {
   }
 
   Widget _buildImageSection(BuildContext context) {
-    String? imagePath;
-    if (annotation.attachmentPaths.isNotEmpty) {
-      const imgExts = {'png', 'jpg', 'jpeg'};
-      for (final p in annotation.attachmentPaths) {
-        if (imgExts.contains(p.split('.').last.toLowerCase())) {
-          imagePath = p;
-          break;
-        }
-      }
-      imagePath ??= annotation.attachmentPaths.first;
-    }
+    const imgExts = {'png', 'jpg', 'jpeg'};
+    final imagePaths = annotation.attachmentPaths
+        .where((p) => imgExts.contains(p.split('.').last.toLowerCase()))
+        .toList();
 
-    if (imagePath == null) {
+    if (imagePaths.isEmpty) {
       return Container(
         height: 100,
         decoration: BoxDecoration(
@@ -133,6 +126,27 @@ class InNoteAnnotationPreview extends StatelessWidget {
       );
     }
 
+    if (imagePaths.length == 1) {
+      return _buildSingleImage(context, imagePaths.first);
+    }
+
+    return SizedBox(
+      height: 140,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: imagePaths.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          return SizedBox(
+            width: 140,
+            child: _buildSingleImage(context, imagePaths[index]),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSingleImage(BuildContext context, String imagePath) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: Image.file(

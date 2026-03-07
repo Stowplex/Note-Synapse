@@ -32,7 +32,8 @@ class InNoteMarker {
 
   // PDF/image fields
   final int? page;
-  final NormalizedRect? normalizedRect;
+  final NormalizedRect? normalizedRect; // legacy primary rect
+  final List<NormalizedRect>? normalizedRects; // multiple queued rects
 
   // Text note fields
   final int? charStart;
@@ -47,6 +48,7 @@ class InNoteMarker {
     this.type = MarkerType.ai,
     this.page,
     this.normalizedRect,
+    this.normalizedRects,
     this.charStart,
     this.charEnd,
   });
@@ -55,7 +57,8 @@ class InNoteMarker {
     String? id,
     required int index,
     required int page,
-    required NormalizedRect normalizedRect,
+    NormalizedRect? normalizedRect,
+    List<NormalizedRect>? normalizedRects,
     required String conversationId,
     required String messageId,
     DateTime? createdAt,
@@ -65,6 +68,7 @@ class InNoteMarker {
     index: index,
     page: page,
     normalizedRect: normalizedRect,
+    normalizedRects: normalizedRects,
     conversationId: conversationId,
     messageId: messageId,
     createdAt: createdAt ?? DateTime.now(),
@@ -77,6 +81,7 @@ class InNoteMarker {
     required int charStart,
     required int charEnd,
     NormalizedRect? normalizedRect,
+    List<NormalizedRect>? normalizedRects,
     required String conversationId,
     required String messageId,
     DateTime? createdAt,
@@ -87,6 +92,7 @@ class InNoteMarker {
     charStart: charStart,
     charEnd: charEnd,
     normalizedRect: normalizedRect,
+    normalizedRects: normalizedRects,
     conversationId: conversationId,
     messageId: messageId,
     createdAt: createdAt ?? DateTime.now(),
@@ -95,6 +101,7 @@ class InNoteMarker {
 
   factory InNoteMarker.fromJson(Map<String, dynamic> json) {
     final rectJson = json['normalizedRect'] as Map<String, dynamic>?;
+    final rectsJson = json['normalizedRects'] as List<dynamic>?;
     final typeStr = json['type'] as String?;
     return InNoteMarker(
       id: json['id'] as String,
@@ -104,8 +111,12 @@ class InNoteMarker {
       createdAt: DateTime.parse(json['createdAt'] as String),
       type: typeStr == 'annotation' ? MarkerType.annotation : MarkerType.ai,
       page: json['page'] as int?,
-      normalizedRect:
-          rectJson != null ? NormalizedRect.fromJson(rectJson) : null,
+      normalizedRect: rectJson != null
+          ? NormalizedRect.fromJson(rectJson)
+          : null,
+      normalizedRects: rectsJson
+          ?.map((e) => NormalizedRect.fromJson(e as Map<String, dynamic>))
+          .toList(),
       charStart: json['charStart'] as int?,
       charEnd: json['charEnd'] as int?,
     );
@@ -120,6 +131,8 @@ class InNoteMarker {
     if (type == MarkerType.annotation) 'type': 'annotation',
     if (page != null) 'page': page,
     if (normalizedRect != null) 'normalizedRect': normalizedRect!.toJson(),
+    if (normalizedRects != null)
+      'normalizedRects': normalizedRects!.map((r) => r.toJson()).toList(),
     if (charStart != null) 'charStart': charStart,
     if (charEnd != null) 'charEnd': charEnd,
   };
