@@ -20,7 +20,7 @@ class InNoteMarkerPreview extends StatefulWidget {
 
 class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
   bool _loading = true;
-  String? _imagePath;
+  List<String> _imagePaths = [];
   String? _userMessageContent;
   String? _aiReplyContent;
 
@@ -59,37 +59,31 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
       // If loading messages fails, show no reply.
     }
 
-    // Find the first image attachment for the user message.
-    String? imagePath;
+    // Find all image attachments for the user message.
+    List<String> imagePaths = [];
     try {
       if (userMessage != null && userMessage.attachmentPaths.isNotEmpty) {
-        String? selectedPath;
         const imageExtensions = {'png', 'jpg', 'jpeg'};
         for (final path in userMessage.attachmentPaths) {
           final ext = path.split('.').last.toLowerCase();
           if (imageExtensions.contains(ext)) {
-            selectedPath = path;
-            break;
+            if (!path.startsWith('http') && !path.startsWith('/')) {
+              imagePaths.add(await FileUtils.getFullFilePath(path, true));
+            } else {
+              imagePaths.add(path);
+            }
           }
-        }
-        // Fallback: if no attachment matched by extension, try the first one
-        selectedPath ??= userMessage.attachmentPaths.first;
-
-        if (!selectedPath.startsWith('http') && !selectedPath.startsWith('/')) {
-          imagePath = await FileUtils.getFullFilePath(selectedPath, true);
-        } else {
-          imagePath = selectedPath;
         }
       }
     } catch (_) {
-      // If attachment loading fails, show placeholder.
+      // If attachment loading fails, continue with empty list
     }
 
     if (mounted) {
       setState(() {
         _userMessageContent = userContent;
         _aiReplyContent = aiContent;
-        _imagePath = imagePath;
+        _imagePaths = imagePaths;
         _loading = false;
       });
     }
@@ -260,7 +254,7 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
   }
 
   Widget _buildImageSection(BuildContext context) {
-    if (_imagePath == null) {
+    if (_imagePaths.isEmpty) {
       return Container(
         height: 120,
         decoration: BoxDecoration(
@@ -277,10 +271,31 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
       );
     }
 
+    if (_imagePaths.length == 1) {
+      return _buildSingleImage(context, _imagePaths.first);
+    }
+
+    return SizedBox(
+      height: 140,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _imagePaths.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          return SizedBox(
+            width: 140,
+            child: _buildSingleImage(context, _imagePaths[index]),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSingleImage(BuildContext context, String path) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: Image.file(
-        File(_imagePath!),
+        File(path),
         fit: BoxFit.contain,
         errorBuilder: (context, error, stack) {
           return Container(
