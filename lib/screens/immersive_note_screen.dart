@@ -1865,13 +1865,17 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                                 _drawingActions.clear();
                                 _redoStack.clear();
                                 _penStrokePoints.clear();
-                                _pendingMarkerPosition = null;
+                                // Only reset marker position if nothing has been queued yet
+                                if (_pendingAttachments.isEmpty) {
+                                  _pendingMarkerPosition = null;
+                                }
                               } else {
-                                // Initialize new session
+                                // Initialize new drawing session
                                 _drawingActions.clear();
                                 _redoStack.clear();
                                 _penStrokePoints.clear();
-                                _pendingMarkerPosition = null;
+                                // Do NOT reset _pendingMarkerPosition here;
+                                // previously confirmed rects must be preserved
                               }
                             });
                           },
