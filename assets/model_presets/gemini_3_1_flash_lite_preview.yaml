@@ -1,0 +1,32 @@
+model_type: gemini
+model_endpoint: https://generativelanguage.googleapis.com/v1beta
+model_name: gemini-3.1-flash-lite-preview
+model_display_name: Gemini 3.1 Flash Lite
+api_key_url: https://aistudio.google.com/app/apikey
+model_capabilities:
+  - support_audio
+  - support_video
+  - support_document_understanding
+  - support_image
+  - support_code_generation
+max_input_token: 1048576
+max_output_token: 65536
+supported_attachment_mime_types:
+  - image/png
+  - image/jpeg
+  - image/webp
+  - application/pdf
+  - application/msword
+  - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  - text/plain
+  - audio/mpeg
+  - audio/wav
+  - audio/mp4
+  - audio/aac
+  - audio/ogg
+  - video/mp4
+  - video/webm
+warn_premium: false
+model_features:
+  - google_search
+  - code_execution

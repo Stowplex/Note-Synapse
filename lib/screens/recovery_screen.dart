@@ -675,6 +675,12 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       // Step 15: Insert all conversation note mapping unique by (noteId, conversationId)
       await _mergeConversationNoteMappings(stagingDb, migratedBackupDb);
 
+      _addImportLog('Merging note annotations...');
+      _updateImportProgress(0.92);
+
+      // Step 16: Merge note_annotations (immutable: insert-or-skip by UUID)
+      await _mergeNoteAnnotations(stagingDb, migratedBackupDb);
+
       await migratedBackupDb.close();
       await stagingDb.close();
 
@@ -684,13 +690,13 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       // Force cleanup of staging DB connection before copying
       await stagingDb.close(); // Ensure strictly closed
 
-      // Step 16: Copy staging DB to app's DB directory
+      // Step 17: Copy staging DB to app's DB directory
       await stagingDbFile.copy(currentDbPath);
 
       _addImportLog(l10n.reloadingData);
       _updateImportProgress(1.0);
 
-      // Step 17: Reload data in the app
+      // Step 18: Reload data in the app
       if (mounted) {
         final appProvider = Provider.of<AppProvider>(context, listen: false);
         await appProvider.loadData();
@@ -771,6 +777,40 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         );
         await stagingDb.insert('notes', filteredData);
       }
+    }
+  }
+
+  Future<void> _mergeNoteAnnotations(
+    Database stagingDb,
+    Database backupDb,
+  ) async {
+    // note_annotations may not exist in older backups — skip gracefully
+    final tables = await backupDb.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='note_annotations'",
+    );
+    if (tables.isEmpty) return;
+
+    final backupAnnotations = await backupDb.query('note_annotations');
+
+    for (final ann in backupAnnotations) {
+      final id = ann['id'] as String;
+      final existing = await stagingDb.query(
+        'note_annotations',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+
+      if (existing.isEmpty) {
+        // Not in staging → insert, filtering to known columns for safety
+        final filteredData = await _filterDataForTable(
+          stagingDb,
+          'note_annotations',
+          ann,
+        );
+        await stagingDb.insert('note_annotations', filteredData);
+      }
+      // Same UUID found → skip (immutable record, idempotent)
     }
   }
 
@@ -1411,6 +1451,25 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     final backupAttachments = await backupDb.query('conversation_attachments');
 
     for (final attachment in backupAttachments) {
+      final filePath = attachment['filePath'] as String;
+
+      String finalFilePath = filePath;
+      if (filePath.startsWith('/')) {
+        if (filePath.contains('/attachments/')) {
+          final parts = filePath.split('/attachments/');
+          if (parts.length > 1) {
+            finalFilePath = 'attachments/${parts[1]}';
+          } else {
+            final fileName = attachment['fileName'] as String;
+            finalFilePath = 'attachments/$fileName';
+          }
+        } else {
+          final fileName = attachment['fileName'] as String;
+          final messageId = attachment['messageId'] as String;
+          finalFilePath = 'attachments/${messageId}_$fileName';
+        }
+      }
+
       // Check if attachment exists in staging by id
       final existingAttachments = await stagingDb.query(
         'conversation_attachments',
@@ -1419,11 +1478,15 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       );
 
       if (existingAttachments.isEmpty) {
+        final newAttachment = Map<String, dynamic>.from(attachment);
+        newAttachment['filePath'] = finalFilePath;
+        newAttachment['isRelativePath'] = 1;
+
         // Insert new attachment - filter to only existing columns
         final filteredData = await _filterDataForTable(
           stagingDb,
           'conversation_attachments',
-          attachment,
+          newAttachment,
         );
         await stagingDb.insert('conversation_attachments', filteredData);
       }

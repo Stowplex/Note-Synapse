@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -25,6 +25,7 @@ import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
 import '../utils/global_keys.dart';
 import '../screens/recovery_screen.dart';
+import '../models/note_annotation.dart';
 
 class MigrationStep {
   final String description;
@@ -46,7 +47,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 41; // Target schema version
+  static const int DATABASE_VERSION = 44; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -65,7 +66,8 @@ class DatabaseService {
         completionPercentage REAL, -- Task completion percentage
         pinned INTEGER NOT NULL DEFAULT 0, -- Whether note is pinned
         isArchived INTEGER NOT NULL DEFAULT 0, -- Whether note is archived
-        recurrenceRule TEXT -- JSON string defining recurrence rules
+        recurrenceRule TEXT, -- JSON string defining recurrence rules
+        metadata TEXT -- JSON metadata (e.g. in-note markers)
       )
   ''';
 
@@ -96,6 +98,18 @@ class DatabaseService {
         tagId TEXT PRIMARY KEY,
         imagePath TEXT NOT NULL,
         FOREIGN KEY (tagId) REFERENCES tags(id) ON DELETE CASCADE
+      )
+  ''';
+
+  static const String _createNoteAnnotationsTable = '''
+      CREATE TABLE IF NOT EXISTS note_annotations (
+        id              TEXT PRIMARY KEY,
+        note_id         TEXT,
+        attachment_id   TEXT,
+        content         TEXT NOT NULL,
+        attachment_paths TEXT,
+        created_at      TEXT NOT NULL,
+        CHECK (note_id IS NOT NULL OR attachment_id IS NOT NULL)
       )
   ''';
 
@@ -446,7 +460,7 @@ class DatabaseService {
 
   Future<Database> _initDatabase() async {
     final dbName = _databaseNameOverride ?? 'note_synapse.db';
-    final path = join(await getDatabasesPath(), dbName);
+    final path = p.join(await getDatabasesPath(), dbName);
 
     // Perform pre-migration backup BEFORE openDatabase
     // This is critical because _onUpgrade runs inside a transaction
@@ -524,8 +538,8 @@ class DatabaseService {
       // Now copy the file
       final dbFile = File(dbPath);
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final backupPath = join(
-        dirname(dbPath),
+      final backupPath = p.join(
+        p.dirname(dbPath),
         'backup_v${fromVersion}_pre_migration_$timestamp.db',
       );
 
@@ -580,6 +594,7 @@ class DatabaseService {
     await db.execute(_createConversationNoteMappingTable);
     await db.execute(_createConversationTagsTable);
     await db.execute(_createMultiFunctionAppsTable);
+    await db.execute(_createNoteAnnotationsTable);
 
     // Create AI-related tables (missing in previous versions' onCreate)
     await db.execute(_createTagAiConfigsTable);
@@ -829,7 +844,95 @@ class DatabaseService {
       description: 'Create tag_images table for image-augmented tags',
       execute: _migrateToVersion41,
     ),
+    42: MigrationStep(
+      description: 'Add metadata column to notes table for in-note markers',
+      execute: _migrateToVersion42,
+    ),
+    43: MigrationStep(
+      description:
+          'Convert absolute paths to relative in conversation_attachments',
+      execute: _migrateToVersion43,
+    ),
+    44: MigrationStep(
+      description: 'Create note_annotations table for scratchpad annotations',
+      execute: _migrateToVersion44,
+    ),
   };
+
+  static Future<void> _migrateToVersion43(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    LoggerService.info(
+      'Migrating conversation_attachments absolute paths to relative paths (v43)',
+    );
+
+    // Find all conversation_attachments with absolute paths
+    final attachments = await db.query(
+      'conversation_attachments',
+      where: "filePath LIKE '/%'",
+    );
+
+    int migratedCount = 0;
+    for (final attachment in attachments) {
+      final id = attachment['id'] as String;
+      final filePath = attachment['filePath'] as String;
+      final fileName = attachment['fileName'] as String;
+      final messageId = attachment['messageId'] as String;
+
+      String newRelativePath;
+
+      if (filePath.contains('/attachments/')) {
+        // Path is absolute but already points inside attachments/
+        // Just extract the attachments/ part
+        final parts = filePath.split('/attachments/');
+        if (parts.length > 1) {
+          newRelativePath = 'attachments/${parts[1]}';
+        } else {
+          newRelativePath = 'attachments/$fileName';
+        }
+      } else {
+        // Path is completely external (e.g., in synapse_temp)
+        final uniqueName = '${messageId}_$fileName';
+        newRelativePath = 'attachments/$uniqueName';
+
+        try {
+          final file = File(filePath);
+          if (await file.exists()) {
+            final attachmentsDir = await FileUtils.getPrivateStorageDirectory();
+            final targetPath = p.join(attachmentsDir.path, uniqueName);
+            // Don't copy if it's already there (shouldn't happen due to the else branch, but safe to check)
+            if (filePath != targetPath) {
+              await file.copy(targetPath);
+            }
+          }
+        } catch (e) {
+          LoggerService.warning(
+            'Failed to copy attachment during v43 migration: $filePath, error: $e',
+          );
+        }
+      }
+
+      await db.update(
+        'conversation_attachments',
+        {'filePath': newRelativePath, 'isRelativePath': 1},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      migratedCount++;
+    }
+
+    LoggerService.info(
+      'Migrated $migratedCount absolute paths in conversation_attachments',
+    );
+  }
+
+  static Future<void> _migrateToVersion44(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    await db.execute(_createNoteAnnotationsTable);
+  }
 
   static Future<void> _migrateToVersion28(
     Database db, {
@@ -1383,6 +1486,13 @@ class DatabaseService {
     ''');
   }
 
+  static Future<void> _migrateToVersion42(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    await db.execute('ALTER TABLE notes ADD COLUMN metadata TEXT');
+  }
+
   // Migrate existing conversation data to new structure
 
   // Migration helper method to create initial revisions for existing apps
@@ -1887,6 +1997,89 @@ class DatabaseService {
       whereArgs: [attachmentId],
     );
   }
+
+  /// Updates the metadata JSON for a specific note
+  Future<void> updateNoteMetadata(
+    String noteId,
+    Map<String, dynamic>? metadata,
+  ) async {
+    final db = await database;
+    await db.update(
+      'notes',
+      {'metadata': metadata != null ? jsonEncode(metadata) : null},
+      where: 'id = ?',
+      whereArgs: [noteId],
+    );
+  }
+
+  /// Gets the metadata JSON for a specific note
+  Future<Map<String, dynamic>?> getNoteMetadata(String noteId) async {
+    final db = await database;
+    final rows = await db.query(
+      'notes',
+      columns: ['metadata'],
+      where: 'id = ?',
+      whereArgs: [noteId],
+    );
+    if (rows.isEmpty) return null;
+    final raw = rows.first['metadata'] as String?;
+    if (raw == null) return null;
+    return jsonDecode(raw) as Map<String, dynamic>;
+  }
+
+  // ── NoteAnnotation CRUD ─────────────────────────────────────────────────
+
+  Future<void> saveNoteAnnotation(NoteAnnotation annotation) async {
+    final db = await database;
+    await db.insert(
+      'note_annotations',
+      annotation.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<NoteAnnotation?> getNoteAnnotation(String id) async {
+    final db = await database;
+    final rows = await db.query(
+      'note_annotations',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return NoteAnnotation.fromMap(rows.first);
+  }
+
+  Future<List<NoteAnnotation>> getNoteAnnotationsForNote(String noteId) async {
+    final db = await database;
+    final rows = await db.query(
+      'note_annotations',
+      where: 'note_id = ?',
+      whereArgs: [noteId],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(NoteAnnotation.fromMap).toList();
+  }
+
+  Future<List<NoteAnnotation>> getNoteAnnotationsForAttachment(
+    String attachmentId,
+  ) async {
+    final db = await database;
+    final rows = await db.query(
+      'note_annotations',
+      where: 'attachment_id = ?',
+      whereArgs: [attachmentId],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(NoteAnnotation.fromMap).toList();
+  }
+
+  Future<void> deleteNoteAnnotation(String id) async {
+    final db = await database;
+    await db.delete('note_annotations', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
 
   /// Updates just the lastViewedPage in attachment metadata
   /// Preserves other metadata fields
@@ -2590,7 +2783,8 @@ class DatabaseService {
 
   // Get database path
   Future<String> getDatabasePath() async {
-    return join(await getDatabasesPath(), 'note_synapse.db');
+    final dbName = _databaseNameOverride ?? 'note_synapse.db';
+    return p.join(await getDatabasesPath(), dbName);
   }
 
   // Force database checkpoint
@@ -3690,16 +3884,16 @@ class DatabaseService {
     );
 
     final messages = <ConversationMessage>[];
-    messages.add(_mapToConversationMessage(firstMsgMaps.first, conversationId));
+    final firstMap = Map<String, dynamic>.from(firstMsgMaps.first);
+    await _populateMessageAttachmentPaths(db, firstMap);
+    messages.add(_mapToConversationMessage(firstMap, conversationId));
 
     // Only add last message if it's different from the first
     if (lastMsgMaps.isNotEmpty) {
-      final lastMsg = _mapToConversationMessage(
-        lastMsgMaps.first,
-        conversationId,
-      );
-      if (lastMsg.id != messages.first.id) {
-        messages.add(lastMsg);
+      final lastMap = Map<String, dynamic>.from(lastMsgMaps.first);
+      if (lastMap['id'] != firstMap['id']) {
+        await _populateMessageAttachmentPaths(db, lastMap);
+        messages.add(_mapToConversationMessage(lastMap, conversationId));
       }
     }
 
@@ -3810,6 +4004,7 @@ class DatabaseService {
         }
       }
 
+      await _populateMessageAttachmentPaths(db, messageMap);
       messages.add(_mapToConversationMessage(messageMap, conversationId));
     }
 
@@ -3897,6 +4092,7 @@ class DatabaseService {
       }
     }
 
+    await _populateMessageAttachmentPaths(db, messageMap);
     return _mapToConversationMessage(messageMap, conversationId);
   }
 
@@ -4180,6 +4376,31 @@ class DatabaseService {
       updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt'] as int),
       isArchived: (map['isArchived'] ?? 0) == 1,
     );
+  }
+
+  Future<void> _populateMessageAttachmentPaths(
+    Database db,
+    Map<String, dynamic> messageMap,
+  ) async {
+    try {
+      final attachmentRecords = await db.query(
+        'conversation_attachments',
+        columns: ['filePath'],
+        where: 'messageId = ?',
+        whereArgs: [messageMap['id']],
+        orderBy: 'createdAt ASC',
+      );
+      if (attachmentRecords.isNotEmpty) {
+        final paths = attachmentRecords
+            .map((r) => r['filePath'] as String)
+            .toList();
+        messageMap['attachmentPaths'] = jsonEncode(paths);
+      }
+    } catch (e) {
+      LoggerService.error(
+        'Failed to get attachments for message ${messageMap['id']}: $e',
+      );
+    }
   }
 
   ConversationMessage _mapToConversationMessage(
@@ -4666,8 +4887,13 @@ class DatabaseService {
         ''', chunk);
 
       for (final map in results) {
+        final messageMap = Map<String, dynamic>.from(map);
+        await _populateMessageAttachmentPaths(db, messageMap);
         messages.add(
-          _mapToConversationMessage(map, map['conversationId'] as String),
+          _mapToConversationMessage(
+            messageMap,
+            messageMap['conversationId'] as String,
+          ),
         );
       }
     }

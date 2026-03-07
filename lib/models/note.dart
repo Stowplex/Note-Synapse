@@ -40,6 +40,7 @@ class Note {
   final bool pinned; // Whether the note is pinned to the top
   final bool isArchived; // Whether the note is archived
   final String? recurrenceRule; // JSON string for recurrence rules
+  final String? metadata; // JSON string for metadata
 
   Note({
     required this.id,
@@ -58,6 +59,7 @@ class Note {
     this.pinned = false,
     this.isArchived = false,
     this.recurrenceRule,
+    this.metadata,
   });
 
   factory Note.fromJson(Map<String, dynamic> json) => _$NoteFromJson(json);
@@ -80,6 +82,7 @@ class Note {
     bool? pinned,
     bool? isArchived,
     String? recurrenceRule,
+    String? metadata,
   }) {
     return Note(
       id: id ?? this.id,
@@ -98,6 +101,7 @@ class Note {
       pinned: pinned ?? this.pinned,
       isArchived: isArchived ?? this.isArchived,
       recurrenceRule: recurrenceRule ?? this.recurrenceRule,
+      metadata: metadata ?? this.metadata,
     );
   }
 

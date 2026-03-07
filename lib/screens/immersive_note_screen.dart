@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
@@ -64,6 +65,13 @@ import 'note_action_app_selection_screen.dart';
 import 'settings_screen.dart';
 import '../widgets/model_selector_button.dart';
 import '../services/built_in_tools_service.dart';
+import '../models/in_note_marker.dart';
+import '../models/note_annotation.dart';
+import '../services/note_marker_service.dart';
+import '../services/note_annotation_service.dart';
+import '../widgets/in_note_marker_badge.dart';
+import '../widgets/in_note_marker_preview.dart';
+import '../widgets/in_note_annotation_preview.dart';
 
 enum DrawingTool { pen, rectangle }
 
@@ -113,6 +121,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final ScrollController _chatScrollController = ScrollController();
   final FocusNode _messageFocusNode = FocusNode();
   final GlobalKey _noteBoundaryKey = GlobalKey();
+  final GlobalKey _noteContentKey = GlobalKey();
 
   static const double _strokeCaptureMargin = 16;
 
@@ -120,6 +129,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   late List<String> _noteOrder;
   final List<ConversationMessage> _messages = [];
   final List<PlatformFile> _pendingAttachments = [];
+  InNoteMarkerPosition? _pendingMarkerPosition;
+  final Map<String, List<InNoteMarker>> _attachmentMarkers = {};
+  final Map<String, List<InNoteMarker>> _noteMarkers = {};
+  late final NoteMarkerService _noteMarkerService = getIt<NoteMarkerService>();
+  late final NoteAnnotationService _noteAnnotationService =
+      getIt<NoteAnnotationService>();
   final Map<String, Future<_AttachmentSource?>> _attachmentSourceFutures = {};
   final Map<String, int> _pdfCurrentPages = {};
   final Map<String, int> _pdfTotalPages = {};
@@ -254,6 +269,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       _loadMcpEndpoints();
       _loadAiTools();
       _loadModelFeatures();
+      // Load markers for the initial content.
+      if (_activeAttachmentPath != null) {
+        _loadMarkersForAttachment(_activeAttachmentPath!);
+      } else {
+        _loadMarkersForNote(widget.notes[_activeNoteIndex].id);
+      }
     });
   }
 
@@ -319,35 +340,31 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     try {
       final noteIds = List<String>.from(_noteOrder);
-      final notes = <Note>[];
-
-      for (final noteId in noteIds) {
-        final note = await _databaseService.getNote(noteId);
-        if (note != null) {
-          notes.add(note);
-        }
-      }
+      final primaryNote = await _databaseService.getNote(noteIds.first);
+      final title = primaryNote?.title ?? 'Immersive Session';
+      final conversation = await _conversationService.createConversation(
+        title: 'Immersive: $title',
+        noteIds: noteIds,
+      );
 
       if (!mounted) return;
 
       setState(() {
-        _conversationNotes = notes;
-        for (final note in notes) {
-          _initialNotesById[note.id] = note;
-        }
+        _conversation = conversation;
+        _hasAssociatedConversations = true;
       });
-
-      // Check for associated conversations
-      await _checkAssociatedConversations();
     } catch (e, stackTrace) {
       LoggerService.error(
-        'Failed to load notes for immersive view: $e',
+        'Failed to create immersive conversation: $e',
         error: e,
         stackTrace: stackTrace,
       );
+      rethrow;
     } finally {
       if (mounted) {
-        setState(() => _isLoadingConversation = false);
+        setState(() {
+          _isLoadingConversation = false;
+        });
       }
     }
   }
@@ -1848,11 +1865,17 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                                 _drawingActions.clear();
                                 _redoStack.clear();
                                 _penStrokePoints.clear();
+                                // Only reset marker position if nothing has been queued yet
+                                if (_pendingAttachments.isEmpty) {
+                                  _pendingMarkerPosition = null;
+                                }
                               } else {
-                                // Initialize new session
+                                // Initialize new drawing session
                                 _drawingActions.clear();
                                 _redoStack.clear();
                                 _penStrokePoints.clear();
+                                // Do NOT reset _pendingMarkerPosition here;
+                                // previously confirmed rects must be preserved
                               }
                             });
                           },
@@ -2057,7 +2080,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   Future<void> _confirmDrawing({bool silent = false}) async {
     if (_drawingActions.isEmpty) return;
 
-    // Calculate bounds of all actions
+    // Calculate bounds of all actions individually
+    final List<Rect> actionBoundsList = [];
     Rect? totalBounds;
     for (final action in _drawingActions) {
       Rect actionBounds;
@@ -2068,6 +2092,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       } else {
         continue;
       }
+      actionBoundsList.add(actionBounds);
 
       if (totalBounds == null) {
         totalBounds = actionBounds;
@@ -2076,7 +2101,27 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
     }
 
-    if (totalBounds == null) return;
+    if (totalBounds == null || actionBoundsList.isEmpty) return;
+    final newPosition = _computeMarkerPosition(actionBoundsList, totalBounds);
+    if (_pendingMarkerPosition == null) {
+      _pendingMarkerPosition = newPosition;
+    } else if (newPosition != null) {
+      final existingRects =
+          _pendingMarkerPosition!.normalizedRects ??
+          (_pendingMarkerPosition!.normalizedRect != null
+              ? [_pendingMarkerPosition!.normalizedRect!]
+              : <NormalizedRect>[]);
+      final newRects =
+          newPosition.normalizedRects ??
+          (newPosition.normalizedRect != null
+              ? [newPosition.normalizedRect!]
+              : <NormalizedRect>[]);
+      _pendingMarkerPosition = InNoteMarkerPosition(
+        normalizedRect: _pendingMarkerPosition!.normalizedRect,
+        normalizedRects: [...existingRects, ...newRects],
+        page: _pendingMarkerPosition!.page ?? newPosition.page,
+      );
+    }
 
     try {
       final imageBytes = await _captureDrawing(_drawingActions, totalBounds);
@@ -2106,6 +2151,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         }
       }
     } catch (e, stackTrace) {
+      _pendingMarkerPosition = null;
       LoggerService.error(
         'Failed to capture drawing: $e',
         error: e,
@@ -2117,6 +2163,111 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         );
       }
     }
+  }
+
+  InNoteMarkerPosition? _computeMarkerPosition(
+    List<Rect> drawBoundsList,
+    Rect totalBounds,
+  ) {
+    if (_activeAttachmentPath != null) {
+      final path = _activeAttachmentPath!;
+      final extension = path.split('.').last.toLowerCase();
+      if (extension == 'pdf') {
+        final controller = _pdfViewerControllers[path];
+        final currentPage = _pdfCurrentPages[path] ?? 0; // 0-indexed
+        if (controller != null && controller.isReady) {
+          try {
+            final pageLayouts = controller.layout.pageLayouts;
+            if (currentPage < pageLayouts.length) {
+              final visibleRect = controller.visibleRect;
+              final viewSize = controller.viewSize;
+              final scaleX = viewSize.width / visibleRect.width;
+              final scaleY = viewSize.height / visibleRect.height;
+              final pageDocRect = pageLayouts[currentPage];
+              final pageScreenLeft =
+                  (pageDocRect.left - visibleRect.left) * scaleX;
+              final pageScreenTop =
+                  (pageDocRect.top - visibleRect.top) * scaleY;
+              final pageScreenW = pageDocRect.width * scaleX;
+              final pageScreenH = pageDocRect.height * scaleY;
+              if (pageScreenW > 0 && pageScreenH > 0) {
+                final norms = drawBoundsList.map((drawBounds) {
+                  return NormalizedRect(
+                    x: ((drawBounds.left - pageScreenLeft) / pageScreenW).clamp(
+                      0.0,
+                      1.0,
+                    ),
+                    y: ((drawBounds.top - pageScreenTop) / pageScreenH).clamp(
+                      0.0,
+                      1.0,
+                    ),
+                    w: (drawBounds.width / pageScreenW).clamp(0.0, 1.0),
+                    h: (drawBounds.height / pageScreenH).clamp(0.0, 1.0),
+                  );
+                }).toList();
+                return InNoteMarkerPosition(
+                  normalizedRect: norms.isNotEmpty
+                      ? norms.first
+                      : NormalizedRect(x: 0, y: 0, w: 0, h: 0),
+                  normalizedRects: norms,
+                  page: currentPage,
+                );
+              }
+            }
+          } catch (_) {
+            // fall through to widget-size fallback
+          }
+        }
+        // Fallback: normalize by widget size (used if controller not ready)
+        final renderObject = _noteBoundaryKey.currentContext
+            ?.findRenderObject();
+        if (renderObject is! RenderRepaintBoundary || renderObject.size.isEmpty)
+          return null;
+        final size = renderObject.size;
+        final norms = drawBoundsList
+            .map(
+              (drawBounds) => NormalizedRect(
+                x: (drawBounds.left / size.width).clamp(0.0, 1.0),
+                y: (drawBounds.top / size.height).clamp(0.0, 1.0),
+                w: (drawBounds.width / size.width).clamp(0.0, 1.0),
+                h: (drawBounds.height / size.height).clamp(0.0, 1.0),
+              ),
+            )
+            .toList();
+        return InNoteMarkerPosition(
+          normalizedRect: norms.isNotEmpty
+              ? norms.first
+              : NormalizedRect(x: 0, y: 0, w: 0, h: 0),
+          normalizedRects: norms,
+        );
+      }
+    } else {
+      // Text note mode
+      final renderObject = _noteContentKey.currentContext?.findRenderObject();
+      if (renderObject is! RenderBox || renderObject.size.isEmpty) return null;
+      final size = renderObject.size;
+
+      final norms = drawBoundsList.map((drawBounds) {
+        final localTopLeft = renderObject.globalToLocal(
+          Offset(drawBounds.left, drawBounds.top),
+        );
+        final localLeft = localTopLeft.dx;
+        final localTop = localTopLeft.dy;
+        return NormalizedRect(
+          x: (localLeft / size.width).clamp(0.0, 1.0),
+          y: (localTop / size.height).clamp(0.0, 1.0),
+          w: (drawBounds.width / size.width).clamp(0.0, 1.0),
+          h: (drawBounds.height / size.height).clamp(0.0, 1.0),
+        );
+      }).toList();
+      return InNoteMarkerPosition(
+        normalizedRect: norms.isNotEmpty
+            ? norms.first
+            : NormalizedRect(x: 0, y: 0, w: 0, h: 0),
+        normalizedRects: norms,
+      );
+    }
+    return null;
   }
 
   Widget _buildSendControl(AppLocalizations l10n) {
@@ -2832,6 +2983,57 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     );
   }
 
+  Future<void> _showRecallDialog() async {
+    List<NoteAnnotation> annotations;
+    if (_activeAttachmentPath != null) {
+      final attachment = await _resolveAttachment(_activeAttachmentPath!);
+      if (attachment == null) return;
+      annotations = await _noteAnnotationService.getAnnotationsForAttachment(
+        attachment.id,
+      );
+    } else {
+      final note = widget.notes[_activeNoteIndex];
+      annotations = await _noteAnnotationService.getAnnotationsForNote(note.id);
+    }
+
+    if (!mounted) return;
+
+    if (annotations.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No past annotations for this note.')),
+      );
+      return;
+    }
+
+    final selected = await showDialog<List<String>>(
+      context: context,
+      builder: (ctx) => _RecallAnnotationsDialog(
+        annotations: annotations,
+        scratchpadIds: _scratchpadItems.map((m) => m.id).toSet(),
+      ),
+    );
+
+    if (selected == null || selected.isEmpty || !mounted) return;
+
+    setState(() {
+      for (final annotation in annotations) {
+        if (selected.contains(annotation.id) &&
+            !_scratchpadItems.any((m) => m.id == annotation.id)) {
+          _scratchpadItems.add(
+            ConversationMessage(
+              id: annotation.id,
+              conversationId: 'scratchpad',
+              content: annotation.content,
+              type: MessageType.user,
+              timestamp: annotation.createdAt,
+              attachmentPaths: annotation.attachmentPaths,
+            ),
+          );
+        }
+      }
+    });
+  }
+
   Widget _buildScratchpadActions(AppLocalizations l10n) {
     return Row(
       children: [
@@ -2851,6 +3053,17 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           ),
         ),
         const SizedBox(width: 8),
+        IconButton(
+          onPressed: _showRecallDialog,
+          icon: const Icon(Icons.history, size: 20),
+          tooltip: 'Recall annotations',
+          padding: const EdgeInsets.all(4),
+          constraints: const BoxConstraints(),
+          style: IconButton.styleFrom(
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+        const SizedBox(width: 4),
         // Include in chat toggle
         Tooltip(
           message: 'Include scratchpad in chat context', // TODO: l10n
@@ -3378,100 +3591,143 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   Widget _buildNoteContent(Note note, AppLocalizations l10n) {
+    final noteMarkers = _noteMarkers[note.id] ?? [];
     return Scrollbar(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Stack(
           children: [
-            Text(
-              note.title,
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            SelectionArea(
-              child: InteractiveCheckboxMarkdown(
-                key: ValueKey(
-                  'immersive_note_${note.id}_${note.updatedAt.toIso8601String()}',
-                ),
-                noteId: note.id,
-                originalContent: note.content,
-                hasWebViewNotifier: _hasWebViewNotifier,
-                onContentChanged: (newContent) {
-                  context.read<AppProvider>().updateNoteContent(
-                    note.id,
-                    newContent,
-                  );
-                },
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-            ),
-            // Add subnotes if present
-            if (note.subNotes.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              Text(
-                l10n.subNotes,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              ...note.subNotes.map(
-                (subNote) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              if (subNote.isCompleted)
-                                const Icon(
-                                  Icons.check_circle,
-                                  color: Colors.green,
-                                  size: 20,
-                                )
-                              else
-                                const Icon(
-                                  Icons.radio_button_unchecked,
-                                  size: 20,
-                                ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  subNote.name,
-                                  style: Theme.of(context).textTheme.titleSmall
-                                      ?.copyWith(fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (subNote.content.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            SelectionArea(
-                              child: InteractiveCheckboxMarkdown(
-                                key: ValueKey(
-                                  'subnote_${subNote.id}_${subNote.createdAt.toIso8601String()}',
-                                ),
-                                noteId: note.id,
-                                originalContent: subNote.content,
-                                hasWebViewNotifier: _hasWebViewNotifier,
-                                onContentChanged: (_) {},
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
+            Container(
+              key: _noteContentKey,
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    note.title,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  SelectionArea(
+                    child: InteractiveCheckboxMarkdown(
+                      key: ValueKey(
+                        'immersive_note_${note.id}_${note.updatedAt.toIso8601String()}',
+                      ),
+                      noteId: note.id,
+                      originalContent: note.content,
+                      hasWebViewNotifier: _hasWebViewNotifier,
+                      onContentChanged: (newContent) {
+                        context.read<AppProvider>().updateNoteContent(
+                          note.id,
+                          newContent,
+                        );
+                      },
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                  ),
+                  // Add subnotes if present
+                  if (note.subNotes.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    Text(
+                      l10n.subNotes,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...note.subNotes.map(
+                      (subNote) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    if (subNote.isCompleted)
+                                      const Icon(
+                                        Icons.check_circle,
+                                        color: Colors.green,
+                                        size: 20,
+                                      )
+                                    else
+                                      const Icon(
+                                        Icons.radio_button_unchecked,
+                                        size: 20,
+                                      ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        subNote.name,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleSmall
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (subNote.content.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  SelectionArea(
+                                    child: InteractiveCheckboxMarkdown(
+                                      key: ValueKey(
+                                        'subnote_${subNote.id}_${subNote.createdAt.toIso8601String()}',
+                                      ),
+                                      noteId: note.id,
+                                      originalContent: subNote.content,
+                                      hasWebViewNotifier: _hasWebViewNotifier,
+                                      onContentChanged: (_) {},
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodyMedium,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (noteMarkers.isNotEmpty)
+              Positioned.fill(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return Stack(
+                      children: noteMarkers.expand((marker) {
+                        final rects =
+                            marker.normalizedRects ??
+                            (marker.normalizedRect != null
+                                ? [marker.normalizedRect!]
+                                : []);
+                        return rects.map((rect) {
+                          return Positioned(
+                            left: rect.x * constraints.maxWidth,
+                            top: rect.y * constraints.maxHeight,
+                            child: InNoteMarkerBadge(
+                              index: marker.index,
+                              color: marker.type == MarkerType.annotation
+                                  ? Colors.pink[200]!
+                                  : Colors.blue,
+                              onTap: () => _handleMarkerTap(marker),
+                            ),
+                          );
+                        });
+                      }).toList(),
+                    );
+                  },
                 ),
               ),
-            ],
           ],
         ),
       ),
@@ -3505,13 +3761,44 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
               ? Image.memory(source.bytes!)
               : Image.file(source.file);
 
-          return InteractiveViewer(
-            transformationController: transformController,
-            minScale: 0.1,
-            maxScale: 4,
-            constrained: true,
-            clipBehavior: Clip.hardEdge,
-            child: imageWidget,
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final markers = _attachmentMarkers[_activeAttachmentPath] ?? [];
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    child: InteractiveViewer(
+                      transformationController: transformController,
+                      minScale: 0.1,
+                      maxScale: 4,
+                      constrained: true,
+                      clipBehavior: Clip.hardEdge,
+                      child: imageWidget,
+                    ),
+                  ),
+                  ...markers.expand((marker) {
+                    final rects =
+                        marker.normalizedRects ??
+                        (marker.normalizedRect != null
+                            ? [marker.normalizedRect!]
+                            : []);
+                    return rects.map((rect) {
+                      return Positioned(
+                        left: rect.x * constraints.maxWidth,
+                        top: rect.y * constraints.maxHeight,
+                        child: InNoteMarkerBadge(
+                          index: marker.index,
+                          color: marker.type == MarkerType.annotation
+                              ? Colors.pink[200]!
+                              : Colors.blue,
+                          onTap: () => _handleMarkerTap(marker),
+                        ),
+                      );
+                    });
+                  }),
+                ],
+              );
+            },
           );
         }
 
@@ -3535,6 +3822,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 totalPageMap: _pdfTotalPages,
                 controllerMap: _pdfViewerControllers,
                 onError: (message) => LoggerService.error(message),
+                markers: _attachmentMarkers[_activeAttachmentPath] ?? [],
+                onMarkerTap: (marker) => _handleMarkerTap(marker),
                 onDocumentReady: (cacheKey, document, outline) {
                   _pdfDocuments[cacheKey] = document;
                   if (outline != null && outline.isNotEmpty) {
@@ -3575,6 +3864,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
+
         if (!snapshot.hasData || snapshot.hasError) {
           return Center(child: Text(l10n.failedToLoadAttachment));
         }
@@ -3687,6 +3977,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _activeNoteIndex = noteIndex;
           _activeAttachmentPath = attachment;
         });
+        _loadMarkersForAttachment(attachment);
         Navigator.pop(context);
       },
       onNodeTap: (node) {
@@ -3694,6 +3985,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _activeNoteIndex = noteIndex;
           _activeAttachmentPath = attachment;
         });
+        _loadMarkersForAttachment(attachment);
         Navigator.pop(context);
         _navigateToPdfOutlineDestination(attachment, node);
       },
@@ -3954,6 +4246,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       _activeNoteIndex = i;
                       _activeAttachmentPath = null;
                     });
+                    _loadMarkersForNote(notes[i].id);
                     Navigator.pop(context);
                   },
                 ),
@@ -4005,6 +4298,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                             _activeAttachmentPath = null;
                           }
                         });
+                        _loadMarkersForNote(linkedNote.id);
                         Navigator.pop(context);
                       },
                     ),
@@ -4038,6 +4332,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                             }
                             _activeAttachmentPath = attachment;
                           });
+                          _loadMarkersForAttachment(attachment);
                           Navigator.pop(context);
                         },
                       ),
@@ -4135,12 +4430,131 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   Future<void> _openAttachment(String path, AppLocalizations l10n) async {
     try {
-      await FileUtils.openFile(path, context);
+      String finalPath = path;
+      if (!path.startsWith('/') &&
+          !path.startsWith('http') &&
+          !path.startsWith('gs://')) {
+        finalPath = await FileUtils.getFullFilePath(path, true);
+      }
+      await FileUtils.openFile(finalPath, context);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l10n.failedToOpenAttachment(e.toString()))),
       );
+    }
+  }
+
+  void _deleteMarker(InNoteMarker marker) async {
+    final note = _conversationNotes[_activeNoteIndex];
+
+    final updatedMarkers = List<InNoteMarker>.from(_noteMarkers[note.id] ?? [])
+      ..removeWhere((m) => m.id == marker.id);
+
+    setState(() {
+      if (updatedMarkers.isEmpty) {
+        _noteMarkers.remove(note.id);
+      } else {
+        _noteMarkers[note.id] = updatedMarkers;
+      }
+
+      // Update attachment markers if necessary
+      if (_activeAttachmentPath != null) {
+        final attachMarkers = List<InNoteMarker>.from(
+          _attachmentMarkers[_activeAttachmentPath!] ?? [],
+        )..removeWhere((m) => m.id == marker.id);
+
+        if (attachMarkers.isEmpty) {
+          _attachmentMarkers.remove(_activeAttachmentPath!);
+        } else {
+          _attachmentMarkers[_activeAttachmentPath!] = attachMarkers;
+        }
+      }
+    });
+
+    final metadataJson = jsonEncode({
+      'inNoteMarkers': updatedMarkers.map((m) => m.toJson()).toList(),
+    });
+
+    final dbService = getIt<DatabaseService>();
+    final updatedNote = note.copyWith(metadata: metadataJson);
+    await dbService.updateNote(updatedNote);
+    if (!mounted) return;
+    context.read<AppProvider>().updateNote(updatedNote);
+
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Marker deleted.')));
+    }
+  }
+
+  Future<void> _handleMarkerTap(InNoteMarker marker) async {
+    if (marker.type == MarkerType.annotation) {
+      final annotation = await _noteAnnotationService.getAnnotation(marker.id);
+      if (annotation == null || !mounted) return;
+      final isInScratchpad = _scratchpadItems.any((m) => m.id == marker.id);
+      final result = await showAnnotationPreview(
+        context,
+        annotation,
+        isInScratchpad: isInScratchpad,
+      );
+      if (!mounted) return;
+      if (result == AnnotationPreviewResult.addToScratchpad) {
+        setState(() {
+          _scratchpadItems.add(
+            ConversationMessage(
+              id: annotation.id,
+              conversationId: 'scratchpad',
+              content: annotation.content,
+              type: MessageType.user,
+              timestamp: annotation.createdAt,
+              attachmentPaths: annotation.attachmentPaths,
+            ),
+          );
+        });
+      } else if (result == AnnotationPreviewResult.removed) {
+        await _deleteAnnotationMarker(marker);
+      }
+    } else {
+      final deleted = await showInNoteMarkerPreview(context, marker);
+      if (deleted == true) {
+        _deleteMarker(marker);
+      }
+    }
+  }
+
+  Future<void> _deleteAnnotationMarker(InNoteMarker marker) async {
+    try {
+      if (_activeAttachmentPath != null) {
+        final attachment = await _resolveAttachment(_activeAttachmentPath!);
+        if (attachment != null) {
+          await _noteMarkerService.deleteMarkerForAttachment(
+            attachment.id,
+            marker.id,
+          );
+        }
+      } else {
+        final note = widget.notes[_activeNoteIndex];
+        await _noteMarkerService.deleteMarkerForNote(note.id, marker.id);
+      }
+      await _noteAnnotationService.deleteAnnotation(marker.id);
+
+      if (mounted) {
+        setState(() {
+          _scratchpadItems.removeWhere((m) => m.id == marker.id);
+          if (_activeAttachmentPath != null) {
+            _attachmentMarkers[_activeAttachmentPath!]?.removeWhere(
+              (m) => m.id == marker.id,
+            );
+          } else {
+            final note = widget.notes[_activeNoteIndex];
+            _noteMarkers[note.id]?.removeWhere((m) => m.id == marker.id);
+          }
+        });
+      }
+    } catch (e) {
+      LoggerService.error('Failed to delete annotation marker: $e', error: e);
     }
   }
 
@@ -4176,6 +4590,152 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           context,
         ).showSnackBar(SnackBar(content: Text('Error opening link: $e')));
       }
+    }
+  }
+
+  Future<void> _loadMarkersForAttachment(String attachmentPath) async {
+    final attachment = await _resolveAttachment(attachmentPath);
+    if (attachment == null) return;
+    final markers = await _noteMarkerService.getMarkersForAttachment(
+      attachment.id,
+    );
+    if (mounted) {
+      setState(() {
+        _attachmentMarkers[attachmentPath] = markers;
+      });
+    }
+  }
+
+  Future<void> _loadMarkersForNote(String noteId) async {
+    final markers = await _noteMarkerService.getMarkersForNote(noteId);
+    if (mounted) {
+      setState(() {
+        _noteMarkers[noteId] = markers;
+      });
+    }
+  }
+
+  Future<void> _saveInNoteMarker(
+    String messageId,
+    String conversationId,
+    InNoteMarkerPosition position,
+  ) async {
+    try {
+      if (_activeAttachmentPath != null) {
+        final attachment = await _resolveAttachment(_activeAttachmentPath!);
+        if (attachment == null) return;
+        final existingMarkers = await _noteMarkerService
+            .getMarkersForAttachment(attachment.id);
+        final marker = InNoteMarker.forAttachment(
+          index: existingMarkers.length + 1,
+          page: position.page ?? 0,
+          normalizedRect: position.normalizedRect,
+          normalizedRects: position.normalizedRects,
+          conversationId: conversationId,
+          messageId: messageId,
+        );
+        await _noteMarkerService.saveMarkerForAttachment(attachment.id, marker);
+      } else {
+        final note = widget.notes[_activeNoteIndex];
+        final existingMarkers = await _noteMarkerService.getMarkersForNote(
+          note.id,
+        );
+        final marker = InNoteMarker.forNote(
+          index: existingMarkers.length + 1,
+          charStart: 0,
+          charEnd: 0,
+          normalizedRect: position.normalizedRect,
+          normalizedRects: position.normalizedRects,
+          conversationId: conversationId,
+          messageId: messageId,
+        );
+        await _noteMarkerService.saveMarkerForNote(note.id, marker);
+      }
+      if (mounted) {
+        setState(() {});
+        if (_activeAttachmentPath != null) {
+          _loadMarkersForAttachment(_activeAttachmentPath!);
+        } else {
+          _loadMarkersForNote(widget.notes[_activeNoteIndex].id);
+        }
+      }
+    } catch (e) {
+      LoggerService.error('Failed to save in-note marker: $e', error: e);
+    }
+  }
+
+  Future<void> _saveAnnotationMarker(
+    String markerId,
+    String content,
+    List<String> attachmentPaths,
+    InNoteMarkerPosition position,
+  ) async {
+    try {
+      if (_activeAttachmentPath != null) {
+        final attachment = await _resolveAttachment(_activeAttachmentPath!);
+        if (attachment == null) return;
+        final existingMarkers = await _noteMarkerService
+            .getMarkersForAttachment(attachment.id);
+        final marker = InNoteMarker.forAttachment(
+          id: markerId,
+          index: existingMarkers.length + 1,
+          page: position.page ?? 0,
+          normalizedRect: position.normalizedRect,
+          normalizedRects: position.normalizedRects,
+          // Annotation markers are not linked to a conversation; the shared
+          // markerId UUID links to NoteAnnotation instead.
+          conversationId: '',
+          messageId: '',
+          type: MarkerType.annotation,
+        );
+        await _noteMarkerService.saveMarkerForAttachment(attachment.id, marker);
+        await _noteAnnotationService.saveAnnotation(
+          NoteAnnotation(
+            id: markerId,
+            attachmentId: attachment.id,
+            content: content,
+            attachmentPaths: attachmentPaths,
+            createdAt: DateTime.now(),
+          ),
+        );
+      } else {
+        final note = widget.notes[_activeNoteIndex];
+        final existingMarkers = await _noteMarkerService.getMarkersForNote(
+          note.id,
+        );
+        final marker = InNoteMarker.forNote(
+          id: markerId,
+          index: existingMarkers.length + 1,
+          charStart: 0,
+          charEnd: 0,
+          normalizedRect: position.normalizedRect,
+          normalizedRects: position.normalizedRects,
+          // Annotation markers are not linked to a conversation; the shared
+          // markerId UUID links to NoteAnnotation instead.
+          conversationId: '',
+          messageId: '',
+          type: MarkerType.annotation,
+        );
+        await _noteMarkerService.saveMarkerForNote(note.id, marker);
+        await _noteAnnotationService.saveAnnotation(
+          NoteAnnotation(
+            id: markerId,
+            noteId: note.id,
+            content: content,
+            attachmentPaths: attachmentPaths,
+            createdAt: DateTime.now(),
+          ),
+        );
+      }
+      if (mounted) {
+        if (_activeAttachmentPath != null) {
+          _loadMarkersForAttachment(_activeAttachmentPath!);
+        } else {
+          _loadMarkersForNote(widget.notes[_activeNoteIndex].id);
+        }
+      }
+    } catch (e) {
+      LoggerService.error('Failed to save annotation marker: $e', error: e);
     }
   }
 
@@ -4223,10 +4783,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     try {
       if (_isScratchpadMode) {
-        // Add to scratchpad
+        final pendingPos = _pendingMarkerPosition;
+        _pendingMarkerPosition = null;
+
+        final markerId = const Uuid().v4();
+
         final message = ConversationMessage(
-          id: const Uuid().v4(), // Need uuid package or generate random string
-          conversationId: _conversation?.id ?? 'scratchpad',
+          id: markerId,
+          conversationId: 'scratchpad',
           content: content,
           type: MessageType.user,
           timestamp: DateTime.now(),
@@ -4238,13 +4802,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _isSending = false;
         });
 
-        // Scroll to bottom of scratchpad?
-        // We might need a separate scroll controller for scratchpad or reuse _chatScrollController if it's swapped.
-        // Since we swap the view, we can reuse _chatScrollController or just let it be.
-        // But _chatScrollController is attached to the ListView in _buildConversationList AND _buildScratchpadList?
-        // Yes, if we reuse it, we should be careful.
-        // Let's check _buildScratchpadList. I didn't assign a controller there.
-        // I should assign _chatScrollController to _buildScratchpadList's ListView as well.
+        if (pendingPos != null) {
+          await _saveAnnotationMarker(
+            markerId,
+            content,
+            attachments.map((f) => f.path!).toList(),
+            pendingPos,
+          );
+        }
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_chatScrollController.hasClients) {
@@ -4283,6 +4848,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         _messages.add(userMessage);
       });
       _scrollToBottom();
+
+      // Save in-note marker if a drawing was confirmed before this send
+      if (_pendingMarkerPosition != null) {
+        final pendingPos = _pendingMarkerPosition!;
+        _pendingMarkerPosition = null;
+        await _saveInNoteMarker(userMessage.id, _conversation!.id, pendingPos);
+      }
 
       final response = await _generateAiResponse(
         content,
@@ -4832,6 +5404,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         _activeAttachmentPath = null;
       });
 
+      // Load markers for the now-active note.
+      final notes = widget.notes;
+      if (notes.isNotEmpty) {
+        final noteId = _noteOrder.isNotEmpty
+            ? _noteOrder[_activeNoteIndex]
+            : notes[_activeNoteIndex].id;
+        _loadMarkersForNote(noteId);
+      }
+
       _scrollToBottom();
       return true;
     } catch (e, stackTrace) {
@@ -5189,6 +5770,8 @@ class _PdfDocumentView extends StatefulWidget {
     required this.totalPageMap,
     required this.controllerMap,
     required this.onError,
+    required this.markers,
+    required this.onMarkerTap,
     this.onDocumentReady,
     this.isNightMode = false,
   });
@@ -5199,6 +5782,8 @@ class _PdfDocumentView extends StatefulWidget {
   final Map<String, int> totalPageMap;
   final Map<String, PdfViewerController> controllerMap;
   final void Function(String message) onError;
+  final List<InNoteMarker> markers;
+  final void Function(InNoteMarker) onMarkerTap;
   final void Function(
     String cacheKey,
     PdfDocument document,
@@ -5326,6 +5911,32 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
               // pdfrx uses 1-indexed page numbers, convert to 0-indexed for storage
               widget.currentPageMap[_cacheKey] = pageNumber - 1;
             }
+          },
+          pageOverlaysBuilder: (context, pageRectInViewer, page) {
+            // page.pageNumber is 1-indexed; our markers store 0-indexed page
+            final pageMarkers = widget.markers
+                .where((m) => m.page == page.pageNumber - 1)
+                .toList();
+            return pageMarkers.expand((marker) {
+              final rects =
+                  marker.normalizedRects ??
+                  (marker.normalizedRect != null
+                      ? [marker.normalizedRect!]
+                      : []);
+              return rects.map((rect) {
+                return Positioned(
+                  left: rect.x * pageRectInViewer.width,
+                  top: rect.y * pageRectInViewer.height,
+                  child: InNoteMarkerBadge(
+                    index: marker.index,
+                    color: marker.type == MarkerType.annotation
+                        ? Colors.pink[200]!
+                        : Colors.blue,
+                    onTap: () => widget.onMarkerTap(marker),
+                  ),
+                );
+              });
+            }).toList();
           },
         ),
       ),
@@ -5699,5 +6310,102 @@ class _AttachmentOutlineItemState extends State<_AttachmentOutlineItem> {
       }
     }
     return widgets;
+  }
+}
+
+/// Transient position captured at draw-confirm time, cleared after save.
+class InNoteMarkerPosition {
+  final NormalizedRect normalizedRect;
+  final List<NormalizedRect>? normalizedRects;
+  final int? page; // null for text notes
+  const InNoteMarkerPosition({
+    required this.normalizedRect,
+    this.normalizedRects,
+    this.page,
+  });
+}
+
+class _RecallAnnotationsDialog extends StatefulWidget {
+  final List<NoteAnnotation> annotations;
+  final Set<String> scratchpadIds;
+
+  const _RecallAnnotationsDialog({
+    required this.annotations,
+    required this.scratchpadIds,
+  });
+
+  @override
+  State<_RecallAnnotationsDialog> createState() =>
+      _RecallAnnotationsDialogState();
+}
+
+class _RecallAnnotationsDialogState extends State<_RecallAnnotationsDialog> {
+  final Set<String> _selected = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Recall Annotations'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: widget.annotations.length,
+          itemBuilder: (context, index) {
+            final ann = widget.annotations[index];
+            final alreadyIn = widget.scratchpadIds.contains(ann.id);
+            return CheckboxListTile(
+              enabled: !alreadyIn,
+              value: alreadyIn ? true : _selected.contains(ann.id),
+              onChanged: alreadyIn
+                  ? null
+                  : (checked) {
+                      setState(() {
+                        if (checked == true) {
+                          _selected.add(ann.id);
+                        } else {
+                          _selected.remove(ann.id);
+                        }
+                      });
+                    },
+              title: Text(
+                ann.content,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: alreadyIn ? theme.disabledColor : null,
+                ),
+              ),
+              subtitle: Text(
+                alreadyIn
+                    ? 'Already in scratchpad'
+                    : _formatDate(ann.createdAt),
+                style: theme.textTheme.labelSmall,
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _selected.isEmpty
+              ? null
+              : () => Navigator.of(context).pop(_selected.toList()),
+          child: const Text('Add'),
+        ),
+      ],
+    );
+  }
+
+  String _formatDate(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inDays > 0) return '${diff.inDays}d ago';
+    if (diff.inHours > 0) return '${diff.inHours}h ago';
+    return '${diff.inMinutes}m ago';
   }
 }

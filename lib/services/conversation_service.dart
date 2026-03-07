@@ -5,6 +5,7 @@ import '../models/conversation_attachment.dart';
 import '../models/conversation_context.dart';
 import '../models/note.dart';
 import '../models/tag.dart';
+import 'conversation_attachment_service.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
 
@@ -225,13 +226,37 @@ class ConversationService {
     required String content,
     List<String> attachmentPaths = const [],
   }) async {
+    // Process local absolute file paths
+    final finalAttachmentPaths = <String>[];
+    final pathsToProcess = <String>[];
+
+    for (final path in attachmentPaths) {
+      if (path.startsWith('http://') ||
+          path.startsWith('https://') ||
+          path.startsWith('gs://') ||
+          path.startsWith('attachments/')) {
+        finalAttachmentPaths.add(path);
+      } else {
+        pathsToProcess.add(path);
+      }
+    }
+
+    if (pathsToProcess.isNotEmpty) {
+      final processed =
+          await ConversationAttachmentService.processFilesForAttachments(
+            filePaths: pathsToProcess,
+            noteId: conversationId,
+          );
+      finalAttachmentPaths.addAll(processed);
+    }
+
     final message = ConversationMessage(
       id: _uuid.v4(),
       conversationId: conversationId,
       type: MessageType.user,
       content: content,
       timestamp: DateTime.now(),
-      attachmentPaths: attachmentPaths,
+      attachmentPaths: finalAttachmentPaths,
     );
 
     // Insert message
@@ -276,11 +301,11 @@ class ConversationService {
     }
 
     // Add attachments
-    for (final attachmentPath in attachmentPaths) {
+    for (final attachmentPath in finalAttachmentPaths) {
       final fileName = attachmentPath.split('/').last;
       final fileType = fileName.split('.').last;
 
-      // Check if it's a URI
+      // Check if it's an absolute URI
       final isUri =
           attachmentPath.startsWith('http://') ||
           attachmentPath.startsWith('https://') ||
@@ -293,7 +318,8 @@ class ConversationService {
         fileName: fileName,
         fileType: fileType,
         createdAt: DateTime.now(),
-        isRelativePath: !isUri, // URIs are absolute paths
+        isRelativePath:
+            !isUri, // Both local absolute and attachments/ are considered relative to the device
       );
       await _databaseService.insertConversationAttachment(attachment);
     }
