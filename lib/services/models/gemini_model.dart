@@ -896,8 +896,8 @@ class GeminiModel implements AIModel {
     );
 
     final response = await NetworkProvider.post(
-      Uri.parse('$endpoint/models/$modelName:generateContent?key=$apiKey'),
-      headers: {'Content-Type': 'application/json'},
+      Uri.parse('$endpoint/models/$modelName:generateContent'),
+      headers: {'Content-Type': 'application/json', 'x-goog-api-key': apiKey},
       body: jsonEncode(requestBody),
     );
 
@@ -1052,8 +1052,8 @@ class GeminiModel implements AIModel {
     );
 
     final response = await NetworkProvider.post(
-      Uri.parse('$endpoint/models/$modelName:generateContent?key=$apiKey'),
-      headers: {'Content-Type': 'application/json'},
+      Uri.parse('$endpoint/models/$modelName:generateContent'),
+      headers: {'Content-Type': 'application/json', 'x-goog-api-key': apiKey},
       body: jsonEncode(requestBody),
     );
 
@@ -1260,8 +1260,8 @@ class GeminiModel implements AIModel {
     );
 
     final response = await NetworkProvider.post(
-      Uri.parse('$endpoint/models/$modelName:generateContent?key=$apiKey'),
-      headers: {'Content-Type': 'application/json'},
+      Uri.parse('$endpoint/models/$modelName:generateContent'),
+      headers: {'Content-Type': 'application/json', 'x-goog-api-key': apiKey},
       body: jsonEncode(requestBody),
     );
 
