@@ -143,6 +143,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final Map<String, PdfDocument> _pdfDocuments = {};
   final Map<String, List<PdfOutlineNode>> _pdfOutlines = {};
   final Map<String, TransformationController> _imageTransforms = {};
+  TransformationController? _activeImageTransform;
 
   final ConversationAiEngine _aiEngine = const ConversationAiEngine();
   Conversation? _conversation;
@@ -2240,6 +2241,42 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
               : NormalizedRect(x: 0, y: 0, w: 0, h: 0),
           normalizedRects: norms,
         );
+      } else {
+        // Non-PDF attachment (image, etc.).
+        // Drawing coordinates are in viewport space.  When the image is
+        // zoomed/panned via InteractiveViewer, we must apply the INVERSE of
+        // the current transform to map viewport coords → image-space coords
+        // before normalising.
+        final renderObject =
+            _noteBoundaryKey.currentContext?.findRenderObject();
+        if (renderObject is! RenderBox || renderObject.size.isEmpty) {
+          return null;
+        }
+        final size = renderObject.size;
+        final matrix = _activeImageTransform?.value ?? Matrix4.identity();
+        final inverseMatrix = Matrix4.inverted(matrix);
+        final norms = drawBoundsList.map((drawBounds) {
+          final topLeft = MatrixUtils.transformPoint(
+            inverseMatrix,
+            Offset(drawBounds.left, drawBounds.top),
+          );
+          final bottomRight = MatrixUtils.transformPoint(
+            inverseMatrix,
+            Offset(drawBounds.right, drawBounds.bottom),
+          );
+          return NormalizedRect(
+            x: (topLeft.dx / size.width).clamp(0.0, 1.0),
+            y: (topLeft.dy / size.height).clamp(0.0, 1.0),
+            w: ((bottomRight.dx - topLeft.dx) / size.width).clamp(0.0, 1.0),
+            h: ((bottomRight.dy - topLeft.dy) / size.height).clamp(0.0, 1.0),
+          );
+        }).toList();
+        return InNoteMarkerPosition(
+          normalizedRect: norms.isNotEmpty
+              ? norms.first
+              : NormalizedRect(x: 0, y: 0, w: 0, h: 0),
+          normalizedRects: norms,
+        );
       }
     } else {
       // Text note mode
@@ -3757,6 +3794,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           final transformController = _ensureImageTransformationController(
             source.cacheKey,
           );
+          _activeImageTransform = transformController;
           final imageWidget = source.bytes != null
               ? Image.memory(source.bytes!)
               : Image.file(source.file);
@@ -3764,39 +3802,41 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           return LayoutBuilder(
             builder: (context, constraints) {
               final markers = _attachmentMarkers[_activeAttachmentPath] ?? [];
-              return Stack(
-                children: [
-                  Positioned.fill(
-                    child: InteractiveViewer(
-                      transformationController: transformController,
-                      minScale: 0.1,
-                      maxScale: 4,
-                      constrained: true,
-                      clipBehavior: Clip.hardEdge,
-                      child: imageWidget,
-                    ),
+              return InteractiveViewer(
+                transformationController: transformController,
+                minScale: 0.1,
+                maxScale: 4,
+                constrained: true,
+                clipBehavior: Clip.hardEdge,
+                child: SizedBox(
+                  width: constraints.maxWidth,
+                  height: constraints.maxHeight,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(child: imageWidget),
+                      ...markers.expand((marker) {
+                        final rects =
+                            marker.normalizedRects ??
+                            (marker.normalizedRect != null
+                                ? [marker.normalizedRect!]
+                                : []);
+                        return rects.map((rect) {
+                          return Positioned(
+                            left: rect.x * constraints.maxWidth,
+                            top: rect.y * constraints.maxHeight,
+                            child: InNoteMarkerBadge(
+                              index: marker.index,
+                              color: marker.type == MarkerType.annotation
+                                  ? Colors.pink[200]!
+                                  : Colors.blue,
+                              onTap: () => _handleMarkerTap(marker),
+                            ),
+                          );
+                        });
+                      }),
+                    ],
                   ),
-                  ...markers.expand((marker) {
-                    final rects =
-                        marker.normalizedRects ??
-                        (marker.normalizedRect != null
-                            ? [marker.normalizedRect!]
-                            : []);
-                    return rects.map((rect) {
-                      return Positioned(
-                        left: rect.x * constraints.maxWidth,
-                        top: rect.y * constraints.maxHeight,
-                        child: InNoteMarkerBadge(
-                          index: marker.index,
-                          color: marker.type == MarkerType.annotation
-                              ? Colors.pink[200]!
-                              : Colors.blue,
-                          onTap: () => _handleMarkerTap(marker),
-                        ),
-                      );
-                    });
-                  }),
-                ],
+                ),
               );
             },
           );
