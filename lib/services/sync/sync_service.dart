@@ -724,10 +724,14 @@ class SyncService {
         }
 
         // Apply any oplog entries on top of snapshot
+        // Use ownDeviceId: '' to include ALL devices' oplog (including own).
+        // This handles the case where the same device UUID rejoins after a
+        // data wipe (e.g., iOS Keychain survives app deletion). Re-applying
+        // ops already covered by the snapshot is idempotent.
         final reader = OplogReader(
           provider: provider,
           encryption: encryption,
-          ownDeviceId: deviceId,
+          ownDeviceId: '',
           currentSchemaVersion: schemaVersion,
         );
         final readResult =

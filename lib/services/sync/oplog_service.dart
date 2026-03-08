@@ -427,14 +427,16 @@ class OplogReader {
       if (file.deviceId == _ownDeviceId) {
         return false;
       }
-      // Skip files entirely older than lastSeen
-      final lastSeen = lastSeenSequences[file.deviceId] ?? 0;
+      // Skip files entirely older than lastSeen.
+      // Use -1 as default (not 0) so that sequence 0 ops are included when
+      // we have no prior knowledge of a device's operations.
+      final lastSeen = lastSeenSequences[file.deviceId] ?? -1;
       return file.seqEnd > lastSeen;
     }).toList();
 
     // Process each qualifying file
     for (final file in qualifyingFiles) {
-      final lastSeen = lastSeenSequences[file.deviceId] ?? 0;
+      final lastSeen = lastSeenSequences[file.deviceId] ?? -1;
 
       List<SyncOperation> ops;
       try {

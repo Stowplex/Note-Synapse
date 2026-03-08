@@ -363,6 +363,67 @@ void main() {
       );
     });
 
+    test('restores oplog data when same device rejoins with wiped local DB',
+        () async {
+      // A initializes sync with empty DB → snapshot is empty
+      await syncServiceA.initializeSyncRoot(provider: provider);
+
+      // A adds notes AFTER init (captured by sync triggers as oplog)
+      final dbAHandle = await dbA.database;
+      await dbAHandle.insert('notes', makeNote('note-a1', 'Note After Init 1'));
+      await dbAHandle.insert('notes', makeNote('note-a2', 'Note After Init 2'));
+
+      // A pushes the oplog to remote
+      await syncServiceA.sync();
+
+      // Simulate wipe: new empty DB, but same device identity (UUID preserved,
+      // as happens with iOS Keychain surviving app deletion)
+      final dbAWiped = DatabaseService.createNew();
+      await dbAWiped.database;
+      // identityA retains the same device UUID
+      final syncServiceAWiped = SyncService(db: dbAWiped, identity: identityA);
+
+      // Re-join with same device UUID
+      await syncServiceAWiped.joinSyncRoot(provider: provider);
+
+      // All notes should be restored from oplog
+      final database = await dbAWiped.database;
+      final notes = await database.query('notes', orderBy: 'id');
+      final noteIds = notes.map((n) => n['id'] as String).toSet();
+      expect(noteIds, contains('note-a1'));
+      expect(noteIds, contains('note-a2'));
+      expect(notes.length, 2);
+
+      await dbAWiped.close();
+    });
+
+    test(
+        'sync now after re-join finds nothing new (data already restored by join)',
+        () async {
+      await syncServiceA.initializeSyncRoot(provider: provider);
+      final dbAHandle = await dbA.database;
+      await dbAHandle.insert('notes', makeNote('note-a1', 'Note After Init'));
+      await syncServiceA.sync();
+
+      final dbAWiped = DatabaseService.createNew();
+      await dbAWiped.database;
+      final syncServiceAWiped = SyncService(db: dbAWiped, identity: identityA);
+      await syncServiceAWiped.joinSyncRoot(provider: provider);
+
+      // sync now should succeed with 0 ops pulled (data was restored in join)
+      final result = await syncServiceAWiped.sync();
+      expect(result.success, isTrue);
+      expect(result.opsPulled, 0);
+
+      // Data is still there
+      final database = await dbAWiped.database;
+      final notes = await database.query('notes');
+      expect(notes.length, 1);
+      expect(notes.first['id'], 'note-a1');
+
+      await dbAWiped.close();
+    });
+
     test('joinSyncRoot merges tags and note_tags correctly', () async {
       // A has a note with a tag
       await insertNotes(dbA, [makeNote('note-a', 'A Note')]);
