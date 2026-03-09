@@ -761,9 +761,11 @@ This is NOT a summary of what you did - this IS the deliverable the user asked f
   - Inline: \\( formula \\) (e.g., \\( E = mc^2 \\))
   - Display: \\[ formula \\] (e.g., \\[ \\int_{0}^{\\infty} e^{-x^2} dx \\])
 
-When referring to notes or conversations, use inline markdown links with the synapseresource:// URI scheme:
+When referring to notes, conversations, or attachments, use inline markdown links with the synapseresource:// URI scheme:
 - For notes: [Note Title](synapseresource://note/<note_id>)
 - For conversations: [Conversation Title](synapseresource://conversation/<conversation_id>)
+- For attachments: [Label](synapseresource://attachment/<attachment_id>?page=<1-indexed page number>)
+  The ?page= parameter is optional; when provided it opens the attachment at that page.
 
 Respond directly to: "$objective"
 ''';

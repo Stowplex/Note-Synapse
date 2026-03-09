@@ -337,7 +337,7 @@ class NotePromptBuilder {
       if (validAttachments.isNotEmpty) {
         buffer.writeln('$indent  Attachments:');
         for (final attachment in validAttachments) {
-          buffer.writeln('$indent    - ${attachment.fileName}');
+          buffer.writeln('$indent    - ${attachment.fileName} (ID: ${attachment.id})');
         }
       }
     } catch (e) {

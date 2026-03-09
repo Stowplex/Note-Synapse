@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart' as pdfrx;
 import '../models/attachment.dart';
+import '../models/in_note_marker.dart';
 import '../models/note.dart';
 import '../screens/note_selection_dialog.dart';
 import '../services/attachment_link_service.dart';
 import '../services/database_service.dart';
+import '../services/note_marker_service.dart';
 import '../services/service_locator.dart';
 import '../widgets/attachment_picker_widget.dart';
 import '../widgets/pdf_location_picker.dart';
@@ -41,6 +43,7 @@ class _InsertAttachmentLinkDialogState
   int? _pdfTotalPages;
   List<PdfOutlineNode>? _pdfOutline;
   String? _pdfAbsPath;
+  List<InNoteMarker> _markers = [];
 
   // Confirm state (non-PDF)
   final TextEditingController _linkTextController = TextEditingController();
@@ -146,6 +149,21 @@ class _InsertAttachmentLinkDialogState
           _pdfAbsPath = absPath;
           _loadingPdf = false;
         });
+      }
+
+      // Load markers for the attachment
+      try {
+        final markerService = getIt<NoteMarkerService>();
+        final markers = await markerService.getMarkersForAttachment(
+          attachment.id,
+        );
+        if (mounted) {
+          setState(() {
+            _markers = markers;
+          });
+        }
+      } catch (_) {
+        // Non-critical — markers are optional
       }
     } catch (e) {
       if (mounted) {
@@ -277,6 +295,7 @@ class _InsertAttachmentLinkDialogState
       totalPages: _pdfTotalPages,
       bookmarks: attachment.getBookmarks(),
       outline: _pdfOutline,
+      markers: _markers,
       pdfPath: _pdfAbsPath,
       attachmentId: attachment.id,
       fileName: attachment.fileName,

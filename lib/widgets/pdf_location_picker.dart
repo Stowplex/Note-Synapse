@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:note_synapse/models/attachment.dart';
+import 'package:note_synapse/models/in_note_marker.dart';
 import 'package:note_synapse/services/attachment_link_service.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/pdf_thumbnail_service.dart';
@@ -35,6 +36,7 @@ class PdfLocationPicker extends StatefulWidget {
   final int? totalPages;
   final List<PdfBookmark> bookmarks;
   final List<PdfOutlineNode>? outline;
+  final List<InNoteMarker> markers;
   final String? pdfPath;
   final String attachmentId;
   final String fileName;
@@ -47,6 +49,7 @@ class PdfLocationPicker extends StatefulWidget {
     this.totalPages,
     this.bookmarks = const [],
     this.outline,
+    this.markers = const [],
     this.pdfPath,
     required this.attachmentId,
     required this.fileName,
@@ -141,6 +144,16 @@ class _PdfLocationPickerState extends State<PdfLocationPicker> {
     // outline nodes are 0-indexed, so we add 1 for UI
     _goToPage(node.page + 1);
     _updateLinkText(chapterTitle: node.title);
+  }
+
+  void _selectMarker(InNoteMarker marker) {
+    // Marker pages are 0-indexed, add 1 for display
+    final displayPage = (marker.page ?? 0) + 1;
+    _goToPage(displayPage);
+    final typeLabel = marker.type == MarkerType.annotation
+        ? 'Annotation'
+        : 'AI';
+    _linkTextController.text = '$typeLabel Marker #${marker.index} (p.$displayPage)';
   }
 
   List<PdfOutlineNode> _flattenOutline(
@@ -273,6 +286,34 @@ class _PdfLocationPickerState extends State<PdfLocationPicker> {
                       avatar: const Icon(Icons.bookmark, size: 18),
                       visualDensity: VisualDensity.compact,
                       label: const Text('Bookmarks'),
+                    ),
+                  ),
+                ],
+                // Markers dropdown
+                if (widget.markers.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  PopupMenuButton<InNoteMarker>(
+                    tooltip: 'Markers',
+                    itemBuilder: (context) {
+                      return widget.markers.map((marker) {
+                        final typeIcon = marker.type == MarkerType.annotation
+                            ? '✏️'
+                            : '🤖';
+                        final displayPage = (marker.page ?? 0) + 1;
+                        return PopupMenuItem<InNoteMarker>(
+                          value: marker,
+                          child: Text(
+                            '$typeIcon #${marker.index} · p.$displayPage',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList();
+                    },
+                    onSelected: _selectMarker,
+                    child: Chip(
+                      avatar: const Icon(Icons.push_pin, size: 18),
+                      visualDensity: VisualDensity.compact,
+                      label: const Text('Markers'),
                     ),
                   ),
                 ],
