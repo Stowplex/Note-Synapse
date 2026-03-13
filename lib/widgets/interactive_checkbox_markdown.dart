@@ -37,6 +37,73 @@ import '../widgets/drawing_editor.dart';
 /// Enum to represent image source type
 enum _ImageSourceType { local, remote }
 
+/// Applies a checkbox toggle to [content] and returns the updated string.
+///
+/// [checkboxLine] is the trimmed line as seen by the markdown component (may
+/// or may not include the leading "- " list marker).
+/// [checkboxText] is the label text after `[x]` / `[ ]`.
+/// [newValue] is the desired checked state.
+/// [occurrenceIndex] is the 0-based index among lines that match [checkboxLine],
+/// in document order.  This disambiguates duplicate list items — e.g. two
+/// consecutive `- [ ] item` lines each have a distinct occurrence index.
+String applyCheckboxToggle(
+  String content,
+  String checkboxLine,
+  String checkboxText,
+  bool newValue, {
+  int occurrenceIndex = 0,
+}) {
+  final lines = content.split('\n');
+  final lineRegex = RegExp(r'^(\s*)(?:-\s+)?\[([ x])\]\s+(.+)$');
+
+  // The markdown parser may strip the "- " prefix before passing text to
+  // InteractiveCheckboxMd, so checkboxLine may be "[x] text" while the raw
+  // source line is "- [x] text". Normalise before comparing.
+  String normalize(String s) => s.startsWith('- ') ? s.substring(2) : s;
+
+  // --- Pass 1: use checkboxLine for exact matching, honoring occurrenceIndex.
+  int exactMatchCount = 0;
+  for (int i = 0; i < lines.length; i++) {
+    final line = lines[i];
+    final trimmedLine = line.trim();
+    if (normalize(trimmedLine) == normalize(checkboxLine)) {
+      final m = lineRegex.firstMatch(line);
+      if (m != null) {
+        if (exactMatchCount == occurrenceIndex) {
+          final indent = m.group(1) ?? '';
+          final text = m.group(3) ?? '';
+          final dash = trimmedLine.startsWith('-') ? '- ' : '';
+          lines[i] = '$indent$dash[${newValue ? 'x' : ' '}] $text';
+          return lines.join('\n');
+        }
+        exactMatchCount++;
+      }
+    }
+  }
+
+  // --- Pass 2: fallback — match by label text, honoring occurrenceIndex.
+  // Do NOT use contains() — it causes false positives when one item's text is
+  // a substring of another (e.g. "牙刷" inside "牙膏牙刷").
+  int fallbackMatchCount = 0;
+  for (int i = 0; i < lines.length; i++) {
+    final line = lines[i];
+    final trimmedLine = line.trim();
+    final m = lineRegex.firstMatch(line);
+    if (m != null && m.group(3)?.trim() == checkboxText.trim()) {
+      if (fallbackMatchCount == occurrenceIndex) {
+        final indent = m.group(1) ?? '';
+        final text = m.group(3) ?? '';
+        final dash = trimmedLine.startsWith('-') ? '- ' : '';
+        lines[i] = '$indent$dash[${newValue ? 'x' : ' '}] $text';
+        return lines.join('\n');
+      }
+      fallbackMatchCount++;
+    }
+  }
+
+  return content; // no match found — return unchanged
+}
+
 /// A wrapper widget that provides interactive checkboxes using gpt_markdown
 /// with a custom checkbox component that handles state updates.
 class InteractiveCheckboxMarkdown extends StatefulWidget {
@@ -76,6 +143,17 @@ class InteractiveCheckboxMarkdown extends StatefulWidget {
 class _InteractiveCheckboxMarkdownState
     extends State<InteractiveCheckboxMarkdown> {
   late String _currentContent;
+
+  /// Tracks how many times each checkbox line has been seen during the current
+  /// build pass.  Reset at the start of every [build] call so that occurrence
+  /// indices stay in sync with the rendered order.
+  final Map<String, int> _checkboxOccurrenceCounters = {};
+
+  int _getOccurrence(String blockText) {
+    final count = _checkboxOccurrenceCounters[blockText] ?? 0;
+    _checkboxOccurrenceCounters[blockText] = count + 1;
+    return count;
+  }
 
   @override
   void initState() {
@@ -169,64 +247,19 @@ class _InteractiveCheckboxMarkdownState
     String checkboxLine,
     String checkboxText,
     bool newValue,
+    int occurrenceIndex,
   ) {
-    // Find the checkbox line in the content and update it
-    // checkboxLine contains the original matched line (trimmed), checkboxText is the text after [x] or [ ]
-    final lines = _currentContent.split('\n');
-
-    // Match checkboxes with pattern: [ ] or [x] optionally prefixed with -
-    for (int i = 0; i < lines.length; i++) {
-      final line = lines[i];
-      final trimmedLine = line.trim();
-
-      // Try to match the checkbox line by comparing the trimmed versions
-      // The checkboxLine passed from the component is already trimmed
-      if (trimmedLine == checkboxLine) {
-        // This is the exact line - update it
-        final checkboxMatch = RegExp(
-          r'^(\s*)(?:-\s+)?\[([ x])\]\s+(.+)$',
-        ).firstMatch(line);
-        if (checkboxMatch != null) {
-          final indent = checkboxMatch.group(1) ?? '';
-          final textAfterCheckbox = checkboxMatch.group(3) ?? '';
-          final hasDashPrefix = trimmedLine.startsWith('-');
-          final dashPrefix = hasDashPrefix ? '- ' : '';
-          final newCheckbox = newValue ? 'x' : ' ';
-          lines[i] = '$indent$dashPrefix[$newCheckbox] $textAfterCheckbox';
-
-          _currentContent = lines.join('\n');
-          widget.onContentChanged?.call(_currentContent);
-          setState(() {});
-          break;
-        }
-      } else {
-        // Try to match by the text content after the checkbox
-        // This handles cases where there might be slight differences in whitespace
-        final checkboxMatch = RegExp(
-          r'^(\s*)(?:-\s+)?\[([ x])\]\s+(.+)$',
-        ).firstMatch(line);
-        if (checkboxMatch != null) {
-          final textAfterCheckbox = checkboxMatch.group(3) ?? '';
-          // Match by checking if the text portions match
-          // Compare the raw text (without markdown processing)
-          if (textAfterCheckbox.trim() == checkboxText.trim() ||
-              (textAfterCheckbox.trim().isNotEmpty &&
-                  checkboxText.trim().isNotEmpty &&
-                  textAfterCheckbox.contains(checkboxText.trim()))) {
-            // Update the checkbox state
-            final indent = checkboxMatch.group(1) ?? '';
-            final hasDashPrefix = trimmedLine.startsWith('-');
-            final dashPrefix = hasDashPrefix ? '- ' : '';
-            final newCheckbox = newValue ? 'x' : ' ';
-            lines[i] = '$indent$dashPrefix[$newCheckbox] $textAfterCheckbox';
-
-            _currentContent = lines.join('\n');
-            widget.onContentChanged?.call(_currentContent);
-            setState(() {});
-            break;
-          }
-        }
-      }
+    final updated = applyCheckboxToggle(
+      _currentContent,
+      checkboxLine,
+      checkboxText,
+      newValue,
+      occurrenceIndex: occurrenceIndex,
+    );
+    if (updated != _currentContent) {
+      _currentContent = updated;
+      widget.onContentChanged?.call(_currentContent);
+      setState(() {});
     }
   }
 
@@ -1146,6 +1179,9 @@ class _InteractiveCheckboxMarkdownState
 
   @override
   Widget build(BuildContext context) {
+    // Reset occurrence counters so they match the order of rendered checkboxes.
+    _checkboxOccurrenceCounters.clear();
+
     // Basic inline components
     final inlineComponents = [
       CustomImageMd(
@@ -1198,8 +1234,8 @@ class _InteractiveCheckboxMarkdownState
       NewLines(),
       if (widget.onContentChanged != null)
         InteractiveCheckboxMd(
-          onToggle: (line, text, value) =>
-              _handleCheckboxToggle(line, text, value),
+          getOccurrence: _getOccurrence,
+          onToggle: _handleCheckboxToggle,
         )
       else
         CheckBoxMd(),
