@@ -181,17 +181,31 @@ class SafeHTag extends DragTargetSafeHTag {
 
 /// Custom checkbox component that extends BlockMd and provides interactive behavior
 class InteractiveCheckboxMd extends BlockMd {
-  final void Function(String checkboxLine, String checkboxText, bool newValue)
-  onToggle;
+  /// Called when the user taps a checkbox.
+  ///
+  /// [checkboxLine] — trimmed line text as delivered by the markdown parser.
+  /// [checkboxText] — label after `[x]` / `[ ]`.
+  /// [newValue]     — desired checked state.
+  /// [occurrenceIndex] — 0-based index among lines with the same [checkboxLine],
+  ///   in document order.  Required to disambiguate duplicate list items.
+  final void Function(
+    String checkboxLine,
+    String checkboxText,
+    bool newValue,
+    int occurrenceIndex,
+  ) onToggle;
+
+  /// Returns the 0-based occurrence index for a given block text.
+  /// Must be provided so duplicate checkboxes can be told apart.
+  final BlockOccurrenceCallback getOccurrence;
 
   // Optional drag support for checkbox lines (less common but possible)
   final BlockEditRequestedCallback? onBlockEditRequested;
-  final BlockOccurrenceCallback? getOccurrence;
 
   InteractiveCheckboxMd({
     required this.onToggle,
+    required this.getOccurrence,
     this.onBlockEditRequested,
-    this.getOccurrence,
   });
 
   @override
@@ -207,21 +221,21 @@ class InteractiveCheckboxMd extends BlockMd {
     final checkboxState = "${match?[1]}" == "x";
     final checkboxText = "${match?[2]}";
     final originalLine = text.trim();
+    final occurrenceIndex = getOccurrence(text);
 
     Widget child = InteractiveCustomCb(
       value: checkboxState,
       textDirection: config.textDirection,
       onChanged: (newValue) {
-        onToggle(originalLine, checkboxText, newValue);
+        onToggle(originalLine, checkboxText, newValue, occurrenceIndex);
       },
       child: MdWidget(context, checkboxText, false, config: config),
     );
 
-    if (onBlockEditRequested != null && getOccurrence != null) {
-      final occurrence = getOccurrence!(text);
+    if (onBlockEditRequested != null) {
       return DragTargetBlockWrapper(
         blockContent: text,
-        occurrenceIndex: occurrence,
+        occurrenceIndex: occurrenceIndex,
         onBlockEditRequested: onBlockEditRequested,
         child: child,
       );
