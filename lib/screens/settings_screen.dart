@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_json_view/flutter_json_view.dart';
+import 'package:file_saver/file_saver.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../services/secure_storage_service.dart';
@@ -1092,6 +1094,28 @@ class AIDebugOverlayScreen extends StatefulWidget {
 }
 
 class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
+  Future<void> _exportLogs() async {
+    try {
+      final logs = LoggerService.aiLogBucket;
+      final jsonStr = jsonEncode(logs.map((e) => e.toJson()).toList());
+      final date = DateTime.now().toIso8601String().substring(0, 10);
+      await FileSaver.instance.saveAs(
+        name: 'ai_debug_logs_$date',
+        bytes: Uint8List.fromList(utf8.encode(jsonStr)),
+        fileExtension: 'json',
+        mimeType: MimeType.text,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Export failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final logs = LoggerService.aiLogBucket;
@@ -1107,6 +1131,11 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
               setState(() {});
             },
             tooltip: l10n.refreshLogs,
+          ),
+          IconButton(
+            icon: const Icon(Icons.download),
+            onPressed: _exportLogs,
+            tooltip: l10n.exportLogs,
           ),
           IconButton(
             icon: const Icon(Icons.clear_all),
@@ -1251,6 +1280,8 @@ class _AIDebugOverlayScreenState extends State<AIDebugOverlayScreen> {
         size: 20,
         color: theme.iconTheme.color,
       ),
+      initiallyExpanded: false,
+      largeStringThreshold: 500,
     );
 
     return Padding(
