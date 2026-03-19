@@ -9,30 +9,30 @@ class HtmlRules {
     'pre-fenced',
     filters: ['pre'],
     replacement: (content, node) {
-      // If the content is already fenced (e.g. handled by a child <code> tag rule), return as is.
-      if (content.trim().startsWith('```')) {
-        return content;
+      var codeNode = node.firstChild;
+      if (codeNode?.nodeName != 'code') {
+        codeNode = null;
       }
 
-      // Attempt to detect language from class attribute (e.g. <pre class="language-dart">)
+      // Attempt to detect language from class attributes on either <pre> or <code>.
       var language = '';
-      final className = node.className;
-      if (className.isNotEmpty) {
-        final languageMatch = RegExp(r'language-(\w+)').firstMatch(className);
+      final classNames = [node.className, if (codeNode != null) codeNode.className];
+      for (final className in classNames) {
+        final languageMatch = RegExp(r'language-([A-Za-z0-9_+-]+)').firstMatch(
+          className,
+        );
         if (languageMatch != null) {
           language = languageMatch.group(1) ?? '';
+          break;
         }
       }
 
-      // If no language found on pre, check if there's a direct code child with language class
-      if (language.isEmpty) {
-        // We can't easily access children DOM nodes from 'node' (which is html2md Node),
-        // but we can try to guess from content if it wasn't processed?
-        // Actually, 'content' is the processed string of children.
-        // So we rely on the pre tag's attributes or just default to empty.
-      }
+      // Use raw DOM text to preserve multiline formatting inside code blocks.
+      var codeText = (codeNode ?? node).textContent;
+      codeText = codeText.replaceFirst(RegExp(r'^\n'), '');
+      codeText = codeText.replaceFirst(RegExp(r'\n$'), '');
 
-      return '\n\n```$language\n${content.trim()}\n```\n\n';
+      return '\n\n```$language\n$codeText\n```\n\n';
     },
   );
 
