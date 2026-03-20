@@ -11,6 +11,13 @@ import 'package:note_synapse/services/models/local_model_presets.dart';
 import 'package:note_synapse/services/logger_service.dart';
 import 'package:note_synapse/services/prompts/prompt_models.dart';
 
+class PreparedImage {
+  final String path;
+  final int width;
+  final int height;
+  const PreparedImage({required this.path, required this.width, required this.height});
+}
+
 class ToolCallParseResult {
   final String text;
   final List<Map<String, dynamic>>? functionCalls;
@@ -169,7 +176,8 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
   }
 
   /// Pre-processes messages by resizing image attachments and inserting
-  /// `<img>` tags into the message content so the MNN runtime can pick them up.
+  /// `<img>` tags (with `<hw>` dimension info) into the message content
+  /// so the MNN runtime can pick them up.
   static Future<List<PromptMessage>> preprocessAttachments(
     List<PromptMessage> messages,
   ) async {
@@ -179,25 +187,38 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
         result.add(msg);
         continue;
       }
-      final imagePaths = <String>[];
+      final prepared = <PreparedImage>[];
       for (final file in msg.attachments) {
         final path = file.path;
         if (path == null) continue;
         final ext = path.split('.').last.toLowerCase();
         if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext)) {
-          final resized = await resizeImageForModel(path);
-          imagePaths.add(resized);
+          final image = await resizeImageForModel(path);
+          prepared.add(image);
         }
       }
-      if (imagePaths.isNotEmpty) {
+      if (prepared.isNotEmpty) {
         result.add(msg.copyWith(
-          content: insertImageTags(msg.content, imagePaths),
+          content: _appendImageTags(msg.content, prepared),
         ));
       } else {
         result.add(msg);
       }
     }
     return result;
+  }
+
+  /// Builds `<img>path<hw>height,width</hw></img>` tags matching the
+  /// format expected by the MNN vision runtime.
+  static String _appendImageTags(String text, List<PreparedImage> images) {
+    final buffer = StringBuffer(text);
+    for (final img in images) {
+      final hwTag = img.width > 0 && img.height > 0
+          ? '<hw>${img.height},${img.width}</hw>'
+          : '';
+      buffer.write('\n<img>${img.path}$hwTag</img>');
+    }
+    return buffer.toString();
   }
 
   static String formatChatML(List<PromptMessage> messages, {String? toolSchemaBlock}) {
@@ -432,10 +453,10 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     _session = null;
   }
 
-  static const _maxImageDimension = 768;
+  static const _maxImageDimension = 1000;
 
   /// Estimates token count for an image based on its dimensions.
-  /// Images are resized to min(maxDim, 768px) preserving aspect ratio.
+  /// Images are resized to min(maxDim, 1000px) preserving aspect ratio.
   /// Token count = ceil(resizedWidth/28) * ceil(resizedHeight/28).
   static int estimateImageTokens(int width, int height) {
     final maxDim = width > height ? width : height;
@@ -448,43 +469,58 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
   }
 
   /// Inserts <img> tags for image paths into the text content.
+  /// Prefer [_appendImageTags] which includes `<hw>` dimension info.
   static String insertImageTags(String text, List<String> imagePaths) {
     if (imagePaths.isEmpty) return text;
     final tags = imagePaths.map((p) => '<img>$p</img>').join('\n');
     return '$text\n$tags';
   }
 
-  /// Resizes an image to fit within 768px on the longest dimension.
-  /// Returns the path to the resized temp file, or original path if already small enough.
-  static Future<String> resizeImageForModel(String sourcePath) async {
+  /// Normalizes an image for the MNN runtime: resizes to fit within 1000px
+  /// on the longest side and always writes to a temp file (matching the
+  /// format expected by the vision runtime).
+  /// Returns a [PreparedImage] with the output path and final dimensions.
+  static Future<PreparedImage> resizeImageForModel(String sourcePath) async {
     final file = File(sourcePath);
     final bytes = await file.readAsBytes();
 
     final image = img_lib.decodeImage(bytes);
-    if (image == null) return sourcePath;
-
-    final width = image.width;
-    final height = image.height;
-    final maxDim = width > height ? width : height;
-
-    if (maxDim <= _maxImageDimension) {
-      return sourcePath; // Already smaller than 768px, no resize needed
+    if (image == null) {
+      return PreparedImage(path: sourcePath, width: 0, height: 0);
     }
 
-    final scale = _maxImageDimension / maxDim;
-    final newWidth = (width * scale).round();
-    final newHeight = (height * scale).round();
+    final longestSide = image.width > image.height ? image.width : image.height;
+    final targetLongest = longestSide > _maxImageDimension
+        ? _maxImageDimension
+        : longestSide;
 
-    final resized = img_lib.copyResize(
-      image,
-      width: newWidth,
-      height: newHeight,
-      interpolation: img_lib.Interpolation.linear,
-    );
+    int newWidth = image.width;
+    int newHeight = image.height;
+    img_lib.Image normalized = image;
 
+    if (targetLongest < longestSide) {
+      final scale = targetLongest / longestSide;
+      newWidth = (image.width * scale).round();
+      newHeight = (image.height * scale).round();
+      normalized = img_lib.copyResize(
+        image,
+        width: newWidth,
+        height: newHeight,
+        interpolation: img_lib.Interpolation.cubic,
+      );
+    }
+
+    final ext = sourcePath.split('.').last.toLowerCase();
     final tempDir = await Directory.systemTemp.createTemp('mnn_img_');
-    final tempPath = '${tempDir.path}/resized.jpg';
-    await File(tempPath).writeAsBytes(img_lib.encodeJpg(resized, quality: 85));
-    return tempPath;
+    final isPng = ext == 'png';
+    final tempPath = '${tempDir.path}/prepared.${isPng ? 'png' : 'jpg'}';
+
+    if (isPng) {
+      await File(tempPath).writeAsBytes(img_lib.encodePng(normalized));
+    } else {
+      await File(tempPath).writeAsBytes(img_lib.encodeJpg(normalized, quality: 92));
+    }
+
+    return PreparedImage(path: tempPath, width: newWidth, height: newHeight);
   }
 }

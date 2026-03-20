@@ -137,10 +137,10 @@ void main() {
     });
 
     test('estimates image tokens from dimensions', () {
-      // 768x512 image: ceil(768/28) * ceil(512/28) = 28 * 19 = 532 tokens
+      // 768x512 image (under 1000px limit): ceil(768/28) * ceil(512/28) = 28 * 19 = 532 tokens
       expect(LocalMnnModel.estimateImageTokens(768, 512), 532);
-      // 1024x768 → resized to 768x576: ceil(768/28) * ceil(576/28) = 28 * 21 = 588
-      expect(LocalMnnModel.estimateImageTokens(1024, 768), 588);
+      // 2000x1000 → resized to 1000x500: ceil(1000/28) * ceil(500/28) = 36 * 18 = 648
+      expect(LocalMnnModel.estimateImageTokens(2000, 1000), 648);
       // 200x100 → no resize: ceil(200/28) * ceil(100/28) = 8 * 4 = 32
       expect(LocalMnnModel.estimateImageTokens(200, 100), 32);
     });
