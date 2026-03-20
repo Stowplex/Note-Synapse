@@ -112,4 +112,37 @@ void main() {
       expect(block, contains('"name": "call_tool"'));
     });
   });
+
+  group('LocalMnnModel image handling', () {
+    test('inserts img tag for image attachment path', () {
+      final result = LocalMnnModel.insertImageTags(
+        'Describe this image',
+        ['/tmp/resized_photo.jpg'],
+      );
+      expect(result, 'Describe this image\n<img>/tmp/resized_photo.jpg</img>');
+    });
+
+    test('inserts multiple img tags for multiple images', () {
+      final result = LocalMnnModel.insertImageTags(
+        'Compare these',
+        ['/tmp/img1.jpg', '/tmp/img2.jpg'],
+      );
+      expect(result, contains('<img>/tmp/img1.jpg</img>'));
+      expect(result, contains('<img>/tmp/img2.jpg</img>'));
+    });
+
+    test('returns original text when no images', () {
+      final result = LocalMnnModel.insertImageTags('Hello', []);
+      expect(result, 'Hello');
+    });
+
+    test('estimates image tokens from dimensions', () {
+      // 768x512 image: ceil(768/28) * ceil(512/28) = 28 * 19 = 532 tokens
+      expect(LocalMnnModel.estimateImageTokens(768, 512), 532);
+      // 1024x768 → resized to 768x576: ceil(768/28) * ceil(576/28) = 28 * 21 = 588
+      expect(LocalMnnModel.estimateImageTokens(1024, 768), 588);
+      // 200x100 → no resize: ceil(200/28) * ceil(100/28) = 8 * 4 = 32
+      expect(LocalMnnModel.estimateImageTokens(200, 100), 32);
+    });
+  });
 }

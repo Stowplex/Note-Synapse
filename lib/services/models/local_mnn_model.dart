@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:edge_gen/edge_gen.dart';
+import 'package:image/image.dart' as img_lib;
 import 'package:json_repair_flutter/json_repair_flutter.dart';
 import 'package:note_synapse/models/model_config.dart';
 import 'package:note_synapse/models/generation_context.dart';
@@ -258,5 +259,61 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
 
   Future<void> dispose() async {
     _session = null;
+  }
+
+  static const _maxImageDimension = 768;
+
+  /// Estimates token count for an image based on its dimensions.
+  /// Images are resized to min(maxDim, 768px) preserving aspect ratio.
+  /// Token count = ceil(resizedWidth/28) * ceil(resizedHeight/28).
+  static int estimateImageTokens(int width, int height) {
+    final maxDim = width > height ? width : height;
+    if (maxDim > _maxImageDimension) {
+      final scale = _maxImageDimension / maxDim;
+      width = (width * scale).ceil();
+      height = (height * scale).ceil();
+    }
+    return ((width / 28).ceil()) * ((height / 28).ceil());
+  }
+
+  /// Inserts <img> tags for image paths into the text content.
+  static String insertImageTags(String text, List<String> imagePaths) {
+    if (imagePaths.isEmpty) return text;
+    final tags = imagePaths.map((p) => '<img>$p</img>').join('\n');
+    return '$text\n$tags';
+  }
+
+  /// Resizes an image to fit within 768px on the longest dimension.
+  /// Returns the path to the resized temp file, or original path if already small enough.
+  static Future<String> resizeImageForModel(String sourcePath) async {
+    final file = File(sourcePath);
+    final bytes = await file.readAsBytes();
+
+    final image = img_lib.decodeImage(bytes);
+    if (image == null) return sourcePath;
+
+    final width = image.width;
+    final height = image.height;
+    final maxDim = width > height ? width : height;
+
+    if (maxDim <= _maxImageDimension) {
+      return sourcePath; // Already smaller than 768px, no resize needed
+    }
+
+    final scale = _maxImageDimension / maxDim;
+    final newWidth = (width * scale).round();
+    final newHeight = (height * scale).round();
+
+    final resized = img_lib.copyResize(
+      image,
+      width: newWidth,
+      height: newHeight,
+      interpolation: img_lib.Interpolation.linear,
+    );
+
+    final tempDir = await Directory.systemTemp.createTemp('mnn_img_');
+    final tempPath = '${tempDir.path}/resized.jpg';
+    await File(tempPath).writeAsBytes(img_lib.encodeJpg(resized, quality: 85));
+    return tempPath;
   }
 }
