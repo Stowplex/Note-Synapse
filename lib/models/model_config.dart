@@ -17,6 +17,9 @@ class ModelConfig {
   final List<String>? supportedAttachmentMimeTypes;
   final List<String>? modelFeatures;
   final bool isConfigured;
+  final int? tokenWindow;
+  final bool? enableThinking;
+  final String? backendType;
 
   ModelConfig({
     String? id,
@@ -31,6 +34,9 @@ class ModelConfig {
     List<String>? supportedAttachmentMimeTypes,
     List<String>? modelFeatures,
     this.isConfigured = false,
+    this.tokenWindow,
+    this.enableThinking,
+    this.backendType,
   }) : id = id ?? const Uuid().v4(),
        customCapabilitiesObject =
            customCapabilitiesObject ??
@@ -65,6 +71,9 @@ class ModelConfig {
     List<String>? supportedAttachmentMimeTypes,
     List<String>? modelFeatures,
     bool? isConfigured,
+    int? tokenWindow,
+    bool? enableThinking,
+    String? backendType,
   }) {
     return ModelConfig(
       id: id ?? this.id,
@@ -81,6 +90,9 @@ class ModelConfig {
           supportedAttachmentMimeTypes ?? this.supportedAttachmentMimeTypes,
       modelFeatures: modelFeatures ?? this.modelFeatures,
       isConfigured: isConfigured ?? this.isConfigured,
+      tokenWindow: tokenWindow ?? this.tokenWindow,
+      enableThinking: enableThinking ?? this.enableThinking,
+      backendType: backendType ?? this.backendType,
     );
   }
 
@@ -99,6 +111,9 @@ class ModelConfig {
       'supportedAttachmentMimeTypes': supportedAttachmentMimeTypes,
       'modelFeatures': modelFeatures,
       'isConfigured': isConfigured,
+      if (tokenWindow != null) 'token_window': tokenWindow,
+      if (enableThinking != null) 'enable_thinking': enableThinking,
+      if (backendType != null) 'backend_type': backendType,
     };
   }
 
@@ -124,6 +139,9 @@ class ModelConfig {
           ?.whereType<String>()
           .toList(),
       isConfigured: json['isConfigured'] as bool? ?? false,
+      tokenWindow: json['token_window'] as int?,
+      enableThinking: json['enable_thinking'] as bool?,
+      backendType: json['backend_type'] as String?,
     );
   }
 
