@@ -8,6 +8,7 @@ import 'package:note_synapse/models/model_config.dart';
 import 'package:note_synapse/models/generation_context.dart';
 import 'package:note_synapse/services/models/ai_model.dart';
 import 'package:note_synapse/services/models/local_model_presets.dart';
+import 'package:note_synapse/services/logger_service.dart';
 import 'package:note_synapse/services/prompts/prompt_models.dart';
 
 class ToolCallParseResult {
@@ -229,6 +230,35 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     return buffer.toString();
   }
 
+  /// Builds a summary of messages and attachments for debug logging.
+  static Map<String, dynamic> _buildLogBody(
+    List<PromptMessage> messages, {
+    String? prompt,
+    List<Map<String, dynamic>>? tools,
+  }) {
+    final msgSummary = messages.map((m) {
+      final entry = <String, dynamic>{
+        'role': m.role.name,
+        'contentLength': m.content.length,
+        'contentPreview': m.content.length > 500
+            ? '${m.content.substring(0, 500)}...'
+            : m.content,
+      };
+      if (m.attachments.isNotEmpty) {
+        entry['attachments'] = m.attachments
+            .map((f) => {'name': f.name, 'size': f.size, 'path': f.path})
+            .toList();
+      }
+      return entry;
+    }).toList();
+
+    return {
+      'messages': msgSummary,
+      if (prompt != null) 'promptLength': prompt.length,
+      if (tools != null && tools.isNotEmpty) 'tools': tools,
+    };
+  }
+
   @override
   Future<String> generateWithMessages(
     List<PromptMessage> messages, {
@@ -238,9 +268,21 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     int? maxOutputTokens,
     GenerationContext? generationContext,
   }) async {
+    final requestId = generationContext?.ensureRequestId() ??
+        DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+    final endpoint = 'local-mnn://$name';
+
     final session = await _ensureSession();
     final processed = await preprocessAttachments(messages);
     final prompt = formatChatML(processed);
+
+    LoggerService.logAiRequest(
+      endpoint: endpoint,
+      headers: {'backend': _config?.backendType ?? 'cpu'},
+      requestBody: _buildLogBody(messages, prompt: prompt),
+      requestId: requestId,
+    );
 
     final buffer = StringBuffer();
     await for (final chunk in session.generate(
@@ -250,7 +292,23 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
       buffer.write(chunk);
     }
 
-    return buffer.toString();
+    final responseText = buffer.toString();
+    final duration = DateTime.now().difference(startTime);
+
+    LoggerService.logAiResponse(
+      statusCode: 200,
+      headers: {'model': name},
+      responseBody: {
+        'text': responseText.length > 2000
+            ? '${responseText.substring(0, 2000)}...'
+            : responseText,
+        'textLength': responseText.length,
+      },
+      requestId: requestId,
+      duration: duration,
+    );
+
+    return responseText;
   }
 
   @override
@@ -263,10 +321,22 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     int? maxOutputTokens,
     GenerationContext? generationContext,
   }) async {
+    final requestId = generationContext?.ensureRequestId() ??
+        DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+    final endpoint = 'local-mnn://$name/tools';
+
     final session = await _ensureSession();
     final processed = await preprocessAttachments(messages);
     final toolSchemaBlock = tools.isNotEmpty ? buildToolSchemaBlock(tools) : null;
     final prompt = formatChatML(processed, toolSchemaBlock: toolSchemaBlock);
+
+    LoggerService.logAiRequest(
+      endpoint: endpoint,
+      headers: {'backend': _config?.backendType ?? 'cpu'},
+      requestBody: _buildLogBody(messages, prompt: prompt, tools: tools),
+      requestId: requestId,
+    );
 
     // Buffer full response for tool call parsing
     final buffer = StringBuffer();
@@ -278,25 +348,76 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     }
 
     final responseText = buffer.toString();
+    final duration = DateTime.now().difference(startTime);
     final parsed = parseToolCalls(responseText);
 
-    return {
+    final result = {
       'text': parsed.text.isEmpty ? '' : parsed.text,
       'function_calls': parsed.functionCalls,
       'modelUsed': name,
     };
+
+    LoggerService.logAiResponse(
+      statusCode: 200,
+      headers: {'model': name},
+      responseBody: {
+        'text': parsed.text.length > 2000
+            ? '${parsed.text.substring(0, 2000)}...'
+            : parsed.text,
+        'functionCalls': parsed.functionCalls,
+        'rawLength': responseText.length,
+      },
+      requestId: requestId,
+      duration: duration,
+    );
+
+    return result;
   }
 
   /// Generates a streaming response for plain chat (no tool calls).
   Stream<String> generateStreaming(List<PromptMessage> messages, {
     int? maxNewTokens,
+    String? requestId,
   }) async* {
+    final reqId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+    final endpoint = 'local-mnn://$name/stream';
+
     final session = await _ensureSession();
     final processed = await preprocessAttachments(messages);
     final prompt = formatChatML(processed);
-    yield* session.generate(
+
+    LoggerService.logAiRequest(
+      endpoint: endpoint,
+      headers: {'backend': _config?.backendType ?? 'cpu'},
+      requestBody: _buildLogBody(messages, prompt: prompt),
+      requestId: reqId,
+    );
+
+    final responseBuffer = StringBuffer();
+    await for (final chunk in session.generate(
       prompt: prompt,
       maxNewTokens: maxNewTokens ?? _config?.maxOutputTokens ?? 8192,
+    )) {
+      responseBuffer.write(chunk);
+      yield chunk;
+    }
+
+    final responseText = responseBuffer.toString();
+    final duration = DateTime.now().difference(startTime);
+
+    LoggerService.logAiResponse(
+      statusCode: 200,
+      headers: {'model': name},
+      responseBody: {
+        'text': responseText.length > 2000
+            ? '${responseText.substring(0, 2000)}...'
+            : responseText,
+        'textLength': responseText.length,
+        'streaming': true,
+      },
+      requestId: reqId,
+      duration: duration,
     );
   }
 
