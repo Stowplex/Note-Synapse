@@ -49,7 +49,11 @@ dependencies:
   rhttp:
     path: third_party/rhttp/rhttp
   crypto: ^3.0.3
-  
+
+  # Local AI inference
+  edge_gen:
+    path: third_party/edge_gen
+
   # Image handling
   image: ^4.2.0
   image_picker: ^1.0.4
