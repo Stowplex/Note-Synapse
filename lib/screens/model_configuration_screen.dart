@@ -11,6 +11,7 @@ import '../services/model_selector.dart';
 import '../services/model_preset_service.dart';
 import '../providers/app_provider.dart';
 import '../l10n/app_localizations.dart';
+import 'local_model_picker_screen.dart';
 
 class ModelConfigurationScreen extends StatefulWidget {
   final ModelConfig? config; // If provided, we are editing
@@ -65,6 +66,21 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     _isEditing = widget.config != null;
     _selectedType =
         widget.config?.type ?? widget.initialType ?? ModelType.gemini;
+
+    if (_selectedType == ModelType.localMnn && !_isEditing) {
+      // Redirect to the local model picker on next frame
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const LocalModelPickerScreen(),
+            ),
+          );
+        }
+      });
+      return;
+    }
 
     if (_isEditing) {
       _loadExistingConfiguration();
@@ -440,6 +456,15 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               }).toList(),
               onChanged: (type) {
                 if (type != null) {
+                  if (type == ModelType.localMnn) {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const LocalModelPickerScreen(),
+                      ),
+                    );
+                    return;
+                  }
                   setState(() {
                     _selectedType = type;
                     _presets = []; // Clear presets to reload for new type

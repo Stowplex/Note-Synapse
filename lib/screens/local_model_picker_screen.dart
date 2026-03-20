@@ -127,10 +127,10 @@ class _LocalModelPickerScreenState extends State<LocalModelPickerScreen> {
             ),
             if (isDownloading) ...[
               const SizedBox(height: 12),
-              LinearProgressIndicator(value: _downloadProgress[preset.id]),
+              LinearProgressIndicator(value: _downloadProgress[preset.id]!.clamp(0.0, 1.0)),
               const SizedBox(height: 4),
               Text('${l10n.localModelDownloading} '
-                  '${(_downloadProgress[preset.id]! * 100).toStringAsFixed(0)}%'),
+                  '${(_downloadProgress[preset.id]!.clamp(0.0, 1.0) * 100).toStringAsFixed(0)}%'),
             ],
             if (error != null) ...[
               const SizedBox(height: 12),
