@@ -1,11 +1,20 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:edge_gen/edge_gen.dart';
+import 'package:json_repair_flutter/json_repair_flutter.dart';
 import 'package:note_synapse/models/model_config.dart';
 import 'package:note_synapse/models/generation_context.dart';
 import 'package:note_synapse/services/models/ai_model.dart';
 import 'package:note_synapse/services/models/local_model_presets.dart';
 import 'package:note_synapse/services/prompts/prompt_models.dart';
+
+class ToolCallParseResult {
+  final String text;
+  final List<Map<String, dynamic>>? functionCalls;
+
+  const ToolCallParseResult({required this.text, this.functionCalls});
+}
 
 class LocalMnnModel extends AIModel {
   EdgeGenSession? _session;
@@ -57,6 +66,104 @@ class LocalMnnModel extends AIModel {
       configJson: edgeConfig.toJson(),
     );
     return _session!;
+  }
+
+  /// Extracts the outermost JSON object from [text] starting at [start]
+  /// using brace counting. Returns null if no balanced object is found.
+  static String? _extractJsonObject(String text, int start) {
+    if (start >= text.length || text[start] != '{') return null;
+    int depth = 0;
+    bool inString = false;
+    bool escape = false;
+    for (int i = start; i < text.length; i++) {
+      final c = text[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (c == '\\' && inString) {
+        escape = true;
+        continue;
+      }
+      if (c == '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
+      if (c == '{') depth++;
+      if (c == '}') {
+        depth--;
+        if (depth == 0) return text.substring(start, i + 1);
+      }
+    }
+    return null;
+  }
+
+  static final _toolCallHint = RegExp(r'\{\s*"name"\s*:\s*"call_tool"');
+
+  /// Parses tool calls from model response text.
+  static ToolCallParseResult parseToolCalls(String response) {
+    final hint = _toolCallHint.firstMatch(response);
+    if (hint == null) {
+      return ToolCallParseResult(text: response);
+    }
+
+    final textBefore = response.substring(0, hint.start).trim();
+    final jsonStr = _extractJsonObject(response, hint.start);
+
+    try {
+      Map<String, dynamic> parsed;
+      if (jsonStr != null) {
+        // Balanced braces found — try standard JSON decode first
+        try {
+          parsed = jsonDecode(jsonStr) as Map<String, dynamic>;
+        } catch (_) {
+          final repaired = repairJson(jsonStr);
+          if (repaired is! Map) {
+            return ToolCallParseResult(text: response);
+          }
+          parsed = Map<String, dynamic>.from(repaired);
+        }
+      } else {
+        // Unbalanced braces (malformed JSON) — try repair on raw substring
+        final repaired = repairJson(response.substring(hint.start));
+        if (repaired is! Map) {
+          return ToolCallParseResult(text: response);
+        }
+        parsed = Map<String, dynamic>.from(repaired);
+      }
+
+      if (parsed['name'] == 'call_tool' && parsed.containsKey('arguments')) {
+        final args = Map<String, dynamic>.from(parsed['arguments'] as Map);
+        return ToolCallParseResult(
+          text: textBefore,
+          functionCalls: [
+            {
+              'name': 'call_tool',
+              'args': args,
+            }
+          ],
+        );
+      }
+    } catch (_) {
+      // JSON repair failed — treat as plain text
+    }
+
+    return ToolCallParseResult(text: response);
+  }
+
+  /// Builds a tool schema block for injection into the system prompt.
+  static String buildToolSchemaBlock(List<Map<String, dynamic>> tools) {
+    const encoder = JsonEncoder.withIndent('  ');
+    final toolsJson = encoder.convert(tools);
+    return '''
+You have access to the following tools. To use a tool, respond with a JSON object:
+{"name": "call_tool", "arguments": {"service_name": "<service>", "tool_name": "<tool>", "params": {<parameters>}}}
+
+Available tools:
+$toolsJson
+
+When you need to use a tool, output ONLY the JSON object. Do not wrap it in markdown code blocks.''';
   }
 
   static String formatChatML(List<PromptMessage> messages, {String? toolSchemaBlock}) {
@@ -122,8 +229,27 @@ class LocalMnnModel extends AIModel {
     int? maxOutputTokens,
     GenerationContext? generationContext,
   }) async {
-    // Implemented in Task 7
-    throw UnimplementedError('Tool calling not yet implemented');
+    final session = await _ensureSession();
+    final toolSchemaBlock = tools.isNotEmpty ? buildToolSchemaBlock(tools) : null;
+    final prompt = formatChatML(messages, toolSchemaBlock: toolSchemaBlock);
+
+    // Buffer full response for tool call parsing
+    final buffer = StringBuffer();
+    await for (final chunk in session.generate(
+      prompt: prompt,
+      maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+    )) {
+      buffer.write(chunk);
+    }
+
+    final responseText = buffer.toString();
+    final parsed = parseToolCalls(responseText);
+
+    return {
+      'text': parsed.text.isEmpty ? '' : parsed.text,
+      'function_calls': parsed.functionCalls,
+      'modelUsed': name,
+    };
   }
 
   Future<void> resetSession() async {
