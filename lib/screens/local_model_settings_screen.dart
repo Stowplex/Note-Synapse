@@ -6,6 +6,7 @@ import 'package:note_synapse/models/model_type.dart';
 import 'package:note_synapse/services/local_model_service.dart';
 import 'package:note_synapse/services/model_storage_service.dart';
 import 'package:note_synapse/services/model_selector.dart';
+import 'package:note_synapse/models/model_capabilities.dart';
 import 'package:note_synapse/services/models/local_model_presets.dart';
 import '../l10n/app_localizations.dart';
 
@@ -58,6 +59,14 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
       enableThinking: _enableThinking,
       backendType: _backendType,
       isConfigured: true,
+      customCapabilitiesObject: ModelCapabilities(
+        maxInputTokens: _tokenWindow,
+        maxOutputTokens: 8192,
+        supportsImages: widget.preset.supportsVision,
+        supportsDocuments: false,
+        supportsAudio: false,
+        supportsVideo: false,
+      ),
     );
 
     final storage = GetIt.instance<ModelStorageService>();

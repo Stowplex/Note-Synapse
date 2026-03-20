@@ -167,6 +167,38 @@ $toolsJson
 When you need to use a tool, output ONLY the JSON object. Do not wrap it in markdown code blocks.''';
   }
 
+  /// Pre-processes messages by resizing image attachments and inserting
+  /// `<img>` tags into the message content so the MNN runtime can pick them up.
+  static Future<List<PromptMessage>> preprocessAttachments(
+    List<PromptMessage> messages,
+  ) async {
+    final result = <PromptMessage>[];
+    for (final msg in messages) {
+      if (msg.attachments.isEmpty) {
+        result.add(msg);
+        continue;
+      }
+      final imagePaths = <String>[];
+      for (final file in msg.attachments) {
+        final path = file.path;
+        if (path == null) continue;
+        final ext = path.split('.').last.toLowerCase();
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext)) {
+          final resized = await resizeImageForModel(path);
+          imagePaths.add(resized);
+        }
+      }
+      if (imagePaths.isNotEmpty) {
+        result.add(msg.copyWith(
+          content: insertImageTags(msg.content, imagePaths),
+        ));
+      } else {
+        result.add(msg);
+      }
+    }
+    return result;
+  }
+
   static String formatChatML(List<PromptMessage> messages, {String? toolSchemaBlock}) {
     final buffer = StringBuffer();
 
@@ -207,7 +239,8 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     GenerationContext? generationContext,
   }) async {
     final session = await _ensureSession();
-    final prompt = formatChatML(messages);
+    final processed = await preprocessAttachments(messages);
+    final prompt = formatChatML(processed);
 
     final buffer = StringBuffer();
     await for (final chunk in session.generate(
@@ -231,8 +264,9 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     GenerationContext? generationContext,
   }) async {
     final session = await _ensureSession();
+    final processed = await preprocessAttachments(messages);
     final toolSchemaBlock = tools.isNotEmpty ? buildToolSchemaBlock(tools) : null;
-    final prompt = formatChatML(messages, toolSchemaBlock: toolSchemaBlock);
+    final prompt = formatChatML(processed, toolSchemaBlock: toolSchemaBlock);
 
     // Buffer full response for tool call parsing
     final buffer = StringBuffer();
@@ -258,7 +292,8 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     int? maxNewTokens,
   }) async* {
     final session = await _ensureSession();
-    final prompt = formatChatML(messages);
+    final processed = await preprocessAttachments(messages);
+    final prompt = formatChatML(processed);
     yield* session.generate(
       prompt: prompt,
       maxNewTokens: maxNewTokens ?? _config?.maxOutputTokens ?? 8192,
