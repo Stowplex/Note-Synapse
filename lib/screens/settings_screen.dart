@@ -652,6 +652,8 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
         return Icons.auto_awesome;
       case ModelType.openaiCompatible:
         return Icons.smart_toy;
+      case ModelType.localMnn:
+        return Icons.computer;
     }
   }
 }

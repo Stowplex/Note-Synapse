@@ -287,6 +287,8 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
         return Icons.psychology;
       case ModelType.openaiCompatible:
         return Icons.api;
+      case ModelType.localMnn:
+        return Icons.computer;
     }
   }
 
@@ -296,6 +298,8 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
         return AppLocalizations.of(context)!.geminiModelDescription;
       case ModelType.openaiCompatible:
         return AppLocalizations.of(context)!.openaiCompatibleModelDescription;
+      case ModelType.localMnn:
+        return 'Run AI models locally on-device using MNN inference engine';
     }
   }
 }

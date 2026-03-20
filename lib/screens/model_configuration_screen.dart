@@ -82,6 +82,9 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
       case ModelType.openaiCompatible:
         _apiKeyUrl = 'https://platform.openai.com/api-keys';
         break;
+      case ModelType.localMnn:
+        _apiKeyUrl = '';
+        break;
     }
   }
 
@@ -970,6 +973,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         return Icons.auto_awesome;
       case ModelType.openaiCompatible:
         return Icons.smart_toy;
+      case ModelType.localMnn:
+        return Icons.computer;
     }
   }
 
@@ -979,6 +984,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         return 'Google\'s most advanced model with full multimodal capabilities';
       case ModelType.openaiCompatible:
         return 'Compatible with OpenAI API endpoints with configurable capabilities';
+      case ModelType.localMnn:
+        return 'Run AI models locally on-device using MNN inference engine';
     }
   }
 
@@ -988,6 +995,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         return l10n.geminiApiKey;
       case ModelType.openaiCompatible:
         return 'API Key for OpenAI compatible provider';
+      case ModelType.localMnn:
+        return 'No API key required for local models';
     }
   }
 }

@@ -495,6 +495,8 @@ class ModelSelector {
         return GeminiModel();
       case ModelType.openaiCompatible:
         return OpenAIModel();
+      case ModelType.localMnn:
+        throw UnimplementedError('LocalMnn model not yet implemented');
     }
   }
 
