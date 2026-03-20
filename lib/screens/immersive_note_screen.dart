@@ -154,6 +154,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   bool _isPenMode = false;
   bool _isLoadingConversation = true;
   bool _isSending = false;
+  String _streamingContent = '';
+  bool _isStreaming = false;
   bool _isAborting = false;
   String? _currentRequestId;
   final Set<String> _cancelledRequestIds = {};
@@ -3305,8 +3307,53 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return ListView.builder(
       controller: _chatScrollController,
       padding: const EdgeInsets.only(bottom: 12),
-      itemCount: _messages.length,
+      itemCount: _messages.length + (_isStreaming ? 1 : 0),
       itemBuilder: (context, index) {
+        if (index == _messages.length && _isStreaming) {
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.7,
+              ),
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.smart_toy,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.secondary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        l10n.ai,
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
+                              color: Theme.of(context).colorScheme.secondary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SelectableText(_streamingContent),
+                ],
+              ),
+            ),
+          );
+        }
         final message = _messages[index];
         final isUser = message.type == MessageType.user;
         final hasTools =
@@ -4899,6 +4946,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         content,
         attachments,
         generationContext,
+        onStreamChunk: (chunk) {
+          if (mounted) {
+            setState(() {
+              _streamingContent += chunk;
+              _isStreaming = true;
+            });
+            _scrollToBottom();
+          }
+        },
       );
       final aiMessage = await _conversationService.addAIResponse(
         conversationId: _conversation!.id,
@@ -4909,6 +4965,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
       if (!mounted) return;
       setState(() {
+        _streamingContent = '';
+        _isStreaming = false;
         _messages.add(aiMessage);
       });
       _scrollToBottom();
@@ -4939,6 +4997,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _isSending = false;
           _isAborting = false;
           _currentRequestId = null;
+          _streamingContent = '';
+          _isStreaming = false;
         });
       }
       _cancelledRequestIds.remove(requestId);
@@ -4981,8 +5041,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   Future<ConversationAiResponse> _generateAiResponse(
     String userMessage,
     List<PlatformFile> latestAttachments,
-    GenerationContext generationContext,
-  ) async {
+    GenerationContext generationContext, {
+    void Function(String chunk)? onStreamChunk,
+  }) async {
     final requestId = generationContext.ensureRequestId();
     final noteBuilder = NotePromptBuilder(_databaseService);
     final systemMessage = _buildSystemPrompt();
@@ -5180,6 +5241,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       generationContext: generationContext,
       maxToolIterations: _maxToolIterations,
       onIterationsExhausted: _handleIterationsExhausted,
+      onStreamChunk: onStreamChunk,
     );
 
     if (_cancelledRequestIds.contains(requestId)) {
