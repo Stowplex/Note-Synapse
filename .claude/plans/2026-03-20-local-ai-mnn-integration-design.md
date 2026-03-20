@@ -128,9 +128,9 @@ Responsibilities:
 
 **Image handling:**
 - All image sources supported (note content, PDF pages, conversation attachments, immersive reading)
-- Images resized to 784px on longest dimension, preserving aspect ratio (matches Qwen's 28x28 patch tokenization)
+- Images resized to min(maxDimension, 768px) on longest dimension, preserving aspect ratio. No resize if already smaller than 768px.
 - Resized images saved to temp directory, path inserted as `<img>/path/to/resized.jpg</img>` in prompt
-- PDFs rendered as page images, each resized to 784px
+- PDFs rendered as page images, each resized per the same rule
 - Temp files cleaned up after generation completes
 
 **Tool calling:**
@@ -177,7 +177,7 @@ No `apiKey` or `endpoint` needed for local models.
 
 Before generation with a local model:
 
-1. **Token estimation:** reuse existing `TokenEstimator.estimateTokens()` from `lib/utils/token_estimator.dart` (handles CJK characters correctly); add ~784 tokens per image (28x28 patches). Sum compared against configured `tokenWindow`.
+1. **Token estimation:** reuse existing `TokenEstimator.estimateTokens()` from `lib/utils/token_estimator.dart` (handles CJK characters correctly); for images, calculate from resized dimensions: `ceil(width/28) * ceil(height/28)` tokens per image (Qwen's 28x28 patch tokenizer). Images are resized to min(maxDim, 768px) preserving aspect ratio. Sum text + image tokens compared against configured `tokenWindow`.
 2. **Over-limit warning:** If estimated tokens exceed token window, show dialog: "This input is ~{N}K tokens, exceeding your local model's {W}K window. Switch to [cloud model]?" Options: Switch / Send Anyway / Cancel.
 3. **Existing capability matching:** `ModelCapabilities` flags (supports images, video, etc.) set correctly in local model presets. No new capability logic needed.
 4. **Tool call failure fallback:** If local model fails to produce valid JSON after repair, error message suggests switching to cloud model.

@@ -1021,6 +1021,15 @@ Add to test file:
       final result = LocalMnnModel.insertImageTags('Hello', []);
       expect(result, 'Hello');
     });
+
+    test('estimates image tokens from dimensions', () {
+      // 768x512 image: ceil(768/28) * ceil(512/28) = 28 * 19 = 532 tokens
+      expect(LocalMnnModel.estimateImageTokens(768, 512), 532);
+      // 1024x768 → resized to 768x576: ceil(768/28) * ceil(576/28) = 28 * 21 = 588
+      expect(LocalMnnModel.estimateImageTokens(1024, 768), 588);
+      // 200x100 → no resize: ceil(200/28) * ceil(100/28) = 8 * 4 = 32
+      expect(LocalMnnModel.estimateImageTokens(200, 100), 32);
+    });
   });
 ```
 
@@ -1036,7 +1045,20 @@ Expected: FAIL — `insertImageTags` not found.
 Add to `LocalMnnModel`:
 
 ```dart
-  static const _maxImageDimension = 784;
+  static const _maxImageDimension = 768;
+
+  /// Estimates token count for an image based on its dimensions.
+  /// Images are resized to min(maxDim, 768px) preserving aspect ratio.
+  /// Token count = ceil(resizedWidth/28) * ceil(resizedHeight/28).
+  static int estimateImageTokens(int width, int height) {
+    final maxDim = width > height ? width : height;
+    if (maxDim > _maxImageDimension) {
+      final scale = _maxImageDimension / maxDim;
+      width = (width * scale).ceil();
+      height = (height * scale).ceil();
+    }
+    return ((width / 28).ceil()) * ((height / 28).ceil());
+  }
 
   /// Inserts <img> tags for image paths into the text content.
   static String insertImageTags(String text, List<String> imagePaths) {
@@ -1060,13 +1082,17 @@ Add to `LocalMnnModel`:
     final maxDim = width > height ? width : height;
 
     if (maxDim <= _maxImageDimension) {
-      return sourcePath; // No resize needed
+      return sourcePath; // Already smaller than 768px, no resize needed
     }
+
+    final scale = _maxImageDimension / maxDim;
+    final newWidth = (width * scale).round();
+    final newHeight = (height * scale).round();
 
     final resized = img_lib.copyResize(
       img,
-      width: width > height ? _maxImageDimension : null,
-      height: height >= width ? _maxImageDimension : null,
+      width: newWidth,
+      height: newHeight,
       interpolation: img_lib.Interpolation.linear,
     );
 
@@ -1153,10 +1179,19 @@ Find the section in `ModelSelector` where generation is initiated (the `generate
     int estimatedTokens = 0;
     for (final msg in messages) {
       estimatedTokens += TokenEstimator.estimateTokens(msg.content);
-      // Each image ≈ 784 tokens (28x28 patches)
-      final imagePaths = msg.metadata?['image_paths'] as List?;
-      if (imagePaths != null) {
-        estimatedTokens += imagePaths.length * 784;
+      // Image tokens = ceil(resizedWidth/28) * ceil(resizedHeight/28) per image
+      // Resized to min(maxDim, 768) preserving aspect ratio
+      final imageDims = msg.metadata?['image_dimensions'] as List<Map<String, int>>?;
+      if (imageDims != null) {
+        for (final dim in imageDims) {
+          final w = dim['width'] ?? 768;
+          final h = dim['height'] ?? 768;
+          final maxDim = w > h ? w : h;
+          final scale = maxDim > 768 ? 768 / maxDim : 1.0;
+          final rw = (w * scale).ceil();
+          final rh = (h * scale).ceil();
+          estimatedTokens += ((rw / 28).ceil()) * ((rh / 28).ceil());
+        }
       }
     }
 
