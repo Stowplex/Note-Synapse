@@ -64,6 +64,7 @@ import 'note_selection_dialog.dart';
 import 'note_action_app_selection_screen.dart';
 import 'settings_screen.dart';
 import '../widgets/model_selector_button.dart';
+import '../widgets/attachment_preview_tile.dart';
 import '../services/built_in_tools_service.dart';
 import '../models/in_note_marker.dart';
 import '../models/note_annotation.dart';
@@ -2247,8 +2248,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         // zoomed/panned via InteractiveViewer, we must apply the INVERSE of
         // the current transform to map viewport coords → image-space coords
         // before normalising.
-        final renderObject =
-            _noteBoundaryKey.currentContext?.findRenderObject();
+        final renderObject = _noteBoundaryKey.currentContext
+            ?.findRenderObject();
         if (renderObject is! RenderBox || renderObject.size.isEmpty) {
           return null;
         }
@@ -3579,14 +3580,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     AppLocalizations l10n,
   ) {
     return Wrap(
-      spacing: 6,
-      runSpacing: 6,
+      spacing: 10,
+      runSpacing: 10,
       children: message.attachmentPaths.map((path) {
-        final label = path.split(Platform.pathSeparator).last;
-        return ActionChip(
-          avatar: Icon(_iconForAttachment(path), size: 18),
-          label: Text(label, overflow: TextOverflow.ellipsis),
-          onPressed: () => _openAttachment(path, l10n),
+        return AttachmentPreviewTile(
+          attachmentPath: path,
+          onTap: () => _openAttachment(path, l10n),
         );
       }).toList(),
     );

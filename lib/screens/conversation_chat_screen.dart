@@ -57,6 +57,7 @@ import '../services/tools/note_tools.dart';
 import '../services/sql_query_service.dart';
 import '../widgets/agent_plan_review_widget.dart';
 import '../widgets/agent_task_tree_widget.dart';
+import '../widgets/attachment_preview_tile.dart';
 
 class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
@@ -3281,37 +3282,12 @@ $historyBuffer
 
   Widget _buildMessageAttachmentChips(ConversationMessage message) {
     return Wrap(
-      spacing: 6,
-      runSpacing: 6,
+      spacing: 10,
+      runSpacing: 10,
       children: message.attachmentPaths.map((path) {
-        String label;
-        final isUri =
-            path.startsWith('http://') ||
-            path.startsWith('https://') ||
-            path.startsWith('gs://');
-
-        if (isUri) {
-          try {
-            final uriObj = Uri.parse(path);
-            if (uriObj.pathSegments.isNotEmpty) {
-              label = uriObj.pathSegments.last;
-            } else {
-              label = path;
-            }
-          } catch (_) {
-            label = path.split('/').last;
-          }
-        } else {
-          label = path.split(Platform.pathSeparator).last;
-        }
-
-        final extension = label.contains('.')
-            ? label.split('.').last.toLowerCase()
-            : null;
-        return ActionChip(
-          avatar: Icon(_getFileIcon(extension), size: 18),
-          label: Text(label, overflow: TextOverflow.ellipsis),
-          onPressed: () => _openAttachment(path),
+        return AttachmentPreviewTile(
+          attachmentPath: path,
+          onTap: () => _openAttachment(path),
         );
       }).toList(),
     );
