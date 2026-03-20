@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import 'model_configuration_screen.dart';
+import 'local_model_picker_screen.dart';
 
 class ModelSelectionScreen extends StatefulWidget {
   final bool isOnboarding;
@@ -218,6 +219,15 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
       margin: const EdgeInsets.only(bottom: 16),
       child: InkWell(
         onTap: () {
+          if (modelType == ModelType.localMnn) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const LocalModelPickerScreen(),
+              ),
+            );
+            return;
+          }
           setState(() {
             _selectedModel = modelType;
             _error = null;
@@ -288,7 +298,7 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
       case ModelType.openaiCompatible:
         return Icons.api;
       case ModelType.localMnn:
-        return Icons.computer;
+        return Icons.phone_android;
     }
   }
 
@@ -299,7 +309,7 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
       case ModelType.openaiCompatible:
         return AppLocalizations.of(context)!.openaiCompatibleModelDescription;
       case ModelType.localMnn:
-        return 'Run AI models locally on-device using MNN inference engine';
+        return AppLocalizations.of(context)!.localModelDescription;
     }
   }
 }

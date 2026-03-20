@@ -4189,4 +4189,46 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fetchingImage => 'Fetching image...';
+
+  @override
+  String get localModelDescription => '本地AI模型，无需API密钥';
+
+  @override
+  String get localModelDownload => '下载';
+
+  @override
+  String get localModelDownloading => '下载中...';
+
+  @override
+  String get localModelReady => '就绪';
+
+  @override
+  String get localModelNotDownloaded => '未下载';
+
+  @override
+  String get localModelDownloadFailed => '下载失败';
+
+  @override
+  String get localModelRetry => '重试';
+
+  @override
+  String get localModelDelete => '删除模型';
+
+  @override
+  String get localModelTokenWindow => 'Token窗口';
+
+  @override
+  String get localModelEnableThinking => '启用思考';
+
+  @override
+  String get localModelBackend => '后端';
+
+  @override
+  String get localModelSettings => '模型设置';
+
+  @override
+  String get localModelConstraintWarning => '输入内容可能超出本地模型的Token窗口限制，建议切换至云端模型。';
+
+  @override
+  String get localModelSwitchToCloud => '切换到云端';
 }

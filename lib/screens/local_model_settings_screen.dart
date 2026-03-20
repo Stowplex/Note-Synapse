@@ -99,7 +99,7 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
           Text(l10n.localModelBackend, style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            value: _backendType,
+            initialValue: _backendType,
             items: _availableBackends
                 .map((b) => DropdownMenuItem(value: b, child: Text(_backendLabel(b))))
                 .toList(),

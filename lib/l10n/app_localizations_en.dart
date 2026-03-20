@@ -4383,4 +4383,47 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fetchingImage => 'Fetching image...';
+
+  @override
+  String get localModelDescription => 'On-device AI, no API key needed';
+
+  @override
+  String get localModelDownload => 'Download';
+
+  @override
+  String get localModelDownloading => 'Downloading...';
+
+  @override
+  String get localModelReady => 'Ready';
+
+  @override
+  String get localModelNotDownloaded => 'Not downloaded';
+
+  @override
+  String get localModelDownloadFailed => 'Download Failed';
+
+  @override
+  String get localModelRetry => 'Retry';
+
+  @override
+  String get localModelDelete => 'Delete Model';
+
+  @override
+  String get localModelTokenWindow => 'Token Window';
+
+  @override
+  String get localModelEnableThinking => 'Enable Thinking';
+
+  @override
+  String get localModelBackend => 'Backend';
+
+  @override
+  String get localModelSettings => 'Model Settings';
+
+  @override
+  String get localModelConstraintWarning =>
+      'This input may exceed the local model\'s token window. Consider switching to a cloud model.';
+
+  @override
+  String get localModelSwitchToCloud => 'Switch to Cloud';
 }
