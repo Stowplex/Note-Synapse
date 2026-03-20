@@ -91,6 +91,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   bool _isLoading = false;
   bool _isSending = false;
   bool _isAborting = false;
+  String _streamingContent = '';
+  bool _isStreaming = false;
   String? _currentRequestId;
   final Set<String> _cancelledRequestIds = {};
   final List<PlatformFile> _attachedFiles = [];
@@ -1000,6 +1002,15 @@ $historyBuffer
         content,
         attachments,
         generationContext,
+        onStreamChunk: (chunk) {
+          if (mounted) {
+            setState(() {
+              _streamingContent += chunk;
+              _isStreaming = true;
+            });
+            _scrollToBottom();
+          }
+        },
       );
 
       final aiMessage = await _conversationService.addAIResponse(
@@ -1011,6 +1022,8 @@ $historyBuffer
       if (!mounted) return;
 
       setState(() {
+        _streamingContent = '';
+        _isStreaming = false;
         _messages.add(aiMessage);
       });
       _scrollToBottom();
@@ -1117,8 +1130,9 @@ $historyBuffer
   Future<ConversationAiResponse> _generateAIResponse(
     String userMessage,
     List<PlatformFile> attachedFiles,
-    GenerationContext generationContext,
-  ) async {
+    GenerationContext generationContext, {
+    void Function(String chunk)? onStreamChunk,
+  }) async {
     final requestId = generationContext.ensureRequestId();
     try {
       if (_cancelledRequestIds.contains(requestId)) {
@@ -1178,6 +1192,7 @@ $historyBuffer
         generationContext: generationContext,
         maxToolIterations: _maxToolIterations,
         onIterationsExhausted: _handleIterationsExhausted,
+        onStreamChunk: onStreamChunk,
       );
 
       if (_cancelledRequestIds.contains(requestId)) {
@@ -2705,8 +2720,11 @@ $historyBuffer
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.all(16.0),
-              itemCount: _messages.length,
+              itemCount: _messages.length + (_isStreaming ? 1 : 0),
               itemBuilder: (context, index) {
+                if (index == _messages.length && _isStreaming) {
+                  return _buildStreamingMessageCard();
+                }
                 final message = _messages[index];
                 return _buildMessageCard(message);
               },
@@ -3071,6 +3089,40 @@ $historyBuffer
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildStreamingMessageCard() {
+    final l10n = AppLocalizations.of(context)!;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8.0),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.smart_toy,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  l10n.ai,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.secondary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SelectableText(_streamingContent),
+          ],
+        ),
       ),
     );
   }

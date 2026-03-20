@@ -253,6 +253,21 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     };
   }
 
+  /// Generates a streaming response for plain chat (no tool calls).
+  Stream<String> generateStreaming(List<PromptMessage> messages, {
+    int? maxNewTokens,
+  }) async* {
+    final session = await _ensureSession();
+    final prompt = formatChatML(messages);
+    yield* session.generate(
+      prompt: prompt,
+      maxNewTokens: maxNewTokens ?? _config?.maxOutputTokens ?? 8192,
+    );
+  }
+
+  /// Whether this model supports streaming responses.
+  bool get supportsStreaming => true;
+
   Future<void> resetSession() async {
     _session = null;
   }

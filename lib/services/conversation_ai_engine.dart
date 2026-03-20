@@ -6,6 +6,7 @@ import '../models/generation_context.dart';
 import '../services/logger_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/model_selector.dart';
+import '../services/models/local_mnn_model.dart';
 import '../services/service_locator.dart';
 import '../services/prompts/prompt_models.dart';
 import 'conversation_settings_service.dart';
@@ -51,6 +52,7 @@ class ConversationAiEngine {
     required GenerationContext generationContext,
     int? maxToolIterations,
     IterationsExhaustedHandler? onIterationsExhausted,
+    void Function(String chunk)? onStreamChunk,
   }) async {
     if (isCancelled()) {
       throw const ConversationCancelledException();
@@ -66,6 +68,7 @@ class ConversationAiEngine {
       generationContext: generationContext,
       maxToolIterations: maxToolIterations,
       onIterationsExhausted: onIterationsExhausted,
+      onStreamChunk: onStreamChunk,
     );
   }
 
@@ -77,6 +80,7 @@ class ConversationAiEngine {
     required GenerationContext generationContext,
     int? maxToolIterations,
     IterationsExhaustedHandler? onIterationsExhausted,
+    void Function(String chunk)? onStreamChunk,
   }) async {
     try {
       final requestId = generationContext.ensureRequestId();
@@ -112,6 +116,24 @@ class ConversationAiEngine {
       var iteration = 0;
       final conversationParts = <String>[];
       Map<String, dynamic>? lastAssistantMetadata;
+
+      // Streaming shortcut: if local model + no tools, stream directly
+      final activeModel = getIt<ModelSelector>().currentModel;
+      if (activeModel is LocalMnnModel &&
+          activeModel.supportsStreaming &&
+          activeTools.isEmpty &&
+          onStreamChunk != null) {
+        final buffer = StringBuffer();
+        await for (final chunk in activeModel.generateStreaming(currentMessages)) {
+          if (isCancelled()) throw const ConversationCancelledException();
+          buffer.write(chunk);
+          onStreamChunk(chunk);
+        }
+        return ConversationAiResponse(
+          content: buffer.toString(),
+          metadata: {'modelUsed': activeModel.name},
+        );
+      }
 
       while (true) {
         if (iteration >= iterationLimit) {
