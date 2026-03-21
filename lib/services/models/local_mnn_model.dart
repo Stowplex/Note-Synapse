@@ -272,10 +272,7 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     final msgSummary = messages.map((m) {
       final entry = <String, dynamic>{
         'role': m.role.name,
-        'contentLength': m.content.length,
-        'contentPreview': m.content.length > 500
-            ? '${m.content.substring(0, 500)}...'
-            : m.content,
+        'content': m.content,
       };
       if (m.attachments.isNotEmpty) {
         entry['attachments'] = m.attachments
@@ -335,10 +332,7 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
       statusCode: 200,
       headers: {'model': name},
       responseBody: {
-        'text': responseText.length > 2000
-            ? '${responseText.substring(0, 2000)}...'
-            : responseText,
-        'textLength': responseText.length,
+        'text': responseText,
       },
       requestId: requestId,
       duration: duration,
@@ -398,9 +392,7 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
       statusCode: 200,
       headers: {'model': name},
       responseBody: {
-        'text': parsed.text.length > 2000
-            ? '${parsed.text.substring(0, 2000)}...'
-            : parsed.text,
+        'text': parsed.text,
         'functionCalls': parsed.functionCalls,
         'rawLength': responseText.length,
       },
