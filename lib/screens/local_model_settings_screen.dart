@@ -13,11 +13,13 @@ import '../l10n/app_localizations.dart';
 class LocalModelSettingsScreen extends StatefulWidget {
   final LocalModelPreset preset;
   final String configPath;
+  final ModelConfig? existingConfig;
 
   const LocalModelSettingsScreen({
     super.key,
     required this.preset,
     required this.configPath,
+    this.existingConfig,
   });
 
   @override
@@ -43,14 +45,22 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
   @override
   void initState() {
     super.initState();
-    final platform = Platform.isAndroid ? 'android' : 'ios';
-    _backendType = widget.preset.defaultBackend[platform] ?? 'cpu';
-    _tokenWindow = widget.preset.defaultTokenWindow;
+    final existing = widget.existingConfig;
+    if (existing != null) {
+      _backendType = existing.backendType ?? 'cpu';
+      _enableThinking = existing.enableThinking ?? false;
+      _tokenWindow = existing.tokenWindow ?? widget.preset.defaultTokenWindow;
+    } else {
+      final platform = Platform.isAndroid ? 'android' : 'ios';
+      _backendType = widget.preset.defaultBackend[platform] ?? 'cpu';
+      _tokenWindow = widget.preset.defaultTokenWindow;
+    }
   }
 
   Future<void> _saveAndActivate() async {
+    final configId = 'local_${widget.preset.id}';
     final config = ModelConfig(
-      id: 'local_${widget.preset.id}',
+      id: configId,
       type: ModelType.localMnn,
       modelName: widget.preset.id,
       displayName: widget.preset.displayName,
@@ -70,7 +80,13 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
     );
 
     final storage = GetIt.instance<ModelStorageService>();
-    await storage.addModel(config);
+    // Use update if this model already exists, otherwise add
+    final existing = await storage.getConfiguredModels();
+    if (existing.any((m) => m.id == configId)) {
+      await storage.updateModel(config);
+    } else {
+      await storage.addModel(config);
+    }
     await GetIt.instance<ModelSelector>().switchToModel(config);
 
     if (mounted) {

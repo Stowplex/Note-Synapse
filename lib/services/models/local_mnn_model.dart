@@ -468,10 +468,10 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     _session = null;
   }
 
-  static const _maxImageDimension = 1000;
+  static const _maxImageDimension = 784;
 
   /// Estimates token count for an image based on its dimensions.
-  /// Images are resized to min(maxDim, 1000px) preserving aspect ratio.
+  /// Images are resized to min(maxDim, 784px) preserving aspect ratio.
   /// Token count = ceil(resizedWidth/28) * ceil(resizedHeight/28).
   static int estimateImageTokens(int width, int height) {
     final maxDim = width > height ? width : height;
