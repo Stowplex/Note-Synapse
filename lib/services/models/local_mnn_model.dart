@@ -189,11 +189,23 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
       }
       final prepared = <PreparedImage>[];
       for (final file in msg.attachments) {
-        final path = file.path;
-        if (path == null) continue;
-        final ext = path.split('.').last.toLowerCase();
+        String? sourcePath = file.path;
+
+        // Handle in-memory attachments (e.g. rendered PDF pages) by
+        // writing bytes to a temp file first.
+        if (sourcePath == null && file.bytes != null) {
+          final ext = file.name.split('.').last.toLowerCase();
+          if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext)) {
+            final tempDir = await Directory.systemTemp.createTemp('mnn_mem_');
+            sourcePath = '${tempDir.path}/${file.name}';
+            await File(sourcePath).writeAsBytes(file.bytes!);
+          }
+        }
+
+        if (sourcePath == null) continue;
+        final ext = sourcePath.split('.').last.toLowerCase();
         if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext)) {
-          final image = await resizeImageForModel(path);
+          final image = await resizeImageForModel(sourcePath);
           prepared.add(image);
         }
       }
@@ -295,6 +307,9 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     final endpoint = 'local-mnn://$name';
 
     final session = await _ensureSession();
+    // Reset KV cache — the full conversation history is already embedded
+    // in the ChatML prompt, so stale cache causes duplication and slowdown.
+    await session.reset();
     final processed = await preprocessAttachments(messages);
     final prompt = formatChatML(processed);
 
@@ -348,6 +363,7 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     final endpoint = 'local-mnn://$name/tools';
 
     final session = await _ensureSession();
+    await session.reset();
     final processed = await preprocessAttachments(messages);
     final toolSchemaBlock = tools.isNotEmpty ? buildToolSchemaBlock(tools) : null;
     final prompt = formatChatML(processed, toolSchemaBlock: toolSchemaBlock);
@@ -405,6 +421,7 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     final endpoint = 'local-mnn://$name/stream';
 
     final session = await _ensureSession();
+    await session.reset();
     final processed = await preprocessAttachments(messages);
     final prompt = formatChatML(processed);
 
