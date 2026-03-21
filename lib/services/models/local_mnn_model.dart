@@ -276,7 +276,13 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
       };
       if (m.attachments.isNotEmpty) {
         entry['attachments'] = m.attachments
-            .map((f) => {'name': f.name, 'size': f.size, 'path': f.path})
+            .map((f) => {
+              'name': f.name,
+              'size': f.size,
+              'path': f.path,
+              'hasBytes': f.bytes != null,
+              'bytesLength': f.bytes?.length,
+            })
             .toList();
       }
       return entry;
@@ -284,7 +290,7 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
 
     return {
       'messages': msgSummary,
-      if (prompt != null) 'promptLength': prompt.length,
+      if (prompt != null) 'prompt': prompt,
       if (tools != null && tools.isNotEmpty) 'tools': tools,
     };
   }
