@@ -43,18 +43,21 @@ void main() {
       expect(result[0]['content'], contains('TOOLS_HERE'));
     });
 
-    test('injects system message for toolSchemaBlock when no system present', () {
-      final messages = [
-        PromptMessage(role: PromptRole.user, content: 'Hello'),
-      ];
-      final result = LocalMnnModel.buildChatMessages(
-        messages,
-        toolSchemaBlock: 'TOOLS_HERE',
-      );
-      expect(result.length, 2);
-      expect(result[0], {'role': 'system', 'content': 'TOOLS_HERE'});
-      expect(result[1], {'role': 'user', 'content': 'Hello'});
-    });
+    test(
+      'injects system message for toolSchemaBlock when no system present',
+      () {
+        final messages = [
+          PromptMessage(role: PromptRole.user, content: 'Hello'),
+        ];
+        final result = LocalMnnModel.buildChatMessages(
+          messages,
+          toolSchemaBlock: 'TOOLS_HERE',
+        );
+        expect(result.length, 2);
+        expect(result[0], {'role': 'system', 'content': 'TOOLS_HERE'});
+        expect(result[1], {'role': 'user', 'content': 'Hello'});
+      },
+    );
 
     test('preserves message order for multi-turn conversation', () {
       final messages = [
@@ -107,24 +110,80 @@ void main() {
         PromptMessage(role: PromptRole.system, content: 'You are helpful.'),
         PromptMessage(role: PromptRole.user, content: 'Hello'),
       ];
-      final result = LocalMnnModel.formatPrompt(messages, toolSchemaBlock: 'TOOLS_HERE');
+      final result = LocalMnnModel.formatPrompt(
+        messages,
+        toolSchemaBlock: 'TOOLS_HERE',
+      );
       expect(result, contains('You are helpful.'));
       expect(result, contains('TOOLS_HERE'));
       expect(result, endsWith('Hello'));
     });
 
     test('handles user-only message', () {
-      final messages = [
-        PromptMessage(role: PromptRole.user, content: 'Hello'),
-      ];
+      final messages = [PromptMessage(role: PromptRole.user, content: 'Hello')];
       final result = LocalMnnModel.formatPrompt(messages);
       expect(result, 'Hello');
     });
   });
 
+  group('LocalMnnModel buildPromptTranscript', () {
+    test('flattens multi-turn conversation into labeled transcript', () {
+      final messages = [
+        PromptMessage(role: PromptRole.system, content: 'You are helpful.'),
+        PromptMessage(role: PromptRole.user, content: 'What is in this image?'),
+        PromptMessage(
+          role: PromptRole.assistant,
+          content: 'It looks like a cat.',
+        ),
+        PromptMessage(
+          role: PromptRole.user,
+          content: 'What color is it?\n<img>/tmp/cat.jpg<hw>512,512</hw></img>',
+        ),
+      ];
+
+      final result = LocalMnnModel.buildPromptTranscript(messages);
+
+      expect(result, contains('System instructions:\nYou are helpful.'));
+      expect(result, contains('User:\nWhat is in this image?'));
+      expect(result, contains('Assistant:\nIt looks like a cat.'));
+      expect(
+        result,
+        contains(
+          'User:\nWhat color is it?\n<img>/tmp/cat.jpg<hw>512,512</hw></img>',
+        ),
+      );
+    });
+
+    test('prepends tool schema when no system message exists', () {
+      final messages = [
+        PromptMessage(role: PromptRole.user, content: 'Search for this'),
+      ];
+
+      final result = LocalMnnModel.buildPromptTranscript(
+        messages,
+        toolSchemaBlock: 'TOOLS_HERE',
+      );
+
+      expect(result, startsWith('System instructions:\nTOOLS_HERE'));
+      expect(result, contains('User:\nSearch for this'));
+    });
+
+    test('renders tool results as their own transcript section', () {
+      final messages = [
+        PromptMessage(role: PromptRole.user, content: 'Do the thing'),
+        PromptMessage(role: PromptRole.tool, content: '{"status":"ok"}'),
+      ];
+
+      final result = LocalMnnModel.buildPromptTranscript(messages);
+
+      expect(result, contains('Tool result:\n{"status":"ok"}'));
+    });
+  });
+
   group('LocalMnnModel tool call parsing', () {
     test('parses valid JSON tool call from response', () {
-      final response = 'Let me search for that.\n{"name": "call_tool", "arguments": {"service_name": "mcp", "tool_name": "search", "params": {"query": "test"}}}';
+      final response =
+          'Let me search for that.\n{"name": "call_tool", "arguments": {"service_name": "mcp", "tool_name": "search", "params": {"query": "test"}}}';
       final result = LocalMnnModel.parseToolCalls(response);
       expect(result.functionCalls, isNotNull);
       expect(result.functionCalls!.length, 1);
@@ -134,7 +193,8 @@ void main() {
     });
 
     test('handles malformed JSON with json_repair', () {
-      final response = '{"name": "call_tool", "arguments": {"service_name": "test", "tool_name": "foo", "params": {"key": "value}}}';
+      final response =
+          '{"name": "call_tool", "arguments": {"service_name": "test", "tool_name": "foo", "params": {"key": "value}}}';
       final result = LocalMnnModel.parseToolCalls(response);
       // json_repair should fix the missing quote
       expect(result.functionCalls, isNotNull);
@@ -148,14 +208,19 @@ void main() {
     });
 
     test('parses tool call with braces inside string values', () {
-      final response = '{"name": "call_tool", "arguments": {"service_name": "test", "tool_name": "foo", "params": {"code": "if (x) { return y; }"}}}';
+      final response =
+          '{"name": "call_tool", "arguments": {"service_name": "test", "tool_name": "foo", "params": {"code": "if (x) { return y; }"}}}';
       final result = LocalMnnModel.parseToolCalls(response);
       expect(result.functionCalls, isNotNull);
-      expect(result.functionCalls![0]['args']['params']['code'], 'if (x) { return y; }');
+      expect(
+        result.functionCalls![0]['args']['params']['code'],
+        'if (x) { return y; }',
+      );
     });
 
     test('parses tool call followed by trailing text', () {
-      final response = '{"name": "call_tool", "arguments": {"service_name": "test", "tool_name": "bar", "params": {}}}\nDone.';
+      final response =
+          '{"name": "call_tool", "arguments": {"service_name": "test", "tool_name": "bar", "params": {}}}\nDone.';
       final result = LocalMnnModel.parseToolCalls(response);
       expect(result.functionCalls, isNotNull);
       expect(result.functionCalls![0]['args']['tool_name'], 'bar');
@@ -185,19 +250,18 @@ void main() {
 
   group('LocalMnnModel image handling', () {
     test('inserts img tag for image attachment path', () {
-      final result = LocalMnnModel.insertImageTags(
-        'Describe this',
-        ['/tmp/img.jpg'],
-      );
+      final result = LocalMnnModel.insertImageTags('Describe this', [
+        '/tmp/img.jpg',
+      ]);
       expect(result, contains('<img>/tmp/img.jpg</img>'));
       expect(result, startsWith('Describe this'));
     });
 
     test('inserts multiple img tags for multiple images', () {
-      final result = LocalMnnModel.insertImageTags(
-        'Two images',
-        ['/tmp/a.jpg', '/tmp/b.png'],
-      );
+      final result = LocalMnnModel.insertImageTags('Two images', [
+        '/tmp/a.jpg',
+        '/tmp/b.png',
+      ]);
       expect(result, contains('<img>/tmp/a.jpg</img>'));
       expect(result, contains('<img>/tmp/b.png</img>'));
     });

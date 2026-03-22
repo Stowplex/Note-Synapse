@@ -15,7 +15,11 @@ class PreparedImage {
   final String path;
   final int width;
   final int height;
-  const PreparedImage({required this.path, required this.width, required this.height});
+  const PreparedImage({
+    required this.path,
+    required this.width,
+    required this.height,
+  });
 }
 
 class ToolCallParseResult {
@@ -35,7 +39,8 @@ class LocalMnnModel extends AIModel {
   String get id => _config?.id ?? 'local_mnn';
 
   @override
-  String get name => _config?.displayName ?? _preset?.displayName ?? 'Local Model';
+  String get name =>
+      _config?.displayName ?? _preset?.displayName ?? 'Local Model';
 
   @override
   String get description => 'On-device AI model via MNN';
@@ -60,7 +65,8 @@ class LocalMnnModel extends AIModel {
       throw Exception('Local model config path not set');
     }
 
-    final backendType = _config?.backendType ??
+    final backendType =
+        _config?.backendType ??
         _preset?.defaultBackend[Platform.isAndroid ? 'android' : 'ios'] ??
         'cpu';
 
@@ -76,6 +82,9 @@ class LocalMnnModel extends AIModel {
     );
     return _session!;
   }
+
+  bool get _usesPromptTranscriptFallback =>
+      _preset?.id == LocalModelPresets.qwen3Vl2b.id;
 
   /// Extracts the outermost JSON object from [text] starting at [start]
   /// using brace counting. Returns null if no balanced object is found.
@@ -147,10 +156,7 @@ class LocalMnnModel extends AIModel {
         return ToolCallParseResult(
           text: textBefore,
           functionCalls: [
-            {
-              'name': 'call_tool',
-              'args': args,
-            }
+            {'name': 'call_tool', 'args': args},
           ],
         );
       }
@@ -210,9 +216,9 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
         }
       }
       if (prepared.isNotEmpty) {
-        result.add(msg.copyWith(
-          content: _appendImageTags(msg.content, prepared),
-        ));
+        result.add(
+          msg.copyWith(content: _appendImageTags(msg.content, prepared)),
+        );
       } else {
         result.add(msg);
       }
@@ -263,13 +269,17 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
           break;
         case PromptRole.tool:
           // MNN doesn't support "tool" role — map to "user" with prefix
-          result.add({'role': 'user', 'content': 'Tool result: ${msg.content}'});
+          result.add({
+            'role': 'user',
+            'content': 'Tool result: ${msg.content}',
+          });
           break;
       }
     }
 
     // If there's a tool schema but no system message was present, inject one
-    if (toolSchemaBlock != null && !messages.any((m) => m.role == PromptRole.system)) {
+    if (toolSchemaBlock != null &&
+        !messages.any((m) => m.role == PromptRole.system)) {
       result.insert(0, {'role': 'system', 'content': toolSchemaBlock});
     }
 
@@ -277,8 +287,14 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
   }
 
   /// Legacy plain-text prompt formatting. Kept for tests and fallback.
-  static String formatPrompt(List<PromptMessage> messages, {String? toolSchemaBlock}) {
-    final chatMessages = buildChatMessages(messages, toolSchemaBlock: toolSchemaBlock);
+  static String formatPrompt(
+    List<PromptMessage> messages, {
+    String? toolSchemaBlock,
+  }) {
+    final chatMessages = buildChatMessages(
+      messages,
+      toolSchemaBlock: toolSchemaBlock,
+    );
     final buffer = StringBuffer();
     for (int i = 0; i < chatMessages.length; i++) {
       final msg = chatMessages[i];
@@ -296,6 +312,68 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     return buffer.toString();
   }
 
+  /// Flattens a structured chat history into a single prompt transcript.
+  ///
+  /// This is used as a compatibility fallback for Qwen3-VL because MNN's
+  /// structured message template path appears unreliable for this model,
+  /// while the plain prompt path is what upstream multimodal examples use.
+  static String buildPromptTranscript(
+    List<PromptMessage> messages, {
+    String? toolSchemaBlock,
+  }) {
+    final buffer = StringBuffer();
+
+    void writeSection(String label, String content) {
+      final trimmed = content.trim();
+      if (trimmed.isEmpty) {
+        return;
+      }
+      if (buffer.isNotEmpty) {
+        buffer.write('\n\n');
+      }
+      buffer.write('$label:\n$trimmed');
+    }
+
+    String toolAugmentedSystem(String content) {
+      if (toolSchemaBlock == null || toolSchemaBlock.trim().isEmpty) {
+        return content;
+      }
+      if (content.trim().isEmpty) {
+        return toolSchemaBlock;
+      }
+      return '$content\n\n$toolSchemaBlock';
+    }
+
+    for (final msg in messages) {
+      switch (msg.role) {
+        case PromptRole.system:
+          writeSection('System instructions', toolAugmentedSystem(msg.content));
+          break;
+        case PromptRole.user:
+          writeSection('User', msg.content);
+          break;
+        case PromptRole.assistant:
+          writeSection('Assistant', msg.content);
+          break;
+        case PromptRole.tool:
+          writeSection('Tool result', msg.content);
+          break;
+      }
+    }
+
+    if (toolSchemaBlock != null &&
+        toolSchemaBlock.trim().isNotEmpty &&
+        !messages.any((m) => m.role == PromptRole.system)) {
+      final current = buffer.toString();
+      if (current.isEmpty) {
+        return 'System instructions:\n${toolSchemaBlock.trim()}';
+      }
+      return 'System instructions:\n${toolSchemaBlock.trim()}\n\n$current';
+    }
+
+    return buffer.toString();
+  }
+
   /// Builds a summary of messages and attachments for debug logging.
   static Map<String, dynamic> _buildLogBody(
     List<PromptMessage> messages, {
@@ -309,13 +387,15 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
       };
       if (m.attachments.isNotEmpty) {
         entry['attachments'] = m.attachments
-            .map((f) => {
-              'name': f.name,
-              'size': f.size,
-              'path': f.path,
-              'hasBytes': f.bytes != null,
-              'bytesLength': f.bytes?.length,
-            })
+            .map(
+              (f) => {
+                'name': f.name,
+                'size': f.size,
+                'path': f.path,
+                'hasBytes': f.bytes != null,
+                'bytesLength': f.bytes?.length,
+              },
+            )
             .toList();
       }
       return entry;
@@ -337,7 +417,8 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     int? maxOutputTokens,
     GenerationContext? generationContext,
   }) async {
-    final requestId = generationContext?.ensureRequestId() ??
+    final requestId =
+        generationContext?.ensureRequestId() ??
         DateTime.now().millisecondsSinceEpoch.toString();
     final startTime = DateTime.now();
     final endpoint = 'local-mnn://$name';
@@ -345,21 +426,39 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     final session = await _ensureSession();
     await session.reset();
     final processed = await preprocessAttachments(messages);
-    final chatMessages = buildChatMessages(processed);
+    final usePromptFallback = _usesPromptTranscriptFallback;
+    final chatMessages = usePromptFallback
+        ? null
+        : buildChatMessages(processed);
+    final promptTranscript = usePromptFallback
+        ? buildPromptTranscript(processed)
+        : null;
 
     LoggerService.logAiRequest(
       endpoint: endpoint,
       headers: {'backend': _config?.backendType ?? 'cpu'},
-      requestBody: _buildLogBody(messages, prompt: chatMessages.toString()),
+      requestBody: _buildLogBody(
+        messages,
+        prompt: usePromptFallback ? promptTranscript : chatMessages.toString(),
+      ),
       requestId: requestId,
     );
 
     final buffer = StringBuffer();
-    await for (final chunk in session.generateWithMessages(
-      messages: chatMessages,
-      maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
-    )) {
-      buffer.write(chunk);
+    if (usePromptFallback) {
+      await for (final chunk in session.generate(
+        prompt: promptTranscript!,
+        maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+      )) {
+        buffer.write(chunk);
+      }
+    } else {
+      await for (final chunk in session.generateWithMessages(
+        messages: chatMessages!,
+        maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+      )) {
+        buffer.write(chunk);
+      }
     }
 
     final responseText = buffer.toString();
@@ -368,9 +467,7 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     LoggerService.logAiResponse(
       statusCode: 200,
       headers: {'model': name},
-      responseBody: {
-        'text': responseText,
-      },
+      responseBody: {'text': responseText},
       requestId: requestId,
       duration: duration,
     );
@@ -388,7 +485,8 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     int? maxOutputTokens,
     GenerationContext? generationContext,
   }) async {
-    final requestId = generationContext?.ensureRequestId() ??
+    final requestId =
+        generationContext?.ensureRequestId() ??
         DateTime.now().millisecondsSinceEpoch.toString();
     final startTime = DateTime.now();
     final endpoint = 'local-mnn://$name/tools';
@@ -396,23 +494,44 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     final session = await _ensureSession();
     await session.reset();
     final processed = await preprocessAttachments(messages);
-    final toolSchemaBlock = tools.isNotEmpty ? buildToolSchemaBlock(tools) : null;
-    final chatMessages = buildChatMessages(processed, toolSchemaBlock: toolSchemaBlock);
+    final toolSchemaBlock = tools.isNotEmpty
+        ? buildToolSchemaBlock(tools)
+        : null;
+    final usePromptFallback = _usesPromptTranscriptFallback;
+    final chatMessages = usePromptFallback
+        ? null
+        : buildChatMessages(processed, toolSchemaBlock: toolSchemaBlock);
+    final promptTranscript = usePromptFallback
+        ? buildPromptTranscript(processed, toolSchemaBlock: toolSchemaBlock)
+        : null;
 
     LoggerService.logAiRequest(
       endpoint: endpoint,
       headers: {'backend': _config?.backendType ?? 'cpu'},
-      requestBody: _buildLogBody(messages, prompt: chatMessages.toString(), tools: tools),
+      requestBody: _buildLogBody(
+        messages,
+        prompt: usePromptFallback ? promptTranscript : chatMessages.toString(),
+        tools: tools,
+      ),
       requestId: requestId,
     );
 
     // Buffer full response for tool call parsing
     final buffer = StringBuffer();
-    await for (final chunk in session.generateWithMessages(
-      messages: chatMessages,
-      maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
-    )) {
-      buffer.write(chunk);
+    if (usePromptFallback) {
+      await for (final chunk in session.generate(
+        prompt: promptTranscript!,
+        maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+      )) {
+        buffer.write(chunk);
+      }
+    } else {
+      await for (final chunk in session.generateWithMessages(
+        messages: chatMessages!,
+        maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+      )) {
+        buffer.write(chunk);
+      }
     }
 
     final responseText = buffer.toString();
@@ -441,7 +560,8 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
   }
 
   /// Generates a streaming response for plain chat (no tool calls).
-  Stream<String> generateStreaming(List<PromptMessage> messages, {
+  Stream<String> generateStreaming(
+    List<PromptMessage> messages, {
     int? maxNewTokens,
     String? requestId,
   }) async* {
@@ -452,22 +572,41 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     final session = await _ensureSession();
     await session.reset();
     final processed = await preprocessAttachments(messages);
-    final chatMessages = buildChatMessages(processed);
+    final usePromptFallback = _usesPromptTranscriptFallback;
+    final chatMessages = usePromptFallback
+        ? null
+        : buildChatMessages(processed);
+    final promptTranscript = usePromptFallback
+        ? buildPromptTranscript(processed)
+        : null;
 
     LoggerService.logAiRequest(
       endpoint: endpoint,
       headers: {'backend': _config?.backendType ?? 'cpu'},
-      requestBody: _buildLogBody(messages, prompt: chatMessages.toString()),
+      requestBody: _buildLogBody(
+        messages,
+        prompt: usePromptFallback ? promptTranscript : chatMessages.toString(),
+      ),
       requestId: reqId,
     );
 
     final responseBuffer = StringBuffer();
-    await for (final chunk in session.generateWithMessages(
-      messages: chatMessages,
-      maxNewTokens: maxNewTokens ?? _config?.maxOutputTokens ?? 8192,
-    )) {
-      responseBuffer.write(chunk);
-      yield chunk;
+    if (usePromptFallback) {
+      await for (final chunk in session.generate(
+        prompt: promptTranscript!,
+        maxNewTokens: maxNewTokens ?? _config?.maxOutputTokens ?? 8192,
+      )) {
+        responseBuffer.write(chunk);
+        yield chunk;
+      }
+    } else {
+      await for (final chunk in session.generateWithMessages(
+        messages: chatMessages!,
+        maxNewTokens: maxNewTokens ?? _config?.maxOutputTokens ?? 8192,
+      )) {
+        responseBuffer.write(chunk);
+        yield chunk;
+      }
     }
 
     final responseText = responseBuffer.toString();
@@ -564,7 +703,9 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     if (isPng) {
       await File(tempPath).writeAsBytes(img_lib.encodePng(normalized));
     } else {
-      await File(tempPath).writeAsBytes(img_lib.encodeJpg(normalized, quality: 92));
+      await File(
+        tempPath,
+      ).writeAsBytes(img_lib.encodeJpg(normalized, quality: 92));
     }
 
     return PreparedImage(path: tempPath, width: newWidth, height: newHeight);
