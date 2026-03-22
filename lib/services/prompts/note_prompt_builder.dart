@@ -26,6 +26,14 @@ class NotePromptBuilder {
 
   final DatabaseService _databaseService;
 
+  /// Shared transformation guidelines for both note-level and block-level transforms.
+  static List<String> get _transformationGuidelines => [
+    'Preserve critical information unless explicitly told to remove it.',
+    'Indicate any assumptions made during transformation.',
+    AIPrompts.mathFormulaGuidelines,
+    AIPrompts.promptInjectionProtectionGuidelines,
+  ];
+
   /// Build a single-turn question answering prompt with separated system/user context.
   Future<PromptRequest> buildQuestionPrompt({
     required String question,
@@ -109,12 +117,7 @@ class NotePromptBuilder {
       taskContext:
           'Transform the provided note content based on the user instruction while respecting structure and metadata. '
           'The upcoming context message includes the original note, sub-notes, tags, and linked references.',
-      guidelines: [
-        'Preserve critical information unless explicitly told to remove it.',
-        'Indicate any assumptions made during transformation.',
-        AIPrompts.mathFormulaGuidelines,
-        AIPrompts.promptInjectionProtectionGuidelines,
-      ],
+      guidelines: _transformationGuidelines,
     );
 
     final noteContextMessage = await buildContextMessage([note]);
