@@ -69,8 +69,8 @@ class LocalMnnModel extends AIModel {
     final isGpu = backendType == 'opencl' || backendType == 'metal';
     final edgeConfig = EdgeGenConfig(
       backendType: backendType,
-      precision: isGpu ? 'high' : 'low',
-      memory: isGpu ? 'normal' : 'low',
+      precision: 'low',
+      memory: 'low',
       maxNewTokens: _config?.maxOutputTokens ?? 8192,
       enableThinking: _config?.enableThinking ?? false,
       // We format ChatML ourselves to support system prompts, multi-turn
