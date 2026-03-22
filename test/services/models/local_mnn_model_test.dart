@@ -10,16 +10,14 @@ void main() {
         PromptMessage(role: PromptRole.user, content: 'Hello'),
       ];
       final result = LocalMnnModel.formatPrompt(messages);
-      expect(result, contains('[Instructions]'));
       expect(result, contains('You are helpful.'));
-      // Last user message is at the end without prefix
       expect(result, endsWith('Hello'));
       // No ChatML tags — MNN applies its own template
       expect(result, isNot(contains('<|im_start|>')));
       expect(result, isNot(contains('<|im_end|>')));
     });
 
-    test('formats multi-turn conversation', () {
+    test('formats multi-turn conversation with correct ordering', () {
       final messages = [
         PromptMessage(role: PromptRole.system, content: 'System prompt'),
         PromptMessage(role: PromptRole.user, content: 'First question'),
@@ -27,14 +25,15 @@ void main() {
         PromptMessage(role: PromptRole.user, content: 'Follow up'),
       ];
       final result = LocalMnnModel.formatPrompt(messages);
-      expect(result, contains('[Conversation History]'));
-      expect(result, contains('User: First question'));
-      expect(result, contains('Assistant: First answer'));
-      // Last user message is the current request
+      // Prior turns appear in order
+      final userIdx = result.indexOf('User: First question');
+      final assistantIdx = result.indexOf('Assistant: First answer');
+      expect(userIdx, lessThan(assistantIdx));
+      // Last user message is at the end
       expect(result, endsWith('Follow up'));
     });
 
-    test('injects toolSchemaBlock into instructions', () {
+    test('injects toolSchemaBlock into prompt', () {
       final messages = [
         PromptMessage(role: PromptRole.system, content: 'You are helpful.'),
         PromptMessage(role: PromptRole.user, content: 'Hello'),
@@ -42,10 +41,7 @@ void main() {
       final result = LocalMnnModel.formatPrompt(messages, toolSchemaBlock: 'TOOLS_HERE');
       expect(result, contains('You are helpful.'));
       expect(result, contains('TOOLS_HERE'));
-      // Both in the instructions section
-      final instructionsEnd = result.indexOf('\n\n');
-      final instructionsSection = result.substring(0, instructionsEnd > 0 ? instructionsEnd : result.length);
-      expect(instructionsSection, contains('[Instructions]'));
+      expect(result, endsWith('Hello'));
     });
 
     test('handles empty system message', () {
@@ -53,8 +49,7 @@ void main() {
         PromptMessage(role: PromptRole.user, content: 'Hello'),
       ];
       final result = LocalMnnModel.formatPrompt(messages);
-      expect(result, isNot(contains('[Instructions]')));
-      expect(result, contains('Hello'));
+      expect(result, 'Hello');
     });
   });
 

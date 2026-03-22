@@ -32,13 +32,10 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
   int _tokenWindow = 16384;
 
   List<String> get _availableBackends {
-    if (Platform.isAndroid) {
-      return ['cpu', 'opencl'];
-    } else if (Platform.isIOS) {
-      final defaultBackend = widget.preset.defaultBackend['ios'] ?? 'cpu';
-      if (defaultBackend == 'metal') return ['metal', 'cpu'];
-      return ['cpu'];
-    }
+    final platform = Platform.isAndroid ? 'android' : 'ios';
+    final defaultBackend = widget.preset.defaultBackend[platform] ?? 'cpu';
+    if (defaultBackend == 'opencl') return ['cpu', 'opencl'];
+    if (defaultBackend == 'metal') return ['metal', 'cpu'];
     return ['cpu'];
   }
 

@@ -238,54 +238,54 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
   /// MNN's native session adds this as a "user" message and applies its own
   /// ChatML Jinja template. We must NOT add ChatML tags ourselves — doing so
   /// causes double-wrapping that breaks `<img>` tag processing for vision
-  /// models. Instead, embed system instructions and conversation history as
-  /// plain text within the prompt.
+  /// models. The prompt should be as close as possible to what the example
+  /// app sends: just the user's text with `<img>` tags appended.
   static String formatPrompt(List<PromptMessage> messages, {String? toolSchemaBlock}) {
     final buffer = StringBuffer();
 
-    // Collect system instructions, conversation history, and the last user message.
-    final systemParts = <String>[];
-    final historyParts = <String>[];
+    // Extract the last user message — this is the primary prompt content.
+    // System context and prior turns are prepended minimally.
+    String? systemContent;
+    final priorTurns = <String>[];
     String lastUserContent = '';
 
     for (final msg in messages) {
       if (msg.role == PromptRole.system) {
-        systemParts.add(msg.content);
+        systemContent = msg.content;
       } else if (msg.role == PromptRole.user) {
-        // Move any previous "last user" into history
         if (lastUserContent.isNotEmpty) {
-          historyParts.add('User: $lastUserContent');
+          priorTurns.add('User: $lastUserContent');
         }
         lastUserContent = msg.content;
       } else if (msg.role == PromptRole.assistant) {
-        historyParts.add('Assistant: ${msg.content}');
+        // Flush pending user message before adding assistant response
+        if (lastUserContent.isNotEmpty) {
+          priorTurns.add('User: $lastUserContent');
+          lastUserContent = '';
+        }
+        priorTurns.add('Assistant: ${msg.content}');
       } else if (msg.role == PromptRole.tool) {
-        historyParts.add('Tool result: ${msg.content}');
+        priorTurns.add('Tool: ${msg.content}');
       }
     }
 
-    // System instructions
-    if (systemParts.isNotEmpty || toolSchemaBlock != null) {
-      buffer.writeln('[Instructions]');
-      for (final s in systemParts) {
-        buffer.writeln(s);
-      }
-      if (toolSchemaBlock != null) {
-        buffer.writeln(toolSchemaBlock);
-      }
-      buffer.writeln();
+    // Prepend system context and tool schema briefly if present
+    if (systemContent != null && systemContent.isNotEmpty) {
+      buffer.writeln(systemContent);
+    }
+    if (toolSchemaBlock != null) {
+      buffer.writeln(toolSchemaBlock);
     }
 
-    // Prior conversation turns
-    if (historyParts.isNotEmpty) {
-      buffer.writeln('[Conversation History]');
-      for (final h in historyParts) {
-        buffer.writeln(h);
+    // Include prior conversation turns if any
+    if (priorTurns.isNotEmpty) {
+      for (final turn in priorTurns) {
+        buffer.writeln(turn);
       }
-      buffer.writeln();
     }
 
-    // Current user message (with any <img> tags already appended)
+    // Current user message last (with <img> tags already appended by
+    // preprocessAttachments). This is what MNN's vision processor scans.
     buffer.write(lastUserContent);
 
     return buffer.toString();

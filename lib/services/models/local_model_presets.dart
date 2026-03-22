@@ -23,11 +23,12 @@ class LocalModelPreset {
 class LocalModelPresets {
   LocalModelPresets._();
 
+  // CPU-only: OpenCL produces garbled output for this model's attention layers.
   static final qwen35_08b = LocalModelPreset(
     id: 'qwen35_08b',
     displayName: 'Qwen 3.5 0.8B',
     spec: QwenModelSpec.qwen35_08bMnn,
-    defaultBackend: {'android': 'opencl', 'ios': 'cpu'},
+    defaultBackend: {'android': 'cpu', 'ios': 'cpu'},
     supportsVision: true,
     supportsThinking: true,
     defaultTokenWindow: 16384,
