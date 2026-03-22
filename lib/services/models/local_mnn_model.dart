@@ -64,19 +64,10 @@ class LocalMnnModel extends AIModel {
         _preset?.defaultBackend[Platform.isAndroid ? 'android' : 'ios'] ??
         'cpu';
 
-    // GPU backends with 'low' precision use FP16 which overflows in
-    // transformer attention/FFT layers. Use 'high' (Precision_High = FP32).
-    final isGpu = backendType == 'opencl' || backendType == 'metal';
     final edgeConfig = EdgeGenConfig(
       backendType: backendType,
-      precision: 'low',
-      memory: 'low',
       maxNewTokens: _config?.maxOutputTokens ?? 8192,
       enableThinking: _config?.enableThinking ?? false,
-      // We format ChatML ourselves to support system prompts, multi-turn
-      // history, and tool messages. Disable MNN's Jinja template to avoid
-      // double-wrapping which breaks <img> tag processing for vision models.
-      useTemplate: false,
     );
 
     _session = await EdgeGenController.instance.openSession(
@@ -242,33 +233,61 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     return buffer.toString();
   }
 
-  static String formatChatML(List<PromptMessage> messages, {String? toolSchemaBlock}) {
+  /// Formats messages into a single user prompt for the MNN runtime.
+  ///
+  /// MNN's native session adds this as a "user" message and applies its own
+  /// ChatML Jinja template. We must NOT add ChatML tags ourselves — doing so
+  /// causes double-wrapping that breaks `<img>` tag processing for vision
+  /// models. Instead, embed system instructions and conversation history as
+  /// plain text within the prompt.
+  static String formatPrompt(List<PromptMessage> messages, {String? toolSchemaBlock}) {
     final buffer = StringBuffer();
+
+    // Collect system instructions, conversation history, and the last user message.
+    final systemParts = <String>[];
+    final historyParts = <String>[];
+    String lastUserContent = '';
 
     for (final msg in messages) {
       if (msg.role == PromptRole.system) {
-        buffer.writeln('<|im_start|>system');
-        buffer.write(msg.content);
-        if (toolSchemaBlock != null) {
-          buffer.write('\n\n$toolSchemaBlock');
-        }
-        buffer.writeln('\n<|im_end|>');
+        systemParts.add(msg.content);
       } else if (msg.role == PromptRole.user) {
-        buffer.writeln('<|im_start|>user');
-        buffer.writeln(msg.content);
-        buffer.writeln('<|im_end|>');
+        // Move any previous "last user" into history
+        if (lastUserContent.isNotEmpty) {
+          historyParts.add('User: $lastUserContent');
+        }
+        lastUserContent = msg.content;
       } else if (msg.role == PromptRole.assistant) {
-        buffer.writeln('<|im_start|>assistant');
-        buffer.writeln(msg.content);
-        buffer.writeln('<|im_end|>');
+        historyParts.add('Assistant: ${msg.content}');
       } else if (msg.role == PromptRole.tool) {
-        buffer.writeln('<|im_start|>tool');
-        buffer.writeln(msg.content);
-        buffer.writeln('<|im_end|>');
+        historyParts.add('Tool result: ${msg.content}');
       }
     }
 
-    buffer.writeln('<|im_start|>assistant');
+    // System instructions
+    if (systemParts.isNotEmpty || toolSchemaBlock != null) {
+      buffer.writeln('[Instructions]');
+      for (final s in systemParts) {
+        buffer.writeln(s);
+      }
+      if (toolSchemaBlock != null) {
+        buffer.writeln(toolSchemaBlock);
+      }
+      buffer.writeln();
+    }
+
+    // Prior conversation turns
+    if (historyParts.isNotEmpty) {
+      buffer.writeln('[Conversation History]');
+      for (final h in historyParts) {
+        buffer.writeln(h);
+      }
+      buffer.writeln();
+    }
+
+    // Current user message (with any <img> tags already appended)
+    buffer.write(lastUserContent);
+
     return buffer.toString();
   }
 
@@ -323,7 +342,7 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     // in the ChatML prompt, so stale cache causes duplication and slowdown.
     await session.reset();
     final processed = await preprocessAttachments(messages);
-    final prompt = formatChatML(processed);
+    final prompt = formatPrompt(processed);
 
     LoggerService.logAiRequest(
       endpoint: endpoint,
@@ -375,7 +394,7 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     await session.reset();
     final processed = await preprocessAttachments(messages);
     final toolSchemaBlock = tools.isNotEmpty ? buildToolSchemaBlock(tools) : null;
-    final prompt = formatChatML(processed, toolSchemaBlock: toolSchemaBlock);
+    final prompt = formatPrompt(processed, toolSchemaBlock: toolSchemaBlock);
 
     LoggerService.logAiRequest(
       endpoint: endpoint,
@@ -430,7 +449,7 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     final session = await _ensureSession();
     await session.reset();
     final processed = await preprocessAttachments(messages);
-    final prompt = formatChatML(processed);
+    final prompt = formatPrompt(processed);
 
     LoggerService.logAiRequest(
       endpoint: endpoint,

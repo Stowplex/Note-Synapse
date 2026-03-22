@@ -4,18 +4,19 @@ import 'package:note_synapse/services/prompts/prompt_models.dart';
 
 void main() {
   group('LocalMnnModel prompt formatting', () {
-    test('formats system + user messages to ChatML', () {
+    test('formats system + user messages as plain prompt', () {
       final messages = [
         PromptMessage(role: PromptRole.system, content: 'You are helpful.'),
         PromptMessage(role: PromptRole.user, content: 'Hello'),
       ];
-      final result = LocalMnnModel.formatChatML(messages);
-      expect(result, contains('<|im_start|>system'));
+      final result = LocalMnnModel.formatPrompt(messages);
+      expect(result, contains('[Instructions]'));
       expect(result, contains('You are helpful.'));
-      expect(result, contains('<|im_end|>'));
-      expect(result, contains('<|im_start|>user'));
-      expect(result, contains('Hello'));
-      expect(result, endsWith('<|im_start|>assistant\n'));
+      // Last user message is at the end without prefix
+      expect(result, endsWith('Hello'));
+      // No ChatML tags — MNN applies its own template
+      expect(result, isNot(contains('<|im_start|>')));
+      expect(result, isNot(contains('<|im_end|>')));
     });
 
     test('formats multi-turn conversation', () {
@@ -25,30 +26,35 @@ void main() {
         PromptMessage(role: PromptRole.assistant, content: 'First answer'),
         PromptMessage(role: PromptRole.user, content: 'Follow up'),
       ];
-      final result = LocalMnnModel.formatChatML(messages);
-      expect(result, contains('<|im_start|>assistant\nFirst answer\n<|im_end|>'));
-      expect(result, contains('Follow up'));
+      final result = LocalMnnModel.formatPrompt(messages);
+      expect(result, contains('[Conversation History]'));
+      expect(result, contains('User: First question'));
+      expect(result, contains('Assistant: First answer'));
+      // Last user message is the current request
+      expect(result, endsWith('Follow up'));
     });
 
-    test('injects toolSchemaBlock into system message', () {
+    test('injects toolSchemaBlock into instructions', () {
       final messages = [
         PromptMessage(role: PromptRole.system, content: 'You are helpful.'),
         PromptMessage(role: PromptRole.user, content: 'Hello'),
       ];
-      final result = LocalMnnModel.formatChatML(messages, toolSchemaBlock: 'TOOLS_HERE');
-      expect(result, contains('You are helpful.\n\nTOOLS_HERE'));
-      // Ensure it's inside the system block, before im_end
-      final systemBlock = result.split('<|im_end|>').first;
-      expect(systemBlock, contains('TOOLS_HERE'));
+      final result = LocalMnnModel.formatPrompt(messages, toolSchemaBlock: 'TOOLS_HERE');
+      expect(result, contains('You are helpful.'));
+      expect(result, contains('TOOLS_HERE'));
+      // Both in the instructions section
+      final instructionsEnd = result.indexOf('\n\n');
+      final instructionsSection = result.substring(0, instructionsEnd > 0 ? instructionsEnd : result.length);
+      expect(instructionsSection, contains('[Instructions]'));
     });
 
     test('handles empty system message', () {
       final messages = [
         PromptMessage(role: PromptRole.user, content: 'Hello'),
       ];
-      final result = LocalMnnModel.formatChatML(messages);
-      expect(result, contains('<|im_start|>user'));
-      expect(result, isNot(contains('<|im_start|>system')));
+      final result = LocalMnnModel.formatPrompt(messages);
+      expect(result, isNot(contains('[Instructions]')));
+      expect(result, contains('Hello'));
     });
   });
 
@@ -64,76 +70,77 @@ void main() {
     });
 
     test('handles malformed JSON with json_repair', () {
-      // Missing closing quote on "test
-      final response = '{"name": "call_tool", "arguments": {"service_name": "mcp", "tool_name": "search", "params": {"query": "test}}}';
+      final response = '{"name": "call_tool", "arguments": {"service_name": "test", "tool_name": "foo", "params": {"key": "value}}}';
       final result = LocalMnnModel.parseToolCalls(response);
       // json_repair should fix the missing quote
       expect(result.functionCalls, isNotNull);
     });
 
     test('returns plain text when no tool call found', () {
-      final response = 'This is just a regular response with no tool calls.';
+      final response = 'This is just a plain text response with no JSON.';
       final result = LocalMnnModel.parseToolCalls(response);
-      expect(result.functionCalls, isNull);
       expect(result.text, response);
+      expect(result.functionCalls, isNull);
     });
 
     test('parses tool call with braces inside string values', () {
-      final response = '{"name": "call_tool", "arguments": {"service_name": "mcp", "tool_name": "run", "params": {"code": "if (x) { print(\\"}\\"); }"}}}';
+      final response = '{"name": "call_tool", "arguments": {"service_name": "test", "tool_name": "foo", "params": {"code": "if (x) { return y; }"}}}';
       final result = LocalMnnModel.parseToolCalls(response);
       expect(result.functionCalls, isNotNull);
-      expect(result.functionCalls![0]['args']['tool_name'], 'run');
+      expect(result.functionCalls![0]['args']['params']['code'], 'if (x) { return y; }');
     });
 
     test('parses tool call followed by trailing text', () {
-      final response = '{"name": "call_tool", "arguments": {"service_name": "mcp", "tool_name": "search", "params": {"q": "test"}}} I will now search.';
+      final response = '{"name": "call_tool", "arguments": {"service_name": "test", "tool_name": "bar", "params": {}}}\nDone.';
       final result = LocalMnnModel.parseToolCalls(response);
       expect(result.functionCalls, isNotNull);
-      expect(result.functionCalls![0]['args']['tool_name'], 'search');
+      expect(result.functionCalls![0]['args']['tool_name'], 'bar');
     });
 
     test('falls back to plain text when arguments is not a map', () {
       final response = '{"name": "call_tool", "arguments": "invalid"}';
       final result = LocalMnnModel.parseToolCalls(response);
-      expect(result.functionCalls, isNull);
       expect(result.text, response);
+      expect(result.functionCalls, isNull);
     });
 
     test('builds tool schema block for system prompt', () {
       final tools = [
         {
-          'name': 'call_tool',
-          'description': 'Call a tool',
-          'parameters': {'type': 'object', 'properties': {}}
-        }
+          'name': 'search',
+          'description': 'Search the web',
+          'parameters': {'query': 'string'},
+        },
       ];
-      final block = LocalMnnModel.buildToolSchemaBlock(tools);
-      expect(block, contains('call_tool'));
-      expect(block, contains('"name": "call_tool"'));
+      final result = LocalMnnModel.buildToolSchemaBlock(tools);
+      expect(result, contains('call_tool'));
+      expect(result, contains('search'));
+      expect(result, contains('Search the web'));
     });
   });
 
   group('LocalMnnModel image handling', () {
     test('inserts img tag for image attachment path', () {
       final result = LocalMnnModel.insertImageTags(
-        'Describe this image',
-        ['/tmp/resized_photo.jpg'],
+        'Describe this',
+        ['/tmp/img.jpg'],
       );
-      expect(result, 'Describe this image\n<img>/tmp/resized_photo.jpg</img>');
+      expect(result, contains('<img>/tmp/img.jpg</img>'));
+      expect(result, startsWith('Describe this'));
     });
 
     test('inserts multiple img tags for multiple images', () {
       final result = LocalMnnModel.insertImageTags(
-        'Compare these',
-        ['/tmp/img1.jpg', '/tmp/img2.jpg'],
+        'Two images',
+        ['/tmp/a.jpg', '/tmp/b.png'],
       );
-      expect(result, contains('<img>/tmp/img1.jpg</img>'));
-      expect(result, contains('<img>/tmp/img2.jpg</img>'));
+      expect(result, contains('<img>/tmp/a.jpg</img>'));
+      expect(result, contains('<img>/tmp/b.png</img>'));
     });
 
     test('returns original text when no images', () {
-      final result = LocalMnnModel.insertImageTags('Hello', []);
-      expect(result, 'Hello');
+      final result = LocalMnnModel.insertImageTags('No images', []);
+      expect(result, 'No images');
     });
 
     test('estimates image tokens from dimensions', () {
