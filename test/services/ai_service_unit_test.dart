@@ -231,7 +231,7 @@ void main() {
   });
 
   group('AIService block transformation', () {
-    test('transformBlock returns transformed content', () async {
+    test('transformBlock extracts content from transformed tags', () async {
       when(mockModelSelector.generateFromPrompt(
         any,
         temperature: anyNamed('temperature'),
@@ -239,7 +239,8 @@ void main() {
         topP: anyNamed('topP'),
         maxOutputTokens: anyNamed('maxOutputTokens'),
         generationContext: anyNamed('generationContext'),
-      )).thenAnswer((_) async => 'Transformed block content');
+      )).thenAnswer((_) async =>
+          '<transformed>\nTransformed block content\n</transformed>\n\n<notes>\nSome assumption\n</notes>');
 
       final result = await service.transformBlock(
         '## Original Block\nSome text',
@@ -261,6 +262,21 @@ void main() {
           contains('Make it shorter'));
       expect(captured.conversationMessages.first.content,
           contains('## Original Block'));
+    });
+
+    test('transformBlock falls back to raw response without tags', () async {
+      when(mockModelSelector.generateFromPrompt(
+        any,
+        temperature: anyNamed('temperature'),
+        topK: anyNamed('topK'),
+        topP: anyNamed('topP'),
+        maxOutputTokens: anyNamed('maxOutputTokens'),
+        generationContext: anyNamed('generationContext'),
+      )).thenAnswer((_) async => 'Raw response without tags');
+
+      final result = await service.transformBlock('content', 'instruction');
+
+      expect(result, equals('Raw response without tags'));
     });
 
     test('transformBlock propagates errors', () async {

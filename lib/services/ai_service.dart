@@ -146,11 +146,25 @@ class AIService {
         instruction: instruction,
       );
 
-      return await _modelSelector.generateFromPrompt(
+      final rawResponse = await _modelSelector.generateFromPrompt(
         request,
         generationContext: context,
       );
+
+      return _extractTransformedContent(rawResponse);
     }, requestId: requestId);
+  }
+
+  /// Extract content from <transformed> tags, falling back to raw response.
+  static String _extractTransformedContent(String response) {
+    final match = RegExp(
+      r'<transformed>\s*([\s\S]*?)\s*</transformed>',
+    ).firstMatch(response);
+    if (match != null) {
+      return match.group(1)!.trim();
+    }
+    // Fallback: return raw response if model didn't use the template
+    return response.trim();
   }
 
   Future<String> generateWithAttachments(

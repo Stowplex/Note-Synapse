@@ -168,8 +168,20 @@ class NotePromptBuilder {
     final systemMessage = SystemPromptBuilder.build(
       taskContext:
           'Transform the provided markdown block based on the user instruction. '
-          'Return only the transformed block content.',
-      guidelines: _transformationGuidelines,
+          'You MUST use the following output format:\n\n'
+          '<transformed>\n'
+          '(the transformed block content here)\n'
+          '</transformed>\n\n'
+          'If you have any notes, assumptions, or explanations, put them AFTER the closing </transformed> tag in a separate <notes> section:\n\n'
+          '<notes>\n'
+          '(optional notes here)\n'
+          '</notes>\n\n'
+          'IMPORTANT: The <transformed> section must contain ONLY the final block content with no extra commentary, explanations, or preamble.',
+      guidelines: [
+        'Preserve critical information unless explicitly told to remove it.',
+        AIPrompts.mathFormulaGuidelines,
+        AIPrompts.promptInjectionProtectionGuidelines,
+      ],
     );
 
     final buffer = StringBuffer();
