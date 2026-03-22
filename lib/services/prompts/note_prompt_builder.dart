@@ -159,6 +159,36 @@ class NotePromptBuilder {
     );
   }
 
+  /// Build a prompt for transforming a markdown block (not a full note).
+  /// Synchronous because block-level transforms don't need DB lookups for context.
+  PromptRequest buildBlockTransformationPrompt({
+    required String blockContent,
+    required String instruction,
+  }) {
+    final systemMessage = SystemPromptBuilder.build(
+      taskContext:
+          'Transform the provided markdown block based on the user instruction. '
+          'Return only the transformed block content.',
+      guidelines: _transformationGuidelines,
+    );
+
+    final buffer = StringBuffer();
+    buffer.writeln('Transformation instruction: "$instruction"');
+    buffer.writeln();
+    buffer.writeln('Block content to transform:');
+    buffer.writeln(blockContent);
+
+    final userMessage = PromptMessage(
+      role: PromptRole.user,
+      content: buffer.toString().trim(),
+    );
+
+    return PromptRequest(
+      systemMessage: systemMessage,
+      conversationMessages: [userMessage],
+    );
+  }
+
   /// Build a prompt for creating new notes from context and instruction.
   Future<PromptRequest> buildNewNoteCreationPrompt({
     required String userInstruction,
