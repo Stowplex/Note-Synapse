@@ -64,8 +64,14 @@ class LocalMnnModel extends AIModel {
         _preset?.defaultBackend[Platform.isAndroid ? 'android' : 'ios'] ??
         'cpu';
 
+    // OpenCL with low precision (FP16) causes garbled output in transformer
+    // models due to half-precision overflow in attention/FFT operations.
+    // Use FP32 precision and normal memory mode for GPU backends.
+    final isGpu = backendType == 'opencl' || backendType == 'metal';
     final edgeConfig = EdgeGenConfig(
       backendType: backendType,
+      precision: isGpu ? 'normal' : 'low',
+      memory: isGpu ? 'normal' : 'low',
       maxNewTokens: _config?.maxOutputTokens ?? 8192,
       enableThinking: _config?.enableThinking ?? false,
     );
