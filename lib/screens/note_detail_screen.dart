@@ -479,45 +479,23 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   Future<void> _handleAIEditSelection() async {
     if (_selectedBlockIndices.isEmpty) return;
-    final l10n = AppLocalizations.of(context)!;
 
     final sortedIndices = _selectedBlockIndices.toList()..sort();
     final blocksToEdit = sortedIndices.map((i) => _parsedBlocks[i]).toList();
     final originalContent = blocksToEdit.map((b) => b.content).join('\n\n');
 
-    // Step 1: Get instruction from user
-    final instruction = await BlockAIEditDialog.show(context);
-    if (instruction == null || !mounted) return;
-
-    // Step 2: Show loading
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
+    // Show prompt dialog — loading/error handled inline within the dialog
+    final transformedContent = await BlockAIEditDialog.show(
+      context,
+      onTransform: (instruction) async {
+        final aiService = getIt<AIService>();
+        return await aiService.transformBlock(originalContent, instruction);
+      },
     );
 
-    // Step 3: Call AI service
-    String transformedContent;
-    try {
-      final aiService = getIt<AIService>();
-      transformedContent = await aiService.transformBlock(
-        originalContent,
-        instruction,
-      );
-    } catch (e) {
-      if (mounted) {
-        Navigator.of(context).pop(); // dismiss loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${l10n.error}: $e')),
-        );
-      }
-      return;
-    }
+    if (transformedContent == null || !mounted) return;
 
-    if (!mounted) return;
-    Navigator.of(context).pop(); // dismiss loading
-
-    // Step 4: Show diff preview
+    // Show diff preview
     final accepted = await BlockDiffPreviewDialog.show(
       context,
       original: originalContent,
@@ -526,7 +504,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
     if (!accepted || !mounted) return;
 
-    // Step 5: Apply changes
+    // Apply changes
     final appProvider = Provider.of<AppProvider>(context, listen: false);
     final currentNote = appProvider.notes.firstWhere(
       (n) => n.id == widget.note.id,
