@@ -23,6 +23,8 @@ import '../widgets/share_dialog.dart';
 import '../widgets/tag_selection_dialog.dart';
 import '../widgets/synapse_note_editor.dart';
 import '../widgets/block_editor_dialog.dart';
+import '../widgets/block_ai_edit_dialog.dart';
+import '../widgets/block_diff_preview_dialog.dart';
 import '../utils/markdown_block_tracker.dart';
 import '../widgets/block_markdown_body.dart';
 import '../widgets/block_selection_menu.dart';
@@ -473,6 +475,72 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       _updateNoteContent(newContent);
       _clearSelection();
     }
+  }
+
+  Future<void> _handleAIEditSelection() async {
+    if (_selectedBlockIndices.isEmpty) return;
+    final l10n = AppLocalizations.of(context)!;
+
+    final sortedIndices = _selectedBlockIndices.toList()..sort();
+    final blocksToEdit = sortedIndices.map((i) => _parsedBlocks[i]).toList();
+    final originalContent = blocksToEdit.map((b) => b.content).join('\n\n');
+
+    // Step 1: Get instruction from user
+    final instruction = await BlockAIEditDialog.show(context);
+    if (instruction == null || !mounted) return;
+
+    // Step 2: Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    // Step 3: Call AI service
+    String transformedContent;
+    try {
+      final aiService = getIt<AIService>();
+      transformedContent = await aiService.transformBlock(
+        originalContent,
+        instruction,
+      );
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop(); // dismiss loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${l10n.error}: $e')),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pop(); // dismiss loading
+
+    // Step 4: Show diff preview
+    final accepted = await BlockDiffPreviewDialog.show(
+      context,
+      original: originalContent,
+      transformed: transformedContent,
+    );
+
+    if (!accepted || !mounted) return;
+
+    // Step 5: Apply changes
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+    final currentNote = appProvider.notes.firstWhere(
+      (n) => n.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+
+    final tracker = MarkdownBlockTracker();
+    final newContent = tracker.replaceBlockRange(
+      currentNote.content,
+      blocksToEdit,
+      transformedContent,
+    );
+    _updateNoteContent(newContent);
+    _clearSelection();
   }
 
   @override
@@ -1346,6 +1414,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 onExpandBelow: _expandSelectionBelow,
                 onContractBelow: _contractSelectionBelow,
                 onEdit: () => _handleEditSelection(),
+                onAIEdit: () => _handleAIEditSelection(),
                 onDelete: () => _handleDeleteSelection(),
                 onExit: _clearSelection,
                 canExpandAbove:
