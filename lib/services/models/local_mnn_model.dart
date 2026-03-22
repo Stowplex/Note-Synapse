@@ -64,16 +64,19 @@ class LocalMnnModel extends AIModel {
         _preset?.defaultBackend[Platform.isAndroid ? 'android' : 'ios'] ??
         'cpu';
 
-    // OpenCL with low precision (FP16) causes garbled output in transformer
-    // models due to half-precision overflow in attention/FFT operations.
-    // Use FP32 precision and normal memory mode for GPU backends.
+    // GPU backends with 'low' precision use FP16 which overflows in
+    // transformer attention/FFT layers. Use 'high' (Precision_High = FP32).
     final isGpu = backendType == 'opencl' || backendType == 'metal';
     final edgeConfig = EdgeGenConfig(
       backendType: backendType,
-      precision: isGpu ? 'normal' : 'low',
+      precision: isGpu ? 'high' : 'low',
       memory: isGpu ? 'normal' : 'low',
       maxNewTokens: _config?.maxOutputTokens ?? 8192,
       enableThinking: _config?.enableThinking ?? false,
+      // We format ChatML ourselves to support system prompts, multi-turn
+      // history, and tool messages. Disable MNN's Jinja template to avoid
+      // double-wrapping which breaks <img> tag processing for vision models.
+      useTemplate: false,
     );
 
     _session = await EdgeGenController.instance.openSession(
