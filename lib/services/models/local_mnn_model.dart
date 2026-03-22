@@ -233,61 +233,66 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     return buffer.toString();
   }
 
-  /// Formats messages into a single user prompt for the MNN runtime.
+  /// Converts [PromptMessage] list into structured (role, content) pairs
+  /// for the MNN native session. MNN's Jinja template engine formats these
+  /// into the correct ChatML for each model (Qwen 3.5, Qwen3 VL, etc.).
   ///
-  /// MNN's native session adds this as a "user" message and applies its own
-  /// ChatML Jinja template. We must NOT add ChatML tags ourselves — doing so
-  /// causes double-wrapping that breaks `<img>` tag processing for vision
-  /// models. The prompt should be as close as possible to what the example
-  /// app sends: just the user's text with `<img>` tags appended.
-  static String formatPrompt(List<PromptMessage> messages, {String? toolSchemaBlock}) {
-    final buffer = StringBuffer();
-
-    // Extract the last user message — this is the primary prompt content.
-    // System context and prior turns are prepended minimally.
-    String? systemContent;
-    final priorTurns = <String>[];
-    String lastUserContent = '';
+  /// MNN supports "system", "user", "assistant" roles. "tool" role messages
+  /// are mapped to "user" with a "Tool result:" prefix since MNN silently
+  /// drops unknown roles.
+  static List<Map<String, String>> buildChatMessages(
+    List<PromptMessage> messages, {
+    String? toolSchemaBlock,
+  }) {
+    final result = <Map<String, String>>[];
 
     for (final msg in messages) {
-      if (msg.role == PromptRole.system) {
-        systemContent = msg.content;
-      } else if (msg.role == PromptRole.user) {
-        if (lastUserContent.isNotEmpty) {
-          priorTurns.add('User: $lastUserContent');
-        }
-        lastUserContent = msg.content;
-      } else if (msg.role == PromptRole.assistant) {
-        // Flush pending user message before adding assistant response
-        if (lastUserContent.isNotEmpty) {
-          priorTurns.add('User: $lastUserContent');
-          lastUserContent = '';
-        }
-        priorTurns.add('Assistant: ${msg.content}');
-      } else if (msg.role == PromptRole.tool) {
-        priorTurns.add('Tool: ${msg.content}');
+      switch (msg.role) {
+        case PromptRole.system:
+          // Merge tool schema into the system message content
+          final content = toolSchemaBlock != null
+              ? '${msg.content}\n\n$toolSchemaBlock'
+              : msg.content;
+          result.add({'role': 'system', 'content': content});
+          break;
+        case PromptRole.user:
+          result.add({'role': 'user', 'content': msg.content});
+          break;
+        case PromptRole.assistant:
+          result.add({'role': 'assistant', 'content': msg.content});
+          break;
+        case PromptRole.tool:
+          // MNN doesn't support "tool" role — map to "user" with prefix
+          result.add({'role': 'user', 'content': 'Tool result: ${msg.content}'});
+          break;
       }
     }
 
-    // Prepend system context and tool schema briefly if present
-    if (systemContent != null && systemContent.isNotEmpty) {
-      buffer.writeln(systemContent);
-    }
-    if (toolSchemaBlock != null) {
-      buffer.writeln(toolSchemaBlock);
+    // If there's a tool schema but no system message was present, inject one
+    if (toolSchemaBlock != null && !messages.any((m) => m.role == PromptRole.system)) {
+      result.insert(0, {'role': 'system', 'content': toolSchemaBlock});
     }
 
-    // Include prior conversation turns if any
-    if (priorTurns.isNotEmpty) {
-      for (final turn in priorTurns) {
-        buffer.writeln(turn);
+    return result;
+  }
+
+  /// Legacy plain-text prompt formatting. Kept for tests and fallback.
+  static String formatPrompt(List<PromptMessage> messages, {String? toolSchemaBlock}) {
+    final chatMessages = buildChatMessages(messages, toolSchemaBlock: toolSchemaBlock);
+    final buffer = StringBuffer();
+    for (int i = 0; i < chatMessages.length; i++) {
+      final msg = chatMessages[i];
+      if (i > 0) buffer.write('\n');
+      final role = msg['role']!;
+      final content = msg['content']!;
+      if (role == 'system') {
+        buffer.write(content);
+      } else if (role == 'user') {
+        buffer.write(content);
+      } else if (role == 'assistant') {
+        buffer.write('Assistant: $content');
       }
     }
-
-    // Current user message last (with <img> tags already appended by
-    // preprocessAttachments). This is what MNN's vision processor scans.
-    buffer.write(lastUserContent);
-
     return buffer.toString();
   }
 
@@ -338,22 +343,20 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     final endpoint = 'local-mnn://$name';
 
     final session = await _ensureSession();
-    // Reset KV cache — the full conversation history is already embedded
-    // in the ChatML prompt, so stale cache causes duplication and slowdown.
     await session.reset();
     final processed = await preprocessAttachments(messages);
-    final prompt = formatPrompt(processed);
+    final chatMessages = buildChatMessages(processed);
 
     LoggerService.logAiRequest(
       endpoint: endpoint,
       headers: {'backend': _config?.backendType ?? 'cpu'},
-      requestBody: _buildLogBody(messages, prompt: prompt),
+      requestBody: _buildLogBody(messages, prompt: chatMessages.toString()),
       requestId: requestId,
     );
 
     final buffer = StringBuffer();
-    await for (final chunk in session.generate(
-      prompt: prompt,
+    await for (final chunk in session.generateWithMessages(
+      messages: chatMessages,
       maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
     )) {
       buffer.write(chunk);
@@ -394,19 +397,19 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     await session.reset();
     final processed = await preprocessAttachments(messages);
     final toolSchemaBlock = tools.isNotEmpty ? buildToolSchemaBlock(tools) : null;
-    final prompt = formatPrompt(processed, toolSchemaBlock: toolSchemaBlock);
+    final chatMessages = buildChatMessages(processed, toolSchemaBlock: toolSchemaBlock);
 
     LoggerService.logAiRequest(
       endpoint: endpoint,
       headers: {'backend': _config?.backendType ?? 'cpu'},
-      requestBody: _buildLogBody(messages, prompt: prompt, tools: tools),
+      requestBody: _buildLogBody(messages, prompt: chatMessages.toString(), tools: tools),
       requestId: requestId,
     );
 
     // Buffer full response for tool call parsing
     final buffer = StringBuffer();
-    await for (final chunk in session.generate(
-      prompt: prompt,
+    await for (final chunk in session.generateWithMessages(
+      messages: chatMessages,
       maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
     )) {
       buffer.write(chunk);
@@ -449,18 +452,18 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     final session = await _ensureSession();
     await session.reset();
     final processed = await preprocessAttachments(messages);
-    final prompt = formatPrompt(processed);
+    final chatMessages = buildChatMessages(processed);
 
     LoggerService.logAiRequest(
       endpoint: endpoint,
       headers: {'backend': _config?.backendType ?? 'cpu'},
-      requestBody: _buildLogBody(messages, prompt: prompt),
+      requestBody: _buildLogBody(messages, prompt: chatMessages.toString()),
       requestId: reqId,
     );
 
     final responseBuffer = StringBuffer();
-    await for (final chunk in session.generate(
-      prompt: prompt,
+    await for (final chunk in session.generateWithMessages(
+      messages: chatMessages,
       maxNewTokens: maxNewTokens ?? _config?.maxOutputTokens ?? 8192,
     )) {
       responseBuffer.write(chunk);

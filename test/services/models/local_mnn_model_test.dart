@@ -3,8 +3,80 @@ import 'package:note_synapse/services/models/local_mnn_model.dart';
 import 'package:note_synapse/services/prompts/prompt_models.dart';
 
 void main() {
-  group('LocalMnnModel prompt formatting', () {
-    test('formats system + user messages as plain prompt', () {
+  group('LocalMnnModel buildChatMessages', () {
+    test('maps system, user, assistant roles correctly', () {
+      final messages = [
+        PromptMessage(role: PromptRole.system, content: 'You are helpful.'),
+        PromptMessage(role: PromptRole.user, content: 'Hello'),
+        PromptMessage(role: PromptRole.assistant, content: 'Hi there'),
+        PromptMessage(role: PromptRole.user, content: 'Follow up'),
+      ];
+      final result = LocalMnnModel.buildChatMessages(messages);
+      expect(result.length, 4);
+      expect(result[0], {'role': 'system', 'content': 'You are helpful.'});
+      expect(result[1], {'role': 'user', 'content': 'Hello'});
+      expect(result[2], {'role': 'assistant', 'content': 'Hi there'});
+      expect(result[3], {'role': 'user', 'content': 'Follow up'});
+    });
+
+    test('maps tool role to user with prefix', () {
+      final messages = [
+        PromptMessage(role: PromptRole.tool, content: '{"result": "ok"}'),
+      ];
+      final result = LocalMnnModel.buildChatMessages(messages);
+      expect(result.length, 1);
+      expect(result[0]['role'], 'user');
+      expect(result[0]['content'], 'Tool result: {"result": "ok"}');
+    });
+
+    test('merges toolSchemaBlock into system message', () {
+      final messages = [
+        PromptMessage(role: PromptRole.system, content: 'You are helpful.'),
+        PromptMessage(role: PromptRole.user, content: 'Hello'),
+      ];
+      final result = LocalMnnModel.buildChatMessages(
+        messages,
+        toolSchemaBlock: 'TOOLS_HERE',
+      );
+      expect(result[0]['role'], 'system');
+      expect(result[0]['content'], contains('You are helpful.'));
+      expect(result[0]['content'], contains('TOOLS_HERE'));
+    });
+
+    test('injects system message for toolSchemaBlock when no system present', () {
+      final messages = [
+        PromptMessage(role: PromptRole.user, content: 'Hello'),
+      ];
+      final result = LocalMnnModel.buildChatMessages(
+        messages,
+        toolSchemaBlock: 'TOOLS_HERE',
+      );
+      expect(result.length, 2);
+      expect(result[0], {'role': 'system', 'content': 'TOOLS_HERE'});
+      expect(result[1], {'role': 'user', 'content': 'Hello'});
+    });
+
+    test('preserves message order for multi-turn conversation', () {
+      final messages = [
+        PromptMessage(role: PromptRole.system, content: 'System prompt'),
+        PromptMessage(role: PromptRole.user, content: 'First question'),
+        PromptMessage(role: PromptRole.assistant, content: 'First answer'),
+        PromptMessage(role: PromptRole.user, content: 'Second question'),
+      ];
+      final result = LocalMnnModel.buildChatMessages(messages);
+      expect(result.length, 4);
+      expect(result[0]['role'], 'system');
+      expect(result[1]['role'], 'user');
+      expect(result[1]['content'], 'First question');
+      expect(result[2]['role'], 'assistant');
+      expect(result[2]['content'], 'First answer');
+      expect(result[3]['role'], 'user');
+      expect(result[3]['content'], 'Second question');
+    });
+  });
+
+  group('LocalMnnModel formatPrompt (legacy)', () {
+    test('formats system + user messages', () {
       final messages = [
         PromptMessage(role: PromptRole.system, content: 'You are helpful.'),
         PromptMessage(role: PromptRole.user, content: 'Hello'),
@@ -17,7 +89,7 @@ void main() {
       expect(result, isNot(contains('<|im_end|>')));
     });
 
-    test('formats multi-turn conversation with correct ordering', () {
+    test('includes assistant turns', () {
       final messages = [
         PromptMessage(role: PromptRole.system, content: 'System prompt'),
         PromptMessage(role: PromptRole.user, content: 'First question'),
@@ -25,11 +97,8 @@ void main() {
         PromptMessage(role: PromptRole.user, content: 'Follow up'),
       ];
       final result = LocalMnnModel.formatPrompt(messages);
-      // Prior turns appear in order
-      final userIdx = result.indexOf('User: First question');
-      final assistantIdx = result.indexOf('Assistant: First answer');
-      expect(userIdx, lessThan(assistantIdx));
-      // Last user message is at the end
+      expect(result, contains('First question'));
+      expect(result, contains('Assistant: First answer'));
       expect(result, endsWith('Follow up'));
     });
 
@@ -44,7 +113,7 @@ void main() {
       expect(result, endsWith('Hello'));
     });
 
-    test('handles empty system message', () {
+    test('handles user-only message', () {
       final messages = [
         PromptMessage(role: PromptRole.user, content: 'Hello'),
       ];
