@@ -2956,6 +2956,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiEdit => 'AI Edit';
 
   @override
+  String get aiEditPromptTitle => 'AI Edit Block';
+
+  @override
+  String get aiEditPromptHint => 'Describe how to transform this block...';
+
+  @override
+  String get aiEditDiffTitle => 'Review Changes';
+
+  @override
+  String get aiEditAccept => 'Accept';
+
+  @override
+  String get aiEditReject => 'Reject';
+
+  @override
   String get pleaseEnterSuggestion => 'Please enter a suggestion';
 
   @override
