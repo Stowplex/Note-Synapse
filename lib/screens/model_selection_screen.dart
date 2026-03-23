@@ -218,14 +218,20 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: InkWell(
-        onTap: () {
+        onTap: () async {
           if (modelType == ModelType.localMnn) {
-            Navigator.push(
+            final configured = await Navigator.push<bool>(
               context,
               MaterialPageRoute(
-                builder: (_) => const LocalModelPickerScreen(),
+                builder: (_) =>
+                    const LocalModelPickerScreen(closeOnConfigured: true),
               ),
             );
+            if (!mounted || configured != true) return;
+            setState(() {
+              _selectedModel = ModelType.localMnn;
+              _error = null;
+            });
             return;
           }
           setState(() {

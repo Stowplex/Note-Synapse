@@ -14,12 +14,14 @@ class LocalModelSettingsScreen extends StatefulWidget {
   final LocalModelPreset preset;
   final String configPath;
   final ModelConfig? existingConfig;
+  final bool returnToPreviousScreenOnSave;
 
   const LocalModelSettingsScreen({
     super.key,
     required this.preset,
     required this.configPath,
     this.existingConfig,
+    this.returnToPreviousScreenOnSave = true,
   });
 
   @override
@@ -88,9 +90,12 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
     }
     await GetIt.instance<ModelSelector>().switchToModel(config);
 
-    if (mounted) {
-      Navigator.popUntil(context, (route) => route.isFirst);
+    if (!mounted) return;
+    if (widget.returnToPreviousScreenOnSave) {
+      Navigator.pop(context, true);
+      return;
     }
+    Navigator.popUntil(context, (route) => route.isFirst);
   }
 
   Future<void> _deleteModel() async {

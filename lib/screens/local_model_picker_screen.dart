@@ -6,7 +6,9 @@ import 'package:note_synapse/screens/local_model_settings_screen.dart';
 import '../l10n/app_localizations.dart';
 
 class LocalModelPickerScreen extends StatefulWidget {
-  const LocalModelPickerScreen({super.key});
+  final bool closeOnConfigured;
+
+  const LocalModelPickerScreen({super.key, this.closeOnConfigured = false});
 
   @override
   State<LocalModelPickerScreen> createState() => _LocalModelPickerScreenState();
@@ -35,27 +37,48 @@ class _LocalModelPickerScreenState extends State<LocalModelPickerScreen> {
       _downloadErrors.remove(preset.id);
     });
 
-    _service.downloadModel(
-      preset,
-      onComplete: (configPath) {
-        if (mounted) {
-          setState(() => _downloadProgress.remove(preset.id));
-          _loadModels();
-        }
-      },
-      onError: (error) {
-        if (mounted) {
-          setState(() {
-            _downloadProgress.remove(preset.id);
-            _downloadErrors[preset.id] = error;
-          });
-        }
-      },
-    ).listen((progress) {
-      if (mounted) {
-        setState(() => _downloadProgress[preset.id] = progress);
-      }
-    });
+    _service
+        .downloadModel(
+          preset,
+          onComplete: (configPath) {
+            if (mounted) {
+              setState(() => _downloadProgress.remove(preset.id));
+              _loadModels();
+            }
+          },
+          onError: (error) {
+            if (mounted) {
+              setState(() {
+                _downloadProgress.remove(preset.id);
+                _downloadErrors[preset.id] = error;
+              });
+            }
+          },
+        )
+        .listen((progress) {
+          if (mounted) {
+            setState(() => _downloadProgress[preset.id] = progress);
+          }
+        });
+  }
+
+  Future<void> _openModelSettings(
+    LocalModelPreset preset,
+    String configPath,
+  ) async {
+    final configured = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            LocalModelSettingsScreen(preset: preset, configPath: configPath),
+      ),
+    );
+
+    await _loadModels();
+
+    if (configured == true && mounted && widget.closeOnConfigured) {
+      Navigator.pop(context, true);
+    }
   }
 
   @override
@@ -91,8 +114,10 @@ class _LocalModelPickerScreenState extends State<LocalModelPickerScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(preset.displayName,
-                          style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                        preset.displayName,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                       const SizedBox(height: 4),
                       Text(
                         preset.supportsVision ? 'Vision + Text' : 'Text only',
@@ -103,15 +128,8 @@ class _LocalModelPickerScreenState extends State<LocalModelPickerScreen> {
                 ),
                 if (status.isDownloaded && !isDownloading)
                   FilledButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => LocalModelSettingsScreen(
-                          preset: preset,
-                          configPath: status.modelPath!,
-                        ),
-                      ),
-                    ),
+                    onPressed: () =>
+                        _openModelSettings(preset, status.modelPath!),
                     child: Text(l10n.localModelReady),
                   )
                 else if (isDownloading)
@@ -127,21 +145,29 @@ class _LocalModelPickerScreenState extends State<LocalModelPickerScreen> {
             ),
             if (isDownloading) ...[
               const SizedBox(height: 12),
-              LinearProgressIndicator(value: _downloadProgress[preset.id]!.clamp(0.0, 1.0)),
+              LinearProgressIndicator(
+                value: _downloadProgress[preset.id]!.clamp(0.0, 1.0),
+              ),
               const SizedBox(height: 4),
-              Text('${l10n.localModelDownloading} '
-                  '${(_downloadProgress[preset.id]!.clamp(0.0, 1.0) * 100).toStringAsFixed(0)}%'),
+              Text(
+                '${l10n.localModelDownloading} '
+                '${(_downloadProgress[preset.id]!.clamp(0.0, 1.0) * 100).toStringAsFixed(0)}%',
+              ),
             ],
             if (error != null) ...[
               const SizedBox(height: 12),
-              Text(l10n.localModelDownloadFailed,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              Text(
+                l10n.localModelDownloadFailed,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
               const SizedBox(height: 8),
               Row(
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: Text(MaterialLocalizations.of(context).backButtonTooltip),
+                    child: Text(
+                      MaterialLocalizations.of(context).backButtonTooltip,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   FilledButton(
@@ -154,14 +180,20 @@ class _LocalModelPickerScreenState extends State<LocalModelPickerScreen> {
             if (status.isDownloaded && !isDownloading)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(l10n.localModelReady,
-                    style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+                child: Text(
+                  l10n.localModelReady,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
               ),
             if (!status.isDownloaded && !isDownloading && error == null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(l10n.localModelNotDownloaded,
-                    style: Theme.of(context).textTheme.bodySmall),
+                child: Text(
+                  l10n.localModelNotDownloaded,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
           ],
         ),

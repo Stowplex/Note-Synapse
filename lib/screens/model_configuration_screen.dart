@@ -74,7 +74,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (_) => const LocalModelPickerScreen(),
+              builder: (_) =>
+                  const LocalModelPickerScreen(closeOnConfigured: true),
             ),
           );
         }
@@ -460,7 +461,9 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
                     Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const LocalModelPickerScreen(),
+                        builder: (_) => const LocalModelPickerScreen(
+                          closeOnConfigured: true,
+                        ),
                       ),
                     );
                     return;
