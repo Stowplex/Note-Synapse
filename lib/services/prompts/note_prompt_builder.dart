@@ -26,6 +26,14 @@ class NotePromptBuilder {
 
   final DatabaseService _databaseService;
 
+  /// Shared transformation guidelines for both note-level and block-level transforms.
+  static List<String> get _transformationGuidelines => [
+    'Preserve critical information unless explicitly told to remove it.',
+    'Indicate any assumptions made during transformation.',
+    AIPrompts.mathFormulaGuidelines,
+    AIPrompts.promptInjectionProtectionGuidelines,
+  ];
+
   /// Build a single-turn question answering prompt with separated system/user context.
   Future<PromptRequest> buildQuestionPrompt({
     required String question,
@@ -109,12 +117,7 @@ class NotePromptBuilder {
       taskContext:
           'Transform the provided note content based on the user instruction while respecting structure and metadata. '
           'The upcoming context message includes the original note, sub-notes, tags, and linked references.',
-      guidelines: [
-        'Preserve critical information unless explicitly told to remove it.',
-        'Indicate any assumptions made during transformation.',
-        AIPrompts.mathFormulaGuidelines,
-        AIPrompts.promptInjectionProtectionGuidelines,
-      ],
+      guidelines: _transformationGuidelines,
     );
 
     final noteContextMessage = await buildContextMessage([note]);
@@ -152,6 +155,48 @@ class NotePromptBuilder {
     return PromptRequest(
       systemMessage: systemMessage,
       contextMessages: contextMessages,
+      conversationMessages: [userMessage],
+    );
+  }
+
+  /// Build a prompt for transforming a markdown block (not a full note).
+  /// Synchronous because block-level transforms don't need DB lookups for context.
+  PromptRequest buildBlockTransformationPrompt({
+    required String blockContent,
+    required String instruction,
+  }) {
+    final systemMessage = SystemPromptBuilder.build(
+      taskContext:
+          'Transform the provided markdown block based on the user instruction. '
+          'You MUST use the following output format:\n\n'
+          '<transformed>\n'
+          '(the transformed block content here)\n'
+          '</transformed>\n\n'
+          'If you have any notes, assumptions, or explanations, put them AFTER the closing </transformed> tag in a separate <notes> section:\n\n'
+          '<notes>\n'
+          '(optional notes here)\n'
+          '</notes>\n\n'
+          'IMPORTANT: The <transformed> section must contain ONLY the final block content with no extra commentary, explanations, or preamble.',
+      guidelines: [
+        'Preserve critical information unless explicitly told to remove it.',
+        AIPrompts.mathFormulaGuidelines,
+        AIPrompts.promptInjectionProtectionGuidelines,
+      ],
+    );
+
+    final buffer = StringBuffer();
+    buffer.writeln('Transformation instruction: "$instruction"');
+    buffer.writeln();
+    buffer.writeln('Block content to transform:');
+    buffer.writeln(blockContent);
+
+    final userMessage = PromptMessage(
+      role: PromptRole.user,
+      content: buffer.toString().trim(),
+    );
+
+    return PromptRequest(
+      systemMessage: systemMessage,
       conversationMessages: [userMessage],
     );
   }

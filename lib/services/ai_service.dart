@@ -120,6 +120,53 @@ class AIService {
     }, requestId: requestId);
   }
 
+  /// Block-level transformation (single or multiple selected blocks)
+  Future<String> transformBlock(
+    String blockContent,
+    String instruction, {
+    GenerationContext? generationContext,
+  }) async {
+    final context = generationContext ?? GenerationContext();
+    final requestId = context.ensureRequestId();
+
+    return await _withErrorHandling('block transformation', () async {
+      LoggerService.debug(
+        'Starting block transformation request',
+        error: {
+          'blockContentLength': blockContent.length,
+          'instruction': instruction,
+          'requestId': requestId,
+        },
+      );
+
+      final builder = _notePromptBuilder();
+      // Synchronous — no await needed (no DB lookups for block context)
+      final request = builder.buildBlockTransformationPrompt(
+        blockContent: blockContent,
+        instruction: instruction,
+      );
+
+      final rawResponse = await _modelSelector.generateFromPrompt(
+        request,
+        generationContext: context,
+      );
+
+      return _extractTransformedContent(rawResponse);
+    }, requestId: requestId);
+  }
+
+  /// Extract content from <transformed> tags, falling back to raw response.
+  static String _extractTransformedContent(String response) {
+    final match = RegExp(
+      r'<transformed>\s*([\s\S]*?)\s*</transformed>',
+    ).firstMatch(response);
+    if (match != null) {
+      return match.group(1)!.trim();
+    }
+    // Fallback: return raw response if model didn't use the template
+    return response.trim();
+  }
+
   Future<String> generateWithAttachments(
     String prompt,
     List<PlatformFile> attachedFiles, {
