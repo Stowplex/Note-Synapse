@@ -126,8 +126,8 @@ void main() {
     });
   });
 
-  group('LocalMnnModel buildPromptTranscript', () {
-    test('flattens multi-turn conversation into labeled transcript', () {
+  group('LocalMnnModel buildQwenChatMlPrompt', () {
+    test('formats multi-turn conversation into ChatML', () {
       final messages = [
         PromptMessage(role: PromptRole.system, content: 'You are helpful.'),
         PromptMessage(role: PromptRole.user, content: 'What is in this image?'),
@@ -141,42 +141,66 @@ void main() {
         ),
       ];
 
-      final result = LocalMnnModel.buildPromptTranscript(messages);
+      final result = LocalMnnModel.buildQwenChatMlPrompt(messages);
 
-      expect(result, contains('System instructions:\nYou are helpful.'));
-      expect(result, contains('User:\nWhat is in this image?'));
-      expect(result, contains('Assistant:\nIt looks like a cat.'));
+      expect(
+        result,
+        contains('<|im_start|>system\nYou are helpful.<|im_end|>\n'),
+      );
+      expect(
+        result,
+        contains('<|im_start|>user\nWhat is in this image?<|im_end|>\n'),
+      );
+      expect(
+        result,
+        contains('<|im_start|>assistant\nIt looks like a cat.<|im_end|>\n'),
+      );
       expect(
         result,
         contains(
-          'User:\nWhat color is it?\n<img>/tmp/cat.jpg<hw>512,512</hw></img>',
+          '<|im_start|>user\nWhat color is it?\n<img>/tmp/cat.jpg<hw>512,512</hw></img><|im_end|>\n',
         ),
       );
+      expect(result, endsWith('<|im_start|>assistant\n'));
     });
 
-    test('prepends tool schema when no system message exists', () {
-      final messages = [
-        PromptMessage(role: PromptRole.user, content: 'Search for this'),
-      ];
+    test(
+      'prepends tool schema as system ChatML when no system message exists',
+      () {
+        final messages = [
+          PromptMessage(role: PromptRole.user, content: 'Search for this'),
+        ];
 
-      final result = LocalMnnModel.buildPromptTranscript(
-        messages,
-        toolSchemaBlock: 'TOOLS_HERE',
-      );
+        final result = LocalMnnModel.buildQwenChatMlPrompt(
+          messages,
+          toolSchemaBlock: 'TOOLS_HERE',
+        );
 
-      expect(result, startsWith('System instructions:\nTOOLS_HERE'));
-      expect(result, contains('User:\nSearch for this'));
-    });
+        expect(
+          result,
+          startsWith('<|im_start|>system\nTOOLS_HERE<|im_end|>\n'),
+        );
+        expect(
+          result,
+          contains('<|im_start|>user\nSearch for this<|im_end|>\n'),
+        );
+      },
+    );
 
-    test('renders tool results as their own transcript section', () {
+    test('renders tool results as tool_response blocks', () {
       final messages = [
         PromptMessage(role: PromptRole.user, content: 'Do the thing'),
         PromptMessage(role: PromptRole.tool, content: '{"status":"ok"}'),
       ];
 
-      final result = LocalMnnModel.buildPromptTranscript(messages);
+      final result = LocalMnnModel.buildQwenChatMlPrompt(messages);
 
-      expect(result, contains('Tool result:\n{"status":"ok"}'));
+      expect(
+        result,
+        contains(
+          '<|im_start|>user\n<tool_response>\n{"status":"ok"}\n</tool_response><|im_end|>\n',
+        ),
+      );
     });
   });
 
