@@ -44,7 +44,9 @@ class SystemPromptBuilder {
       for (final line in guidelines) {
         final trimmed = line.trim();
         if (trimmed.isEmpty) continue;
-        if (trimmed.startsWith('-')) {
+        if (trimmed.contains('\n')) {
+          buffer.writeln(trimmed);
+        } else if (trimmed.startsWith('-')) {
           buffer.writeln(trimmed);
         } else {
           buffer.writeln('- $trimmed');
