@@ -8,13 +8,20 @@ class AIPrompts {
   // Common math formula guidelines used across all prompts
   static const String mathFormulaGuidelines = '''
 IMPORTANT - Math Formula Guidelines:
-- When including mathematical formulas, equations, or expressions in your response, use LaTeX format
-- Use the format: \\( formula \\) for inline math (without leading and ending \$ symbols)
-- Use the format: \\[ formula \\] for display math (without leading and ending \$ symbols)
+- When including mathematical formulas, equations, or expressions in your response, use LaTeX delimiters exactly as specified below
+- Inline math must use only: \\( formula \\)
+- Display math must use only: \\[ formula \\]
+- Never use Markdown dollar math delimiters such as \$...\$ or \$\$...\$\$
+- Do not wrap LaTeX formulas in code fences or backticks
+- If you need inline math, convert any \$...\$ form to \\(...\\)
+- If you need display math, convert any \$\$...\$\$ form to \\[...\\]
 - Examples:
   - Inline: \\( E = mc^2 \\) or \\( \\frac{a}{b} \\)
   - Display: \\[ \\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi} \\]
+  - Correct conversion: write \\( x_i \\), not \$x_i\$
+  - Correct conversion: write \\[ a_i = a_{i-1} \\], not \$\$ a_i = a_{i-1} \$\$
 - Preserve all mathematical notation, symbols, and formatting accurately
+- Before sending the final answer, check that no math expression uses \$ or \$\$
 - If explaining complex equations, break them down into logical components
 
 ### Internal Links (Synapse Resources)
