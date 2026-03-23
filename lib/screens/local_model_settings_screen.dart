@@ -23,7 +23,8 @@ class LocalModelSettingsScreen extends StatefulWidget {
   });
 
   @override
-  State<LocalModelSettingsScreen> createState() => _LocalModelSettingsScreenState();
+  State<LocalModelSettingsScreen> createState() =>
+      _LocalModelSettingsScreenState();
 }
 
 class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
@@ -32,12 +33,12 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
   int _tokenWindow = 16384;
 
   List<String> get _availableBackends {
-    if (Platform.isAndroid) {
-      return ['cpu', 'opencl'];
-    } else if (Platform.isIOS) {
-      return ['metal', 'cpu'];
-    }
-    return ['cpu'];
+    final platform = Platform.isAndroid
+        ? 'android'
+        : Platform.isIOS
+        ? 'ios'
+        : 'desktop';
+    return widget.preset.supportedBackends[platform] ?? ['cpu'];
   }
 
   @override
@@ -99,8 +100,14 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
         title: Text(AppLocalizations.of(context)!.localModelDelete),
         content: Text('Delete ${widget.preset.displayName}?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
@@ -119,12 +126,18 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(l10n.localModelBackend, style: Theme.of(context).textTheme.titleSmall),
+          Text(
+            l10n.localModelBackend,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             initialValue: _backendType,
             items: _availableBackends
-                .map((b) => DropdownMenuItem(value: b, child: Text(_backendLabel(b))))
+                .map(
+                  (b) =>
+                      DropdownMenuItem(value: b, child: Text(_backendLabel(b))),
+                )
                 .toList(),
             onChanged: (v) => setState(() => _backendType = v!),
           ),
@@ -136,7 +149,10 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
             onChanged: (v) => setState(() => _enableThinking = v),
           ),
           const SizedBox(height: 24),
-          Text(l10n.localModelTokenWindow, style: Theme.of(context).textTheme.titleSmall),
+          Text(
+            l10n.localModelTokenWindow,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -154,7 +170,12 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
               const Text('32768'),
             ],
           ),
-          Center(child: Text('$_tokenWindow', style: Theme.of(context).textTheme.titleMedium)),
+          Center(
+            child: Text(
+              '$_tokenWindow',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
           const SizedBox(height: 32),
           FilledButton(
             onPressed: _saveAndActivate,
@@ -175,10 +196,14 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
 
   String _backendLabel(String backend) {
     switch (backend) {
-      case 'opencl': return 'OpenCL (GPU)';
-      case 'metal': return 'Metal (GPU)';
-      case 'cpu': return 'CPU';
-      default: return backend;
+      case 'opencl':
+        return 'OpenCL (GPU)';
+      case 'metal':
+        return 'Metal (GPU)';
+      case 'cpu':
+        return 'CPU';
+      default:
+        return backend;
     }
   }
 }

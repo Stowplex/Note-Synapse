@@ -49,7 +49,7 @@ class LocalModelService {
   Future<List<String>> getDownloadedModels() async {
     final prefs = await SharedPreferences.getInstance();
     final downloaded = <String>[];
-    for (final preset in LocalModelPresets.all) {
+    for (final preset in LocalModelPresets.available) {
       if (prefs.containsKey('$_keyPrefix${preset.id}')) {
         downloaded.add(preset.id);
       }
@@ -59,13 +59,15 @@ class LocalModelService {
 
   Future<List<LocalModelStatus>> getAvailableModels() async {
     final statuses = <LocalModelStatus>[];
-    for (final preset in LocalModelPresets.all) {
+    for (final preset in LocalModelPresets.available) {
       final path = await getModelPath(preset.id);
-      statuses.add(LocalModelStatus(
-        preset: preset,
-        isDownloaded: path != null,
-        modelPath: path,
-      ));
+      statuses.add(
+        LocalModelStatus(
+          preset: preset,
+          isDownloaded: path != null,
+          modelPath: path,
+        ),
+      );
     }
     return statuses;
   }

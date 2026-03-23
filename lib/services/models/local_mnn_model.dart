@@ -74,7 +74,7 @@ class LocalMnnModel extends AIModel {
       backendType: backendType,
       maxNewTokens: _config?.maxOutputTokens ?? 8192,
       enableThinking: _config?.enableThinking ?? false,
-      useTemplate: !_usesManualPromptFormatting,
+      useTemplate: true,
     );
 
     _session = await EdgeGenController.instance.openSession(
@@ -84,7 +84,7 @@ class LocalMnnModel extends AIModel {
     return _session!;
   }
 
-  bool get _usesManualPromptFormatting =>
+  bool get _usesPromptTranscriptFallback =>
       _preset?.id == LocalModelPresets.qwen3Vl2b.id;
 
   /// Extracts the outermost JSON object from [text] starting at [start]
@@ -313,23 +313,26 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     return buffer.toString();
   }
 
-  /// Builds Qwen-style ChatML directly.
+  /// Flattens a structured chat history into a single prompt transcript.
   ///
-  /// Qwen3-VL's published MNN config uses a richer Jinja template than the
-  /// `edge_gen` ChatMessages bridge can represent. For this model we bypass
-  /// template application and send the fully formatted prompt ourselves.
-  static String buildQwenChatMlPrompt(
+  /// For Qwen3-VL we use prompt-mode generation so MNN can process `<img>`
+  /// tags through its multimodal tokenizer while still applying the model's
+  /// own template from `llm_config.json`.
+  static String buildPromptTranscript(
     List<PromptMessage> messages, {
     String? toolSchemaBlock,
   }) {
     final buffer = StringBuffer();
 
-    void writeBlock(String role, String content) {
+    void writeSection(String label, String content) {
       final trimmed = content.trim();
       if (trimmed.isEmpty) {
         return;
       }
-      buffer.write('<|im_start|>$role\n$trimmed<|im_end|>\n');
+      if (buffer.isNotEmpty) {
+        buffer.write('\n\n');
+      }
+      buffer.write('$label:\n$trimmed');
     }
 
     String toolAugmentedSystem(String content) {
@@ -342,36 +345,33 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
       return '$content\n\n$toolSchemaBlock';
     }
 
-    bool wroteSystem = false;
     for (final msg in messages) {
       switch (msg.role) {
         case PromptRole.system:
-          writeBlock('system', toolAugmentedSystem(msg.content));
-          wroteSystem = true;
+          writeSection('System instructions', toolAugmentedSystem(msg.content));
           break;
         case PromptRole.user:
-          writeBlock('user', msg.content);
+          writeSection('User', msg.content);
           break;
         case PromptRole.assistant:
-          writeBlock('assistant', msg.content);
+          writeSection('Assistant', msg.content);
           break;
         case PromptRole.tool:
-          writeBlock(
-            'user',
-            '<tool_response>\n${msg.content.trim()}\n</tool_response>',
-          );
+          writeSection('Tool result', msg.content);
           break;
       }
     }
 
-    if (!wroteSystem &&
-        toolSchemaBlock != null &&
-        toolSchemaBlock.trim().isNotEmpty) {
-      return '<|im_start|>system\n${toolSchemaBlock.trim()}<|im_end|>\n'
-          '${buffer.toString()}<|im_start|>assistant\n';
+    if (toolSchemaBlock != null &&
+        toolSchemaBlock.trim().isNotEmpty &&
+        !messages.any((m) => m.role == PromptRole.system)) {
+      final current = buffer.toString();
+      if (current.isEmpty) {
+        return 'System instructions:\n${toolSchemaBlock.trim()}';
+      }
+      return 'System instructions:\n${toolSchemaBlock.trim()}\n\n$current';
     }
 
-    buffer.write('<|im_start|>assistant\n');
     return buffer.toString();
   }
 
@@ -427,10 +427,12 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     final session = await _ensureSession();
     await session.reset();
     final processed = await preprocessAttachments(messages);
-    final useManualPrompt = _usesManualPromptFormatting;
-    final chatMessages = useManualPrompt ? null : buildChatMessages(processed);
-    final promptText = useManualPrompt
-        ? buildQwenChatMlPrompt(processed)
+    final usePromptFallback = _usesPromptTranscriptFallback;
+    final chatMessages = usePromptFallback
+        ? null
+        : buildChatMessages(processed);
+    final promptText = usePromptFallback
+        ? buildPromptTranscript(processed)
         : null;
 
     LoggerService.logAiRequest(
@@ -438,13 +440,13 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
       headers: {'backend': _config?.backendType ?? 'cpu'},
       requestBody: _buildLogBody(
         messages,
-        prompt: useManualPrompt ? promptText : chatMessages.toString(),
+        prompt: usePromptFallback ? promptText : chatMessages.toString(),
       ),
       requestId: requestId,
     );
 
     final buffer = StringBuffer();
-    if (useManualPrompt) {
+    if (usePromptFallback) {
       await for (final chunk in session.generate(
         prompt: promptText!,
         maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
@@ -496,12 +498,12 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     final toolSchemaBlock = tools.isNotEmpty
         ? buildToolSchemaBlock(tools)
         : null;
-    final useManualPrompt = _usesManualPromptFormatting;
-    final chatMessages = useManualPrompt
+    final usePromptFallback = _usesPromptTranscriptFallback;
+    final chatMessages = usePromptFallback
         ? null
         : buildChatMessages(processed, toolSchemaBlock: toolSchemaBlock);
-    final promptText = useManualPrompt
-        ? buildQwenChatMlPrompt(processed, toolSchemaBlock: toolSchemaBlock)
+    final promptText = usePromptFallback
+        ? buildPromptTranscript(processed, toolSchemaBlock: toolSchemaBlock)
         : null;
 
     LoggerService.logAiRequest(
@@ -509,7 +511,7 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
       headers: {'backend': _config?.backendType ?? 'cpu'},
       requestBody: _buildLogBody(
         messages,
-        prompt: useManualPrompt ? promptText : chatMessages.toString(),
+        prompt: usePromptFallback ? promptText : chatMessages.toString(),
         tools: tools,
       ),
       requestId: requestId,
@@ -517,7 +519,7 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
 
     // Buffer full response for tool call parsing
     final buffer = StringBuffer();
-    if (useManualPrompt) {
+    if (usePromptFallback) {
       await for (final chunk in session.generate(
         prompt: promptText!,
         maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
@@ -571,10 +573,12 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     final session = await _ensureSession();
     await session.reset();
     final processed = await preprocessAttachments(messages);
-    final useManualPrompt = _usesManualPromptFormatting;
-    final chatMessages = useManualPrompt ? null : buildChatMessages(processed);
-    final promptText = useManualPrompt
-        ? buildQwenChatMlPrompt(processed)
+    final usePromptFallback = _usesPromptTranscriptFallback;
+    final chatMessages = usePromptFallback
+        ? null
+        : buildChatMessages(processed);
+    final promptText = usePromptFallback
+        ? buildPromptTranscript(processed)
         : null;
 
     LoggerService.logAiRequest(
@@ -582,13 +586,13 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
       headers: {'backend': _config?.backendType ?? 'cpu'},
       requestBody: _buildLogBody(
         messages,
-        prompt: useManualPrompt ? promptText : chatMessages.toString(),
+        prompt: usePromptFallback ? promptText : chatMessages.toString(),
       ),
       requestId: reqId,
     );
 
     final responseBuffer = StringBuffer();
-    if (useManualPrompt) {
+    if (usePromptFallback) {
       await for (final chunk in session.generate(
         prompt: promptText!,
         maxNewTokens: maxNewTokens ?? _config?.maxOutputTokens ?? 8192,
