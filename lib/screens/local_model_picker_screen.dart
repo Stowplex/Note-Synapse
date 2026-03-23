@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:edge_gen/edge_gen.dart';
 import 'package:get_it/get_it.dart';
 import 'package:note_synapse/services/local_model_service.dart';
 import 'package:note_synapse/services/models/local_model_presets.dart';
@@ -17,7 +18,7 @@ class LocalModelPickerScreen extends StatefulWidget {
 class _LocalModelPickerScreenState extends State<LocalModelPickerScreen> {
   final _service = GetIt.instance<LocalModelService>();
   List<LocalModelStatus> _models = [];
-  final Map<String, double> _downloadProgress = {};
+  final Map<String, DownloadProgress?> _downloadProgress = {};
   final Map<String, String> _downloadErrors = {};
 
   @override
@@ -33,7 +34,7 @@ class _LocalModelPickerScreenState extends State<LocalModelPickerScreen> {
 
   void _startDownload(LocalModelPreset preset) {
     setState(() {
-      _downloadProgress[preset.id] = 0.0;
+      _downloadProgress[preset.id] = null;
       _downloadErrors.remove(preset.id);
     });
 
@@ -99,6 +100,7 @@ class _LocalModelPickerScreenState extends State<LocalModelPickerScreen> {
     final isDownloading = _downloadProgress.containsKey(preset.id);
     final error = _downloadErrors[preset.id];
     final l10n = AppLocalizations.of(context)!;
+    final progress = _downloadProgress[preset.id];
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -145,13 +147,12 @@ class _LocalModelPickerScreenState extends State<LocalModelPickerScreen> {
             ),
             if (isDownloading) ...[
               const SizedBox(height: 12),
-              LinearProgressIndicator(
-                value: _downloadProgress[preset.id]!.clamp(0.0, 1.0),
-              ),
+              const LinearProgressIndicator(),
               const SizedBox(height: 4),
               Text(
-                '${l10n.localModelDownloading} '
-                '${(_downloadProgress[preset.id]!.clamp(0.0, 1.0) * 100).toStringAsFixed(0)}%',
+                progress == null
+                    ? l10n.localModelDownloading
+                    : '${l10n.localModelDownloading} ${_formatDownloadedMb(progress.downloadedBytes)}',
               ),
             ],
             if (error != null) ...[
@@ -199,5 +200,10 @@ class _LocalModelPickerScreenState extends State<LocalModelPickerScreen> {
         ),
       ),
     );
+  }
+
+  String _formatDownloadedMb(int bytes) {
+    final mb = bytes / (1024 * 1024);
+    return '${mb.toStringAsFixed(2)}MB';
   }
 }

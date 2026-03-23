@@ -72,23 +72,23 @@ class LocalModelService {
     return statuses;
   }
 
-  /// Downloads [preset] and emits progress as a fraction in [0.0, 1.0].
+  /// Downloads [preset] and emits raw download progress updates.
   ///
   /// [onComplete] is called with the config path when the download finishes.
   /// [onError] is called with an error message if the download fails.
-  Stream<double> downloadModel(
+  Stream<DownloadProgress> downloadModel(
     LocalModelPreset preset, {
     required void Function(String configPath) onComplete,
     required void Function(String error) onError,
   }) {
-    final controller = StreamController<double>();
+    final controller = StreamController<DownloadProgress>();
     _doDownload(preset, controller, onComplete, onError);
     return controller.stream;
   }
 
   Future<void> _doDownload(
     LocalModelPreset preset,
-    StreamController<double> controller,
+    StreamController<DownloadProgress> controller,
     void Function(String configPath) onComplete,
     void Function(String error) onError,
   ) async {
@@ -97,7 +97,7 @@ class LocalModelService {
         preset.spec,
         onProgress: (DownloadProgress progress) {
           if (!controller.isClosed) {
-            controller.add(progress.fraction);
+            controller.add(progress);
           }
         },
       );
