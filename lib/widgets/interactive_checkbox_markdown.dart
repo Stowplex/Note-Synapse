@@ -1294,6 +1294,7 @@ class _InteractiveCheckboxMarkdownState
         codeBuilder: _buildCodeBlock,
         components: components,
         inlineComponents: inlineComponents,
+        useDollarSignsForLatex: true,
       ),
     );
   }
