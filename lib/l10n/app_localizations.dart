@@ -5312,6 +5312,36 @@ abstract class AppLocalizations {
   /// **'AI Edit'**
   String get aiEdit;
 
+  /// No description provided for @aiEditPromptTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Edit Block'**
+  String get aiEditPromptTitle;
+
+  /// No description provided for @aiEditPromptHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe how to transform this block...'**
+  String get aiEditPromptHint;
+
+  /// No description provided for @aiEditDiffTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Review Changes'**
+  String get aiEditDiffTitle;
+
+  /// No description provided for @aiEditAccept.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept'**
+  String get aiEditAccept;
+
+  /// No description provided for @aiEditReject.
+  ///
+  /// In en, this message translates to:
+  /// **'Reject'**
+  String get aiEditReject;
+
   /// No description provided for @pleaseEnterSuggestion.
   ///
   /// In en, this message translates to:

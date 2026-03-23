@@ -230,6 +230,72 @@ void main() {
     });
   });
 
+  group('AIService block transformation', () {
+    test('transformBlock extracts content from transformed tags', () async {
+      when(mockModelSelector.generateFromPrompt(
+        any,
+        temperature: anyNamed('temperature'),
+        topK: anyNamed('topK'),
+        topP: anyNamed('topP'),
+        maxOutputTokens: anyNamed('maxOutputTokens'),
+        generationContext: anyNamed('generationContext'),
+      )).thenAnswer((_) async =>
+          '<transformed>\nTransformed block content\n</transformed>\n\n<notes>\nSome assumption\n</notes>');
+
+      final result = await service.transformBlock(
+        '## Original Block\nSome text',
+        'Make it shorter',
+      );
+
+      expect(result, equals('Transformed block content'));
+
+      // Verify the prompt contains block content and instruction
+      final captured = verify(mockModelSelector.generateFromPrompt(
+        captureAny,
+        temperature: anyNamed('temperature'),
+        topK: anyNamed('topK'),
+        topP: anyNamed('topP'),
+        maxOutputTokens: anyNamed('maxOutputTokens'),
+        generationContext: anyNamed('generationContext'),
+      )).captured.single as PromptRequest;
+      expect(captured.conversationMessages.first.content,
+          contains('Make it shorter'));
+      expect(captured.conversationMessages.first.content,
+          contains('## Original Block'));
+    });
+
+    test('transformBlock falls back to raw response without tags', () async {
+      when(mockModelSelector.generateFromPrompt(
+        any,
+        temperature: anyNamed('temperature'),
+        topK: anyNamed('topK'),
+        topP: anyNamed('topP'),
+        maxOutputTokens: anyNamed('maxOutputTokens'),
+        generationContext: anyNamed('generationContext'),
+      )).thenAnswer((_) async => 'Raw response without tags');
+
+      final result = await service.transformBlock('content', 'instruction');
+
+      expect(result, equals('Raw response without tags'));
+    });
+
+    test('transformBlock propagates errors', () async {
+      when(mockModelSelector.generateFromPrompt(
+        any,
+        temperature: anyNamed('temperature'),
+        topK: anyNamed('topK'),
+        topP: anyNamed('topP'),
+        maxOutputTokens: anyNamed('maxOutputTokens'),
+        generationContext: anyNamed('generationContext'),
+      )).thenThrow(Exception('API error'));
+
+      expect(
+        () => service.transformBlock('content', 'instruction'),
+        throwsA(isA<Exception>()),
+      );
+    });
+  });
+
   group('AIService generateWithAttachments', () {
     test('generateWithAttachments returns response', () async {
       when(mockModelSelector.generateFromPrompt(

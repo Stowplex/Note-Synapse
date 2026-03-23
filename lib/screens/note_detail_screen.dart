@@ -23,6 +23,8 @@ import '../widgets/share_dialog.dart';
 import '../widgets/tag_selection_dialog.dart';
 import '../widgets/synapse_note_editor.dart';
 import '../widgets/block_editor_dialog.dart';
+import '../widgets/block_ai_edit_dialog.dart';
+import '../widgets/block_diff_preview_dialog.dart';
 import '../utils/markdown_block_tracker.dart';
 import '../widgets/block_markdown_body.dart';
 import '../widgets/block_selection_menu.dart';
@@ -473,6 +475,50 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       _updateNoteContent(newContent);
       _clearSelection();
     }
+  }
+
+  Future<void> _handleAIEditSelection() async {
+    if (_selectedBlockIndices.isEmpty) return;
+
+    final sortedIndices = _selectedBlockIndices.toList()..sort();
+    final blocksToEdit = sortedIndices.map((i) => _parsedBlocks[i]).toList();
+    final originalContent = blocksToEdit.map((b) => b.content).join('\n\n');
+
+    // Show prompt dialog — loading/error handled inline within the dialog
+    final transformedContent = await BlockAIEditDialog.show(
+      context,
+      onTransform: (instruction) async {
+        final aiService = getIt<AIService>();
+        return await aiService.transformBlock(originalContent, instruction);
+      },
+    );
+
+    if (transformedContent == null || !mounted) return;
+
+    // Show diff preview
+    final accepted = await BlockDiffPreviewDialog.show(
+      context,
+      original: originalContent,
+      transformed: transformedContent,
+    );
+
+    if (!accepted || !mounted) return;
+
+    // Apply changes
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+    final currentNote = appProvider.notes.firstWhere(
+      (n) => n.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+
+    final tracker = MarkdownBlockTracker();
+    final newContent = tracker.replaceBlockRange(
+      currentNote.content,
+      blocksToEdit,
+      transformedContent,
+    );
+    _updateNoteContent(newContent);
+    _clearSelection();
   }
 
   @override
@@ -1346,6 +1392,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 onExpandBelow: _expandSelectionBelow,
                 onContractBelow: _contractSelectionBelow,
                 onEdit: () => _handleEditSelection(),
+                onAIEdit: () => _handleAIEditSelection(),
                 onDelete: () => _handleDeleteSelection(),
                 onExit: _clearSelection,
                 canExpandAbove:

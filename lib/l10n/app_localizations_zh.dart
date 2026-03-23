@@ -2873,6 +2873,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiEdit => 'AI 编辑';
 
   @override
+  String get aiEditPromptTitle => 'AI 编辑区块';
+
+  @override
+  String get aiEditPromptHint => '描述您想要如何转换此区块...';
+
+  @override
+  String get aiEditDiffTitle => '审查更改';
+
+  @override
+  String get aiEditAccept => '接受';
+
+  @override
+  String get aiEditReject => '拒绝';
+
+  @override
   String get pleaseEnterSuggestion => '请输入建议';
 
   @override
