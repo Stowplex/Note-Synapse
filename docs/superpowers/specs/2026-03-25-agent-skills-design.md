@@ -146,6 +146,32 @@ Resolved tools are added to a **skill-discovered tools set** for the session. To
 
 ---
 
+## Section 8: Context Management for Skills
+
+**Context layout per API call:**
+
+```
+[ System Prompt: Goal + Tools + Skill Index ]   ← text only, unchanged
+[ Skills Messages: loaded skill content ]        ← pinned, never compressed, may be multi-modal
+[ Observation Rounds: execution log ]            ← compressible as today
+```
+
+Loaded skill content is inserted as a **pinned message block** in the conversation messages, positioned before the observation rounds. `ContextManagerService` maintains a separate `loadedSkills` list alongside the compressible execution log.
+
+**Compaction behavior:**
+- The compaction algorithm operates **only on the Observations region** — skill messages are never touched
+- Skill token usage is tracked separately from observation token usage
+- The compaction threshold applies to observations only; skill tokens are additive on top
+
+**When `load_skill` is called:**
+1. Skill content (text + any multi-modal references) is appended to the `loadedSkills` list in `ContextManagerService`
+2. It is NOT added to the observations stream
+3. All subsequent API calls include the full `loadedSkills` block before observations
+
+**Deduplication:** if `load_skill` is called twice with the same noteId, the second call returns the cached content without appending a duplicate to the `loadedSkills` block.
+
+---
+
 ## New Components
 
 | Component | Location | Purpose |
@@ -157,6 +183,7 @@ Resolved tools are added to a **skill-discovered tools set** for the session. To
 | Skills toggle | Agent launch UI + chat tool settings | Per-conversation opt-out |
 | Insert Tool button + picker | Note editor toolbar | Tool link insertion UI (3 tabs: Built-in, User Defined, MCP) |
 | Tag filter in note selection dialog | `NoteSelectionDialog` | Filter icon + `initialTags` parameter |
+| `loadedSkills` pinned block | `ContextManagerService` | Protected skill region in message context, excluded from compaction |
 
 ---
 
