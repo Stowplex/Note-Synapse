@@ -16,6 +16,7 @@ import 'mcp_service.dart';
 import 'tag_image_service.dart';
 import 'note_marker_service.dart';
 import 'note_annotation_service.dart';
+import 'skill_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -85,6 +86,12 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<NoteAnnotationService>()) {
     getIt.registerLazySingleton<NoteAnnotationService>(
       () => NoteAnnotationService(getIt<DatabaseService>()),
+    );
+  }
+
+  if (!getIt.isRegistered<SkillService>()) {
+    getIt.registerLazySingleton<SkillService>(
+      () => SkillService(getIt<DatabaseService>()),
     );
   }
 
