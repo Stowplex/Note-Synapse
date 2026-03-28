@@ -8,6 +8,7 @@ class ModelCapabilities {
   final bool supportsVideo;
   final bool supportsImageGeneration;
   final bool supportsCodeGeneration;
+  final bool supportsToolOrchestration;
   final List<String> supportedImageFormats;
   final List<String> supportedDocumentFormats;
   final List<String> supportedAudioFormats;
@@ -21,6 +22,7 @@ class ModelCapabilities {
     required this.supportsVideo,
     this.supportsImageGeneration = false,
     this.supportsCodeGeneration = false,
+    this.supportsToolOrchestration = true,
     this.supportedImageFormats = const ['jpg', 'jpeg', 'png', 'gif', 'webp'],
     this.supportedDocumentFormats = const ['pdf', 'txt', 'doc', 'docx'],
     this.supportedAudioFormats = const ['mp3', 'wav', 'aac', 'm4a', 'ogg'],
@@ -59,6 +61,7 @@ class ModelCapabilities {
     if (supportsVideo) capabilities.add('Video');
     if (supportsImageGeneration) capabilities.add('Image Generation');
     if (supportsCodeGeneration) capabilities.add('Code Generation');
+    if (supportsToolOrchestration) capabilities.add('Tool Orchestration');
 
     return capabilities.join(', ');
   }
@@ -88,7 +91,8 @@ class ModelCapabilities {
           supportsAudio == other.supportsAudio &&
           supportsVideo == other.supportsVideo &&
           supportsImageGeneration == other.supportsImageGeneration &&
-          supportsCodeGeneration == other.supportsCodeGeneration;
+          supportsCodeGeneration == other.supportsCodeGeneration &&
+          supportsToolOrchestration == other.supportsToolOrchestration;
 
   @override
   int get hashCode =>
@@ -99,7 +103,8 @@ class ModelCapabilities {
       supportsAudio.hashCode ^
       supportsVideo.hashCode ^
       supportsImageGeneration.hashCode ^
-      supportsCodeGeneration.hashCode;
+      supportsCodeGeneration.hashCode ^
+      supportsToolOrchestration.hashCode;
 
   /// Convert to JSON for storage
   Map<String, dynamic> toJson() {
@@ -112,14 +117,22 @@ class ModelCapabilities {
       'supportsVideo': supportsVideo,
       'supportsImageGeneration': supportsImageGeneration,
       'supportsCodeGeneration': supportsCodeGeneration,
+      'supportsToolOrchestration': supportsToolOrchestration,
       'supportedImageFormats': supportedImageFormats,
       'supportedDocumentFormats': supportedDocumentFormats,
       'supportedAudioFormats': supportedAudioFormats,
     };
   }
 
-  /// Create from JSON
-  factory ModelCapabilities.fromJson(Map<String, dynamic> json) {
+  /// Create from JSON.
+  ///
+  /// [defaultSupportsOrchestration] controls the fallback when the
+  /// `supportsToolOrchestration` key is absent (pre-existing saves).
+  /// Pass `false` for local models so old configs default to unsupported.
+  factory ModelCapabilities.fromJson(
+    Map<String, dynamic> json, {
+    bool defaultSupportsOrchestration = true,
+  }) {
     return ModelCapabilities(
       maxInputTokens: json['maxInputTokens'] as int? ?? 100000,
       maxOutputTokens: json['maxOutputTokens'] as int? ?? 4000,
@@ -130,6 +143,9 @@ class ModelCapabilities {
       supportsImageGeneration:
           json['supportsImageGeneration'] as bool? ?? false,
       supportsCodeGeneration: json['supportsCodeGeneration'] as bool? ?? false,
+      supportsToolOrchestration:
+          json['supportsToolOrchestration'] as bool? ??
+          defaultSupportsOrchestration,
       supportedImageFormats: List<String>.from(
         json['supportedImageFormats'] ?? ['jpg', 'jpeg', 'png', 'gif', 'webp'],
       ),

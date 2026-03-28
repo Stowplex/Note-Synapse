@@ -52,6 +52,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   bool _supportsVideo = false;
   bool _supportsImageGeneration = false;
   bool _supportsCodeGeneration = false;
+  bool _supportsToolOrchestration = false;
 
   List<ModelConfig> _presets = [];
   ModelConfig? _selectedPreset;
@@ -209,6 +210,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           preset.customCapabilitiesObject?.supportsImageGeneration ?? false;
       _supportsCodeGeneration =
           preset.customCapabilitiesObject?.supportsCodeGeneration ?? false;
+      _supportsToolOrchestration =
+          preset.customCapabilitiesObject?.supportsToolOrchestration ?? true;
       _supportedAttachmentMimeTypesController.text =
           preset.supportedAttachmentMimeTypes?.join(', ') ?? '';
 
@@ -254,6 +257,9 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               config.customCapabilitiesObject?.supportsImageGeneration ?? false;
           _supportsCodeGeneration =
               config.customCapabilitiesObject?.supportsCodeGeneration ?? false;
+          _supportsToolOrchestration =
+              config.customCapabilitiesObject?.supportsToolOrchestration ??
+                  true;
           _supportedAttachmentMimeTypesController.text =
               config.supportedAttachmentMimeTypes?.join(', ') ?? '';
           _existingModelFeatures = config.modelFeatures;
@@ -302,6 +308,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         supportsVideo: _supportsVideo,
         supportsImageGeneration: _supportsImageGeneration,
         supportsCodeGeneration: _supportsCodeGeneration,
+        supportsToolOrchestration: _supportsToolOrchestration,
       );
 
       // If editing, use existing ID. If adding, ModelConfig constructor generates new ID.
@@ -900,6 +907,18 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               onChanged: (value) {
                 setState(() {
                   _supportsCodeGeneration = value ?? false;
+                });
+              },
+            ),
+            CheckboxListTile(
+              title: const Text('Tool Orchestration'),
+              subtitle: const Text(
+                'Model can reliably execute tool calls and coordinate multi-step agentic workflows',
+              ),
+              value: _supportsToolOrchestration,
+              onChanged: (value) {
+                setState(() {
+                  _supportsToolOrchestration = value ?? false;
                 });
               },
             ),

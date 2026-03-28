@@ -71,6 +71,7 @@ import '../services/note_marker_service.dart';
 import '../services/note_annotation_service.dart';
 import '../widgets/in_note_marker_badge.dart';
 import '../widgets/in_note_marker_preview.dart';
+import '../widgets/tool_orchestration_warning_dialog.dart';
 import '../widgets/in_note_annotation_preview.dart';
 
 enum DrawingTool { pen, rectangle }
@@ -2431,6 +2432,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         activeBuiltInToolsCount +
         activeSystemToolsCount;
     final headerTitle = l10n.mcpAndLocalTools;
+    final modelConfig = context.read<AppProvider>().modelConfig;
+    final supportsToolOrchestration =
+        (_selectedModel ?? modelConfig)
+            ?.customCapabilitiesObject
+            ?.supportsToolOrchestration ??
+        true;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -2587,6 +2594,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                             ),
                         ],
                       ),
+                      if (!supportsToolOrchestration) ...[
+                        const SizedBox(height: 4),
+                        buildToolOrchestrationWarningRow(context),
+                      ],
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 8,
@@ -4826,6 +4837,26 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     if (_isPenMode && _drawingActions.isNotEmpty) {
       await _confirmDrawing(silent: true);
+    }
+
+    // Check tool orchestration capability before sending
+    if (!mounted) return;
+    final hasTools =
+        _selectedBuiltInTools.isNotEmpty || _selectedMcpEndpointIds.isNotEmpty;
+    final activeConfig =
+        _selectedModel ?? context.read<AppProvider>().modelConfig;
+    final supportsOrchestration =
+        activeConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
+        true;
+    if (hasTools && !supportsOrchestration) {
+      final result =
+          await ToolOrchestrationWarningDialog.show(context, activeConfig);
+      if (!mounted) return;
+      if (result == null || result is ToolOrchestrationStop) return;
+      if (result is ToolOrchestrationContinue &&
+          result.modelOverride != null) {
+        _selectedModel = result.modelOverride;
+      }
     }
 
     setState(() {

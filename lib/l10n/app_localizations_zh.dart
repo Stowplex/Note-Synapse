@@ -4246,4 +4246,29 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get localModelSwitchToCloud => '切换到云端';
+
+  @override
+  String get toolOrchestrationWarningTitle => '不支持工具编排';
+
+  @override
+  String toolOrchestrationWarningBody(String modelName) {
+    return '$modelName 可能无法可靠地执行工具调用，性能可能显著下降。';
+  }
+
+  @override
+  String toolOrchestrationSupportedBody(String modelName) {
+    return '$modelName 支持工具编排。';
+  }
+
+  @override
+  String get toolOrchestrationContinueAnyway => '仍然继续';
+
+  @override
+  String get toolOrchestrationContinue => '继续';
+
+  @override
+  String get toolOrchestrationStop => '停止';
+
+  @override
+  String get toolOrchestrationSwitchModel => '切换模型';
 }

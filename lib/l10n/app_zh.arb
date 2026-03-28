@@ -1727,5 +1727,26 @@
   "localModelBackend": "后端",
   "localModelSettings": "模型设置",
   "localModelConstraintWarning": "输入内容可能超出本地模型的Token窗口限制，建议切换至云端模型。",
-  "localModelSwitchToCloud": "切换到云端"
+  "localModelSwitchToCloud": "切换到云端",
+  "toolOrchestrationWarningTitle": "不支持工具编排",
+  "toolOrchestrationWarningBody": "{modelName} 可能无法可靠地执行工具调用，性能可能显著下降。",
+  "@toolOrchestrationWarningBody": {
+    "placeholders": {
+      "modelName": {
+        "type": "String"
+      }
+    }
+  },
+  "toolOrchestrationSupportedBody": "{modelName} 支持工具编排。",
+  "@toolOrchestrationSupportedBody": {
+    "placeholders": {
+      "modelName": {
+        "type": "String"
+      }
+    }
+  },
+  "toolOrchestrationContinueAnyway": "仍然继续",
+  "toolOrchestrationContinue": "继续",
+  "toolOrchestrationStop": "停止",
+  "toolOrchestrationSwitchModel": "切换模型"
 }

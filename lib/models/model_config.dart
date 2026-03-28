@@ -119,17 +119,23 @@ class ModelConfig {
 
   /// Create from JSON
   factory ModelConfig.fromJson(Map<String, dynamic> json) {
+    final type = ModelType.fromId(json['type'] as String) ?? ModelType.gemini;
+    final capJson =
+        json['customCapabilitiesObject'] as Map<String, dynamic>?;
     return ModelConfig(
       id: json['id'] as String?,
-      type: ModelType.fromId(json['type'] as String) ?? ModelType.gemini,
+      type: type,
       apiKey: json['apiKey'] as String?,
       endpoint: json['endpoint'] as String?,
       modelName: json['modelName'] as String?,
       displayName: json['displayName'] as String?,
       maxInputTokens: json['maxInputTokens'] as int?,
       maxOutputTokens: json['maxOutputTokens'] as int?,
-      customCapabilitiesObject: json['customCapabilitiesObject'] != null
-          ? ModelCapabilities.fromJson(json['customCapabilitiesObject'])
+      customCapabilitiesObject: capJson != null
+          ? ModelCapabilities.fromJson(
+              capJson,
+              defaultSupportsOrchestration: type != ModelType.localMnn,
+            )
           : null,
       supportedAttachmentMimeTypes:
           (json['supportedAttachmentMimeTypes'] as List?)

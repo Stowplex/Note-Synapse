@@ -4441,4 +4441,30 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get localModelSwitchToCloud => 'Switch to Cloud';
+
+  @override
+  String get toolOrchestrationWarningTitle =>
+      'Tool Orchestration Not Supported';
+
+  @override
+  String toolOrchestrationWarningBody(String modelName) {
+    return '$modelName may not reliably execute tool calls. Performance can degrade significantly.';
+  }
+
+  @override
+  String toolOrchestrationSupportedBody(String modelName) {
+    return '$modelName supports tool orchestration.';
+  }
+
+  @override
+  String get toolOrchestrationContinueAnyway => 'Continue Anyway';
+
+  @override
+  String get toolOrchestrationContinue => 'Continue';
+
+  @override
+  String get toolOrchestrationStop => 'Stop';
+
+  @override
+  String get toolOrchestrationSwitchModel => 'Switch Model';
 }

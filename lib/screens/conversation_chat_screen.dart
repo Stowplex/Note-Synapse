@@ -58,6 +58,7 @@ import '../services/sql_query_service.dart';
 import '../widgets/agent_plan_review_widget.dart';
 import '../widgets/agent_task_tree_widget.dart';
 import '../widgets/attachment_preview_tile.dart';
+import '../widgets/tool_orchestration_warning_dialog.dart';
 
 class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
@@ -826,6 +827,25 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     // Capture ScaffoldMessenger and Navigator before any async operations
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
+
+    // Check tool orchestration capability before sending
+    final hasTools =
+        _selectedBuiltInTools.isNotEmpty || _selectedMcpEndpointIds.isNotEmpty;
+    final activeConfig =
+        _selectedModel ?? context.read<AppProvider>().modelConfig;
+    final supportsOrchestration =
+        activeConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
+        true;
+    if (hasTools && !supportsOrchestration) {
+      final result =
+          await ToolOrchestrationWarningDialog.show(context, activeConfig);
+      if (!mounted) return;
+      if (result == null || result is ToolOrchestrationStop) return;
+      if (result is ToolOrchestrationContinue &&
+          result.modelOverride != null) {
+        _selectedModel = result.modelOverride;
+      }
+    }
 
     final content = _messageController.text;
     final attachments = List<PlatformFile>.from(_attachedFiles);
@@ -1817,6 +1837,11 @@ $historyBuffer
     // Get current model config to check for features
     final appProvider = context.read<AppProvider>();
     final modelConfig = appProvider.modelConfig;
+    final supportsToolOrchestration =
+        (_selectedModel ?? modelConfig)
+            ?.customCapabilitiesObject
+            ?.supportsToolOrchestration ??
+        true;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1923,7 +1948,23 @@ $historyBuffer
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                           value: isSelected,
-                          secondary: Icon(tool.icon, color: tool.color),
+                          secondary: supportsToolOrchestration
+                              ? Icon(tool.icon, color: tool.color)
+                              : Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    Icon(tool.icon, color: tool.color),
+                                    Positioned(
+                                      right: -4,
+                                      top: -4,
+                                      child: Icon(
+                                        Icons.warning_amber_rounded,
+                                        size: 12,
+                                        color: Colors.amber.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                           onChanged: (value) {
                             setState(() {
                               if (value == true) {
@@ -1968,6 +2009,10 @@ $historyBuffer
                           ),
                       ],
                     ),
+                    if (!supportsToolOrchestration) ...[
+                      const SizedBox(height: 4),
+                      buildToolOrchestrationWarningRow(context),
+                    ],
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,

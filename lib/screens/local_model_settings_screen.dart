@@ -77,6 +77,7 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
         supportsDocuments: false,
         supportsAudio: false,
         supportsVideo: false,
+        supportsToolOrchestration: false,
       ),
     );
 

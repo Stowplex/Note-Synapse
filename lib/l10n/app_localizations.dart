@@ -7747,6 +7747,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Switch to Cloud'**
   String get localModelSwitchToCloud;
+
+  /// No description provided for @toolOrchestrationWarningTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool Orchestration Not Supported'**
+  String get toolOrchestrationWarningTitle;
+
+  /// No description provided for @toolOrchestrationWarningBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{modelName} may not reliably execute tool calls. Performance can degrade significantly.'**
+  String toolOrchestrationWarningBody(String modelName);
+
+  /// No description provided for @toolOrchestrationSupportedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{modelName} supports tool orchestration.'**
+  String toolOrchestrationSupportedBody(String modelName);
+
+  /// No description provided for @toolOrchestrationContinueAnyway.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue Anyway'**
+  String get toolOrchestrationContinueAnyway;
+
+  /// No description provided for @toolOrchestrationContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get toolOrchestrationContinue;
+
+  /// No description provided for @toolOrchestrationStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get toolOrchestrationStop;
+
+  /// No description provided for @toolOrchestrationSwitchModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch Model'**
+  String get toolOrchestrationSwitchModel;
 }
 
 class _AppLocalizationsDelegate
