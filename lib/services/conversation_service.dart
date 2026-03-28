@@ -6,6 +6,7 @@ import '../models/conversation_context.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/note.dart';
 import '../models/tag.dart';
+import 'agent_service.dart';
 import 'ai_tool_service.dart';
 import 'conversation_attachment_service.dart';
 import 'database_service.dart';
@@ -22,6 +23,8 @@ class ConversationService {
   final Uuid _uuid = const Uuid();
 
   // Skill state (chat mode)
+  // NOTE: must be activated via enableSkills() before skillsEnabled returns true.
+  // The per-conversation skills toggle (Task 10) will call enableSkills() at session start.
   bool _skillsEnabled = false;
   Map<String, SkillMetadata> _skillIndex = {};
   final List<McpTool> _skillDiscoveredTools = [];
@@ -109,15 +112,8 @@ class ConversationService {
   }
 
   /// The standard set of native tools available for `builtin` URI resolution.
-  static final List<NativeTool> _standardNativeTools = [
-    NoteSearchTool(),
-    NoteReadTool(),
-    RunSqlTool(),
-    ListFiltersTool(),
-    ModifyNoteTool(),
-    CreateNotesTool(),
-    DeleteNoteTool(),
-  ];
+  /// Derived from [AgentService] to avoid duplication.
+  List<NativeTool> get _standardNativeTools => getIt<AgentService>().nativeTools;
 
   /// Handles the result from a `load_skill` tool call during chat mode.
   ///

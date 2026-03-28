@@ -242,6 +242,12 @@ class MockContextManagerService extends _i1.Mock
           as _i6.Future<String>);
 
   @override
+  void addLoadedSkill(String? noteId, String? content) => super.noSuchMethod(
+    Invocation.method(#addLoadedSkill, [noteId, content]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
   void markContextFailed(_i2.ContextNode? node, String? error) =>
       super.noSuchMethod(
         Invocation.method(#markContextFailed, [node, error]),
