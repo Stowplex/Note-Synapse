@@ -19,8 +19,10 @@ import 'agentic_settings_service.dart';
 import 'context_manager_service.dart';
 import 'model_selector.dart';
 import 'logger_service.dart';
+import 'ai_tool_service.dart';
 import 'mcp_service.dart';
 import 'skill_service.dart';
+import 'user_app_service.dart';
 import '../utils/xml_response_parser.dart';
 import 'mcp_tool_integration_service.dart';
 import 'database_service.dart';
@@ -2257,6 +2259,14 @@ $taskSkillSection''';
             "Tool Execution Error: $e";
       }
 
+      // Intercept load_skill results to route to context and resolve tool URIs
+      if (toolName == 'load_skill' && result is String) {
+        final noteId = (args['noteId'] as String? ?? '').trim();
+        if (noteId.isNotEmpty) {
+          await _handleLoadSkillResult(noteId, result);
+        }
+      }
+
       task.executionHistory.add("Observation: $result");
       // Log observation to hierarchical context
       _contextManager
@@ -2284,6 +2294,92 @@ $taskSkillSection''';
 
       // Also log to execution log to keep history straight
       _contextManager.getContext(task.contextNodeId ?? '')?.log(errorMsg);
+    }
+  }
+
+  /// Called when a load_skill tool call returns successfully.
+  /// Routes skill content to the loadedSkills context region and resolves tool URIs.
+  Future<void> _handleLoadSkillResult(String noteId, String content) async {
+    // Add to pinned context region (deduplicated inside addLoadedSkill)
+    _contextManager.addLoadedSkill(noteId, content);
+
+    // Extract and resolve tool URIs from skill content
+    final skillService = getIt<SkillService>();
+    final uris = skillService.extractToolUris(content);
+    final newToolNames = <String>[];
+    for (final uri in uris) {
+      final parsed = skillService.parseToolUri(uri);
+      if (parsed == null) continue;
+      final tools = await _resolveSkillToolUri(parsed);
+      for (final tool in tools) {
+        if (!_skillDiscoveredTools.any((t) => t.name == tool.name)) {
+          _skillDiscoveredTools.add(tool);
+          newToolNames.add(tool.name);
+        }
+      }
+    }
+
+    // Log trace annotation when new tools were injected
+    if (newToolNames.isNotEmpty) {
+      _contextManager.rootContext?.log(
+        'Skill loaded: injected tools [${newToolNames.join(', ')}]',
+      );
+    }
+    notifyListeners();
+  }
+
+  /// Resolve a parsed tool URI to a list of McpTools.
+  Future<List<McpTool>> _resolveSkillToolUri(
+    ({String namespace, String id, String? function}) parsed,
+  ) async {
+    switch (parsed.namespace) {
+      case 'builtin':
+        // Find in native tools list, convert to McpTool format
+        final tool = _nativeTools.where((t) => t.name == parsed.id).firstOrNull;
+        if (tool == null) return [];
+        return [
+          McpTool(
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+          ),
+        ];
+
+      case 'user_defined':
+        // Find UserApp by UUID, load its bundle and convert to McpTools
+        final allApps = await _databaseService.getAllUserApps();
+        final app = allApps.where((a) => a.uuid == parsed.id).firstOrNull;
+        if (app == null || app.selectedRevisionId == null) return [];
+        final revision = await getIt<UserAppService>().getAppRevision(
+          app.selectedRevisionId!,
+        );
+        if (revision == null) return [];
+        final bundle = await AiToolService.loadAppBundle(
+          app: app,
+          revision: revision,
+        );
+        if (bundle == null) return [];
+        final allTools = bundle.toMcpTools();
+        if (parsed.function != null) {
+          return allTools.where((t) => t.name == parsed.function).toList();
+        }
+        return allTools;
+
+      case 'mcp':
+        // Find endpoint by name, get its tools (cached or refresh)
+        final mcpService = getIt<McpService>();
+        final endpoints = await mcpService.getEndpoints();
+        final endpoint = endpoints.where((e) => e.name == parsed.id).firstOrNull;
+        if (endpoint == null) return [];
+        final cache = await mcpService.getCachedTools(endpoint.id);
+        final allTools = cache?.tools ?? (await mcpService.refreshTools(endpoint.id)).tools;
+        if (parsed.function != null) {
+          return allTools.where((t) => t.name == parsed.function).toList();
+        }
+        return allTools;
+
+      default:
+        return [];
     }
   }
 
