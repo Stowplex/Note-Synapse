@@ -64,6 +64,7 @@ class ConversationChatScreen extends StatefulWidget {
   final List<String>? initialNoteIds;
   final ModelConfig? initialModelOverride;
   final String? initialMessageId;
+  final bool skillsEnabled;
 
   const ConversationChatScreen({
     super.key,
@@ -71,6 +72,7 @@ class ConversationChatScreen extends StatefulWidget {
     this.initialNoteIds,
     this.initialModelOverride,
     this.initialMessageId,
+    this.skillsEnabled = true,
   });
 
   @override
@@ -131,6 +133,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _selectedModel = widget.initialModelOverride;
+    if (widget.skillsEnabled) {
+      unawaited(_conversationService.enableSkills());
+    } else {
+      _conversationService.disableSkills();
+    }
     _loadMcpEndpoints();
     _loadIterationPreference();
     _setupSqlWriteApprovalCallback();
