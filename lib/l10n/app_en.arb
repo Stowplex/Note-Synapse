@@ -327,6 +327,7 @@
   "linkedNotes": "Linked Notes",
   "addLink": "Add Link",
   "insertAttachmentLink": "Insert Attachment Link",
+  "insertToolLink": "Insert Tool Link",
   "selectAttachment": "Select Attachment",
   "selectLocation": "Select Location",
   "noAttachments": "No attachments",

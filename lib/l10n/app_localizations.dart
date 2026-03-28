@@ -2000,6 +2000,12 @@ abstract class AppLocalizations {
   /// **'Insert Attachment Link'**
   String get insertAttachmentLink;
 
+  /// No description provided for @insertToolLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert Tool Link'**
+  String get insertToolLink;
+
   /// No description provided for @selectAttachment.
   ///
   /// In en, this message translates to:

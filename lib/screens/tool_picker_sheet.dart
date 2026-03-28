@@ -63,9 +63,9 @@ class _ToolPickerSheetState extends State<ToolPickerSheet>
             child: TabBarView(
               controller: _tabController,
               children: [
-                _BuiltinToolsTab(onSelect: _select),
-                _UserDefinedToolsTab(onSelect: _select),
-                _McpToolsTab(onSelect: _select),
+                _BuiltinToolsTab(onSelect: _select, scrollController: scrollController),
+                _UserDefinedToolsTab(onSelect: _select, scrollController: scrollController),
+                _McpToolsTab(onSelect: _select, scrollController: scrollController),
               ],
             ),
           ),
@@ -97,12 +97,14 @@ const _kBuiltinTools = [
 
 class _BuiltinToolsTab extends StatelessWidget {
   final void Function(String) onSelect;
+  final ScrollController? scrollController;
 
-  const _BuiltinToolsTab({required this.onSelect});
+  const _BuiltinToolsTab({required this.onSelect, this.scrollController});
 
   @override
   Widget build(BuildContext context) {
     return ListView.builder(
+      controller: scrollController,
       itemCount: _kBuiltinTools.length,
       itemBuilder: (context, index) {
         final tool = _kBuiltinTools[index];
@@ -123,8 +125,9 @@ class _BuiltinToolsTab extends StatelessWidget {
 
 class _UserDefinedToolsTab extends StatefulWidget {
   final void Function(String) onSelect;
+  final ScrollController? scrollController;
 
-  const _UserDefinedToolsTab({required this.onSelect});
+  const _UserDefinedToolsTab({required this.onSelect, this.scrollController});
 
   @override
   State<_UserDefinedToolsTab> createState() => _UserDefinedToolsTabState();
@@ -178,6 +181,7 @@ class _UserDefinedToolsTabState extends State<_UserDefinedToolsTab> {
           return const Center(child: Text('No user-defined AI tools found.'));
         }
         return ListView.builder(
+          controller: widget.scrollController,
           itemCount: entries.length,
           itemBuilder: (context, index) {
             final entry = entries[index];
@@ -236,8 +240,9 @@ class _AppBundleEntry {
 
 class _McpToolsTab extends StatefulWidget {
   final void Function(String) onSelect;
+  final ScrollController? scrollController;
 
-  const _McpToolsTab({required this.onSelect});
+  const _McpToolsTab({required this.onSelect, this.scrollController});
 
   @override
   State<_McpToolsTab> createState() => _McpToolsTabState();
@@ -281,6 +286,7 @@ class _McpToolsTabState extends State<_McpToolsTab> {
           return const Center(child: Text('No MCP endpoints configured.'));
         }
         return ListView.builder(
+          controller: widget.scrollController,
           itemCount: entries.length,
           itemBuilder: (context, index) {
             final entry = entries[index];

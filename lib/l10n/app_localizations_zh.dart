@@ -1038,6 +1038,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get insertAttachmentLink => '插入附件链接';
 
   @override
+  String get insertToolLink => '插入工具链接';
+
+  @override
   String get selectAttachment => '选择附件';
 
   @override

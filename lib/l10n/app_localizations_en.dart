@@ -1063,6 +1063,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get insertAttachmentLink => 'Insert Attachment Link';
 
   @override
+  String get insertToolLink => 'Insert Tool Link';
+
+  @override
   String get selectAttachment => 'Select Attachment';
 
   @override

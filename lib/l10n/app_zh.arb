@@ -322,6 +322,7 @@
   "linkedNotes": "关联笔记",
   "addLink": "添加链接",
   "insertAttachmentLink": "插入附件链接",
+  "insertToolLink": "插入工具链接",
   "selectAttachment": "选择附件",
   "selectLocation": "选择位置（可选）",
   "noAttachments": "该笔记没有附件",

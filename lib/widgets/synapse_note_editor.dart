@@ -121,7 +121,7 @@ class _SynapseNoteEditorState extends State<SynapseNoteEditor> {
           IconButton(
             icon: const Icon(Icons.build_outlined, size: 20),
             onPressed: widget.onPickToolLink,
-            tooltip: 'Insert Tool Link',
+            tooltip: l10n.insertToolLink,
           ),
       ],
     );
