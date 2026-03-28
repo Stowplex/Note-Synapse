@@ -10,6 +10,7 @@ class SynapseNoteEditor extends StatefulWidget {
   final VoidCallback? onPickImage;
   final VoidCallback? onPickNoteLink;
   final VoidCallback? onPickAttachmentLink;
+  final VoidCallback? onPickToolLink;
   final String? language;
 
   const SynapseNoteEditor({
@@ -19,6 +20,7 @@ class SynapseNoteEditor extends StatefulWidget {
     this.onPickImage,
     this.onPickNoteLink,
     this.onPickAttachmentLink,
+    this.onPickToolLink,
     this.language,
   });
 
@@ -114,6 +116,12 @@ class _SynapseNoteEditorState extends State<SynapseNoteEditor> {
             icon: const Icon(Icons.attach_file, size: 20),
             onPressed: widget.onPickAttachmentLink,
             tooltip: l10n.insertAttachmentLink,
+          ),
+        if (widget.onPickToolLink != null)
+          IconButton(
+            icon: const Icon(Icons.build_outlined, size: 20),
+            onPressed: widget.onPickToolLink,
+            tooltip: 'Insert Tool Link',
           ),
       ],
     );

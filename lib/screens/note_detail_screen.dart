@@ -37,6 +37,7 @@ import 'subnote_edit_screen.dart';
 import 'note_action_app_selection_screen.dart';
 import 'note_selection_dialog.dart';
 import '../widgets/insert_attachment_link_dialog.dart';
+import 'tool_picker_sheet.dart';
 import '../services/logger_service.dart';
 import '../services/database_service.dart';
 import '../services/conversation_service.dart';
@@ -1441,6 +1442,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               onPickImage: () => _showImagePicker(context),
               onPickNoteLink: () => _showNoteLinkPicker(context),
               onPickAttachmentLink: () => _showAttachmentLinkPicker(context),
+              onPickToolLink: () => _showToolLinkPicker(context),
               language: 'markdown',
             ),
           ),
@@ -1473,6 +1475,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
     if (result != null) {
       _insertText(result);
+    }
+  }
+
+  Future<void> _showToolLinkPicker(BuildContext context) async {
+    final link = await ToolPickerSheet.show(context);
+    if (link != null && mounted) {
+      _insertText(link);
     }
   }
 
