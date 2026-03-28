@@ -3,6 +3,15 @@ import 'task_result_storage.dart';
 /// Status of a context node in the hierarchical execution tree.
 enum ContextNodeStatus { pending, active, completed, failed, paused }
 
+/// Represents a skill loaded into an agent session.
+///
+/// Skills are session-scoped, pinned (never compacted), and deduplicated by noteId.
+class LoadedSkill {
+  final String noteId;
+  final String content;
+  const LoadedSkill({required this.noteId, required this.content});
+}
+
 /// Represents a node in the hierarchical context tree.
 ///
 /// Each node represents a task/subtask with its own isolated execution context.
@@ -54,6 +63,10 @@ class ContextNode {
   /// The most recent error encountered during execution in this context.
   /// Displayed in <LastRoundError> section to inform the agent of failures.
   String? lastError;
+
+  /// Skills pinned to this session (root node only). Session-scoped, never compacted.
+  /// Deduplicated by noteId. Not serialized to JSON (runtime state only).
+  List<LoadedSkill> loadedSkills = [];
 
   ContextNode({
     required this.id,

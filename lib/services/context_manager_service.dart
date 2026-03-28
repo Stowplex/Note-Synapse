@@ -156,6 +156,17 @@ class ContextManagerService {
     buffer.writeln('</GlobalObjective>');
     buffer.writeln();
 
+    // Add pinned skills (never compacted)
+    if (root.loadedSkills.isNotEmpty) {
+      buffer.writeln('<LoadedSkills note="These skill workflows guide your approach. Follow them.">');
+      for (final skill in root.loadedSkills) {
+        buffer.writeln(skill.content);
+        buffer.writeln();
+      }
+      buffer.writeln('</LoadedSkills>');
+      buffer.writeln();
+    }
+
     // Add ancestor context (TOC-based for lazy loading)
     final ancestors = _getAncestors(node);
     if (ancestors.isNotEmpty) {
@@ -339,6 +350,18 @@ class ContextManagerService {
     List<DependencyInfo> structuredDependencies = const [],
   }) {
     final buffer = StringBuffer();
+
+    // Add pinned skills (never compacted)
+    final root = _getRoot(node);
+    if (root.loadedSkills.isNotEmpty) {
+      buffer.writeln('<LoadedSkills note="These skill workflows guide your approach. Follow them.">');
+      for (final skill in root.loadedSkills) {
+        buffer.writeln(skill.content);
+        buffer.writeln();
+      }
+      buffer.writeln('</LoadedSkills>');
+      buffer.writeln();
+    }
 
     // Use structured dependencies if available (TOC-based rendering)
     if (structuredDependencies.isNotEmpty) {
@@ -634,6 +657,15 @@ If this is research/analysis, output structured findings.
     }
 
     return node.summary!;
+  }
+
+  /// Add a loaded skill to the root context node (session-scoped, deduplicated).
+  void addLoadedSkill(String noteId, String content) {
+    final root = rootContext;
+    if (root == null) return;
+    // Deduplicate by noteId
+    if (root.loadedSkills.any((s) => s.noteId == noteId)) return;
+    root.loadedSkills.add(LoadedSkill(noteId: noteId, content: content));
   }
 
   /// Marks a context as failed with an error message.
