@@ -673,6 +673,31 @@ class MockAIService extends _i1.Mock implements _i15.AIService {
           as _i6.Future<String>);
 
   @override
+  _i6.Future<String> transformBlock(
+    String? blockContent,
+    String? instruction, {
+    _i13.GenerationContext? generationContext,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #transformBlock,
+              [blockContent, instruction],
+              {#generationContext: generationContext},
+            ),
+            returnValue: _i6.Future<String>.value(
+              _i7.dummyValue<String>(
+                this,
+                Invocation.method(
+                  #transformBlock,
+                  [blockContent, instruction],
+                  {#generationContext: generationContext},
+                ),
+              ),
+            ),
+          )
+          as _i6.Future<String>);
+
+  @override
   _i6.Future<String> generateWithAttachments(
     String? prompt,
     List<_i12.PlatformFile>? attachedFiles, {

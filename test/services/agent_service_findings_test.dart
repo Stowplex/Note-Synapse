@@ -12,6 +12,7 @@ import 'package:note_synapse/services/context_manager_service.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/model_selector.dart';
 import 'package:note_synapse/services/service_locator.dart';
+import 'package:note_synapse/services/skill_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 @GenerateMocks([
@@ -45,6 +46,9 @@ void main() {
     getIt.registerLazySingleton<ModelSelector>(() => mockModelSelector);
     getIt.registerLazySingleton<AIService>(() => mockAIService);
     getIt.registerLazySingleton<DatabaseService>(() => mockDatabaseService);
+    getIt.registerLazySingleton<SkillService>(() => SkillService(mockDatabaseService));
+    when(mockDatabaseService.searchNotesFTS(any, tags: anyNamed('tags')))
+        .thenAnswer((_) async => []);
 
     agentService = AgentService(
       mockContextManager,

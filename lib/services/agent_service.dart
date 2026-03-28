@@ -11,6 +11,7 @@ import '../models/context_node.dart';
 import '../models/generation_context.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/model_config.dart';
+import 'tools/load_skill_tool.dart';
 import 'tools/note_tools.dart';
 import 'tools/read_task_result_tool.dart';
 import 'ai_service.dart';
@@ -19,6 +20,7 @@ import 'context_manager_service.dart';
 import 'model_selector.dart';
 import 'logger_service.dart';
 import 'mcp_service.dart';
+import 'skill_service.dart';
 import '../utils/xml_response_parser.dart';
 import 'mcp_tool_integration_service.dart';
 import 'database_service.dart';
@@ -1002,9 +1004,19 @@ If no findings worth preserving, return: []
   /// Cached ReadTaskResultTool instance (requires contextManager)
   ReadTaskResultTool? _readTaskResultTool;
 
+  // Skill state
+  bool _skillsEnabled = true;
+  Map<String, SkillMetadata> _skillIndex = {};
+  final List<McpTool> _skillDiscoveredTools = [];
+  LoadSkillTool? _loadSkillTool;
+
   /// Gets all native tools including the read_task_result tool.
   List<NativeTool> get nativeTools {
     _readTaskResultTool ??= ReadTaskResultTool(_contextManager);
+    if (_skillsEnabled) {
+      _loadSkillTool ??= LoadSkillTool();
+      return List.unmodifiable([..._nativeTools, _readTaskResultTool!, _loadSkillTool!]);
+    }
     return List.unmodifiable([..._nativeTools, _readTaskResultTool!]);
   }
 
@@ -1041,9 +1053,21 @@ If no findings worth preserving, return: []
     ToolExecutor? executeTool,
     String? context,
     List<PlatformFile> contextAttachments = const [],
+    bool skillsEnabled = true,
   }) async {
     _externalTools = activeTools;
     _toolExecutor = executeTool;
+    _skillsEnabled = skillsEnabled;
+    _skillDiscoveredTools.clear();
+    getIt<SkillService>().resetSession();
+    _loadSkillTool?.resetSession();
+
+    if (_skillsEnabled) {
+      _skillIndex = await getIt<SkillService>().buildSkillIndex();
+    } else {
+      _skillIndex = {};
+    }
+
     _currentThought = 'Generating plan...';
     // Reset previous results
     _finalAnswer = null;
@@ -1134,6 +1158,10 @@ Example: "identify knowledge gaps in transformer notes":
 '''
         : '';
 
+    final skillIndexSection = _skillsEnabled
+        ? getIt<SkillService>().buildSkillIndexPrompt(_skillIndex)
+        : '';
+
     final prompt =
         '''
 You are an intelligent agent that plans and executes tasks to solve an objective.
@@ -1215,7 +1243,7 @@ Example (note exploration):
 
 If no tools are needed for a step (e.g. analysis), use: "tools": [].
 Only use the tools listed above.
-''';
+$skillIndexSection''';
 
     const maxRetries = 3;
     String? lastError;
@@ -1690,10 +1718,12 @@ Return ONLY a valid JSON list with ALL required fields:
     // 2. If empty, use all enabled tools
     // Note: task.toolNames (planner's suggestions) are hints only, not filters
     List<NativeTool> allowedNativeFn() {
-      // read_task_result is ALWAYS available (internal mechanism for TOC-based context)
-      // Use nativeTools (not enabledNativeTools) to ensure it's always present
-      final readTaskResultTool = nativeTools
-          .where((t) => t.name == 'read_task_result')
+      // read_task_result and load_skill (when skills enabled) are ALWAYS available
+      // (internal mechanisms for TOC-based context and skill loading)
+      // Use nativeTools (not enabledNativeTools) to ensure they're always present
+      final alwaysAvailableNames = {'read_task_result', if (_skillsEnabled) 'load_skill'};
+      final alwaysAvailableTools = nativeTools
+          .where((t) => alwaysAvailableNames.contains(t.name))
           .toList();
 
       // User's per-step restrictions take priority
@@ -1701,15 +1731,21 @@ Return ONLY a valid JSON list with ALL required fields:
         final userFiltered = enabledNativeTools
             .where((t) => task.allowedTools.contains(t.name))
             .toList();
-        // Ensure read_task_result is always included
-        if (!userFiltered.any((t) => t.name == 'read_task_result')) {
-          return [...userFiltered, ...readTaskResultTool];
+        // Ensure always-available tools are included
+        final missing = alwaysAvailableTools
+            .where((t) => !userFiltered.any((u) => u.name == t.name))
+            .toList();
+        if (missing.isNotEmpty) {
+          return [...userFiltered, ...missing];
         }
         return userFiltered;
       }
-      // No user restriction - all enabled tools available + read_task_result
-      if (!enabledNativeTools.any((t) => t.name == 'read_task_result')) {
-        return [...enabledNativeTools, ...readTaskResultTool];
+      // No user restriction - all enabled tools available + always-available tools
+      final missing = alwaysAvailableTools
+          .where((t) => !enabledNativeTools.any((u) => u.name == t.name))
+          .toList();
+      if (missing.isNotEmpty) {
+        return [...enabledNativeTools, ...missing];
       }
       return enabledNativeTools;
     }
@@ -1730,6 +1766,11 @@ Return ONLY a valid JSON list with ALL required fields:
     // Fallback: If for some reason the planned tool isn't found in native/external,
     // we should alert or fail? For now, we proceed with what we found.
 
+    final skillToolsDesc = _skillDiscoveredTools.isNotEmpty
+        ? '\n\nSkill-Discovered Tools (injected by loaded skills):\n'
+          '${_skillDiscoveredTools.map((t) => '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}').join('\n')}'
+        : '';
+
     final toolsDesc = [
       ...currentAllowedNative.map(
         (t) =>
@@ -1739,7 +1780,7 @@ Return ONLY a valid JSON list with ALL required fields:
         (t) =>
             '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}',
       ),
-    ].join('\n');
+    ].join('\n') + skillToolsDesc;
 
     // Build special instructions for final deliverable tasks
     final deliverableInstructions = task.isFinalDeliverable
@@ -1831,6 +1872,10 @@ The investigation reveals that...
 Current task depth: ${task.depth} / $_cachedMaxSubtaskDepth
 ''';
 
+    final taskSkillSection = _skillsEnabled && _skillIndex.isNotEmpty
+        ? getIt<SkillService>().buildSkillIndexPrompt(_skillIndex)
+        : '';
+
     final prompt =
         '''
 You are an intelligent agent working on a task.
@@ -1871,7 +1916,7 @@ INSTRUCTIONS:
 $deliverableInstructions
 
 $formatInstructions
-''';
+$taskSkillSection''';
 
     try {
       // Checkpoint: Before LLM call
