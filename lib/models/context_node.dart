@@ -61,7 +61,7 @@ class ContextNode {
   TaskResultStorage? structuredResult;
 
   /// The most recent error encountered during execution in this context.
-  /// Displayed in <LastRoundError> section to inform the agent of failures.
+  /// Displayed in `LastRoundError` section to inform the agent of failures.
   String? lastError;
 
   /// Skills pinned to this session (root node only). Session-scoped, never compacted.
