@@ -807,6 +807,26 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     return runtime;
   }
 
+  /// Gets or creates an [AiToolRuntime] for a skill-discovered user_defined tool.
+  ///
+  /// Unlike [_getAiToolRuntime], this uses the provided [bundle] directly rather
+  /// than looking it up from [_aiToolBundles].
+  Future<AiToolRuntime> _getSkillAiToolRuntime(
+      String serviceName, AiToolAppBundle bundle) async {
+    final existing = _aiToolRuntimes[serviceName];
+    if (existing != null) {
+      return existing;
+    }
+    final runtime = AiToolRuntime(
+      bundle: bundle,
+      appProvider: context.read<AppProvider>(),
+      onModificationRequest: _handleModificationRequest,
+      onSqlWriteApprovalRequest: _handleSqlWriteApprovalRequest,
+    );
+    _aiToolRuntimes[serviceName] = runtime;
+    return runtime;
+  }
+
   /// Handle note modification approval requests from AI tools.
   Future<bool> _handleModificationRequest(
     dynamic source,
@@ -1199,7 +1219,47 @@ $historyBuffer
                 }
                 return resultStr;
               }
-              // Skill-discovered tools are MCP tools — fall through to MCP handler
+              // Skill-discovered native (builtin) tool — route to native execution
+              if (_conversationService.skillDiscoveredNativeToolNames
+                  .contains(toolName)) {
+                final agentService = this.context.read<AgentService>();
+                final nativeTool = agentService.nativeTools
+                    .where((t) => t.name == toolName)
+                    .firstOrNull;
+                if (nativeTool != null) {
+                  final result = await nativeTool.execute(params);
+                  return result is String ? result : result.toString();
+                }
+                return 'Error: Native tool "$toolName" not found';
+              }
+              // Skill-discovered user_defined tool — route via AI tool bundle
+              for (final entry
+                  in _conversationService.skillDiscoveredBundles.entries) {
+                if (entry.value.toolDefinitions
+                    .any((d) => d.toolName == toolName)) {
+                  final runtime = await _getSkillAiToolRuntime(
+                      entry.key, entry.value);
+                  return runtime.invoke(toolName, params, context);
+                }
+              }
+              // Skill-discovered MCP tool — use the real endpoint name
+              final endpointName =
+                  _conversationService.skillToolEndpointNames[toolName];
+              final endpointId =
+                  _conversationService.skillToolEndpointIds[toolName];
+              if (endpointName != null && endpointId != null) {
+                return McpToolIntegrationService.executeToolCall(
+                  serviceName: endpointName,
+                  toolName: toolName,
+                  parameters: params,
+                  enabledEndpointIds: [
+                    ..._selectedMcpEndpointIds,
+                    endpointId,
+                  ],
+                  generationContext: context,
+                );
+              }
+              return 'Error: Skill tool "$toolName" not found';
             }
 
             // Handle MCP Tools

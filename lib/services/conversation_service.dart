@@ -6,6 +6,7 @@ import '../models/conversation_context.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/note.dart';
 import '../models/tag.dart';
+import 'ai_tool_service.dart';
 import 'conversation_attachment_service.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
@@ -13,6 +14,8 @@ import 'mcp_service.dart';
 import 'service_locator.dart';
 import 'skill_service.dart';
 import 'tools/load_skill_tool.dart';
+import 'tools/note_tools.dart';
+import 'user_app_service.dart';
 
 class ConversationService {
   final DatabaseService _databaseService;
@@ -24,6 +27,18 @@ class ConversationService {
   final List<McpTool> _skillDiscoveredTools = [];
   LoadSkillTool? _loadSkillTool;
 
+  /// Maps skill-discovered MCP tool names to their MCP endpoint names.
+  final Map<String, String> _skillToolEndpointNames = {};
+
+  /// Maps skill-discovered MCP tool names to their MCP endpoint IDs.
+  final Map<String, String> _skillToolEndpointIds = {};
+
+  /// Maps skill-discovered user_defined tool names to their [AiToolAppBundle].
+  final Map<String, AiToolAppBundle> _skillDiscoveredBundles = {};
+
+  /// Names of skill-discovered native (builtin) tools.
+  final Set<String> _skillDiscoveredNativeToolNames = {};
+
   /// Whether skills are currently enabled for chat mode.
   bool get skillsEnabled => _skillsEnabled;
 
@@ -33,6 +48,22 @@ class ConversationService {
   /// Tools discovered via skill tool URIs during this chat session.
   List<McpTool> get skillDiscoveredTools =>
       List.unmodifiable(_skillDiscoveredTools);
+
+  /// Maps skill-discovered MCP tool names to their MCP endpoint names.
+  Map<String, String> get skillToolEndpointNames =>
+      Map.unmodifiable(_skillToolEndpointNames);
+
+  /// Maps skill-discovered MCP tool names to their MCP endpoint IDs.
+  Map<String, String> get skillToolEndpointIds =>
+      Map.unmodifiable(_skillToolEndpointIds);
+
+  /// Bundles for skill-discovered user_defined tools (keyed by serviceName).
+  Map<String, AiToolAppBundle> get skillDiscoveredBundles =>
+      Map.unmodifiable(_skillDiscoveredBundles);
+
+  /// Names of skill-discovered native (builtin) tools.
+  Set<String> get skillDiscoveredNativeToolNames =>
+      Set.unmodifiable(_skillDiscoveredNativeToolNames);
 
   /// The LoadSkillTool instance (lazily created when skills are enabled).
   LoadSkillTool get loadSkillTool => _loadSkillTool ??= LoadSkillTool();
@@ -57,6 +88,10 @@ class ConversationService {
   Future<void> enableSkills() async {
     _skillsEnabled = true;
     _skillDiscoveredTools.clear();
+    _skillToolEndpointNames.clear();
+    _skillToolEndpointIds.clear();
+    _skillDiscoveredBundles.clear();
+    _skillDiscoveredNativeToolNames.clear();
     getIt<SkillService>().resetSession();
     _loadSkillTool?.resetSession();
     _skillIndex = await getIt<SkillService>().buildSkillIndex();
@@ -67,13 +102,28 @@ class ConversationService {
     _skillsEnabled = false;
     _skillIndex = {};
     _skillDiscoveredTools.clear();
+    _skillToolEndpointNames.clear();
+    _skillToolEndpointIds.clear();
+    _skillDiscoveredBundles.clear();
+    _skillDiscoveredNativeToolNames.clear();
   }
+
+  /// The standard set of native tools available for `builtin` URI resolution.
+  static final List<NativeTool> _standardNativeTools = [
+    NoteSearchTool(),
+    NoteReadTool(),
+    RunSqlTool(),
+    ListFiltersTool(),
+    ModifyNoteTool(),
+    CreateNotesTool(),
+    DeleteNoteTool(),
+  ];
 
   /// Handles the result from a `load_skill` tool call during chat mode.
   ///
   /// Parses tool URIs from the skill content, resolves them to [McpTool]
-  /// instances (currently only the `mcp` namespace is supported), and
-  /// appends any newly-discovered tools to [skillDiscoveredTools].
+  /// instances (supporting `mcp`, `builtin`, and `user_defined` namespaces),
+  /// and appends any newly-discovered tools to [skillDiscoveredTools].
   Future<void> handleLoadSkillResult(
     String noteId,
     String result,
@@ -85,24 +135,67 @@ class ConversationService {
     for (final uri in uris) {
       final parsed = skillService.parseToolUri(uri);
       if (parsed == null) continue;
-      if (parsed.namespace == 'mcp') {
-        final mcpService = getIt<McpService>();
-        final endpoints = await mcpService.getEndpoints();
-        final endpoint =
-            endpoints.where((e) => e.name == parsed.id).firstOrNull;
-        if (endpoint != null) {
-          final cache = await mcpService.getCachedTools(endpoint.id);
-          final allTools =
-              cache?.tools ?? (await mcpService.refreshTools(endpoint.id)).tools;
+      switch (parsed.namespace) {
+        case 'builtin':
+          // Find in standard native tools list, convert to McpTool and add.
+          final nativeTool =
+              _standardNativeTools.where((t) => t.name == parsed.id).firstOrNull;
+          if (nativeTool != null &&
+              !_skillDiscoveredTools.any((s) => s.name == nativeTool.name)) {
+            _skillDiscoveredTools.add(McpTool(
+              name: nativeTool.name,
+              description: nativeTool.description,
+              inputSchema: nativeTool.inputSchema,
+            ));
+            _skillDiscoveredNativeToolNames.add(nativeTool.name);
+          }
+
+        case 'user_defined':
+          // Load UserApp bundle and add its tools.
+          final allApps = await _databaseService.getAllUserApps();
+          final app = allApps.where((a) => a.uuid == parsed.id).firstOrNull;
+          if (app == null || app.selectedRevisionId == null) continue;
+          final revision = await getIt<UserAppService>().getAppRevision(
+            app.selectedRevisionId!,
+          );
+          if (revision == null) continue;
+          final bundle = await AiToolService.loadAppBundle(
+            app: app,
+            revision: revision,
+          );
+          if (bundle == null) continue;
+          final allTools = bundle.toMcpTools();
           final filtered = parsed.function != null
               ? allTools.where((t) => t.name == parsed.function).toList()
               : allTools;
           for (final t in filtered) {
             if (!_skillDiscoveredTools.any((s) => s.name == t.name)) {
               _skillDiscoveredTools.add(t);
+              _skillDiscoveredBundles[bundle.serviceName] = bundle;
             }
           }
-        }
+
+        case 'mcp':
+          final mcpService = getIt<McpService>();
+          final endpoints = await mcpService.getEndpoints();
+          final endpoint =
+              endpoints.where((e) => e.name == parsed.id).firstOrNull;
+          if (endpoint != null) {
+            final cache = await mcpService.getCachedTools(endpoint.id);
+            final allTools =
+                cache?.tools ??
+                (await mcpService.refreshTools(endpoint.id)).tools;
+            final filtered = parsed.function != null
+                ? allTools.where((t) => t.name == parsed.function).toList()
+                : allTools;
+            for (final t in filtered) {
+              if (!_skillDiscoveredTools.any((s) => s.name == t.name)) {
+                _skillDiscoveredTools.add(t);
+                _skillToolEndpointNames[t.name] = endpoint.name;
+                _skillToolEndpointIds[t.name] = endpoint.id;
+              }
+            }
+          }
       }
     }
   }
