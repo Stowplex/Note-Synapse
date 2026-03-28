@@ -3410,6 +3410,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       context: context,
       builder: (context) => NoteSelectionDialog(
         onNotesSelected: (notes) => Navigator.of(context).pop(notes),
+        initialTags: widget.note.tags.contains('agent-skill')
+            ? ['agent-skill']
+            : null,
       ),
     );
 

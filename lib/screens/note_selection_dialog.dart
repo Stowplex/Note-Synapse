@@ -5,12 +5,15 @@ import '../models/note.dart';
 import '../widgets/note_card.dart';
 import '../l10n/app_localizations.dart';
 import '../services/note_selection_service.dart';
+import '../services/database_service.dart';
+import '../services/service_locator.dart';
 
 class NoteSelectionDialog extends StatefulWidget {
   final Function(List<Note>) onNotesSelected;
   final String? title;
   final bool singleSelection;
   final List<String> initialSelectedNoteIds;
+  final List<String>? initialTags;
 
   const NoteSelectionDialog({
     super.key,
@@ -18,6 +21,7 @@ class NoteSelectionDialog extends StatefulWidget {
     this.title,
     this.singleSelection = false,
     this.initialSelectedNoteIds = const [],
+    this.initialTags,
   });
 
   @override
@@ -30,6 +34,13 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
   String _searchQuery = '';
   final NoteSelectionService _noteSelectionService = NoteSelectionService();
   bool _initialized = false;
+  List<String> _activeTagFilters = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _activeTagFilters = List.from(widget.initialTags ?? []);
+  }
 
   @override
   void didChangeDependencies() {
@@ -88,6 +99,30 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                         color: Theme.of(context).colorScheme.onPrimary,
                       ),
                     ),
+                  ),
+                  IconButton(
+                    icon: Stack(
+                      children: [
+                        Icon(
+                          Icons.filter_list,
+                          color: Theme.of(context).colorScheme.onPrimary,
+                        ),
+                        if (_activeTagFilters.isNotEmpty)
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Colors.blue,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    onPressed: _showTagFilterDialog,
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
@@ -154,10 +189,19 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                   final allNotes = appProvider.notes;
 
                   // Use the service to filter and sort notes
-                  final filteredNotes = _noteSelectionService.filterNotes(
+                  var filteredNotes = _noteSelectionService.filterNotes(
                     allNotes: allNotes,
                     searchQuery: _searchQuery,
                   );
+
+                  // Apply tag filters if active
+                  if (_activeTagFilters.isNotEmpty) {
+                    filteredNotes = filteredNotes.where((note) {
+                      return _activeTagFilters.every(
+                        (tag) => note.tags.contains(tag),
+                      );
+                    }).toList();
+                  }
 
                   if (filteredNotes.isEmpty) {
                     return Center(
@@ -303,5 +347,89 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
 
   void _updateNoteContent(String noteId, String newContent) {
     context.read<AppProvider>().updateNoteContent(noteId, newContent);
+  }
+
+  void _applyFilters() {
+    setState(() {
+      // Trigger rebuild with updated _activeTagFilters
+    });
+  }
+
+  Future<void> _showTagFilterDialog() async {
+    final allTagObjects = await getIt<DatabaseService>().getAllTags();
+    if (!mounted) return;
+    final allTags = allTagObjects.map((t) => t.name).toList();
+    final selected = await showDialog<List<String>>(
+      context: context,
+      builder: (ctx) => _TagFilterDialog(
+        allTags: allTags,
+        selectedTags: _activeTagFilters,
+      ),
+    );
+    if (selected != null) {
+      setState(() {
+        _activeTagFilters = selected;
+      });
+      _applyFilters();
+    }
+  }
+}
+
+class _TagFilterDialog extends StatefulWidget {
+  final List<String> allTags;
+  final List<String> selectedTags;
+  const _TagFilterDialog({required this.allTags, required this.selectedTags});
+
+  @override
+  State<_TagFilterDialog> createState() => _TagFilterDialogState();
+}
+
+class _TagFilterDialogState extends State<_TagFilterDialog> {
+  late List<String> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = List.from(widget.selectedTags);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Filter by Tags'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ListView(
+          shrinkWrap: true,
+          children: widget.allTags
+              .map(
+                (tag) => CheckboxListTile(
+                  title: Text(tag),
+                  value: _selected.contains(tag),
+                  onChanged: (checked) {
+                    setState(() {
+                      if (checked == true) {
+                        _selected.add(tag);
+                      } else {
+                        _selected.remove(tag);
+                      }
+                    });
+                  },
+                ),
+              )
+              .toList(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, null),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _selected),
+          child: const Text('Apply'),
+        ),
+      ],
+    );
   }
 }
