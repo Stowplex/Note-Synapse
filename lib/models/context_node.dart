@@ -142,8 +142,9 @@ class ContextNode {
     DateTime? createdAt,
     DateTime? updatedAt,
     List<String>? allowedTools,
+    List<LoadedSkill>? loadedSkills,
   }) {
-    return ContextNode(
+    final copy = ContextNode(
       id: id ?? this.id,
       parentId: parentId ?? this.parentId,
       objective: objective ?? this.objective,
@@ -160,6 +161,8 @@ class ContextNode {
       allowedTools: allowedTools ?? List.from(this.allowedTools),
       lastError: lastError ?? this.lastError,
     );
+    copy.loadedSkills = loadedSkills ?? List.from(this.loadedSkills);
+    return copy;
   }
 
   /// Serializes to JSON for potential snapshot/persistence.
