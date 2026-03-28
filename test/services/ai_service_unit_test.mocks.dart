@@ -161,6 +161,14 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i4.Future<List<_i5.Note>>);
 
   @override
+  _i4.Future<List<_i5.Note>> getNotesByTag(String? tagName) =>
+      (super.noSuchMethod(
+            Invocation.method(#getNotesByTag, [tagName]),
+            returnValue: _i4.Future<List<_i5.Note>>.value(<_i5.Note>[]),
+          )
+          as _i4.Future<List<_i5.Note>>);
+
+  @override
   _i4.Future<void> updateNote(_i5.Note? note) =>
       (super.noSuchMethod(
             Invocation.method(#updateNote, [note]),
@@ -1713,6 +1721,16 @@ class MockModelSelector extends _i1.Mock implements _i16.ModelSelector {
             ),
           )
           as _i4.Future<Map<String, dynamic>>);
+
+  @override
+  String? checkLocalModelConstraints(
+    List<_i22.PromptMessage>? messages,
+    _i18.ModelConfig? config,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#checkLocalModelConstraints, [messages, config]),
+          )
+          as String?);
 
   @override
   _i4.Future<_i18.ModelConfig?> getModelByHint(

@@ -128,6 +128,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   // System Tools (native tools from AgentService)
   final Set<String> _selectedSystemTools = {};
 
+  // Agent Skills
+  bool _skillsEnabled = false;
+  int _skillCount = 0;
+
   bool _hasInitialized = false;
   bool _waitingForAgentResult = false;
   AgentService? _agentService;
@@ -137,10 +141,16 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _selectedModel = widget.initialModelOverride;
+    _skillsEnabled = widget.skillsEnabled;
     if (widget.skillsEnabled) {
-      unawaited(_conversationService.enableSkills());
+      _conversationService.enableSkills().then((_) {
+        if (mounted) setState(() => _skillCount = _conversationService.skillIndex.length);
+      });
     } else {
       _conversationService.disableSkills();
+      getIt<SkillService>().buildSkillIndex().then((index) {
+        if (mounted) setState(() => _skillCount = index.length);
+      });
     }
     _loadMcpEndpoints();
     _loadIterationPreference();
@@ -1950,7 +1960,8 @@ $historyBuffer
         activeLocalCount +
         activeModelFeaturesCount +
         activeBuiltInToolsCount +
-        activeSystemToolsCount;
+        activeSystemToolsCount +
+        (_skillsEnabled ? 1 : 0);
     final headerTitle = l10n.mcpAndLocalTools;
 
     // Get current model config to check for features
@@ -2286,6 +2297,72 @@ $historyBuffer
                             ),
                           );
                         }).toList(),
+                      ),
+                    ],
+                    // Agent Skills
+                    if (_skillCount > 0) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.auto_awesome,
+                            size: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Agent Skills',
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.8),
+                                ),
+                          ),
+                          const Spacer(),
+                          if (_skillsEnabled)
+                            ActiveToolCountBadge(
+                              count: 1,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          FilterChip(
+                            label: Text(
+                              '$_skillCount available',
+                            ),
+                            selected: _skillsEnabled,
+                            onSelected: (selected) {
+                              setState(() => _skillsEnabled = selected);
+                              if (selected) {
+                                _conversationService.enableSkills().then((_) {
+                                  if (mounted) {
+                                    setState(() => _skillCount = _conversationService.skillIndex.length);
+                                  }
+                                });
+                              } else {
+                                _conversationService.disableSkills();
+                              }
+                            },
+                            avatar: Icon(
+                              Icons.auto_awesome,
+                              size: 16,
+                              color: _skillsEnabled
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                     if (modelConfig?.modelFeatures != null &&

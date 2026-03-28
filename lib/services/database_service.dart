@@ -1875,6 +1875,25 @@ class DatabaseService {
     return await _batchLoadNotes(maps);
   }
 
+  /// Returns all non-archived notes that have the given tag.
+  Future<List<Note>> getNotesByTag(String tagName) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT
+        n.id, n.title, n.type, n.createdAt, n.updatedAt, n.scheduledAt, n.completeBy,
+        n.status, n.completionPercentage, n.pinned, n.isArchived, n.recurrenceRule,
+        CASE WHEN length(n.content) < 500000 THEN n.content ELSE NULL END as content,
+        length(n.content) as _contentLength
+      FROM notes n
+      JOIN note_tags nt ON n.id = nt.noteId
+      JOIN tags t ON nt.tagId = t.id
+      WHERE t.name = ? AND n.isArchived = 0
+      ORDER BY n.createdAt DESC
+    ''', [tagName]);
+
+    return await _batchLoadNotes(maps);
+  }
+
   Future<void> updateNote(Note note) async {
     final db = await database;
     final json = note.toJson();

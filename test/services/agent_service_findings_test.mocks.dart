@@ -564,6 +564,16 @@ class MockModelSelector extends _i1.Mock implements _i9.ModelSelector {
           as _i6.Future<Map<String, dynamic>>);
 
   @override
+  String? checkLocalModelConstraints(
+    List<_i14.PromptMessage>? messages,
+    _i8.ModelConfig? config,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#checkLocalModelConstraints, [messages, config]),
+          )
+          as String?);
+
+  @override
   _i6.Future<_i8.ModelConfig?> getModelByHint(
     List<String>? hints, {
     _i8.ModelConfig? currentOverride,
@@ -1050,6 +1060,14 @@ class MockDatabaseService extends _i1.Mock implements _i18.DatabaseService {
   _i6.Future<List<_i16.Note>> getNotesByIds(List<String>? noteIds) =>
       (super.noSuchMethod(
             Invocation.method(#getNotesByIds, [noteIds]),
+            returnValue: _i6.Future<List<_i16.Note>>.value(<_i16.Note>[]),
+          )
+          as _i6.Future<List<_i16.Note>>);
+
+  @override
+  _i6.Future<List<_i16.Note>> getNotesByTag(String? tagName) =>
+      (super.noSuchMethod(
+            Invocation.method(#getNotesByTag, [tagName]),
             returnValue: _i6.Future<List<_i16.Note>>.value(<_i16.Note>[]),
           )
           as _i6.Future<List<_i16.Note>>);

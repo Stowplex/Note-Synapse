@@ -270,6 +270,16 @@ class MockModelSelector extends _i1.Mock implements _i2.ModelSelector {
           as _i3.Future<Map<String, dynamic>>);
 
   @override
+  String? checkLocalModelConstraints(
+    List<_i10.PromptMessage>? messages,
+    _i5.ModelConfig? config,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#checkLocalModelConstraints, [messages, config]),
+          )
+          as String?);
+
+  @override
   _i3.Future<_i5.ModelConfig?> getModelByHint(
     List<String>? hints, {
     _i5.ModelConfig? currentOverride,

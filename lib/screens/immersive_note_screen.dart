@@ -65,6 +65,7 @@ import 'settings_screen.dart';
 import '../widgets/model_selector_button.dart';
 import '../widgets/attachment_preview_tile.dart';
 import '../services/built_in_tools_service.dart';
+import '../services/skill_service.dart';
 import '../models/in_note_marker.dart';
 import '../models/note_annotation.dart';
 import '../services/note_marker_service.dart';
@@ -201,6 +202,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   // System Tools (native tools from AgentService)
   final Set<String> _selectedSystemTools = {};
 
+  // Agent Skills
+  bool _skillsEnabled = false;
+  int _skillCount = 0;
+
   // Drawing State
   List<DrawingAction> _drawingActions = [];
   List<DrawingAction> _redoStack = [];
@@ -235,6 +240,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     _conversationNotes = List<Note>.from(widget.notes);
     _loadIterationPreference();
     _setupApprovalCallback();
+    getIt<SkillService>().buildSkillIndex().then((index) {
+      if (mounted) setState(() => _skillCount = index.length);
+    });
 
     if (widget.initialConversation != null) {
       _conversation = widget.initialConversation;
@@ -2430,7 +2438,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         activeLocalCount +
         activeModelFeaturesCount +
         activeBuiltInToolsCount +
-        activeSystemToolsCount;
+        activeSystemToolsCount +
+        (_skillsEnabled ? 1 : 0);
     final headerTitle = l10n.mcpAndLocalTools;
     final modelConfig = context.read<AppProvider>().modelConfig;
     final supportsToolOrchestration =
@@ -2748,6 +2757,67 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                             ),
                           );
                         }).toList(),
+                      ),
+                    ],
+                    // Agent Skills
+                    if (_skillCount > 0) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.auto_awesome,
+                            size: 16,
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Agent Skills',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.8,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (_skillsEnabled)
+                            ActiveToolCountBadge(
+                              count: 1,
+                              label: l10n.active,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          FilterChip(
+                            label: Text('$_skillCount available'),
+                            selected: _skillsEnabled,
+                            onSelected: (selected) {
+                              setState(() => _skillsEnabled = selected);
+                              if (selected) {
+                                _conversationService.enableSkills().then((_) {
+                                  if (mounted) {
+                                    setState(() => _skillCount = _conversationService.skillIndex.length);
+                                  }
+                                });
+                              } else {
+                                _conversationService.disableSkills();
+                              }
+                            },
+                            avatar: Icon(
+                              Icons.auto_awesome,
+                              size: 16,
+                              color: _skillsEnabled
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface.withOpacity(
+                                      0.6,
+                                    ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                     // Model Features Section

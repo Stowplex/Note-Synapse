@@ -85,7 +85,7 @@ void main() {
             '---\nname: Skill B\ndescription: Desc B\nenabled: false\n---\n\nbody'),
         _makeNote('id-3', 'no frontmatter'),
       ];
-      when(mockDb.searchNotesFTS('', tags: ['agent-skill']))
+      when(mockDb.getNotesByTag('agent-skill'))
           .thenAnswer((_) async => notes);
       final index = await service.buildSkillIndex();
       expect(index.keys, containsAll(['id-1']));

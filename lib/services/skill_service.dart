@@ -16,6 +16,8 @@ class SkillMetadata {
 }
 
 class SkillService {
+  static const String agentSkillTag = 'agent-skill';
+
   final DatabaseService _db;
   final Set<String> _loadedSkillNoteIds = {};
 
@@ -55,7 +57,7 @@ class SkillService {
   // --- Index ---
 
   Future<Map<String, SkillMetadata>> buildSkillIndex() async {
-    final notes = await _db.searchNotesFTS('', tags: ['agent-skill']);
+    final notes = await _db.getNotesByTag(agentSkillTag);
     final index = <String, SkillMetadata>{};
     for (final Note note in notes) {
       final meta = parseSkillMetadata(note.id, note.content);

@@ -174,6 +174,14 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i7.Future<List<_i8.Note>>);
 
   @override
+  _i7.Future<List<_i8.Note>> getNotesByTag(String? tagName) =>
+      (super.noSuchMethod(
+            Invocation.method(#getNotesByTag, [tagName]),
+            returnValue: _i7.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+          )
+          as _i7.Future<List<_i8.Note>>);
+
+  @override
   _i7.Future<void> updateNote(_i8.Note? note) =>
       (super.noSuchMethod(
             Invocation.method(#updateNote, [note]),
