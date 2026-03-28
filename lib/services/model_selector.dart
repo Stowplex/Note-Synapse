@@ -4,7 +4,9 @@ import '../providers/app_provider.dart';
 import 'models/ai_model.dart';
 import 'models/gemini_model.dart';
 import 'models/openai_model.dart';
+import 'models/local_mnn_model.dart';
 import 'model_storage_service.dart';
+import '../utils/token_estimator.dart';
 import 'service_locator.dart';
 import 'logger_service.dart';
 import 'prompts/prompt_models.dart';
@@ -495,7 +497,30 @@ class ModelSelector {
         return GeminiModel();
       case ModelType.openaiCompatible:
         return OpenAIModel();
+      case ModelType.localMnn:
+        return LocalMnnModel();
     }
+  }
+
+  /// Estimates total tokens for a request and checks against local model's token window.
+  /// Returns null if within limits, or a warning message if over.
+  String? checkLocalModelConstraints(
+    List<PromptMessage> messages,
+    ModelConfig config,
+  ) {
+    if (config.type != ModelType.localMnn) return null;
+    final tokenWindow = config.tokenWindow ?? 16384;
+
+    int estimatedTokens = 0;
+    for (final msg in messages) {
+      estimatedTokens += TokenEstimator.estimateTokens(msg.content);
+    }
+
+    if (estimatedTokens > tokenWindow) {
+      return 'Estimated input (~${(estimatedTokens / 1024).toStringAsFixed(1)}K tokens) '
+          'exceeds local model token window (${(tokenWindow / 1024).toStringAsFixed(0)}K).';
+    }
+    return null;
   }
 
   /// Find a model with specified capability hints.

@@ -49,7 +49,11 @@ dependencies:
   rhttp:
     path: third_party/rhttp/rhttp
   crypto: ^3.0.3
-  
+
+  # Local AI inference
+  edge_gen:
+    path: third_party/edge_gen
+
   # Image handling
   image: ^4.2.0
   image_picker: ^1.0.4
@@ -157,7 +161,9 @@ dependencies:
   flutter_svg: ^2.2.1
 
   # JSON viewer widget
-  flutter_json_view: ^1.1.5
+  flutter_json_view:
+    path: third_party/flutter_json_view
+
   flutter_painter_v2: ^2.1.0+1
   phosphor_flutter: ^2.1.0
   json_repair_flutter: ^2.0.2

@@ -11,6 +11,7 @@ import '../services/model_selector.dart';
 import '../services/model_preset_service.dart';
 import '../providers/app_provider.dart';
 import '../l10n/app_localizations.dart';
+import 'local_model_picker_screen.dart';
 
 class ModelConfigurationScreen extends StatefulWidget {
   final ModelConfig? config; // If provided, we are editing
@@ -51,6 +52,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   bool _supportsVideo = false;
   bool _supportsImageGeneration = false;
   bool _supportsCodeGeneration = false;
+  bool _supportsToolOrchestration = false;
 
   List<ModelConfig> _presets = [];
   ModelConfig? _selectedPreset;
@@ -65,6 +67,22 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
     _isEditing = widget.config != null;
     _selectedType =
         widget.config?.type ?? widget.initialType ?? ModelType.gemini;
+
+    if (_selectedType == ModelType.localMnn && !_isEditing) {
+      // Redirect to the local model picker on next frame
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) =>
+                  const LocalModelPickerScreen(closeOnConfigured: true),
+            ),
+          );
+        }
+      });
+      return;
+    }
 
     if (_isEditing) {
       _loadExistingConfiguration();
@@ -81,6 +99,9 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         break;
       case ModelType.openaiCompatible:
         _apiKeyUrl = 'https://platform.openai.com/api-keys';
+        break;
+      case ModelType.localMnn:
+        _apiKeyUrl = '';
         break;
     }
   }
@@ -189,6 +210,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
           preset.customCapabilitiesObject?.supportsImageGeneration ?? false;
       _supportsCodeGeneration =
           preset.customCapabilitiesObject?.supportsCodeGeneration ?? false;
+      _supportsToolOrchestration =
+          preset.customCapabilitiesObject?.supportsToolOrchestration ?? true;
       _supportedAttachmentMimeTypesController.text =
           preset.supportedAttachmentMimeTypes?.join(', ') ?? '';
 
@@ -234,6 +257,9 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               config.customCapabilitiesObject?.supportsImageGeneration ?? false;
           _supportsCodeGeneration =
               config.customCapabilitiesObject?.supportsCodeGeneration ?? false;
+          _supportsToolOrchestration =
+              config.customCapabilitiesObject?.supportsToolOrchestration ??
+                  true;
           _supportedAttachmentMimeTypesController.text =
               config.supportedAttachmentMimeTypes?.join(', ') ?? '';
           _existingModelFeatures = config.modelFeatures;
@@ -282,6 +308,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         supportsVideo: _supportsVideo,
         supportsImageGeneration: _supportsImageGeneration,
         supportsCodeGeneration: _supportsCodeGeneration,
+        supportsToolOrchestration: _supportsToolOrchestration,
       );
 
       // If editing, use existing ID. If adding, ModelConfig constructor generates new ID.
@@ -437,6 +464,17 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               }).toList(),
               onChanged: (type) {
                 if (type != null) {
+                  if (type == ModelType.localMnn) {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const LocalModelPickerScreen(
+                          closeOnConfigured: true,
+                        ),
+                      ),
+                    );
+                    return;
+                  }
                   setState(() {
                     _selectedType = type;
                     _presets = []; // Clear presets to reload for new type
@@ -872,6 +910,18 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
                 });
               },
             ),
+            CheckboxListTile(
+              title: const Text('Tool Orchestration'),
+              subtitle: const Text(
+                'Model can reliably execute tool calls and coordinate multi-step agentic workflows',
+              ),
+              value: _supportsToolOrchestration,
+              onChanged: (value) {
+                setState(() {
+                  _supportsToolOrchestration = value ?? false;
+                });
+              },
+            ),
           ],
         ),
       ),
@@ -970,6 +1020,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         return Icons.auto_awesome;
       case ModelType.openaiCompatible:
         return Icons.smart_toy;
+      case ModelType.localMnn:
+        return Icons.computer;
     }
   }
 
@@ -979,6 +1031,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         return 'Google\'s most advanced model with full multimodal capabilities';
       case ModelType.openaiCompatible:
         return 'Compatible with OpenAI API endpoints with configurable capabilities';
+      case ModelType.localMnn:
+        return 'Run AI models locally on-device using MNN inference engine';
     }
   }
 
@@ -988,6 +1042,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         return l10n.geminiApiKey;
       case ModelType.openaiCompatible:
         return 'API Key for OpenAI compatible provider';
+      case ModelType.localMnn:
+        return 'No API key required for local models';
     }
   }
 }

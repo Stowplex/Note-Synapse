@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
@@ -64,6 +63,7 @@ import 'note_selection_dialog.dart';
 import 'note_action_app_selection_screen.dart';
 import 'settings_screen.dart';
 import '../widgets/model_selector_button.dart';
+import '../widgets/attachment_preview_tile.dart';
 import '../services/built_in_tools_service.dart';
 import '../models/in_note_marker.dart';
 import '../models/note_annotation.dart';
@@ -71,6 +71,7 @@ import '../services/note_marker_service.dart';
 import '../services/note_annotation_service.dart';
 import '../widgets/in_note_marker_badge.dart';
 import '../widgets/in_note_marker_preview.dart';
+import '../widgets/tool_orchestration_warning_dialog.dart';
 import '../widgets/in_note_annotation_preview.dart';
 
 enum DrawingTool { pen, rectangle }
@@ -153,6 +154,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   bool _isPenMode = false;
   bool _isLoadingConversation = true;
   bool _isSending = false;
+  String _streamingContent = '';
+  bool _isStreaming = false;
   bool _isAborting = false;
   String? _currentRequestId;
   final Set<String> _cancelledRequestIds = {};
@@ -2247,8 +2250,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         // zoomed/panned via InteractiveViewer, we must apply the INVERSE of
         // the current transform to map viewport coords → image-space coords
         // before normalising.
-        final renderObject =
-            _noteBoundaryKey.currentContext?.findRenderObject();
+        final renderObject = _noteBoundaryKey.currentContext
+            ?.findRenderObject();
         if (renderObject is! RenderBox || renderObject.size.isEmpty) {
           return null;
         }
@@ -2429,6 +2432,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         activeBuiltInToolsCount +
         activeSystemToolsCount;
     final headerTitle = l10n.mcpAndLocalTools;
+    final modelConfig = context.read<AppProvider>().modelConfig;
+    final supportsToolOrchestration =
+        (_selectedModel ?? modelConfig)
+            ?.customCapabilitiesObject
+            ?.supportsToolOrchestration ??
+        true;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -2585,6 +2594,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                             ),
                         ],
                       ),
+                      if (!supportsToolOrchestration) ...[
+                        const SizedBox(height: 4),
+                        buildToolOrchestrationWarningRow(context),
+                      ],
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 8,
@@ -3304,8 +3317,53 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return ListView.builder(
       controller: _chatScrollController,
       padding: const EdgeInsets.only(bottom: 12),
-      itemCount: _messages.length,
+      itemCount: _messages.length + (_isStreaming ? 1 : 0),
       itemBuilder: (context, index) {
+        if (index == _messages.length && _isStreaming) {
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.7,
+              ),
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.smart_toy,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.secondary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        l10n.ai,
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
+                              color: Theme.of(context).colorScheme.secondary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SelectableText(_streamingContent),
+                ],
+              ),
+            ),
+          );
+        }
         final message = _messages[index];
         final isUser = message.type == MessageType.user;
         final hasTools =
@@ -3579,14 +3637,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     AppLocalizations l10n,
   ) {
     return Wrap(
-      spacing: 6,
-      runSpacing: 6,
+      spacing: 10,
+      runSpacing: 10,
       children: message.attachmentPaths.map((path) {
-        final label = path.split(Platform.pathSeparator).last;
-        return ActionChip(
-          avatar: Icon(_iconForAttachment(path), size: 18),
-          label: Text(label, overflow: TextOverflow.ellipsis),
-          onPressed: () => _openAttachment(path, l10n),
+        return AttachmentPreviewTile(
+          attachmentPath: path,
+          onTap: () => _openAttachment(path, l10n),
         );
       }).toList(),
     );
@@ -4485,47 +4541,39 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
-  void _deleteMarker(InNoteMarker marker) async {
-    final note = _conversationNotes[_activeNoteIndex];
+  Future<void> _deleteMarker(InNoteMarker marker) async {
+    try {
+      final note = _conversationNotes[_activeNoteIndex];
 
-    final updatedMarkers = List<InNoteMarker>.from(_noteMarkers[note.id] ?? [])
-      ..removeWhere((m) => m.id == marker.id);
-
-    setState(() {
-      if (updatedMarkers.isEmpty) {
-        _noteMarkers.remove(note.id);
-      } else {
-        _noteMarkers[note.id] = updatedMarkers;
-      }
-
-      // Update attachment markers if necessary
       if (_activeAttachmentPath != null) {
-        final attachMarkers = List<InNoteMarker>.from(
-          _attachmentMarkers[_activeAttachmentPath!] ?? [],
-        )..removeWhere((m) => m.id == marker.id);
-
-        if (attachMarkers.isEmpty) {
-          _attachmentMarkers.remove(_activeAttachmentPath!);
-        } else {
-          _attachmentMarkers[_activeAttachmentPath!] = attachMarkers;
+        final attachment = await _resolveAttachment(_activeAttachmentPath!);
+        if (attachment != null) {
+          await _noteMarkerService.deleteMarkerForAttachment(
+            attachment.id,
+            marker.id,
+          );
         }
+      } else {
+        await _noteMarkerService.deleteMarkerForNote(note.id, marker.id);
       }
-    });
 
-    final metadataJson = jsonEncode({
-      'inNoteMarkers': updatedMarkers.map((m) => m.toJson()).toList(),
-    });
+      if (mounted) {
+        setState(() {
+          if (_activeAttachmentPath != null) {
+            _attachmentMarkers[_activeAttachmentPath!]?.removeWhere(
+              (m) => m.id == marker.id,
+            );
+          } else {
+            _noteMarkers[note.id]?.removeWhere((m) => m.id == marker.id);
+          }
+        });
 
-    final dbService = getIt<DatabaseService>();
-    final updatedNote = note.copyWith(metadata: metadataJson);
-    await dbService.updateNote(updatedNote);
-    if (!mounted) return;
-    context.read<AppProvider>().updateNote(updatedNote);
-
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Marker deleted.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Marker deleted.')));
+      }
+    } catch (e) {
+      LoggerService.error('Failed to delete marker: $e', error: e);
     }
   }
 
@@ -4791,6 +4839,26 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       await _confirmDrawing(silent: true);
     }
 
+    // Check tool orchestration capability before sending
+    if (!mounted) return;
+    final hasTools =
+        _selectedBuiltInTools.isNotEmpty || _selectedMcpEndpointIds.isNotEmpty;
+    final activeConfig =
+        _selectedModel ?? context.read<AppProvider>().modelConfig;
+    final supportsOrchestration =
+        activeConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
+        true;
+    if (hasTools && !supportsOrchestration) {
+      final result =
+          await ToolOrchestrationWarningDialog.show(context, activeConfig);
+      if (!mounted) return;
+      if (result == null || result is ToolOrchestrationStop) return;
+      if (result is ToolOrchestrationContinue &&
+          result.modelOverride != null) {
+        _selectedModel = result.modelOverride;
+      }
+    }
+
     setState(() {
       _isSending = true;
       _isAborting = false;
@@ -4900,6 +4968,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         content,
         attachments,
         generationContext,
+        onStreamChunk: (chunk) {
+          if (mounted) {
+            setState(() {
+              _streamingContent += chunk;
+              _isStreaming = true;
+            });
+            _scrollToBottom();
+          }
+        },
       );
       final aiMessage = await _conversationService.addAIResponse(
         conversationId: _conversation!.id,
@@ -4910,6 +4987,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
       if (!mounted) return;
       setState(() {
+        _streamingContent = '';
+        _isStreaming = false;
         _messages.add(aiMessage);
       });
       _scrollToBottom();
@@ -4940,6 +5019,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _isSending = false;
           _isAborting = false;
           _currentRequestId = null;
+          _streamingContent = '';
+          _isStreaming = false;
         });
       }
       _cancelledRequestIds.remove(requestId);
@@ -4982,8 +5063,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   Future<ConversationAiResponse> _generateAiResponse(
     String userMessage,
     List<PlatformFile> latestAttachments,
-    GenerationContext generationContext,
-  ) async {
+    GenerationContext generationContext, {
+    void Function(String chunk)? onStreamChunk,
+  }) async {
     final requestId = generationContext.ensureRequestId();
     final noteBuilder = NotePromptBuilder(_databaseService);
     final systemMessage = _buildSystemPrompt();
@@ -5027,96 +5109,16 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       );
     }
 
-    final preferredModel = await getIt<ModelSelector>().getModelByHint(
-      ['image_gen'],
-      currentOverride: getIt<ModelSelector>()
-          .currentModelConfig, // Pass current to avoid override if it supports it
+    final currentModelId = getIt<ModelSelector>().currentModelConfig?.id;
+
+    final conversationMessages =
+        await ConversationAiEngine.buildConversationMessages(
+      messages: _messages,
+      currentModelId: currentModelId,
+      loadAttachments: (message) =>
+          _loadConversationAttachments(message, latestAttachments),
     );
-
-    final modelToUseId =
-        preferredModel?.id ?? getIt<ModelSelector>().currentModelConfig?.id;
-
-    for (final message in _messages) {
-      // Filter out synthesized error messages
-      if (message.metadata?['isSynthesized'] == true) {
-        continue;
-      }
-
-      var role = message.type == MessageType.user
-          ? PromptRole.user
-          : PromptRole.assistant;
-      var content = message.content;
-
-      // If the message was generated by a different model, treat it as a user message
-      // to avoid potential format/capability mismatches (e.g. thoughtSignature)
-      if (role == PromptRole.assistant) {
-        final modelUsed = message.metadata?['modelUsed'] as String?;
-        final activeModelId = getIt<ModelSelector>().currentModelConfig?.id;
-
-        if (activeModelId != null &&
-            (modelUsed == null || modelUsed != activeModelId)) {
-          role = PromptRole.user;
-          final modelLabel = modelUsed ?? 'an earlier model';
-          content = '[Response from $modelLabel]:\n$content';
-        }
-      }
-
-      if (role == PromptRole.user) {
-        final messageTimeContext = SystemPromptBuilder.formatTimestamp(
-          message.timestamp,
-        );
-        final perMessageAddOn = PromptConfigurationService.instance.getValue(
-          ChatPromptConfiguration.perMessageAddendumId,
-        );
-        final buffer = StringBuffer()
-          ..write('Message created at: $messageTimeContext');
-        if (perMessageAddOn != null && perMessageAddOn.trim().isNotEmpty) {
-          buffer
-            ..writeln()
-            ..write(perMessageAddOn.trim());
-        }
-        messages.add(
-          PromptMessage(role: PromptRole.user, content: buffer.toString()),
-        );
-      }
-
-      final attachments = await _loadConversationAttachments(
-        message,
-        latestAttachments,
-      );
-
-      messages.add(
-        PromptMessage(
-          role: role,
-          content: content,
-          attachments: attachments,
-          metadata: message.metadata,
-        ),
-      );
-
-      // Add tool results from previous assistant message
-      // Only add tool results if we kept it as an assistant message
-      if (role == PromptRole.assistant) {
-        final toolCallsWithResults =
-            message.metadata?['tool_calls_with_results'] as List?;
-        if (toolCallsWithResults != null && toolCallsWithResults.isNotEmpty) {
-          for (final entry in toolCallsWithResults) {
-            final toolCallId = entry['id'];
-            final toolResult = entry['result'] as String? ?? '';
-            messages.add(
-              PromptMessage(
-                role: PromptRole.tool,
-                content: toolResult,
-                metadata: {
-                  if (toolCallId != null) 'tool_call_id': toolCallId,
-                  ...((entry is Map<String, dynamic>) ? entry : {}),
-                },
-              ),
-            );
-          }
-        }
-      }
-    }
+    messages.addAll(conversationMessages);
 
     final request = PromptRequest(
       systemMessage: systemMessage,
@@ -5181,6 +5183,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       generationContext: generationContext,
       maxToolIterations: _maxToolIterations,
       onIterationsExhausted: _handleIterationsExhausted,
+      onStreamChunk: onStreamChunk,
     );
 
     if (_cancelledRequestIds.contains(requestId)) {

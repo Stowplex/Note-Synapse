@@ -17,6 +17,9 @@ class ModelConfig {
   final List<String>? supportedAttachmentMimeTypes;
   final List<String>? modelFeatures;
   final bool isConfigured;
+  final int? tokenWindow;
+  final bool? enableThinking;
+  final String? backendType;
 
   ModelConfig({
     String? id,
@@ -31,6 +34,9 @@ class ModelConfig {
     List<String>? supportedAttachmentMimeTypes,
     List<String>? modelFeatures,
     this.isConfigured = false,
+    this.tokenWindow,
+    this.enableThinking,
+    this.backendType,
   }) : id = id ?? const Uuid().v4(),
        customCapabilitiesObject =
            customCapabilitiesObject ??
@@ -65,6 +71,9 @@ class ModelConfig {
     List<String>? supportedAttachmentMimeTypes,
     List<String>? modelFeatures,
     bool? isConfigured,
+    int? tokenWindow,
+    bool? enableThinking,
+    String? backendType,
   }) {
     return ModelConfig(
       id: id ?? this.id,
@@ -81,6 +90,9 @@ class ModelConfig {
           supportedAttachmentMimeTypes ?? this.supportedAttachmentMimeTypes,
       modelFeatures: modelFeatures ?? this.modelFeatures,
       isConfigured: isConfigured ?? this.isConfigured,
+      tokenWindow: tokenWindow ?? this.tokenWindow,
+      enableThinking: enableThinking ?? this.enableThinking,
+      backendType: backendType ?? this.backendType,
     );
   }
 
@@ -99,22 +111,31 @@ class ModelConfig {
       'supportedAttachmentMimeTypes': supportedAttachmentMimeTypes,
       'modelFeatures': modelFeatures,
       'isConfigured': isConfigured,
+      if (tokenWindow != null) 'token_window': tokenWindow,
+      if (enableThinking != null) 'enable_thinking': enableThinking,
+      if (backendType != null) 'backend_type': backendType,
     };
   }
 
   /// Create from JSON
   factory ModelConfig.fromJson(Map<String, dynamic> json) {
+    final type = ModelType.fromId(json['type'] as String) ?? ModelType.gemini;
+    final capJson =
+        json['customCapabilitiesObject'] as Map<String, dynamic>?;
     return ModelConfig(
       id: json['id'] as String?,
-      type: ModelType.fromId(json['type'] as String) ?? ModelType.gemini,
+      type: type,
       apiKey: json['apiKey'] as String?,
       endpoint: json['endpoint'] as String?,
       modelName: json['modelName'] as String?,
       displayName: json['displayName'] as String?,
       maxInputTokens: json['maxInputTokens'] as int?,
       maxOutputTokens: json['maxOutputTokens'] as int?,
-      customCapabilitiesObject: json['customCapabilitiesObject'] != null
-          ? ModelCapabilities.fromJson(json['customCapabilitiesObject'])
+      customCapabilitiesObject: capJson != null
+          ? ModelCapabilities.fromJson(
+              capJson,
+              defaultSupportsOrchestration: type != ModelType.localMnn,
+            )
           : null,
       supportedAttachmentMimeTypes:
           (json['supportedAttachmentMimeTypes'] as List?)
@@ -124,6 +145,9 @@ class ModelConfig {
           ?.whereType<String>()
           .toList(),
       isConfigured: json['isConfigured'] as bool? ?? false,
+      tokenWindow: json['token_window'] as int?,
+      enableThinking: json['enable_thinking'] as bool?,
+      backendType: json['backend_type'] as String?,
     );
   }
 

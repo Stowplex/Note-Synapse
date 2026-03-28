@@ -4401,4 +4401,73 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fetchingImage => 'Fetching image...';
+
+  @override
+  String get localModelDescription => 'On-device AI, no API key needed';
+
+  @override
+  String get localModelDownload => 'Download';
+
+  @override
+  String get localModelDownloading => 'Downloading...';
+
+  @override
+  String get localModelReady => 'Ready';
+
+  @override
+  String get localModelNotDownloaded => 'Not downloaded';
+
+  @override
+  String get localModelDownloadFailed => 'Download Failed';
+
+  @override
+  String get localModelRetry => 'Retry';
+
+  @override
+  String get localModelDelete => 'Delete Model';
+
+  @override
+  String get localModelTokenWindow => 'Token Window';
+
+  @override
+  String get localModelEnableThinking => 'Enable Thinking';
+
+  @override
+  String get localModelBackend => 'Backend';
+
+  @override
+  String get localModelSettings => 'Model Settings';
+
+  @override
+  String get localModelConstraintWarning =>
+      'This input may exceed the local model\'s token window. Consider switching to a cloud model.';
+
+  @override
+  String get localModelSwitchToCloud => 'Switch to Cloud';
+
+  @override
+  String get toolOrchestrationWarningTitle =>
+      'Tool Orchestration Not Supported';
+
+  @override
+  String toolOrchestrationWarningBody(String modelName) {
+    return '$modelName may not reliably execute tool calls. Performance can degrade significantly.';
+  }
+
+  @override
+  String toolOrchestrationSupportedBody(String modelName) {
+    return '$modelName supports tool orchestration.';
+  }
+
+  @override
+  String get toolOrchestrationContinueAnyway => 'Continue Anyway';
+
+  @override
+  String get toolOrchestrationContinue => 'Continue';
+
+  @override
+  String get toolOrchestrationStop => 'Stop';
+
+  @override
+  String get toolOrchestrationSwitchModel => 'Switch Model';
 }
