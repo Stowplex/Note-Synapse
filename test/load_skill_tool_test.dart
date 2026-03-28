@@ -73,6 +73,15 @@ void main() {
     final result = await tool.execute({'noteId': ''});
     expect((result as Map)['error'], contains('noteId'));
   });
+
+  test('resetSession clears cache so next call re-fetches', () async {
+    const content = '---\nname: Skill\ndescription: desc\nenabled: true\n---\n\nbody';
+    when(mockDb.getNote('note-1')).thenAnswer((_) async => _makeNote('note-1', content));
+    await tool.execute({'noteId': 'note-1'});
+    tool.resetSession();
+    await tool.execute({'noteId': 'note-1'});
+    verify(mockDb.getNote('note-1')).called(2);
+  });
 }
 
 Note _makeNote(String id, String content) => Note(

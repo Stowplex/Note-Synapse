@@ -55,6 +55,12 @@ class LoadSkillTool extends NativeTool {
     return formatted;
   }
 
-  /// Clear cache for a new session.
+  /// Clear this tool's content cache for a new agent session.
+  ///
+  /// IMPORTANT: Must be called alongside [SkillService.resetSession].
+  /// Both caches must be cleared together — [LoadSkillTool] caches the
+  /// formatted content, while [SkillService] tracks which note IDs have
+  /// been marked as loaded. Resetting one without the other leaves state
+  /// inconsistent.
   void resetSession() => _cache.clear();
 }
