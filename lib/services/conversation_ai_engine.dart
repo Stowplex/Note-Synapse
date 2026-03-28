@@ -210,7 +210,10 @@ class ConversationAiEngine {
         ...request.conversationMessages,
       ];
 
-      final modelType = getIt<ModelSelector>().currentModelConfig?.type;
+      final modelSelector = getIt<ModelSelector>();
+      final modelType =
+          (generationContext.modelOverride ?? modelSelector.currentModelConfig)
+              ?.type;
       final callToolFunction = modelType == ModelType.openaiCompatible
           ? McpToolIntegrationService.getCallToolFunctionForOpenAI(activeTools)
           : McpToolIntegrationService.getCallToolFunctionForGemini(activeTools);
@@ -233,8 +236,11 @@ class ConversationAiEngine {
       final conversationParts = <String>[];
       Map<String, dynamic>? lastAssistantMetadata;
 
-      // Streaming shortcut: if local model + no tools, stream directly
-      final activeModel = getIt<ModelSelector>().currentModel;
+      // Streaming shortcut: if local model + no tools, stream directly.
+      // Only applies when no model override is active.
+      final activeModel = generationContext.modelOverride == null
+          ? modelSelector.currentModel
+          : null;
       if (activeModel is LocalMnnModel &&
           activeModel.supportsStreaming &&
           activeTools.isEmpty &&
