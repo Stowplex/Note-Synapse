@@ -53,6 +53,7 @@ import '../widgets/model_selector_button.dart';
 import '../services/agent_service.dart';
 import '../services/background_agent_service.dart';
 import '../services/built_in_tools_service.dart';
+import '../services/skill_service.dart';
 import '../services/tools/note_tools.dart';
 import '../services/sql_query_service.dart';
 import '../widgets/agent_plan_review_widget.dart';
@@ -547,8 +548,28 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       }
     }
 
+    // Add Skill tools when skills are enabled
+    if (_conversationService.skillsEnabled) {
+      final skillTools = <McpTool>[];
+      final loadSkillTool = _conversationService.loadSkillTool;
+      skillTools.add(McpTool(
+        name: loadSkillTool.name,
+        description: loadSkillTool.description,
+        inputSchema: loadSkillTool.inputSchema,
+      ));
+      for (final t in _conversationService.skillDiscoveredTools) {
+        if (!skillTools.any((s) => s.name == t.name)) {
+          skillTools.add(t);
+        }
+      }
+      combined[_skillToolsServiceKey] = skillTools;
+    }
+
     return combined;
   }
+
+  /// Service key used to route skill tool calls in the executeTool callback.
+  static const String _skillToolsServiceKey = 'SkillTools';
 
   Future<int?> _handleIterationsExhausted(int exhaustedLimit) async {
     if (!mounted) return null;
@@ -1163,6 +1184,24 @@ $historyBuffer
               return 'Error: System tool "$toolName" not found';
             }
 
+            // Handle Skill Tools (load_skill + skill-discovered tools)
+            if (serviceName == _skillToolsServiceKey) {
+              if (toolName == 'load_skill') {
+                final result = await _conversationService.loadSkillTool
+                    .execute(params);
+                final resultStr =
+                    result is String ? result : result.toString();
+                final noteId =
+                    (params['noteId'] as String? ?? '').trim();
+                if (noteId.isNotEmpty && result is String) {
+                  await _conversationService.handleLoadSkillResult(
+                      noteId, resultStr);
+                }
+                return resultStr;
+              }
+              // Skill-discovered tools are MCP tools — fall through to MCP handler
+            }
+
             // Handle MCP Tools
             return McpToolIntegrationService.executeToolCall(
               serviceName: serviceName,
@@ -1344,6 +1383,19 @@ $historyBuffer
       contextBuffer
         ..writeln()
         ..writeln(mcpToolsPrompt.trim());
+    }
+
+    // Append skill index when skills are enabled
+    if (_conversationService.skillsEnabled &&
+        _conversationService.skillIndex.isNotEmpty) {
+      final skillIndexPrompt = getIt<SkillService>().buildSkillIndexPrompt(
+        _conversationService.skillIndex,
+      );
+      if (skillIndexPrompt.trim().isNotEmpty) {
+        contextBuffer
+          ..writeln()
+          ..write(skillIndexPrompt.trim());
+      }
     }
 
     return SystemPromptBuilder.build(

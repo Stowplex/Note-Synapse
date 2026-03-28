@@ -3,15 +3,39 @@ import 'package:uuid/uuid.dart';
 import '../models/conversation.dart';
 import '../models/conversation_attachment.dart';
 import '../models/conversation_context.dart';
+import '../models/mcp_endpoint.dart';
 import '../models/note.dart';
 import '../models/tag.dart';
 import 'conversation_attachment_service.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
+import 'mcp_service.dart';
+import 'service_locator.dart';
+import 'skill_service.dart';
+import 'tools/load_skill_tool.dart';
 
 class ConversationService {
   final DatabaseService _databaseService;
   final Uuid _uuid = const Uuid();
+
+  // Skill state (chat mode)
+  bool _skillsEnabled = false;
+  Map<String, SkillMetadata> _skillIndex = {};
+  final List<McpTool> _skillDiscoveredTools = [];
+  LoadSkillTool? _loadSkillTool;
+
+  /// Whether skills are currently enabled for chat mode.
+  bool get skillsEnabled => _skillsEnabled;
+
+  /// Current skill index (noteId → SkillMetadata).
+  Map<String, SkillMetadata> get skillIndex => Map.unmodifiable(_skillIndex);
+
+  /// Tools discovered via skill tool URIs during this chat session.
+  List<McpTool> get skillDiscoveredTools =>
+      List.unmodifiable(_skillDiscoveredTools);
+
+  /// The LoadSkillTool instance (lazily created when skills are enabled).
+  LoadSkillTool get loadSkillTool => _loadSkillTool ??= LoadSkillTool();
 
   /// Creates a ConversationService.
   ///
@@ -22,6 +46,65 @@ class ConversationService {
   @visibleForTesting
   static ConversationService createForTesting(DatabaseService databaseService) {
     return ConversationService(databaseService);
+  }
+
+  // --- Skill support (chat mode) ---
+
+  /// Enables skills for the current chat session.
+  ///
+  /// Builds the skill index from notes tagged `agent-skill`, resets session
+  /// state on both [SkillService] and [LoadSkillTool] so a fresh session begins.
+  Future<void> enableSkills() async {
+    _skillsEnabled = true;
+    _skillDiscoveredTools.clear();
+    getIt<SkillService>().resetSession();
+    _loadSkillTool?.resetSession();
+    _skillIndex = await getIt<SkillService>().buildSkillIndex();
+  }
+
+  /// Disables skills and clears all skill-related session state.
+  void disableSkills() {
+    _skillsEnabled = false;
+    _skillIndex = {};
+    _skillDiscoveredTools.clear();
+  }
+
+  /// Handles the result from a `load_skill` tool call during chat mode.
+  ///
+  /// Parses tool URIs from the skill content, resolves them to [McpTool]
+  /// instances (currently only the `mcp` namespace is supported), and
+  /// appends any newly-discovered tools to [skillDiscoveredTools].
+  Future<void> handleLoadSkillResult(
+    String noteId,
+    String result,
+  ) async {
+    if (!_skillsEnabled) return;
+    if (noteId.isEmpty) return;
+    final skillService = getIt<SkillService>();
+    final uris = skillService.extractToolUris(result);
+    for (final uri in uris) {
+      final parsed = skillService.parseToolUri(uri);
+      if (parsed == null) continue;
+      if (parsed.namespace == 'mcp') {
+        final mcpService = getIt<McpService>();
+        final endpoints = await mcpService.getEndpoints();
+        final endpoint =
+            endpoints.where((e) => e.name == parsed.id).firstOrNull;
+        if (endpoint != null) {
+          final cache = await mcpService.getCachedTools(endpoint.id);
+          final allTools =
+              cache?.tools ?? (await mcpService.refreshTools(endpoint.id)).tools;
+          final filtered = parsed.function != null
+              ? allTools.where((t) => t.name == parsed.function).toList()
+              : allTools;
+          for (final t in filtered) {
+            if (!_skillDiscoveredTools.any((s) => s.name == t.name)) {
+              _skillDiscoveredTools.add(t);
+            }
+          }
+        }
+      }
+    }
   }
 
   // Create a new conversation
