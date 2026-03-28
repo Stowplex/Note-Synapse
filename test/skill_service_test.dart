@@ -20,6 +20,19 @@ void main() {
     service = SkillService(mockDb);
   });
 
+  group('stripFrontmatter', () {
+    test('strips frontmatter and returns body', () {
+      const content =
+          '---\nname: Skill\ndescription: Desc\n---\n\n## Body\nContent here.';
+      expect(service.stripFrontmatter(content), '## Body\nContent here.');
+    });
+
+    test('returns content unchanged when no frontmatter', () {
+      const content = '## No frontmatter';
+      expect(service.stripFrontmatter(content), '## No frontmatter');
+    });
+  });
+
   group('parseSkillMetadata', () {
     test('returns metadata for valid frontmatter', () {
       const content =

@@ -57,7 +57,7 @@ class SkillService {
   Future<Map<String, SkillMetadata>> buildSkillIndex() async {
     final notes = await _db.searchNotesFTS('', tags: ['agent-skill']);
     final index = <String, SkillMetadata>{};
-    for (final note in notes) {
+    for (final Note note in notes) {
       final meta = parseSkillMetadata(note.id, note.content);
       if (meta != null && meta.enabled) {
         index[note.id] = meta;
@@ -83,7 +83,7 @@ class SkillService {
   // --- Tool URI extraction ---
 
   List<String> extractToolUris(String content) {
-    final regex = RegExp(r'notesynapse://tool/[^\s\)\"\x27]+');
+    final regex = RegExp(r'notesynapse://tool/[^\s\)\"\x27.,;>]+');
     return regex.allMatches(content).map((m) => m.group(0)!).toList();
   }
 
