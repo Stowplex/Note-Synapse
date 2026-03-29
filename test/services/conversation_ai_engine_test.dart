@@ -41,6 +41,7 @@ void main() {
 
     // Default: return null for currentModelConfig (Gemini path)
     when(mockModelSelector.currentModelConfig).thenReturn(null);
+    when(mockModelSelector.currentModel).thenReturn(null);
   });
 
   tearDown(() async {
@@ -50,15 +51,19 @@ void main() {
   group('ConversationAiEngine basic generation', () {
     test('returns text response when no tools needed', () async {
       // Arrange: Mock ModelSelector to return text response with no function_calls
-      when(mockModelSelector.generateWithToolsAndMessages(
-        any,
-        any,
-        generationContext: anyNamed('generationContext'),
-      )).thenAnswer((_) async => {
-            'text': 'Hello! How can I help you?',
-            'function_calls': null,
-            'parts_history': [],
-          });
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer(
+        (_) async => {
+          'text': 'Hello! How can I help you?',
+          'function_calls': null,
+          'parts_history': [],
+        },
+      );
 
       // Act
       final result = await engine.generate(
@@ -72,24 +77,30 @@ void main() {
 
       // Assert
       expect(result.content, equals('Hello! How can I help you?'));
-      verify(mockModelSelector.generateWithToolsAndMessages(
-        any,
-        any,
-        generationContext: anyNamed('generationContext'),
-      )).called(1);
+      verify(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).called(1);
     });
 
     test('handles empty response', () async {
       // Arrange: Mock ModelSelector to return null/empty response
-      when(mockModelSelector.generateWithToolsAndMessages(
-        any,
-        any,
-        generationContext: anyNamed('generationContext'),
-      )).thenAnswer((_) async => {
-            'text': null,
-            'function_calls': null,
-            'parts_history': null,
-          });
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer(
+        (_) async => {
+          'text': null,
+          'function_calls': null,
+          'parts_history': null,
+        },
+      );
 
       // Act
       final result = await engine.generate(
@@ -127,35 +138,41 @@ void main() {
       );
 
       // Verify that generateWithToolsAndMessages was never called
-      verifyNever(mockModelSelector.generateWithToolsAndMessages(
-        any,
-        any,
-        generationContext: anyNamed('generationContext'),
-      ));
+      verifyNever(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      );
     });
 
     test('throws when cancelled during iteration', () async {
       // Arrange: Return a function_call first, then check cancelled
       var callCount = 0;
 
-      when(mockModelSelector.generateWithToolsAndMessages(
-        any,
-        any,
-        generationContext: anyNamed('generationContext'),
-      )).thenAnswer((_) async => {
-            'text': null,
-            'function_calls': [
-              {
-                'name': 'call_tool',
-                'args': {
-                  'service_name': 'test_service',
-                  'tool_name': 'test_tool',
-                  'params': <String, dynamic>{},
-                },
-              }
-            ],
-            'parts_history': [],
-          });
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer(
+        (_) async => {
+          'text': null,
+          'function_calls': [
+            {
+              'name': 'call_tool',
+              'args': {
+                'service_name': 'test_service',
+                'tool_name': 'test_tool',
+                'params': <String, dynamic>{},
+              },
+            },
+          ],
+          'parts_history': [],
+        },
+      );
 
       // Set isCancelled to return true after the first model response
       bool isCancelled() {
@@ -194,11 +211,13 @@ void main() {
       // First response: function_call with call_tool
       // Second response: text only (final)
       var callCount = 0;
-      when(mockModelSelector.generateWithToolsAndMessages(
-        any,
-        any,
-        generationContext: anyNamed('generationContext'),
-      )).thenAnswer((_) async {
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((_) async {
         callCount++;
         if (callCount == 1) {
           return {
@@ -211,7 +230,7 @@ void main() {
                   'tool_name': 'test-tool',
                   'params': {'key': 'value'},
                 },
-              }
+              },
             ],
             'parts_history': [],
           };
@@ -246,14 +265,114 @@ void main() {
       expect(result.content, contains('Done!'));
     });
 
+    test(
+      'refreshes active tools after load_skill and injects discovery prompt',
+      () async {
+        var callCount = 0;
+        final modelCalls = <List<dynamic>>[];
+        final currentTools = <String, List<McpTool>>{
+          'SkillTools': [
+            McpTool(
+              name: 'load_skill',
+              description: 'Load a skill',
+              inputSchema: const {},
+            ),
+          ],
+        };
+
+        when(
+          mockModelSelector.generateWithToolsAndMessages(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer((invocation) async {
+          modelCalls.add([
+            invocation.positionalArguments[0],
+            invocation.positionalArguments[1],
+          ]);
+          callCount++;
+          if (callCount == 1) {
+            return {
+              'text': null,
+              'function_calls': [
+                {
+                  'name': 'call_tool',
+                  'args': {
+                    'service_name': 'SkillTools',
+                    'tool_name': 'load_skill',
+                    'params': {'noteId': 'skill-1'},
+                  },
+                },
+              ],
+              'parts_history': [],
+            };
+          }
+          return {
+            'text': 'Discovered tool used.',
+            'function_calls': null,
+            'parts_history': [],
+          };
+        });
+
+        await engine.generate(
+          request: createTestRequest(),
+          activeTools: currentTools,
+          activeToolsProvider: () => currentTools,
+          enableTools: true,
+          executeTool: (service, tool, params, ctx) async {
+            currentTools['SkillTools'] = [
+              ...currentTools['SkillTools']!,
+              McpTool(
+                name: 'search_notes',
+                description: 'Search notes',
+                inputSchema: const {
+                  'type': 'object',
+                  'properties': {
+                    'query': {'type': 'string'},
+                  },
+                },
+              ),
+            ];
+            return 'Loaded skill';
+          },
+          isCancelled: () => false,
+          generationContext: GenerationContext(),
+        );
+
+        expect(modelCalls, hasLength(2));
+
+        final secondMessages = (modelCalls[1][0] as List)
+            .cast<PromptMessage>()
+            .toList();
+        expect(
+          secondMessages.any(
+            (message) =>
+                message.role == PromptRole.system &&
+                message.content.contains('New tools became available') &&
+                message.content.contains('search_notes'),
+          ),
+          isTrue,
+        );
+
+        final secondFunctions = (modelCalls[1][1] as List)
+            .cast<Map<String, dynamic>>();
+        expect(secondFunctions, isNotEmpty);
+        final description = secondFunctions.first['description'] as String;
+        expect(description, contains('Tool Name Argument: search_notes'));
+      },
+    );
+
     test('handles unknown function calls gracefully', () async {
       // Model calls unknown function directly instead of call_tool
       var callCount = 0;
-      when(mockModelSelector.generateWithToolsAndMessages(
-        any,
-        any,
-        generationContext: anyNamed('generationContext'),
-      )).thenAnswer((_) async {
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((_) async {
         callCount++;
         if (callCount == 1) {
           return {
@@ -286,31 +405,33 @@ void main() {
 
     test('respects max iterations limit', () async {
       // Always return function_calls to trigger limit
-      when(mockModelSelector.generateWithToolsAndMessages(
-        any,
-        any,
-        generationContext: anyNamed('generationContext'),
-      )).thenAnswer((_) async => {
-            'text': null,
-            'function_calls': [
-              {
-                'name': 'call_tool',
-                'args': {
-                  'service_name': 's',
-                  'tool_name': 't',
-                  'params': <String, dynamic>{},
-                },
-              }
-            ],
-            'parts_history': [],
-          });
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer(
+        (_) async => {
+          'text': null,
+          'function_calls': [
+            {
+              'name': 'call_tool',
+              'args': {
+                'service_name': 's',
+                'tool_name': 't',
+                'params': <String, dynamic>{},
+              },
+            },
+          ],
+          'parts_history': [],
+        },
+      );
 
       final result = await engine.generate(
         request: createTestRequest(),
         activeTools: {
-          's': [
-            McpTool(name: 't', description: '', inputSchema: const {}),
-          ],
+          's': [McpTool(name: 't', description: '', inputSchema: const {})],
         },
         enableTools: true,
         executeTool: (_, __, ___, ____) async => 'result',
@@ -324,24 +445,28 @@ void main() {
     });
 
     test('calls onIterationsExhausted when limit reached', () async {
-      when(mockModelSelector.generateWithToolsAndMessages(
-        any,
-        any,
-        generationContext: anyNamed('generationContext'),
-      )).thenAnswer((_) async => {
-            'text': null,
-            'function_calls': [
-              {
-                'name': 'call_tool',
-                'args': {
-                  'service_name': 's',
-                  'tool_name': 't',
-                  'params': <String, dynamic>{},
-                },
-              }
-            ],
-            'parts_history': [],
-          });
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer(
+        (_) async => {
+          'text': null,
+          'function_calls': [
+            {
+              'name': 'call_tool',
+              'args': {
+                'service_name': 's',
+                'tool_name': 't',
+                'params': <String, dynamic>{},
+              },
+            },
+          ],
+          'parts_history': [],
+        },
+      );
 
       var exhaustedCalled = false;
       // When onIterationsExhausted returns null, it throws ConversationCancelledException
@@ -349,9 +474,7 @@ void main() {
         await engine.generate(
           request: createTestRequest(),
           activeTools: {
-            's': [
-              McpTool(name: 't', description: '', inputSchema: const {}),
-            ],
+            's': [McpTool(name: 't', description: '', inputSchema: const {})],
           },
           enableTools: true,
           executeTool: (_, __, ___, ____) async => 'result',
@@ -372,11 +495,13 @@ void main() {
 
     test('continues when onIterationsExhausted returns higher limit', () async {
       var modelCallCount = 0;
-      when(mockModelSelector.generateWithToolsAndMessages(
-        any,
-        any,
-        generationContext: anyNamed('generationContext'),
-      )).thenAnswer((_) async {
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((_) async {
         modelCallCount++;
         if (modelCallCount <= 3) {
           return {
@@ -389,7 +514,7 @@ void main() {
                   'tool_name': 't',
                   'params': <String, dynamic>{},
                 },
-              }
+              },
             ],
             'parts_history': [],
           };
@@ -405,9 +530,7 @@ void main() {
       final result = await engine.generate(
         request: createTestRequest(),
         activeTools: {
-          's': [
-            McpTool(name: 't', description: '', inputSchema: const {}),
-          ],
+          's': [McpTool(name: 't', description: '', inputSchema: const {})],
         },
         enableTools: true,
         executeTool: (_, __, ___, ____) async => 'result',
@@ -427,11 +550,13 @@ void main() {
 
   group('ConversationAiEngine error handling', () {
     test('handles model error gracefully', () async {
-      when(mockModelSelector.generateWithToolsAndMessages(
-        any,
-        any,
-        generationContext: anyNamed('generationContext'),
-      )).thenThrow(Exception('Model API error'));
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenThrow(Exception('Model API error'));
 
       final result = await engine.generate(
         request: createTestRequest(),
@@ -449,11 +574,13 @@ void main() {
 
     test('handles tool execution error gracefully', () async {
       var callCount = 0;
-      when(mockModelSelector.generateWithToolsAndMessages(
-        any,
-        any,
-        generationContext: anyNamed('generationContext'),
-      )).thenAnswer((_) async {
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((_) async {
         callCount++;
         if (callCount == 1) {
           return {
@@ -461,12 +588,8 @@ void main() {
             'function_calls': [
               {
                 'name': 'call_tool',
-                'args': {
-                  'service_name': 's',
-                  'tool_name': 't',
-                  'params': {},
-                },
-              }
+                'args': {'service_name': 's', 'tool_name': 't', 'params': {}},
+              },
             ],
             'parts_history': [],
           };
@@ -496,11 +619,13 @@ void main() {
     });
 
     test('rethrows ConversationCancelledException', () async {
-      when(mockModelSelector.generateWithToolsAndMessages(
-        any,
-        any,
-        generationContext: anyNamed('generationContext'),
-      )).thenThrow(const ConversationCancelledException('Test cancellation'));
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenThrow(const ConversationCancelledException('Test cancellation'));
 
       expect(
         () => engine.generate(

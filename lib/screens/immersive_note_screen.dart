@@ -2781,10 +2781,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                           ),
                           const Spacer(),
                           if (_skillsEnabled)
-                            ActiveToolCountBadge(
-                              count: 1,
-                              label: l10n.active,
-                            ),
+                            ActiveToolCountBadge(count: 1, label: l10n.active),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -2800,7 +2797,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                               if (selected) {
                                 _conversationService.enableSkills().then((_) {
                                   if (mounted) {
-                                    setState(() => _skillCount = _conversationService.skillIndex.length);
+                                    setState(
+                                      () => _skillCount = _conversationService
+                                          .skillIndex
+                                          .length,
+                                    );
                                   }
                                 });
                               } else {
@@ -4919,12 +4920,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         activeConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
         true;
     if (hasTools && !supportsOrchestration) {
-      final result =
-          await ToolOrchestrationWarningDialog.show(context, activeConfig);
+      final result = await ToolOrchestrationWarningDialog.show(
+        context,
+        activeConfig,
+      );
       if (!mounted) return;
       if (result == null || result is ToolOrchestrationStop) return;
-      if (result is ToolOrchestrationContinue &&
-          result.modelOverride != null) {
+      if (result is ToolOrchestrationContinue && result.modelOverride != null) {
         _selectedModel = result.modelOverride;
       }
     }
@@ -5183,11 +5185,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     final conversationMessages =
         await ConversationAiEngine.buildConversationMessages(
-      messages: _messages,
-      currentModelId: currentModelId,
-      loadAttachments: (message) =>
-          _loadConversationAttachments(message, latestAttachments),
-    );
+          messages: _messages,
+          currentModelId: currentModelId,
+          loadAttachments: (message) =>
+              _loadConversationAttachments(message, latestAttachments),
+        );
     messages.addAll(conversationMessages);
 
     final request = PromptRequest(
@@ -5217,6 +5219,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final response = await _aiEngine.generate(
       request: request,
       activeTools: activeTools,
+      activeToolsProvider: _buildActiveToolsMap,
       enableTools: activeTools.isNotEmpty || _selectedModelFeatures.isNotEmpty,
       executeTool: (serviceName, toolName, params, context) async {
         return _runWithToolStatus(serviceName, toolName, () async {

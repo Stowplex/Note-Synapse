@@ -43,6 +43,8 @@ typedef ToolExecutionCallback =
       GenerationContext generationContext,
     );
 
+typedef ActiveToolsProvider = Map<String, List<McpTool>> Function();
+
 typedef CancellationCheck = bool Function();
 typedef IterationsExhaustedHandler = Future<int?> Function(int exhaustedLimit);
 
@@ -59,7 +61,7 @@ class ConversationAiEngine {
     required List<ConversationMessage> messages,
     required String? currentModelId,
     required Future<List<PlatformFile>> Function(ConversationMessage)
-        loadAttachments,
+    loadAttachments,
   }) async {
     final conversationMessages = <PromptMessage>[];
 
@@ -119,8 +121,7 @@ class ConversationAiEngine {
       // Gemini's isModelMatch) can read it.
       final effectiveMetadata = <String, dynamic>{
         ...?message.metadata,
-        if (message.modelUsed != null &&
-            message.metadata?['modelUsed'] == null)
+        if (message.modelUsed != null && message.metadata?['modelUsed'] == null)
           'modelUsed': message.modelUsed,
       };
 
@@ -162,6 +163,7 @@ class ConversationAiEngine {
   Future<ConversationAiResponse> generate({
     required PromptRequest request,
     required Map<String, List<McpTool>> activeTools,
+    ActiveToolsProvider? activeToolsProvider,
     required bool enableTools,
     required ToolExecutionCallback executeTool,
     required CancellationCheck isCancelled,
@@ -179,6 +181,7 @@ class ConversationAiEngine {
     return _generateWithTools(
       request: request,
       activeTools: activeTools,
+      activeToolsProvider: activeToolsProvider,
       executeTool: executeTool,
       isCancelled: isCancelled,
       generationContext: generationContext,
@@ -191,6 +194,7 @@ class ConversationAiEngine {
   Future<ConversationAiResponse> _generateWithTools({
     required PromptRequest request,
     required Map<String, List<McpTool>> activeTools,
+    ActiveToolsProvider? activeToolsProvider,
     required ToolExecutionCallback executeTool,
     required CancellationCheck isCancelled,
     required GenerationContext generationContext,
@@ -210,16 +214,20 @@ class ConversationAiEngine {
         ...request.conversationMessages,
       ];
 
+      Map<String, List<McpTool>> resolveActiveTools() {
+        final resolved = activeToolsProvider?.call() ?? activeTools;
+        return {
+          for (final entry in resolved.entries)
+            entry.key: List<McpTool>.unmodifiable(entry.value),
+        };
+      }
+
       final modelSelector = getIt<ModelSelector>();
-      final modelType =
-          (generationContext.modelOverride ?? modelSelector.currentModelConfig)
-              ?.type;
-      final callToolFunction = modelType == ModelType.openaiCompatible
-          ? McpToolIntegrationService.getCallToolFunctionForOpenAI(activeTools)
-          : McpToolIntegrationService.getCallToolFunctionForGemini(activeTools);
+      var currentActiveTools = resolveActiveTools();
+      final announcedToolKeys = _toolKeys(currentActiveTools);
 
       LoggerService.info(
-        'Starting conversation with ${activeTools.length} tools',
+        'Starting conversation with ${currentActiveTools.length} tools',
         error: {'requestId': requestId},
       );
 
@@ -243,10 +251,12 @@ class ConversationAiEngine {
           : null;
       if (activeModel is LocalMnnModel &&
           activeModel.supportsStreaming &&
-          activeTools.isEmpty &&
+          currentActiveTools.isEmpty &&
           onStreamChunk != null) {
         final buffer = StringBuffer();
-        await for (final chunk in activeModel.generateStreaming(currentMessages)) {
+        await for (final chunk in activeModel.generateStreaming(
+          currentMessages,
+        )) {
           if (isCancelled()) throw const ConversationCancelledException();
           buffer.write(chunk);
           onStreamChunk(chunk);
@@ -298,9 +308,22 @@ class ConversationAiEngine {
 
         LoggerService.debug('MCP iteration ${iteration + 1}/$iterationLimit');
 
+        currentActiveTools = resolveActiveTools();
+        final modelType =
+            (generationContext.modelOverride ??
+                    modelSelector.currentModelConfig)
+                ?.type;
+        final callToolFunction = modelType == ModelType.openaiCompatible
+            ? McpToolIntegrationService.getCallToolFunctionForOpenAI(
+                currentActiveTools,
+              )
+            : McpToolIntegrationService.getCallToolFunctionForGemini(
+                currentActiveTools,
+              );
+
         final response = await getIt<ModelSelector>()
             .generateWithToolsAndMessages(currentMessages, [
-              if (activeTools.isNotEmpty) callToolFunction,
+              if (currentActiveTools.isNotEmpty) callToolFunction,
             ], generationContext: generationContext);
 
         if (isCancelled()) {
@@ -343,7 +366,7 @@ class ConversationAiEngine {
               final errorMessage = _buildUnknownToolErrorMessage(
                 functionName,
                 rawArgs,
-                activeTools,
+                currentActiveTools,
               );
 
               LoggerService.warning(
@@ -553,6 +576,22 @@ class ConversationAiEngine {
               ];
             }
 
+            final latestTools = resolveActiveTools();
+            final newTools = _diffTools(
+              previous: announcedToolKeys,
+              current: latestTools,
+            );
+            if (newTools.isNotEmpty) {
+              currentMessages = [
+                ...currentMessages,
+                PromptMessage(
+                  role: PromptRole.system,
+                  content: _buildDynamicToolDiscoveryMessage(newTools),
+                ),
+              ];
+              announcedToolKeys.addAll(_toolKeys(newTools));
+            }
+
             iteration++;
             continue;
           }
@@ -607,6 +646,41 @@ class ConversationAiEngine {
         metadata: {'is_client_synthetic': true},
       );
     }
+  }
+
+  Set<String> _toolKeys(Map<String, List<McpTool>> toolsByService) {
+    return {
+      for (final entry in toolsByService.entries)
+        for (final tool in entry.value) '${entry.key}::${tool.name}',
+    };
+  }
+
+  Map<String, List<McpTool>> _diffTools({
+    required Set<String> previous,
+    required Map<String, List<McpTool>> current,
+  }) {
+    final diff = <String, List<McpTool>>{};
+    for (final entry in current.entries) {
+      final fresh = entry.value
+          .where((tool) => !previous.contains('${entry.key}::${tool.name}'))
+          .toList();
+      if (fresh.isNotEmpty) {
+        diff[entry.key] = fresh;
+      }
+    }
+    return diff;
+  }
+
+  String _buildDynamicToolDiscoveryMessage(
+    Map<String, List<McpTool>> newTools,
+  ) {
+    final prompt = McpToolIntegrationService.buildMcpSystemPrompt(
+      newTools,
+    ).trim();
+    return [
+      'New tools became available after the previous tool call. Use them immediately if they help.',
+      prompt,
+    ].where((line) => line.isNotEmpty).join('\n\n');
   }
 
   /// Build a helpful error message for unrecognized tool calls.

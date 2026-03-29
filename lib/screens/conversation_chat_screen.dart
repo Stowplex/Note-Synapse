@@ -144,7 +144,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     _skillsEnabled = widget.skillsEnabled;
     if (widget.skillsEnabled) {
       _conversationService.enableSkills().then((_) {
-        if (mounted) setState(() => _skillCount = _conversationService.skillIndex.length);
+        if (mounted)
+          setState(() => _skillCount = _conversationService.skillIndex.length);
       });
     } else {
       _conversationService.disableSkills();
@@ -573,11 +574,13 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     if (_conversationService.skillsEnabled) {
       final skillTools = <McpTool>[];
       final loadSkillTool = _conversationService.loadSkillTool;
-      skillTools.add(McpTool(
-        name: loadSkillTool.name,
-        description: loadSkillTool.description,
-        inputSchema: loadSkillTool.inputSchema,
-      ));
+      skillTools.add(
+        McpTool(
+          name: loadSkillTool.name,
+          description: loadSkillTool.description,
+          inputSchema: loadSkillTool.inputSchema,
+        ),
+      );
       for (final t in _conversationService.skillDiscoveredTools) {
         if (!skillTools.any((s) => s.name == t.name)) {
           skillTools.add(t);
@@ -833,7 +836,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   /// Unlike [_getAiToolRuntime], this uses the provided [bundle] directly rather
   /// than looking it up from [_aiToolBundles].
   Future<AiToolRuntime> _getSkillAiToolRuntime(
-      String serviceName, AiToolAppBundle bundle) async {
+    String serviceName,
+    AiToolAppBundle bundle,
+  ) async {
     final existing = _aiToolRuntimes[serviceName];
     if (existing != null) {
       return existing;
@@ -895,12 +900,13 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         activeConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
         true;
     if (hasTools && !supportsOrchestration) {
-      final result =
-          await ToolOrchestrationWarningDialog.show(context, activeConfig);
+      final result = await ToolOrchestrationWarningDialog.show(
+        context,
+        activeConfig,
+      );
       if (!mounted) return;
       if (result == null || result is ToolOrchestrationStop) return;
-      if (result is ToolOrchestrationContinue &&
-          result.modelOverride != null) {
+      if (result is ToolOrchestrationContinue && result.modelOverride != null) {
         _selectedModel = result.modelOverride;
       }
     }
@@ -1234,6 +1240,7 @@ $historyBuffer
       final aiResponse = await _aiEngine.generate(
         request: request,
         activeTools: _buildActiveToolsMap(),
+        activeToolsProvider: _buildActiveToolsMap,
         enableTools: _hasAnyTools || _selectedModelFeatures.isNotEmpty,
         executeTool: (serviceName, toolName, params, context) async {
           return _runWithToolStatus(serviceName, toolName, () async {
@@ -1259,21 +1266,23 @@ $historyBuffer
             // Handle Skill Tools (load_skill + skill-discovered tools)
             if (serviceName == _skillToolsServiceKey) {
               if (toolName == 'load_skill') {
-                final result = await _conversationService.loadSkillTool
-                    .execute(params);
-                final resultStr =
-                    result is String ? result : result.toString();
-                final noteId =
-                    (params['noteId'] as String? ?? '').trim();
+                final result = await _conversationService.loadSkillTool.execute(
+                  params,
+                );
+                final resultStr = result is String ? result : result.toString();
+                final noteId = (params['noteId'] as String? ?? '').trim();
                 if (noteId.isNotEmpty && result is String) {
                   await _conversationService.handleLoadSkillResult(
-                      noteId, resultStr);
+                    noteId,
+                    resultStr,
+                  );
                 }
                 return resultStr;
               }
               // Skill-discovered native (builtin) tool — route to native execution
-              if (_conversationService.skillDiscoveredNativeToolNames
-                  .contains(toolName)) {
+              if (_conversationService.skillDiscoveredNativeToolNames.contains(
+                toolName,
+              )) {
                 final agentService = this.context.read<AgentService>();
                 final nativeTool = agentService.nativeTools
                     .where((t) => t.name == toolName)
@@ -1287,10 +1296,13 @@ $historyBuffer
               // Skill-discovered user_defined tool — route via AI tool bundle
               for (final entry
                   in _conversationService.skillDiscoveredBundles.entries) {
-                if (entry.value.toolDefinitions
-                    .any((d) => d.toolName == toolName)) {
+                if (entry.value.toolDefinitions.any(
+                  (d) => d.toolName == toolName,
+                )) {
                   final runtime = await _getSkillAiToolRuntime(
-                      entry.key, entry.value);
+                    entry.key,
+                    entry.value,
+                  );
                   return runtime.invoke(toolName, params, context);
                 }
               }
@@ -1304,10 +1316,7 @@ $historyBuffer
                   serviceName: endpointName,
                   toolName: toolName,
                   parameters: params,
-                  enabledEndpointIds: [
-                    ..._selectedMcpEndpointIds,
-                    endpointId,
-                  ],
+                  enabledEndpointIds: [..._selectedMcpEndpointIds, endpointId],
                   generationContext: context,
                 );
               }
@@ -1363,11 +1372,11 @@ $historyBuffer
 
     final conversationMessages =
         await ConversationAiEngine.buildConversationMessages(
-      messages: _messages,
-      currentModelId: currentModelId,
-      loadAttachments: (message) =>
-          _loadConversationAttachments(message, latestUserAttachments),
-    );
+          messages: _messages,
+          currentModelId: currentModelId,
+          loadAttachments: (message) =>
+              _loadConversationAttachments(message, latestUserAttachments),
+        );
 
     final contextMessages =
         (contextMessage.content.trim().isEmpty &&
@@ -2324,10 +2333,7 @@ $historyBuffer
                           ),
                           const Spacer(),
                           if (_skillsEnabled)
-                            ActiveToolCountBadge(
-                              count: 1,
-                              label: l10n.active,
-                            ),
+                            ActiveToolCountBadge(count: 1, label: l10n.active),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -2336,16 +2342,18 @@ $historyBuffer
                         runSpacing: 4,
                         children: [
                           FilterChip(
-                            label: Text(
-                              '$_skillCount available',
-                            ),
+                            label: Text('$_skillCount available'),
                             selected: _skillsEnabled,
                             onSelected: (selected) {
                               setState(() => _skillsEnabled = selected);
                               if (selected) {
                                 _conversationService.enableSkills().then((_) {
                                   if (mounted) {
-                                    setState(() => _skillCount = _conversationService.skillIndex.length);
+                                    setState(
+                                      () => _skillCount = _conversationService
+                                          .skillIndex
+                                          .length,
+                                    );
                                   }
                                 });
                               } else {
