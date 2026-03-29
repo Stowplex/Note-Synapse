@@ -375,11 +375,15 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     return buffer.toString();
   }
 
-  /// Builds a summary of messages and attachments for debug logging.
+  /// Builds a summary of the original messages and the actual transport
+  /// payload sent through the edge_gen bridge.
   static Map<String, dynamic> _buildLogBody(
     List<PromptMessage> messages, {
-    String? prompt,
+    String? transportPrompt,
+    List<Map<String, String>>? transportMessages,
     List<Map<String, dynamic>>? tools,
+    String? toolSchemaBlock,
+    required bool usesPromptFallback,
   }) {
     final msgSummary = messages.map((m) {
       final entry = <String, dynamic>{
@@ -402,11 +406,22 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
       return entry;
     }).toList();
 
-    return {
-      'messages': msgSummary,
-      if (prompt != null) 'prompt': prompt,
-      if (tools != null && tools.isNotEmpty) 'tools': tools,
+    final transport = <String, dynamic>{
+      'mode': usesPromptFallback ? 'prompt' : 'messages',
+      if (transportPrompt != null) 'prompt': transportPrompt,
+      if (transportMessages != null) 'messages': transportMessages,
     };
+
+    if (tools != null && tools.isNotEmpty) {
+      transport['toolTransport'] = {
+        'nativeBridgeSupportsToolDeclarations': false,
+        'declarationMode': 'system_prompt_injection',
+        if (toolSchemaBlock != null) 'injectedSchemaBlock': toolSchemaBlock,
+        'originalDeclarations': tools,
+      };
+    }
+
+    return {'messages': msgSummary, 'mnnTransport': transport};
   }
 
   @override
@@ -440,7 +455,9 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
       headers: {'backend': _config?.backendType ?? 'cpu'},
       requestBody: _buildLogBody(
         messages,
-        prompt: usePromptFallback ? promptText : chatMessages.toString(),
+        transportPrompt: promptText,
+        transportMessages: chatMessages,
+        usesPromptFallback: usePromptFallback,
       ),
       requestId: requestId,
     );
@@ -511,8 +528,11 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
       headers: {'backend': _config?.backendType ?? 'cpu'},
       requestBody: _buildLogBody(
         messages,
-        prompt: usePromptFallback ? promptText : chatMessages.toString(),
+        transportPrompt: promptText,
+        transportMessages: chatMessages,
         tools: tools,
+        toolSchemaBlock: toolSchemaBlock,
+        usesPromptFallback: usePromptFallback,
       ),
       requestId: requestId,
     );
@@ -586,7 +606,9 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
       headers: {'backend': _config?.backendType ?? 'cpu'},
       requestBody: _buildLogBody(
         messages,
-        prompt: usePromptFallback ? promptText : chatMessages.toString(),
+        transportPrompt: promptText,
+        transportMessages: chatMessages,
+        usesPromptFallback: usePromptFallback,
       ),
       requestId: reqId,
     );
