@@ -2275,16 +2275,24 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
     } else {
       // Text note mode
-      final renderObject = _noteContentKey.currentContext?.findRenderObject();
-      if (renderObject is! RenderBox || renderObject.size.isEmpty) return null;
-      final size = renderObject.size;
+      final contentRenderObject = _noteContentKey.currentContext
+          ?.findRenderObject();
+      final boundaryRenderObject = _noteBoundaryKey.currentContext
+          ?.findRenderObject();
+      if (contentRenderObject is! RenderBox ||
+          boundaryRenderObject is! RenderBox ||
+          contentRenderObject.size.isEmpty) {
+        return null;
+      }
+      final size = contentRenderObject.size;
+      final contentOriginInBoundary = contentRenderObject.localToGlobal(
+        Offset.zero,
+        ancestor: boundaryRenderObject,
+      );
 
       final norms = drawBoundsList.map((drawBounds) {
-        final localTopLeft = renderObject.globalToLocal(
-          Offset(drawBounds.left, drawBounds.top),
-        );
-        final localLeft = localTopLeft.dx;
-        final localTop = localTopLeft.dy;
+        final localLeft = drawBounds.left - contentOriginInBoundary.dx;
+        final localTop = drawBounds.top - contentOriginInBoundary.dy;
         return NormalizedRect(
           x: (localLeft / size.width).clamp(0.0, 1.0),
           y: (localTop / size.height).clamp(0.0, 1.0),
