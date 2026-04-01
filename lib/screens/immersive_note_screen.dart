@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
@@ -4484,47 +4483,39 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
-  void _deleteMarker(InNoteMarker marker) async {
-    final note = _conversationNotes[_activeNoteIndex];
+  Future<void> _deleteMarker(InNoteMarker marker) async {
+    try {
+      final note = _conversationNotes[_activeNoteIndex];
 
-    final updatedMarkers = List<InNoteMarker>.from(_noteMarkers[note.id] ?? [])
-      ..removeWhere((m) => m.id == marker.id);
-
-    setState(() {
-      if (updatedMarkers.isEmpty) {
-        _noteMarkers.remove(note.id);
-      } else {
-        _noteMarkers[note.id] = updatedMarkers;
-      }
-
-      // Update attachment markers if necessary
       if (_activeAttachmentPath != null) {
-        final attachMarkers = List<InNoteMarker>.from(
-          _attachmentMarkers[_activeAttachmentPath!] ?? [],
-        )..removeWhere((m) => m.id == marker.id);
-
-        if (attachMarkers.isEmpty) {
-          _attachmentMarkers.remove(_activeAttachmentPath!);
-        } else {
-          _attachmentMarkers[_activeAttachmentPath!] = attachMarkers;
+        final attachment = await _resolveAttachment(_activeAttachmentPath!);
+        if (attachment != null) {
+          await _noteMarkerService.deleteMarkerForAttachment(
+            attachment.id,
+            marker.id,
+          );
         }
+      } else {
+        await _noteMarkerService.deleteMarkerForNote(note.id, marker.id);
       }
-    });
 
-    final metadataJson = jsonEncode({
-      'inNoteMarkers': updatedMarkers.map((m) => m.toJson()).toList(),
-    });
+      if (mounted) {
+        setState(() {
+          if (_activeAttachmentPath != null) {
+            _attachmentMarkers[_activeAttachmentPath!]?.removeWhere(
+              (m) => m.id == marker.id,
+            );
+          } else {
+            _noteMarkers[note.id]?.removeWhere((m) => m.id == marker.id);
+          }
+        });
 
-    final dbService = getIt<DatabaseService>();
-    final updatedNote = note.copyWith(metadata: metadataJson);
-    await dbService.updateNote(updatedNote);
-    if (!mounted) return;
-    context.read<AppProvider>().updateNote(updatedNote);
-
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Marker deleted.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Marker deleted.')));
+      }
+    } catch (e) {
+      LoggerService.error('Failed to delete marker: $e', error: e);
     }
   }
 
