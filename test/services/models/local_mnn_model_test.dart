@@ -78,6 +78,61 @@ void main() {
     });
   });
 
+  group('LocalMnnModel buildStructuredMessages', () {
+    test('preserves native tool role messages', () {
+      final messages = [
+        PromptMessage(role: PromptRole.user, content: 'Do the thing'),
+        PromptMessage(
+          role: PromptRole.tool,
+          content: '{"status":"ok"}',
+          metadata: {'function_name': 'call_tool', 'tool_call_id': 'call_123'},
+        ),
+      ];
+
+      final result = LocalMnnModel.buildStructuredMessages(messages);
+
+      expect(result.length, 2);
+      expect(result[0], {'role': 'user', 'content': 'Do the thing'});
+      expect(result[1]['role'], 'tool');
+      expect(result[1]['content'], '{"status":"ok"}');
+      expect(result[1]['name'], 'call_tool');
+      expect(result[1]['tool_call_id'], 'call_123');
+    });
+
+    test('serializes assistant function_calls into tool_calls', () {
+      final messages = [
+        PromptMessage(
+          role: PromptRole.assistant,
+          content: '',
+          metadata: {
+            'function_calls': [
+              {
+                'id': 'call_1',
+                'name': 'call_tool',
+                'args': {
+                  'service_name': 'weather',
+                  'tool_name': 'forecast',
+                  'params': {'city': 'SF'},
+                },
+              },
+            ],
+          },
+        ),
+      ];
+
+      final result = LocalMnnModel.buildStructuredMessages(messages);
+
+      expect(result.length, 1);
+      expect(result[0]['role'], 'assistant');
+      final toolCalls = result[0]['tool_calls'] as List;
+      expect(toolCalls.length, 1);
+      expect((toolCalls[0] as Map)['id'], 'call_1');
+      final function = (toolCalls[0] as Map)['function'] as Map;
+      expect(function['name'], 'call_tool');
+      expect((function['arguments'] as Map)['tool_name'], 'forecast');
+    });
+  });
+
   group('LocalMnnModel formatPrompt (legacy)', () {
     test('formats system + user messages', () {
       final messages = [
@@ -231,6 +286,26 @@ void main() {
       final result = LocalMnnModel.parseToolCalls(response);
       expect(result.text, response);
       expect(result.functionCalls, isNull);
+    });
+
+    test('parses structured tool_calls envelope', () {
+      final response =
+          '{"tool_calls":[{"id":"call_1","type":"function","function":{"name":"call_tool","arguments":{"service_name":"svc","tool_name":"search","params":{"query":"note"}}}}]}';
+      final result = LocalMnnModel.parseToolCalls(response);
+      expect(result.functionCalls, isNotNull);
+      expect(result.functionCalls!.length, 1);
+      expect(result.functionCalls![0]['id'], 'call_1');
+      expect(result.functionCalls![0]['name'], 'call_tool');
+      expect(result.functionCalls![0]['args']['tool_name'], 'search');
+    });
+
+    test('parses structured tool_calls with stringified arguments', () {
+      final response =
+          '{"tool_calls":[{"type":"function","function":{"name":"call_tool","arguments":"{\\"service_name\\":\\"svc\\",\\"tool_name\\":\\"search\\",\\"params\\":{\\"query\\":\\"note\\"}}"}}]}';
+      final result = LocalMnnModel.parseToolCalls(response);
+      expect(result.functionCalls, isNotNull);
+      expect(result.functionCalls!.length, 1);
+      expect(result.functionCalls![0]['args']['service_name'], 'svc');
     });
 
     test('builds tool schema block for system prompt', () {

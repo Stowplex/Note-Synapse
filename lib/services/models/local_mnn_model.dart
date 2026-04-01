@@ -119,9 +119,99 @@ class LocalMnnModel extends AIModel {
   }
 
   static final _toolCallHint = RegExp(r'\{\s*"name"\s*:\s*"call_tool"');
+  static final _toolCallsHint = RegExp(r'\{\s*"tool_calls"\s*:');
+
+  static Map<String, dynamic>? _decodeJsonObject(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return decoded.map((key, value) => MapEntry(key.toString(), value));
+      }
+    } catch (_) {
+      final repaired = repairJson(raw);
+      if (repaired is Map<String, dynamic>) {
+        return repaired;
+      }
+      if (repaired is Map) {
+        return repaired.map((key, value) => MapEntry(key.toString(), value));
+      }
+    }
+    return null;
+  }
+
+  static List<Map<String, dynamic>>? _parseToolCallsEnvelope(
+    Map<String, dynamic> parsed,
+  ) {
+    if (!parsed.containsKey('tool_calls')) {
+      return null;
+    }
+    final rawToolCalls = parsed['tool_calls'];
+    if (rawToolCalls is! List) {
+      return null;
+    }
+
+    final functionCalls = <Map<String, dynamic>>[];
+    for (final item in rawToolCalls) {
+      if (item is! Map) continue;
+      final rawMap = item.map((key, value) => MapEntry(key.toString(), value));
+      final id = rawMap['id']?.toString();
+
+      if (rawMap['function'] is Map) {
+        final function = (rawMap['function'] as Map).map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+        final name = function['name']?.toString();
+        if (name == null || name.isEmpty) continue;
+        dynamic args = function['arguments'];
+        if (args is String) {
+          final decodedArgs = _decodeJsonObject(args);
+          if (decodedArgs != null) {
+            args = decodedArgs;
+          }
+        }
+        functionCalls.add({
+          'name': name,
+          'args': args ?? const <String, dynamic>{},
+          if (id != null && id.isNotEmpty) 'id': id,
+        });
+        continue;
+      }
+
+      final name = rawMap['name']?.toString();
+      if (name == null || name.isEmpty) continue;
+      functionCalls.add({
+        'name': name,
+        'args': rawMap['arguments'] ?? const <String, dynamic>{},
+        if (id != null && id.isNotEmpty) 'id': id,
+      });
+    }
+
+    return functionCalls.isEmpty ? null : functionCalls;
+  }
 
   /// Parses tool calls from model response text.
   static ToolCallParseResult parseToolCalls(String response) {
+    final structuredHint = _toolCallsHint.firstMatch(response);
+    if (structuredHint != null) {
+      final textBefore = response.substring(0, structuredHint.start).trim();
+      final jsonStr = _extractJsonObject(response, structuredHint.start);
+      final parsed = _decodeJsonObject(
+        jsonStr ?? response.substring(structuredHint.start),
+      );
+      if (parsed != null) {
+        final functionCalls = _parseToolCallsEnvelope(parsed);
+        if (functionCalls != null && functionCalls.isNotEmpty) {
+          return ToolCallParseResult(
+            text: textBefore,
+            functionCalls: functionCalls,
+          );
+        }
+      }
+    }
+
     final hint = _toolCallHint.firstMatch(response);
     if (hint == null) {
       return ToolCallParseResult(text: response);
@@ -131,33 +221,27 @@ class LocalMnnModel extends AIModel {
     final jsonStr = _extractJsonObject(response, hint.start);
 
     try {
-      Map<String, dynamic> parsed;
-      if (jsonStr != null) {
-        // Balanced braces found — try standard JSON decode first
-        try {
-          parsed = jsonDecode(jsonStr) as Map<String, dynamic>;
-        } catch (_) {
-          final repaired = repairJson(jsonStr);
-          if (repaired is! Map) {
-            return ToolCallParseResult(text: response);
-          }
-          parsed = Map<String, dynamic>.from(repaired);
-        }
-      } else {
-        // Unbalanced braces (malformed JSON) — try repair on raw substring
-        final repaired = repairJson(response.substring(hint.start));
-        if (repaired is! Map) {
-          return ToolCallParseResult(text: response);
-        }
-        parsed = Map<String, dynamic>.from(repaired);
+      final parsed = _decodeJsonObject(
+        jsonStr ?? response.substring(hint.start),
+      );
+      if (parsed == null) {
+        return ToolCallParseResult(text: response);
       }
 
       if (parsed['name'] == 'call_tool' && parsed.containsKey('arguments')) {
-        final args = Map<String, dynamic>.from(parsed['arguments'] as Map);
+        final rawArgs = parsed['arguments'];
+        if (rawArgs is! Map) {
+          return ToolCallParseResult(text: response);
+        }
+        final args = Map<String, dynamic>.from(rawArgs);
         return ToolCallParseResult(
           text: textBefore,
           functionCalls: [
-            {'name': 'call_tool', 'args': args},
+            {
+              'name': 'call_tool',
+              'args': args,
+              if (parsed['id'] != null) 'id': parsed['id'].toString(),
+            },
           ],
         );
       }
@@ -287,6 +371,81 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     return result;
   }
 
+  static List<Map<String, dynamic>> normalizeStructuredTools(
+    List<Map<String, dynamic>> tools,
+  ) {
+    return tools.map((tool) {
+      if (tool['type'] == 'function' && tool['function'] is Map) {
+        return Map<String, dynamic>.from(tool);
+      }
+      return {'type': 'function', 'function': Map<String, dynamic>.from(tool)};
+    }).toList();
+  }
+
+  static List<Map<String, dynamic>>? _serializeAssistantToolCalls(
+    PromptMessage message,
+  ) {
+    final rawCalls = message.metadata?['function_calls'];
+    if (rawCalls is! List || rawCalls.isEmpty) {
+      return null;
+    }
+
+    final toolCalls = <Map<String, dynamic>>[];
+    for (final rawCall in rawCalls) {
+      if (rawCall is! Map) continue;
+      final call = rawCall.map((key, value) => MapEntry(key.toString(), value));
+      final functionName = call['name']?.toString();
+      if (functionName == null || functionName.isEmpty) continue;
+      toolCalls.add({
+        'id': call['id']?.toString() ?? 'call_${toolCalls.length + 1}',
+        'type': 'function',
+        'function': {
+          'name': functionName,
+          'arguments': call['args'] ?? const <String, dynamic>{},
+        },
+      });
+    }
+    return toolCalls.isEmpty ? null : toolCalls;
+  }
+
+  static List<Map<String, dynamic>> buildStructuredMessages(
+    List<PromptMessage> messages,
+  ) {
+    final result = <Map<String, dynamic>>[];
+
+    for (final msg in messages) {
+      switch (msg.role) {
+        case PromptRole.system:
+        case PromptRole.user:
+          result.add({'role': msg.role.apiName, 'content': msg.content});
+          break;
+        case PromptRole.assistant:
+          final entry = <String, dynamic>{
+            'role': 'assistant',
+            'content': msg.content,
+          };
+          final toolCalls = _serializeAssistantToolCalls(msg);
+          if (toolCalls != null) {
+            entry['tool_calls'] = toolCalls;
+          }
+          result.add(entry);
+          break;
+        case PromptRole.tool:
+          result.add({
+            'role': 'tool',
+            'content': msg.content,
+            if (msg.metadata?['function_name'] is String)
+              'name': msg.metadata!['function_name'],
+            if (msg.metadata?['tool_call_id'] != null)
+              'tool_call_id': msg.metadata!['tool_call_id'].toString(),
+          });
+          break;
+      }
+    }
+
+    return result;
+  }
+
   /// Legacy plain-text prompt formatting. Kept for tests and fallback.
   static String formatPrompt(
     List<PromptMessage> messages, {
@@ -381,6 +540,9 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     List<PromptMessage> messages, {
     String? transportPrompt,
     List<Map<String, String>>? transportMessages,
+    List<Map<String, dynamic>>? structuredMessages,
+    List<Map<String, dynamic>>? structuredTools,
+    Map<String, dynamic>? extraContext,
     List<Map<String, dynamic>>? tools,
     String? toolSchemaBlock,
     required bool usesPromptFallback,
@@ -407,16 +569,26 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     }).toList();
 
     final transport = <String, dynamic>{
-      'mode': usesPromptFallback ? 'prompt' : 'messages',
+      'mode': usesPromptFallback
+          ? 'prompt'
+          : structuredMessages != null
+          ? 'structured'
+          : 'messages',
       if (transportPrompt != null) 'prompt': transportPrompt,
       if (transportMessages != null) 'messages': transportMessages,
+      if (structuredMessages != null) 'structuredMessages': structuredMessages,
+      if (structuredTools != null) 'structuredTools': structuredTools,
+      if (extraContext != null) 'extraContext': extraContext,
     };
 
     if (tools != null && tools.isNotEmpty) {
       transport['toolTransport'] = {
-        'nativeBridgeSupportsToolDeclarations': false,
-        'declarationMode': 'system_prompt_injection',
-        if (toolSchemaBlock != null) 'injectedSchemaBlock': toolSchemaBlock,
+        'nativeBridgeSupportsToolDeclarations': structuredMessages != null,
+        'declarationMode': structuredMessages != null
+            ? 'native_structured'
+            : 'system_prompt_injection',
+        if (toolSchemaBlock != null && structuredMessages == null)
+          'injectedSchemaBlock': toolSchemaBlock,
         'originalDeclarations': tools,
       };
     }
@@ -512,6 +684,8 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     final session = await _ensureSession();
     await session.reset();
     final processed = await preprocessAttachments(messages);
+    final structuredMessages = buildStructuredMessages(processed);
+    final structuredTools = normalizeStructuredTools(tools);
     final toolSchemaBlock = tools.isNotEmpty
         ? buildToolSchemaBlock(tools)
         : null;
@@ -530,6 +704,8 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
         messages,
         transportPrompt: promptText,
         transportMessages: chatMessages,
+        structuredMessages: structuredMessages,
+        structuredTools: structuredTools,
         tools: tools,
         toolSchemaBlock: toolSchemaBlock,
         usesPromptFallback: usePromptFallback,
@@ -539,19 +715,43 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
 
     // Buffer full response for tool call parsing
     final buffer = StringBuffer();
-    if (usePromptFallback) {
-      await for (final chunk in session.generate(
-        prompt: promptText!,
-        maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
-      )) {
-        buffer.write(chunk);
+    var usedStructuredTransport = false;
+    if (!usePromptFallback) {
+      try {
+        await for (final chunk in session.generateStructured(
+          messages: structuredMessages,
+          tools: structuredTools,
+          maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+        )) {
+          buffer.write(chunk);
+        }
+        usedStructuredTransport = true;
+      } catch (error, stackTrace) {
+        LoggerService.warning(
+          'Structured local MNN tool transport failed; falling back to prompt injection',
+          error: {
+            'error': error.toString(),
+            'stackTrace': stackTrace.toString(),
+          },
+        );
       }
-    } else {
-      await for (final chunk in session.generateWithMessages(
-        messages: chatMessages!,
-        maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
-      )) {
-        buffer.write(chunk);
+    }
+
+    if (!usedStructuredTransport) {
+      if (usePromptFallback) {
+        await for (final chunk in session.generate(
+          prompt: promptText!,
+          maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+        )) {
+          buffer.write(chunk);
+        }
+      } else {
+        await for (final chunk in session.generateWithMessages(
+          messages: chatMessages!,
+          maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+        )) {
+          buffer.write(chunk);
+        }
       }
     }
 
@@ -572,6 +772,7 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
         'text': parsed.text,
         'functionCalls': parsed.functionCalls,
         'rawLength': responseText.length,
+        'structuredTransport': usedStructuredTransport,
       },
       requestId: requestId,
       duration: duration,
