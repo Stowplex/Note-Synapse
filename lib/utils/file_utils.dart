@@ -5,6 +5,8 @@ import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+import 'synapse_temp_utils.dart';
+
 /// Utility class for file operations
 class FileUtils {
   /// Opens a file using the platform's default application
@@ -165,6 +167,19 @@ class FileUtils {
       // Legacy absolute path - return as is
       return filePath;
     }
+  }
+
+  static Future<String> resolvePortableAttachmentPath(String filePath) async {
+    if (SynapseTempUtils.isSynapseTempUri(filePath)) {
+      final file = await SynapseTempUtils.resolveUri(filePath);
+      return file.path;
+    }
+    if (!filePath.startsWith('/') &&
+        !filePath.startsWith('http') &&
+        !filePath.startsWith('gs://')) {
+      return getFullFilePath(filePath, true);
+    }
+    return filePath;
   }
 
   /// Attempts to convert an absolute path to a relative path if it's within the app's documents directory
