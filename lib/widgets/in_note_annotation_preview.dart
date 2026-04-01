@@ -1,10 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/note_annotation.dart';
+import '../utils/file_utils.dart';
 
 enum AnnotationPreviewResult { none, addToScratchpad, removed }
 
-class InNoteAnnotationPreview extends StatelessWidget {
+class InNoteAnnotationPreview extends StatefulWidget {
   final NoteAnnotation annotation;
   final bool isInScratchpad;
 
@@ -13,6 +14,32 @@ class InNoteAnnotationPreview extends StatelessWidget {
     required this.annotation,
     required this.isInScratchpad,
   });
+
+  @override
+  State<InNoteAnnotationPreview> createState() =>
+      _InNoteAnnotationPreviewState();
+}
+
+class _InNoteAnnotationPreviewState extends State<InNoteAnnotationPreview> {
+  late final Future<List<String>> _imagePathsFuture = _loadImagePaths();
+
+  Future<List<String>> _loadImagePaths() async {
+    const imgExts = {'png', 'jpg', 'jpeg'};
+    final resolved = <String>[];
+    for (final path in widget.annotation.attachmentPaths) {
+      final ext = path.split('.').last.toLowerCase();
+      if (!imgExts.contains(ext)) {
+        continue;
+      }
+      try {
+        final next = await FileUtils.resolvePortableAttachmentPath(path);
+        resolved.add(next);
+      } catch (_) {
+        // Ignore broken paths and let the preview fall back.
+      }
+    }
+    return resolved;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,10 +80,21 @@ class InNoteAnnotationPreview extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               // Captured image
-              _buildImageSection(context),
+              FutureBuilder<List<String>>(
+                future: _imagePathsFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const SizedBox(
+                      height: 100,
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  return _buildImageSection(context, snapshot.data ?? const []);
+                },
+              ),
               const SizedBox(height: 16),
               // Annotation text
-              if (annotation.content.isNotEmpty) ...[
+              if (widget.annotation.content.isNotEmpty) ...[
                 Text(
                   'Note',
                   style: theme.textTheme.labelSmall?.copyWith(
@@ -66,7 +104,7 @@ class InNoteAnnotationPreview extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 SelectableText(
-                  annotation.content,
+                  widget.annotation.content,
                   style: theme.textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 20),
@@ -76,14 +114,16 @@ class InNoteAnnotationPreview extends StatelessWidget {
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: isInScratchpad
+                      onPressed: widget.isInScratchpad
                           ? null
                           : () => Navigator.of(
                               context,
                             ).pop(AnnotationPreviewResult.addToScratchpad),
                       icon: const Icon(Icons.playlist_add, size: 18),
                       label: Text(
-                        isInScratchpad ? 'In Scratchpad' : 'Add to Scratchpad',
+                        widget.isInScratchpad
+                            ? 'In Scratchpad'
+                            : 'Add to Scratchpad',
                       ),
                     ),
                   ),
@@ -103,12 +143,7 @@ class InNoteAnnotationPreview extends StatelessWidget {
     );
   }
 
-  Widget _buildImageSection(BuildContext context) {
-    const imgExts = {'png', 'jpg', 'jpeg'};
-    final imagePaths = annotation.attachmentPaths
-        .where((p) => imgExts.contains(p.split('.').last.toLowerCase()))
-        .toList();
-
+  Widget _buildImageSection(BuildContext context, List<String> imagePaths) {
     if (imagePaths.isEmpty) {
       return Container(
         height: 100,
@@ -147,26 +182,42 @@ class InNoteAnnotationPreview extends StatelessWidget {
   }
 
   Widget _buildSingleImage(BuildContext context, String imagePath) {
+    final file = File(imagePath);
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
-      child: Image.file(
-        File(imagePath),
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => Container(
-          height: 100,
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Center(
-            child: Icon(
-              Icons.broken_image_outlined,
-              size: 36,
-              color: Theme.of(context).disabledColor,
+      child: file.existsSync()
+          ? Image.file(
+              file,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => Container(
+                height: 100,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(
+                  child: Icon(
+                    Icons.broken_image_outlined,
+                    size: 36,
+                    color: Theme.of(context).disabledColor,
+                  ),
+                ),
+              ),
+            )
+          : Container(
+              height: 100,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.broken_image_outlined,
+                  size: 36,
+                  color: Theme.of(context).disabledColor,
+                ),
+              ),
             ),
-          ),
-        ),
-      ),
     );
   }
 
