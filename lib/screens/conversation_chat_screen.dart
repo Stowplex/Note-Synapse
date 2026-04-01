@@ -837,12 +837,13 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         activeConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
         true;
     if (hasTools && !supportsOrchestration) {
-      final result =
-          await ToolOrchestrationWarningDialog.show(context, activeConfig);
+      final result = await ToolOrchestrationWarningDialog.show(
+        context,
+        activeConfig,
+      );
       if (!mounted) return;
       if (result == null || result is ToolOrchestrationStop) return;
-      if (result is ToolOrchestrationContinue &&
-          result.modelOverride != null) {
+      if (result is ToolOrchestrationContinue && result.modelOverride != null) {
         _selectedModel = result.modelOverride;
       }
     }
@@ -1247,11 +1248,11 @@ $historyBuffer
 
     final conversationMessages =
         await ConversationAiEngine.buildConversationMessages(
-      messages: _messages,
-      currentModelId: currentModelId,
-      loadAttachments: (message) =>
-          _loadConversationAttachments(message, latestUserAttachments),
-    );
+          messages: _messages,
+          currentModelId: currentModelId,
+          loadAttachments: (message) =>
+              _loadConversationAttachments(message, latestUserAttachments),
+        );
 
     final contextMessages =
         (contextMessage.content.trim().isEmpty &&
@@ -2695,10 +2696,16 @@ $historyBuffer
               itemCount: _messages.length + (_isStreaming ? 1 : 0),
               itemBuilder: (context, index) {
                 if (index == _messages.length && _isStreaming) {
-                  return _buildStreamingMessageCard();
+                  return KeyedSubtree(
+                    key: const ValueKey('conversation_streaming_message'),
+                    child: _buildStreamingMessageCard(),
+                  );
                 }
                 final message = _messages[index];
-                return _buildMessageCard(message);
+                return KeyedSubtree(
+                  key: ValueKey(message.id),
+                  child: _buildMessageCard(message),
+                );
               },
             ),
           ),
@@ -3310,6 +3317,7 @@ $historyBuffer
       runSpacing: 10,
       children: message.attachmentPaths.map((path) {
         return AttachmentPreviewTile(
+          key: ValueKey('${message.id}:$path'),
           attachmentPath: path,
           onTap: () => _openAttachment(path),
         );

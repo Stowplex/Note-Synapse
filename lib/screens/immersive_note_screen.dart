@@ -3370,46 +3370,49 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       itemCount: _messages.length + (_isStreaming ? 1 : 0),
       itemBuilder: (context, index) {
         if (index == _messages.length && _isStreaming) {
-          return Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.7,
-              ),
-              margin: const EdgeInsets.symmetric(vertical: 6),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant,
+          return KeyedSubtree(
+            key: const ValueKey('immersive_streaming_message'),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.7,
                 ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.smart_toy,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.secondary,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        l10n.ai,
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(
-                              color: Theme.of(context).colorScheme.secondary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                    ],
+                margin: const EdgeInsets.symmetric(vertical: 6),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outlineVariant,
                   ),
-                  const SizedBox(height: 8),
-                  SelectableText(_streamingContent),
-                ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.smart_toy,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.secondary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          l10n.ai,
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.secondary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SelectableText(_streamingContent),
+                  ],
+                ),
               ),
             ),
           );
@@ -3421,55 +3424,104 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             (message.metadata!.containsKey('parts_history') ||
                 message.metadata!.containsKey('function_calls'));
 
-        return Align(
-          alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.7,
-            ),
-            margin: const EdgeInsets.symmetric(vertical: 6),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isUser
-                  ? Theme.of(context).colorScheme.primaryContainer
-                  : Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Theme.of(context).colorScheme.outlineVariant,
+        return KeyedSubtree(
+          key: ValueKey(message.id),
+          child: Align(
+            alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.7,
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: isUser
-                  ? CrossAxisAlignment.end
-                  : CrossAxisAlignment.start,
-              children: [
-                if (!isUser) ...[
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.smart_toy,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.secondary,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        l10n.ai,
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(
-                              color: Theme.of(context).colorScheme.secondary,
-                              fontWeight: FontWeight.bold,
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isUser
+                    ? Theme.of(context).colorScheme.primaryContainer
+                    : Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: isUser
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
+                children: [
+                  if (!isUser) ...[
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.smart_toy,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.secondary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          l10n.ai,
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.secondary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                        const Spacer(),
+                        if (hasTools) ...[
+                          IconButton(
+                            icon: const Icon(
+                              Icons.build_circle_outlined,
+                              size: 18,
                             ),
-                      ),
-                      const Spacer(),
-                      if (hasTools) ...[
-                        IconButton(
-                          icon: const Icon(
-                            Icons.build_circle_outlined,
-                            size: 18,
+                            tooltip: 'View Tool Usage',
+                            onPressed: () => _showToolDetailsDialog(message),
+                            constraints: const BoxConstraints(
+                              minWidth: 32,
+                              minHeight: 32,
+                            ),
+                            padding: EdgeInsets.zero,
                           ),
-                          tooltip: 'View Tool Usage',
-                          onPressed: () => _showToolDetailsDialog(message),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  if (isUser)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Flexible(
+                          child: SelectableText(
+                            message.content,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface,
+                                ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: Icon(
+                            Icons.edit,
+                            size: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.5),
+                          ),
+                          onPressed: () {
+                            _messageController.text = message.content;
+                            _scrollToBottom();
+                            Future.delayed(
+                              const Duration(milliseconds: 200),
+                              () {
+                                _messageFocusNode.requestFocus();
+                              },
+                            );
+                          },
+                          tooltip: 'Use this message',
                           constraints: const BoxConstraints(
                             minWidth: 32,
                             minHeight: 32,
@@ -3477,77 +3529,35 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                           padding: EdgeInsets.zero,
                         ),
                       ],
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                if (isUser)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Flexible(
-                        child: SelectableText(
-                          message.content,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
+                    )
+                  else
+                    SelectionArea(
+                      child: InteractiveCheckboxMarkdown(
+                        originalContent: message.content,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
+                        onLinkTap: (url, _) =>
+                            _handleMarkdownLinkTap(url, l10n),
                       ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: Icon(
-                          Icons.edit,
-                          size: 16,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withOpacity(0.5),
-                        ),
-                        onPressed: () {
-                          _messageController.text = message.content;
-                          // Scroll to bottom to show the input field
-                          _scrollToBottom();
-                          // Focus the text field after a short delay to ensure it's visible
-                          Future.delayed(const Duration(milliseconds: 200), () {
-                            _messageFocusNode.requestFocus();
-                          });
-                        },
-                        tooltip: 'Use this message',
-                        constraints: const BoxConstraints(
-                          minWidth: 32,
-                          minHeight: 32,
-                        ),
-                        padding: EdgeInsets.zero,
-                      ),
-                    ],
-                  )
-                else
-                  SelectionArea(
-                    child: InteractiveCheckboxMarkdown(
-                      originalContent: message.content,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                      onLinkTap: (url, _) => _handleMarkdownLinkTap(url, l10n),
                     ),
-                  ),
-                if (message.attachmentPaths.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: _buildMessageAttachmentChips(message, l10n),
-                  ),
-                if (!isUser) ...[
-                  const SizedBox(height: 12),
-                  ChatMessageActionRow(
-                    onCopy: () => copyContentToClipboard(message.content),
-                    onAddNote: () => handleAddContentToNote(
-                      content: message.content,
-                      contextNotes: _conversationNotes,
+                  if (message.attachmentPaths.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _buildMessageAttachmentChips(message, l10n),
                     ),
-                  ),
+                  if (!isUser) ...[
+                    const SizedBox(height: 12),
+                    ChatMessageActionRow(
+                      onCopy: () => copyContentToClipboard(message.content),
+                      onAddNote: () => handleAddContentToNote(
+                        content: message.content,
+                        contextNotes: _conversationNotes,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         );
@@ -3691,6 +3701,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       runSpacing: 10,
       children: message.attachmentPaths.map((path) {
         return AttachmentPreviewTile(
+          key: ValueKey('${message.id}:$path'),
           attachmentPath: path,
           onTap: () => _openAttachment(path, l10n),
         );
@@ -4953,12 +4964,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         activeConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
         true;
     if (hasTools && !supportsOrchestration) {
-      final result =
-          await ToolOrchestrationWarningDialog.show(context, activeConfig);
+      final result = await ToolOrchestrationWarningDialog.show(
+        context,
+        activeConfig,
+      );
       if (!mounted) return;
       if (result == null || result is ToolOrchestrationStop) return;
-      if (result is ToolOrchestrationContinue &&
-          result.modelOverride != null) {
+      if (result is ToolOrchestrationContinue && result.modelOverride != null) {
         _selectedModel = result.modelOverride;
       }
     }
