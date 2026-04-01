@@ -1,3 +1,6 @@
 [submodule "third_party/rhttp"]
 	path = third_party/rhttp
 	url = git@github.com:kkspeed/rhttp.git
+[submodule "third_party/flutter_json_view"]
+	path = third_party/flutter_json_view
+	url = git@github.com:Stowplex/flutter_json_view.git
