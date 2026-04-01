@@ -120,6 +120,19 @@ class LocalMnnModel extends AIModel {
 
   static final _toolCallHint = RegExp(r'\{\s*"name"\s*:\s*"call_tool"');
   static final _toolCallsHint = RegExp(r'\{\s*"tool_calls"\s*:');
+  static final _xmlToolCallBlockHint = RegExp(
+    r'<tool_call>\s*',
+    multiLine: true,
+  );
+  static final _xmlFunctionName = RegExp(
+    r'<function=([^>\n]+)>\s*',
+    multiLine: true,
+  );
+  static final _xmlParameterPattern = RegExp(
+    r'<parameter=([^>\n]+)>\s*([\s\S]*?)\s*</parameter>',
+    multiLine: true,
+  );
+  static const _mcpToolsSectionMarker = '\n\n=== MCP TOOLS AVAILABLE ===\n';
 
   static Map<String, dynamic>? _decodeJsonObject(String raw) {
     try {
@@ -192,8 +205,87 @@ class LocalMnnModel extends AIModel {
     return functionCalls.isEmpty ? null : functionCalls;
   }
 
+  static List<Map<String, dynamic>>? _parseXmlToolCalls(String response) {
+    final matches = _xmlToolCallBlockHint.allMatches(response).toList();
+    if (matches.isEmpty) {
+      return null;
+    }
+
+    final functionCalls = <Map<String, dynamic>>[];
+    for (final match in matches) {
+      final blockStart = match.start;
+      final blockEnd = response.indexOf('</tool_call>', blockStart);
+      if (blockEnd == -1) continue;
+
+      final block = response.substring(
+        blockStart,
+        blockEnd + '</tool_call>'.length,
+      );
+      final functionMatch = _xmlFunctionName.firstMatch(block);
+      if (functionMatch == null) continue;
+
+      final name = functionMatch.group(1)?.trim();
+      if (name == null || name.isEmpty) continue;
+
+      final args = <String, dynamic>{};
+      for (final parameterMatch in _xmlParameterPattern.allMatches(block)) {
+        final key = parameterMatch.group(1)?.trim();
+        final rawValue = parameterMatch.group(2)?.trim() ?? '';
+        if (key == null || key.isEmpty) continue;
+
+        dynamic value = rawValue;
+        if (rawValue.startsWith('{') || rawValue.startsWith('[')) {
+          final decoded = _decodeJsonObject(rawValue);
+          if (decoded != null) {
+            value = decoded;
+          }
+        }
+        args[key] = value;
+      }
+
+      functionCalls.add({'name': name, 'args': args});
+    }
+
+    return functionCalls.isEmpty ? null : functionCalls;
+  }
+
+  static String _stripInjectedMcpToolPrompt(String content) {
+    final markerIndex = content.indexOf(_mcpToolsSectionMarker);
+    if (markerIndex == -1) {
+      return content;
+    }
+    return content.substring(0, markerIndex).trimRight();
+  }
+
+  static List<PromptMessage> sanitizeMessagesForStructuredTools(
+    List<PromptMessage> messages,
+  ) {
+    return messages.map((msg) {
+      if (msg.role != PromptRole.system) {
+        return msg;
+      }
+      final sanitized = _stripInjectedMcpToolPrompt(msg.content);
+      if (sanitized == msg.content) {
+        return msg;
+      }
+      return msg.copyWith(content: sanitized);
+    }).toList();
+  }
+
   /// Parses tool calls from model response text.
   static ToolCallParseResult parseToolCalls(String response) {
+    final xmlHint = _xmlToolCallBlockHint.firstMatch(response);
+    if (xmlHint != null) {
+      final textBefore = response.substring(0, xmlHint.start).trim();
+      final functionCalls = _parseXmlToolCalls(response);
+      if (functionCalls != null && functionCalls.isNotEmpty) {
+        return ToolCallParseResult(
+          text: textBefore,
+          functionCalls: functionCalls,
+        );
+      }
+    }
+
     final structuredHint = _toolCallsHint.firstMatch(response);
     if (structuredHint != null) {
       final textBefore = response.substring(0, structuredHint.start).trim();
@@ -684,7 +776,10 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     final session = await _ensureSession();
     await session.reset();
     final processed = await preprocessAttachments(messages);
-    final structuredMessages = buildStructuredMessages(processed);
+    final structuredProcessed = tools.isNotEmpty
+        ? sanitizeMessagesForStructuredTools(processed)
+        : processed;
+    final structuredMessages = buildStructuredMessages(structuredProcessed);
     final structuredTools = normalizeStructuredTools(tools);
     final toolSchemaBlock = tools.isNotEmpty
         ? buildToolSchemaBlock(tools)
@@ -716,6 +811,7 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     // Buffer full response for tool call parsing
     final buffer = StringBuffer();
     var usedStructuredTransport = false;
+    String? structuredTransportError;
     if (!usePromptFallback) {
       try {
         await for (final chunk in session.generateStructured(
@@ -727,10 +823,11 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
         }
         usedStructuredTransport = true;
       } catch (error, stackTrace) {
+        structuredTransportError = error.toString();
         LoggerService.warning(
           'Structured local MNN tool transport failed; falling back to prompt injection',
           error: {
-            'error': error.toString(),
+            'error': structuredTransportError,
             'stackTrace': stackTrace.toString(),
           },
         );
@@ -773,6 +870,8 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
         'functionCalls': parsed.functionCalls,
         'rawLength': responseText.length,
         'structuredTransport': usedStructuredTransport,
+        if (structuredTransportError != null)
+          'structuredTransportError': structuredTransportError,
       },
       requestId: requestId,
       duration: duration,

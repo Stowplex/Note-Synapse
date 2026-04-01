@@ -79,6 +79,29 @@ void main() {
   });
 
   group('LocalMnnModel buildStructuredMessages', () {
+    test('strips injected MCP prompt block for structured tools', () {
+      final messages = [
+        PromptMessage(
+          role: PromptRole.system,
+          content:
+              'You are helpful.\n\n=== MCP TOOLS AVAILABLE ===\nUse call_tool.',
+        ),
+        PromptMessage(role: PromptRole.user, content: 'Hello'),
+      ];
+
+      final sanitized = LocalMnnModel.sanitizeMessagesForStructuredTools(
+        messages,
+      );
+      final result = LocalMnnModel.buildStructuredMessages(sanitized);
+
+      expect(result[0]['role'], 'system');
+      expect(result[0]['content'], 'You are helpful.');
+      expect(
+        result[0]['content'],
+        isNot(contains('=== MCP TOOLS AVAILABLE ===')),
+      );
+    });
+
     test('preserves native tool role messages', () {
       final messages = [
         PromptMessage(role: PromptRole.user, content: 'Do the thing'),
@@ -306,6 +329,20 @@ void main() {
       expect(result.functionCalls, isNotNull);
       expect(result.functionCalls!.length, 1);
       expect(result.functionCalls![0]['args']['service_name'], 'svc');
+    });
+
+    test('parses qwen xml tool call output', () {
+      final response =
+          'Thinking...\n<tool_call>\n<function=fetch_youtube_data>\n<parameter=video_url>\nhttps://youtu.be/if3oBYyh2b0\n</parameter>\n</function>\n</tool_call>\n';
+      final result = LocalMnnModel.parseToolCalls(response);
+      expect(result.functionCalls, isNotNull);
+      expect(result.functionCalls!.length, 1);
+      expect(result.functionCalls![0]['name'], 'fetch_youtube_data');
+      expect(
+        result.functionCalls![0]['args']['video_url'],
+        'https://youtu.be/if3oBYyh2b0',
+      );
+      expect(result.text, 'Thinking...');
     });
 
     test('builds tool schema block for system prompt', () {

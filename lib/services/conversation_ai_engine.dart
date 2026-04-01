@@ -59,7 +59,7 @@ class ConversationAiEngine {
     required List<ConversationMessage> messages,
     required String? currentModelId,
     required Future<List<PlatformFile>> Function(ConversationMessage)
-        loadAttachments,
+    loadAttachments,
   }) async {
     final conversationMessages = <PromptMessage>[];
 
@@ -119,8 +119,7 @@ class ConversationAiEngine {
       // Gemini's isModelMatch) can read it.
       final effectiveMetadata = <String, dynamic>{
         ...?message.metadata,
-        if (message.modelUsed != null &&
-            message.metadata?['modelUsed'] == null)
+        if (message.modelUsed != null && message.metadata?['modelUsed'] == null)
           'modelUsed': message.modelUsed,
       };
 
@@ -246,7 +245,9 @@ class ConversationAiEngine {
           activeTools.isEmpty &&
           onStreamChunk != null) {
         final buffer = StringBuffer();
-        await for (final chunk in activeModel.generateStreaming(currentMessages)) {
+        await for (final chunk in activeModel.generateStreaming(
+          currentMessages,
+        )) {
           if (isCancelled()) throw const ConversationCancelledException();
           buffer.write(chunk);
           onStreamChunk(chunk);
@@ -338,65 +339,80 @@ class ConversationAiEngine {
             Map<String, dynamic>? params;
 
             if (functionName != 'call_tool') {
-              // Model called a tool directly by name instead of using call_tool wrapper
-              // Return an error with helpful guidance (like "command not found" helper)
-              final errorMessage = _buildUnknownToolErrorMessage(
+              final directTool = _resolveDirectToolCall(
                 functionName,
-                rawArgs,
                 activeTools,
               );
-
-              LoggerService.warning(
-                'Unknown function call: $functionName, returning error to LLM',
-              );
-
-              final errorResult = 'Error: $errorMessage';
-              toolResults.add(errorResult);
-              conversationParts.add(
-                '[Tool error: Unknown function "$functionName"]',
-              );
-
-              // Build proper tool error message based on model type
-              if (getIt<ModelSelector>().currentModelConfig?.type ==
-                  ModelType.openaiCompatible) {
-                // OpenAI: Use the original tool_call_id from the API response
-                final toolCallId =
-                    functionCall['id'] as String? ??
-                    't_err_${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}_$i';
-                toolCallsWithResults.add({
-                  'id': toolCallId,
-                  'function_call': functionCall,
-                  'result': errorResult,
-                });
+              if (directTool != null) {
+                serviceName = directTool['service_name']!;
+                toolName = directTool['tool_name']!;
+                params = rawArgs is Map<String, dynamic>
+                    ? Map<String, dynamic>.from(rawArgs)
+                    : rawArgs is Map
+                    ? rawArgs.map(
+                        (key, value) => MapEntry(key.toString(), value),
+                      )
+                    : <String, dynamic>{};
               } else {
-                // Gemini: Store with function metadata for proper functionResponse format
-                toolCallsWithResults.add({
-                  'function_name': functionName,
-                  'function_args': rawArgs,
-                  'result': errorResult,
-                  // Preserve thought_signature for Gemini 3+ models
-                  if (functionCall.containsKey('thoughtSignature'))
-                    'thought_signature': functionCall['thoughtSignature'],
-                });
+                // Model called a tool directly by name instead of using call_tool wrapper
+                // Return an error with helpful guidance (like "command not found" helper)
+                final errorMessage = _buildUnknownToolErrorMessage(
+                  functionName,
+                  rawArgs,
+                  activeTools,
+                );
+
+                LoggerService.warning(
+                  'Unknown function call: $functionName, returning error to LLM',
+                );
+
+                final errorResult = 'Error: $errorMessage';
+                toolResults.add(errorResult);
+                conversationParts.add(
+                  '[Tool error: Unknown function "$functionName"]',
+                );
+
+                // Build proper tool error message based on model type
+                if (getIt<ModelSelector>().currentModelConfig?.type ==
+                    ModelType.openaiCompatible) {
+                  // OpenAI: Use the original tool_call_id from the API response
+                  final toolCallId =
+                      functionCall['id'] as String? ??
+                      't_err_${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}_$i';
+                  toolCallsWithResults.add({
+                    'id': toolCallId,
+                    'function_call': functionCall,
+                    'result': errorResult,
+                  });
+                } else {
+                  // Gemini: Store with function metadata for proper functionResponse format
+                  toolCallsWithResults.add({
+                    'function_name': functionName,
+                    'function_args': rawArgs,
+                    'result': errorResult,
+                    // Preserve thought_signature for Gemini 3+ models
+                    if (functionCall.containsKey('thoughtSignature'))
+                      'thought_signature': functionCall['thoughtSignature'],
+                  });
+                }
+
+                continue;
+              }
+            } else {
+              final parsedArgs =
+                  McpToolIntegrationService.parseCallToolArguments(rawArgs);
+              if (parsedArgs == null) {
+                LoggerService.error(
+                  'Failed to parse call_tool arguments',
+                  error: {'args': rawArgs},
+                );
+                continue;
               }
 
-              continue;
+              serviceName = parsedArgs['service_name'] as String;
+              toolName = parsedArgs['tool_name'] as String;
+              params = parsedArgs['params'] as Map<String, dynamic>;
             }
-
-            final parsedArgs = McpToolIntegrationService.parseCallToolArguments(
-              rawArgs,
-            );
-            if (parsedArgs == null) {
-              LoggerService.error(
-                'Failed to parse call_tool arguments',
-                error: {'args': rawArgs},
-              );
-              continue;
-            }
-
-            serviceName = parsedArgs['service_name'] as String;
-            toolName = parsedArgs['tool_name'] as String;
-            params = parsedArgs['params'] as Map<String, dynamic>;
 
             LoggerService.info('Executing: $serviceName.$toolName');
             LoggerService.debug('Tool parameters', error: params);
@@ -474,7 +490,7 @@ class ConversationAiEngine {
               'function_calls': functionCalls, // Keep for legacy
               'parts_history': runningPartsHistory, // Updated history
               'modelUsed':
-                  response?['modelUsed'] ??
+                  response['modelUsed'] ??
                   getIt<ModelSelector>().currentModelConfig?.id,
             };
 
@@ -577,7 +593,7 @@ class ConversationAiEngine {
             if (functionCalls != null) 'function_calls': functionCalls,
             'parts_history': finalPartsHistory,
             'modelUsed': textResponse != null || partsHistory != null
-                ? (response?['modelUsed'] ??
+                ? (response['modelUsed'] ??
                       getIt<ModelSelector>().currentModelConfig?.id)
                 : getIt<ModelSelector>().currentModelConfig?.id,
           };
@@ -652,5 +668,24 @@ class ConversationAiEngine {
     }
 
     return buffer.toString();
+  }
+
+  Map<String, String>? _resolveDirectToolCall(
+    String functionName,
+    Map<String, List<McpTool>> activeTools,
+  ) {
+    final matches = <Map<String, String>>[];
+    for (final entry in activeTools.entries) {
+      for (final tool in entry.value) {
+        if (tool.name == functionName) {
+          matches.add({'service_name': entry.key, 'tool_name': tool.name});
+        }
+      }
+    }
+
+    if (matches.length == 1) {
+      return matches.first;
+    }
+    return null;
   }
 }
