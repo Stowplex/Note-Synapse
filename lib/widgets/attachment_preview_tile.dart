@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
+import '../utils/synapse_temp_utils.dart';
 
 class AttachmentPreviewTile extends StatelessWidget {
   const AttachmentPreviewTile({
@@ -107,7 +108,9 @@ class AttachmentPreviewTile extends StatelessWidget {
       return _buildThumbnailFallback(context);
     }
 
-    final futurePath = attachmentPath.startsWith('/')
+    final futurePath = SynapseTempUtils.isSynapseTempUri(attachmentPath)
+        ? FileUtils.resolvePortableAttachmentPath(attachmentPath)
+        : attachmentPath.startsWith('/')
         ? Future.value(attachmentPath)
         : FileUtils.getFullFilePath(attachmentPath, true);
 
