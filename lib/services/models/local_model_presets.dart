@@ -43,6 +43,20 @@ class LocalModelPresets {
     defaultTokenWindow: 16384,
   );
 
+  static final qwen35_2b = LocalModelPreset(
+    id: 'qwen35_2b',
+    displayName: 'Qwen 3.5 2B',
+    spec: QwenModelSpec.qwen35_2bMnn,
+    defaultBackend: {'android': 'cpu', 'ios': 'cpu'},
+    supportedBackends: {
+      'android': ['cpu'],
+      'ios': ['cpu'],
+    },
+    supportsVision: true,
+    supportsThinking: true,
+    defaultTokenWindow: 16384,
+  );
+
   static final qwen3Vl2b = LocalModelPreset(
     id: 'qwen3_vl_2b',
     displayName: 'Qwen3 VL 2B',
@@ -58,7 +72,7 @@ class LocalModelPresets {
     defaultTokenWindow: 16384,
   );
 
-  static final List<LocalModelPreset> all = [qwen35_08b, qwen3Vl2b];
+  static final List<LocalModelPreset> all = [qwen35_08b, qwen35_2b, qwen3Vl2b];
 
   static List<LocalModelPreset> get available {
     if (kDebugMode) {

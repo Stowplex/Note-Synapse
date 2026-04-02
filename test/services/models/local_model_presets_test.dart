@@ -10,7 +10,18 @@ void main() {
       expect(preset.supportsVision, true);
       expect(preset.supportsThinking, true);
       expect(preset.defaultTokenWindow, 16384);
-      expect(preset.defaultBackend['android'], 'opencl');
+      expect(preset.defaultBackend['android'], 'cpu');
+      expect(preset.defaultBackend['ios'], 'cpu');
+    });
+
+    test('qwen35_2b preset has correct properties', () {
+      final preset = LocalModelPresets.qwen35_2b;
+      expect(preset.id, 'qwen35_2b');
+      expect(preset.displayName, 'Qwen 3.5 2B');
+      expect(preset.supportsVision, true);
+      expect(preset.supportsThinking, true);
+      expect(preset.defaultTokenWindow, 16384);
+      expect(preset.defaultBackend['android'], 'cpu');
       expect(preset.defaultBackend['ios'], 'cpu');
     });
 
@@ -22,15 +33,16 @@ void main() {
       expect(preset.supportsThinking, true);
       expect(preset.defaultTokenWindow, 16384);
       expect(preset.defaultBackend['android'], 'cpu');
-      expect(preset.defaultBackend['ios'], 'metal');
+      expect(preset.defaultBackend['ios'], 'cpu');
     });
 
-    test('all presets returns both models', () {
-      expect(LocalModelPresets.all.length, 2);
+    test('all presets returns three models', () {
+      expect(LocalModelPresets.all.length, 3);
     });
 
     test('findById returns correct preset', () {
       expect(LocalModelPresets.findById('qwen35_08b')?.id, 'qwen35_08b');
+      expect(LocalModelPresets.findById('qwen35_2b')?.id, 'qwen35_2b');
       expect(LocalModelPresets.findById('nonexistent'), null);
     });
   });
