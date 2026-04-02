@@ -53,7 +53,7 @@ void main() {
   late Directory tempDir;
   late Directory appDocDir;
 
-  setUp(() async {
+  setUpAll(() async {
     rootDir = await Directory.systemTemp.createTemp('conv_attach_test_');
     tempDir = Directory('${rootDir.path}/tmp')..createSync(recursive: true);
     appDocDir = Directory('${rootDir.path}/docs')..createSync(recursive: true);
@@ -63,7 +63,18 @@ void main() {
     );
   });
 
-  tearDown(() async {
+  setUp(() async {
+    if (await tempDir.exists()) {
+      await tempDir.delete(recursive: true);
+    }
+    if (await appDocDir.exists()) {
+      await appDocDir.delete(recursive: true);
+    }
+    await tempDir.create(recursive: true);
+    await appDocDir.create(recursive: true);
+  });
+
+  tearDownAll(() async {
     if (await rootDir.exists()) {
       await rootDir.delete(recursive: true);
     }
@@ -124,4 +135,29 @@ void main() {
 
     expect(promoted, 'attachments/existing.png');
   });
+
+  test(
+    'processFilesForAttachments persists synapsetemp URI captures for chat messages',
+    () async {
+      final cacheDir = Directory('${tempDir.path}/synapse_temp')
+        ..createSync(recursive: true);
+      final fileName = 'capture.png';
+      final tempCapture = File('${cacheDir.path}/$fileName');
+      await tempCapture.writeAsBytes([5, 4, 3, 2], flush: true);
+      final tempUri = SynapseTempUtils.buildUriFromFileName(fileName);
+
+      final processed =
+          await ConversationAttachmentService.processFilesForAttachments(
+            filePaths: [tempUri],
+            noteId: 'conversation-1',
+          );
+
+      expect(processed, hasLength(1));
+      expect(processed.single, startsWith('attachments/'));
+
+      final persisted = File('${appDocDir.path}/${processed.single}');
+      expect(await persisted.exists(), isTrue);
+      expect(await persisted.readAsBytes(), [5, 4, 3, 2]);
+    },
+  );
 }
