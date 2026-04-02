@@ -36,6 +36,8 @@ import '../services/conversation_settings_service.dart';
 import '../services/model_selector.dart';
 import '../services/service_locator.dart';
 import '../services/attachment_preprocessor.dart';
+import '../services/conversation_attachment_service.dart';
+import '../services/marker_cluster_service.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/prompts/note_prompt_builder.dart';
 import '../services/prompts/prompt_models.dart';
@@ -163,6 +165,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final List<ConversationMessage> _scratchpadItems = [];
   bool _includeScratchpadInChat = false;
   int _lastSavedScratchpadCount = 0;
+  final List<NormalizedRect> _pendingMarkerRawRects = [];
+  MarkerPlacementMode _pendingMarkerPlacementMode = MarkerPlacementMode.auto;
+  bool _pendingMarkerSupportsSplit = false;
+  int? _pendingMarkerPage;
 
   // PDF State
   bool _isPdfNightMode = false;
@@ -1822,10 +1828,20 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_pendingAttachments.isNotEmpty)
+        if (_pendingAttachments.isNotEmpty || _pendingMarkerSupportsSplit)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: _buildPendingAttachmentsPreview(l10n),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_pendingAttachments.isNotEmpty)
+                  _buildPendingAttachmentsPreview(l10n),
+                if (_pendingMarkerSupportsSplit) ...[
+                  if (_pendingAttachments.isNotEmpty) const SizedBox(height: 8),
+                  _buildMarkerPlacementModeSelector(theme),
+                ],
+              ],
+            ),
           ),
         DecoratedBox(
           decoration: BoxDecoration(
@@ -1868,7 +1884,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                                 _penStrokePoints.clear();
                                 // Only reset marker position if nothing has been queued yet
                                 if (_pendingAttachments.isEmpty) {
-                                  _pendingMarkerPosition = null;
+                                  _clearPendingMarkerState();
                                 }
                               } else {
                                 // Initialize new drawing session
@@ -2103,25 +2119,20 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
 
     if (totalBounds == null || actionBoundsList.isEmpty) return;
-    final newPosition = _computeMarkerPosition(actionBoundsList, totalBounds);
-    if (_pendingMarkerPosition == null) {
-      _pendingMarkerPosition = newPosition;
-    } else if (newPosition != null) {
-      final existingRects =
-          _pendingMarkerPosition!.normalizedRects ??
-          (_pendingMarkerPosition!.normalizedRect != null
-              ? [_pendingMarkerPosition!.normalizedRect!]
-              : <NormalizedRect>[]);
-      final newRects =
-          newPosition.normalizedRects ??
-          (newPosition.normalizedRect != null
-              ? [newPosition.normalizedRect!]
-              : <NormalizedRect>[]);
-      _pendingMarkerPosition = InNoteMarkerPosition(
-        normalizedRect: _pendingMarkerPosition!.normalizedRect,
-        normalizedRects: [...existingRects, ...newRects],
-        page: _pendingMarkerPosition!.page ?? newPosition.page,
-      );
+    final newRects = _computeMarkerRects(actionBoundsList, totalBounds);
+    if (newRects != null) {
+      if (_pendingMarkerRawRects.isEmpty) {
+        _pendingMarkerPlacementMode = MarkerPlacementMode.auto;
+      }
+      _pendingMarkerRawRects.addAll(newRects.rects);
+      _pendingMarkerPage ??= newRects.page;
+      _pendingMarkerSupportsSplit =
+          MarkerClusterService.shouldOfferSplitOverride(_pendingMarkerRawRects);
+      if (!_pendingMarkerSupportsSplit &&
+          _pendingMarkerPlacementMode == MarkerPlacementMode.split) {
+        _pendingMarkerPlacementMode = MarkerPlacementMode.auto;
+      }
+      _rebuildPendingMarkerPosition();
     }
 
     try {
@@ -2133,7 +2144,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
       final platformFile = PlatformFile(
         name: 'annotation_${DateTime.now().millisecondsSinceEpoch}.png',
-        path: result.file.path,
+        path: result.uri,
         size: imageBytes.length,
         bytes: imageBytes,
       );
@@ -2152,7 +2163,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         }
       }
     } catch (e, stackTrace) {
-      _pendingMarkerPosition = null;
+      _clearPendingMarkerState();
       LoggerService.error(
         'Failed to capture drawing: $e',
         error: e,
@@ -2166,7 +2177,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
-  InNoteMarkerPosition? _computeMarkerPosition(
+  _MarkerRectComputation? _computeMarkerRects(
     List<Rect> drawBoundsList,
     Rect totalBounds,
   ) {
@@ -2206,13 +2217,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     h: (drawBounds.height / pageScreenH).clamp(0.0, 1.0),
                   );
                 }).toList();
-                return InNoteMarkerPosition(
-                  normalizedRect: norms.isNotEmpty
-                      ? norms.first
-                      : NormalizedRect(x: 0, y: 0, w: 0, h: 0),
-                  normalizedRects: norms,
-                  page: currentPage,
-                );
+                return _MarkerRectComputation(rects: norms, page: currentPage);
               }
             }
           } catch (_) {
@@ -2235,12 +2240,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
               ),
             )
             .toList();
-        return InNoteMarkerPosition(
-          normalizedRect: norms.isNotEmpty
-              ? norms.first
-              : NormalizedRect(x: 0, y: 0, w: 0, h: 0),
-          normalizedRects: norms,
-        );
+        return _MarkerRectComputation(rects: norms);
       } else {
         // Non-PDF attachment (image, etc.).
         // Drawing coordinates are in viewport space.  When the image is
@@ -2271,25 +2271,28 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             h: ((bottomRight.dy - topLeft.dy) / size.height).clamp(0.0, 1.0),
           );
         }).toList();
-        return InNoteMarkerPosition(
-          normalizedRect: norms.isNotEmpty
-              ? norms.first
-              : NormalizedRect(x: 0, y: 0, w: 0, h: 0),
-          normalizedRects: norms,
-        );
+        return _MarkerRectComputation(rects: norms);
       }
     } else {
       // Text note mode
-      final renderObject = _noteContentKey.currentContext?.findRenderObject();
-      if (renderObject is! RenderBox || renderObject.size.isEmpty) return null;
-      final size = renderObject.size;
+      final contentRenderObject = _noteContentKey.currentContext
+          ?.findRenderObject();
+      final boundaryRenderObject = _noteBoundaryKey.currentContext
+          ?.findRenderObject();
+      if (contentRenderObject is! RenderBox ||
+          boundaryRenderObject is! RenderBox ||
+          contentRenderObject.size.isEmpty) {
+        return null;
+      }
+      final size = contentRenderObject.size;
+      final contentOriginInBoundary = contentRenderObject.localToGlobal(
+        Offset.zero,
+        ancestor: boundaryRenderObject,
+      );
 
       final norms = drawBoundsList.map((drawBounds) {
-        final localTopLeft = renderObject.globalToLocal(
-          Offset(drawBounds.left, drawBounds.top),
-        );
-        final localLeft = localTopLeft.dx;
-        final localTop = localTopLeft.dy;
+        final localLeft = drawBounds.left - contentOriginInBoundary.dx;
+        final localTop = drawBounds.top - contentOriginInBoundary.dy;
         return NormalizedRect(
           x: (localLeft / size.width).clamp(0.0, 1.0),
           y: (localTop / size.height).clamp(0.0, 1.0),
@@ -2297,14 +2300,61 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           h: (drawBounds.height / size.height).clamp(0.0, 1.0),
         );
       }).toList();
-      return InNoteMarkerPosition(
-        normalizedRect: norms.isNotEmpty
-            ? norms.first
-            : NormalizedRect(x: 0, y: 0, w: 0, h: 0),
-        normalizedRects: norms,
-      );
+      return _MarkerRectComputation(rects: norms);
     }
-    return null;
+  }
+
+  MarkerPlacementMode _effectivePendingMarkerPlacementMode() {
+    if (_pendingMarkerPlacementMode == MarkerPlacementMode.auto) {
+      return MarkerPlacementMode.split;
+    }
+    return _pendingMarkerPlacementMode;
+  }
+
+  void _rebuildPendingMarkerPosition() {
+    if (_pendingMarkerRawRects.isEmpty) {
+      _pendingMarkerPosition = null;
+      _pendingMarkerSupportsSplit = false;
+      return;
+    }
+
+    final rects = MarkerClusterService.buildPlacementRects(
+      _pendingMarkerRawRects,
+      mode: _effectivePendingMarkerPlacementMode(),
+    );
+    if (rects.isEmpty) {
+      _pendingMarkerPosition = null;
+      return;
+    }
+
+    _pendingMarkerPosition = InNoteMarkerPosition(
+      normalizedRect: rects.first,
+      normalizedRects: rects,
+      page: _pendingMarkerPage,
+    );
+  }
+
+  void _clearPendingMarkerState() {
+    _pendingMarkerPosition = null;
+    _pendingMarkerRawRects.clear();
+    _pendingMarkerPlacementMode = MarkerPlacementMode.auto;
+    _pendingMarkerSupportsSplit = false;
+    _pendingMarkerPage = null;
+  }
+
+  String get _currentNoteIdForAnnotationSave {
+    if (_activeAttachmentPath != null) {
+      final noteIndex = _findNoteIndexForAttachment(
+        _activeAttachmentPath!,
+        _conversationNotes,
+      );
+      if (noteIndex != null &&
+          noteIndex >= 0 &&
+          noteIndex < _conversationNotes.length) {
+        return _conversationNotes[noteIndex].id;
+      }
+    }
+    return _conversationNotes[_activeNoteIndex].id;
   }
 
   Widget _buildSendControl(AppLocalizations l10n) {
@@ -3609,6 +3659,48 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     );
   }
 
+  Widget _buildMarkerPlacementModeSelector(ThemeData theme) {
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 10,
+      runSpacing: 8,
+      children: [
+        Text(
+          'Marker placement',
+          style: theme.textTheme.labelMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        SegmentedButton<MarkerPlacementMode>(
+          segments: const [
+            ButtonSegment<MarkerPlacementMode>(
+              value: MarkerPlacementMode.single,
+              label: Text('Single'),
+              icon: Icon(Icons.filter_1),
+            ),
+            ButtonSegment<MarkerPlacementMode>(
+              value: MarkerPlacementMode.split,
+              label: Text('Split'),
+              icon: Icon(Icons.call_split),
+            ),
+          ],
+          selected: {
+            _pendingMarkerPlacementMode == MarkerPlacementMode.split
+                ? MarkerPlacementMode.split
+                : MarkerPlacementMode.single,
+          },
+          onSelectionChanged: (selection) {
+            final nextMode = selection.first;
+            setState(() {
+              _pendingMarkerPlacementMode = nextMode;
+              _rebuildPendingMarkerPosition();
+            });
+          },
+        ),
+      ],
+    );
+  }
+
   Future<void> _previewPendingAttachment(PlatformFile file) async {
     await FileUtils.openPlatformFile(file, context);
   }
@@ -4468,12 +4560,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   Future<void> _openAttachment(String path, AppLocalizations l10n) async {
     try {
-      String finalPath = path;
-      if (!path.startsWith('/') &&
-          !path.startsWith('http') &&
-          !path.startsWith('gs://')) {
-        finalPath = await FileUtils.getFullFilePath(path, true);
-      }
+      final finalPath = await FileUtils.resolvePortableAttachmentPath(path);
       await FileUtils.openFile(finalPath, context);
     } catch (e) {
       if (!mounted) return;
@@ -4701,6 +4788,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     InNoteMarkerPosition position,
   ) async {
     try {
+      final portableAttachmentPaths =
+          await ConversationAttachmentService.promoteAttachmentPathsToPersistent(
+            paths: attachmentPaths,
+            noteId: _currentNoteIdForAnnotationSave,
+          );
+
       if (_activeAttachmentPath != null) {
         final attachment = await _resolveAttachment(_activeAttachmentPath!);
         if (attachment == null) return;
@@ -4724,7 +4817,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             id: markerId,
             attachmentId: attachment.id,
             content: content,
-            attachmentPaths: attachmentPaths,
+            attachmentPaths: portableAttachmentPaths,
             createdAt: DateTime.now(),
           ),
         );
@@ -4752,12 +4845,23 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             id: markerId,
             noteId: note.id,
             content: content,
-            attachmentPaths: attachmentPaths,
+            attachmentPaths: portableAttachmentPaths,
             createdAt: DateTime.now(),
           ),
         );
       }
       if (mounted) {
+        setState(() {
+          final scratchpadIndex = _scratchpadItems.indexWhere(
+            (item) => item.id == markerId,
+          );
+          if (scratchpadIndex != -1) {
+            _scratchpadItems[scratchpadIndex] =
+                _scratchpadItems[scratchpadIndex].copyWith(
+                  attachmentPaths: portableAttachmentPaths,
+                );
+          }
+        });
         if (_activeAttachmentPath != null) {
           _loadMarkersForAttachment(_activeAttachmentPath!);
         } else {
@@ -4814,9 +4918,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     try {
       if (_isScratchpadMode) {
         final pendingPos = _pendingMarkerPosition;
-        _pendingMarkerPosition = null;
+        _clearPendingMarkerState();
 
         final markerId = const Uuid().v4();
+        final transientAttachmentPaths = attachments
+            .where((f) => f.path != null)
+            .map((f) => f.path!)
+            .toList();
 
         final message = ConversationMessage(
           id: markerId,
@@ -4824,7 +4932,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           content: content,
           type: MessageType.user,
           timestamp: DateTime.now(),
-          attachmentPaths: attachments.map((f) => f.path!).toList(),
+          attachmentPaths: transientAttachmentPaths,
         );
 
         setState(() {
@@ -4836,7 +4944,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           await _saveAnnotationMarker(
             markerId,
             content,
-            attachments.map((f) => f.path!).toList(),
+            transientAttachmentPaths,
             pendingPos,
           );
         }
@@ -4882,7 +4990,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       // Save in-note marker if a drawing was confirmed before this send
       if (_pendingMarkerPosition != null) {
         final pendingPos = _pendingMarkerPosition!;
-        _pendingMarkerPosition = null;
+        _clearPendingMarkerState();
         await _saveInNoteMarker(userMessage.id, _conversation!.id, pendingPos);
       }
 
@@ -5021,11 +5129,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     final conversationMessages =
         await ConversationAiEngine.buildConversationMessages(
-      messages: _messages,
-      currentModelId: currentModelId,
-      loadAttachments: (message) =>
-          _loadConversationAttachments(message, latestAttachments),
-    );
+          messages: _messages,
+          currentModelId: currentModelId,
+          loadAttachments: (message) =>
+              _loadConversationAttachments(message, latestAttachments),
+        );
     messages.addAll(conversationMessages);
 
     final request = PromptRequest(
@@ -5176,13 +5284,16 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final files = <PlatformFile>[];
     for (final path in message.attachmentPaths) {
       try {
-        final file = File(path);
+        final resolvedPath = await FileUtils.resolvePortableAttachmentPath(
+          path,
+        );
+        final file = File(resolvedPath);
         if (!await file.exists()) continue;
         final bytes = await file.readAsBytes();
         files.add(
           PlatformFile(
-            name: path.split(Platform.pathSeparator).last,
-            path: file.path,
+            name: path.split('/').last,
+            path: path,
             size: bytes.length,
             bytes: bytes,
           ),
@@ -6273,6 +6384,13 @@ class InNoteMarkerPosition {
     this.normalizedRects,
     this.page,
   });
+}
+
+class _MarkerRectComputation {
+  final List<NormalizedRect> rects;
+  final int? page;
+
+  const _MarkerRectComputation({required this.rects, this.page});
 }
 
 class _RecallAnnotationsDialog extends StatefulWidget {
