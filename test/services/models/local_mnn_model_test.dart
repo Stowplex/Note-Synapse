@@ -1,4 +1,6 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img_lib;
 import 'package:note_synapse/services/models/local_mnn_model.dart';
 import 'package:note_synapse/services/prompts/prompt_models.dart';
 
@@ -361,6 +363,8 @@ void main() {
   });
 
   group('LocalMnnModel image handling', () {
+    final oneByOnePng = img_lib.encodePng(img_lib.Image(width: 1, height: 1));
+
     test('inserts img tag for image attachment path', () {
       final result = LocalMnnModel.insertImageTags('Describe this', [
         '/tmp/img.jpg',
@@ -390,6 +394,60 @@ void main() {
       expect(LocalMnnModel.estimateImageTokens(2000, 1000), 392);
       // 200x100 → no resize: ceil(200/28) * ceil(100/28) = 8 * 4 = 32
       expect(LocalMnnModel.estimateImageTokens(200, 100), 32);
+    });
+
+    test('preprocesses byte-backed synapsetemp image attachments', () async {
+      final messages = [
+        PromptMessage(
+          role: PromptRole.user,
+          content: 'What is in this annotation?',
+          attachments: [
+            PlatformFile(
+              name: 'annotation.png',
+              path: 'synapsetemp:///annotation.png',
+              size: oneByOnePng.length,
+              bytes: oneByOnePng,
+            ),
+          ],
+        ),
+      ];
+
+      final processed = await LocalMnnModel.preprocessAttachments(messages);
+
+      expect(processed, hasLength(1));
+      expect(processed.single.content, contains('<img>'));
+      expect(processed.single.content, contains('<hw>1,1</hw>'));
+      expect(
+        processed.single.content,
+        isNot(contains('synapsetemp:///annotation.png')),
+      );
+    });
+
+    test('preprocesses byte-backed relative attachment images', () async {
+      final messages = [
+        PromptMessage(
+          role: PromptRole.user,
+          content: 'Check previous annotation',
+          attachments: [
+            PlatformFile(
+              name: 'saved_annotation.png',
+              path: 'attachments/saved_annotation.png',
+              size: oneByOnePng.length,
+              bytes: oneByOnePng,
+            ),
+          ],
+        ),
+      ];
+
+      final processed = await LocalMnnModel.preprocessAttachments(messages);
+
+      expect(processed, hasLength(1));
+      expect(processed.single.content, contains('<img>'));
+      expect(processed.single.content, contains('<hw>1,1</hw>'));
+      expect(
+        processed.single.content,
+        isNot(contains('attachments/saved_annotation.png')),
+      );
     });
   });
 }

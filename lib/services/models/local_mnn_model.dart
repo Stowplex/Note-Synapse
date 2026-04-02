@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:edge_gen/edge_gen.dart';
 import 'package:image/image.dart' as img_lib;
 import 'package:json_repair_flutter/json_repair_flutter.dart';
@@ -372,24 +374,48 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
       }
       final prepared = <PreparedImage>[];
       for (final file in msg.attachments) {
-        String? sourcePath = file.path;
-
-        // Handle in-memory attachments (e.g. rendered PDF pages) by
-        // writing bytes to a temp file first.
-        if (sourcePath == null && file.bytes != null) {
-          final ext = file.name.split('.').last.toLowerCase();
-          if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext)) {
-            final tempDir = await Directory.systemTemp.createTemp('mnn_mem_');
-            sourcePath = '${tempDir.path}/${file.name}';
-            await File(sourcePath).writeAsBytes(file.bytes!);
+        try {
+          final sourcePath = file.path;
+          final ext = _inferImageExtension(file);
+          if (!_isSupportedImageExtension(ext)) {
+            continue;
           }
-        }
 
-        if (sourcePath == null) continue;
-        final ext = sourcePath.split('.').last.toLowerCase();
-        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext)) {
-          final image = await resizeImageForModel(sourcePath);
+          final PreparedImage image;
+          if (file.bytes != null && file.bytes!.isNotEmpty) {
+            image = await resizeImageBytesForModel(
+              file.bytes!,
+              originalExtension: ext,
+            );
+          } else if (sourcePath != null && sourcePath.isNotEmpty) {
+            image = await resizeImageForModel(sourcePath);
+          } else {
+            LoggerService.warning(
+              'Skipping local image attachment with no readable bytes or path',
+              error: {
+                'name': file.name,
+                'path': sourcePath,
+                'size': file.size,
+                'hasBytes': false,
+              },
+            );
+            continue;
+          }
+
           prepared.add(image);
+        } catch (e, stackTrace) {
+          LoggerService.warning(
+            'Failed to preprocess local image attachment',
+            error: {
+              'name': file.name,
+              'path': file.path,
+              'size': file.size,
+              'hasBytes': file.bytes != null,
+              'bytesLength': file.bytes?.length,
+              'error': e.toString(),
+            },
+            stackTrace: stackTrace,
+          );
         }
       }
       if (prepared.isNotEmpty) {
@@ -702,59 +728,68 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
         DateTime.now().millisecondsSinceEpoch.toString();
     final startTime = DateTime.now();
     final endpoint = 'local-mnn://$name';
+    try {
+      final session = await _ensureSession();
+      await session.reset();
+      final processed = await preprocessAttachments(messages);
+      final usePromptFallback = _usesPromptTranscriptFallback;
+      final chatMessages = usePromptFallback
+          ? null
+          : buildChatMessages(processed);
+      final promptText = usePromptFallback
+          ? buildPromptTranscript(processed)
+          : null;
 
-    final session = await _ensureSession();
-    await session.reset();
-    final processed = await preprocessAttachments(messages);
-    final usePromptFallback = _usesPromptTranscriptFallback;
-    final chatMessages = usePromptFallback
-        ? null
-        : buildChatMessages(processed);
-    final promptText = usePromptFallback
-        ? buildPromptTranscript(processed)
-        : null;
+      LoggerService.logAiRequest(
+        endpoint: endpoint,
+        headers: {'backend': _config?.backendType ?? 'cpu'},
+        requestBody: _buildLogBody(
+          messages,
+          transportPrompt: promptText,
+          transportMessages: chatMessages,
+          usesPromptFallback: usePromptFallback,
+        ),
+        requestId: requestId,
+      );
 
-    LoggerService.logAiRequest(
-      endpoint: endpoint,
-      headers: {'backend': _config?.backendType ?? 'cpu'},
-      requestBody: _buildLogBody(
-        messages,
-        transportPrompt: promptText,
-        transportMessages: chatMessages,
-        usesPromptFallback: usePromptFallback,
-      ),
-      requestId: requestId,
-    );
-
-    final buffer = StringBuffer();
-    if (usePromptFallback) {
-      await for (final chunk in session.generate(
-        prompt: promptText!,
-        maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
-      )) {
-        buffer.write(chunk);
+      final buffer = StringBuffer();
+      if (usePromptFallback) {
+        await for (final chunk in session.generate(
+          prompt: promptText!,
+          maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+        )) {
+          buffer.write(chunk);
+        }
+      } else {
+        await for (final chunk in session.generateWithMessages(
+          messages: chatMessages!,
+          maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+        )) {
+          buffer.write(chunk);
+        }
       }
-    } else {
-      await for (final chunk in session.generateWithMessages(
-        messages: chatMessages!,
-        maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
-      )) {
-        buffer.write(chunk);
-      }
+
+      final responseText = buffer.toString();
+      final duration = DateTime.now().difference(startTime);
+
+      LoggerService.logAiResponse(
+        statusCode: 200,
+        headers: {'model': name},
+        responseBody: {'text': responseText},
+        requestId: requestId,
+        duration: duration,
+      );
+
+      return responseText;
+    } catch (e) {
+      LoggerService.logAiError(
+        error: e.toString(),
+        endpoint: endpoint,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+      rethrow;
     }
-
-    final responseText = buffer.toString();
-    final duration = DateTime.now().difference(startTime);
-
-    LoggerService.logAiResponse(
-      statusCode: 200,
-      headers: {'model': name},
-      responseBody: {'text': responseText},
-      requestId: requestId,
-      duration: duration,
-    );
-
-    return responseText;
   }
 
   @override
@@ -772,112 +807,121 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
         DateTime.now().millisecondsSinceEpoch.toString();
     final startTime = DateTime.now();
     final endpoint = 'local-mnn://$name/tools';
+    try {
+      final session = await _ensureSession();
+      await session.reset();
+      final processed = await preprocessAttachments(messages);
+      final structuredProcessed = tools.isNotEmpty
+          ? sanitizeMessagesForStructuredTools(processed)
+          : processed;
+      final structuredMessages = buildStructuredMessages(structuredProcessed);
+      final structuredTools = normalizeStructuredTools(tools);
+      final toolSchemaBlock = tools.isNotEmpty
+          ? buildToolSchemaBlock(tools)
+          : null;
+      final usePromptFallback = _usesPromptTranscriptFallback;
+      final chatMessages = usePromptFallback
+          ? null
+          : buildChatMessages(processed, toolSchemaBlock: toolSchemaBlock);
+      final promptText = usePromptFallback
+          ? buildPromptTranscript(processed, toolSchemaBlock: toolSchemaBlock)
+          : null;
 
-    final session = await _ensureSession();
-    await session.reset();
-    final processed = await preprocessAttachments(messages);
-    final structuredProcessed = tools.isNotEmpty
-        ? sanitizeMessagesForStructuredTools(processed)
-        : processed;
-    final structuredMessages = buildStructuredMessages(structuredProcessed);
-    final structuredTools = normalizeStructuredTools(tools);
-    final toolSchemaBlock = tools.isNotEmpty
-        ? buildToolSchemaBlock(tools)
-        : null;
-    final usePromptFallback = _usesPromptTranscriptFallback;
-    final chatMessages = usePromptFallback
-        ? null
-        : buildChatMessages(processed, toolSchemaBlock: toolSchemaBlock);
-    final promptText = usePromptFallback
-        ? buildPromptTranscript(processed, toolSchemaBlock: toolSchemaBlock)
-        : null;
+      LoggerService.logAiRequest(
+        endpoint: endpoint,
+        headers: {'backend': _config?.backendType ?? 'cpu'},
+        requestBody: _buildLogBody(
+          messages,
+          transportPrompt: promptText,
+          transportMessages: chatMessages,
+          structuredMessages: structuredMessages,
+          structuredTools: structuredTools,
+          tools: tools,
+          toolSchemaBlock: toolSchemaBlock,
+          usesPromptFallback: usePromptFallback,
+        ),
+        requestId: requestId,
+      );
 
-    LoggerService.logAiRequest(
-      endpoint: endpoint,
-      headers: {'backend': _config?.backendType ?? 'cpu'},
-      requestBody: _buildLogBody(
-        messages,
-        transportPrompt: promptText,
-        transportMessages: chatMessages,
-        structuredMessages: structuredMessages,
-        structuredTools: structuredTools,
-        tools: tools,
-        toolSchemaBlock: toolSchemaBlock,
-        usesPromptFallback: usePromptFallback,
-      ),
-      requestId: requestId,
-    );
-
-    // Buffer full response for tool call parsing
-    final buffer = StringBuffer();
-    var usedStructuredTransport = false;
-    String? structuredTransportError;
-    if (!usePromptFallback) {
-      try {
-        await for (final chunk in session.generateStructured(
-          messages: structuredMessages,
-          tools: structuredTools,
-          maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
-        )) {
-          buffer.write(chunk);
-        }
-        usedStructuredTransport = true;
-      } catch (error, stackTrace) {
-        structuredTransportError = error.toString();
-        LoggerService.warning(
-          'Structured local MNN tool transport failed; falling back to prompt injection',
-          error: {
-            'error': structuredTransportError,
-            'stackTrace': stackTrace.toString(),
-          },
-        );
-      }
-    }
-
-    if (!usedStructuredTransport) {
-      if (usePromptFallback) {
-        await for (final chunk in session.generate(
-          prompt: promptText!,
-          maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
-        )) {
-          buffer.write(chunk);
-        }
-      } else {
-        await for (final chunk in session.generateWithMessages(
-          messages: chatMessages!,
-          maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
-        )) {
-          buffer.write(chunk);
+      // Buffer full response for tool call parsing
+      final buffer = StringBuffer();
+      var usedStructuredTransport = false;
+      String? structuredTransportError;
+      if (!usePromptFallback) {
+        try {
+          await for (final chunk in session.generateStructured(
+            messages: structuredMessages,
+            tools: structuredTools,
+            maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+          )) {
+            buffer.write(chunk);
+          }
+          usedStructuredTransport = true;
+        } catch (error, stackTrace) {
+          structuredTransportError = error.toString();
+          LoggerService.warning(
+            'Structured local MNN tool transport failed; falling back to prompt injection',
+            error: {
+              'error': structuredTransportError,
+              'stackTrace': stackTrace.toString(),
+            },
+          );
         }
       }
+
+      if (!usedStructuredTransport) {
+        if (usePromptFallback) {
+          await for (final chunk in session.generate(
+            prompt: promptText!,
+            maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+          )) {
+            buffer.write(chunk);
+          }
+        } else {
+          await for (final chunk in session.generateWithMessages(
+            messages: chatMessages!,
+            maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+          )) {
+            buffer.write(chunk);
+          }
+        }
+      }
+
+      final responseText = buffer.toString();
+      final duration = DateTime.now().difference(startTime);
+      final parsed = parseToolCalls(responseText);
+
+      final result = {
+        'text': parsed.text.isEmpty ? '' : parsed.text,
+        'function_calls': parsed.functionCalls,
+        'modelUsed': name,
+      };
+
+      LoggerService.logAiResponse(
+        statusCode: 200,
+        headers: {'model': name},
+        responseBody: {
+          'text': parsed.text,
+          'functionCalls': parsed.functionCalls,
+          'rawLength': responseText.length,
+          'structuredTransport': usedStructuredTransport,
+          if (structuredTransportError != null)
+            'structuredTransportError': structuredTransportError,
+        },
+        requestId: requestId,
+        duration: duration,
+      );
+
+      return result;
+    } catch (e) {
+      LoggerService.logAiError(
+        error: e.toString(),
+        endpoint: endpoint,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+      rethrow;
     }
-
-    final responseText = buffer.toString();
-    final duration = DateTime.now().difference(startTime);
-    final parsed = parseToolCalls(responseText);
-
-    final result = {
-      'text': parsed.text.isEmpty ? '' : parsed.text,
-      'function_calls': parsed.functionCalls,
-      'modelUsed': name,
-    };
-
-    LoggerService.logAiResponse(
-      statusCode: 200,
-      headers: {'model': name},
-      responseBody: {
-        'text': parsed.text,
-        'functionCalls': parsed.functionCalls,
-        'rawLength': responseText.length,
-        'structuredTransport': usedStructuredTransport,
-        if (structuredTransportError != null)
-          'structuredTransportError': structuredTransportError,
-      },
-      requestId: requestId,
-      duration: duration,
-    );
-
-    return result;
   }
 
   /// Generates a streaming response for plain chat (no tool calls).
@@ -889,65 +933,74 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     final reqId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
     final startTime = DateTime.now();
     final endpoint = 'local-mnn://$name/stream';
+    try {
+      final session = await _ensureSession();
+      await session.reset();
+      final processed = await preprocessAttachments(messages);
+      final usePromptFallback = _usesPromptTranscriptFallback;
+      final chatMessages = usePromptFallback
+          ? null
+          : buildChatMessages(processed);
+      final promptText = usePromptFallback
+          ? buildPromptTranscript(processed)
+          : null;
 
-    final session = await _ensureSession();
-    await session.reset();
-    final processed = await preprocessAttachments(messages);
-    final usePromptFallback = _usesPromptTranscriptFallback;
-    final chatMessages = usePromptFallback
-        ? null
-        : buildChatMessages(processed);
-    final promptText = usePromptFallback
-        ? buildPromptTranscript(processed)
-        : null;
+      LoggerService.logAiRequest(
+        endpoint: endpoint,
+        headers: {'backend': _config?.backendType ?? 'cpu'},
+        requestBody: _buildLogBody(
+          messages,
+          transportPrompt: promptText,
+          transportMessages: chatMessages,
+          usesPromptFallback: usePromptFallback,
+        ),
+        requestId: reqId,
+      );
 
-    LoggerService.logAiRequest(
-      endpoint: endpoint,
-      headers: {'backend': _config?.backendType ?? 'cpu'},
-      requestBody: _buildLogBody(
-        messages,
-        transportPrompt: promptText,
-        transportMessages: chatMessages,
-        usesPromptFallback: usePromptFallback,
-      ),
-      requestId: reqId,
-    );
-
-    final responseBuffer = StringBuffer();
-    if (usePromptFallback) {
-      await for (final chunk in session.generate(
-        prompt: promptText!,
-        maxNewTokens: maxNewTokens ?? _config?.maxOutputTokens ?? 8192,
-      )) {
-        responseBuffer.write(chunk);
-        yield chunk;
+      final responseBuffer = StringBuffer();
+      if (usePromptFallback) {
+        await for (final chunk in session.generate(
+          prompt: promptText!,
+          maxNewTokens: maxNewTokens ?? _config?.maxOutputTokens ?? 8192,
+        )) {
+          responseBuffer.write(chunk);
+          yield chunk;
+        }
+      } else {
+        await for (final chunk in session.generateWithMessages(
+          messages: chatMessages!,
+          maxNewTokens: maxNewTokens ?? _config?.maxOutputTokens ?? 8192,
+        )) {
+          responseBuffer.write(chunk);
+          yield chunk;
+        }
       }
-    } else {
-      await for (final chunk in session.generateWithMessages(
-        messages: chatMessages!,
-        maxNewTokens: maxNewTokens ?? _config?.maxOutputTokens ?? 8192,
-      )) {
-        responseBuffer.write(chunk);
-        yield chunk;
-      }
+
+      final responseText = responseBuffer.toString();
+      final duration = DateTime.now().difference(startTime);
+
+      LoggerService.logAiResponse(
+        statusCode: 200,
+        headers: {'model': name},
+        responseBody: {
+          'text': responseText.length > 2000
+              ? '${responseText.substring(0, 2000)}...'
+              : responseText,
+          'textLength': responseText.length,
+          'streaming': true,
+        },
+        requestId: reqId,
+        duration: duration,
+      );
+    } catch (e) {
+      LoggerService.logAiError(
+        error: e.toString(),
+        endpoint: endpoint,
+        requestId: reqId,
+        duration: DateTime.now().difference(startTime),
+      );
+      rethrow;
     }
-
-    final responseText = responseBuffer.toString();
-    final duration = DateTime.now().difference(startTime);
-
-    LoggerService.logAiResponse(
-      statusCode: 200,
-      headers: {'model': name},
-      responseBody: {
-        'text': responseText.length > 2000
-            ? '${responseText.substring(0, 2000)}...'
-            : responseText,
-        'textLength': responseText.length,
-        'streaming': true,
-      },
-      requestId: reqId,
-      duration: duration,
-    );
   }
 
   /// Whether this model supports streaming responses.
@@ -984,6 +1037,29 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
     return '$text\n$tags';
   }
 
+  static bool _isSupportedImageExtension(String extension) {
+    return const {
+      'jpg',
+      'jpeg',
+      'png',
+      'gif',
+      'webp',
+      'bmp',
+    }.contains(extension);
+  }
+
+  static String _inferImageExtension(PlatformFile file) {
+    String candidate = file.name;
+    if (candidate.isEmpty && file.path != null) {
+      candidate = file.path!;
+    }
+    final lastDot = candidate.lastIndexOf('.');
+    if (lastDot == -1 || lastDot == candidate.length - 1) {
+      return '';
+    }
+    return candidate.substring(lastDot + 1).toLowerCase();
+  }
+
   /// Normalizes an image for the MNN runtime: resizes to fit within 1000px
   /// on the longest side and always writes to a temp file (matching the
   /// format expected by the vision runtime).
@@ -991,10 +1067,19 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
   static Future<PreparedImage> resizeImageForModel(String sourcePath) async {
     final file = File(sourcePath);
     final bytes = await file.readAsBytes();
+    final ext = sourcePath.split('.').last.toLowerCase();
+    return resizeImageBytesForModel(bytes, originalExtension: ext);
+  }
+
+  static Future<PreparedImage> resizeImageBytesForModel(
+    Uint8List bytes, {
+    String? originalExtension,
+  }) async {
+    final normalizedExtension = (originalExtension ?? '').toLowerCase();
 
     final image = img_lib.decodeImage(bytes);
     if (image == null) {
-      return PreparedImage(path: sourcePath, width: 0, height: 0);
+      throw const FormatException('Unable to decode image bytes');
     }
 
     final longestSide = image.width > image.height ? image.width : image.height;
@@ -1018,9 +1103,8 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
       );
     }
 
-    final ext = sourcePath.split('.').last.toLowerCase();
     final tempDir = await Directory.systemTemp.createTemp('mnn_img_');
-    final isPng = ext == 'png';
+    final isPng = normalizedExtension == 'png';
     final tempPath = '${tempDir.path}/prepared.${isPng ? 'png' : 'jpg'}';
 
     if (isPng) {

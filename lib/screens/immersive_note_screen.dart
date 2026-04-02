@@ -5398,7 +5398,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         files.add(
           PlatformFile(
             name: path.split('/').last,
-            path: path,
+            path: resolvedPath,
             size: bytes.length,
             bytes: bytes,
           ),
