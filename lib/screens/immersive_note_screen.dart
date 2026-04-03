@@ -1286,8 +1286,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              _isPdfNightMode ? 'Day Mode' : 'Night Mode',
-                            ), // TODO: l10n
+                              _isPdfNightMode ? l10n.dayMode : l10n.nightMode,
+                            ),
                           ],
                         ),
                       ),
@@ -6063,6 +6063,7 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
         key: ValueKey('${_cacheKey}_pdf_view'),
         controller: _controller,
         params: PdfViewerParams(
+          backgroundColor: widget.isNightMode ? Colors.white : Colors.grey,
           textSelectionParams: const PdfTextSelectionParams(),
           pageDropShadow: null,
           onViewerReady: (document, controller) async {

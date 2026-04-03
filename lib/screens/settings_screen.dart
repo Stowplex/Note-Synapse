@@ -96,8 +96,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Card(
             child: ListTile(
               leading: const Icon(Icons.apps),
-              title: const Text('User App'),
-              subtitle: const Text('Manage user app settings and libraries'),
+              title: Text(l10n.userAppSettingsTitle),
+              subtitle: Text(l10n.userAppSettingsSubtitle),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
                 context,
