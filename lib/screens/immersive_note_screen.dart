@@ -4801,19 +4801,48 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
+  Future<int> _nextMarkerIndex() async {
+    if (_activeAttachmentPath != null) {
+      final attachmentPath = _activeAttachmentPath!;
+      final cachedMarkers = _attachmentMarkers[attachmentPath];
+      if (cachedMarkers != null && cachedMarkers.isNotEmpty) {
+        return cachedMarkers.map((marker) => marker.index).reduce(max) + 1;
+      }
+
+      final attachment = await _resolveAttachment(attachmentPath);
+      if (attachment == null) return 1;
+      final persistedMarkers = await _noteMarkerService.getMarkersForAttachment(
+        attachment.id,
+      );
+      if (persistedMarkers.isEmpty) return 1;
+      return persistedMarkers.map((marker) => marker.index).reduce(max) + 1;
+    }
+
+    final note = _conversationNotes[_activeNoteIndex];
+    final cachedMarkers = _noteMarkers[note.id];
+    if (cachedMarkers != null && cachedMarkers.isNotEmpty) {
+      return cachedMarkers.map((marker) => marker.index).reduce(max) + 1;
+    }
+
+    final persistedMarkers = await _noteMarkerService.getMarkersForNote(
+      note.id,
+    );
+    if (persistedMarkers.isEmpty) return 1;
+    return persistedMarkers.map((marker) => marker.index).reduce(max) + 1;
+  }
+
   Future<void> _saveInNoteMarker(
     String messageId,
     String conversationId,
     InNoteMarkerPosition position,
   ) async {
     try {
+      final nextIndex = await _nextMarkerIndex();
       if (_activeAttachmentPath != null) {
         final attachment = await _resolveAttachment(_activeAttachmentPath!);
         if (attachment == null) return;
-        final existingMarkers = await _noteMarkerService
-            .getMarkersForAttachment(attachment.id);
         final marker = InNoteMarker.forAttachment(
-          index: existingMarkers.length + 1,
+          index: nextIndex,
           page: position.page ?? 0,
           normalizedRect: position.normalizedRect,
           normalizedRects: position.normalizedRects,
@@ -4822,12 +4851,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         );
         await _noteMarkerService.saveMarkerForAttachment(attachment.id, marker);
       } else {
-        final note = widget.notes[_activeNoteIndex];
-        final existingMarkers = await _noteMarkerService.getMarkersForNote(
-          note.id,
-        );
+        final note = _conversationNotes[_activeNoteIndex];
         final marker = InNoteMarker.forNote(
-          index: existingMarkers.length + 1,
+          index: nextIndex,
           charStart: 0,
           charEnd: 0,
           normalizedRect: position.normalizedRect,
@@ -4842,7 +4868,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         if (_activeAttachmentPath != null) {
           _loadMarkersForAttachment(_activeAttachmentPath!);
         } else {
-          _loadMarkersForNote(widget.notes[_activeNoteIndex].id);
+          _loadMarkersForNote(_conversationNotes[_activeNoteIndex].id);
         }
       }
     } catch (e) {
@@ -4857,6 +4883,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     InNoteMarkerPosition position,
   ) async {
     try {
+      final nextIndex = await _nextMarkerIndex();
       final portableAttachmentPaths =
           await ConversationAttachmentService.promoteAttachmentPathsToPersistent(
             paths: attachmentPaths,
@@ -4866,11 +4893,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       if (_activeAttachmentPath != null) {
         final attachment = await _resolveAttachment(_activeAttachmentPath!);
         if (attachment == null) return;
-        final existingMarkers = await _noteMarkerService
-            .getMarkersForAttachment(attachment.id);
         final marker = InNoteMarker.forAttachment(
           id: markerId,
-          index: existingMarkers.length + 1,
+          index: nextIndex,
           page: position.page ?? 0,
           normalizedRect: position.normalizedRect,
           normalizedRects: position.normalizedRects,
@@ -4891,13 +4916,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           ),
         );
       } else {
-        final note = widget.notes[_activeNoteIndex];
-        final existingMarkers = await _noteMarkerService.getMarkersForNote(
-          note.id,
-        );
+        final note = _conversationNotes[_activeNoteIndex];
         final marker = InNoteMarker.forNote(
           id: markerId,
-          index: existingMarkers.length + 1,
+          index: nextIndex,
           charStart: 0,
           charEnd: 0,
           normalizedRect: position.normalizedRect,
@@ -4934,7 +4956,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         if (_activeAttachmentPath != null) {
           _loadMarkersForAttachment(_activeAttachmentPath!);
         } else {
-          _loadMarkersForNote(widget.notes[_activeNoteIndex].id);
+          _loadMarkersForNote(_conversationNotes[_activeNoteIndex].id);
         }
       }
     } catch (e) {
