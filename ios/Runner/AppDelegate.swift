@@ -219,7 +219,12 @@ import AVFoundation
       return
     }
 
-    let documentPicker = UIDocumentPickerViewController(forExporting: [fileURL], asCopy: true)
+    let documentPicker: UIDocumentPickerViewController
+    if #available(iOS 14.0, *) {
+      documentPicker = UIDocumentPickerViewController(forExporting: [fileURL], asCopy: true)
+    } else {
+      documentPicker = UIDocumentPickerViewController(url: fileURL, in: .exportToService)
+    }
     documentPicker.modalPresentationStyle = .formSheet
     controller.present(documentPicker, animated: true, completion: nil)
     

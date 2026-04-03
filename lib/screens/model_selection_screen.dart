@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import 'model_configuration_screen.dart';
+import 'local_model_picker_screen.dart';
 
 class ModelSelectionScreen extends StatefulWidget {
   final bool isOnboarding;
@@ -217,7 +218,22 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: InkWell(
-        onTap: () {
+        onTap: () async {
+          if (modelType == ModelType.localMnn) {
+            final configured = await Navigator.push<bool>(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    const LocalModelPickerScreen(closeOnConfigured: true),
+              ),
+            );
+            if (!mounted || configured != true) return;
+            setState(() {
+              _selectedModel = ModelType.localMnn;
+              _error = null;
+            });
+            return;
+          }
           setState(() {
             _selectedModel = modelType;
             _error = null;
@@ -287,6 +303,8 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
         return Icons.psychology;
       case ModelType.openaiCompatible:
         return Icons.api;
+      case ModelType.localMnn:
+        return Icons.phone_android;
     }
   }
 
@@ -296,6 +314,8 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
         return AppLocalizations.of(context)!.geminiModelDescription;
       case ModelType.openaiCompatible:
         return AppLocalizations.of(context)!.openaiCompatibleModelDescription;
+      case ModelType.localMnn:
+        return AppLocalizations.of(context)!.localModelDescription;
     }
   }
 }

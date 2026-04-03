@@ -8,6 +8,7 @@ import 'user_app_service.dart';
 import 'model_storage_service.dart';
 import 'model_preference_service.dart';
 import 'model_selector.dart';
+import 'local_model_service.dart';
 import 'sql_query_service.dart';
 import 'context_manager_service.dart';
 import 'ai_service.dart';
@@ -100,6 +101,12 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<ModelPreferenceService>()) {
     getIt.registerLazySingleton<ModelPreferenceService>(
       () => ModelPreferenceService(),
+    );
+  }
+
+  if (!getIt.isRegistered<LocalModelService>()) {
+    getIt.registerLazySingleton<LocalModelService>(
+      () => LocalModelService(),
     );
   }
 

@@ -1,7 +1,8 @@
 /// Enum representing different model types
 enum ModelType {
   gemini('gemini', 'Gemini'),
-  openaiCompatible('openai_compatible', 'OpenAI Compatible');
+  openaiCompatible('openai_compatible', 'OpenAI Compatible'),
+  localMnn('local_mnn', 'Local Model');
 
   const ModelType(this.id, this.displayName);
 

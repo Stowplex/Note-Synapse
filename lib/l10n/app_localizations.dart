@@ -7663,6 +7663,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Fetching image...'**
   String get fetchingImage;
+
+  /// No description provided for @localModelDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'On-device AI, no API key needed'**
+  String get localModelDescription;
+
+  /// No description provided for @localModelDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get localModelDownload;
+
+  /// No description provided for @localModelDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading...'**
+  String get localModelDownloading;
+
+  /// No description provided for @localModelReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get localModelReady;
+
+  /// No description provided for @localModelNotDownloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Not downloaded'**
+  String get localModelNotDownloaded;
+
+  /// No description provided for @localModelDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Download Failed'**
+  String get localModelDownloadFailed;
+
+  /// No description provided for @localModelRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get localModelRetry;
+
+  /// No description provided for @localModelDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Model'**
+  String get localModelDelete;
+
+  /// No description provided for @localModelTokenWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Token Window'**
+  String get localModelTokenWindow;
+
+  /// No description provided for @localModelEnableThinking.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Thinking'**
+  String get localModelEnableThinking;
+
+  /// No description provided for @localModelBackend.
+  ///
+  /// In en, this message translates to:
+  /// **'Backend'**
+  String get localModelBackend;
+
+  /// No description provided for @localModelSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Model Settings'**
+  String get localModelSettings;
+
+  /// No description provided for @localModelConstraintWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This input may exceed the local model\'s token window. Consider switching to a cloud model.'**
+  String get localModelConstraintWarning;
+
+  /// No description provided for @localModelSwitchToCloud.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to Cloud'**
+  String get localModelSwitchToCloud;
+
+  /// No description provided for @toolOrchestrationWarningTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool Orchestration Not Supported'**
+  String get toolOrchestrationWarningTitle;
+
+  /// No description provided for @toolOrchestrationWarningBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{modelName} may not reliably execute tool calls. Performance can degrade significantly.'**
+  String toolOrchestrationWarningBody(String modelName);
+
+  /// No description provided for @toolOrchestrationSupportedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{modelName} supports tool orchestration.'**
+  String toolOrchestrationSupportedBody(String modelName);
+
+  /// No description provided for @toolOrchestrationContinueAnyway.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue Anyway'**
+  String get toolOrchestrationContinueAnyway;
+
+  /// No description provided for @toolOrchestrationContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get toolOrchestrationContinue;
+
+  /// No description provided for @toolOrchestrationStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get toolOrchestrationStop;
+
+  /// No description provided for @toolOrchestrationSwitchModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch Model'**
+  String get toolOrchestrationSwitchModel;
 }
 
 class _AppLocalizationsDelegate

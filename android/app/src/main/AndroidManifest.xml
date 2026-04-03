@@ -25,6 +25,12 @@
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
         android:usesCleartextTraffic="true">
+        <!-- GPU compute libraries for MNN local model inference (OpenCL) -->
+        <!-- required=false: app still installs on devices without these libs -->
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+        <uses-native-library android:name="libOpenCL-pixel.so" android:required="false" />
+        <uses-native-library android:name="libOpenCL-car.so" android:required="false" />
+        <uses-native-library android:name="libGLES_mali.so" android:required="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

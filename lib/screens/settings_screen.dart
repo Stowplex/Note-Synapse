@@ -23,6 +23,8 @@ import '../services/conversation_settings_service.dart';
 import '../models/model_config.dart';
 import 'settings/user_app_settings_screen.dart';
 import '../services/wake_lock_service.dart' as wake_lock;
+import '../services/models/local_model_presets.dart';
+import 'local_model_settings_screen.dart';
 import '../services/network_settings_service.dart';
 import '../services/network_provider.dart';
 import 'settings/about_screen.dart';
@@ -391,14 +393,32 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
   }
 
   Future<void> _openModelConfiguration({ModelConfig? config}) async {
-    if (mounted) {
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => ModelConfigurationScreen(config: config),
-        ),
-      );
-      _loadData();
+    if (!mounted) return;
+
+    // For local MNN models, route to the local model settings screen
+    if (config != null && config.type == ModelType.localMnn) {
+      final preset = LocalModelPresets.findById(config.modelName ?? '');
+      if (preset != null) {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => LocalModelSettingsScreen(
+              preset: preset,
+              configPath: config.endpoint ?? '',
+              existingConfig: config,
+            ),
+          ),
+        );
+        _loadData();
+        return;
+      }
     }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ModelConfigurationScreen(config: config),
+      ),
+    );
+    _loadData();
   }
 
   @override
@@ -652,6 +672,8 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
         return Icons.auto_awesome;
       case ModelType.openaiCompatible:
         return Icons.smart_toy;
+      case ModelType.localMnn:
+        return Icons.computer;
     }
   }
 }

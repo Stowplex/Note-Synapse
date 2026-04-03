@@ -58,6 +58,7 @@ import '../services/sql_query_service.dart';
 import '../widgets/agent_plan_review_widget.dart';
 import '../widgets/agent_task_tree_widget.dart';
 import '../widgets/attachment_preview_tile.dart';
+import '../widgets/tool_orchestration_warning_dialog.dart';
 
 class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
@@ -91,6 +92,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   bool _isLoading = false;
   bool _isSending = false;
   bool _isAborting = false;
+  String _streamingContent = '';
+  bool _isStreaming = false;
   String? _currentRequestId;
   final Set<String> _cancelledRequestIds = {};
   final List<PlatformFile> _attachedFiles = [];
@@ -825,6 +828,26 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
 
+    // Check tool orchestration capability before sending
+    final hasTools =
+        _selectedBuiltInTools.isNotEmpty || _selectedMcpEndpointIds.isNotEmpty;
+    final activeConfig =
+        _selectedModel ?? context.read<AppProvider>().modelConfig;
+    final supportsOrchestration =
+        activeConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
+        true;
+    if (hasTools && !supportsOrchestration) {
+      final result = await ToolOrchestrationWarningDialog.show(
+        context,
+        activeConfig,
+      );
+      if (!mounted) return;
+      if (result == null || result is ToolOrchestrationStop) return;
+      if (result is ToolOrchestrationContinue && result.modelOverride != null) {
+        _selectedModel = result.modelOverride;
+      }
+    }
+
     final content = _messageController.text;
     final attachments = List<PlatformFile>.from(_attachedFiles);
     String? requestId;
@@ -1000,6 +1023,15 @@ $historyBuffer
         content,
         attachments,
         generationContext,
+        onStreamChunk: (chunk) {
+          if (mounted) {
+            setState(() {
+              _streamingContent += chunk;
+              _isStreaming = true;
+            });
+            _scrollToBottom();
+          }
+        },
       );
 
       final aiMessage = await _conversationService.addAIResponse(
@@ -1011,6 +1043,8 @@ $historyBuffer
       if (!mounted) return;
 
       setState(() {
+        _streamingContent = '';
+        _isStreaming = false;
         _messages.add(aiMessage);
       });
       _scrollToBottom();
@@ -1117,8 +1151,9 @@ $historyBuffer
   Future<ConversationAiResponse> _generateAIResponse(
     String userMessage,
     List<PlatformFile> attachedFiles,
-    GenerationContext generationContext,
-  ) async {
+    GenerationContext generationContext, {
+    void Function(String chunk)? onStreamChunk,
+  }) async {
     final requestId = generationContext.ensureRequestId();
     try {
       if (_cancelledRequestIds.contains(requestId)) {
@@ -1178,6 +1213,7 @@ $historyBuffer
         generationContext: generationContext,
         maxToolIterations: _maxToolIterations,
         onIterationsExhausted: _handleIterationsExhausted,
+        onStreamChunk: onStreamChunk,
       );
 
       if (_cancelledRequestIds.contains(requestId)) {
@@ -1212,11 +1248,11 @@ $historyBuffer
 
     final conversationMessages =
         await ConversationAiEngine.buildConversationMessages(
-      messages: _messages,
-      currentModelId: currentModelId,
-      loadAttachments: (message) =>
-          _loadConversationAttachments(message, latestUserAttachments),
-    );
+          messages: _messages,
+          currentModelId: currentModelId,
+          loadAttachments: (message) =>
+              _loadConversationAttachments(message, latestUserAttachments),
+        );
 
     final contextMessages =
         (contextMessage.content.trim().isEmpty &&
@@ -1802,6 +1838,11 @@ $historyBuffer
     // Get current model config to check for features
     final appProvider = context.read<AppProvider>();
     final modelConfig = appProvider.modelConfig;
+    final supportsToolOrchestration =
+        (_selectedModel ?? modelConfig)
+            ?.customCapabilitiesObject
+            ?.supportsToolOrchestration ??
+        true;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1908,7 +1949,23 @@ $historyBuffer
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                           value: isSelected,
-                          secondary: Icon(tool.icon, color: tool.color),
+                          secondary: supportsToolOrchestration
+                              ? Icon(tool.icon, color: tool.color)
+                              : Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    Icon(tool.icon, color: tool.color),
+                                    Positioned(
+                                      right: -4,
+                                      top: -4,
+                                      child: Icon(
+                                        Icons.warning_amber_rounded,
+                                        size: 12,
+                                        color: Colors.amber.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                           onChanged: (value) {
                             setState(() {
                               if (value == true) {
@@ -1953,6 +2010,10 @@ $historyBuffer
                           ),
                       ],
                     ),
+                    if (!supportsToolOrchestration) ...[
+                      const SizedBox(height: 4),
+                      buildToolOrchestrationWarningRow(context),
+                    ],
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -2632,10 +2693,19 @@ $historyBuffer
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.all(16.0),
-              itemCount: _messages.length,
+              itemCount: _messages.length + (_isStreaming ? 1 : 0),
               itemBuilder: (context, index) {
+                if (index == _messages.length && _isStreaming) {
+                  return KeyedSubtree(
+                    key: const ValueKey('conversation_streaming_message'),
+                    child: _buildStreamingMessageCard(),
+                  );
+                }
                 final message = _messages[index];
-                return _buildMessageCard(message);
+                return KeyedSubtree(
+                  key: ValueKey(message.id),
+                  child: _buildMessageCard(message),
+                );
               },
             ),
           ),
@@ -3002,6 +3072,40 @@ $historyBuffer
     );
   }
 
+  Widget _buildStreamingMessageCard() {
+    final l10n = AppLocalizations.of(context)!;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8.0),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.smart_toy,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  l10n.ai,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.secondary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SelectableText(_streamingContent),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildMessageCard(ConversationMessage message) {
     final l10n = AppLocalizations.of(context)!;
 
@@ -3213,6 +3317,7 @@ $historyBuffer
       runSpacing: 10,
       children: message.attachmentPaths.map((path) {
         return AttachmentPreviewTile(
+          key: ValueKey('${message.id}:$path'),
           attachmentPath: path,
           onTap: () => _openAttachment(path),
         );

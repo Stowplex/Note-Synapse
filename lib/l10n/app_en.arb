@@ -1775,5 +1775,40 @@
     }
   },
   "forceRefetchImages": "Force Refetch Images",
-  "fetchingImage": "Fetching image..."
+  "fetchingImage": "Fetching image...",
+  "localModelDescription": "On-device AI, no API key needed",
+  "localModelDownload": "Download",
+  "localModelDownloading": "Downloading...",
+  "localModelReady": "Ready",
+  "localModelNotDownloaded": "Not downloaded",
+  "localModelDownloadFailed": "Download Failed",
+  "localModelRetry": "Retry",
+  "localModelDelete": "Delete Model",
+  "localModelTokenWindow": "Token Window",
+  "localModelEnableThinking": "Enable Thinking",
+  "localModelBackend": "Backend",
+  "localModelSettings": "Model Settings",
+  "localModelConstraintWarning": "This input may exceed the local model's token window. Consider switching to a cloud model.",
+  "localModelSwitchToCloud": "Switch to Cloud",
+  "toolOrchestrationWarningTitle": "Tool Orchestration Not Supported",
+  "toolOrchestrationWarningBody": "{modelName} may not reliably execute tool calls. Performance can degrade significantly.",
+  "@toolOrchestrationWarningBody": {
+    "placeholders": {
+      "modelName": {
+        "type": "String"
+      }
+    }
+  },
+  "toolOrchestrationSupportedBody": "{modelName} supports tool orchestration.",
+  "@toolOrchestrationSupportedBody": {
+    "placeholders": {
+      "modelName": {
+        "type": "String"
+      }
+    }
+  },
+  "toolOrchestrationContinueAnyway": "Continue Anyway",
+  "toolOrchestrationContinue": "Continue",
+  "toolOrchestrationStop": "Stop",
+  "toolOrchestrationSwitchModel": "Switch Model"
 }

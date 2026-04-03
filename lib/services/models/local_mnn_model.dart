@@ -1,0 +1,1120 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
+import 'package:edge_gen/edge_gen.dart';
+import 'package:image/image.dart' as img_lib;
+import 'package:json_repair_flutter/json_repair_flutter.dart';
+import 'package:note_synapse/models/model_config.dart';
+import 'package:note_synapse/models/generation_context.dart';
+import 'package:note_synapse/services/models/ai_model.dart';
+import 'package:note_synapse/services/models/local_model_presets.dart';
+import 'package:note_synapse/services/logger_service.dart';
+import 'package:note_synapse/services/prompts/prompt_models.dart';
+
+class PreparedImage {
+  final String path;
+  final int width;
+  final int height;
+  const PreparedImage({
+    required this.path,
+    required this.width,
+    required this.height,
+  });
+}
+
+class ToolCallParseResult {
+  final String text;
+  final List<Map<String, dynamic>>? functionCalls;
+
+  const ToolCallParseResult({required this.text, this.functionCalls});
+}
+
+class LocalMnnModel extends AIModel {
+  EdgeGenSession? _session;
+  ModelConfig? _config;
+  LocalModelPreset? _preset;
+  bool _isInitialized = false;
+
+  @override
+  String get id => _config?.id ?? 'local_mnn';
+
+  @override
+  String get name =>
+      _config?.displayName ?? _preset?.displayName ?? 'Local Model';
+
+  @override
+  String get description => 'On-device AI model via MNN';
+
+  @override
+  Future<bool> isReady() async => _isInitialized;
+
+  @override
+  Future<void> initialize({ModelConfig? config}) async {
+    _config = config;
+    if (config?.modelName != null) {
+      _preset = LocalModelPresets.findById(config!.modelName!);
+    }
+    _isInitialized = _preset != null;
+  }
+
+  Future<EdgeGenSession> _ensureSession() async {
+    if (_session != null) return _session!;
+
+    final configPath = _config?.endpoint;
+    if (configPath == null) {
+      throw Exception('Local model config path not set');
+    }
+
+    final backendType =
+        _config?.backendType ??
+        _preset?.defaultBackend[Platform.isAndroid ? 'android' : 'ios'] ??
+        'cpu';
+
+    final edgeConfig = EdgeGenConfig(
+      backendType: backendType,
+      maxNewTokens: _config?.maxOutputTokens ?? 8192,
+      enableThinking: _config?.enableThinking ?? false,
+      useTemplate: true,
+    );
+
+    _session = await EdgeGenController.instance.openSession(
+      configPath: configPath,
+      configJson: edgeConfig.toJson(),
+    );
+    return _session!;
+  }
+
+  bool get _usesPromptTranscriptFallback =>
+      _preset?.id == LocalModelPresets.qwen3Vl2b.id;
+
+  /// Extracts the outermost JSON object from [text] starting at [start]
+  /// using brace counting. Returns null if no balanced object is found.
+  static String? _extractJsonObject(String text, int start) {
+    if (start >= text.length || text[start] != '{') return null;
+    int depth = 0;
+    bool inString = false;
+    bool escape = false;
+    for (int i = start; i < text.length; i++) {
+      final c = text[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (c == '\\' && inString) {
+        escape = true;
+        continue;
+      }
+      if (c == '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
+      if (c == '{') depth++;
+      if (c == '}') {
+        depth--;
+        if (depth == 0) return text.substring(start, i + 1);
+      }
+    }
+    return null;
+  }
+
+  static final _toolCallHint = RegExp(r'\{\s*"name"\s*:\s*"call_tool"');
+  static final _toolCallsHint = RegExp(r'\{\s*"tool_calls"\s*:');
+  static final _xmlToolCallBlockHint = RegExp(
+    r'<tool_call>\s*',
+    multiLine: true,
+  );
+  static final _xmlFunctionName = RegExp(
+    r'<function=([^>\n]+)>\s*',
+    multiLine: true,
+  );
+  static final _xmlParameterPattern = RegExp(
+    r'<parameter=([^>\n]+)>\s*([\s\S]*?)\s*</parameter>',
+    multiLine: true,
+  );
+  static const _mcpToolsSectionMarker = '\n\n=== MCP TOOLS AVAILABLE ===\n';
+
+  static Map<String, dynamic>? _decodeJsonObject(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return decoded.map((key, value) => MapEntry(key.toString(), value));
+      }
+    } catch (_) {
+      final repaired = repairJson(raw);
+      if (repaired is Map<String, dynamic>) {
+        return repaired;
+      }
+      if (repaired is Map) {
+        return repaired.map((key, value) => MapEntry(key.toString(), value));
+      }
+    }
+    return null;
+  }
+
+  static List<Map<String, dynamic>>? _parseToolCallsEnvelope(
+    Map<String, dynamic> parsed,
+  ) {
+    if (!parsed.containsKey('tool_calls')) {
+      return null;
+    }
+    final rawToolCalls = parsed['tool_calls'];
+    if (rawToolCalls is! List) {
+      return null;
+    }
+
+    final functionCalls = <Map<String, dynamic>>[];
+    for (final item in rawToolCalls) {
+      if (item is! Map) continue;
+      final rawMap = item.map((key, value) => MapEntry(key.toString(), value));
+      final id = rawMap['id']?.toString();
+
+      if (rawMap['function'] is Map) {
+        final function = (rawMap['function'] as Map).map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+        final name = function['name']?.toString();
+        if (name == null || name.isEmpty) continue;
+        dynamic args = function['arguments'];
+        if (args is String) {
+          final decodedArgs = _decodeJsonObject(args);
+          if (decodedArgs != null) {
+            args = decodedArgs;
+          }
+        }
+        functionCalls.add({
+          'name': name,
+          'args': args ?? const <String, dynamic>{},
+          if (id != null && id.isNotEmpty) 'id': id,
+        });
+        continue;
+      }
+
+      final name = rawMap['name']?.toString();
+      if (name == null || name.isEmpty) continue;
+      functionCalls.add({
+        'name': name,
+        'args': rawMap['arguments'] ?? const <String, dynamic>{},
+        if (id != null && id.isNotEmpty) 'id': id,
+      });
+    }
+
+    return functionCalls.isEmpty ? null : functionCalls;
+  }
+
+  static List<Map<String, dynamic>>? _parseXmlToolCalls(String response) {
+    final matches = _xmlToolCallBlockHint.allMatches(response).toList();
+    if (matches.isEmpty) {
+      return null;
+    }
+
+    final functionCalls = <Map<String, dynamic>>[];
+    for (final match in matches) {
+      final blockStart = match.start;
+      final blockEnd = response.indexOf('</tool_call>', blockStart);
+      if (blockEnd == -1) continue;
+
+      final block = response.substring(
+        blockStart,
+        blockEnd + '</tool_call>'.length,
+      );
+      final functionMatch = _xmlFunctionName.firstMatch(block);
+      if (functionMatch == null) continue;
+
+      final name = functionMatch.group(1)?.trim();
+      if (name == null || name.isEmpty) continue;
+
+      final args = <String, dynamic>{};
+      for (final parameterMatch in _xmlParameterPattern.allMatches(block)) {
+        final key = parameterMatch.group(1)?.trim();
+        final rawValue = parameterMatch.group(2)?.trim() ?? '';
+        if (key == null || key.isEmpty) continue;
+
+        dynamic value = rawValue;
+        if (rawValue.startsWith('{') || rawValue.startsWith('[')) {
+          final decoded = _decodeJsonObject(rawValue);
+          if (decoded != null) {
+            value = decoded;
+          }
+        }
+        args[key] = value;
+      }
+
+      functionCalls.add({'name': name, 'args': args});
+    }
+
+    return functionCalls.isEmpty ? null : functionCalls;
+  }
+
+  static String _stripInjectedMcpToolPrompt(String content) {
+    final markerIndex = content.indexOf(_mcpToolsSectionMarker);
+    if (markerIndex == -1) {
+      return content;
+    }
+    return content.substring(0, markerIndex).trimRight();
+  }
+
+  static List<PromptMessage> sanitizeMessagesForStructuredTools(
+    List<PromptMessage> messages,
+  ) {
+    return messages.map((msg) {
+      if (msg.role != PromptRole.system) {
+        return msg;
+      }
+      final sanitized = _stripInjectedMcpToolPrompt(msg.content);
+      if (sanitized == msg.content) {
+        return msg;
+      }
+      return msg.copyWith(content: sanitized);
+    }).toList();
+  }
+
+  /// Parses tool calls from model response text.
+  static ToolCallParseResult parseToolCalls(String response) {
+    final xmlHint = _xmlToolCallBlockHint.firstMatch(response);
+    if (xmlHint != null) {
+      final textBefore = response.substring(0, xmlHint.start).trim();
+      final functionCalls = _parseXmlToolCalls(response);
+      if (functionCalls != null && functionCalls.isNotEmpty) {
+        return ToolCallParseResult(
+          text: textBefore,
+          functionCalls: functionCalls,
+        );
+      }
+    }
+
+    final structuredHint = _toolCallsHint.firstMatch(response);
+    if (structuredHint != null) {
+      final textBefore = response.substring(0, structuredHint.start).trim();
+      final jsonStr = _extractJsonObject(response, structuredHint.start);
+      final parsed = _decodeJsonObject(
+        jsonStr ?? response.substring(structuredHint.start),
+      );
+      if (parsed != null) {
+        final functionCalls = _parseToolCallsEnvelope(parsed);
+        if (functionCalls != null && functionCalls.isNotEmpty) {
+          return ToolCallParseResult(
+            text: textBefore,
+            functionCalls: functionCalls,
+          );
+        }
+      }
+    }
+
+    final hint = _toolCallHint.firstMatch(response);
+    if (hint == null) {
+      return ToolCallParseResult(text: response);
+    }
+
+    final textBefore = response.substring(0, hint.start).trim();
+    final jsonStr = _extractJsonObject(response, hint.start);
+
+    try {
+      final parsed = _decodeJsonObject(
+        jsonStr ?? response.substring(hint.start),
+      );
+      if (parsed == null) {
+        return ToolCallParseResult(text: response);
+      }
+
+      if (parsed['name'] == 'call_tool' && parsed.containsKey('arguments')) {
+        final rawArgs = parsed['arguments'];
+        if (rawArgs is! Map) {
+          return ToolCallParseResult(text: response);
+        }
+        final args = Map<String, dynamic>.from(rawArgs);
+        return ToolCallParseResult(
+          text: textBefore,
+          functionCalls: [
+            {
+              'name': 'call_tool',
+              'args': args,
+              if (parsed['id'] != null) 'id': parsed['id'].toString(),
+            },
+          ],
+        );
+      }
+    } catch (_) {
+      // JSON repair failed — treat as plain text
+    }
+
+    return ToolCallParseResult(text: response);
+  }
+
+  /// Builds a tool schema block for injection into the system prompt.
+  static String buildToolSchemaBlock(List<Map<String, dynamic>> tools) {
+    const encoder = JsonEncoder.withIndent('  ');
+    final toolsJson = encoder.convert(tools);
+    return '''
+You have access to the following tools. To use a tool, respond with a JSON object:
+{"name": "call_tool", "arguments": {"service_name": "<service>", "tool_name": "<tool>", "params": {<parameters>}}}
+
+Available tools:
+$toolsJson
+
+When you need to use a tool, output ONLY the JSON object. Do not wrap it in markdown code blocks.''';
+  }
+
+  /// Pre-processes messages by resizing image attachments and inserting
+  /// `<img>` tags (with `<hw>` dimension info) into the message content
+  /// so the MNN runtime can pick them up.
+  static Future<List<PromptMessage>> preprocessAttachments(
+    List<PromptMessage> messages,
+  ) async {
+    final result = <PromptMessage>[];
+    for (final msg in messages) {
+      if (msg.attachments.isEmpty) {
+        result.add(msg);
+        continue;
+      }
+      final prepared = <PreparedImage>[];
+      for (final file in msg.attachments) {
+        try {
+          final sourcePath = file.path;
+          final ext = _inferImageExtension(file);
+          if (!_isSupportedImageExtension(ext)) {
+            continue;
+          }
+
+          final PreparedImage image;
+          if (file.bytes != null && file.bytes!.isNotEmpty) {
+            image = await resizeImageBytesForModel(
+              file.bytes!,
+              originalExtension: ext,
+            );
+          } else if (sourcePath != null && sourcePath.isNotEmpty) {
+            image = await resizeImageForModel(sourcePath);
+          } else {
+            LoggerService.warning(
+              'Skipping local image attachment with no readable bytes or path',
+              error: {
+                'name': file.name,
+                'path': sourcePath,
+                'size': file.size,
+                'hasBytes': false,
+              },
+            );
+            continue;
+          }
+
+          prepared.add(image);
+        } catch (e, stackTrace) {
+          LoggerService.warning(
+            'Failed to preprocess local image attachment',
+            error: {
+              'name': file.name,
+              'path': file.path,
+              'size': file.size,
+              'hasBytes': file.bytes != null,
+              'bytesLength': file.bytes?.length,
+              'error': e.toString(),
+            },
+            stackTrace: stackTrace,
+          );
+        }
+      }
+      if (prepared.isNotEmpty) {
+        result.add(
+          msg.copyWith(content: _appendImageTags(msg.content, prepared)),
+        );
+      } else {
+        result.add(msg);
+      }
+    }
+    return result;
+  }
+
+  /// Builds `<img>path<hw>height,width</hw></img>` tags matching the
+  /// format expected by the MNN vision runtime.
+  static String _appendImageTags(String text, List<PreparedImage> images) {
+    final buffer = StringBuffer(text);
+    for (final img in images) {
+      final hwTag = img.width > 0 && img.height > 0
+          ? '<hw>${img.height},${img.width}</hw>'
+          : '';
+      buffer.write('\n<img>${img.path}$hwTag</img>');
+    }
+    return buffer.toString();
+  }
+
+  /// Converts [PromptMessage] list into structured (role, content) pairs
+  /// for the MNN native session. MNN's Jinja template engine formats these
+  /// into the correct ChatML for each model (Qwen 3.5, Qwen3 VL, etc.).
+  ///
+  /// MNN supports "system", "user", "assistant" roles. "tool" role messages
+  /// are mapped to "user" with a "Tool result:" prefix since MNN silently
+  /// drops unknown roles.
+  static List<Map<String, String>> buildChatMessages(
+    List<PromptMessage> messages, {
+    String? toolSchemaBlock,
+  }) {
+    final result = <Map<String, String>>[];
+
+    for (final msg in messages) {
+      switch (msg.role) {
+        case PromptRole.system:
+          // Merge tool schema into the system message content
+          final content = toolSchemaBlock != null
+              ? '${msg.content}\n\n$toolSchemaBlock'
+              : msg.content;
+          result.add({'role': 'system', 'content': content});
+          break;
+        case PromptRole.user:
+          result.add({'role': 'user', 'content': msg.content});
+          break;
+        case PromptRole.assistant:
+          result.add({'role': 'assistant', 'content': msg.content});
+          break;
+        case PromptRole.tool:
+          // MNN doesn't support "tool" role — map to "user" with prefix
+          result.add({
+            'role': 'user',
+            'content': 'Tool result: ${msg.content}',
+          });
+          break;
+      }
+    }
+
+    // If there's a tool schema but no system message was present, inject one
+    if (toolSchemaBlock != null &&
+        !messages.any((m) => m.role == PromptRole.system)) {
+      result.insert(0, {'role': 'system', 'content': toolSchemaBlock});
+    }
+
+    return result;
+  }
+
+  static List<Map<String, dynamic>> normalizeStructuredTools(
+    List<Map<String, dynamic>> tools,
+  ) {
+    return tools.map((tool) {
+      if (tool['type'] == 'function' && tool['function'] is Map) {
+        return Map<String, dynamic>.from(tool);
+      }
+      return {'type': 'function', 'function': Map<String, dynamic>.from(tool)};
+    }).toList();
+  }
+
+  static List<Map<String, dynamic>>? _serializeAssistantToolCalls(
+    PromptMessage message,
+  ) {
+    final rawCalls = message.metadata?['function_calls'];
+    if (rawCalls is! List || rawCalls.isEmpty) {
+      return null;
+    }
+
+    final toolCalls = <Map<String, dynamic>>[];
+    for (final rawCall in rawCalls) {
+      if (rawCall is! Map) continue;
+      final call = rawCall.map((key, value) => MapEntry(key.toString(), value));
+      final functionName = call['name']?.toString();
+      if (functionName == null || functionName.isEmpty) continue;
+      toolCalls.add({
+        'id': call['id']?.toString() ?? 'call_${toolCalls.length + 1}',
+        'type': 'function',
+        'function': {
+          'name': functionName,
+          'arguments': call['args'] ?? const <String, dynamic>{},
+        },
+      });
+    }
+    return toolCalls.isEmpty ? null : toolCalls;
+  }
+
+  static List<Map<String, dynamic>> buildStructuredMessages(
+    List<PromptMessage> messages,
+  ) {
+    final result = <Map<String, dynamic>>[];
+
+    for (final msg in messages) {
+      switch (msg.role) {
+        case PromptRole.system:
+        case PromptRole.user:
+          result.add({'role': msg.role.apiName, 'content': msg.content});
+          break;
+        case PromptRole.assistant:
+          final entry = <String, dynamic>{
+            'role': 'assistant',
+            'content': msg.content,
+          };
+          final toolCalls = _serializeAssistantToolCalls(msg);
+          if (toolCalls != null) {
+            entry['tool_calls'] = toolCalls;
+          }
+          result.add(entry);
+          break;
+        case PromptRole.tool:
+          result.add({
+            'role': 'tool',
+            'content': msg.content,
+            if (msg.metadata?['function_name'] is String)
+              'name': msg.metadata!['function_name'],
+            if (msg.metadata?['tool_call_id'] != null)
+              'tool_call_id': msg.metadata!['tool_call_id'].toString(),
+          });
+          break;
+      }
+    }
+
+    return result;
+  }
+
+  /// Legacy plain-text prompt formatting. Kept for tests and fallback.
+  static String formatPrompt(
+    List<PromptMessage> messages, {
+    String? toolSchemaBlock,
+  }) {
+    final chatMessages = buildChatMessages(
+      messages,
+      toolSchemaBlock: toolSchemaBlock,
+    );
+    final buffer = StringBuffer();
+    for (int i = 0; i < chatMessages.length; i++) {
+      final msg = chatMessages[i];
+      if (i > 0) buffer.write('\n');
+      final role = msg['role']!;
+      final content = msg['content']!;
+      if (role == 'system') {
+        buffer.write(content);
+      } else if (role == 'user') {
+        buffer.write(content);
+      } else if (role == 'assistant') {
+        buffer.write('Assistant: $content');
+      }
+    }
+    return buffer.toString();
+  }
+
+  /// Flattens a structured chat history into a single prompt transcript.
+  ///
+  /// For Qwen3-VL we use prompt-mode generation so MNN can process `<img>`
+  /// tags through its multimodal tokenizer while still applying the model's
+  /// own template from `llm_config.json`.
+  static String buildPromptTranscript(
+    List<PromptMessage> messages, {
+    String? toolSchemaBlock,
+  }) {
+    final buffer = StringBuffer();
+
+    void writeSection(String label, String content) {
+      final trimmed = content.trim();
+      if (trimmed.isEmpty) {
+        return;
+      }
+      if (buffer.isNotEmpty) {
+        buffer.write('\n\n');
+      }
+      buffer.write('$label:\n$trimmed');
+    }
+
+    String toolAugmentedSystem(String content) {
+      if (toolSchemaBlock == null || toolSchemaBlock.trim().isEmpty) {
+        return content;
+      }
+      if (content.trim().isEmpty) {
+        return toolSchemaBlock;
+      }
+      return '$content\n\n$toolSchemaBlock';
+    }
+
+    for (final msg in messages) {
+      switch (msg.role) {
+        case PromptRole.system:
+          writeSection('System instructions', toolAugmentedSystem(msg.content));
+          break;
+        case PromptRole.user:
+          writeSection('User', msg.content);
+          break;
+        case PromptRole.assistant:
+          writeSection('Assistant', msg.content);
+          break;
+        case PromptRole.tool:
+          writeSection('Tool result', msg.content);
+          break;
+      }
+    }
+
+    if (toolSchemaBlock != null &&
+        toolSchemaBlock.trim().isNotEmpty &&
+        !messages.any((m) => m.role == PromptRole.system)) {
+      final current = buffer.toString();
+      if (current.isEmpty) {
+        return 'System instructions:\n${toolSchemaBlock.trim()}';
+      }
+      return 'System instructions:\n${toolSchemaBlock.trim()}\n\n$current';
+    }
+
+    return buffer.toString();
+  }
+
+  /// Builds a summary of the original messages and the actual transport
+  /// payload sent through the edge_gen bridge.
+  static Map<String, dynamic> _buildLogBody(
+    List<PromptMessage> messages, {
+    String? transportPrompt,
+    List<Map<String, String>>? transportMessages,
+    List<Map<String, dynamic>>? structuredMessages,
+    List<Map<String, dynamic>>? structuredTools,
+    Map<String, dynamic>? extraContext,
+    List<Map<String, dynamic>>? tools,
+    String? toolSchemaBlock,
+    required bool usesPromptFallback,
+  }) {
+    final msgSummary = messages.map((m) {
+      final entry = <String, dynamic>{
+        'role': m.role.name,
+        'content': m.content,
+      };
+      if (m.attachments.isNotEmpty) {
+        entry['attachments'] = m.attachments
+            .map(
+              (f) => {
+                'name': f.name,
+                'size': f.size,
+                'path': f.path,
+                'hasBytes': f.bytes != null,
+                'bytesLength': f.bytes?.length,
+              },
+            )
+            .toList();
+      }
+      return entry;
+    }).toList();
+
+    final transport = <String, dynamic>{
+      'mode': usesPromptFallback
+          ? 'prompt'
+          : structuredMessages != null
+          ? 'structured'
+          : 'messages',
+      if (transportPrompt != null) 'prompt': transportPrompt,
+      if (transportMessages != null) 'messages': transportMessages,
+      if (structuredMessages != null) 'structuredMessages': structuredMessages,
+      if (structuredTools != null) 'structuredTools': structuredTools,
+      if (extraContext != null) 'extraContext': extraContext,
+    };
+
+    if (tools != null && tools.isNotEmpty) {
+      transport['toolTransport'] = {
+        'nativeBridgeSupportsToolDeclarations': structuredMessages != null,
+        'declarationMode': structuredMessages != null
+            ? 'native_structured'
+            : 'system_prompt_injection',
+        if (toolSchemaBlock != null && structuredMessages == null)
+          'injectedSchemaBlock': toolSchemaBlock,
+        'originalDeclarations': tools,
+      };
+    }
+
+    return {'messages': msgSummary, 'mnnTransport': transport};
+  }
+
+  @override
+  Future<String> generateWithMessages(
+    List<PromptMessage> messages, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    GenerationContext? generationContext,
+  }) async {
+    final requestId =
+        generationContext?.ensureRequestId() ??
+        DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+    final endpoint = 'local-mnn://$name';
+    try {
+      final session = await _ensureSession();
+      await session.reset();
+      final processed = await preprocessAttachments(messages);
+      final usePromptFallback = _usesPromptTranscriptFallback;
+      final chatMessages = usePromptFallback
+          ? null
+          : buildChatMessages(processed);
+      final promptText = usePromptFallback
+          ? buildPromptTranscript(processed)
+          : null;
+
+      LoggerService.logAiRequest(
+        endpoint: endpoint,
+        headers: {'backend': _config?.backendType ?? 'cpu'},
+        requestBody: _buildLogBody(
+          messages,
+          transportPrompt: promptText,
+          transportMessages: chatMessages,
+          usesPromptFallback: usePromptFallback,
+        ),
+        requestId: requestId,
+      );
+
+      final buffer = StringBuffer();
+      if (usePromptFallback) {
+        await for (final chunk in session.generate(
+          prompt: promptText!,
+          maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+        )) {
+          buffer.write(chunk);
+        }
+      } else {
+        await for (final chunk in session.generateWithMessages(
+          messages: chatMessages!,
+          maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+        )) {
+          buffer.write(chunk);
+        }
+      }
+
+      final responseText = buffer.toString();
+      final duration = DateTime.now().difference(startTime);
+
+      LoggerService.logAiResponse(
+        statusCode: 200,
+        headers: {'model': name},
+        responseBody: {'text': responseText},
+        requestId: requestId,
+        duration: duration,
+      );
+
+      return responseText;
+    } catch (e) {
+      LoggerService.logAiError(
+        error: e.toString(),
+        endpoint: endpoint,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+      rethrow;
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> generateWithToolsAndMessages(
+    List<PromptMessage> messages,
+    List<Map<String, dynamic>> tools, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    GenerationContext? generationContext,
+  }) async {
+    final requestId =
+        generationContext?.ensureRequestId() ??
+        DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+    final endpoint = 'local-mnn://$name/tools';
+    try {
+      final session = await _ensureSession();
+      await session.reset();
+      final processed = await preprocessAttachments(messages);
+      final structuredProcessed = tools.isNotEmpty
+          ? sanitizeMessagesForStructuredTools(processed)
+          : processed;
+      final structuredMessages = buildStructuredMessages(structuredProcessed);
+      final structuredTools = normalizeStructuredTools(tools);
+      final toolSchemaBlock = tools.isNotEmpty
+          ? buildToolSchemaBlock(tools)
+          : null;
+      final usePromptFallback = _usesPromptTranscriptFallback;
+      final chatMessages = usePromptFallback
+          ? null
+          : buildChatMessages(processed, toolSchemaBlock: toolSchemaBlock);
+      final promptText = usePromptFallback
+          ? buildPromptTranscript(processed, toolSchemaBlock: toolSchemaBlock)
+          : null;
+
+      LoggerService.logAiRequest(
+        endpoint: endpoint,
+        headers: {'backend': _config?.backendType ?? 'cpu'},
+        requestBody: _buildLogBody(
+          messages,
+          transportPrompt: promptText,
+          transportMessages: chatMessages,
+          structuredMessages: structuredMessages,
+          structuredTools: structuredTools,
+          tools: tools,
+          toolSchemaBlock: toolSchemaBlock,
+          usesPromptFallback: usePromptFallback,
+        ),
+        requestId: requestId,
+      );
+
+      // Buffer full response for tool call parsing
+      final buffer = StringBuffer();
+      var usedStructuredTransport = false;
+      String? structuredTransportError;
+      if (!usePromptFallback) {
+        try {
+          await for (final chunk in session.generateStructured(
+            messages: structuredMessages,
+            tools: structuredTools,
+            maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+          )) {
+            buffer.write(chunk);
+          }
+          usedStructuredTransport = true;
+        } catch (error, stackTrace) {
+          structuredTransportError = error.toString();
+          LoggerService.warning(
+            'Structured local MNN tool transport failed; falling back to prompt injection',
+            error: {
+              'error': structuredTransportError,
+              'stackTrace': stackTrace.toString(),
+            },
+          );
+        }
+      }
+
+      if (!usedStructuredTransport) {
+        if (usePromptFallback) {
+          await for (final chunk in session.generate(
+            prompt: promptText!,
+            maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+          )) {
+            buffer.write(chunk);
+          }
+        } else {
+          await for (final chunk in session.generateWithMessages(
+            messages: chatMessages!,
+            maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
+          )) {
+            buffer.write(chunk);
+          }
+        }
+      }
+
+      final responseText = buffer.toString();
+      final duration = DateTime.now().difference(startTime);
+      final parsed = parseToolCalls(responseText);
+
+      final result = {
+        'text': parsed.text.isEmpty ? '' : parsed.text,
+        'function_calls': parsed.functionCalls,
+        'modelUsed': name,
+      };
+
+      LoggerService.logAiResponse(
+        statusCode: 200,
+        headers: {'model': name},
+        responseBody: {
+          'text': parsed.text,
+          'functionCalls': parsed.functionCalls,
+          'rawLength': responseText.length,
+          'structuredTransport': usedStructuredTransport,
+          if (structuredTransportError != null)
+            'structuredTransportError': structuredTransportError,
+        },
+        requestId: requestId,
+        duration: duration,
+      );
+
+      return result;
+    } catch (e) {
+      LoggerService.logAiError(
+        error: e.toString(),
+        endpoint: endpoint,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+      rethrow;
+    }
+  }
+
+  /// Generates a streaming response for plain chat (no tool calls).
+  Stream<String> generateStreaming(
+    List<PromptMessage> messages, {
+    int? maxNewTokens,
+    String? requestId,
+  }) async* {
+    final reqId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+    final endpoint = 'local-mnn://$name/stream';
+    try {
+      final session = await _ensureSession();
+      await session.reset();
+      final processed = await preprocessAttachments(messages);
+      final usePromptFallback = _usesPromptTranscriptFallback;
+      final chatMessages = usePromptFallback
+          ? null
+          : buildChatMessages(processed);
+      final promptText = usePromptFallback
+          ? buildPromptTranscript(processed)
+          : null;
+
+      LoggerService.logAiRequest(
+        endpoint: endpoint,
+        headers: {'backend': _config?.backendType ?? 'cpu'},
+        requestBody: _buildLogBody(
+          messages,
+          transportPrompt: promptText,
+          transportMessages: chatMessages,
+          usesPromptFallback: usePromptFallback,
+        ),
+        requestId: reqId,
+      );
+
+      final responseBuffer = StringBuffer();
+      if (usePromptFallback) {
+        await for (final chunk in session.generate(
+          prompt: promptText!,
+          maxNewTokens: maxNewTokens ?? _config?.maxOutputTokens ?? 8192,
+        )) {
+          responseBuffer.write(chunk);
+          yield chunk;
+        }
+      } else {
+        await for (final chunk in session.generateWithMessages(
+          messages: chatMessages!,
+          maxNewTokens: maxNewTokens ?? _config?.maxOutputTokens ?? 8192,
+        )) {
+          responseBuffer.write(chunk);
+          yield chunk;
+        }
+      }
+
+      final responseText = responseBuffer.toString();
+      final duration = DateTime.now().difference(startTime);
+
+      LoggerService.logAiResponse(
+        statusCode: 200,
+        headers: {'model': name},
+        responseBody: {
+          'text': responseText.length > 2000
+              ? '${responseText.substring(0, 2000)}...'
+              : responseText,
+          'textLength': responseText.length,
+          'streaming': true,
+        },
+        requestId: reqId,
+        duration: duration,
+      );
+    } catch (e) {
+      LoggerService.logAiError(
+        error: e.toString(),
+        endpoint: endpoint,
+        requestId: reqId,
+        duration: DateTime.now().difference(startTime),
+      );
+      rethrow;
+    }
+  }
+
+  /// Whether this model supports streaming responses.
+  bool get supportsStreaming => true;
+
+  Future<void> resetSession() async {
+    _session = null;
+  }
+
+  Future<void> dispose() async {
+    _session = null;
+  }
+
+  static const _maxImageDimension = 784;
+
+  /// Estimates token count for an image based on its dimensions.
+  /// Images are resized to min(maxDim, 784px) preserving aspect ratio.
+  /// Token count = ceil(resizedWidth/28) * ceil(resizedHeight/28).
+  static int estimateImageTokens(int width, int height) {
+    final maxDim = width > height ? width : height;
+    if (maxDim > _maxImageDimension) {
+      final scale = _maxImageDimension / maxDim;
+      width = (width * scale).ceil();
+      height = (height * scale).ceil();
+    }
+    return ((width / 28).ceil()) * ((height / 28).ceil());
+  }
+
+  /// Inserts <img> tags for image paths into the text content.
+  /// Prefer [_appendImageTags] which includes `<hw>` dimension info.
+  static String insertImageTags(String text, List<String> imagePaths) {
+    if (imagePaths.isEmpty) return text;
+    final tags = imagePaths.map((p) => '<img>$p</img>').join('\n');
+    return '$text\n$tags';
+  }
+
+  static bool _isSupportedImageExtension(String extension) {
+    return const {
+      'jpg',
+      'jpeg',
+      'png',
+      'gif',
+      'webp',
+      'bmp',
+    }.contains(extension);
+  }
+
+  static String _inferImageExtension(PlatformFile file) {
+    String candidate = file.name;
+    if (candidate.isEmpty && file.path != null) {
+      candidate = file.path!;
+    }
+    final lastDot = candidate.lastIndexOf('.');
+    if (lastDot == -1 || lastDot == candidate.length - 1) {
+      return '';
+    }
+    return candidate.substring(lastDot + 1).toLowerCase();
+  }
+
+  /// Normalizes an image for the MNN runtime: resizes to fit within 1000px
+  /// on the longest side and always writes to a temp file (matching the
+  /// format expected by the vision runtime).
+  /// Returns a [PreparedImage] with the output path and final dimensions.
+  static Future<PreparedImage> resizeImageForModel(String sourcePath) async {
+    final file = File(sourcePath);
+    final bytes = await file.readAsBytes();
+    final ext = sourcePath.split('.').last.toLowerCase();
+    return resizeImageBytesForModel(bytes, originalExtension: ext);
+  }
+
+  static Future<PreparedImage> resizeImageBytesForModel(
+    Uint8List bytes, {
+    String? originalExtension,
+  }) async {
+    final normalizedExtension = (originalExtension ?? '').toLowerCase();
+
+    final image = img_lib.decodeImage(bytes);
+    if (image == null) {
+      throw const FormatException('Unable to decode image bytes');
+    }
+
+    final longestSide = image.width > image.height ? image.width : image.height;
+    final targetLongest = longestSide > _maxImageDimension
+        ? _maxImageDimension
+        : longestSide;
+
+    int newWidth = image.width;
+    int newHeight = image.height;
+    img_lib.Image normalized = image;
+
+    if (targetLongest < longestSide) {
+      final scale = targetLongest / longestSide;
+      newWidth = (image.width * scale).round();
+      newHeight = (image.height * scale).round();
+      normalized = img_lib.copyResize(
+        image,
+        width: newWidth,
+        height: newHeight,
+        interpolation: img_lib.Interpolation.cubic,
+      );
+    }
+
+    final tempDir = await Directory.systemTemp.createTemp('mnn_img_');
+    final isPng = normalizedExtension == 'png';
+    final tempPath = '${tempDir.path}/prepared.${isPng ? 'png' : 'jpg'}';
+
+    if (isPng) {
+      await File(tempPath).writeAsBytes(img_lib.encodePng(normalized));
+    } else {
+      await File(
+        tempPath,
+      ).writeAsBytes(img_lib.encodeJpg(normalized, quality: 92));
+    }
+
+    return PreparedImage(path: tempPath, width: newWidth, height: newHeight);
+  }
+}

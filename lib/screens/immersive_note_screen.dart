@@ -73,6 +73,7 @@ import '../services/note_marker_service.dart';
 import '../services/note_annotation_service.dart';
 import '../widgets/in_note_marker_badge.dart';
 import '../widgets/in_note_marker_preview.dart';
+import '../widgets/tool_orchestration_warning_dialog.dart';
 import '../widgets/in_note_annotation_preview.dart';
 
 enum DrawingTool { pen, rectangle }
@@ -155,6 +156,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   bool _isPenMode = false;
   bool _isLoadingConversation = true;
   bool _isSending = false;
+  String _streamingContent = '';
+  bool _isStreaming = false;
   bool _isAborting = false;
   String? _currentRequestId;
   final Set<String> _cancelledRequestIds = {};
@@ -2479,6 +2482,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         activeBuiltInToolsCount +
         activeSystemToolsCount;
     final headerTitle = l10n.mcpAndLocalTools;
+    final modelConfig = context.read<AppProvider>().modelConfig;
+    final supportsToolOrchestration =
+        (_selectedModel ?? modelConfig)
+            ?.customCapabilitiesObject
+            ?.supportsToolOrchestration ??
+        true;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -2635,6 +2644,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                             ),
                         ],
                       ),
+                      if (!supportsToolOrchestration) ...[
+                        const SizedBox(height: 4),
+                        buildToolOrchestrationWarningRow(context),
+                      ],
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 8,
@@ -3354,8 +3367,56 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return ListView.builder(
       controller: _chatScrollController,
       padding: const EdgeInsets.only(bottom: 12),
-      itemCount: _messages.length,
+      itemCount: _messages.length + (_isStreaming ? 1 : 0),
       itemBuilder: (context, index) {
+        if (index == _messages.length && _isStreaming) {
+          return KeyedSubtree(
+            key: const ValueKey('immersive_streaming_message'),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.7,
+                ),
+                margin: const EdgeInsets.symmetric(vertical: 6),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.smart_toy,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.secondary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          l10n.ai,
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.secondary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SelectableText(_streamingContent),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
         final message = _messages[index];
         final isUser = message.type == MessageType.user;
         final hasTools =
@@ -3363,55 +3424,104 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             (message.metadata!.containsKey('parts_history') ||
                 message.metadata!.containsKey('function_calls'));
 
-        return Align(
-          alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.7,
-            ),
-            margin: const EdgeInsets.symmetric(vertical: 6),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isUser
-                  ? Theme.of(context).colorScheme.primaryContainer
-                  : Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Theme.of(context).colorScheme.outlineVariant,
+        return KeyedSubtree(
+          key: ValueKey(message.id),
+          child: Align(
+            alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.7,
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: isUser
-                  ? CrossAxisAlignment.end
-                  : CrossAxisAlignment.start,
-              children: [
-                if (!isUser) ...[
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.smart_toy,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.secondary,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        l10n.ai,
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(
-                              color: Theme.of(context).colorScheme.secondary,
-                              fontWeight: FontWeight.bold,
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isUser
+                    ? Theme.of(context).colorScheme.primaryContainer
+                    : Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: isUser
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
+                children: [
+                  if (!isUser) ...[
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.smart_toy,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.secondary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          l10n.ai,
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.secondary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                        const Spacer(),
+                        if (hasTools) ...[
+                          IconButton(
+                            icon: const Icon(
+                              Icons.build_circle_outlined,
+                              size: 18,
                             ),
-                      ),
-                      const Spacer(),
-                      if (hasTools) ...[
-                        IconButton(
-                          icon: const Icon(
-                            Icons.build_circle_outlined,
-                            size: 18,
+                            tooltip: 'View Tool Usage',
+                            onPressed: () => _showToolDetailsDialog(message),
+                            constraints: const BoxConstraints(
+                              minWidth: 32,
+                              minHeight: 32,
+                            ),
+                            padding: EdgeInsets.zero,
                           ),
-                          tooltip: 'View Tool Usage',
-                          onPressed: () => _showToolDetailsDialog(message),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  if (isUser)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Flexible(
+                          child: SelectableText(
+                            message.content,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface,
+                                ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: Icon(
+                            Icons.edit,
+                            size: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.5),
+                          ),
+                          onPressed: () {
+                            _messageController.text = message.content;
+                            _scrollToBottom();
+                            Future.delayed(
+                              const Duration(milliseconds: 200),
+                              () {
+                                _messageFocusNode.requestFocus();
+                              },
+                            );
+                          },
+                          tooltip: 'Use this message',
                           constraints: const BoxConstraints(
                             minWidth: 32,
                             minHeight: 32,
@@ -3419,77 +3529,35 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                           padding: EdgeInsets.zero,
                         ),
                       ],
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                if (isUser)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Flexible(
-                        child: SelectableText(
-                          message.content,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
+                    )
+                  else
+                    SelectionArea(
+                      child: InteractiveCheckboxMarkdown(
+                        originalContent: message.content,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
+                        onLinkTap: (url, _) =>
+                            _handleMarkdownLinkTap(url, l10n),
                       ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: Icon(
-                          Icons.edit,
-                          size: 16,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withOpacity(0.5),
-                        ),
-                        onPressed: () {
-                          _messageController.text = message.content;
-                          // Scroll to bottom to show the input field
-                          _scrollToBottom();
-                          // Focus the text field after a short delay to ensure it's visible
-                          Future.delayed(const Duration(milliseconds: 200), () {
-                            _messageFocusNode.requestFocus();
-                          });
-                        },
-                        tooltip: 'Use this message',
-                        constraints: const BoxConstraints(
-                          minWidth: 32,
-                          minHeight: 32,
-                        ),
-                        padding: EdgeInsets.zero,
-                      ),
-                    ],
-                  )
-                else
-                  SelectionArea(
-                    child: InteractiveCheckboxMarkdown(
-                      originalContent: message.content,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                      onLinkTap: (url, _) => _handleMarkdownLinkTap(url, l10n),
                     ),
-                  ),
-                if (message.attachmentPaths.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: _buildMessageAttachmentChips(message, l10n),
-                  ),
-                if (!isUser) ...[
-                  const SizedBox(height: 12),
-                  ChatMessageActionRow(
-                    onCopy: () => copyContentToClipboard(message.content),
-                    onAddNote: () => handleAddContentToNote(
-                      content: message.content,
-                      contextNotes: _conversationNotes,
+                  if (message.attachmentPaths.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _buildMessageAttachmentChips(message, l10n),
                     ),
-                  ),
+                  if (!isUser) ...[
+                    const SizedBox(height: 12),
+                    ChatMessageActionRow(
+                      onCopy: () => copyContentToClipboard(message.content),
+                      onAddNote: () => handleAddContentToNote(
+                        content: message.content,
+                        contextNotes: _conversationNotes,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         );
@@ -3633,6 +3701,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       runSpacing: 10,
       children: message.attachmentPaths.map((path) {
         return AttachmentPreviewTile(
+          key: ValueKey('${message.id}:$path'),
           attachmentPath: path,
           onTap: () => _openAttachment(path, l10n),
         );
@@ -4732,19 +4801,48 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
+  Future<int> _nextMarkerIndex() async {
+    if (_activeAttachmentPath != null) {
+      final attachmentPath = _activeAttachmentPath!;
+      final cachedMarkers = _attachmentMarkers[attachmentPath];
+      if (cachedMarkers != null && cachedMarkers.isNotEmpty) {
+        return cachedMarkers.map((marker) => marker.index).reduce(max) + 1;
+      }
+
+      final attachment = await _resolveAttachment(attachmentPath);
+      if (attachment == null) return 1;
+      final persistedMarkers = await _noteMarkerService.getMarkersForAttachment(
+        attachment.id,
+      );
+      if (persistedMarkers.isEmpty) return 1;
+      return persistedMarkers.map((marker) => marker.index).reduce(max) + 1;
+    }
+
+    final note = _conversationNotes[_activeNoteIndex];
+    final cachedMarkers = _noteMarkers[note.id];
+    if (cachedMarkers != null && cachedMarkers.isNotEmpty) {
+      return cachedMarkers.map((marker) => marker.index).reduce(max) + 1;
+    }
+
+    final persistedMarkers = await _noteMarkerService.getMarkersForNote(
+      note.id,
+    );
+    if (persistedMarkers.isEmpty) return 1;
+    return persistedMarkers.map((marker) => marker.index).reduce(max) + 1;
+  }
+
   Future<void> _saveInNoteMarker(
     String messageId,
     String conversationId,
     InNoteMarkerPosition position,
   ) async {
     try {
+      final nextIndex = await _nextMarkerIndex();
       if (_activeAttachmentPath != null) {
         final attachment = await _resolveAttachment(_activeAttachmentPath!);
         if (attachment == null) return;
-        final existingMarkers = await _noteMarkerService
-            .getMarkersForAttachment(attachment.id);
         final marker = InNoteMarker.forAttachment(
-          index: existingMarkers.length + 1,
+          index: nextIndex,
           page: position.page ?? 0,
           normalizedRect: position.normalizedRect,
           normalizedRects: position.normalizedRects,
@@ -4753,12 +4851,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         );
         await _noteMarkerService.saveMarkerForAttachment(attachment.id, marker);
       } else {
-        final note = widget.notes[_activeNoteIndex];
-        final existingMarkers = await _noteMarkerService.getMarkersForNote(
-          note.id,
-        );
+        final note = _conversationNotes[_activeNoteIndex];
         final marker = InNoteMarker.forNote(
-          index: existingMarkers.length + 1,
+          index: nextIndex,
           charStart: 0,
           charEnd: 0,
           normalizedRect: position.normalizedRect,
@@ -4773,7 +4868,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         if (_activeAttachmentPath != null) {
           _loadMarkersForAttachment(_activeAttachmentPath!);
         } else {
-          _loadMarkersForNote(widget.notes[_activeNoteIndex].id);
+          _loadMarkersForNote(_conversationNotes[_activeNoteIndex].id);
         }
       }
     } catch (e) {
@@ -4788,6 +4883,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     InNoteMarkerPosition position,
   ) async {
     try {
+      final nextIndex = await _nextMarkerIndex();
       final portableAttachmentPaths =
           await ConversationAttachmentService.promoteAttachmentPathsToPersistent(
             paths: attachmentPaths,
@@ -4797,11 +4893,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       if (_activeAttachmentPath != null) {
         final attachment = await _resolveAttachment(_activeAttachmentPath!);
         if (attachment == null) return;
-        final existingMarkers = await _noteMarkerService
-            .getMarkersForAttachment(attachment.id);
         final marker = InNoteMarker.forAttachment(
           id: markerId,
-          index: existingMarkers.length + 1,
+          index: nextIndex,
           page: position.page ?? 0,
           normalizedRect: position.normalizedRect,
           normalizedRects: position.normalizedRects,
@@ -4822,13 +4916,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           ),
         );
       } else {
-        final note = widget.notes[_activeNoteIndex];
-        final existingMarkers = await _noteMarkerService.getMarkersForNote(
-          note.id,
-        );
+        final note = _conversationNotes[_activeNoteIndex];
         final marker = InNoteMarker.forNote(
           id: markerId,
-          index: existingMarkers.length + 1,
+          index: nextIndex,
           charStart: 0,
           charEnd: 0,
           normalizedRect: position.normalizedRect,
@@ -4865,7 +4956,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         if (_activeAttachmentPath != null) {
           _loadMarkersForAttachment(_activeAttachmentPath!);
         } else {
-          _loadMarkersForNote(widget.notes[_activeNoteIndex].id);
+          _loadMarkersForNote(_conversationNotes[_activeNoteIndex].id);
         }
       }
     } catch (e) {
@@ -4883,6 +4974,27 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     if (_isPenMode && _drawingActions.isNotEmpty) {
       await _confirmDrawing(silent: true);
+    }
+
+    // Check tool orchestration capability before sending
+    if (!mounted) return;
+    final hasTools =
+        _selectedBuiltInTools.isNotEmpty || _selectedMcpEndpointIds.isNotEmpty;
+    final activeConfig =
+        _selectedModel ?? context.read<AppProvider>().modelConfig;
+    final supportsOrchestration =
+        activeConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
+        true;
+    if (hasTools && !supportsOrchestration) {
+      final result = await ToolOrchestrationWarningDialog.show(
+        context,
+        activeConfig,
+      );
+      if (!mounted) return;
+      if (result == null || result is ToolOrchestrationStop) return;
+      if (result is ToolOrchestrationContinue && result.modelOverride != null) {
+        _selectedModel = result.modelOverride;
+      }
     }
 
     setState(() {
@@ -4998,6 +5110,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         content,
         attachments,
         generationContext,
+        onStreamChunk: (chunk) {
+          if (mounted) {
+            setState(() {
+              _streamingContent += chunk;
+              _isStreaming = true;
+            });
+            _scrollToBottom();
+          }
+        },
       );
       final aiMessage = await _conversationService.addAIResponse(
         conversationId: _conversation!.id,
@@ -5008,6 +5129,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
       if (!mounted) return;
       setState(() {
+        _streamingContent = '';
+        _isStreaming = false;
         _messages.add(aiMessage);
       });
       _scrollToBottom();
@@ -5038,6 +5161,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _isSending = false;
           _isAborting = false;
           _currentRequestId = null;
+          _streamingContent = '';
+          _isStreaming = false;
         });
       }
       _cancelledRequestIds.remove(requestId);
@@ -5080,8 +5205,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   Future<ConversationAiResponse> _generateAiResponse(
     String userMessage,
     List<PlatformFile> latestAttachments,
-    GenerationContext generationContext,
-  ) async {
+    GenerationContext generationContext, {
+    void Function(String chunk)? onStreamChunk,
+  }) async {
     final requestId = generationContext.ensureRequestId();
     final noteBuilder = NotePromptBuilder(_databaseService);
     final systemMessage = _buildSystemPrompt();
@@ -5199,6 +5325,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       generationContext: generationContext,
       maxToolIterations: _maxToolIterations,
       onIterationsExhausted: _handleIterationsExhausted,
+      onStreamChunk: onStreamChunk,
     );
 
     if (_cancelledRequestIds.contains(requestId)) {
@@ -5293,7 +5420,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         files.add(
           PlatformFile(
             name: path.split('/').last,
-            path: path,
+            path: resolvedPath,
             size: bytes.length,
             bytes: bytes,
           ),
