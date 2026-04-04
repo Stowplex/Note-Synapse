@@ -101,5 +101,44 @@ void main() {
       expect(result[1].role, PromptRole.assistant);
       expect(result[2].content, 'Second');
     });
+
+    test('extracts Gemma tagged tool calls from text fallback', () {
+      final model = LocalMnnModel();
+
+      final result = model.extractTaggedToolCallsForTest(
+        '<|tool_call>call_tool{service_name: "NS/ytfetcher_327c5c2c", tool_name: "fetch_youtube_data", params: {video_url: "https://youtu.be/tyknmLug2mY?si=79cgwHxw_3T-81cC"}}<tool_call|>',
+      );
+
+      expect(result.cleanedText, isEmpty);
+      expect(result.calls, hasLength(1));
+      expect(result.calls.single['name'], 'call_tool');
+      expect(result.calls.single['args'], {
+        'service_name': 'NS/ytfetcher_327c5c2c',
+        'tool_name': 'fetch_youtube_data',
+        'params': {
+          'video_url': 'https://youtu.be/tyknmLug2mY?si=79cgwHxw_3T-81cC',
+        },
+      });
+    });
+
+    test('preserves surrounding text when Gemma tool call is embedded', () {
+      final model = LocalMnnModel();
+
+      final result = model.extractTaggedToolCallsForTest(
+        'Let me check that.\n<|tool_call>call_tool{service_name: "svc", tool_name: "lookup", params: {q: "hello"}}<tool_call|>\nI will summarize after.',
+      );
+
+      expect(
+        result.cleanedText,
+        'Let me check that.\n\nI will summarize after.',
+      );
+      expect(result.calls, hasLength(1));
+      expect(result.calls.single['name'], 'call_tool');
+      expect(result.calls.single['args'], {
+        'service_name': 'svc',
+        'tool_name': 'lookup',
+        'params': {'q': 'hello'},
+      });
+    });
   });
 }

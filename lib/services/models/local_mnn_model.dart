@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_gemma/flutter_gemma.dart' as gemma;
 import 'package:image/image.dart' as img;
+import 'package:json_repair_flutter/json_repair_flutter.dart';
 
 import 'package:note_synapse/models/generation_context.dart';
 import 'package:note_synapse/models/model_config.dart';
@@ -457,7 +458,142 @@ class LocalMnnModel extends AIModel {
     }
 
     final text = response is gemma.TextResponse ? response.token : '';
+    final parsedToolCalls = _extractTaggedToolCalls(text);
+    if (parsedToolCalls.calls.isNotEmpty) {
+      return {
+        'text': parsedToolCalls.cleanedText,
+        'function_calls': parsedToolCalls.calls,
+        'modelUsed': name,
+      };
+    }
+
     return {'text': text, 'function_calls': null, 'modelUsed': name};
+  }
+
+  @visibleForTesting
+  ParsedToolCallText extractTaggedToolCallsForTest(String text) {
+    return _extractTaggedToolCalls(text);
+  }
+
+  ParsedToolCallText _extractTaggedToolCalls(String text) {
+    if (text.isEmpty) {
+      return const ParsedToolCallText(cleanedText: '', calls: []);
+    }
+
+    final matches = _toolCallTagPattern
+        .allMatches(text)
+        .toList(growable: false);
+    if (matches.isEmpty) {
+      return ParsedToolCallText(cleanedText: text, calls: const []);
+    }
+
+    final calls = <Map<String, dynamic>>[];
+    for (final match in matches) {
+      final payload = match.group(1)?.trim();
+      if (payload == null || payload.isEmpty) {
+        continue;
+      }
+
+      final call = _parseTaggedToolCallPayload(payload);
+      if (call != null) {
+        calls.add(call);
+      }
+    }
+
+    final cleanedText = text.replaceAll(_toolCallTagPattern, '').trim();
+    return ParsedToolCallText(cleanedText: cleanedText, calls: calls);
+  }
+
+  Map<String, dynamic>? _parseTaggedToolCallPayload(String payload) {
+    final argsStart = payload.indexOf('{');
+    if (argsStart <= 0) {
+      return null;
+    }
+
+    final functionName = payload.substring(0, argsStart).trim();
+    if (functionName.isEmpty) {
+      return null;
+    }
+
+    final argsText = _extractBalancedSegment(payload, argsStart);
+    if (argsText == null) {
+      return null;
+    }
+
+    final decodedArgs = _decodeLooseMap(argsText);
+    if (decodedArgs == null) {
+      return null;
+    }
+
+    return {'name': functionName, 'args': decodedArgs};
+  }
+
+  String? _extractBalancedSegment(String content, int startIdx) {
+    int depth = 0;
+    var inString = false;
+    var escapeNext = false;
+
+    for (int i = startIdx; i < content.length; i++) {
+      final char = content[i];
+
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+
+      if (char == '\\' && inString) {
+        escapeNext = true;
+        continue;
+      }
+
+      if (char == '"') {
+        inString = !inString;
+        continue;
+      }
+
+      if (inString) {
+        continue;
+      }
+
+      if (char == '{') {
+        depth++;
+      } else if (char == '}') {
+        depth--;
+        if (depth == 0) {
+          return content.substring(startIdx, i + 1);
+        }
+      }
+    }
+
+    return null;
+  }
+
+  Map<String, dynamic>? _decodeLooseMap(String text) {
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return decoded.map((key, value) => MapEntry(key.toString(), value));
+      }
+    } catch (_) {
+      // Fall through to repairJson for Gemma's relaxed object syntax.
+    }
+
+    try {
+      final repaired = repairJson(text);
+      if (repaired is Map<String, dynamic>) {
+        return repaired;
+      }
+      if (repaired is Map) {
+        return repaired.map((key, value) => MapEntry(key.toString(), value));
+      }
+    } catch (_) {
+      return null;
+    }
+
+    return null;
   }
 
   Future<void> _disposeModel() async {
@@ -663,3 +799,16 @@ class LocalMnnModel extends AIModel {
     }
   }
 }
+
+@visibleForTesting
+class ParsedToolCallText {
+  final String cleanedText;
+  final List<Map<String, dynamic>> calls;
+
+  const ParsedToolCallText({required this.cleanedText, required this.calls});
+}
+
+final _toolCallTagPattern = RegExp(
+  r'<\|tool_call\>([\s\S]*?)<tool_call\|>',
+  dotAll: true,
+);
