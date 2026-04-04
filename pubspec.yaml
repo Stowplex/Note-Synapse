@@ -39,8 +39,8 @@ dependencies:
   
   # Database
   sqflite: ^2.3.0
-  sqflite_common_ffi: ^2.3.0
-  sqflite_common_ffi_web: ^0.4.0
+  sqflite_common_ffi: ^2.4.0+2
+  sqflite_common_ffi_web: ^1.1.1
   sqlite3_flutter_libs: ^0.5.0
   path: ^1.8.3
   
@@ -51,8 +51,7 @@ dependencies:
   crypto: ^3.0.3
 
   # Local AI inference
-  edge_gen:
-    path: third_party/edge_gen
+  flutter_gemma: 0.13.0
 
   # Image handling
   image: ^4.2.0

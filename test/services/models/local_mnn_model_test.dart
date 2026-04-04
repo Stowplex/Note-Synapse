@@ -1,453 +1,105 @@
+import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:image/image.dart' as img_lib;
+import 'package:note_synapse/models/model_config.dart';
+import 'package:note_synapse/models/model_type.dart';
 import 'package:note_synapse/services/models/local_mnn_model.dart';
 import 'package:note_synapse/services/prompts/prompt_models.dart';
 
 void main() {
-  group('LocalMnnModel buildChatMessages', () {
-    test('maps system, user, assistant roles correctly', () {
-      final messages = [
-        PromptMessage(role: PromptRole.system, content: 'You are helpful.'),
-        PromptMessage(role: PromptRole.user, content: 'Hello'),
-        PromptMessage(role: PromptRole.assistant, content: 'Hi there'),
-        PromptMessage(role: PromptRole.user, content: 'Follow up'),
-      ];
-      final result = LocalMnnModel.buildChatMessages(messages);
-      expect(result.length, 4);
-      expect(result[0], {'role': 'system', 'content': 'You are helpful.'});
-      expect(result[1], {'role': 'user', 'content': 'Hello'});
-      expect(result[2], {'role': 'assistant', 'content': 'Hi there'});
-      expect(result[3], {'role': 'user', 'content': 'Follow up'});
-    });
+  group('LocalMnnModel', () {
+    test('initializes successfully for Gemma preset config', () async {
+      final model = LocalMnnModel();
 
-    test('maps tool role to user with prefix', () {
-      final messages = [
-        PromptMessage(role: PromptRole.tool, content: '{"result": "ok"}'),
-      ];
-      final result = LocalMnnModel.buildChatMessages(messages);
-      expect(result.length, 1);
-      expect(result[0]['role'], 'user');
-      expect(result[0]['content'], 'Tool result: {"result": "ok"}');
-    });
-
-    test('merges toolSchemaBlock into system message', () {
-      final messages = [
-        PromptMessage(role: PromptRole.system, content: 'You are helpful.'),
-        PromptMessage(role: PromptRole.user, content: 'Hello'),
-      ];
-      final result = LocalMnnModel.buildChatMessages(
-        messages,
-        toolSchemaBlock: 'TOOLS_HERE',
-      );
-      expect(result[0]['role'], 'system');
-      expect(result[0]['content'], contains('You are helpful.'));
-      expect(result[0]['content'], contains('TOOLS_HERE'));
-    });
-
-    test(
-      'injects system message for toolSchemaBlock when no system present',
-      () {
-        final messages = [
-          PromptMessage(role: PromptRole.user, content: 'Hello'),
-        ];
-        final result = LocalMnnModel.buildChatMessages(
-          messages,
-          toolSchemaBlock: 'TOOLS_HERE',
-        );
-        expect(result.length, 2);
-        expect(result[0], {'role': 'system', 'content': 'TOOLS_HERE'});
-        expect(result[1], {'role': 'user', 'content': 'Hello'});
-      },
-    );
-
-    test('preserves message order for multi-turn conversation', () {
-      final messages = [
-        PromptMessage(role: PromptRole.system, content: 'System prompt'),
-        PromptMessage(role: PromptRole.user, content: 'First question'),
-        PromptMessage(role: PromptRole.assistant, content: 'First answer'),
-        PromptMessage(role: PromptRole.user, content: 'Second question'),
-      ];
-      final result = LocalMnnModel.buildChatMessages(messages);
-      expect(result.length, 4);
-      expect(result[0]['role'], 'system');
-      expect(result[1]['role'], 'user');
-      expect(result[1]['content'], 'First question');
-      expect(result[2]['role'], 'assistant');
-      expect(result[2]['content'], 'First answer');
-      expect(result[3]['role'], 'user');
-      expect(result[3]['content'], 'Second question');
-    });
-  });
-
-  group('LocalMnnModel buildStructuredMessages', () {
-    test('strips injected MCP prompt block for structured tools', () {
-      final messages = [
-        PromptMessage(
-          role: PromptRole.system,
-          content:
-              'You are helpful.\n\n=== MCP TOOLS AVAILABLE ===\nUse call_tool.',
+      await model.initialize(
+        config: ModelConfig(
+          type: ModelType.localMnn,
+          modelName: 'gemma4_e2b',
+          displayName: 'Gemma 4 E2B',
+          endpoint:
+              'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm',
+          backendType: 'gpu',
+          tokenWindow: 32768,
         ),
-        PromptMessage(role: PromptRole.user, content: 'Hello'),
-      ];
-
-      final sanitized = LocalMnnModel.sanitizeMessagesForStructuredTools(
-        messages,
       );
-      final result = LocalMnnModel.buildStructuredMessages(sanitized);
 
-      expect(result[0]['role'], 'system');
-      expect(result[0]['content'], 'You are helpful.');
-      expect(
-        result[0]['content'],
-        isNot(contains('=== MCP TOOLS AVAILABLE ===')),
-      );
+      expect(await model.isReady(), isTrue);
+      expect(model.id, isNotEmpty);
+      expect(model.name, 'Gemma 4 E2B');
+      expect(model.description, contains('Flutter Gemma'));
+      expect(model.supportsStreaming, isTrue);
     });
 
-    test('preserves native tool role messages', () {
-      final messages = [
-        PromptMessage(role: PromptRole.user, content: 'Do the thing'),
-        PromptMessage(
-          role: PromptRole.tool,
-          content: '{"status":"ok"}',
-          metadata: {'function_name': 'call_tool', 'tool_call_id': 'call_123'},
+    test('is not ready for unsupported preset config', () async {
+      final model = LocalMnnModel();
+
+      await model.initialize(
+        config: ModelConfig(
+          type: ModelType.localMnn,
+          modelName: 'legacy_qwen',
+          displayName: 'Legacy Qwen',
+          endpoint: '/tmp/legacy',
         ),
-      ];
-
-      final result = LocalMnnModel.buildStructuredMessages(messages);
-
-      expect(result.length, 2);
-      expect(result[0], {'role': 'user', 'content': 'Do the thing'});
-      expect(result[1]['role'], 'tool');
-      expect(result[1]['content'], '{"status":"ok"}');
-      expect(result[1]['name'], 'call_tool');
-      expect(result[1]['tool_call_id'], 'call_123');
-    });
-
-    test('serializes assistant function_calls into tool_calls', () {
-      final messages = [
-        PromptMessage(
-          role: PromptRole.assistant,
-          content: '',
-          metadata: {
-            'function_calls': [
-              {
-                'id': 'call_1',
-                'name': 'call_tool',
-                'args': {
-                  'service_name': 'weather',
-                  'tool_name': 'forecast',
-                  'params': {'city': 'SF'},
-                },
-              },
-            ],
-          },
-        ),
-      ];
-
-      final result = LocalMnnModel.buildStructuredMessages(messages);
-
-      expect(result.length, 1);
-      expect(result[0]['role'], 'assistant');
-      final toolCalls = result[0]['tool_calls'] as List;
-      expect(toolCalls.length, 1);
-      expect((toolCalls[0] as Map)['id'], 'call_1');
-      final function = (toolCalls[0] as Map)['function'] as Map;
-      expect(function['name'], 'call_tool');
-      expect((function['arguments'] as Map)['tool_name'], 'forecast');
-    });
-  });
-
-  group('LocalMnnModel formatPrompt (legacy)', () {
-    test('formats system + user messages', () {
-      final messages = [
-        PromptMessage(role: PromptRole.system, content: 'You are helpful.'),
-        PromptMessage(role: PromptRole.user, content: 'Hello'),
-      ];
-      final result = LocalMnnModel.formatPrompt(messages);
-      expect(result, contains('You are helpful.'));
-      expect(result, endsWith('Hello'));
-      // No ChatML tags — MNN applies its own template
-      expect(result, isNot(contains('<|im_start|>')));
-      expect(result, isNot(contains('<|im_end|>')));
-    });
-
-    test('includes assistant turns', () {
-      final messages = [
-        PromptMessage(role: PromptRole.system, content: 'System prompt'),
-        PromptMessage(role: PromptRole.user, content: 'First question'),
-        PromptMessage(role: PromptRole.assistant, content: 'First answer'),
-        PromptMessage(role: PromptRole.user, content: 'Follow up'),
-      ];
-      final result = LocalMnnModel.formatPrompt(messages);
-      expect(result, contains('First question'));
-      expect(result, contains('Assistant: First answer'));
-      expect(result, endsWith('Follow up'));
-    });
-
-    test('injects toolSchemaBlock into prompt', () {
-      final messages = [
-        PromptMessage(role: PromptRole.system, content: 'You are helpful.'),
-        PromptMessage(role: PromptRole.user, content: 'Hello'),
-      ];
-      final result = LocalMnnModel.formatPrompt(
-        messages,
-        toolSchemaBlock: 'TOOLS_HERE',
       );
-      expect(result, contains('You are helpful.'));
-      expect(result, contains('TOOLS_HERE'));
-      expect(result, endsWith('Hello'));
+
+      expect(await model.isReady(), isFalse);
     });
 
-    test('handles user-only message', () {
-      final messages = [PromptMessage(role: PromptRole.user, content: 'Hello')];
-      final result = LocalMnnModel.formatPrompt(messages);
-      expect(result, 'Hello');
-    });
-  });
+    test('coalesces consecutive user messages and preserves attachments', () {
+      final model = LocalMnnModel();
+      final firstImage = PlatformFile(
+        name: 'page1.png',
+        size: 3,
+        bytes: Uint8List.fromList([1, 2, 3]),
+      );
+      final secondImage = PlatformFile(
+        name: 'selection.png',
+        size: 2,
+        bytes: Uint8List.fromList([4, 5]),
+      );
 
-  group('LocalMnnModel buildPromptTranscript', () {
-    test('flattens multi-turn conversation into labeled transcript', () {
-      final messages = [
-        PromptMessage(role: PromptRole.system, content: 'You are helpful.'),
-        PromptMessage(role: PromptRole.user, content: 'What is in this image?'),
+      final result = model.coalesceMessagesForGemma([
+        const PromptMessage(role: PromptRole.system, content: 'system'),
         PromptMessage(
-          role: PromptRole.assistant,
-          content: 'It looks like a cat.',
+          role: PromptRole.user,
+          content: 'Context from note pages',
+          attachments: [firstImage],
+          isContext: true,
         ),
         PromptMessage(
           role: PromptRole.user,
-          content: 'What color is it?\n<img>/tmp/cat.jpg<hw>512,512</hw></img>',
+          content: 'Question about the selected region',
+          attachments: [secondImage],
         ),
-      ];
-
-      final result = LocalMnnModel.buildPromptTranscript(messages);
-
-      expect(result, contains('System instructions:\nYou are helpful.'));
-      expect(result, contains('User:\nWhat is in this image?'));
-      expect(result, contains('Assistant:\nIt looks like a cat.'));
-      expect(
-        result,
-        contains(
-          'User:\nWhat color is it?\n<img>/tmp/cat.jpg<hw>512,512</hw></img>',
-        ),
-      );
-    });
-
-    test('prepends tool schema when no system message exists', () {
-      final messages = [
-        PromptMessage(role: PromptRole.user, content: 'Search for this'),
-      ];
-
-      final result = LocalMnnModel.buildPromptTranscript(
-        messages,
-        toolSchemaBlock: 'TOOLS_HERE',
-      );
-
-      expect(result, startsWith('System instructions:\nTOOLS_HERE'));
-      expect(result, contains('User:\nSearch for this'));
-    });
-
-    test('renders tool results as their own transcript section', () {
-      final messages = [
-        PromptMessage(role: PromptRole.user, content: 'Do the thing'),
-        PromptMessage(role: PromptRole.tool, content: '{"status":"ok"}'),
-      ];
-
-      final result = LocalMnnModel.buildPromptTranscript(messages);
-
-      expect(result, contains('Tool result:\n{"status":"ok"}'));
-    });
-  });
-
-  group('LocalMnnModel tool call parsing', () {
-    test('parses valid JSON tool call from response', () {
-      final response =
-          'Let me search for that.\n{"name": "call_tool", "arguments": {"service_name": "mcp", "tool_name": "search", "params": {"query": "test"}}}';
-      final result = LocalMnnModel.parseToolCalls(response);
-      expect(result.functionCalls, isNotNull);
-      expect(result.functionCalls!.length, 1);
-      expect(result.functionCalls![0]['name'], 'call_tool');
-      expect(result.functionCalls![0]['args']['tool_name'], 'search');
-      expect(result.text, 'Let me search for that.');
-    });
-
-    test('handles malformed JSON with json_repair', () {
-      final response =
-          '{"name": "call_tool", "arguments": {"service_name": "test", "tool_name": "foo", "params": {"key": "value}}}';
-      final result = LocalMnnModel.parseToolCalls(response);
-      // json_repair should fix the missing quote
-      expect(result.functionCalls, isNotNull);
-    });
-
-    test('returns plain text when no tool call found', () {
-      final response = 'This is just a plain text response with no JSON.';
-      final result = LocalMnnModel.parseToolCalls(response);
-      expect(result.text, response);
-      expect(result.functionCalls, isNull);
-    });
-
-    test('parses tool call with braces inside string values', () {
-      final response =
-          '{"name": "call_tool", "arguments": {"service_name": "test", "tool_name": "foo", "params": {"code": "if (x) { return y; }"}}}';
-      final result = LocalMnnModel.parseToolCalls(response);
-      expect(result.functionCalls, isNotNull);
-      expect(
-        result.functionCalls![0]['args']['params']['code'],
-        'if (x) { return y; }',
-      );
-    });
-
-    test('parses tool call followed by trailing text', () {
-      final response =
-          '{"name": "call_tool", "arguments": {"service_name": "test", "tool_name": "bar", "params": {}}}\nDone.';
-      final result = LocalMnnModel.parseToolCalls(response);
-      expect(result.functionCalls, isNotNull);
-      expect(result.functionCalls![0]['args']['tool_name'], 'bar');
-    });
-
-    test('falls back to plain text when arguments is not a map', () {
-      final response = '{"name": "call_tool", "arguments": "invalid"}';
-      final result = LocalMnnModel.parseToolCalls(response);
-      expect(result.text, response);
-      expect(result.functionCalls, isNull);
-    });
-
-    test('parses structured tool_calls envelope', () {
-      final response =
-          '{"tool_calls":[{"id":"call_1","type":"function","function":{"name":"call_tool","arguments":{"service_name":"svc","tool_name":"search","params":{"query":"note"}}}}]}';
-      final result = LocalMnnModel.parseToolCalls(response);
-      expect(result.functionCalls, isNotNull);
-      expect(result.functionCalls!.length, 1);
-      expect(result.functionCalls![0]['id'], 'call_1');
-      expect(result.functionCalls![0]['name'], 'call_tool');
-      expect(result.functionCalls![0]['args']['tool_name'], 'search');
-    });
-
-    test('parses structured tool_calls with stringified arguments', () {
-      final response =
-          '{"tool_calls":[{"type":"function","function":{"name":"call_tool","arguments":"{\\"service_name\\":\\"svc\\",\\"tool_name\\":\\"search\\",\\"params\\":{\\"query\\":\\"note\\"}}"}}]}';
-      final result = LocalMnnModel.parseToolCalls(response);
-      expect(result.functionCalls, isNotNull);
-      expect(result.functionCalls!.length, 1);
-      expect(result.functionCalls![0]['args']['service_name'], 'svc');
-    });
-
-    test('parses qwen xml tool call output', () {
-      final response =
-          'Thinking...\n<tool_call>\n<function=fetch_youtube_data>\n<parameter=video_url>\nhttps://youtu.be/if3oBYyh2b0\n</parameter>\n</function>\n</tool_call>\n';
-      final result = LocalMnnModel.parseToolCalls(response);
-      expect(result.functionCalls, isNotNull);
-      expect(result.functionCalls!.length, 1);
-      expect(result.functionCalls![0]['name'], 'fetch_youtube_data');
-      expect(
-        result.functionCalls![0]['args']['video_url'],
-        'https://youtu.be/if3oBYyh2b0',
-      );
-      expect(result.text, 'Thinking...');
-    });
-
-    test('builds tool schema block for system prompt', () {
-      final tools = [
-        {
-          'name': 'search',
-          'description': 'Search the web',
-          'parameters': {'query': 'string'},
-        },
-      ];
-      final result = LocalMnnModel.buildToolSchemaBlock(tools);
-      expect(result, contains('call_tool'));
-      expect(result, contains('search'));
-      expect(result, contains('Search the web'));
-    });
-  });
-
-  group('LocalMnnModel image handling', () {
-    final oneByOnePng = img_lib.encodePng(img_lib.Image(width: 1, height: 1));
-
-    test('inserts img tag for image attachment path', () {
-      final result = LocalMnnModel.insertImageTags('Describe this', [
-        '/tmp/img.jpg',
       ]);
-      expect(result, contains('<img>/tmp/img.jpg</img>'));
-      expect(result, startsWith('Describe this'));
+
+      expect(result, hasLength(2));
+      expect(result.first.role, PromptRole.system);
+      expect(result.last.role, PromptRole.user);
+      expect(
+        result.last.content,
+        'Context from note pages\n\nQuestion about the selected region',
+      );
+      expect(result.last.attachments, hasLength(2));
+      expect(result.last.attachments.first.name, 'page1.png');
+      expect(result.last.attachments.last.name, 'selection.png');
+      expect(result.last.isContext, isFalse);
     });
 
-    test('inserts multiple img tags for multiple images', () {
-      final result = LocalMnnModel.insertImageTags('Two images', [
-        '/tmp/a.jpg',
-        '/tmp/b.png',
+    test('does not merge across assistant boundaries', () {
+      final model = LocalMnnModel();
+
+      final result = model.coalesceMessagesForGemma([
+        const PromptMessage(role: PromptRole.user, content: 'First'),
+        const PromptMessage(role: PromptRole.assistant, content: 'Reply'),
+        const PromptMessage(role: PromptRole.user, content: 'Second'),
       ]);
-      expect(result, contains('<img>/tmp/a.jpg</img>'));
-      expect(result, contains('<img>/tmp/b.png</img>'));
-    });
 
-    test('returns original text when no images', () {
-      final result = LocalMnnModel.insertImageTags('No images', []);
-      expect(result, 'No images');
-    });
-
-    test('estimates image tokens from dimensions', () {
-      // 768x512 image (under 784px limit): ceil(768/28) * ceil(512/28) = 28 * 19 = 532 tokens
-      expect(LocalMnnModel.estimateImageTokens(768, 512), 532);
-      // 2000x1000 → resized to 784x392: ceil(784/28) * ceil(392/28) = 28 * 14 = 392
-      expect(LocalMnnModel.estimateImageTokens(2000, 1000), 392);
-      // 200x100 → no resize: ceil(200/28) * ceil(100/28) = 8 * 4 = 32
-      expect(LocalMnnModel.estimateImageTokens(200, 100), 32);
-    });
-
-    test('preprocesses byte-backed synapsetemp image attachments', () async {
-      final messages = [
-        PromptMessage(
-          role: PromptRole.user,
-          content: 'What is in this annotation?',
-          attachments: [
-            PlatformFile(
-              name: 'annotation.png',
-              path: 'synapsetemp:///annotation.png',
-              size: oneByOnePng.length,
-              bytes: oneByOnePng,
-            ),
-          ],
-        ),
-      ];
-
-      final processed = await LocalMnnModel.preprocessAttachments(messages);
-
-      expect(processed, hasLength(1));
-      expect(processed.single.content, contains('<img>'));
-      expect(processed.single.content, contains('<hw>1,1</hw>'));
-      expect(
-        processed.single.content,
-        isNot(contains('synapsetemp:///annotation.png')),
-      );
-    });
-
-    test('preprocesses byte-backed relative attachment images', () async {
-      final messages = [
-        PromptMessage(
-          role: PromptRole.user,
-          content: 'Check previous annotation',
-          attachments: [
-            PlatformFile(
-              name: 'saved_annotation.png',
-              path: 'attachments/saved_annotation.png',
-              size: oneByOnePng.length,
-              bytes: oneByOnePng,
-            ),
-          ],
-        ),
-      ];
-
-      final processed = await LocalMnnModel.preprocessAttachments(messages);
-
-      expect(processed, hasLength(1));
-      expect(processed.single.content, contains('<img>'));
-      expect(processed.single.content, contains('<hw>1,1</hw>'));
-      expect(
-        processed.single.content,
-        isNot(contains('attachments/saved_annotation.png')),
-      );
+      expect(result, hasLength(3));
+      expect(result[0].content, 'First');
+      expect(result[1].role, PromptRole.assistant);
+      expect(result[2].content, 'Second');
     });
   });
 }
