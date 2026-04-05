@@ -36,6 +36,7 @@ import '../services/conversation_settings_service.dart';
 import '../services/model_selector.dart';
 import '../services/service_locator.dart';
 import '../services/attachment_preprocessor.dart';
+import '../services/local_model_attachment_constraint_service.dart';
 import '../services/conversation_attachment_service.dart';
 import '../services/marker_cluster_service.dart';
 import '../services/prompts/ai_prompts.dart';
@@ -74,6 +75,7 @@ import '../services/note_annotation_service.dart';
 import '../widgets/in_note_marker_badge.dart';
 import '../widgets/in_note_marker_preview.dart';
 import '../widgets/tool_orchestration_warning_dialog.dart';
+import '../widgets/local_model_attachment_warning_dialog.dart';
 import '../widgets/in_note_annotation_preview.dart';
 
 enum DrawingTool { pen, rectangle }
@@ -4976,19 +4978,43 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       await _confirmDrawing(silent: true);
     }
 
+    final activeConfig =
+        _selectedModel ?? context.read<AppProvider>().modelConfig;
+    final pendingAttachments = List<PlatformFile>.from(_pendingAttachments);
+    final localAttachmentWarning =
+        await LocalModelAttachmentConstraintService.analyzeForGemma4(
+          config: activeConfig,
+          prompt: trimmed,
+          attachments: pendingAttachments,
+        );
+    if (!mounted) return;
+    if (localAttachmentWarning != null) {
+      final result = await LocalModelAttachmentWarningDialog.show(
+        context,
+        currentModel: activeConfig,
+        warning: localAttachmentWarning,
+      );
+      if (!mounted) return;
+      if (result == null || result is LocalModelAttachmentWarningStop) return;
+      if (result is LocalModelAttachmentWarningContinue &&
+          result.modelOverride != null) {
+        _selectedModel = result.modelOverride;
+      }
+    }
+
     // Check tool orchestration capability before sending
     if (!mounted) return;
     final hasTools =
         _selectedBuiltInTools.isNotEmpty || _selectedMcpEndpointIds.isNotEmpty;
-    final activeConfig =
+    final toolCheckConfig =
         _selectedModel ?? context.read<AppProvider>().modelConfig;
     final supportsOrchestration =
-        activeConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
+        toolCheckConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
         true;
     if (hasTools && !supportsOrchestration) {
       final result = await ToolOrchestrationWarningDialog.show(
         context,
-        activeConfig,
+        toolCheckConfig,
       );
       if (!mounted) return;
       if (result == null || result is ToolOrchestrationStop) return;

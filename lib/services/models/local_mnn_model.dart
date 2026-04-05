@@ -9,6 +9,7 @@ import 'package:json_repair_flutter/json_repair_flutter.dart';
 
 import 'package:note_synapse/models/generation_context.dart';
 import 'package:note_synapse/models/model_config.dart';
+import 'package:note_synapse/services/attachment_preprocessor.dart';
 import 'package:note_synapse/services/logger_service.dart';
 import 'package:note_synapse/services/models/ai_model.dart';
 import 'package:note_synapse/services/models/local_model_presets.dart';
@@ -654,15 +655,16 @@ class LocalMnnModel extends AIModel {
     final endpoint = 'local-gemma://$name';
 
     try {
+      final sanitizedMessages = await _sanitizeMessages(messages, requestId);
       LoggerService.logAiRequest(
         endpoint: endpoint,
         headers: {'backend': _config?.backendType ?? 'gpu'},
-        requestBody: _buildLogBody(messages, tools: const []),
+        requestBody: _buildLogBody(sanitizedMessages, tools: const []),
         requestId: requestId,
       );
 
       final chat = await _createChat(
-        messages: messages,
+        messages: sanitizedMessages,
         tools: const [],
         temperature: temperature,
         topK: topK,
@@ -712,15 +714,16 @@ class LocalMnnModel extends AIModel {
     final endpoint = 'local-gemma://$name/tools';
 
     try {
+      final sanitizedMessages = await _sanitizeMessages(messages, requestId);
       LoggerService.logAiRequest(
         endpoint: endpoint,
         headers: {'backend': _config?.backendType ?? 'gpu'},
-        requestBody: _buildLogBody(messages, tools: tools),
+        requestBody: _buildLogBody(sanitizedMessages, tools: tools),
         requestId: requestId,
       );
 
       final chat = await _createChat(
-        messages: messages,
+        messages: sanitizedMessages,
         tools: tools,
         temperature: temperature,
         topK: topK,
@@ -762,14 +765,18 @@ class LocalMnnModel extends AIModel {
     final endpoint = 'local-gemma://$name/stream';
 
     try {
+      final sanitizedMessages = await _sanitizeMessages(messages, reqId);
       LoggerService.logAiRequest(
         endpoint: endpoint,
         headers: {'backend': _config?.backendType ?? 'gpu'},
-        requestBody: _buildLogBody(messages, tools: const []),
+        requestBody: _buildLogBody(sanitizedMessages, tools: const []),
         requestId: reqId,
       );
 
-      final chat = await _createChat(messages: messages, tools: const []);
+      final chat = await _createChat(
+        messages: sanitizedMessages,
+        tools: const [],
+      );
       final buffer = StringBuffer();
 
       await for (final response in chat.generateChatResponseAsync()) {
@@ -797,6 +804,28 @@ class LocalMnnModel extends AIModel {
     } finally {
       await _disposeModel();
     }
+  }
+
+  Future<List<PromptMessage>> _sanitizeMessages(
+    List<PromptMessage> messages,
+    String requestId,
+  ) async {
+    if (messages.isEmpty) {
+      return messages;
+    }
+
+    final outcome = await AttachmentPreprocessor.sanitizeMessages(
+      messages,
+      config: _config,
+    );
+
+    AttachmentPreprocessor.logIgnoredAttachments(
+      outcome.ignored,
+      endpoint: '${name} attachment_filter',
+      requestId: requestId,
+    );
+
+    return outcome.messages;
   }
 }
 
