@@ -70,21 +70,23 @@ Note Synapse already has a rich agent system with skills (notes tagged `agent-sk
   6. Update log
 
 ### Gap E: Query Answers Filed Back as Wiki Pages
-**What's missing**: LLM Wiki suggests good query answers should be "filed back into the wiki as new pages." Currently, conversation answers live in conversation history, not as notes.
+**What's missing**: LLM Wiki suggests good query answers should be "filed back into the wiki as new pages."
 
-**How to close**: **Agent Skill** (partially) + **Native UI change** (recommended)
-- **Skill approach**: Instruct agent to `create_notes` with the synthesized answer when a query is comprehensive enough
-- **Native UI improvement**: Add a "Save as Note" action to conversation messages (on `ChatMessageActionRow` widget). This is a small UI addition that has broad value beyond the wiki pattern.
-  - File: `lib/widgets/chat_message_action_row.dart`
-  - Already has copy/share actions; add "Save as Note" that creates a note from message content
+**How to close**: **Already exists** — no code changes needed
+- Chat messages already have `Add to Note` action (`lib/widgets/chat_message_action_row.dart:35`) → opens `AddNoteDialog` which supports creating new notes or appending to existing ones
+- Conversation tree multi-select (`lib/screens/conversation_tree_screen.dart:744`) → `saveSelectedNodesAsNote` consolidates multiple conversation nodes into one note
+- **Skill approach**: Wiki Query skill tells the user when a synthesis is worth filing, pointing to the existing `Add to Note` flow
 
-### Gap F: No Source Immutability Concept
-**What's missing**: LLM Wiki distinguishes "raw sources" (immutable) from "wiki pages" (LLM-generated, mutable). Note Synapse treats all notes equally.
+### Gap F: No Source Immutability Enforcement
+**What's missing**: LLM Wiki distinguishes "raw sources" (immutable) from "wiki pages" (LLM-generated, mutable). Note Synapse treats all notes equally, and nothing prevents mutation of source-tagged notes.
 
-**How to close**: **Tag Convention in Skill** (no code changes needed)
-- Use tags: `source` (immutable raw material) vs `wiki-page` (LLM-generated)
-- Skill can instruct agent to never modify `source`-tagged notes
-- Optional: a `read-only` note attribute could be a small native enhancement, but tags work fine
+**Why tags alone are insufficient**: `modify_note` will happily mutate any note regardless of tags. Worse, `ContentIngestionService` explicitly writes extracted content back into the current note (`content_ingestion_service.dart:121` — the AI can return modifications that get applied to the source note via `NoteModificationService.applyModifications()`). A bad skill, prompt, or ingestion tag can silently destroy provenance on source notes.
+
+**How to close**: **Tag Convention + Write-path guard** (small code change)
+- Use tags: `wiki-source` (immutable raw material) vs `wiki-compiled` (LLM-generated)
+- **Required code change**: `NoteModificationService.applyModifications()` must check for a `wiki-source` tag and refuse content/title modifications when present. Tag and attachment modifications should still be allowed (so the note can be tagged/organized).
+- **ContentIngestionService guard**: When processing a note tagged `wiki-source`, the ingestion output should go to a new compiled note (or a subnote), not back into the source.
+- Files: `lib/services/note_modification_service.dart:21`, `lib/services/content_ingestion_service.dart:121`
 
 ### Gap G: No Graph Visualization of Wiki
 **What's missing**: LLM Wiki suggests Obsidian-style graph view to see connections, identify hubs/orphans.
@@ -150,7 +152,6 @@ Build HTML/JS extensions for visualization and interaction.
 
 | Change | Type | Effort | Files |
 |---|---|---|---|
-| **"Save as Note" on chat messages** | UI widget enhancement | Small | `lib/widgets/chat_message_action_row.dart` |
 | **Batch note operations in agent** | Tool enhancement (modify multiple notes atomically) | Small | `lib/services/tools/note_tools.dart` — `modify_note` already exists but single-note; add batch mode |
 | **Note read-only flag** | DB + model + UI | Medium | `lib/models/note.dart`, `database_service.dart`, `note_detail_screen.dart` |
 | **Scheduled skill execution** | New service | Medium | New `lib/services/scheduled_task_service.dart` |
@@ -160,11 +161,13 @@ Build HTML/JS extensions for visualization and interaction.
 
 ## 4. Recommendation
 
-**Start with Tier 1.** The skill system is perfectly designed for this — it's literally the "Schema" layer from Karpathy's architecture. Write 3-5 skill notes that encode the Wiki Ingest, Query, and Lint workflows. The agent already has all the tools it needs (`read_note`, `search_notes`, `modify_note`, `create_notes`, `run_sql`).
+**The skill system is the right substrate** — it's literally the "Schema" layer from Karpathy's architecture, and the existing tools (`read_note`, `search_notes`, `modify_note` with append/prepend/replace, `create_notes`, `run_sql`) cover core CRUD. The filing path from conversations to notes already exists via `Add to Note` + `AddNoteDialog` + conversation tree consolidation.
 
-The only native change worth doing immediately is **"Save as Note"** on chat messages — it's small, broadly useful, and bridges the gap between conversations and the note knowledge base.
+**However, skills alone are not the first step.** The skill pipeline (Tasks 1-8 of `2026-03-26-agent-skills.md`) is code-complete but not yet validated end-to-end. Building wiki skills on an untested foundation risks wasted effort. Additionally, two narrow tool/enforcement gaps block reliable wiki workflows: (1) `create_notes` doesn't advertise the `link` field in its schema, so the LLM won't create relationships at note-creation time; (2) nothing prevents `modify_note` or `ContentIngestionService` from mutating source-tagged notes.
 
-Everything else (graph visualization, dashboards) can come as User Apps, proving out the plugin system while delivering real value.
+**The real order is**: validate the skill pipeline → close the narrow tool/enforcement gaps + define the wiki contract → write and pilot the wiki skills → close further gaps only if the pilot proves need. See Section 8 for the detailed task list.
+
+Visualization, dashboards, vector search, and scheduling are deferred until after the pilot.
 
 ---
 
@@ -173,3 +176,746 @@ Everything else (graph visualization, dashboards) can come as User Apps, proving
 - **Skills**: Create test skill notes, run agent with each workflow, verify notes are created/updated correctly
 - **User Apps**: Test graph app with sample wiki notes, verify Synapse API queries work
 - **Native changes**: `flutter test` for any modified services, manual testing for UI additions
+
+---
+
+## 6. Corrections From Alternative Plan Review
+
+The alternative plan (`2026-04-05-llm-wiki-executable-gap-plan.md`) makes several corrections to Sections 1-5 above:
+
+### 6A. Gap E Was Overstated — "Save as Note" Already Exists
+
+Gap E claimed chat answers can't be filed back as notes. This is wrong. The app already has:
+
+- **`Add to Note`** button on every chat message (`lib/widgets/chat_message_action_row.dart:35`) → opens `AddNoteDialog`
+- **`AddNoteDialog`** (`lib/widgets/add_note_dialog.dart`) supports: create new note, append to existing note, AI-shaped note creation
+- **Conversation tree multi-select** (`lib/screens/conversation_tree_screen.dart:744`) → `saveSelectedNodesAsNote` consolidates multiple tree nodes into one note
+
+These three surfaces together cover query-to-wiki filing. No new "Save as Note" UI is needed.
+
+**Section 3 Tier 3 correction**: Remove "Save as Note on chat messages" from recommended native changes. Remove item 18 from Section 9.
+
+### 6B. Wiki Pages Are Regular Notes
+
+The alternative plan correctly insists: wiki pages are not a separate object type. They are regular notes distinguished by tags, metadata, and workflow conventions. This plan should use the vocabulary:
+
+- **source note**: raw evidence, not modified by ingest workflows
+- **compiled note**: a regular note maintained by agent workflows (entities, topics, summaries)
+- **wiki workspace**: a set of regular notes sharing the same conventions + an index + a log
+- **schema skill**: the skill note that defines the workflow contract
+
+No new DB models, no new note types.
+
+### 6C. Workflow Contract Before Code
+
+The alternative plan correctly argues that the gap is not infrastructure but a defined, repeatable workflow UX. Before writing skills or tools, we need to define:
+
+1. **Bootstrap**: How a user creates a wiki workspace (index, log, schema notes)
+2. **Ingest**: How a source note gets processed into compiled notes
+3. **Query filing**: When a chat answer stays ephemeral vs gets filed (using existing Add to Note)
+4. **Lint**: What "wiki health" means and where findings go
+
+This workflow contract is a prerequisite for skill authoring.
+
+### 6D. What The Alternative Plan Underweights
+
+The alternative plan defers all of:
+- Agent skills validation
+- Tool call gaps (multimodal, `create_notes` link schema, source immutability enforcement)
+- Local-first token optimization
+
+These are not speculative infrastructure. They are prerequisites:
+- Skills validation: if `load_skill` + context pinning + tool URI resolution don't work, wiki skills can't run
+- `create_notes` link schema: the implementation handles `link` data (`note_modification_service.dart:246`) but the `inputSchema` doesn't advertise it — the LLM won't create relationships at note-creation time unless the schema tells it the field exists
+- Source immutability: `modify_note` and `ContentIngestionService` can both mutate source-tagged notes — without enforcement, the "raw sources are immutable" invariant is a fiction
+- PDF text extraction: if local models can't read PDFs at all, source ingestion fails for the primary local-first use case
+
+**Note on `modify_note` append/prepend**: The alternative plan's comment that this is a nonexistent gap is correct. `modify_note` already supports `content.action: 'append'|'prepend'|'replace'` in its schema (`note_tools.dart:816`), and `NoteModificationService.applyModifications()` implements all three (`note_modification_service.dart:36`). This is **not a gap** and is removed from the task list.
+
+---
+
+## 7. Executable Task List
+
+Terminology: "wiki pages are regular notes" throughout. Each task specifies UX change, workflow change, validation method, and acceptance criteria.
+
+### Priority Legend
+
+- **P0**: Blocks everything. Must pass before subsequent phases start.
+- **P1**: Required for the pilot to run at all.
+- **P2**: Required for the pilot to run well on local models.
+- **P3**: Improves quality. Can be deferred until pilot exposes need.
+
+---
+
+### Phase A: Validate Agent Skills Foundation (P0)
+
+#### Task A1: Skill Pipeline Integration Tests
+
+**Goal**: Prove the implemented skill system (Tasks 1-8 of `2026-03-26-agent-skills.md`) works end-to-end before building on it.
+
+**UX change**: None.
+
+**Workflow change**: None — this validates existing code.
+
+**Validation method**: Unit/integration tests in `test/skill_pipeline_integration_test.dart`.
+
+**Tests and expected outcomes**:
+
+| Test | Expected Outcome |
+|------|-----------------|
+| Parse frontmatter with colons in description (`description: Use for: analysis`) | Returns `SkillMetadata` with full description string including colon |
+| Parse frontmatter with multi-line description (indented continuation) | Returns null (current parser is line-based — document as known limitation or fix) |
+| `buildSkillIndex()` with 0 enabled skills returns empty map | Empty map, empty prompt string |
+| `buildSkillIndex()` with mix of enabled, disabled, malformed notes | Only enabled+valid notes in index |
+| `LoadSkillTool.execute()` returns formatted content, second call returns cached content without DB hit | `verify(mockDb.getNote('id')).called(1)` after two execute calls |
+| `LoadSkillTool.resetSession()` clears cache, next call hits DB again | `verify(mockDb.getNote('id')).called(2)` after reset + re-execute |
+| `extractToolUris()` finds `notesynapse://tool/builtin/search_notes` in content | Returns list containing that URI |
+| `extractToolUris()` ignores `notesynapse://note/abc` (not a tool URI) | Returns empty list |
+| `parseToolUri()` for builtin, user_defined, mcp namespaces | Correct (namespace, id, function) tuples |
+
+**Acceptance criteria**:
+- [ ] All tests pass in `flutter test test/skill_pipeline_integration_test.dart`
+- [ ] Known limitations documented as comments in test file
+
+#### Task A2: Context Compaction With Loaded Skills
+
+**Goal**: Verify loaded skills survive compaction and don't starve the execution log budget.
+
+**UX change**: None.
+
+**Workflow change**: None — validation only.
+
+**Validation method**: Unit test in `test/context_manager_skill_compaction_test.dart`.
+
+**Tests and expected outcomes**:
+
+| Test | Expected Outcome |
+|------|-----------------|
+| Add 2 loaded skills (each ~500 tokens), fill execution log to 80% of a 16K budget, trigger compaction | After compaction: both skills still in `root.loadedSkills`, execution log compacted to summary + last 3 entries |
+| Add 3 loaded skills totaling 4K tokens in a 16K budget, log a 10K observation | Compaction triggers. Skills unchanged. Log compacted. Total estimated tokens < 16K. |
+| `buildContextForNode()` with loaded skills outputs skills before execution log | Output string contains `<LoadedSkills>` section before any `Observation:` entries |
+
+**Acceptance criteria**:
+- [ ] All tests pass
+- [ ] Compaction never removes or truncates loaded skills
+- [ ] After compaction, `estimatedTokens` + skill tokens < `maxContextTokens`
+
+#### Task A3: Chat Mode Skill Discovery End-to-End
+
+**Goal**: Verify `ConversationService` correctly loads skills, discovers tools from URIs, and makes discovered tools available in subsequent turns.
+
+**UX change**: None.
+
+**Workflow change**: None — validation only.
+
+**Validation method**: Unit test in `test/conversation_skill_discovery_test.dart`, mocking `DatabaseService` and `SkillService`.
+
+**Tests and expected outcomes**:
+
+| Test | Expected Outcome |
+|------|-----------------|
+| `enableSkills()` populates `skillIndex` from DB | `skillIndex` contains enabled skills |
+| `disableSkills()` clears index and discovered tools | `skillIndex.isEmpty`, `skillDiscoveredTools.isEmpty` |
+| Simulated `load_skill` result containing `notesynapse://tool/builtin/search_notes` | `_skillDiscoveredTools` contains an `McpTool` named `search_notes` |
+| Second `enableSkills()` call resets state cleanly | No duplicate tools from previous session |
+
+**Acceptance criteria**:
+- [ ] All tests pass
+- [ ] `_skillDiscoveredTools` never contains duplicate tool names
+
+---
+
+### Phase B: Critical Tool Gaps (P1)
+
+> **Note**: `modify_note` append/prepend is NOT a gap. The tool already exposes `content.action: 'append'|'prepend'|'replace'` in its `inputSchema` (`note_tools.dart:816`), and `NoteModificationService.applyModifications()` implements all three (`note_modification_service.dart:44-53`). Similarly, `modify_note` already handles relationship creation via the `link` field (`note_tools.dart:841`, `note_modification_service.dart:129`). The actual gaps in this phase are narrower.
+
+#### Task B1: `create_notes` Schema — Expose `link` Field
+
+**Goal**: `create_notes` implementation already handles `link` data in `NoteModificationService.createNote()` (`note_modification_service.dart:246`), but the tool's `inputSchema` doesn't advertise it. Without the schema field, the LLM won't know it can create relationships at note-creation time — it would have to create the note first, then call `modify_note` with `link`, wasting a tool call.
+
+**UX change**: None (tool schema change only).
+
+**Workflow change**: Agent can create notes with relationships in a single `create_notes` call. Wiki Ingest can create a compiled note and link it to the source in one step.
+
+**Files changed**:
+- `lib/services/tools/note_tools.dart` — `CreateNotesTool.inputSchema`: add `link` property to the items schema
+
+**Validation method**: Unit tests.
+
+**Tests and expected outcomes**:
+
+| Test | Expected Outcome |
+|------|-----------------|
+| `create_notes` with `link: [{relation: 'derived_from', target: 'source-note-id'}]` | Note created AND relationship inserted in DB |
+| `create_notes` without `link` field | Existing behavior unchanged, no relationships created |
+| `create_notes` with `link` targeting non-existent note | Note created, relationship created (DB doesn't enforce FK on relationships — verify this) |
+| `inputSchema` includes `link` property matching `modify_note`'s link schema | Schema has `'link': {'type': 'array', 'items': {'type': 'object', 'properties': {'relation': ..., 'target': ...}}}` |
+
+**Acceptance criteria**:
+- [ ] All tests pass
+- [ ] `flutter analyze lib/services/tools/note_tools.dart` — no errors
+- [ ] Existing `create_notes` tests still pass (no regression)
+- [ ] App test: agent creates a note with `link` field → relationship visible in note detail screen
+
+#### Task B2: `read_note mode='pdf_text'` — Text Extraction From PDFs
+
+**Goal**: Extract text directly from PDF pages without rendering to images. Essential for local models (Gemma 4) that can't process images and for token-efficient PDF reading on any model.
+
+**UX change**: None (tool-only).
+
+**Workflow change**: Agent can call `read_note` with `mode: 'pdf_text'` to get text content from PDF pages. Falls back gracefully for scanned/image-only PDFs.
+
+**Files changed**:
+- `lib/services/tools/note_tools.dart` — `NoteReadTool`: add `'pdf_text'` to mode enum, implement `_executePdfText()` method
+
+**Implementation notes**: `pdfrx` provides `PdfPage` — check if it exposes a `.text` property or text extraction API. If not, evaluate `pdf_text_extraction` or similar package. If no text extraction is available in `pdfrx`, extract what the outline/bookmarks provide and return that with a note that full text extraction requires a different package.
+
+**Validation method**: Unit tests + manual test with a real PDF.
+
+**Tests and expected outcomes**:
+
+| Test | Expected Outcome |
+|------|-----------------|
+| `read_note mode='pdf_text'` with attachment param on a text-heavy PDF | Returns `{id, attachment, pages_read, total_pages, text: '...extracted text...'}` |
+| `read_note mode='pdf_text'` without `attachment` param | Returns `{error: 'attachment parameter is required...'}` |
+| `read_note mode='pdf_text'` on non-PDF attachment | Returns `{error: 'Attachment "photo.jpg" is not a PDF...'}` |
+| `read_note mode='pdf_text'` on scanned PDF (no extractable text) | Returns `{text: '', note: 'No extractable text found. This may be a scanned document. Use mode=pdf_pages with a vision-capable model.'}` |
+| `read_note mode='pdf_text'` with `start_page`/`end_page` | Only text from those pages returned |
+
+**Acceptance criteria**:
+- [ ] Tests pass
+- [ ] Manual test: attach a text-heavy PDF to a note, agent calls `read_note mode='pdf_text'` and gets readable text
+- [ ] Manual test: same PDF with Gemma 4 — agent can read PDF content without image support
+- [ ] Token cost of `pdf_text` result is < 20% of equivalent `pdf_pages` visual analysis for a text-heavy page
+
+#### Task B3: `read_note mode='image'` — Direct Image Attachment Reading
+
+**Goal**: Allow the agent to read a specific image attachment from a note as visual input to the LLM, without loading full note content or requiring `extraction_guide`.
+
+**UX change**: None (tool-only).
+
+**Workflow change**: Agent calls `read_note mode='image', attachment: 'photo.jpg'` → receives the image for visual inspection. If model doesn't support images, returns an AI-generated description of the image instead.
+
+**Files changed**:
+- `lib/services/tools/note_tools.dart` — add `'image'` to mode enum, implement `_executeImage()`
+
+**Implementation notes**: The return value must work with the agent's tool result handling. In `AgentService._performTask()`, tool results that include `PlatformFile` attachments are passed to the next LLM call as multimodal content. Check how `_executePdfPages()` currently returns its AI description vs how it could return raw images. The `_executeImage()` method should:
+1. Load the image file as `PlatformFile` with bytes
+2. Check `ModelSelector.currentCapabilities.supportsImages`
+3. If yes: return the image as an attachment in the tool result (need to verify agent handles this)
+4. If no: call `AIService.extractContentFromImage()` and return the text description
+
+**Validation method**: Unit tests + manual test.
+
+**Tests and expected outcomes**:
+
+| Test | Expected Outcome |
+|------|-----------------|
+| `read_note mode='image'` with valid image attachment | Returns result containing image data or AI description |
+| `read_note mode='image'` without `attachment` param | Returns `{error: 'attachment parameter is required...'}` |
+| `read_note mode='image'` with non-image attachment (PDF) | Returns `{error: 'Attachment "doc.pdf" is not an image. Use mode=pdf_pages or pdf_text.'}` |
+| `read_note mode='image'` when model doesn't support images | Returns `{description: '...AI-generated text description of image...'}` |
+| `read_note mode='image'` with missing file | Returns `{error: 'File not found...'}` |
+
+**Acceptance criteria**:
+- [ ] Tests pass
+- [ ] Manual test with cloud model: agent sees actual image content and can answer questions about it
+- [ ] Manual test with Gemma: agent gets text description fallback
+- [ ] `stat` mode attachment info includes a hint: `'hint': 'Use mode=image to view'` for image attachments
+
+#### Task B4: Relationship Deletion/Listing Ergonomics
+
+**Goal**: `modify_note` and `create_notes` already handle relationship **creation** via the `link` field. But there is no ergonomic way to **delete** or **list** relationships — the agent must use `run_sql` for both. For wiki workflows (lint finding stale cross-references, ingest cleaning up outdated links), this is awkward and error-prone.
+
+**UX change**: None (tool-only).
+
+**Workflow change**: Agent can list and delete relationships via `modify_note` instead of `run_sql`. The `link` modification field gains `removed` support (matching the pattern used by `tags` and `attachments`).
+
+**Files changed**:
+- `lib/services/tools/note_tools.dart` — `ModifyNoteTool.inputSchema`: extend `link` schema to support `removed` array
+- `lib/services/note_modification_service.dart` — handle `link.removed` in `applyModifications()`
+- Optionally: add a `list_relationships` read-only action to `read_note mode='stat'` output (it already shows `linked_notes` — verify this is sufficient)
+
+**Validation method**: Unit tests.
+
+**Tests and expected outcomes**:
+
+| Test | Expected Outcome |
+|------|-----------------|
+| `modify_note` with `link: [{relation: 'related', target: 'note-b'}]` (existing behavior) | Relationship created — no regression |
+| `modify_note` with `link` containing `removed: ['note-b']` | Relationship from current note to `note-b` deleted |
+| `modify_note` with `link` containing both creation and removal entries | Creates new relationships AND deletes specified ones |
+| `read_note mode='stat'` output `linked_notes` field | Lists all relationships with id, title, relation type, direction — verify this already works |
+
+**Acceptance criteria**:
+- [ ] Tests pass
+- [ ] Agent can create AND delete relationships via `modify_note` without `run_sql`
+- [ ] `read_note stat` provides enough relationship info for lint to assess cross-references
+
+#### Task B5: Source Immutability Enforcement
+
+**Goal**: Prevent `modify_note` and `ContentIngestionService` from mutating notes tagged `wiki-source`. Without this, the "raw sources are immutable" invariant (Karpathy's core model and Gap F) is unenforceable — a bad skill or prompt can silently destroy provenance.
+
+**UX change**: When a user manually edits a `wiki-source` note in the note editor, no change (manual edits are intentional). When the **agent** tries to modify a `wiki-source` note via tool call, `modify_note` returns an error explaining the restriction.
+
+**Workflow change**:
+1. `NoteModificationService.applyModifications()` checks for `wiki-source` tag. If present, refuses content and title modifications. Tag, attachment, subnote, and link modifications are still allowed (so the note can be organized and cross-referenced).
+2. `ContentIngestionService`: when processing a note tagged `wiki-source`, extracted content goes to a new compiled note (not back into the source). The compiled note is tagged `wiki-compiled` and linked to the source via `link`.
+
+**Files changed**:
+- `lib/services/note_modification_service.dart:21` — add guard in `applyModifications()`
+- `lib/services/content_ingestion_service.dart:121` — redirect output for `wiki-source` notes
+
+**Validation method**: Unit tests + manual test.
+
+**Tests and expected outcomes**:
+
+| Test | Expected Outcome |
+|------|-----------------|
+| `modify_note` on `wiki-source` note with `content: {action: 'append', text: '...'}` | Returns `{error: 'Cannot modify content of a wiki-source note. Source notes are immutable to preserve provenance.'}` |
+| `modify_note` on `wiki-source` note with `title: {new_title: '...'}` | Returns same error |
+| `modify_note` on `wiki-source` note with `tags: {added: ['reviewed']}` | Succeeds — tag modification allowed |
+| `modify_note` on `wiki-source` note with `link: [{relation: 'related', target: '...'}]` | Succeeds — link creation allowed |
+| `modify_note` on non-`wiki-source` note | Existing behavior unchanged |
+| `ContentIngestionService` processes `wiki-source` note | Creates a new `wiki-compiled` note with extraction results; source note content unchanged |
+| `ContentIngestionService` processes non-`wiki-source` note | Existing behavior unchanged — writes back to same note |
+
+**Acceptance criteria**:
+- [ ] All tests pass
+- [ ] `flutter analyze` clean on both changed files
+- [ ] App test: tag a note `wiki-source`, attach a PDF, trigger content ingestion → source note unchanged, new compiled note created with extraction results
+- [ ] App test: agent tries `modify_note` with content change on `wiki-source` note → receives error, note unchanged
+
+---
+
+### Phase C: Wiki Workflow Contract (P1)
+
+#### Task C1: Define Wiki Schema Artifact
+
+**Goal**: Write the canonical schema document that defines terminology, tag conventions, compiled note structure, provenance rules, and contradiction handling. This is a markdown artifact, not code.
+
+**UX change**: None — this is a spec document.
+
+**Workflow change**: Establishes the rules that all wiki skills will follow. Two different agents following this schema should produce structurally similar compiled notes.
+
+**Deliverable**: `docs/wiki-schema.md` (or a note template that can be imported).
+
+**Content requirements**:
+1. **Terminology**: source note, compiled note, wiki workspace, schema skill
+2. **Tag conventions**: `wiki-source`, `wiki-compiled`, `wiki-index`, `wiki-log`, `wiki-entity`, `wiki-topic`, `wiki-synthesis`
+3. **Compiled note required structure**: each compiled note must have:
+   - `> [!SUMMARY]` block (first line, for `read_note mode='summary'`)
+   - `## Sources` section listing source note IDs/titles
+   - `## Claims` section with explicit provenance per claim
+   - `## See Also` section with note links to related compiled notes
+4. **Provenance rules**: every claim must link to a source note or source-linked compiled note. Unverifiable claims marked with `[unverified]`.
+5. **Contradiction handling**: conflicting claims from different sources represented explicitly with both versions and source attribution, not collapsed silently.
+6. **Source immutability**: notes tagged `wiki-source` must never have content/title modified by ingest workflows. Enforced by Task B5's write guard in `NoteModificationService` — not just a convention.
+
+**Validation method**: Human review.
+
+**Acceptance criteria**:
+- [ ] A reader unfamiliar with the project can read the schema and understand how to create/maintain a wiki workspace
+- [ ] The schema can be followed manually (no skill or code needed) using existing tools
+- [ ] Two people following the schema independently would produce structurally similar compiled notes
+
+#### Task C2: Define Workflow UX Spec
+
+**Goal**: Document the four user-visible operations (bootstrap, ingest, query filing, lint) against existing product surfaces.
+
+**UX change**: None — this is a spec. But it must reference only existing UI surfaces.
+
+**Workflow change**: Establishes the entry points, expected outputs, and persistence paths for each operation.
+
+**Deliverable**: `docs/wiki-workflow-ux.md`
+
+**Content requirements**:
+
+**Bootstrap**:
+- Entry point: user runs agent with "Wiki Bootstrap" skill or creates notes manually
+- Creates: `Wiki Index` note (tagged `wiki-index`), `Wiki Log` note (tagged `wiki-log`), schema reference note
+- User distinguishes workspace from ordinary notes by the tag prefix `wiki-`
+
+**Ingest**:
+- Entry point: user tags a note `wiki-source`, then runs agent with "Wiki Ingest" skill referencing that note
+- Expected output: 1+ compiled notes created/updated, index updated, log appended
+- Persistence: all via `modify_note` (append for log/index) and `create_notes`
+
+**Query filing**:
+- Entry point: user asks a question in chat with wiki skills enabled
+- Filing decision: agent tells user when a synthesis is substantial enough to file
+- Persistence path: user uses existing `Add to Note` → `AddNoteDialog` → append to existing compiled note or create new synthesis note (tagged `wiki-synthesis`)
+- Conversation tree consolidation for multi-turn syntheses
+
+**Lint**:
+- Entry point: user runs agent with "Wiki Lint" skill
+- Output: `Wiki Lint Report` note listing orphans, stale claims, uncited content, contradiction candidates
+- Direct fixes: lint can update compiled notes to add missing `See Also` links or mark stale claims. Structural changes (delete, merge) require user confirmation.
+
+**Validation method**: Human review + trace through existing UI.
+
+**Acceptance criteria**:
+- [ ] Each operation maps to an existing entry point (agent launch, chat, Add to Note dialog)
+- [ ] No operation requires a new product surface
+- [ ] A user can execute each flow manually today using existing tools
+
+---
+
+### Phase D: Token-Aware Infrastructure (P2)
+
+#### Task D1: Tiered Skill Index
+
+**Goal**: Reduce skill index token cost for small-context models.
+
+**UX change**: None visible. Agent prompt is shorter on small-context models.
+
+**Workflow change**: `SkillService.buildSkillIndexPrompt()` accepts a `maxBudgetTokens` parameter. When budget is tight, it produces a compact index.
+
+**Files changed**:
+- `lib/services/skill_service.dart` — `buildSkillIndexPrompt()` method
+- `lib/services/agent_service.dart` — pass budget to `buildSkillIndexPrompt()`
+- `lib/services/conversation_service.dart` — same
+
+**Validation method**: Unit tests.
+
+**Tests and expected outcomes**:
+
+| Test | Expected Outcome |
+|------|-----------------|
+| `buildSkillIndexPrompt(index, maxBudgetTokens: 100000)` | Full format: noteId, name, description per skill (current behavior) |
+| `buildSkillIndexPrompt(index, maxBudgetTokens: 15000)` with 10 skills | Compact format: `skill_id: Name` only, no descriptions. Total output < 500 chars. |
+| `buildSkillIndexPrompt(index, maxBudgetTokens: 8000)` with 10 skills | Minimal format: `Available skills: Name1, Name2, ...` single line. |
+| `buildSkillIndexPrompt(empty, maxBudgetTokens: any)` | Returns empty string (unchanged) |
+
+**Acceptance criteria**:
+- [ ] Tests pass
+- [ ] With 10 registered skills on a 16K model, skill index prompt < 200 tokens
+- [ ] With 10 registered skills on a 100K model, skill index prompt unchanged from current behavior
+
+#### Task D2: Adaptive Skill Pinning Budget
+
+**Goal**: Prevent loaded skills from consuming more than 30% of context budget. On 16K, that's ~4,800 tokens for all pinned content.
+
+**UX change**: If a skill would exceed the pinning budget, the agent receives a message: `"Skill loaded but summarized due to context constraints. Key instructions: [one-line summary]. Unload a skill or use a higher-context model for full skill content."`
+
+**Workflow change**: `ContextManagerService.addLoadedSkill()` checks pinning budget before adding. If over budget, it stores a one-line summary instead of full content.
+
+**Files changed**:
+- `lib/services/context_manager_service.dart` — `addLoadedSkill()` gains budget check
+- `lib/utils/token_estimator.dart` — used for estimation (already exists)
+
+**Validation method**: Unit tests.
+
+**Tests and expected outcomes**:
+
+| Test | Expected Outcome |
+|------|-----------------|
+| Add a 500-token skill to 100K budget | Full content stored in `loadedSkills` |
+| Add a 3000-token skill to 16K budget (first skill, under 30%) | Full content stored |
+| Add a second 3000-token skill to 16K budget (would exceed 30%) | Second skill stored as one-line summary (~50 tokens). First skill unchanged. |
+| Add skill to budget where objective + skills already > 30% | Skill stored as summary |
+| `estimatePinnedTokens()` returns sum of all pinned content | Correct token estimate |
+
+**Acceptance criteria**:
+- [ ] Tests pass
+- [ ] On 16K model with 2 wiki skills, agent doesn't hit compaction immediately on first tool call
+- [ ] On 100K model, behavior unchanged — all skills stored in full
+
+#### Task D3: PDF Text Fallback for Text-Only Models
+
+**Goal**: When `read_note mode='pdf_pages'` is called on a model without image support, automatically fall back to text extraction instead of failing.
+
+**UX change**: Agent using a local model can now read PDF content. Previously, `pdf_pages` would call `generateWithAttachments()` which would fail or return garbage on text-only models.
+
+**Workflow change**: `_executePdfPages()` checks `ModelCapabilities.supportsImages`. If false, delegates to the same text extraction logic as Task B2's `_executePdfText()`. Returns text with a note explaining the fallback.
+
+**Files changed**:
+- `lib/services/tools/note_tools.dart` — `_executePdfPages()` method
+
+**Validation method**: Unit tests + manual test on Gemma.
+
+**Tests and expected outcomes**:
+
+| Test | Expected Outcome |
+|------|-----------------|
+| `pdf_pages` on image-capable model | Current behavior: renders + AI describes (unchanged) |
+| `pdf_pages` on text-only model with text-heavy PDF | Returns `{text: '...', fallback: true, note: 'Text extracted because model does not support images.'}` |
+| `pdf_pages` on text-only model with scanned PDF | Returns `{text: '', fallback: true, error: 'Scanned PDF requires a vision-capable model.'}` |
+
+**Acceptance criteria**:
+- [ ] Tests pass
+- [ ] Manual: Gemma 4 agent can read a text PDF via `pdf_pages` and produce a reasonable summary
+- [ ] No regression: cloud model with image support still gets rendered page descriptions
+
+#### Task D4: `min_context` Frontmatter Field
+
+**Goal**: Skills can declare their minimum context requirement. The skill index and agent can warn when a model is too constrained.
+
+**UX change**: In the skill index prompt, skills with `min_context` exceeding the current model's budget are annotated: `(limited — requires 50K+ context)`. In the agent launch screen (if skills toggle exists), these skills show a warning badge.
+
+**Workflow change**: `SkillMetadata` gains optional `minContext` field. `buildSkillIndexPrompt()` annotates constrained skills. `LoadSkillTool` includes a warning in its output when loading a skill that exceeds budget.
+
+**Files changed**:
+- `lib/services/skill_service.dart` — `SkillMetadata.minContext`, parsing in `parseSkillMetadata()`
+- `lib/services/tools/load_skill_tool.dart` — warning message when budget < minContext
+
+**Validation method**: Unit tests.
+
+**Tests and expected outcomes**:
+
+| Test | Expected Outcome |
+|------|-----------------|
+| Parse frontmatter with `min_context: 50000` | `SkillMetadata.minContext == 50000` |
+| Parse frontmatter without `min_context` | `SkillMetadata.minContext == null` (no constraint) |
+| `buildSkillIndexPrompt()` with budget 16K and a skill with `min_context: 50000` | Skill entry includes `(limited mode)` annotation |
+| `LoadSkillTool.execute()` for a skill with `min_context: 50000` on 16K model | Returns skill content prefixed with: `⚠ This skill is designed for 50K+ context. Running on 16K. Some steps may need to be split across sessions.` |
+
+**Acceptance criteria**:
+- [ ] Tests pass
+- [ ] Skill authors can declare context requirements in frontmatter
+- [ ] Agent receives clear signal about constrained execution
+
+---
+
+### Phase E: Wiki Skill Pack + Pilot (P1 — after Phases A-C; can overlap with Phase D)
+
+#### Task E1: Wiki Bootstrap Skill
+
+**Goal**: A skill note that guides the agent to set up a wiki workspace from scratch.
+
+**UX change**: User creates a note tagged `agent-skill` with the bootstrap skill content. Then runs the agent with an objective like "Set up a wiki workspace for [domain]."
+
+**Workflow change**: Agent follows the skill to:
+1. Create `Wiki Index` note (tagged `wiki-index`)
+2. Create `Wiki Log` note (tagged `wiki-log`)
+3. Verify/apply tag conventions from the schema (Task C1)
+4. Append bootstrap entry to log
+
+**Deliverable**: Skill note content (markdown with YAML frontmatter).
+
+**Validation method**: Run agent with the skill on a fresh note collection.
+
+**Expected behavior (app test)**:
+1. User creates a note with skill frontmatter and tags it `agent-skill`
+2. User starts agent with objective "Bootstrap a wiki workspace for machine learning"
+3. Agent loads the bootstrap skill
+4. Agent creates Index and Log notes with correct tags
+5. Log note contains a timestamped bootstrap entry
+6. Index note has the correct structure per schema
+
+**Acceptance criteria**:
+- [ ] After agent completes, `search_notes` with tag `wiki-index` returns exactly 1 note
+- [ ] After agent completes, `search_notes` with tag `wiki-log` returns exactly 1 note
+- [ ] Index note has `> [!SUMMARY]` block
+- [ ] Log note has at least one timestamped entry
+- [ ] Agent did not modify any existing notes
+
+#### Task E2: Wiki Ingest Skill
+
+**Goal**: A skill that processes one source note into compiled note updates.
+
+**UX change**: User tags a note `wiki-source`, then runs agent with "Ingest [note title] into the wiki."
+
+**Workflow change**: Agent follows the skill to:
+1. Read the source note (using progressive discovery: stat → toc → lines/pdf_text)
+2. Identify entities/topics/claims in the source
+3. For each entity/topic: search for existing compiled note, update or create
+4. Each compiled note follows the schema structure (summary, sources, claims, see also)
+5. Create relationships from source to compiled notes
+6. Append to log (using `modify_note operation='append'`)
+7. Update index
+
+**Deliverable**: Skill note content. Must include token-aware instructions:
+- Budget > 50K: full ingest in one session
+- Budget 16K-50K: staged (one entity at a time)
+- Budget < 16K: micro-ingest (one entity per session, instruction to continue)
+
+**Validation method**: Run agent on a prepared source note.
+
+**Expected behavior (app test)**:
+1. Prepare a 500-word source note about "Transformer Architecture" tagged `wiki-source`
+2. Run agent with ingest skill
+3. Agent creates compiled notes for identified entities (e.g., "Attention Mechanism", "Positional Encoding")
+4. Each compiled note has correct structure per schema
+5. Relationships created from source to compiled notes
+6. Index updated with new entries
+7. Log has ingest entry
+
+**Acceptance criteria**:
+- [ ] Source note unchanged after ingest
+- [ ] At least 2 compiled notes created with correct tags and structure
+- [ ] Each compiled note's `## Sources` section references the source note
+- [ ] Index note updated with new compiled note entries
+- [ ] Log note has timestamped ingest entry
+- [ ] Relationships exist between source and compiled notes (verifiable via `manage_relationships action='list'`)
+- [ ] On 16K model: agent completes at least 1 entity without context exhaustion
+
+#### Task E3: Wiki Lint Skill
+
+**Goal**: A skill that audits wiki health.
+
+**UX change**: User runs agent with "Lint the wiki workspace."
+
+**Workflow change**: Agent follows the skill to:
+1. Read the index note
+2. For each compiled note: check staleness, check source references, check cross-references
+3. Find orphans (notes with wiki tags but no relationships)
+4. Find uncited claims (claims without source attribution)
+5. Write findings to a `Wiki Lint Report` note
+6. Append to log
+
+**Deliverable**: Skill note content.
+
+**Validation method**: Run after Task E2's ingest, then manually introduce some issues (remove a source reference, create an orphan note).
+
+**Expected behavior (app test)**:
+1. After successful ingest, manually remove `## Sources` from one compiled note
+2. Create a note tagged `wiki-compiled` with no relationships
+3. Run lint
+4. Lint report identifies: 1 note missing source references, 1 orphan note
+5. Log updated
+
+**Acceptance criteria**:
+- [ ] Lint report note created with correct tag
+- [ ] Report identifies orphan notes (no relationships)
+- [ ] Report identifies compiled notes missing source references
+- [ ] Report identifies stale notes (not updated in configurable period — skill defines what "stale" means)
+- [ ] Lint does not modify compiled notes (report-only)
+- [ ] Log updated with lint entry
+
+#### Task E4: Wiki Query Skill
+
+**Goal**: A skill that answers questions from compiled notes first, cites sources, and tells the user when to file the result.
+
+**UX change**: User asks a question in chat with wiki skills enabled.
+
+**Workflow change**: Agent follows the skill to:
+1. Search compiled notes first (not raw sources)
+2. Synthesize answer with citations to compiled notes and their sources
+3. If answer is substantial, suggest: "This synthesis may be worth filing. Use 'Add to Note' to save it as a compiled note tagged `wiki-synthesis`."
+
+**Deliverable**: Skill note content.
+
+**Validation method**: Run queries against the wiki after ingest.
+
+**Expected behavior (app test)**:
+1. After ingest of "Transformer Architecture" source, ask: "How does attention work?"
+2. Agent searches compiled notes, finds "Attention Mechanism" compiled note
+3. Answer cites the compiled note and traces back to the source
+4. Agent suggests filing if the answer adds new synthesis
+
+**Acceptance criteria**:
+- [ ] Agent searches compiled notes before raw sources
+- [ ] Answer includes citations (note titles or IDs)
+- [ ] Answer quality is better than a from-scratch response (because compiled context exists)
+- [ ] Agent suggests filing path using existing Add to Note flow (not a new UI)
+
+#### Task E5: Fixed Pilot Corpus
+
+**Goal**: Run the full loop (bootstrap → ingest × N → query → file → lint) on a small curated corpus to validate the workflow end-to-end.
+
+**UX change**: None — this is a validation exercise.
+
+**Workflow change**: None — exercises the workflows defined above.
+
+**Validation method**: Manual execution with documented observations.
+
+**Pilot spec**:
+1. Domain: pick one (e.g., "Machine Learning Fundamentals" or user's choice)
+2. 5 source notes, each 300-800 words
+3. Run bootstrap once
+4. Run ingest for each source note sequentially
+5. Run 5 representative queries
+6. File at least 2 answers back using Add to Note
+7. Run lint
+8. Document: what worked, what broke, what was awkward
+
+**Acceptance criteria**:
+- [ ] Compiled note set is visibly more useful after 5th source than after 1st
+- [ ] Query quality improves because prior compiled context exists
+- [ ] All source notes unchanged
+- [ ] Existing `Add to Note` and tree-save surfaces are sufficient for filing
+- [ ] Lint identifies real issues (not just noise)
+- [ ] On cloud model: full ingest completes in one session per source
+- [ ] On local model (if tested): at least micro-ingest completes per source
+
+---
+
+### Phase F: Proven Gaps Only (P3 — after pilot)
+
+These items are explicitly deferred until the pilot from Phase E exposes a concrete need.
+
+| Item | Trigger to Build |
+|------|-----------------|
+| `modify_note` section-level replace | Pilot shows whole-note updates are too brittle or wasteful |
+| Standalone `manage_tags` tool | Pilot shows `modify_note` tag operations are too cumbersome (note: `modify_note` already supports `tags: {added: [...], removed: [...]}`) |
+| Extraction cache | Pilot shows re-reading the same source is a real cost problem |
+| Vector / semantic search | Pilot shows FTS keyword search systematically misses relevant notes |
+| Scheduled agent execution | Users want periodic lint without manual trigger |
+| Wiki Graph User App | Users want visual exploration of compiled note relationships |
+| Token budget dashboard | Users can't diagnose why agent stops mid-workflow on local model |
+| Batch `modify_note` | Pilot shows 10+ individual `modify_note` calls cause context exhaustion |
+
+---
+
+## 8. Summary: Prioritized Task Order
+
+```
+Phase A (P0): Validate Foundation
+  A1: Skill pipeline integration tests
+  A2: Context compaction with loaded skills
+  A3: Chat mode skill discovery tests
+
+Phase B (P1): Critical Tool Gaps
+  B1: create_notes schema — expose link field
+  B2: read_note mode='pdf_text'
+  B3: read_note mode='image'
+  B4: Relationship deletion/listing ergonomics (modify_note link.removed)
+  B5: Source immutability enforcement (wiki-source write guard)
+
+Phase C (P1): Wiki Workflow Contract
+  C1: Wiki schema artifact
+  C2: Workflow UX spec
+
+Phase D (P2): Token-Aware Infrastructure      ← can overlap with C/E
+  D1: Tiered skill index
+  D2: Adaptive skill pinning budget
+  D3: PDF text fallback for text-only models
+  D4: min_context frontmatter field
+
+Phase E (P1): Wiki Skill Pack + Pilot         ← after A, B, C complete
+  E1: Wiki Bootstrap skill
+  E2: Wiki Ingest skill
+  E3: Wiki Lint skill
+  E4: Wiki Query skill
+  E5: Fixed pilot corpus
+
+Phase F (P3): Proven Gaps Only                ← after pilot
+  (see table above)
+```
+
+**Critical path**: A → B → C → E → (evaluate) → F
+**Parallel track**: D runs alongside C and E
+
+### Execution Plans
+
+Each phase has a detailed execution plan with TDD steps, exact code, and commit points:
+
+- **Phase A**: `docs/superpowers/plans/2026-04-05-phase-a-foundation-validation.md`
+- **Phase B**: `docs/superpowers/plans/2026-04-05-phase-b-tool-gaps.md` (B1, B4, B5; B2/B3 deferred)
+- **Phase C**: `docs/superpowers/plans/2026-04-05-phase-c-wiki-contract.md`
+- **Phase D**: `docs/superpowers/plans/2026-04-05-phase-d-token-infra.md` (D1, D2, D4; D3 deferred)
+- **Phase E**: `docs/superpowers/plans/2026-04-05-phase-e-wiki-skills.md`
+
+### What already exists (not gaps)
+
+For clarity, these capabilities are often cited as gaps but already work:
+
+| Capability | Where It Exists |
+|-----------|----------------|
+| `modify_note` append/prepend/replace | `inputSchema` enum at `note_tools.dart:816`; implementation at `note_modification_service.dart:44` |
+| `modify_note` relationship creation via `link` | Schema at `note_tools.dart:841`; implementation at `note_modification_service.dart:129` |
+| `modify_note` tag add/remove | Schema at `note_tools.dart:829`; implementation at `note_modification_service.dart:71` |
+| `create_notes` relationship creation (implementation only) | `note_modification_service.dart:246` — works but not in `inputSchema` (fixed by B1) |
+| Chat → Note filing | `Add to Note` in `chat_message_action_row.dart:35` → `AddNoteDialog` (create/append/AI-shape) |
+| Conversation tree → Note consolidation | `conversation_tree_screen.dart:744` multi-select → `saveSelectedNodesAsNote` |
