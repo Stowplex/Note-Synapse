@@ -25,7 +25,7 @@
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
         android:usesCleartextTraffic="true">
-        <!-- GPU compute libraries for MNN local model inference (OpenCL) -->
+        <!-- GPU compute libraries for flutter_gemma local model inference -->
         <!-- required=false: app still installs on devices without these libs -->
         <uses-native-library android:name="libOpenCL.so" android:required="false" />
         <uses-native-library android:name="libOpenCL-pixel.so" android:required="false" />

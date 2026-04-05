@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:edge_gen/edge_gen.dart';
 import 'package:get_it/get_it.dart';
 import 'package:note_synapse/services/local_model_service.dart';
 import 'package:note_synapse/services/models/local_model_presets.dart';
@@ -18,7 +17,7 @@ class LocalModelPickerScreen extends StatefulWidget {
 class _LocalModelPickerScreenState extends State<LocalModelPickerScreen> {
   final _service = GetIt.instance<LocalModelService>();
   List<LocalModelStatus> _models = [];
-  final Map<String, DownloadProgress?> _downloadProgress = {};
+  final Map<String, LocalModelDownloadProgress?> _downloadProgress = {};
   final Map<String, String> _downloadErrors = {};
 
   @override
@@ -147,12 +146,16 @@ class _LocalModelPickerScreenState extends State<LocalModelPickerScreen> {
             ),
             if (isDownloading) ...[
               const SizedBox(height: 12),
-              const LinearProgressIndicator(),
+              LinearProgressIndicator(
+                value: progress == null
+                    ? null
+                    : progress.progressPercent / 100.0,
+              ),
               const SizedBox(height: 4),
               Text(
                 progress == null
                     ? l10n.localModelDownloading
-                    : '${l10n.localModelDownloading} ${_formatDownloadedMb(progress.downloadedBytes)}',
+                    : '${l10n.localModelDownloading} ${progress.progressPercent}%',
               ),
             ],
             if (error != null) ...[
@@ -202,8 +205,4 @@ class _LocalModelPickerScreenState extends State<LocalModelPickerScreen> {
     );
   }
 
-  String _formatDownloadedMb(int bytes) {
-    final mb = bytes / (1024 * 1024);
-    return '${mb.toStringAsFixed(2)}MB';
-  }
 }

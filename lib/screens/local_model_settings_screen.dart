@@ -48,15 +48,22 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
     super.initState();
     final existing = widget.existingConfig;
     if (existing != null) {
-      _backendType = existing.backendType ?? 'cpu';
-      _enableThinking = existing.enableThinking ?? false;
-      _tokenWindow = existing.tokenWindow ?? widget.preset.defaultTokenWindow;
+      _backendType =
+          existing.backendType ??
+          widget.preset.defaultBackend[_platformKey] ??
+          'gpu';
+      _enableThinking =
+          widget.preset.supportsThinking && (existing.enableThinking ?? false);
+      _tokenWindow = (
+        existing.tokenWindow ?? widget.preset.defaultTokenWindow
+      ).clamp(widget.preset.minTokenWindow, widget.preset.maxTokenWindow);
     } else {
-      final platform = Platform.isAndroid ? 'android' : 'ios';
-      _backendType = widget.preset.defaultBackend[platform] ?? 'cpu';
+      _backendType = widget.preset.defaultBackend[_platformKey] ?? 'gpu';
       _tokenWindow = widget.preset.defaultTokenWindow;
     }
   }
+
+  String get _platformKey => Platform.isAndroid ? 'android' : 'ios';
 
   Future<void> _saveAndActivate() async {
     final configId = 'local_${widget.preset.id}';
@@ -67,7 +74,7 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
       displayName: widget.preset.displayName,
       endpoint: widget.configPath,
       tokenWindow: _tokenWindow,
-      enableThinking: _enableThinking,
+      enableThinking: widget.preset.supportsThinking ? _enableThinking : false,
       backendType: _backendType,
       isConfigured: true,
       customCapabilitiesObject: ModelCapabilities(
@@ -77,7 +84,7 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
         supportsDocuments: false,
         supportsAudio: false,
         supportsVideo: false,
-        supportsToolOrchestration: false,
+        supportsToolOrchestration: widget.preset.supportsToolCalls,
       ),
     );
 
@@ -120,6 +127,9 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
 
     if (confirmed == true) {
       await GetIt.instance<LocalModelService>().removeModel(widget.preset.id);
+      final storage = GetIt.instance<ModelStorageService>();
+      final configId = 'local_${widget.preset.id}';
+      await storage.deleteModel(configId);
       if (mounted) Navigator.pop(context);
     }
   }
@@ -148,13 +158,15 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
             onChanged: (v) => setState(() => _backendType = v!),
           ),
           const SizedBox(height: 24),
-          SwitchListTile(
-            title: Text(l10n.localModelEnableThinking),
-            subtitle: const Text('Extended reasoning (uses more tokens)'),
-            value: _enableThinking,
-            onChanged: (v) => setState(() => _enableThinking = v),
-          ),
-          const SizedBox(height: 24),
+          if (widget.preset.supportsThinking) ...[
+            SwitchListTile(
+              title: Text(l10n.localModelEnableThinking),
+              subtitle: const Text('Extended reasoning (uses more tokens)'),
+              value: _enableThinking,
+              onChanged: (v) => setState(() => _enableThinking = v),
+            ),
+            const SizedBox(height: 24),
+          ],
           Text(
             l10n.localModelTokenWindow,
             style: Theme.of(context).textTheme.titleSmall,
@@ -162,18 +174,22 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
           const SizedBox(height: 8),
           Row(
             children: [
-              const Text('4096'),
+              Text(widget.preset.minTokenWindow.toString()),
               Expanded(
                 child: Slider(
                   value: _tokenWindow.toDouble(),
-                  min: 4096,
-                  max: 32768,
-                  divisions: 7,
+                  min: widget.preset.minTokenWindow.toDouble(),
+                  max: widget.preset.maxTokenWindow.toDouble(),
+                  divisions:
+                      ((widget.preset.maxTokenWindow -
+                                      widget.preset.minTokenWindow) /
+                                  2048)
+                              .round(),
                   label: _tokenWindow.toString(),
                   onChanged: (v) => setState(() => _tokenWindow = v.round()),
                 ),
               ),
-              const Text('32768'),
+              Text(widget.preset.maxTokenWindow.toString()),
             ],
           ),
           Center(
@@ -206,6 +222,8 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
         return 'OpenCL (GPU)';
       case 'metal':
         return 'Metal (GPU)';
+      case 'gpu':
+        return 'GPU';
       case 'cpu':
         return 'CPU';
       default:
