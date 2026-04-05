@@ -2582,7 +2582,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get bookmarkPage => 'Bookmark Page';
+  String get bookmarkPage => '书签此页';
 
   @override
   String get page => 'Page';
@@ -2591,7 +2591,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get removeBookmark => 'Remove Bookmark';
 
   @override
-  String get bookmarks => 'Bookmarks';
+  String get bookmarks => '书签';
 
   @override
   String get addBookmark => 'Add Bookmark';
@@ -2603,27 +2603,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bookmarkAnnotationHint => 'Enter annotation (max 200 chars)';
 
   @override
-  String get noBookmarksYet => 'No bookmarks yet';
+  String get noBookmarksYet => '暂无书签';
 
   @override
-  String get aiContextBookmarks => 'AI Context: Bookmarks';
+  String get aiContextBookmarks => 'AI 上下文：书签';
 
   @override
-  String get configureAiContext => 'Configure AI Context';
+  String get configureAiContext => '配置 AI 上下文';
 
   @override
   String aiContext(String mode) {
-    return 'AI Context: $mode';
+    return 'AI 上下文：$mode';
   }
 
   @override
-  String get aiContextFullPdf => 'Full PDF';
+  String get aiContextFullPdf => '完整 PDF';
 
   @override
-  String get aiContextWindow => 'Window';
+  String get aiContextWindow => '窗口';
 
   @override
-  String get aiContextChapters => 'Chapters';
+  String get aiContextChapters => '章节';
 
   @override
   String get windowSize => 'Window Size';
@@ -4274,4 +4274,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get toolOrchestrationSwitchModel => '切换模型';
+
+  @override
+  String get nightMode => '夜间模式';
+
+  @override
+  String get dayMode => '日间模式';
+
+  @override
+  String get userAppSettingsTitle => '用户应用';
+
+  @override
+  String get userAppSettingsSubtitle => '管理用户应用设置和库';
+
+  @override
+  String get addFromFilter => '从筛选器添加';
 }

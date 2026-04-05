@@ -13,7 +13,7 @@ void main() {
     });
 
     test('isModelDownloaded returns false when no model downloaded', () async {
-      final result = await service.isModelDownloaded('qwen35_08b');
+      final result = await service.isModelDownloaded('gemma4_e2b');
       expect(result, false);
     });
 
@@ -23,35 +23,45 @@ void main() {
     });
 
     test('markModelDownloaded persists model path', () async {
-      await service.markModelDownloaded('qwen35_08b', '/path/to/model');
-      final result = await service.isModelDownloaded('qwen35_08b');
+      await service.markModelDownloaded(
+        'gemma4_e2b',
+        'https://example.com/gemma-4-E2B-it.litertlm',
+      );
+      final result = await service.isModelDownloaded('gemma4_e2b');
       expect(result, true);
     });
 
     test('getModelPath returns stored path', () async {
-      await service.markModelDownloaded('qwen35_08b', '/path/to/model');
-      final path = await service.getModelPath('qwen35_08b');
-      expect(path, '/path/to/model');
+      await service.markModelDownloaded(
+        'gemma4_e2b',
+        'https://example.com/gemma-4-E2B-it.litertlm',
+      );
+      final path = await service.getModelPath('gemma4_e2b');
+      expect(path, 'https://example.com/gemma-4-E2B-it.litertlm');
     });
 
     test('removeModel clears stored path', () async {
-      await service.markModelDownloaded('qwen35_08b', '/path/to/model');
-      await service.removeModel('qwen35_08b');
-      final result = await service.isModelDownloaded('qwen35_08b');
+      await service.markModelDownloaded(
+        'gemma4_e2b',
+        'https://example.com/gemma-4-E2B-it.litertlm',
+      );
+      await service.removeModel('gemma4_e2b');
+      final result = await service.isModelDownloaded('gemma4_e2b');
       expect(result, false);
     });
 
     test('getAvailableModels returns all presets with download status',
         () async {
-      await service.markModelDownloaded('qwen35_08b', '/path/to/model');
+      await service.markModelDownloaded(
+        'gemma4_e2b',
+        'https://example.com/gemma-4-E2B-it.litertlm',
+      );
       final models = await service.getAvailableModels();
       expect(models.length, LocalModelPresets.all.length);
       expect(
-          models.firstWhere((m) => m.preset.id == 'qwen35_08b').isDownloaded,
-          true);
-      expect(
-          models.firstWhere((m) => m.preset.id == 'qwen3_vl_2b').isDownloaded,
-          false);
+        models.firstWhere((m) => m.preset.id == 'gemma4_e2b').isDownloaded,
+        true,
+      );
     });
   });
 }

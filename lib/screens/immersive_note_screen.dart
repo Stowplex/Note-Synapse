@@ -36,6 +36,8 @@ import '../services/conversation_settings_service.dart';
 import '../services/model_selector.dart';
 import '../services/service_locator.dart';
 import '../services/attachment_preprocessor.dart';
+import '../services/conversation_attachment_service.dart';
+import '../services/marker_cluster_service.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/prompts/note_prompt_builder.dart';
 import '../services/prompts/prompt_models.dart';
@@ -167,6 +169,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final List<ConversationMessage> _scratchpadItems = [];
   bool _includeScratchpadInChat = false;
   int _lastSavedScratchpadCount = 0;
+  final List<NormalizedRect> _pendingMarkerRawRects = [];
+  MarkerPlacementMode _pendingMarkerPlacementMode = MarkerPlacementMode.auto;
+  bool _pendingMarkerSupportsSplit = false;
+  int? _pendingMarkerPage;
 
   // PDF State
   bool _isPdfNightMode = false;
@@ -1288,8 +1294,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              _isPdfNightMode ? 'Day Mode' : 'Night Mode',
-                            ), // TODO: l10n
+                              _isPdfNightMode ? l10n.dayMode : l10n.nightMode,
+                            ),
                           ],
                         ),
                       ),
@@ -1833,10 +1839,20 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_pendingAttachments.isNotEmpty)
+        if (_pendingAttachments.isNotEmpty || _pendingMarkerSupportsSplit)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: _buildPendingAttachmentsPreview(l10n),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_pendingAttachments.isNotEmpty)
+                  _buildPendingAttachmentsPreview(l10n),
+                if (_pendingMarkerSupportsSplit) ...[
+                  if (_pendingAttachments.isNotEmpty) const SizedBox(height: 8),
+                  _buildMarkerPlacementModeSelector(theme),
+                ],
+              ],
+            ),
           ),
         DecoratedBox(
           decoration: BoxDecoration(
@@ -1879,7 +1895,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                                 _penStrokePoints.clear();
                                 // Only reset marker position if nothing has been queued yet
                                 if (_pendingAttachments.isEmpty) {
-                                  _pendingMarkerPosition = null;
+                                  _clearPendingMarkerState();
                                 }
                               } else {
                                 // Initialize new drawing session
@@ -2114,25 +2130,20 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
 
     if (totalBounds == null || actionBoundsList.isEmpty) return;
-    final newPosition = _computeMarkerPosition(actionBoundsList, totalBounds);
-    if (_pendingMarkerPosition == null) {
-      _pendingMarkerPosition = newPosition;
-    } else if (newPosition != null) {
-      final existingRects =
-          _pendingMarkerPosition!.normalizedRects ??
-          (_pendingMarkerPosition!.normalizedRect != null
-              ? [_pendingMarkerPosition!.normalizedRect!]
-              : <NormalizedRect>[]);
-      final newRects =
-          newPosition.normalizedRects ??
-          (newPosition.normalizedRect != null
-              ? [newPosition.normalizedRect!]
-              : <NormalizedRect>[]);
-      _pendingMarkerPosition = InNoteMarkerPosition(
-        normalizedRect: _pendingMarkerPosition!.normalizedRect,
-        normalizedRects: [...existingRects, ...newRects],
-        page: _pendingMarkerPosition!.page ?? newPosition.page,
-      );
+    final newRects = _computeMarkerRects(actionBoundsList, totalBounds);
+    if (newRects != null) {
+      if (_pendingMarkerRawRects.isEmpty) {
+        _pendingMarkerPlacementMode = MarkerPlacementMode.auto;
+      }
+      _pendingMarkerRawRects.addAll(newRects.rects);
+      _pendingMarkerPage ??= newRects.page;
+      _pendingMarkerSupportsSplit =
+          MarkerClusterService.shouldOfferSplitOverride(_pendingMarkerRawRects);
+      if (!_pendingMarkerSupportsSplit &&
+          _pendingMarkerPlacementMode == MarkerPlacementMode.split) {
+        _pendingMarkerPlacementMode = MarkerPlacementMode.auto;
+      }
+      _rebuildPendingMarkerPosition();
     }
 
     try {
@@ -2144,7 +2155,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
       final platformFile = PlatformFile(
         name: 'annotation_${DateTime.now().millisecondsSinceEpoch}.png',
-        path: result.file.path,
+        path: result.uri,
         size: imageBytes.length,
         bytes: imageBytes,
       );
@@ -2163,7 +2174,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         }
       }
     } catch (e, stackTrace) {
-      _pendingMarkerPosition = null;
+      _clearPendingMarkerState();
       LoggerService.error(
         'Failed to capture drawing: $e',
         error: e,
@@ -2177,7 +2188,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
-  InNoteMarkerPosition? _computeMarkerPosition(
+  _MarkerRectComputation? _computeMarkerRects(
     List<Rect> drawBoundsList,
     Rect totalBounds,
   ) {
@@ -2217,13 +2228,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     h: (drawBounds.height / pageScreenH).clamp(0.0, 1.0),
                   );
                 }).toList();
-                return InNoteMarkerPosition(
-                  normalizedRect: norms.isNotEmpty
-                      ? norms.first
-                      : NormalizedRect(x: 0, y: 0, w: 0, h: 0),
-                  normalizedRects: norms,
-                  page: currentPage,
-                );
+                return _MarkerRectComputation(rects: norms, page: currentPage);
               }
             }
           } catch (_) {
@@ -2246,12 +2251,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
               ),
             )
             .toList();
-        return InNoteMarkerPosition(
-          normalizedRect: norms.isNotEmpty
-              ? norms.first
-              : NormalizedRect(x: 0, y: 0, w: 0, h: 0),
-          normalizedRects: norms,
-        );
+        return _MarkerRectComputation(rects: norms);
       } else {
         // Non-PDF attachment (image, etc.).
         // Drawing coordinates are in viewport space.  When the image is
@@ -2282,25 +2282,28 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             h: ((bottomRight.dy - topLeft.dy) / size.height).clamp(0.0, 1.0),
           );
         }).toList();
-        return InNoteMarkerPosition(
-          normalizedRect: norms.isNotEmpty
-              ? norms.first
-              : NormalizedRect(x: 0, y: 0, w: 0, h: 0),
-          normalizedRects: norms,
-        );
+        return _MarkerRectComputation(rects: norms);
       }
     } else {
       // Text note mode
-      final renderObject = _noteContentKey.currentContext?.findRenderObject();
-      if (renderObject is! RenderBox || renderObject.size.isEmpty) return null;
-      final size = renderObject.size;
+      final contentRenderObject = _noteContentKey.currentContext
+          ?.findRenderObject();
+      final boundaryRenderObject = _noteBoundaryKey.currentContext
+          ?.findRenderObject();
+      if (contentRenderObject is! RenderBox ||
+          boundaryRenderObject is! RenderBox ||
+          contentRenderObject.size.isEmpty) {
+        return null;
+      }
+      final size = contentRenderObject.size;
+      final contentOriginInBoundary = contentRenderObject.localToGlobal(
+        Offset.zero,
+        ancestor: boundaryRenderObject,
+      );
 
       final norms = drawBoundsList.map((drawBounds) {
-        final localTopLeft = renderObject.globalToLocal(
-          Offset(drawBounds.left, drawBounds.top),
-        );
-        final localLeft = localTopLeft.dx;
-        final localTop = localTopLeft.dy;
+        final localLeft = drawBounds.left - contentOriginInBoundary.dx;
+        final localTop = drawBounds.top - contentOriginInBoundary.dy;
         return NormalizedRect(
           x: (localLeft / size.width).clamp(0.0, 1.0),
           y: (localTop / size.height).clamp(0.0, 1.0),
@@ -2308,14 +2311,61 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           h: (drawBounds.height / size.height).clamp(0.0, 1.0),
         );
       }).toList();
-      return InNoteMarkerPosition(
-        normalizedRect: norms.isNotEmpty
-            ? norms.first
-            : NormalizedRect(x: 0, y: 0, w: 0, h: 0),
-        normalizedRects: norms,
-      );
+      return _MarkerRectComputation(rects: norms);
     }
-    return null;
+  }
+
+  MarkerPlacementMode _effectivePendingMarkerPlacementMode() {
+    if (_pendingMarkerPlacementMode == MarkerPlacementMode.auto) {
+      return MarkerPlacementMode.split;
+    }
+    return _pendingMarkerPlacementMode;
+  }
+
+  void _rebuildPendingMarkerPosition() {
+    if (_pendingMarkerRawRects.isEmpty) {
+      _pendingMarkerPosition = null;
+      _pendingMarkerSupportsSplit = false;
+      return;
+    }
+
+    final rects = MarkerClusterService.buildPlacementRects(
+      _pendingMarkerRawRects,
+      mode: _effectivePendingMarkerPlacementMode(),
+    );
+    if (rects.isEmpty) {
+      _pendingMarkerPosition = null;
+      return;
+    }
+
+    _pendingMarkerPosition = InNoteMarkerPosition(
+      normalizedRect: rects.first,
+      normalizedRects: rects,
+      page: _pendingMarkerPage,
+    );
+  }
+
+  void _clearPendingMarkerState() {
+    _pendingMarkerPosition = null;
+    _pendingMarkerRawRects.clear();
+    _pendingMarkerPlacementMode = MarkerPlacementMode.auto;
+    _pendingMarkerSupportsSplit = false;
+    _pendingMarkerPage = null;
+  }
+
+  String get _currentNoteIdForAnnotationSave {
+    if (_activeAttachmentPath != null) {
+      final noteIndex = _findNoteIndexForAttachment(
+        _activeAttachmentPath!,
+        _conversationNotes,
+      );
+      if (noteIndex != null &&
+          noteIndex >= 0 &&
+          noteIndex < _conversationNotes.length) {
+        return _conversationNotes[noteIndex].id;
+      }
+    }
+    return _conversationNotes[_activeNoteIndex].id;
   }
 
   Widget _buildSendControl(AppLocalizations l10n) {
@@ -3391,46 +3441,49 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       itemCount: _messages.length + (_isStreaming ? 1 : 0),
       itemBuilder: (context, index) {
         if (index == _messages.length && _isStreaming) {
-          return Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.7,
-              ),
-              margin: const EdgeInsets.symmetric(vertical: 6),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant,
+          return KeyedSubtree(
+            key: const ValueKey('immersive_streaming_message'),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.7,
                 ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.smart_toy,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.secondary,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        l10n.ai,
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(
-                              color: Theme.of(context).colorScheme.secondary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                    ],
+                margin: const EdgeInsets.symmetric(vertical: 6),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outlineVariant,
                   ),
-                  const SizedBox(height: 8),
-                  SelectableText(_streamingContent),
-                ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.smart_toy,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.secondary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          l10n.ai,
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.secondary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SelectableText(_streamingContent),
+                  ],
+                ),
               ),
             ),
           );
@@ -3442,55 +3495,104 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             (message.metadata!.containsKey('parts_history') ||
                 message.metadata!.containsKey('function_calls'));
 
-        return Align(
-          alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.7,
-            ),
-            margin: const EdgeInsets.symmetric(vertical: 6),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isUser
-                  ? Theme.of(context).colorScheme.primaryContainer
-                  : Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Theme.of(context).colorScheme.outlineVariant,
+        return KeyedSubtree(
+          key: ValueKey(message.id),
+          child: Align(
+            alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.7,
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: isUser
-                  ? CrossAxisAlignment.end
-                  : CrossAxisAlignment.start,
-              children: [
-                if (!isUser) ...[
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.smart_toy,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.secondary,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        l10n.ai,
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(
-                              color: Theme.of(context).colorScheme.secondary,
-                              fontWeight: FontWeight.bold,
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isUser
+                    ? Theme.of(context).colorScheme.primaryContainer
+                    : Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: isUser
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
+                children: [
+                  if (!isUser) ...[
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.smart_toy,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.secondary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          l10n.ai,
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.secondary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                        const Spacer(),
+                        if (hasTools) ...[
+                          IconButton(
+                            icon: const Icon(
+                              Icons.build_circle_outlined,
+                              size: 18,
                             ),
-                      ),
-                      const Spacer(),
-                      if (hasTools) ...[
-                        IconButton(
-                          icon: const Icon(
-                            Icons.build_circle_outlined,
-                            size: 18,
+                            tooltip: 'View Tool Usage',
+                            onPressed: () => _showToolDetailsDialog(message),
+                            constraints: const BoxConstraints(
+                              minWidth: 32,
+                              minHeight: 32,
+                            ),
+                            padding: EdgeInsets.zero,
                           ),
-                          tooltip: 'View Tool Usage',
-                          onPressed: () => _showToolDetailsDialog(message),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  if (isUser)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Flexible(
+                          child: SelectableText(
+                            message.content,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface,
+                                ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: Icon(
+                            Icons.edit,
+                            size: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.5),
+                          ),
+                          onPressed: () {
+                            _messageController.text = message.content;
+                            _scrollToBottom();
+                            Future.delayed(
+                              const Duration(milliseconds: 200),
+                              () {
+                                _messageFocusNode.requestFocus();
+                              },
+                            );
+                          },
+                          tooltip: 'Use this message',
                           constraints: const BoxConstraints(
                             minWidth: 32,
                             minHeight: 32,
@@ -3498,77 +3600,35 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                           padding: EdgeInsets.zero,
                         ),
                       ],
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                if (isUser)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Flexible(
-                        child: SelectableText(
-                          message.content,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
+                    )
+                  else
+                    SelectionArea(
+                      child: InteractiveCheckboxMarkdown(
+                        originalContent: message.content,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
+                        onLinkTap: (url, _) =>
+                            _handleMarkdownLinkTap(url, l10n),
                       ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: Icon(
-                          Icons.edit,
-                          size: 16,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withOpacity(0.5),
-                        ),
-                        onPressed: () {
-                          _messageController.text = message.content;
-                          // Scroll to bottom to show the input field
-                          _scrollToBottom();
-                          // Focus the text field after a short delay to ensure it's visible
-                          Future.delayed(const Duration(milliseconds: 200), () {
-                            _messageFocusNode.requestFocus();
-                          });
-                        },
-                        tooltip: 'Use this message',
-                        constraints: const BoxConstraints(
-                          minWidth: 32,
-                          minHeight: 32,
-                        ),
-                        padding: EdgeInsets.zero,
-                      ),
-                    ],
-                  )
-                else
-                  SelectionArea(
-                    child: InteractiveCheckboxMarkdown(
-                      originalContent: message.content,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                      onLinkTap: (url, _) => _handleMarkdownLinkTap(url, l10n),
                     ),
-                  ),
-                if (message.attachmentPaths.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: _buildMessageAttachmentChips(message, l10n),
-                  ),
-                if (!isUser) ...[
-                  const SizedBox(height: 12),
-                  ChatMessageActionRow(
-                    onCopy: () => copyContentToClipboard(message.content),
-                    onAddNote: () => handleAddContentToNote(
-                      content: message.content,
-                      contextNotes: _conversationNotes,
+                  if (message.attachmentPaths.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _buildMessageAttachmentChips(message, l10n),
                     ),
-                  ),
+                  if (!isUser) ...[
+                    const SizedBox(height: 12),
+                    ChatMessageActionRow(
+                      onCopy: () => copyContentToClipboard(message.content),
+                      onAddNote: () => handleAddContentToNote(
+                        content: message.content,
+                        contextNotes: _conversationNotes,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         );
@@ -3712,6 +3772,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       runSpacing: 10,
       children: message.attachmentPaths.map((path) {
         return AttachmentPreviewTile(
+          key: ValueKey('${message.id}:$path'),
           attachmentPath: path,
           onTap: () => _openAttachment(path, l10n),
         );
@@ -3735,6 +3796,48 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           }),
         );
       }),
+    );
+  }
+
+  Widget _buildMarkerPlacementModeSelector(ThemeData theme) {
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 10,
+      runSpacing: 8,
+      children: [
+        Text(
+          'Marker placement',
+          style: theme.textTheme.labelMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        SegmentedButton<MarkerPlacementMode>(
+          segments: const [
+            ButtonSegment<MarkerPlacementMode>(
+              value: MarkerPlacementMode.single,
+              label: Text('Single'),
+              icon: Icon(Icons.filter_1),
+            ),
+            ButtonSegment<MarkerPlacementMode>(
+              value: MarkerPlacementMode.split,
+              label: Text('Split'),
+              icon: Icon(Icons.call_split),
+            ),
+          ],
+          selected: {
+            _pendingMarkerPlacementMode == MarkerPlacementMode.split
+                ? MarkerPlacementMode.split
+                : MarkerPlacementMode.single,
+          },
+          onSelectionChanged: (selection) {
+            final nextMode = selection.first;
+            setState(() {
+              _pendingMarkerPlacementMode = nextMode;
+              _rebuildPendingMarkerPosition();
+            });
+          },
+        ),
+      ],
     );
   }
 
@@ -4597,12 +4700,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
   Future<void> _openAttachment(String path, AppLocalizations l10n) async {
     try {
-      String finalPath = path;
-      if (!path.startsWith('/') &&
-          !path.startsWith('http') &&
-          !path.startsWith('gs://')) {
-        finalPath = await FileUtils.getFullFilePath(path, true);
-      }
+      final finalPath = await FileUtils.resolvePortableAttachmentPath(path);
       await FileUtils.openFile(finalPath, context);
     } catch (e) {
       if (!mounted) return;
@@ -4774,19 +4872,48 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
+  Future<int> _nextMarkerIndex() async {
+    if (_activeAttachmentPath != null) {
+      final attachmentPath = _activeAttachmentPath!;
+      final cachedMarkers = _attachmentMarkers[attachmentPath];
+      if (cachedMarkers != null && cachedMarkers.isNotEmpty) {
+        return cachedMarkers.map((marker) => marker.index).reduce(max) + 1;
+      }
+
+      final attachment = await _resolveAttachment(attachmentPath);
+      if (attachment == null) return 1;
+      final persistedMarkers = await _noteMarkerService.getMarkersForAttachment(
+        attachment.id,
+      );
+      if (persistedMarkers.isEmpty) return 1;
+      return persistedMarkers.map((marker) => marker.index).reduce(max) + 1;
+    }
+
+    final note = _conversationNotes[_activeNoteIndex];
+    final cachedMarkers = _noteMarkers[note.id];
+    if (cachedMarkers != null && cachedMarkers.isNotEmpty) {
+      return cachedMarkers.map((marker) => marker.index).reduce(max) + 1;
+    }
+
+    final persistedMarkers = await _noteMarkerService.getMarkersForNote(
+      note.id,
+    );
+    if (persistedMarkers.isEmpty) return 1;
+    return persistedMarkers.map((marker) => marker.index).reduce(max) + 1;
+  }
+
   Future<void> _saveInNoteMarker(
     String messageId,
     String conversationId,
     InNoteMarkerPosition position,
   ) async {
     try {
+      final nextIndex = await _nextMarkerIndex();
       if (_activeAttachmentPath != null) {
         final attachment = await _resolveAttachment(_activeAttachmentPath!);
         if (attachment == null) return;
-        final existingMarkers = await _noteMarkerService
-            .getMarkersForAttachment(attachment.id);
         final marker = InNoteMarker.forAttachment(
-          index: existingMarkers.length + 1,
+          index: nextIndex,
           page: position.page ?? 0,
           normalizedRect: position.normalizedRect,
           normalizedRects: position.normalizedRects,
@@ -4795,12 +4922,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         );
         await _noteMarkerService.saveMarkerForAttachment(attachment.id, marker);
       } else {
-        final note = widget.notes[_activeNoteIndex];
-        final existingMarkers = await _noteMarkerService.getMarkersForNote(
-          note.id,
-        );
+        final note = _conversationNotes[_activeNoteIndex];
         final marker = InNoteMarker.forNote(
-          index: existingMarkers.length + 1,
+          index: nextIndex,
           charStart: 0,
           charEnd: 0,
           normalizedRect: position.normalizedRect,
@@ -4815,7 +4939,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         if (_activeAttachmentPath != null) {
           _loadMarkersForAttachment(_activeAttachmentPath!);
         } else {
-          _loadMarkersForNote(widget.notes[_activeNoteIndex].id);
+          _loadMarkersForNote(_conversationNotes[_activeNoteIndex].id);
         }
       }
     } catch (e) {
@@ -4830,14 +4954,19 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     InNoteMarkerPosition position,
   ) async {
     try {
+      final nextIndex = await _nextMarkerIndex();
+      final portableAttachmentPaths =
+          await ConversationAttachmentService.promoteAttachmentPathsToPersistent(
+            paths: attachmentPaths,
+            noteId: _currentNoteIdForAnnotationSave,
+          );
+
       if (_activeAttachmentPath != null) {
         final attachment = await _resolveAttachment(_activeAttachmentPath!);
         if (attachment == null) return;
-        final existingMarkers = await _noteMarkerService
-            .getMarkersForAttachment(attachment.id);
         final marker = InNoteMarker.forAttachment(
           id: markerId,
-          index: existingMarkers.length + 1,
+          index: nextIndex,
           page: position.page ?? 0,
           normalizedRect: position.normalizedRect,
           normalizedRects: position.normalizedRects,
@@ -4853,18 +4982,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             id: markerId,
             attachmentId: attachment.id,
             content: content,
-            attachmentPaths: attachmentPaths,
+            attachmentPaths: portableAttachmentPaths,
             createdAt: DateTime.now(),
           ),
         );
       } else {
-        final note = widget.notes[_activeNoteIndex];
-        final existingMarkers = await _noteMarkerService.getMarkersForNote(
-          note.id,
-        );
+        final note = _conversationNotes[_activeNoteIndex];
         final marker = InNoteMarker.forNote(
           id: markerId,
-          index: existingMarkers.length + 1,
+          index: nextIndex,
           charStart: 0,
           charEnd: 0,
           normalizedRect: position.normalizedRect,
@@ -4881,16 +5007,27 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             id: markerId,
             noteId: note.id,
             content: content,
-            attachmentPaths: attachmentPaths,
+            attachmentPaths: portableAttachmentPaths,
             createdAt: DateTime.now(),
           ),
         );
       }
       if (mounted) {
+        setState(() {
+          final scratchpadIndex = _scratchpadItems.indexWhere(
+            (item) => item.id == markerId,
+          );
+          if (scratchpadIndex != -1) {
+            _scratchpadItems[scratchpadIndex] =
+                _scratchpadItems[scratchpadIndex].copyWith(
+                  attachmentPaths: portableAttachmentPaths,
+                );
+          }
+        });
         if (_activeAttachmentPath != null) {
           _loadMarkersForAttachment(_activeAttachmentPath!);
         } else {
-          _loadMarkersForNote(widget.notes[_activeNoteIndex].id);
+          _loadMarkersForNote(_conversationNotes[_activeNoteIndex].id);
         }
       }
     } catch (e) {
@@ -4964,9 +5101,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     try {
       if (_isScratchpadMode) {
         final pendingPos = _pendingMarkerPosition;
-        _pendingMarkerPosition = null;
+        _clearPendingMarkerState();
 
         final markerId = const Uuid().v4();
+        final transientAttachmentPaths = attachments
+            .where((f) => f.path != null)
+            .map((f) => f.path!)
+            .toList();
 
         final message = ConversationMessage(
           id: markerId,
@@ -4974,7 +5115,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           content: content,
           type: MessageType.user,
           timestamp: DateTime.now(),
-          attachmentPaths: attachments.map((f) => f.path!).toList(),
+          attachmentPaths: transientAttachmentPaths,
         );
 
         setState(() {
@@ -4986,7 +5127,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           await _saveAnnotationMarker(
             markerId,
             content,
-            attachments.map((f) => f.path!).toList(),
+            transientAttachmentPaths,
             pendingPos,
           );
         }
@@ -5032,7 +5173,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       // Save in-note marker if a drawing was confirmed before this send
       if (_pendingMarkerPosition != null) {
         final pendingPos = _pendingMarkerPosition!;
-        _pendingMarkerPosition = null;
+        _clearPendingMarkerState();
         await _saveInNoteMarker(userMessage.id, _conversation!.id, pendingPos);
       }
 
@@ -5342,13 +5483,16 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final files = <PlatformFile>[];
     for (final path in message.attachmentPaths) {
       try {
-        final file = File(path);
+        final resolvedPath = await FileUtils.resolvePortableAttachmentPath(
+          path,
+        );
+        final file = File(resolvedPath);
         if (!await file.exists()) continue;
         final bytes = await file.readAsBytes();
         files.add(
           PlatformFile(
-            name: path.split(Platform.pathSeparator).last,
-            path: file.path,
+            name: path.split('/').last,
+            path: resolvedPath,
             size: bytes.length,
             bytes: bytes,
           ),
@@ -5991,6 +6135,7 @@ class _PdfDocumentViewState extends State<_PdfDocumentView>
         key: ValueKey('${_cacheKey}_pdf_view'),
         controller: _controller,
         params: PdfViewerParams(
+          backgroundColor: widget.isNightMode ? Colors.white : Colors.grey,
           textSelectionParams: const PdfTextSelectionParams(),
           pageDropShadow: null,
           onViewerReady: (document, controller) async {
@@ -6439,6 +6584,13 @@ class InNoteMarkerPosition {
     this.normalizedRects,
     this.page,
   });
+}
+
+class _MarkerRectComputation {
+  final List<NormalizedRect> rects;
+  final int? page;
+
+  const _MarkerRectComputation({required this.rects, this.page});
 }
 
 class _RecallAnnotationsDialog extends StatefulWidget {

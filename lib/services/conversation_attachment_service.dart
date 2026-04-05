@@ -178,33 +178,88 @@ class ConversationAttachmentService {
     required String noteId,
   }) async {
     final List<String> newAttachmentPaths = [];
-    final attachmentsDir = await FileUtils.getPrivateStorageDirectory();
 
     for (final path in filePaths) {
-      try {
-        final file = File(path);
-        if (!await file.exists()) {
-          LoggerService.warning('Attachment file not found: $path');
-          continue;
-        }
-
-        final fileName = p.basename(path);
-        // Generate a unique name to avoid collisions
-        final uniqueName =
-            '${noteId}_${DateTime.now().millisecondsSinceEpoch}_$fileName';
-        final newFilePath = p.join(attachmentsDir.path, uniqueName);
-
-        await file.copy(newFilePath);
-
-        newAttachmentPaths.add('attachments/$uniqueName');
-      } catch (e) {
-        LoggerService.error(
-          'Failed to process attachment file: $path',
-          error: e,
-        );
+      final promoted = await promoteAttachmentPathToPersistent(
+        path: path,
+        noteId: noteId,
+      );
+      if (promoted != null && promoted.isNotEmpty) {
+        newAttachmentPaths.add(promoted);
       }
     }
 
     return newAttachmentPaths;
+  }
+
+  static Future<String?> promoteAttachmentPathToPersistent({
+    required String path,
+    required String noteId,
+  }) async {
+    try {
+      if (path.startsWith('http') || path.startsWith('gs://')) {
+        return path;
+      }
+
+      if (path.startsWith('attachments/')) {
+        return path;
+      }
+
+      File sourceFile;
+      String originalFileName;
+
+      if (SynapseTempUtils.isSynapseTempUri(path)) {
+        final tempFile = await SynapseTempUtils.loadFile(path);
+        sourceFile = tempFile.file;
+        originalFileName = tempFile.fileName;
+      } else {
+        final resolvedPath = await FileUtils.resolvePortableAttachmentPath(
+          path,
+        );
+        sourceFile = File(resolvedPath);
+        originalFileName = p.basename(resolvedPath);
+      }
+
+      if (!await sourceFile.exists()) {
+        LoggerService.warning('Attachment file not found: $path');
+        return null;
+      }
+
+      final relativeExistingPath = await FileUtils.getRelativePath(
+        sourceFile.path,
+      );
+      if (relativeExistingPath != null &&
+          relativeExistingPath.startsWith('attachments/')) {
+        return relativeExistingPath;
+      }
+
+      final attachmentsDir = await FileUtils.getPrivateStorageDirectory();
+      final uniqueName =
+          '${noteId}_${DateTime.now().millisecondsSinceEpoch}_${FileUtils.generateUniqueFileName(originalFileName)}';
+      final newFilePath = p.join(attachmentsDir.path, uniqueName);
+
+      await sourceFile.copy(newFilePath);
+      return 'attachments/$uniqueName';
+    } catch (e) {
+      LoggerService.error('Failed to promote attachment path: $path', error: e);
+      return null;
+    }
+  }
+
+  static Future<List<String>> promoteAttachmentPathsToPersistent({
+    required List<String> paths,
+    required String noteId,
+  }) async {
+    final promoted = <String>[];
+    for (final path in paths) {
+      final next = await promoteAttachmentPathToPersistent(
+        path: path,
+        noteId: noteId,
+      );
+      if (next != null && next.isNotEmpty) {
+        promoted.add(next);
+      }
+    }
+    return promoted;
   }
 }

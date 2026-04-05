@@ -1811,5 +1811,10 @@
   "toolOrchestrationContinueAnyway": "Continue Anyway",
   "toolOrchestrationContinue": "Continue",
   "toolOrchestrationStop": "Stop",
-  "toolOrchestrationSwitchModel": "Switch Model"
+  "toolOrchestrationSwitchModel": "Switch Model",
+  "nightMode": "Night Mode",
+  "dayMode": "Day Mode",
+  "userAppSettingsTitle": "User App",
+  "userAppSettingsSubtitle": "Manage user app settings and libraries",
+  "addFromFilter": "Add from filter"
 }

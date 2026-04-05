@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
+import '../utils/synapse_temp_utils.dart';
 
-class AttachmentPreviewTile extends StatelessWidget {
+class AttachmentPreviewTile extends StatefulWidget {
   const AttachmentPreviewTile({
     super.key,
     required this.attachmentPath,
@@ -19,16 +20,47 @@ class AttachmentPreviewTile extends StatelessWidget {
   final double width;
   final double thumbnailSize;
 
-  bool get _isRemoteHttpImage =>
-      attachmentPath.startsWith('http://') ||
-      attachmentPath.startsWith('https://');
+  @override
+  State<AttachmentPreviewTile> createState() => _AttachmentPreviewTileState();
+}
 
-  bool get _isRemoteUnsupported => attachmentPath.startsWith('gs://');
+class _AttachmentPreviewTileState extends State<AttachmentPreviewTile> {
+  late Future<String> _resolvedPathFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolvedPathFuture = _createResolvedPathFuture();
+  }
+
+  @override
+  void didUpdateWidget(covariant AttachmentPreviewTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.attachmentPath != widget.attachmentPath) {
+      _resolvedPathFuture = _createResolvedPathFuture();
+    }
+  }
+
+  Future<String> _createResolvedPathFuture() {
+    if (SynapseTempUtils.isSynapseTempUri(widget.attachmentPath)) {
+      return FileUtils.resolvePortableAttachmentPath(widget.attachmentPath);
+    }
+    if (widget.attachmentPath.startsWith('/')) {
+      return Future.value(widget.attachmentPath);
+    }
+    return FileUtils.getFullFilePath(widget.attachmentPath, true);
+  }
+
+  bool get _isRemoteHttpImage =>
+      widget.attachmentPath.startsWith('http://') ||
+      widget.attachmentPath.startsWith('https://');
+
+  bool get _isRemoteUnsupported => widget.attachmentPath.startsWith('gs://');
 
   String get _label {
     if (_isRemoteHttpImage || _isRemoteUnsupported) {
       try {
-        final uri = Uri.parse(attachmentPath);
+        final uri = Uri.parse(widget.attachmentPath);
         if (uri.pathSegments.isNotEmpty) {
           return uri.pathSegments.last;
         }
@@ -37,11 +69,11 @@ class AttachmentPreviewTile extends StatelessWidget {
       }
     }
 
-    if (attachmentPath.contains(Platform.pathSeparator)) {
-      return attachmentPath.split(Platform.pathSeparator).last;
+    if (widget.attachmentPath.contains(Platform.pathSeparator)) {
+      return widget.attachmentPath.split(Platform.pathSeparator).last;
     }
 
-    return attachmentPath.split('/').last;
+    return widget.attachmentPath.split('/').last;
   }
 
   String get _extension => FileTypeUtils.getFileExtension(_label);
@@ -50,10 +82,10 @@ class AttachmentPreviewTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: width,
+      width: widget.width,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
+        onTap: widget.onTap,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -78,8 +110,8 @@ class AttachmentPreviewTile extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Container(
-      width: thumbnailSize,
-      height: thumbnailSize,
+      width: widget.thumbnailSize,
+      height: widget.thumbnailSize,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: theme.colorScheme.outlineVariant),
@@ -93,8 +125,9 @@ class AttachmentPreviewTile extends StatelessWidget {
   Widget _buildImageContent(BuildContext context) {
     if (_isRemoteHttpImage) {
       return Image.network(
-        attachmentPath,
+        widget.attachmentPath,
         fit: BoxFit.cover,
+        gaplessPlayback: true,
         errorBuilder: (_, _, _) => _buildThumbnailFallback(context),
         loadingBuilder: (context, child, progress) {
           if (progress == null) return child;
@@ -107,12 +140,8 @@ class AttachmentPreviewTile extends StatelessWidget {
       return _buildThumbnailFallback(context);
     }
 
-    final futurePath = attachmentPath.startsWith('/')
-        ? Future.value(attachmentPath)
-        : FileUtils.getFullFilePath(attachmentPath, true);
-
     return FutureBuilder<String>(
-      future: futurePath,
+      future: _resolvedPathFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return _buildLoadingState(context);
@@ -131,6 +160,7 @@ class AttachmentPreviewTile extends StatelessWidget {
         return Image.file(
           file,
           fit: BoxFit.cover,
+          gaplessPlayback: true,
           errorBuilder: (_, _, _) => _buildThumbnailFallback(context),
         );
       },
@@ -166,8 +196,8 @@ class AttachmentPreviewTile extends StatelessWidget {
     final icon = _iconForExtension(_extension);
 
     return Container(
-      width: thumbnailSize,
-      height: thumbnailSize,
+      width: widget.thumbnailSize,
+      height: widget.thumbnailSize,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: theme.colorScheme.outlineVariant),

@@ -7795,6 +7795,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Switch Model'**
   String get toolOrchestrationSwitchModel;
+
+  /// No description provided for @nightMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Night Mode'**
+  String get nightMode;
+
+  /// No description provided for @dayMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Day Mode'**
+  String get dayMode;
+
+  /// No description provided for @userAppSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'User App'**
+  String get userAppSettingsTitle;
+
+  /// No description provided for @userAppSettingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage user app settings and libraries'**
+  String get userAppSettingsSubtitle;
+
+  /// No description provided for @addFromFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Add from filter'**
+  String get addFromFilter;
 }
 
 class _AppLocalizationsDelegate

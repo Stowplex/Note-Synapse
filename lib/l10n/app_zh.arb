@@ -1749,5 +1749,26 @@
   "toolOrchestrationContinueAnyway": "仍然继续",
   "toolOrchestrationContinue": "继续",
   "toolOrchestrationStop": "停止",
-  "toolOrchestrationSwitchModel": "切换模型"
+  "toolOrchestrationSwitchModel": "切换模型",
+  "bookmarkPage": "书签此页",
+  "bookmarks": "书签",
+  "noBookmarksYet": "暂无书签",
+  "aiContextBookmarks": "AI 上下文：书签",
+  "configureAiContext": "配置 AI 上下文",
+  "aiContext": "AI 上下文：{mode}",
+  "@aiContext": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "aiContextFullPdf": "完整 PDF",
+  "aiContextWindow": "窗口",
+  "aiContextChapters": "章节",
+  "nightMode": "夜间模式",
+  "dayMode": "日间模式",
+  "userAppSettingsTitle": "用户应用",
+  "userAppSettingsSubtitle": "管理用户应用设置和库",
+  "addFromFilter": "从筛选器添加"
 }

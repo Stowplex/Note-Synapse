@@ -1,39 +1,26 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:edge_gen/edge_gen.dart';
-import 'package:image/image.dart' as img_lib;
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_gemma/flutter_gemma.dart' as gemma;
+import 'package:image/image.dart' as img;
 import 'package:json_repair_flutter/json_repair_flutter.dart';
-import 'package:note_synapse/models/model_config.dart';
+
 import 'package:note_synapse/models/generation_context.dart';
+import 'package:note_synapse/models/model_config.dart';
+import 'package:note_synapse/services/logger_service.dart';
 import 'package:note_synapse/services/models/ai_model.dart';
 import 'package:note_synapse/services/models/local_model_presets.dart';
-import 'package:note_synapse/services/logger_service.dart';
 import 'package:note_synapse/services/prompts/prompt_models.dart';
 
-class PreparedImage {
-  final String path;
-  final int width;
-  final int height;
-  const PreparedImage({
-    required this.path,
-    required this.width,
-    required this.height,
-  });
-}
-
-class ToolCallParseResult {
-  final String text;
-  final List<Map<String, dynamic>>? functionCalls;
-
-  const ToolCallParseResult({required this.text, this.functionCalls});
-}
-
 class LocalMnnModel extends AIModel {
-  EdgeGenSession? _session;
+  gemma.InferenceModel? _model;
   ModelConfig? _config;
   LocalModelPreset? _preset;
   bool _isInitialized = false;
+
+  bool get supportsStreaming => true;
 
   @override
   String get id => _config?.id ?? 'local_mnn';
@@ -43,7 +30,7 @@ class LocalMnnModel extends AIModel {
       _config?.displayName ?? _preset?.displayName ?? 'Local Model';
 
   @override
-  String get description => 'On-device AI model via MNN';
+  String get description => 'On-device AI model via Flutter Gemma';
 
   @override
   Future<bool> isReady() async => _isInitialized;
@@ -51,361 +38,603 @@ class LocalMnnModel extends AIModel {
   @override
   Future<void> initialize({ModelConfig? config}) async {
     _config = config;
-    if (config?.modelName != null) {
-      _preset = LocalModelPresets.findById(config!.modelName!);
-    }
+    _preset = config?.modelName != null
+        ? LocalModelPresets.findById(config!.modelName!)
+        : null;
     _isInitialized = _preset != null;
   }
 
-  Future<EdgeGenSession> _ensureSession() async {
-    if (_session != null) return _session!;
-
-    final configPath = _config?.endpoint;
-    if (configPath == null) {
-      throw Exception('Local model config path not set');
+  Future<gemma.InferenceModel> _ensureModel() async {
+    if (_model != null) {
+      return _model!;
     }
 
-    final backendType =
-        _config?.backendType ??
-        _preset?.defaultBackend[Platform.isAndroid ? 'android' : 'ios'] ??
-        'cpu';
+    final preset = _preset;
+    if (preset == null) {
+      throw Exception('Unsupported local model preset');
+    }
 
-    final edgeConfig = EdgeGenConfig(
-      backendType: backendType,
-      maxNewTokens: _config?.maxOutputTokens ?? 8192,
-      enableThinking: _config?.enableThinking ?? false,
-      useTemplate: true,
+    final installed = await gemma.FlutterGemma.isModelInstalled(
+      preset.filename,
     );
+    if (!installed) {
+      throw Exception('Local model is not downloaded yet.');
+    }
 
-    _session = await EdgeGenController.instance.openSession(
-      configPath: configPath,
-      configJson: edgeConfig.toJson(),
+    await gemma.FlutterGemma.installModel(
+          modelType: preset.modelType,
+          fileType: preset.fileType,
+        )
+        .fromNetwork(
+          _config?.endpoint ?? preset.downloadUrl,
+          foreground: preset.foregroundDownload,
+        )
+        .install();
+
+    _model = await gemma.FlutterGemma.getActiveModel(
+      maxTokens: _resolvedTokenWindow,
+      preferredBackend: _preferredBackend,
+      supportImage: preset.supportsVision,
+      supportAudio: false,
+      maxNumImages: _resolvedMaxNumImages,
     );
-    return _session!;
+    return _model!;
   }
 
-  bool get _usesPromptTranscriptFallback =>
-      _preset?.id == LocalModelPresets.qwen3Vl2b.id;
+  int get _resolvedTokenWindow {
+    final preset = _preset;
+    if (preset == null) {
+      return _config?.tokenWindow ?? 8192;
+    }
+    final requested = _config?.tokenWindow ?? preset.defaultTokenWindow;
+    return requested.clamp(preset.minTokenWindow, preset.maxTokenWindow);
+  }
 
-  /// Extracts the outermost JSON object from [text] starting at [start]
-  /// using brace counting. Returns null if no balanced object is found.
-  static String? _extractJsonObject(String text, int start) {
-    if (start >= text.length || text[start] != '{') return null;
+  gemma.PreferredBackend? get _preferredBackend {
+    switch (_config?.backendType) {
+      case 'cpu':
+        return gemma.PreferredBackend.cpu;
+      case 'gpu':
+        return gemma.PreferredBackend.gpu;
+      default:
+        return null;
+    }
+  }
+
+  int? get _resolvedMaxNumImages {
+    final preset = _preset;
+    if (preset == null || !preset.supportsVision) {
+      return null;
+    }
+    return preset.maxNumImages;
+  }
+
+  Future<gemma.InferenceChat> _createChat({
+    required List<PromptMessage> messages,
+    required List<Map<String, dynamic>> tools,
+    double? temperature,
+    int? topK,
+    double? topP,
+  }) async {
+    final preset = _preset;
+    if (preset == null) {
+      throw Exception('Unsupported local model preset');
+    }
+
+    final model = await _ensureModel();
+    final chat = await model.createChat(
+      temperature: temperature ?? preset.temperature,
+      randomSeed: 1,
+      topK: topK ?? preset.topK,
+      topP: topP ?? preset.topP,
+      tokenBuffer: 256,
+      supportImage: preset.supportsVision,
+      supportAudio: false,
+      supportsFunctionCalls: tools.isNotEmpty && preset.supportsToolCalls,
+      tools: _toToolDeclarations(tools),
+      toolChoice: tools.isEmpty ? gemma.ToolChoice.none : gemma.ToolChoice.auto,
+      modelType: preset.modelType,
+      systemInstruction: _extractSystemInstruction(messages),
+    );
+
+    await _appendConversation(chat, messages);
+    return chat;
+  }
+
+  String? _extractSystemInstruction(List<PromptMessage> messages) {
+    final parts = messages
+        .where((message) => message.role == PromptRole.system)
+        .map((message) => message.content.trim())
+        .where((content) => content.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) {
+      return null;
+    }
+    return parts.join('\n\n');
+  }
+
+  Future<void> _appendConversation(
+    gemma.InferenceChat chat,
+    List<PromptMessage> messages,
+  ) async {
+    final coalescedMessages = _coalesceMessagesForGemma(messages);
+    LoggerService.info(
+      'Local Gemma coalesced messages',
+      error: {
+        'count': coalescedMessages.length,
+        'messages': coalescedMessages
+            .map(
+              (message) => {
+                'role': message.role.name,
+                'contentLength': message.content.length,
+                'attachmentCount': message.attachments.length,
+                'attachmentNames': message.attachments
+                    .map((attachment) => attachment.name)
+                    .toList(growable: false),
+              },
+            )
+            .toList(growable: false),
+      },
+    );
+    for (final message in coalescedMessages) {
+      if (message.role == PromptRole.system) {
+        continue;
+      }
+      final converted = await _toGemmaMessages(message);
+      for (final gemmaMessage in converted) {
+        await chat.addQueryChunk(gemmaMessage, message.role == PromptRole.tool);
+      }
+    }
+  }
+
+  @visibleForTesting
+  List<PromptMessage> coalesceMessagesForGemma(List<PromptMessage> messages) {
+    return _coalesceMessagesForGemma(messages);
+  }
+
+  List<PromptMessage> _coalesceMessagesForGemma(List<PromptMessage> messages) {
+    if (messages.isEmpty) {
+      return const [];
+    }
+
+    final coalesced = <PromptMessage>[];
+    PromptMessage? pendingUserMessage;
+
+    void flushPendingUserMessage() {
+      if (pendingUserMessage == null) {
+        return;
+      }
+      coalesced.add(pendingUserMessage!);
+      pendingUserMessage = null;
+    }
+
+    for (final message in messages) {
+      if (message.role != PromptRole.user) {
+        flushPendingUserMessage();
+        coalesced.add(message);
+        continue;
+      }
+
+      if (pendingUserMessage == null) {
+        pendingUserMessage = message;
+        continue;
+      }
+
+      final mergedContent = [
+        pendingUserMessage!.content.trim(),
+        message.content.trim(),
+      ].where((part) => part.isNotEmpty).join('\n\n');
+
+      final mergedAttachments = <PlatformFile>[
+        ...pendingUserMessage!.attachments,
+        ...message.attachments,
+      ];
+
+      pendingUserMessage = PromptMessage(
+        role: PromptRole.user,
+        content: mergedContent,
+        attachments: mergedAttachments,
+        metadata:
+            {...?pendingUserMessage!.metadata, ...?message.metadata}.isEmpty
+            ? null
+            : {...?pendingUserMessage!.metadata, ...?message.metadata},
+        isContext: pendingUserMessage!.isContext && message.isContext,
+      );
+    }
+
+    flushPendingUserMessage();
+    return coalesced;
+  }
+
+  Future<List<gemma.Message>> _toGemmaMessages(PromptMessage message) async {
+    switch (message.role) {
+      case PromptRole.system:
+        return const [];
+      case PromptRole.user:
+        return _buildUserMessages(message);
+      case PromptRole.assistant:
+        return _buildAssistantMessages(message);
+      case PromptRole.tool:
+        return [_buildToolResponseMessage(message)];
+    }
+  }
+
+  Future<List<gemma.Message>> _buildUserMessages(PromptMessage message) async {
+    _logAttachmentDiagnostics(message);
+    final images = await _readSupportedImageAttachments(message.attachments);
+    var content = message.content.trim();
+
+    if (images.isEmpty) {
+      return [gemma.Message.text(text: content, isUser: true)];
+    }
+
+    final result = <gemma.Message>[
+      gemma.Message.withImage(
+        text: content,
+        imageBytes: images.first,
+        isUser: true,
+      ),
+    ];
+
+    // TODO: On Android LiteRT-LM, follow-up imageOnly chunks appear to be
+    // ignored or collapsed in practice for PDF-page context. Keep this path
+    // raw for now so we can observe runtime behavior without workarounds.
+    for (final image in images.skip(1)) {
+      result.add(gemma.Message.imageOnly(imageBytes: image, isUser: true));
+    }
+    return result;
+  }
+
+  List<gemma.Message> _buildAssistantMessages(PromptMessage message) {
+    final result = <gemma.Message>[];
+    final functionCalls = message.metadata?['function_calls'];
+    if (functionCalls is List && functionCalls.isNotEmpty) {
+      result.add(
+        gemma.Message.toolCall(
+          text: jsonEncode(_toolCallEnvelope(functionCalls)),
+        ),
+      );
+    }
+    final content = message.content.trim();
+    if (content.isNotEmpty) {
+      result.add(gemma.Message.text(text: content, isUser: false));
+    }
+    return result;
+  }
+
+  gemma.Message _buildToolResponseMessage(PromptMessage message) {
+    final toolName =
+        message.metadata?['function_name']?.toString() ?? 'call_tool';
+    final decoded = _decodeToolResponse(message.content);
+    return gemma.Message.toolResponse(toolName: toolName, response: decoded);
+  }
+
+  Map<String, dynamic> _toolCallEnvelope(List<dynamic> rawCalls) {
+    final calls = rawCalls.whereType<Map>().map((rawCall) {
+      final call = rawCall.map((key, value) => MapEntry(key.toString(), value));
+      return {
+        'name': call['name'],
+        'arguments': call['args'] ?? const <String, dynamic>{},
+        if (call['id'] != null) 'id': call['id'],
+      };
+    }).toList();
+
+    if (calls.length == 1) {
+      return Map<String, dynamic>.from(calls.first);
+    }
+    return {'tool_calls': calls};
+  }
+
+  Map<String, dynamic> _decodeToolResponse(String content) {
+    try {
+      final decoded = jsonDecode(content);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return decoded.map((key, value) => MapEntry(key.toString(), value));
+      }
+      return {'result': decoded};
+    } catch (_) {
+      return {'result': content};
+    }
+  }
+
+  List<gemma.Tool> _toToolDeclarations(List<Map<String, dynamic>> tools) {
+    return tools
+        .map((tool) {
+          final function = tool['function'] is Map<String, dynamic>
+              ? tool['function'] as Map<String, dynamic>
+              : tool;
+          return gemma.Tool(
+            name: function['name']?.toString() ?? 'call_tool',
+            description: function['description']?.toString() ?? '',
+            parameters: function['parameters'] is Map<String, dynamic>
+                ? function['parameters'] as Map<String, dynamic>
+                : const <String, dynamic>{},
+          );
+        })
+        .toList(growable: false);
+  }
+
+  Future<List<Uint8List>> _readSupportedImageAttachments(
+    List<PlatformFile> attachments,
+  ) async {
+    final images = <Uint8List>[];
+    for (final attachment in attachments) {
+      if (!_isSupportedImageFile(attachment)) {
+        continue;
+      }
+      if (attachment.bytes != null && attachment.bytes!.isNotEmpty) {
+        images.add(attachment.bytes!);
+        continue;
+      }
+      final path = attachment.path;
+      if (path != null && path.isNotEmpty) {
+        images.add(await File(path).readAsBytes());
+      }
+    }
+    return images;
+  }
+
+  bool _isSupportedImageFile(PlatformFile file) {
+    final name = file.name.toLowerCase();
+    return name.endsWith('.png') ||
+        name.endsWith('.jpg') ||
+        name.endsWith('.jpeg') ||
+        name.endsWith('.webp');
+  }
+
+  void _logAttachmentDiagnostics(PromptMessage message) {
+    if (message.attachments.isEmpty) {
+      return;
+    }
+
+    final diagnostics = message.attachments
+        .map((attachment) {
+          final bytes = attachment.bytes;
+          final resolvedBytesLength = bytes?.length;
+          final decoded = bytes != null && bytes.isNotEmpty
+              ? img.decodeImage(bytes)
+              : null;
+          final signature = bytes == null || bytes.isEmpty
+              ? null
+              : bytes
+                    .take(8)
+                    .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+                    .join(' ');
+          return {
+            'name': attachment.name,
+            'path': attachment.path,
+            'declaredSize': attachment.size,
+            'hasBytes': bytes != null,
+            'resolvedBytesLength': resolvedBytesLength,
+            'isSupportedImage': _isSupportedImageFile(attachment),
+            'decoded': decoded != null,
+            if (decoded != null) 'decodedWidth': decoded.width,
+            if (decoded != null) 'decodedHeight': decoded.height,
+            if (signature != null) 'signature': signature,
+          };
+        })
+        .toList(growable: false);
+
+    LoggerService.info(
+      'Local Gemma attachment diagnostics',
+      error: {
+        'contentLength': message.content.length,
+        'attachmentCount': message.attachments.length,
+        'attachments': diagnostics,
+      },
+    );
+  }
+
+  Map<String, dynamic> _responseToToolResult(gemma.ModelResponse response) {
+    if (response is gemma.FunctionCallResponse) {
+      return {
+        'text': '',
+        'function_calls': [
+          {'name': response.name, 'args': response.args},
+        ],
+        'modelUsed': name,
+      };
+    }
+
+    if (response is gemma.ParallelFunctionCallResponse) {
+      return {
+        'text': '',
+        'function_calls': response.calls
+            .map((call) => {'name': call.name, 'args': call.args})
+            .toList(growable: false),
+        'modelUsed': name,
+      };
+    }
+
+    if (response is gemma.ThinkingResponse) {
+      return {
+        'text': response.content,
+        'function_calls': null,
+        'modelUsed': name,
+      };
+    }
+
+    final text = response is gemma.TextResponse ? response.token : '';
+    final parsedToolCalls = _extractTaggedToolCalls(text);
+    if (parsedToolCalls.calls.isNotEmpty) {
+      return {
+        'text': parsedToolCalls.cleanedText,
+        'function_calls': parsedToolCalls.calls,
+        'modelUsed': name,
+      };
+    }
+
+    return {'text': text, 'function_calls': null, 'modelUsed': name};
+  }
+
+  @visibleForTesting
+  ParsedToolCallText extractTaggedToolCallsForTest(String text) {
+    return _extractTaggedToolCalls(text);
+  }
+
+  ParsedToolCallText _extractTaggedToolCalls(String text) {
+    if (text.isEmpty) {
+      return const ParsedToolCallText(cleanedText: '', calls: []);
+    }
+
+    final matches = _toolCallTagPattern
+        .allMatches(text)
+        .toList(growable: false);
+    if (matches.isEmpty) {
+      return ParsedToolCallText(cleanedText: text, calls: const []);
+    }
+
+    final calls = <Map<String, dynamic>>[];
+    for (final match in matches) {
+      final payload = match.group(1)?.trim();
+      if (payload == null || payload.isEmpty) {
+        continue;
+      }
+
+      final call = _parseTaggedToolCallPayload(payload);
+      if (call != null) {
+        calls.add(call);
+      }
+    }
+
+    final cleanedText = text.replaceAll(_toolCallTagPattern, '').trim();
+    return ParsedToolCallText(cleanedText: cleanedText, calls: calls);
+  }
+
+  Map<String, dynamic>? _parseTaggedToolCallPayload(String payload) {
+    final argsStart = payload.indexOf('{');
+    if (argsStart <= 0) {
+      return null;
+    }
+
+    final functionName = payload.substring(0, argsStart).trim();
+    if (functionName.isEmpty) {
+      return null;
+    }
+
+    final argsText = _extractBalancedSegment(payload, argsStart);
+    if (argsText == null) {
+      return null;
+    }
+
+    final decodedArgs = _decodeLooseMap(argsText);
+    if (decodedArgs == null) {
+      return null;
+    }
+
+    return {'name': functionName, 'args': decodedArgs};
+  }
+
+  String? _extractBalancedSegment(String content, int startIdx) {
     int depth = 0;
-    bool inString = false;
-    bool escape = false;
-    for (int i = start; i < text.length; i++) {
-      final c = text[i];
-      if (escape) {
-        escape = false;
+    var inString = false;
+    var escapeNext = false;
+
+    for (int i = startIdx; i < content.length; i++) {
+      final char = content[i];
+
+      if (escapeNext) {
+        escapeNext = false;
         continue;
       }
-      if (c == '\\' && inString) {
-        escape = true;
+
+      if (char == '\\' && inString) {
+        escapeNext = true;
         continue;
       }
-      if (c == '"') {
+
+      if (char == '"') {
         inString = !inString;
         continue;
       }
-      if (inString) continue;
-      if (c == '{') depth++;
-      if (c == '}') {
+
+      if (inString) {
+        continue;
+      }
+
+      if (char == '{') {
+        depth++;
+      } else if (char == '}') {
         depth--;
-        if (depth == 0) return text.substring(start, i + 1);
+        if (depth == 0) {
+          return content.substring(startIdx, i + 1);
+        }
       }
     }
+
     return null;
   }
 
-  static final _toolCallHint = RegExp(r'\{\s*"name"\s*:\s*"call_tool"');
-
-  /// Parses tool calls from model response text.
-  static ToolCallParseResult parseToolCalls(String response) {
-    final hint = _toolCallHint.firstMatch(response);
-    if (hint == null) {
-      return ToolCallParseResult(text: response);
-    }
-
-    final textBefore = response.substring(0, hint.start).trim();
-    final jsonStr = _extractJsonObject(response, hint.start);
-
+  Map<String, dynamic>? _decodeLooseMap(String text) {
     try {
-      Map<String, dynamic> parsed;
-      if (jsonStr != null) {
-        // Balanced braces found — try standard JSON decode first
-        try {
-          parsed = jsonDecode(jsonStr) as Map<String, dynamic>;
-        } catch (_) {
-          final repaired = repairJson(jsonStr);
-          if (repaired is! Map) {
-            return ToolCallParseResult(text: response);
-          }
-          parsed = Map<String, dynamic>.from(repaired);
-        }
-      } else {
-        // Unbalanced braces (malformed JSON) — try repair on raw substring
-        final repaired = repairJson(response.substring(hint.start));
-        if (repaired is! Map) {
-          return ToolCallParseResult(text: response);
-        }
-        parsed = Map<String, dynamic>.from(repaired);
+      final decoded = jsonDecode(text);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
       }
-
-      if (parsed['name'] == 'call_tool' && parsed.containsKey('arguments')) {
-        final args = Map<String, dynamic>.from(parsed['arguments'] as Map);
-        return ToolCallParseResult(
-          text: textBefore,
-          functionCalls: [
-            {'name': 'call_tool', 'args': args},
-          ],
-        );
+      if (decoded is Map) {
+        return decoded.map((key, value) => MapEntry(key.toString(), value));
       }
     } catch (_) {
-      // JSON repair failed — treat as plain text
+      // Fall through to repairJson for Gemma's relaxed object syntax.
     }
 
-    return ToolCallParseResult(text: response);
-  }
-
-  /// Builds a tool schema block for injection into the system prompt.
-  static String buildToolSchemaBlock(List<Map<String, dynamic>> tools) {
-    const encoder = JsonEncoder.withIndent('  ');
-    final toolsJson = encoder.convert(tools);
-    return '''
-You have access to the following tools. To use a tool, respond with a JSON object:
-{"name": "call_tool", "arguments": {"service_name": "<service>", "tool_name": "<tool>", "params": {<parameters>}}}
-
-Available tools:
-$toolsJson
-
-When you need to use a tool, output ONLY the JSON object. Do not wrap it in markdown code blocks.''';
-  }
-
-  /// Pre-processes messages by resizing image attachments and inserting
-  /// `<img>` tags (with `<hw>` dimension info) into the message content
-  /// so the MNN runtime can pick them up.
-  static Future<List<PromptMessage>> preprocessAttachments(
-    List<PromptMessage> messages,
-  ) async {
-    final result = <PromptMessage>[];
-    for (final msg in messages) {
-      if (msg.attachments.isEmpty) {
-        result.add(msg);
-        continue;
+    try {
+      final repaired = repairJson(text);
+      if (repaired is Map<String, dynamic>) {
+        return repaired;
       }
-      final prepared = <PreparedImage>[];
-      for (final file in msg.attachments) {
-        String? sourcePath = file.path;
-
-        // Handle in-memory attachments (e.g. rendered PDF pages) by
-        // writing bytes to a temp file first.
-        if (sourcePath == null && file.bytes != null) {
-          final ext = file.name.split('.').last.toLowerCase();
-          if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext)) {
-            final tempDir = await Directory.systemTemp.createTemp('mnn_mem_');
-            sourcePath = '${tempDir.path}/${file.name}';
-            await File(sourcePath).writeAsBytes(file.bytes!);
-          }
-        }
-
-        if (sourcePath == null) continue;
-        final ext = sourcePath.split('.').last.toLowerCase();
-        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext)) {
-          final image = await resizeImageForModel(sourcePath);
-          prepared.add(image);
-        }
+      if (repaired is Map) {
+        return repaired.map((key, value) => MapEntry(key.toString(), value));
       }
-      if (prepared.isNotEmpty) {
-        result.add(
-          msg.copyWith(content: _appendImageTags(msg.content, prepared)),
-        );
-      } else {
-        result.add(msg);
-      }
+    } catch (_) {
+      return null;
     }
-    return result;
+
+    return null;
   }
 
-  /// Builds `<img>path<hw>height,width</hw></img>` tags matching the
-  /// format expected by the MNN vision runtime.
-  static String _appendImageTags(String text, List<PreparedImage> images) {
-    final buffer = StringBuffer(text);
-    for (final img in images) {
-      final hwTag = img.width > 0 && img.height > 0
-          ? '<hw>${img.height},${img.width}</hw>'
-          : '';
-      buffer.write('\n<img>${img.path}$hwTag</img>');
+  Future<void> _disposeModel() async {
+    final model = _model;
+    _model = null;
+    if (model != null) {
+      await model.close();
     }
-    return buffer.toString();
   }
 
-  /// Converts [PromptMessage] list into structured (role, content) pairs
-  /// for the MNN native session. MNN's Jinja template engine formats these
-  /// into the correct ChatML for each model (Qwen 3.5, Qwen3 VL, etc.).
-  ///
-  /// MNN supports "system", "user", "assistant" roles. "tool" role messages
-  /// are mapped to "user" with a "Tool result:" prefix since MNN silently
-  /// drops unknown roles.
-  static List<Map<String, String>> buildChatMessages(
+  Map<String, dynamic> _buildLogBody(
     List<PromptMessage> messages, {
-    String? toolSchemaBlock,
+    required List<Map<String, dynamic>> tools,
   }) {
-    final result = <Map<String, String>>[];
-
-    for (final msg in messages) {
-      switch (msg.role) {
-        case PromptRole.system:
-          // Merge tool schema into the system message content
-          final content = toolSchemaBlock != null
-              ? '${msg.content}\n\n$toolSchemaBlock'
-              : msg.content;
-          result.add({'role': 'system', 'content': content});
-          break;
-        case PromptRole.user:
-          result.add({'role': 'user', 'content': msg.content});
-          break;
-        case PromptRole.assistant:
-          result.add({'role': 'assistant', 'content': msg.content});
-          break;
-        case PromptRole.tool:
-          // MNN doesn't support "tool" role — map to "user" with prefix
-          result.add({
-            'role': 'user',
-            'content': 'Tool result: ${msg.content}',
-          });
-          break;
-      }
-    }
-
-    // If there's a tool schema but no system message was present, inject one
-    if (toolSchemaBlock != null &&
-        !messages.any((m) => m.role == PromptRole.system)) {
-      result.insert(0, {'role': 'system', 'content': toolSchemaBlock});
-    }
-
-    return result;
-  }
-
-  /// Legacy plain-text prompt formatting. Kept for tests and fallback.
-  static String formatPrompt(
-    List<PromptMessage> messages, {
-    String? toolSchemaBlock,
-  }) {
-    final chatMessages = buildChatMessages(
-      messages,
-      toolSchemaBlock: toolSchemaBlock,
-    );
-    final buffer = StringBuffer();
-    for (int i = 0; i < chatMessages.length; i++) {
-      final msg = chatMessages[i];
-      if (i > 0) buffer.write('\n');
-      final role = msg['role']!;
-      final content = msg['content']!;
-      if (role == 'system') {
-        buffer.write(content);
-      } else if (role == 'user') {
-        buffer.write(content);
-      } else if (role == 'assistant') {
-        buffer.write('Assistant: $content');
-      }
-    }
-    return buffer.toString();
-  }
-
-  /// Flattens a structured chat history into a single prompt transcript.
-  ///
-  /// For Qwen3-VL we use prompt-mode generation so MNN can process `<img>`
-  /// tags through its multimodal tokenizer while still applying the model's
-  /// own template from `llm_config.json`.
-  static String buildPromptTranscript(
-    List<PromptMessage> messages, {
-    String? toolSchemaBlock,
-  }) {
-    final buffer = StringBuffer();
-
-    void writeSection(String label, String content) {
-      final trimmed = content.trim();
-      if (trimmed.isEmpty) {
-        return;
-      }
-      if (buffer.isNotEmpty) {
-        buffer.write('\n\n');
-      }
-      buffer.write('$label:\n$trimmed');
-    }
-
-    String toolAugmentedSystem(String content) {
-      if (toolSchemaBlock == null || toolSchemaBlock.trim().isEmpty) {
-        return content;
-      }
-      if (content.trim().isEmpty) {
-        return toolSchemaBlock;
-      }
-      return '$content\n\n$toolSchemaBlock';
-    }
-
-    for (final msg in messages) {
-      switch (msg.role) {
-        case PromptRole.system:
-          writeSection('System instructions', toolAugmentedSystem(msg.content));
-          break;
-        case PromptRole.user:
-          writeSection('User', msg.content);
-          break;
-        case PromptRole.assistant:
-          writeSection('Assistant', msg.content);
-          break;
-        case PromptRole.tool:
-          writeSection('Tool result', msg.content);
-          break;
-      }
-    }
-
-    if (toolSchemaBlock != null &&
-        toolSchemaBlock.trim().isNotEmpty &&
-        !messages.any((m) => m.role == PromptRole.system)) {
-      final current = buffer.toString();
-      if (current.isEmpty) {
-        return 'System instructions:\n${toolSchemaBlock.trim()}';
-      }
-      return 'System instructions:\n${toolSchemaBlock.trim()}\n\n$current';
-    }
-
-    return buffer.toString();
-  }
-
-  /// Builds a summary of messages and attachments for debug logging.
-  static Map<String, dynamic> _buildLogBody(
-    List<PromptMessage> messages, {
-    String? prompt,
-    List<Map<String, dynamic>>? tools,
-  }) {
-    final msgSummary = messages.map((m) {
-      final entry = <String, dynamic>{
-        'role': m.role.name,
-        'content': m.content,
-      };
-      if (m.attachments.isNotEmpty) {
-        entry['attachments'] = m.attachments
-            .map(
-              (f) => {
-                'name': f.name,
-                'size': f.size,
-                'path': f.path,
-                'hasBytes': f.bytes != null,
-                'bytesLength': f.bytes?.length,
-              },
-            )
-            .toList();
-      }
-      return entry;
-    }).toList();
-
     return {
-      'messages': msgSummary,
-      if (prompt != null) 'prompt': prompt,
-      if (tools != null && tools.isNotEmpty) 'tools': tools,
+      'messages': messages
+          .map(
+            (message) => {
+              'role': message.role.name,
+              'content': message.content,
+              if (message.attachments.isNotEmpty)
+                'attachments': message.attachments
+                    .map(
+                      (file) => {
+                        'name': file.name,
+                        'path': file.path,
+                        'size': file.size,
+                        'hasBytes': file.bytes != null,
+                      },
+                    )
+                    .toList(),
+              if (message.metadata != null) 'metadata': message.metadata,
+            },
+          )
+          .toList(),
+      'tools': tools,
+      'gemmaConfig': {
+        'preset': _preset?.id,
+        'backend': _config?.backendType ?? 'gpu',
+        'tokenWindow': _resolvedTokenWindow,
+      },
     };
   }
 
@@ -422,58 +651,48 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
         generationContext?.ensureRequestId() ??
         DateTime.now().millisecondsSinceEpoch.toString();
     final startTime = DateTime.now();
-    final endpoint = 'local-mnn://$name';
+    final endpoint = 'local-gemma://$name';
 
-    final session = await _ensureSession();
-    await session.reset();
-    final processed = await preprocessAttachments(messages);
-    final usePromptFallback = _usesPromptTranscriptFallback;
-    final chatMessages = usePromptFallback
-        ? null
-        : buildChatMessages(processed);
-    final promptText = usePromptFallback
-        ? buildPromptTranscript(processed)
-        : null;
+    try {
+      LoggerService.logAiRequest(
+        endpoint: endpoint,
+        headers: {'backend': _config?.backendType ?? 'gpu'},
+        requestBody: _buildLogBody(messages, tools: const []),
+        requestId: requestId,
+      );
 
-    LoggerService.logAiRequest(
-      endpoint: endpoint,
-      headers: {'backend': _config?.backendType ?? 'cpu'},
-      requestBody: _buildLogBody(
-        messages,
-        prompt: usePromptFallback ? promptText : chatMessages.toString(),
-      ),
-      requestId: requestId,
-    );
+      final chat = await _createChat(
+        messages: messages,
+        tools: const [],
+        temperature: temperature,
+        topK: topK,
+        topP: topP,
+      );
 
-    final buffer = StringBuffer();
-    if (usePromptFallback) {
-      await for (final chunk in session.generate(
-        prompt: promptText!,
-        maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
-      )) {
-        buffer.write(chunk);
-      }
-    } else {
-      await for (final chunk in session.generateWithMessages(
-        messages: chatMessages!,
-        maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
-      )) {
-        buffer.write(chunk);
-      }
+      final response = await chat.generateChatResponse();
+      final result = _responseToToolResult(response);
+      final text = result['text']?.toString() ?? '';
+
+      LoggerService.logAiResponse(
+        statusCode: 200,
+        headers: {'model': name},
+        responseBody: result,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+
+      return text;
+    } catch (e) {
+      LoggerService.logAiError(
+        error: e.toString(),
+        endpoint: endpoint,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+      rethrow;
+    } finally {
+      await _disposeModel();
     }
-
-    final responseText = buffer.toString();
-    final duration = DateTime.now().difference(startTime);
-
-    LoggerService.logAiResponse(
-      statusCode: 200,
-      headers: {'model': name},
-      responseBody: {'text': responseText},
-      requestId: requestId,
-      duration: duration,
-    );
-
-    return responseText;
   }
 
   @override
@@ -490,77 +709,49 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
         generationContext?.ensureRequestId() ??
         DateTime.now().millisecondsSinceEpoch.toString();
     final startTime = DateTime.now();
-    final endpoint = 'local-mnn://$name/tools';
+    final endpoint = 'local-gemma://$name/tools';
 
-    final session = await _ensureSession();
-    await session.reset();
-    final processed = await preprocessAttachments(messages);
-    final toolSchemaBlock = tools.isNotEmpty
-        ? buildToolSchemaBlock(tools)
-        : null;
-    final usePromptFallback = _usesPromptTranscriptFallback;
-    final chatMessages = usePromptFallback
-        ? null
-        : buildChatMessages(processed, toolSchemaBlock: toolSchemaBlock);
-    final promptText = usePromptFallback
-        ? buildPromptTranscript(processed, toolSchemaBlock: toolSchemaBlock)
-        : null;
+    try {
+      LoggerService.logAiRequest(
+        endpoint: endpoint,
+        headers: {'backend': _config?.backendType ?? 'gpu'},
+        requestBody: _buildLogBody(messages, tools: tools),
+        requestId: requestId,
+      );
 
-    LoggerService.logAiRequest(
-      endpoint: endpoint,
-      headers: {'backend': _config?.backendType ?? 'cpu'},
-      requestBody: _buildLogBody(
-        messages,
-        prompt: usePromptFallback ? promptText : chatMessages.toString(),
+      final chat = await _createChat(
+        messages: messages,
         tools: tools,
-      ),
-      requestId: requestId,
-    );
+        temperature: temperature,
+        topK: topK,
+        topP: topP,
+      );
 
-    // Buffer full response for tool call parsing
-    final buffer = StringBuffer();
-    if (usePromptFallback) {
-      await for (final chunk in session.generate(
-        prompt: promptText!,
-        maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
-      )) {
-        buffer.write(chunk);
-      }
-    } else {
-      await for (final chunk in session.generateWithMessages(
-        messages: chatMessages!,
-        maxNewTokens: maxOutputTokens ?? _config?.maxOutputTokens ?? 8192,
-      )) {
-        buffer.write(chunk);
-      }
+      final response = await chat.generateChatResponse();
+      final result = _responseToToolResult(response);
+
+      LoggerService.logAiResponse(
+        statusCode: 200,
+        headers: {'model': name},
+        responseBody: result,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+
+      return result;
+    } catch (e) {
+      LoggerService.logAiError(
+        error: e.toString(),
+        endpoint: endpoint,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+      rethrow;
+    } finally {
+      await _disposeModel();
     }
-
-    final responseText = buffer.toString();
-    final duration = DateTime.now().difference(startTime);
-    final parsed = parseToolCalls(responseText);
-
-    final result = {
-      'text': parsed.text.isEmpty ? '' : parsed.text,
-      'function_calls': parsed.functionCalls,
-      'modelUsed': name,
-    };
-
-    LoggerService.logAiResponse(
-      statusCode: 200,
-      headers: {'model': name},
-      responseBody: {
-        'text': parsed.text,
-        'functionCalls': parsed.functionCalls,
-        'rawLength': responseText.length,
-      },
-      requestId: requestId,
-      duration: duration,
-    );
-
-    return result;
   }
 
-  /// Generates a streaming response for plain chat (no tool calls).
   Stream<String> generateStreaming(
     List<PromptMessage> messages, {
     int? maxNewTokens,
@@ -568,147 +759,56 @@ When you need to use a tool, output ONLY the JSON object. Do not wrap it in mark
   }) async* {
     final reqId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
     final startTime = DateTime.now();
-    final endpoint = 'local-mnn://$name/stream';
+    final endpoint = 'local-gemma://$name/stream';
 
-    final session = await _ensureSession();
-    await session.reset();
-    final processed = await preprocessAttachments(messages);
-    final usePromptFallback = _usesPromptTranscriptFallback;
-    final chatMessages = usePromptFallback
-        ? null
-        : buildChatMessages(processed);
-    final promptText = usePromptFallback
-        ? buildPromptTranscript(processed)
-        : null;
-
-    LoggerService.logAiRequest(
-      endpoint: endpoint,
-      headers: {'backend': _config?.backendType ?? 'cpu'},
-      requestBody: _buildLogBody(
-        messages,
-        prompt: usePromptFallback ? promptText : chatMessages.toString(),
-      ),
-      requestId: reqId,
-    );
-
-    final responseBuffer = StringBuffer();
-    if (usePromptFallback) {
-      await for (final chunk in session.generate(
-        prompt: promptText!,
-        maxNewTokens: maxNewTokens ?? _config?.maxOutputTokens ?? 8192,
-      )) {
-        responseBuffer.write(chunk);
-        yield chunk;
-      }
-    } else {
-      await for (final chunk in session.generateWithMessages(
-        messages: chatMessages!,
-        maxNewTokens: maxNewTokens ?? _config?.maxOutputTokens ?? 8192,
-      )) {
-        responseBuffer.write(chunk);
-        yield chunk;
-      }
-    }
-
-    final responseText = responseBuffer.toString();
-    final duration = DateTime.now().difference(startTime);
-
-    LoggerService.logAiResponse(
-      statusCode: 200,
-      headers: {'model': name},
-      responseBody: {
-        'text': responseText.length > 2000
-            ? '${responseText.substring(0, 2000)}...'
-            : responseText,
-        'textLength': responseText.length,
-        'streaming': true,
-      },
-      requestId: reqId,
-      duration: duration,
-    );
-  }
-
-  /// Whether this model supports streaming responses.
-  bool get supportsStreaming => true;
-
-  Future<void> resetSession() async {
-    _session = null;
-  }
-
-  Future<void> dispose() async {
-    _session = null;
-  }
-
-  static const _maxImageDimension = 784;
-
-  /// Estimates token count for an image based on its dimensions.
-  /// Images are resized to min(maxDim, 784px) preserving aspect ratio.
-  /// Token count = ceil(resizedWidth/28) * ceil(resizedHeight/28).
-  static int estimateImageTokens(int width, int height) {
-    final maxDim = width > height ? width : height;
-    if (maxDim > _maxImageDimension) {
-      final scale = _maxImageDimension / maxDim;
-      width = (width * scale).ceil();
-      height = (height * scale).ceil();
-    }
-    return ((width / 28).ceil()) * ((height / 28).ceil());
-  }
-
-  /// Inserts <img> tags for image paths into the text content.
-  /// Prefer [_appendImageTags] which includes `<hw>` dimension info.
-  static String insertImageTags(String text, List<String> imagePaths) {
-    if (imagePaths.isEmpty) return text;
-    final tags = imagePaths.map((p) => '<img>$p</img>').join('\n');
-    return '$text\n$tags';
-  }
-
-  /// Normalizes an image for the MNN runtime: resizes to fit within 1000px
-  /// on the longest side and always writes to a temp file (matching the
-  /// format expected by the vision runtime).
-  /// Returns a [PreparedImage] with the output path and final dimensions.
-  static Future<PreparedImage> resizeImageForModel(String sourcePath) async {
-    final file = File(sourcePath);
-    final bytes = await file.readAsBytes();
-
-    final image = img_lib.decodeImage(bytes);
-    if (image == null) {
-      return PreparedImage(path: sourcePath, width: 0, height: 0);
-    }
-
-    final longestSide = image.width > image.height ? image.width : image.height;
-    final targetLongest = longestSide > _maxImageDimension
-        ? _maxImageDimension
-        : longestSide;
-
-    int newWidth = image.width;
-    int newHeight = image.height;
-    img_lib.Image normalized = image;
-
-    if (targetLongest < longestSide) {
-      final scale = targetLongest / longestSide;
-      newWidth = (image.width * scale).round();
-      newHeight = (image.height * scale).round();
-      normalized = img_lib.copyResize(
-        image,
-        width: newWidth,
-        height: newHeight,
-        interpolation: img_lib.Interpolation.cubic,
+    try {
+      LoggerService.logAiRequest(
+        endpoint: endpoint,
+        headers: {'backend': _config?.backendType ?? 'gpu'},
+        requestBody: _buildLogBody(messages, tools: const []),
+        requestId: reqId,
       );
+
+      final chat = await _createChat(messages: messages, tools: const []);
+      final buffer = StringBuffer();
+
+      await for (final response in chat.generateChatResponseAsync()) {
+        if (response is gemma.TextResponse) {
+          buffer.write(response.token);
+          yield response.token;
+        }
+      }
+
+      LoggerService.logAiResponse(
+        statusCode: 200,
+        headers: {'model': name},
+        responseBody: {'text': buffer.toString()},
+        requestId: reqId,
+        duration: DateTime.now().difference(startTime),
+      );
+    } catch (e) {
+      LoggerService.logAiError(
+        error: e.toString(),
+        endpoint: endpoint,
+        requestId: reqId,
+        duration: DateTime.now().difference(startTime),
+      );
+      rethrow;
+    } finally {
+      await _disposeModel();
     }
-
-    final ext = sourcePath.split('.').last.toLowerCase();
-    final tempDir = await Directory.systemTemp.createTemp('mnn_img_');
-    final isPng = ext == 'png';
-    final tempPath = '${tempDir.path}/prepared.${isPng ? 'png' : 'jpg'}';
-
-    if (isPng) {
-      await File(tempPath).writeAsBytes(img_lib.encodePng(normalized));
-    } else {
-      await File(
-        tempPath,
-      ).writeAsBytes(img_lib.encodeJpg(normalized, quality: 92));
-    }
-
-    return PreparedImage(path: tempPath, width: newWidth, height: newHeight);
   }
 }
+
+@visibleForTesting
+class ParsedToolCallText {
+  final String cleanedText;
+  final List<Map<String, dynamic>> calls;
+
+  const ParsedToolCallText({required this.cleanedText, required this.calls});
+}
+
+final _toolCallTagPattern = RegExp(
+  r'<\|tool_call\>([\s\S]*?)<tool_call\|>',
+  dotAll: true,
+);

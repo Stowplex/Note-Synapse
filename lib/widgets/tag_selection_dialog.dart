@@ -384,7 +384,7 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
           actions: [
             TextButton(
               onPressed: () => _openFilterSelection(context, appProvider),
-              child: const Text('Add from filter'),
+              child: Text(l10n.addFromFilter),
             ),
             if (widget.showManageTagsButton) ...[
               TextButton(

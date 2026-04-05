@@ -4470,4 +4470,20 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get toolOrchestrationSwitchModel => 'Switch Model';
+
+  @override
+  String get nightMode => 'Night Mode';
+
+  @override
+  String get dayMode => 'Day Mode';
+
+  @override
+  String get userAppSettingsTitle => 'User App';
+
+  @override
+  String get userAppSettingsSubtitle =>
+      'Manage user app settings and libraries';
+
+  @override
+  String get addFromFilter => 'Add from filter';
 }

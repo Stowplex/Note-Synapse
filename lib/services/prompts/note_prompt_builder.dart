@@ -1,8 +1,8 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 import '../../models/note.dart';
@@ -12,6 +12,7 @@ import '../../utils/file_utils.dart';
 import '../../utils/prompt_injection_protection.dart';
 import '../../utils/remote_image_storage.dart';
 import '../../utils/remote_image_utils.dart';
+import '../../utils/synapse_temp_utils.dart';
 import '../database_service.dart';
 import '../logger_service.dart';
 import 'ai_prompts.dart';
@@ -382,7 +383,9 @@ class NotePromptBuilder {
       if (validAttachments.isNotEmpty) {
         buffer.writeln('$indent  Attachments:');
         for (final attachment in validAttachments) {
-          buffer.writeln('$indent    - ${attachment.fileName} (ID: ${attachment.id})');
+          buffer.writeln(
+            '$indent    - ${attachment.fileName} (ID: ${attachment.id})',
+          );
         }
       }
     } catch (e) {
@@ -512,7 +515,7 @@ class NotePromptBuilder {
                 final pdfDoc = await PdfDocument.openFile(fullPath);
                 final outline = await pdfDoc.loadOutline();
 
-                if (outline != null && outline.isNotEmpty) {
+                if (outline.isNotEmpty) {
                   // Find page ranges for selected chapters
                   final pageRanges = _getChapterPageRanges(
                     outline,
@@ -658,37 +661,12 @@ class NotePromptBuilder {
                 pageNum <= actualEndPage;
                 pageNum++
               ) {
-                final page = pdfDoc.pages[pageNum - 1]; // 0-indexed
-
-                // Render at reasonable resolution (2x for clarity)
-                final renderWidth = (page.width * 2).toInt();
-                final renderHeight = (page.height * 2).toInt();
-
-                final pdfImage = await page.render(
-                  width: renderWidth,
-                  height: renderHeight,
+                await _extractAndAddPage(
+                  pdfDoc,
+                  pageNum,
+                  attachment.fileName,
+                  target,
                 );
-
-                if (pdfImage != null) {
-                  // Convert to PNG bytes
-                  final uiImage = await pdfImage.createImage();
-                  final byteData = await uiImage.toByteData(
-                    format: ui.ImageByteFormat.png,
-                  );
-
-                  if (byteData != null) {
-                    final pngBytes = byteData.buffer.asUint8List();
-                    target.add(
-                      PlatformFile(
-                        name: '${attachment.fileName}_page$pageNum.png',
-                        path: null,
-                        size: pngBytes.length,
-                        bytes: pngBytes,
-                      ),
-                    );
-                  }
-                  uiImage.dispose();
-                }
               }
               pdfDoc.dispose();
             } catch (e) {
@@ -911,13 +889,15 @@ class NotePromptBuilder {
 
     final page = pdfDoc.pages[pageNum - 1]; // 0-indexed
 
-    // Render at reasonable resolution (2x for clarity)
-    final renderWidth = (page.width * 2).toInt();
-    final renderHeight = (page.height * 2).toInt();
+    // Render the full page at higher DPI. Passing only width/height here makes
+    // pdfrx render a 72-dpi page into a larger bitmap, which leaves most of the
+    // canvas blank. fullWidth/fullHeight must carry the scaled page size.
+    final renderWidth = page.width * 2;
+    final renderHeight = page.height * 2;
 
     final pdfImage = await page.render(
-      width: renderWidth,
-      height: renderHeight,
+      fullWidth: renderWidth,
+      fullHeight: renderHeight,
     );
 
     if (pdfImage != null) {
@@ -926,6 +906,38 @@ class NotePromptBuilder {
 
       if (byteData != null) {
         final pngBytes = byteData.buffer.asUint8List();
+        String? debugTempUri;
+        String? debugTempPath;
+        if (kDebugMode) {
+          try {
+            final tempResult = await SynapseTempUtils.saveTempData(
+              mimeType: 'image/png',
+              bytes: pngBytes,
+            );
+            debugTempUri = tempResult.uri;
+            debugTempPath = tempResult.file.path;
+          } catch (e) {
+            LoggerService.warning(
+              'Failed to persist debug PDF page image for $fileName page $pageNum: $e',
+            );
+          }
+        }
+        LoggerService.info(
+          'Extracted PDF page for AI context',
+          error: {
+            'fileName': fileName,
+            'pageNum': pageNum,
+            'renderWidth': renderWidth,
+            'renderHeight': renderHeight,
+            'pngBytesLength': pngBytes.length,
+            'signature': pngBytes
+                .take(8)
+                .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+                .join(' '),
+            if (debugTempUri != null) 'debugTempUri': debugTempUri,
+            if (debugTempPath != null) 'debugTempPath': debugTempPath,
+          },
+        );
         target.add(
           PlatformFile(
             name: '${fileName}_page$pageNum.png',

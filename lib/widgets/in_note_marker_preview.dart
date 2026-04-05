@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/in_note_marker.dart';
 import '../models/conversation.dart';
-import '../models/conversation_attachment.dart';
 import '../services/database_service.dart';
 import '../services/service_locator.dart';
 import '../screens/conversation_chat_screen.dart';
@@ -67,11 +66,7 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
         for (final path in userMessage.attachmentPaths) {
           final ext = path.split('.').last.toLowerCase();
           if (imageExtensions.contains(ext)) {
-            if (!path.startsWith('http') && !path.startsWith('/')) {
-              imagePaths.add(await FileUtils.getFullFilePath(path, true));
-            } else {
-              imagePaths.add(path);
-            }
+            imagePaths.add(await FileUtils.resolvePortableAttachmentPath(path));
           }
         }
       }
