@@ -82,11 +82,27 @@ Note Synapse already has a rich agent system with skills (notes tagged `agent-sk
 
 **Why tags alone are insufficient**: `modify_note` will happily mutate any note regardless of tags. Worse, `ContentIngestionService` explicitly writes extracted content back into the current note (`content_ingestion_service.dart:121` — the AI can return modifications that get applied to the source note via `NoteModificationService.applyModifications()`). A bad skill, prompt, or ingestion tag can silently destroy provenance on source notes.
 
-**How to close**: **Tag Convention + Write-path guard** (small code change)
-- Use tags: `wiki-source` (immutable raw material) vs `wiki-compiled` (LLM-generated)
-- **Required code change**: `NoteModificationService.applyModifications()` must check for a `wiki-source` tag and refuse content/title modifications when present. Tag and attachment modifications should still be allowed (so the note can be tagged/organized).
-- **ContentIngestionService guard**: When processing a note tagged `wiki-source`, the ingestion output should go to a new compiled note (or a subnote), not back into the source.
+**How to close**: **Namespaced tag convention + Prefix-aware write-path guard** (small code change)
+- Use namespaced tags: `wiki-source-<namespace>` (immutable raw material) vs `wiki-compiled-<namespace>` (LLM-generated). The namespace identifies which wiki workspace the note belongs to (e.g., `wiki-source-ml`, `wiki-compiled-ml`).
+- There is no generic `wiki-source` tag. Source immutability is triggered by any tag matching the `wiki-source-` prefix.
+- **Required code change**: `NoteModificationService.applyModifications()` must check for any tag with `wiki-source-` prefix and refuse content/title modifications when present. Tag and attachment modifications should still be allowed (so the note can be tagged/organized).
+- **ContentIngestionService guard**: When processing a note with any `wiki-source-*` tag, the ingestion output should go to a new compiled note (or a subnote), not back into the source. The compiled note inherits the same namespace.
 - Files: `lib/services/note_modification_service.dart:21`, `lib/services/content_ingestion_service.dart:121`
+
+### Gap F2: No Tag-to-Workflow Binding
+**What's missing**: Wiki operations (ingest, lint) are currently "run the right skill manually" — there is no mechanism that binds a tag to a workflow so the user can reliably trigger operations from a note's tags rather than remembering which skill to invoke.
+
+**Why this matters**: The existing `getTagExtractionPrompt` / `ContentIngestionService` already implements a primitive version of tag-associated behavior: a tag can carry an extraction prompt, and the ingestion service runs it when a note with that tag has attachments. But this is a prompt, not a workflow. For wiki, we need tag → workflow bindings where the tag triggers a full agent skill execution with namespace context.
+
+**How to close**: **Extend tag-associated prompts into tag-associated workflows** (medium code change)
+- Add a `workflow_skill_id` column to the tag metadata (alongside existing `extraction_prompt`)
+- A tag can optionally point to a skill note that defines its workflow
+- Resolution rules:
+  1. Exact match first: tag `wiki-source-ml` → its specific workflow binding
+  2. Prefix match fallback: tag `wiki-source-ml` matches a prefix rule for `wiki-source-*` → bound skill
+  3. If multiple `wiki-source-*` tags on one note, fail fast and ask user to disambiguate
+- The bound workflow receives the matched tag string as execution context, so the skill knows which namespace to operate in
+- This is a platform mechanism, not wiki-specific: any tag prefix can bind to any skill
 
 ### Gap G: No Graph Visualization of Wiki
 **What's missing**: LLM Wiki suggests Obsidian-style graph view to see connections, identify hubs/orphans.
@@ -137,7 +153,7 @@ These are the highest-value, lowest-effort items. Write skill notes that teach t
 | **Wiki Query** | Search wiki, synthesize answer, optionally file as new page |
 | **Wiki Lint** | Health-check: find orphans, stale pages, gaps, contradictions |
 | **Wiki Index Maintainer** | Rebuild/update the master index note |
-| **Source Filing** | Tag conventions for sources vs wiki-pages |
+| **Source Filing** | Namespaced tag conventions (`wiki-source-<ns>` vs `wiki-compiled-<ns>`) |
 
 ### Tier 2: User Apps (Zero code changes)
 Build HTML/JS extensions for visualization and interaction.
@@ -199,12 +215,12 @@ These three surfaces together cover query-to-wiki filing. No new "Save as Note" 
 
 The alternative plan correctly insists: wiki pages are not a separate object type. They are regular notes distinguished by tags, metadata, and workflow conventions. This plan should use the vocabulary:
 
-- **source note**: raw evidence, not modified by ingest workflows
-- **compiled note**: a regular note maintained by agent workflows (entities, topics, summaries)
-- **wiki workspace**: a set of regular notes sharing the same conventions + an index + a log
+- **source note**: raw evidence, not modified by ingest workflows. Tagged `wiki-source-<namespace>`.
+- **compiled note**: a regular note maintained by agent workflows. Tagged `wiki-compiled-<namespace>` plus a type tag (`wiki-entity-<ns>`, `wiki-topic-<ns>`, etc.)
+- **wiki workspace**: a namespace — a set of regular notes sharing the same namespace suffix in their tags + one index + one log per namespace
 - **schema skill**: the skill note that defines the workflow contract
 
-No new DB models, no new note types.
+No new DB models, no new note types. Namespaces live in tag suffixes, not in a new column.
 
 ### 6C. Workflow Contract Before Code
 
@@ -452,19 +468,21 @@ Terminology: "wiki pages are regular notes" throughout. Each task specifies UX c
 - [ ] Agent can create AND delete relationships via `modify_note` without `run_sql`
 - [ ] `read_note stat` provides enough relationship info for lint to assess cross-references
 
-#### Task B5: Source Immutability Enforcement
+#### Task B5: Source Immutability Enforcement (Prefix-Aware)
 
-**Goal**: Prevent `modify_note` and `ContentIngestionService` from mutating notes tagged `wiki-source`. Without this, the "raw sources are immutable" invariant (Karpathy's core model and Gap F) is unenforceable — a bad skill or prompt can silently destroy provenance.
+**Goal**: Prevent `modify_note` and `ContentIngestionService` from mutating notes with any `wiki-source-*` tag. Without this, the "raw sources are immutable" invariant is unenforceable. Uses prefix matching, not an exact tag — supports multiple independent wiki namespaces.
 
-**UX change**: When a user manually edits a `wiki-source` note in the note editor, no change (manual edits are intentional). When the **agent** tries to modify a `wiki-source` note via tool call, `modify_note` returns an error explaining the restriction.
+**UX change**: When the **agent** tries to modify a `wiki-source-*` note via tool call, `modify_note` returns an error explaining the restriction. Manual edits in the note editor are unaffected.
 
 **Workflow change**:
-1. `NoteModificationService.applyModifications()` checks for `wiki-source` tag. If present, refuses content and title modifications. Tag, attachment, subnote, and link modifications are still allowed (so the note can be organized and cross-referenced).
-2. `ContentIngestionService`: when processing a note tagged `wiki-source`, extracted content goes to a new compiled note (not back into the source). The compiled note is tagged `wiki-compiled` and linked to the source via `link`.
+1. `NoteModificationService.applyModifications()` checks for any tag with `wiki-source-` prefix. If present, refuses content and title modifications. Tag, attachment, subnote, and link modifications are still allowed.
+2. `ContentIngestionService`: when processing a note with any `wiki-source-*` tag, extracted content goes to a new compiled note. The compiled note inherits the same namespace (e.g., `wiki-source-ml` → compiled note gets `wiki-compiled-ml`).
+3. A helper function `getWikiSourceNamespace(List<String> tags)` returns the namespace suffix from the first `wiki-source-*` tag, or `null` if no match. Used by both guards.
 
 **Files changed**:
-- `lib/services/note_modification_service.dart:21` — add guard in `applyModifications()`
-- `lib/services/content_ingestion_service.dart:121` — redirect output for `wiki-source` notes
+- `lib/services/note_modification_service.dart:21` — add prefix-aware guard in `applyModifications()`
+- `lib/services/content_ingestion_service.dart:121` — redirect output for `wiki-source-*` notes
+- `lib/utils/wiki_tag_utils.dart` (new) — prefix matching and namespace extraction helpers
 
 **Validation method**: Unit tests + manual test.
 
@@ -472,27 +490,75 @@ Terminology: "wiki pages are regular notes" throughout. Each task specifies UX c
 
 | Test | Expected Outcome |
 |------|-----------------|
-| `modify_note` on `wiki-source` note with `content: {action: 'append', text: '...'}` | Returns `{error: 'Cannot modify content of a wiki-source note. Source notes are immutable to preserve provenance.'}` |
-| `modify_note` on `wiki-source` note with `title: {new_title: '...'}` | Returns same error |
-| `modify_note` on `wiki-source` note with `tags: {added: ['reviewed']}` | Succeeds — tag modification allowed |
-| `modify_note` on `wiki-source` note with `link: [{relation: 'related', target: '...'}]` | Succeeds — link creation allowed |
-| `modify_note` on non-`wiki-source` note | Existing behavior unchanged |
-| `ContentIngestionService` processes `wiki-source` note | Creates a new `wiki-compiled` note with extraction results; source note content unchanged |
-| `ContentIngestionService` processes non-`wiki-source` note | Existing behavior unchanged — writes back to same note |
+| `modify_note` on note tagged `wiki-source-ml` with content change | Returns error: "Cannot modify content of a wiki-source note." |
+| `modify_note` on note tagged `wiki-source-harry-potter` with title change | Returns same error |
+| `modify_note` on note tagged `wiki-source-ml` with `tags: {added: ['reviewed']}` | Succeeds — tag modification allowed |
+| `modify_note` on note tagged `wiki-source-ml` with `link: [...]` | Succeeds — link creation allowed |
+| `modify_note` on note with NO `wiki-source-*` tags | Existing behavior unchanged |
+| `ContentIngestionService` processes `wiki-source-ml` note | Creates compiled note tagged `wiki-compiled-ml`; source unchanged |
+| `ContentIngestionService` processes non-wiki-source note | Existing behavior unchanged |
+| `getWikiSourceNamespace(['wiki-source-ml', 'other'])` | Returns `'ml'` |
+| `getWikiSourceNamespace(['regular-tag'])` | Returns `null` |
+| Note with both `wiki-source-ml` and `wiki-source-ai` | Fails fast with error asking user to disambiguate |
 
 **Acceptance criteria**:
 - [ ] All tests pass
-- [ ] `flutter analyze` clean on both changed files
-- [ ] App test: tag a note `wiki-source`, attach a PDF, trigger content ingestion → source note unchanged, new compiled note created with extraction results
-- [ ] App test: agent tries `modify_note` with content change on `wiki-source` note → receives error, note unchanged
+- [ ] Prefix matching works for any namespace suffix
+- [ ] Multiple `wiki-source-*` tags on one note produces a clear error
+- [ ] `flutter analyze` clean on all changed files
 
 ---
 
 ### Phase C: Wiki Workflow Contract (P1)
 
-#### Task C1: Define Wiki Schema Artifact
+#### Task C0: Tag-Associated Workflow Bindings (Platform Mechanism)
 
-**Goal**: Write the canonical schema document that defines terminology, tag conventions, compiled note structure, provenance rules, and contradiction handling. This is a markdown artifact, not code.
+**Goal**: Extend the existing tag-associated prompt concept (`getTagExtractionPrompt`) into a general tag-to-workflow binding mechanism. This is the platform layer that makes wiki ingest (and future tag-driven workflows) discoverable and triggerable from tags, not just manual skill invocation.
+
+**UX change**: A tag can optionally bind to a skill note. When a note is processed (via ingestion, agent launch, or a future trigger), the system checks its tags for workflow bindings and executes the bound skill with the matched tag as context.
+
+**Workflow change**: Tags gain an optional `workflow_skill_id` alongside the existing `extraction_prompt`. Resolution rules:
+
+1. **Exact match first**: tag `wiki-source-ml` → its specific workflow binding
+2. **Prefix match fallback**: tag `wiki-source-ml` matches a prefix rule `wiki-source-*` → bound skill
+3. **Disambiguation**: if multiple `wiki-source-*` tags on one note, fail fast with an error asking the user to disambiguate
+4. **Context passing**: the bound workflow receives the matched tag string as execution context, so the skill knows which namespace to operate in
+
+**Files changed**:
+- `lib/services/database_service.dart` — add `workflow_skill_id` column to tags table (or a new `tag_workflows` table)
+- `lib/services/skill_service.dart` — add `resolveTagWorkflow(List<String> tags)` method with prefix matching
+- `lib/utils/wiki_tag_utils.dart` (new) — `getWikiSourceNamespace(tags)`, `hasWikiSourceTag(tags)`, `isWikiSourceTag(tag)` helpers
+
+**Design constraints**:
+- One workflow per tag (not many-to-many)
+- Prefix-match support for tag families (e.g., `wiki-source-*` all bind to the same skill)
+- Workflow receives the matched tag string, not just the skill — the tag carries the namespace
+- This is a platform mechanism, not wiki-specific: any tag prefix can bind to any skill
+
+**Validation method**: Unit tests.
+
+**Tests and expected outcomes**:
+
+| Test | Expected Outcome |
+|------|-----------------|
+| `resolveTagWorkflow(['wiki-source-ml'])` with prefix rule `wiki-source-*` → skill-id | Returns `(skillId: 'ingest-skill', matchedTag: 'wiki-source-ml', namespace: 'ml')` |
+| `resolveTagWorkflow(['regular-tag', 'wiki-source-ai'])` | Returns match for `wiki-source-ai` |
+| `resolveTagWorkflow(['wiki-source-ml', 'wiki-source-ai'])` | Returns error: ambiguous — multiple wiki-source tags |
+| `resolveTagWorkflow(['no-workflow-tags'])` | Returns null |
+| `getWikiSourceNamespace(['wiki-source-ml'])` | Returns `'ml'` |
+| `getWikiSourceNamespace(['regular'])` | Returns `null` |
+| `isWikiSourceTag('wiki-source-ml')` | Returns `true` |
+| `isWikiSourceTag('wiki-compiled-ml')` | Returns `false` |
+
+**Acceptance criteria**:
+- [ ] All tests pass
+- [ ] Prefix matching works for any namespace suffix after `wiki-source-`
+- [ ] Resolution is deterministic (exact match > prefix match)
+- [ ] Ambiguous multiple matches produce a clear error
+
+#### Task C1: Define Wiki Schema Artifact (Namespace-Aware)
+
+**Goal**: Write the canonical schema document that defines terminology, namespaced tag conventions, compiled note structure, provenance rules, and contradiction handling.
 
 **UX change**: None — this is a spec document.
 
@@ -501,61 +567,70 @@ Terminology: "wiki pages are regular notes" throughout. Each task specifies UX c
 **Deliverable**: `docs/wiki-schema.md` (or a note template that can be imported).
 
 **Content requirements**:
-1. **Terminology**: source note, compiled note, wiki workspace, schema skill
-2. **Tag conventions**: `wiki-source`, `wiki-compiled`, `wiki-index`, `wiki-log`, `wiki-entity`, `wiki-topic`, `wiki-synthesis`
-3. **Compiled note required structure**: each compiled note must have:
-   - `> [!SUMMARY]` block (first line, for `read_note mode='summary'`)
-   - `## Sources` section listing source note IDs/titles
-   - `## Claims` section with explicit provenance per claim
-   - `## See Also` section with note links to related compiled notes
-4. **Provenance rules**: every claim must link to a source note or source-linked compiled note. Unverifiable claims marked with `[unverified]`.
-5. **Contradiction handling**: conflicting claims from different sources represented explicitly with both versions and source attribution, not collapsed silently.
-6. **Source immutability**: notes tagged `wiki-source` must never have content/title modified by ingest workflows. Enforced by Task B5's write guard in `NoteModificationService` — not just a convention.
+1. **Terminology**: source note, compiled note, wiki workspace (= a namespace), schema skill
+2. **Namespace model**: Each wiki workspace has a namespace (e.g., `ml`, `harry-potter`). All tags carry the namespace suffix.
+3. **Tag conventions** (all namespaced):
+   - `wiki-source-<ns>` — immutable raw material in namespace `<ns>`
+   - `wiki-compiled-<ns>` — LLM-generated content in namespace `<ns>`
+   - `wiki-index-<ns>` — index note (exactly one per namespace)
+   - `wiki-log-<ns>` — log note (exactly one per namespace)
+   - `wiki-entity-<ns>` — entity page in namespace
+   - `wiki-topic-<ns>` — topic page in namespace
+   - `wiki-synthesis-<ns>` — query-derived synthesis in namespace
+4. **No generic `wiki-source` tag**: there is no flat tag. Source identity always includes namespace.
+5. **Compiled note required structure**: same as before (summary, sources, claims, see also)
+6. **Provenance rules**: every claim must link to a source note or source-linked compiled note
+7. **Contradiction handling**: conflicting claims preserved with explicit attribution
+8. **Source immutability**: notes with any `wiki-source-*` tag cannot have content/title modified by agent tools. Enforced by prefix-aware guard in `NoteModificationService`.
+9. **Cross-namespace rules**: a compiled note in namespace A can reference a source from namespace B, but the compiled note carries only its own namespace tag. Cross-namespace references are explicit in `## Sources`.
 
 **Validation method**: Human review.
 
 **Acceptance criteria**:
-- [ ] A reader unfamiliar with the project can read the schema and understand how to create/maintain a wiki workspace
-- [ ] The schema can be followed manually (no skill or code needed) using existing tools
-- [ ] Two people following the schema independently would produce structurally similar compiled notes
+- [ ] A reader can understand how multiple independent wikis coexist
+- [ ] The schema can be followed manually using existing tools
+- [ ] Two agents following the schema independently would produce structurally similar notes
+- [ ] No flat `wiki-source` or `wiki-compiled` tags appear anywhere in the schema
 
-#### Task C2: Define Workflow UX Spec
+#### Task C2: Define Workflow UX Spec (Namespace + Tag-Triggered)
 
-**Goal**: Document the four user-visible operations (bootstrap, ingest, query filing, lint) against existing product surfaces.
+**Goal**: Document the four user-visible operations against existing product surfaces, using namespaced tags and tag-to-workflow bindings as the trigger mechanism.
 
-**UX change**: None — this is a spec. But it must reference only existing UI surfaces.
+**UX change**: Ingest is triggered by tag-to-workflow binding, not manual skill invocation. The user tags a note `wiki-source-<ns>` and the system resolves the bound workflow.
 
-**Workflow change**: Establishes the entry points, expected outputs, and persistence paths for each operation.
+**Workflow change**: Entry points are tag-driven. Each operation is scoped to a namespace.
 
 **Deliverable**: `docs/wiki-workflow-ux.md`
 
 **Content requirements**:
 
 **Bootstrap**:
-- Entry point: user runs agent with "Wiki Bootstrap" skill or creates notes manually
-- Creates: `Wiki Index` note (tagged `wiki-index`), `Wiki Log` note (tagged `wiki-log`), schema reference note
-- User distinguishes workspace from ordinary notes by the tag prefix `wiki-`
+- Entry point: user runs agent with "Wiki Bootstrap" skill, providing a namespace name
+- Creates: `Wiki Index: <Namespace>` note (tagged `wiki-index-<ns>`, `wiki-compiled-<ns>`) and `Wiki Log: <Namespace>` note (tagged `wiki-log-<ns>`, `wiki-compiled-<ns>`)
+- Registers the `wiki-source-<ns>` prefix → Wiki Ingest skill binding (via tag workflow mechanism from C0)
+- User distinguishes workspaces by namespace suffix
 
 **Ingest**:
-- Entry point: user tags a note `wiki-source`, then runs agent with "Wiki Ingest" skill referencing that note
+- Entry point: user tags a note `wiki-source-<ns>`. The tag-to-workflow binding (from C0) resolves to the Wiki Ingest skill with namespace context.
+- The skill receives the matched tag (e.g., `wiki-source-ml`) and derives namespace `ml`
+- All created/updated compiled notes are scoped to namespace `ml` (tagged `wiki-compiled-ml`, `wiki-entity-ml`, etc.)
+- Index/log lookups are scoped: `search_notes tags:['wiki-index-ml']`
 - Expected output: 1+ compiled notes created/updated, index updated, log appended
-- Persistence: all via `modify_note` (append for log/index) and `create_notes`
 
 **Query filing**:
-- Entry point: user asks a question in chat with wiki skills enabled
-- Filing decision: agent tells user when a synthesis is substantial enough to file
-- Persistence path: user uses existing `Add to Note` → `AddNoteDialog` → append to existing compiled note or create new synthesis note (tagged `wiki-synthesis`)
-- Conversation tree consolidation for multi-turn syntheses
+- Entry point: user asks a question in chat. If wiki skills are enabled, the agent searches compiled notes.
+- Namespace scoping: if user specifies a namespace ("ask the ML wiki"), search `wiki-compiled-ml`. If unspecified, search all `wiki-compiled-*` notes.
+- Filing: user uses existing `Add to Note` → tags result `wiki-compiled-<ns>`, `wiki-synthesis-<ns>`
 
 **Lint**:
-- Entry point: user runs agent with "Wiki Lint" skill
-- Output: `Wiki Lint Report` note listing orphans, stale claims, uncited content, contradiction candidates
-- Direct fixes: lint can update compiled notes to add missing `See Also` links or mark stale claims. Structural changes (delete, merge) require user confirmation.
+- Entry point: user runs agent with "Wiki Lint" skill, specifying namespace
+- All checks scoped to that namespace's tags
+- Output: lint report note
 
 **Validation method**: Human review + trace through existing UI.
 
 **Acceptance criteria**:
-- [ ] Each operation maps to an existing entry point (agent launch, chat, Add to Note dialog)
+- [ ] Ingest entry point is a tag-to-workflow binding, not "remember to run the right skill"
 - [ ] No operation requires a new product surface
 - [ ] A user can execute each flow manually today using existing tools
 
@@ -679,17 +754,19 @@ Terminology: "wiki pages are regular notes" throughout. Each task specifies UX c
 
 ### Phase E: Wiki Skill Pack + Pilot (P1 — after Phases A-C; can overlap with Phase D)
 
-#### Task E1: Wiki Bootstrap Skill
+#### Task E1: Wiki Bootstrap Skill (Namespace-Aware)
 
-**Goal**: A skill note that guides the agent to set up a wiki workspace from scratch.
+**Goal**: A skill note that guides the agent to set up a namespaced wiki workspace.
 
-**UX change**: User creates a note tagged `agent-skill` with the bootstrap skill content. Then runs the agent with an objective like "Set up a wiki workspace for [domain]."
+**UX change**: User creates a note tagged `agent-skill` with the bootstrap skill content. Then runs the agent with an objective like "Set up a wiki workspace for machine learning" — the agent derives namespace `ml` and creates namespaced notes.
 
 **Workflow change**: Agent follows the skill to:
-1. Create `Wiki Index` note (tagged `wiki-index`)
-2. Create `Wiki Log` note (tagged `wiki-log`)
-3. Verify/apply tag conventions from the schema (Task C1)
-4. Append bootstrap entry to log
+1. Ask user for domain name and derive namespace (e.g., "Machine Learning" → `ml`)
+2. Check for existing `wiki-index-<ns>` note to avoid duplicates
+3. Create `Wiki Index: <Domain>` note (tagged `wiki-index-<ns>`, `wiki-compiled-<ns>`)
+4. Create `Wiki Log: <Domain>` note (tagged `wiki-log-<ns>`, `wiki-compiled-<ns>`)
+5. Register the `wiki-source-<ns>` tag prefix → Wiki Ingest skill binding (via C0 mechanism)
+6. Append bootstrap entry to log
 
 **Deliverable**: Skill note content (markdown with YAML frontmatter).
 
@@ -698,23 +775,24 @@ Terminology: "wiki pages are regular notes" throughout. Each task specifies UX c
 **Expected behavior (app test)**:
 1. User creates a note with skill frontmatter and tags it `agent-skill`
 2. User starts agent with objective "Bootstrap a wiki workspace for machine learning"
-3. Agent loads the bootstrap skill
-4. Agent creates Index and Log notes with correct tags
+3. Agent derives namespace `ml`, loads the bootstrap skill
+4. Agent creates Index (tagged `wiki-index-ml`) and Log (tagged `wiki-log-ml`) notes
 5. Log note contains a timestamped bootstrap entry
 6. Index note has the correct structure per schema
 
 **Acceptance criteria**:
-- [ ] After agent completes, `search_notes` with tag `wiki-index` returns exactly 1 note
-- [ ] After agent completes, `search_notes` with tag `wiki-log` returns exactly 1 note
+- [ ] After agent completes, `search_notes` with tag `wiki-index-ml` returns exactly 1 note
+- [ ] After agent completes, `search_notes` with tag `wiki-log-ml` returns exactly 1 note
 - [ ] Index note has `> [!SUMMARY]` block
 - [ ] Log note has at least one timestamped entry
 - [ ] Agent did not modify any existing notes
+- [ ] No flat `wiki-index` or `wiki-log` tags created
 
-#### Task E2: Wiki Ingest Skill
+#### Task E2: Wiki Ingest Skill (Namespace-Aware)
 
-**Goal**: A skill that processes one source note into compiled note updates.
+**Goal**: A skill that processes one source note into compiled note updates within a namespace.
 
-**UX change**: User tags a note `wiki-source`, then runs agent with "Ingest [note title] into the wiki."
+**UX change**: User tags a note `wiki-source-<ns>`. The tag-to-workflow binding triggers ingest. The skill receives the matched tag and derives namespace from it.
 
 **Workflow change**: Agent follows the skill to:
 1. Read the source note (using progressive discovery: stat → toc → lines/pdf_text)
@@ -733,66 +811,68 @@ Terminology: "wiki pages are regular notes" throughout. Each task specifies UX c
 **Validation method**: Run agent on a prepared source note.
 
 **Expected behavior (app test)**:
-1. Prepare a 500-word source note about "Transformer Architecture" tagged `wiki-source`
-2. Run agent with ingest skill
-3. Agent creates compiled notes for identified entities (e.g., "Attention Mechanism", "Positional Encoding")
+1. Prepare a 500-word source note about "Transformer Architecture" tagged `wiki-source-ml`
+2. Tag triggers ingest via tag-to-workflow binding (or run agent with ingest skill + namespace context)
+3. Agent creates compiled notes tagged `wiki-compiled-ml`, `wiki-entity-ml` for identified entities
 4. Each compiled note has correct structure per schema
 5. Relationships created from source to compiled notes
-6. Index updated with new entries
-7. Log has ingest entry
+6. Index (`wiki-index-ml`) updated with new entries
+7. Log (`wiki-log-ml`) has ingest entry
 
 **Acceptance criteria**:
 - [ ] Source note unchanged after ingest
-- [ ] At least 2 compiled notes created with correct tags and structure
+- [ ] At least 2 compiled notes created with correct namespaced tags
 - [ ] Each compiled note's `## Sources` section references the source note
-- [ ] Index note updated with new compiled note entries
-- [ ] Log note has timestamped ingest entry
-- [ ] Relationships exist between source and compiled notes (verifiable via `manage_relationships action='list'`)
+- [ ] Namespace-scoped index note updated
+- [ ] Namespace-scoped log note has timestamped ingest entry
+- [ ] Relationships exist between source and compiled notes
 - [ ] On 16K model: agent completes at least 1 entity without context exhaustion
+- [ ] No flat `wiki-compiled` or `wiki-entity` tags created (all carry namespace)
 
-#### Task E3: Wiki Lint Skill
+#### Task E3: Wiki Lint Skill (Namespace-Scoped)
 
-**Goal**: A skill that audits wiki health.
+**Goal**: A skill that audits wiki health within a specific namespace.
 
-**UX change**: User runs agent with "Lint the wiki workspace."
+**UX change**: User runs agent with "Lint the ML wiki workspace" — agent derives namespace `ml` and scopes all checks to `wiki-*-ml` tags.
 
 **Workflow change**: Agent follows the skill to:
-1. Read the index note
-2. For each compiled note: check staleness, check source references, check cross-references
-3. Find orphans (notes with wiki tags but no relationships)
-4. Find uncited claims (claims without source attribution)
-5. Write findings to a `Wiki Lint Report` note
-6. Append to log
+1. Read the namespace-scoped index note (`wiki-index-<ns>`)
+2. For each compiled note in namespace: check staleness, sources, cross-references
+3. Find orphans (notes with `wiki-compiled-<ns>` tag but no relationships)
+4. Find uncited claims
+5. Write findings to a namespace-scoped lint report note
+6. Append to namespace-scoped log
 
 **Deliverable**: Skill note content.
 
 **Validation method**: Run after Task E2's ingest, then manually introduce some issues (remove a source reference, create an orphan note).
 
 **Expected behavior (app test)**:
-1. After successful ingest, manually remove `## Sources` from one compiled note
-2. Create a note tagged `wiki-compiled` with no relationships
-3. Run lint
+1. After successful ingest in namespace `ml`, manually remove `## Sources` from one compiled note
+2. Create a note tagged `wiki-compiled-ml` with no relationships
+3. Run lint scoped to namespace `ml`
 4. Lint report identifies: 1 note missing source references, 1 orphan note
-5. Log updated
+5. Log (`wiki-log-ml`) updated
 
 **Acceptance criteria**:
-- [ ] Lint report note created with correct tag
-- [ ] Report identifies orphan notes (no relationships)
-- [ ] Report identifies compiled notes missing source references
-- [ ] Report identifies stale notes (not updated in configurable period — skill defines what "stale" means)
+- [ ] Lint report note created with correct namespaced tag
+- [ ] Report identifies orphan notes (no relationships) within the namespace
+- [ ] Report identifies compiled notes missing source references within the namespace
+- [ ] Report identifies stale notes (not updated in configurable period)
 - [ ] Lint does not modify compiled notes (report-only)
-- [ ] Log updated with lint entry
+- [ ] Namespace-scoped log updated with lint entry
+- [ ] Lint does NOT report notes from other namespaces
 
-#### Task E4: Wiki Query Skill
+#### Task E4: Wiki Query Skill (Namespace-Aware)
 
-**Goal**: A skill that answers questions from compiled notes first, cites sources, and tells the user when to file the result.
+**Goal**: A skill that answers questions from compiled notes, scoped by namespace when specified, cites sources, and tells the user when to file.
 
-**UX change**: User asks a question in chat with wiki skills enabled.
+**UX change**: User asks a question in chat with wiki skills enabled. Can optionally specify namespace ("ask the ML wiki").
 
 **Workflow change**: Agent follows the skill to:
-1. Search compiled notes first (not raw sources)
+1. Search compiled notes first — scoped to `wiki-compiled-<ns>` if namespace specified, all `wiki-compiled-*` otherwise
 2. Synthesize answer with citations to compiled notes and their sources
-3. If answer is substantial, suggest: "This synthesis may be worth filing. Use 'Add to Note' to save it as a compiled note tagged `wiki-synthesis`."
+3. If answer is substantial, suggest filing with namespaced tags: `wiki-compiled-<ns>`, `wiki-synthesis-<ns>`
 
 **Deliverable**: Skill note content.
 
@@ -821,13 +901,13 @@ Terminology: "wiki pages are regular notes" throughout. Each task specifies UX c
 **Validation method**: Manual execution with documented observations.
 
 **Pilot spec**:
-1. Domain: pick one (e.g., "Machine Learning Fundamentals" or user's choice)
-2. 5 source notes, each 300-800 words
-3. Run bootstrap once
-4. Run ingest for each source note sequentially
-5. Run 5 representative queries
-6. File at least 2 answers back using Add to Note
-7. Run lint
+1. Domain: "Machine Learning Fundamentals" → namespace `ml`
+2. 5 source notes, each 300-800 words, tagged `wiki-source-ml`
+3. Run bootstrap once → creates `wiki-index-ml`, `wiki-log-ml`
+4. Tag each source note `wiki-source-ml` → tag-to-workflow binding triggers ingest
+5. Run 5 representative queries scoped to namespace `ml`
+6. File at least 2 answers back using Add to Note (tagged `wiki-synthesis-ml`)
+7. Run lint scoped to namespace `ml`
 8. Document: what worked, what broke, what was awkward
 
 **Acceptance criteria**:
@@ -836,6 +916,8 @@ Terminology: "wiki pages are regular notes" throughout. Each task specifies UX c
 - [ ] All source notes unchanged
 - [ ] Existing `Add to Note` and tree-save surfaces are sufficient for filing
 - [ ] Lint identifies real issues (not just noise)
+- [ ] All notes carry namespace-scoped tags (no flat `wiki-source`/`wiki-compiled`)
+- [ ] Tag-to-workflow binding triggers ingest without user remembering skill name
 - [ ] On cloud model: full ingest completes in one session per source
 - [ ] On local model (if tested): at least micro-ingest completes per source
 
@@ -871,11 +953,12 @@ Phase B (P1): Critical Tool Gaps
   B2: read_note mode='pdf_text'
   B3: read_note mode='image'
   B4: Relationship deletion/listing ergonomics (modify_note link.removed)
-  B5: Source immutability enforcement (wiki-source write guard)
+  B5: Source immutability enforcement (prefix-aware: wiki-source-* tags)
 
 Phase C (P1): Wiki Workflow Contract
-  C1: Wiki schema artifact
-  C2: Workflow UX spec
+  C0: Tag-associated workflow bindings (platform mechanism)   ← NEW
+  C1: Wiki schema artifact (namespace-aware)
+  C2: Workflow UX spec (namespace + tag-triggered)
 
 Phase D (P2): Token-Aware Infrastructure      ← can overlap with C/E
   D1: Tiered skill index
@@ -884,11 +967,11 @@ Phase D (P2): Token-Aware Infrastructure      ← can overlap with C/E
   D4: min_context frontmatter field
 
 Phase E (P1): Wiki Skill Pack + Pilot         ← after A, B, C complete
-  E1: Wiki Bootstrap skill
-  E2: Wiki Ingest skill
-  E3: Wiki Lint skill
-  E4: Wiki Query skill
-  E5: Fixed pilot corpus
+  E1: Wiki Bootstrap skill (namespace-aware)
+  E2: Wiki Ingest skill (namespace-aware, tag-triggered)
+  E3: Wiki Lint skill (namespace-scoped)
+  E4: Wiki Query skill (namespace-aware)
+  E5: Fixed pilot corpus (namespace: ml)
 
 Phase F (P3): Proven Gaps Only                ← after pilot
   (see table above)
@@ -896,6 +979,8 @@ Phase F (P3): Proven Gaps Only                ← after pilot
 
 **Critical path**: A → B → C → E → (evaluate) → F
 **Parallel track**: D runs alongside C and E
+
+**Key architectural change**: All wiki tags are namespaced (`wiki-source-<ns>`, `wiki-compiled-<ns>`, etc.). There is no flat `wiki-source` tag. Multiple independent wiki workspaces coexist without collision. Ingest is triggered by tag-to-workflow binding, not manual skill invocation.
 
 ### Execution Plans
 

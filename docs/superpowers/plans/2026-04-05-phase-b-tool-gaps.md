@@ -421,16 +421,179 @@ wiki lint to clean up stale cross-references."
 
 ---
 
-### Task 3: Source Immutability Enforcement (B5)
+### Task 3: Source Immutability Enforcement — Prefix-Aware (B5)
 
 **Files:**
-- Modify: `lib/services/note_modification_service.dart:20-32` — add wiki-source guard
-- Modify: `lib/services/content_ingestion_service.dart:166-172` — redirect output for wiki-source
+- Create: `lib/utils/wiki_tag_utils.dart` — prefix matching and namespace extraction
+- Modify: `lib/services/note_modification_service.dart:20-32` — add prefix-aware wiki-source guard
+- Modify: `lib/services/content_ingestion_service.dart:166-172` — redirect output for wiki-source-* notes
+- Create: `test/wiki_tag_utils_test.dart`
 - Create: `test/source_immutability_test.dart`
 
-Notes tagged `wiki-source` must not have their content or title modified by agent tools or content ingestion. Tags, links, and attachments are still allowed (so the note can be organized).
+Notes with any `wiki-source-*` tag must not have their content or title modified by agent tools. There is no flat `wiki-source` tag — all source tags carry a namespace suffix (e.g., `wiki-source-ml`, `wiki-source-harry-potter`). Multiple `wiki-source-*` tags on one note is an error.
 
-- [ ] **Step 1: Write the failing test for applyModifications guard**
+- [ ] **Step 1: Write the wiki_tag_utils tests**
+
+```dart
+// test/wiki_tag_utils_test.dart
+import 'package:flutter_test/flutter_test.dart';
+import 'package:note_synapse/utils/wiki_tag_utils.dart';
+
+void main() {
+  group('isWikiSourceTag', () {
+    test('matches wiki-source-ml', () {
+      expect(WikiTagUtils.isWikiSourceTag('wiki-source-ml'), isTrue);
+    });
+
+    test('matches wiki-source-harry-potter', () {
+      expect(WikiTagUtils.isWikiSourceTag('wiki-source-harry-potter'), isTrue);
+    });
+
+    test('rejects flat wiki-source (no namespace)', () {
+      expect(WikiTagUtils.isWikiSourceTag('wiki-source'), isFalse);
+    });
+
+    test('rejects wiki-compiled-ml', () {
+      expect(WikiTagUtils.isWikiSourceTag('wiki-compiled-ml'), isFalse);
+    });
+
+    test('rejects unrelated tags', () {
+      expect(WikiTagUtils.isWikiSourceTag('machine-learning'), isFalse);
+    });
+  });
+
+  group('getWikiSourceNamespace', () {
+    test('extracts namespace from single wiki-source tag', () {
+      final result = WikiTagUtils.getWikiSourceNamespace(['wiki-source-ml', 'other-tag']);
+      expect(result, 'ml');
+    });
+
+    test('extracts multi-word namespace', () {
+      final result = WikiTagUtils.getWikiSourceNamespace(['wiki-source-harry-potter']);
+      expect(result, 'harry-potter');
+    });
+
+    test('returns null when no wiki-source tag present', () {
+      final result = WikiTagUtils.getWikiSourceNamespace(['regular', 'wiki-compiled-ml']);
+      expect(result, isNull);
+    });
+
+    test('returns null for empty tags', () {
+      expect(WikiTagUtils.getWikiSourceNamespace([]), isNull);
+    });
+  });
+
+  group('getWikiSourceNamespaceStrict', () {
+    test('returns namespace for single wiki-source tag', () {
+      final result = WikiTagUtils.getWikiSourceNamespaceStrict(['wiki-source-ml']);
+      expect(result, 'ml');
+    });
+
+    test('throws on multiple wiki-source tags (ambiguous)', () {
+      expect(
+        () => WikiTagUtils.getWikiSourceNamespaceStrict(
+          ['wiki-source-ml', 'wiki-source-ai']),
+        throwsA(isA<Exception>().having(
+          (e) => e.toString(), 'message', contains('ambiguous'))),
+      );
+    });
+  });
+
+  group('hasWikiSourceTag', () {
+    test('true when wiki-source-* present', () {
+      expect(WikiTagUtils.hasWikiSourceTag(['wiki-source-ml', 'other']), isTrue);
+    });
+
+    test('false when no wiki-source-* present', () {
+      expect(WikiTagUtils.hasWikiSourceTag(['wiki-compiled-ml', 'other']), isFalse);
+    });
+  });
+
+  group('compiledTagForNamespace', () {
+    test('generates wiki-compiled-ml', () {
+      expect(WikiTagUtils.compiledTagForNamespace('ml'), 'wiki-compiled-ml');
+    });
+  });
+}
+```
+
+- [ ] **Step 2: Implement wiki_tag_utils.dart**
+
+```dart
+// lib/utils/wiki_tag_utils.dart
+
+/// Utilities for wiki namespaced tag operations.
+/// Wiki tags follow the pattern: wiki-<role>-<namespace>
+/// e.g., wiki-source-ml, wiki-compiled-harry-potter
+class WikiTagUtils {
+  static const String _sourcePrefix = 'wiki-source-';
+
+  /// Returns true if the tag is a wiki-source tag with a namespace.
+  /// Rejects bare 'wiki-source' (no namespace).
+  static bool isWikiSourceTag(String tag) {
+    return tag.startsWith(_sourcePrefix) && tag.length > _sourcePrefix.length;
+  }
+
+  /// Returns true if any tag in the list is a wiki-source-* tag.
+  static bool hasWikiSourceTag(List<String> tags) {
+    return tags.any(isWikiSourceTag);
+  }
+
+  /// Extracts the namespace from the first wiki-source-* tag found.
+  /// Returns null if no wiki-source tag is present.
+  static String? getWikiSourceNamespace(List<String> tags) {
+    for (final tag in tags) {
+      if (isWikiSourceTag(tag)) {
+        return tag.substring(_sourcePrefix.length);
+      }
+    }
+    return null;
+  }
+
+  /// Like getWikiSourceNamespace, but throws if multiple wiki-source-* tags
+  /// are present (ambiguous namespace).
+  static String? getWikiSourceNamespaceStrict(List<String> tags) {
+    final sourceTags = tags.where(isWikiSourceTag).toList();
+    if (sourceTags.isEmpty) return null;
+    if (sourceTags.length > 1) {
+      throw Exception(
+        'Ambiguous wiki namespace: note has multiple wiki-source tags '
+        '(${sourceTags.join(", ")}). Remove all but one.',
+      );
+    }
+    return sourceTags.first.substring(_sourcePrefix.length);
+  }
+
+  /// Returns the wiki-compiled tag for a namespace.
+  static String compiledTagForNamespace(String namespace) =>
+      'wiki-compiled-$namespace';
+
+  /// Returns the wiki-index tag for a namespace.
+  static String indexTagForNamespace(String namespace) =>
+      'wiki-index-$namespace';
+
+  /// Returns the wiki-log tag for a namespace.
+  static String logTagForNamespace(String namespace) =>
+      'wiki-log-$namespace';
+}
+```
+
+- [ ] **Step 3: Run wiki_tag_utils tests**
+
+Run: `flutter test test/wiki_tag_utils_test.dart -v`
+Expected: All tests pass.
+
+- [ ] **Step 4: Commit wiki_tag_utils**
+
+```bash
+git add lib/utils/wiki_tag_utils.dart test/wiki_tag_utils_test.dart
+git commit -m "feat: add WikiTagUtils for prefix-aware wiki tag operations
+
+Supports wiki-source-<namespace> pattern with strict disambiguation
+when multiple source tags are present."
+```
+
+- [ ] **Step 5: Write the source immutability test (prefix-aware)**
 
 ```dart
 // test/source_immutability_test.dart
@@ -449,16 +612,40 @@ void main() {
   late MockDatabaseService mockDb;
   late NoteModificationService service;
 
-  final sourceNote = Note(
+  final sourceNoteMl = Note(
     id: 'source-1',
     title: 'Original Title',
-    content: 'Original content that must not change.',
+    content: 'Original content.',
     type: NoteType.note,
     createdAt: DateTime.now(),
     updatedAt: DateTime.now(),
     subNotes: [],
-    tags: ['wiki-source', 'machine-learning'],
+    tags: ['wiki-source-ml', 'machine-learning'],
     attachmentPaths: ['doc.pdf'],
+  );
+
+  final sourceNoteHp = Note(
+    id: 'source-2',
+    title: 'HP Source',
+    content: 'Harry Potter content.',
+    type: NoteType.note,
+    createdAt: DateTime.now(),
+    updatedAt: DateTime.now(),
+    subNotes: [],
+    tags: ['wiki-source-harry-potter'],
+    attachmentPaths: [],
+  );
+
+  final ambiguousNote = Note(
+    id: 'source-3',
+    title: 'Ambiguous',
+    content: 'Content.',
+    type: NoteType.note,
+    createdAt: DateTime.now(),
+    updatedAt: DateTime.now(),
+    subNotes: [],
+    tags: ['wiki-source-ml', 'wiki-source-ai'],
+    attachmentPaths: [],
   );
 
   final regularNote = Note(
@@ -469,7 +656,7 @@ void main() {
     createdAt: DateTime.now(),
     updatedAt: DateTime.now(),
     subNotes: [],
-    tags: ['wiki-compiled'],
+    tags: ['wiki-compiled-ml'],
     attachmentPaths: [],
   );
 
@@ -480,39 +667,33 @@ void main() {
     service = NoteModificationService(mockDb);
   });
 
-  group('wiki-source content immutability', () {
-    test('rejects content modification on wiki-source note', () async {
-      when(mockDb.getNoteById('source-1')).thenAnswer((_) async => sourceNote);
+  group('prefix-aware wiki-source immutability', () {
+    test('rejects content modification on wiki-source-ml note', () async {
+      when(mockDb.getNoteById('source-1')).thenAnswer((_) async => sourceNoteMl);
 
       expect(
         () => service.applyModifications('source-1', {
-          'content': {'action': 'append', 'text': 'Appended text'},
+          'content': {'action': 'append', 'text': 'Appended'},
         }),
         throwsA(isA<Exception>().having(
-          (e) => e.toString(),
-          'message',
-          contains('wiki-source'),
-        )),
+          (e) => e.toString(), 'message', contains('wiki-source'))),
       );
     });
 
-    test('rejects title modification on wiki-source note', () async {
-      when(mockDb.getNoteById('source-1')).thenAnswer((_) async => sourceNote);
+    test('rejects title modification on wiki-source-harry-potter note', () async {
+      when(mockDb.getNoteById('source-2')).thenAnswer((_) async => sourceNoteHp);
 
       expect(
-        () => service.applyModifications('source-1', {
-          'title': {'new_title': 'Changed Title'},
+        () => service.applyModifications('source-2', {
+          'title': {'new_title': 'Changed'},
         }),
         throwsA(isA<Exception>().having(
-          (e) => e.toString(),
-          'message',
-          contains('wiki-source'),
-        )),
+          (e) => e.toString(), 'message', contains('wiki-source'))),
       );
     });
 
-    test('allows tag modification on wiki-source note', () async {
-      when(mockDb.getNoteById('source-1')).thenAnswer((_) async => sourceNote);
+    test('allows tag modification on wiki-source-ml note', () async {
+      when(mockDb.getNoteById('source-1')).thenAnswer((_) async => sourceNoteMl);
       when(mockDb.updateNote(any)).thenAnswer((_) async {});
 
       final result = await service.applyModifications('source-1', {
@@ -520,18 +701,15 @@ void main() {
       });
 
       expect(result.tags, contains('reviewed'));
-      verify(mockDb.updateNote(any)).called(1);
     });
 
-    test('allows link creation on wiki-source note', () async {
-      when(mockDb.getNoteById('source-1')).thenAnswer((_) async => sourceNote);
+    test('allows link creation on wiki-source-ml note', () async {
+      when(mockDb.getNoteById('source-1')).thenAnswer((_) async => sourceNoteMl);
       when(mockDb.updateNote(any)).thenAnswer((_) async {});
       when(mockDb.insertRelationship(any)).thenAnswer((_) async {});
 
       await service.applyModifications('source-1', {
-        'link': [
-          {'relation': 'related', 'target': 'other-note'},
-        ],
+        'link': [{'relation': 'related', 'target': 'other'}],
       });
 
       verify(mockDb.insertRelationship(any)).called(1);
@@ -547,27 +725,44 @@ void main() {
 
       expect(result.content, contains('New text'));
     });
+
+    test('rejects modification when multiple wiki-source tags (ambiguous)', () async {
+      when(mockDb.getNoteById('source-3')).thenAnswer((_) async => ambiguousNote);
+
+      expect(
+        () => service.applyModifications('source-3', {
+          'content': {'action': 'append', 'text': 'text'},
+        }),
+        throwsA(isA<Exception>().having(
+          (e) => e.toString(), 'message', contains('ambiguous'))),
+      );
+    });
   });
 }
 ```
 
-- [ ] **Step 2: Generate mocks and run to verify failing**
+- [ ] **Step 6: Generate mocks and run to verify failing**
 
 Run: `dart run build_runner build --delete-conflicting-outputs && flutter test test/source_immutability_test.dart -v`
-Expected: Tests fail — no wiki-source guard exists yet.
+Expected: Tests fail — no prefix-aware guard exists yet.
 
-- [ ] **Step 3: Add the wiki-source guard to `applyModifications`**
+- [ ] **Step 7: Add the prefix-aware guard to `applyModifications`**
 
-In `lib/services/note_modification_service.dart`, add the guard after the note fetch (after line 32):
+In `lib/services/note_modification_service.dart`, add import and guard after the note fetch (after line 32):
 
 ```dart
-    final note = await _db.getNoteById(noteId);
-    if (note == null) {
-      throw Exception('Note not found: $noteId');
-    }
+import '../utils/wiki_tag_utils.dart';
+```
 
-    // Wiki-source immutability guard: reject content and title modifications
-    if (note.tags.contains('wiki-source')) {
+Then in `applyModifications`, after `if (note == null)` check:
+
+```dart
+    // Wiki-source immutability guard (prefix-aware)
+    // Any tag matching wiki-source-* triggers protection
+    if (WikiTagUtils.hasWikiSourceTag(note.tags)) {
+      // Also check for ambiguous multiple wiki-source tags
+      WikiTagUtils.getWikiSourceNamespaceStrict(note.tags);
+
       final hasContentMod = modifications.containsKey('content') &&
           (modifications['content'] as Map<String, dynamic>)['action'] != 'no-op';
       final hasTitleMod = modifications.containsKey('title');
@@ -580,34 +775,38 @@ In `lib/services/note_modification_service.dart`, add the guard after the note f
         );
       }
     }
-
-    Note updatedNote = note;
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 8: Run tests to verify they pass**
 
 Run: `flutter test test/source_immutability_test.dart -v`
 Expected: All tests pass.
 
-- [ ] **Step 5: Run full test suite**
+- [ ] **Step 9: Run full test suite**
 
 Run: `flutter test`
 Expected: No regressions.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add lib/services/note_modification_service.dart test/source_immutability_test.dart test/source_immutability_test.mocks.dart
-git commit -m "feat: enforce wiki-source note immutability (Phase B5)
+git commit -m "feat: prefix-aware wiki-source immutability enforcement (Phase B5)
 
-Notes tagged wiki-source now reject content and title modifications
-via applyModifications(). Tags, links, and attachments still allowed.
-Prevents agent tools from silently destroying source provenance."
+Notes with any wiki-source-* tag reject content/title modifications.
+Uses WikiTagUtils prefix matching — supports multiple namespaces.
+Multiple wiki-source-* tags on one note produces an ambiguity error."
 ```
 
-- [ ] **Step 7: Add ContentIngestionService redirect for wiki-source (optional — can defer)**
+- [ ] **Step 11: Add ContentIngestionService redirect for wiki-source-* notes**
 
-This change makes `ContentIngestionService` write extracted content to a new compiled note instead of back into the source note. Read `content_ingestion_service.dart:166-172` and modify:
+In `lib/services/content_ingestion_service.dart`, add import and modify the write-back logic:
+
+```dart
+import '../utils/wiki_tag_utils.dart';
+```
+
+Then at line ~166, replace the write-back block:
 
 ```dart
       if (json is Map<String, dynamic>) {
@@ -615,13 +814,13 @@ This change makes `ContentIngestionService` write extracted content to a new com
 
         final service = getIt<NoteModificationService>();
 
-        // If source is wiki-source, redirect output to a new compiled note
-        if (note.tags.contains('wiki-source')) {
-          // Create a new compiled note with the extraction results
+        // If source is wiki-source-*, redirect output to a new compiled note
+        final namespace = WikiTagUtils.getWikiSourceNamespace(note.tags);
+        if (namespace != null) {
           final compiledData = <String, dynamic>{
             'title': 'Compiled: ${note.title}',
             'content': json['content']?['text'] ?? '',
-            'tags': ['wiki-compiled'],
+            'tags': [WikiTagUtils.compiledTagForNamespace(namespace)],
             'link': [
               {'relation': 'derived_from', 'target': note.id},
             ],
@@ -635,17 +834,16 @@ This change makes `ContentIngestionService` write extracted content to a new com
       }
 ```
 
-- [ ] **Step 8: Run full test suite and commit**
+- [ ] **Step 12: Run full test suite and commit**
 
 Run: `flutter test && flutter analyze`
 
 ```bash
 git add lib/services/content_ingestion_service.dart
-git commit -m "feat: redirect content ingestion output for wiki-source notes
+git commit -m "feat: redirect content ingestion for wiki-source-* notes
 
-When processing a wiki-source note, extracted content goes to a
-new compiled note linked back to the source instead of mutating
-the source in place."
+Namespace-aware: wiki-source-ml creates wiki-compiled-ml note.
+Source note content unchanged."
 ```
 
 ---
