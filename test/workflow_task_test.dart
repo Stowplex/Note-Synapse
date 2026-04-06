@@ -10,7 +10,6 @@ import 'package:note_synapse/services/ai_service.dart';
 import 'package:note_synapse/services/context_manager_service.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/model_selector.dart';
-import 'package:note_synapse/models/workflow_binding_row.dart';
 import 'package:note_synapse/services/tag_workflow_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/services/skill_service.dart';
