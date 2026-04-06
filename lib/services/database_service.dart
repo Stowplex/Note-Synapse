@@ -2547,6 +2547,17 @@ class DatabaseService {
     );
   }
 
+  Future<void> deleteRelationshipBetween(
+      String fromNoteId, String toNoteId) async {
+    final db = await database;
+    await db.delete(
+      'relationships',
+      where:
+          '(fromNoteId = ? AND toNoteId = ?) OR (fromNoteId = ? AND toNoteId = ?)',
+      whereArgs: [fromNoteId, toNoteId, toNoteId, fromNoteId],
+    );
+  }
+
   Future<void> deleteRelationshipsForNote(String noteId) async {
     final db = await database;
     await db.delete(

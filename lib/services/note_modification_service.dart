@@ -128,8 +128,21 @@ class NoteModificationService {
 
     // 6. Links (Relationship) Modification
     if (modifications.containsKey('link')) {
-      final links = (modifications['link'] as List?) ?? [];
-      for (final link in links) {
+      final linkData = modifications['link'];
+
+      List<dynamic> addedLinks = [];
+      List<String> removedTargets = [];
+
+      if (linkData is List) {
+        // Old format: treat entire list as additions
+        addedLinks = linkData;
+      } else if (linkData is Map<String, dynamic>) {
+        addedLinks = (linkData['added'] as List?) ?? [];
+        removedTargets =
+            (linkData['removed'] as List?)?.cast<String>() ?? [];
+      }
+
+      for (final link in addedLinks) {
         if (link is Map<String, dynamic>) {
           final relationType = link['relation'] as String? ?? 'related';
           final targetId = link['target'] as String?;
@@ -146,6 +159,10 @@ class NoteModificationService {
             );
           }
         }
+      }
+
+      for (final targetId in removedTargets) {
+        await _db.deleteRelationshipBetween(updatedNote.id, targetId);
       }
     }
 

@@ -839,12 +839,32 @@ class ModifyNoteTool implements NativeTool {
             },
           },
           'link': {
-            'type': 'array',
-            'items': {
-              'type': 'object',
-              'properties': {
-                'relation': {'type': 'string'},
-                'target': {'type': 'string'},
+            'type': 'object',
+            'description': 'Add or remove relationships to other notes.',
+            'properties': {
+              'added': {
+                'type': 'array',
+                'description': 'Relationships to create.',
+                'items': {
+                  'type': 'object',
+                  'properties': {
+                    'relation': {
+                      'type': 'string',
+                      'description': 'Relationship type.',
+                    },
+                    'target': {
+                      'type': 'string',
+                      'description': 'Target note ID.',
+                    },
+                  },
+                  'required': ['relation', 'target'],
+                },
+              },
+              'removed': {
+                'type': 'array',
+                'description':
+                    'Target note IDs whose relationships should be deleted.',
+                'items': {'type': 'string'},
               },
             },
           },
