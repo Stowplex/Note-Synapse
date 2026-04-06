@@ -187,6 +187,8 @@ void main() {
 
       // Unblock
       completer.complete('<Action type="answer"><Content>Done</Content></Action>');
+      // Give the queue time to drain after unblocking
+      await Future.delayed(const Duration(milliseconds: 20));
     });
   });
 }

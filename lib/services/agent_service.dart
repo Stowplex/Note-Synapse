@@ -1520,10 +1520,15 @@ Return ONLY a valid JSON list with ALL required fields:
       matchedTag: binding.matchedTag,
     );
 
-    // Clear previous state
-    _tasks.clear();
-    _finalAnswer = null;
-    _finalMetadata = null;
+    // Save pending workflows before clearing state
+    final savedPendingWorkflows = List.of(_pendingWorkflows);
+
+    // Clear all previous state
+    clearState();
+
+    // Restore pending workflows
+    _pendingWorkflows.addAll(savedPendingWorkflows);
+
     _currentObjective = substitutedPrompt;
 
     // Create root context for the workflow
