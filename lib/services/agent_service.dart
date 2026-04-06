@@ -11,6 +11,8 @@ import '../models/context_node.dart';
 import '../models/generation_context.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/model_config.dart';
+import '../models/note.dart';
+import 'tag_workflow_service.dart';
 import 'tools/load_skill_tool.dart';
 import 'tools/note_tools.dart';
 import 'tools/read_task_result_tool.dart';
@@ -78,6 +80,12 @@ class AgentService extends ChangeNotifier {
 
   /// Cached max subtask depth from settings (loaded at execution start).
   int _cachedMaxSubtaskDepth = kMaxSubtaskDepth;
+
+  // Workflow queue (for tag-triggered workflows)
+  final List<_PendingWorkflow> _pendingWorkflows = [];
+
+  /// Number of workflows queued waiting for the agent to become free.
+  int get pendingWorkflowCount => _pendingWorkflows.length;
 
   // Pause/Resume/Stop state
   bool _isPaused = false;
@@ -190,6 +198,8 @@ class AgentService extends ChangeNotifier {
     _enabledNativeToolNames = null;
     // Reset cached settings
     _cachedMaxSubtaskDepth = kMaxSubtaskDepth;
+    // Clear workflow queue
+    _pendingWorkflows.clear();
     notifyListeners();
   }
 
@@ -1477,6 +1487,92 @@ Return ONLY a valid JSON list with ALL required fields:
     notifyListeners();
   }
 
+  /// Substitutes template variables in a workflow prompt.
+  ///
+  /// Replaces `{note_id}` with [noteId] and `{matched_tag}` with [matchedTag].
+  static String substitutePromptTemplate(
+    String template, {
+    required String noteId,
+    required String matchedTag,
+  }) {
+    return template
+        .replaceAll('{note_id}', noteId)
+        .replaceAll('{matched_tag}', matchedTag);
+  }
+
+  /// Executes a tag-triggered workflow as a single [AgentTask].
+  ///
+  /// If the agent is already running, the workflow is queued and will be
+  /// executed when the agent becomes free.
+  Future<void> runWorkflowTask({
+    required ResolvedBinding binding,
+    required Note note,
+  }) async {
+    if (_isRunning) {
+      _pendingWorkflows.add(_PendingWorkflow(binding, note));
+      notifyListeners();
+      return;
+    }
+
+    final substitutedPrompt = substitutePromptTemplate(
+      binding.prompt,
+      noteId: note.id,
+      matchedTag: binding.matchedTag,
+    );
+
+    // Clear previous state
+    _tasks.clear();
+    _finalAnswer = null;
+    _finalMetadata = null;
+    _currentObjective = substitutedPrompt;
+
+    // Create root context for the workflow
+    await _contextManager.createRootContext(
+      objective: substitutedPrompt,
+      allowedTools: getAllToolNames(),
+    );
+
+    // Create a single task for the workflow
+    final task = AgentTask(
+      id: const Uuid().v4(),
+      description: substitutedPrompt,
+      name: 'workflow_task',
+      isFinalDeliverable: true,
+      status: AgentTaskStatus.pending,
+    );
+    _tasks = [task];
+    notifyListeners();
+
+    _isRunning = true;
+    _currentThought = 'Starting workflow: ${binding.matchedTag}';
+    onProgressUpdate?.call(_currentThought!);
+    notifyListeners();
+
+    // Load cached max subtask depth from settings
+    _cachedMaxSubtaskDepth = await AgenticSettingsService.getMaxSubtaskDepth();
+
+    try {
+      await _executeLoop();
+    } catch (e) {
+      LoggerService.error('Workflow execution failure: $e');
+      _currentThought = 'Workflow error: $e';
+      onProgressUpdate?.call(_currentThought!);
+    } finally {
+      _isRunning = false;
+      onProgressUpdate?.call('Workflow completed');
+      notifyListeners();
+      _processWorkflowQueue();
+    }
+  }
+
+  /// Processes the next pending workflow in the queue, if any.
+  void _processWorkflowQueue() {
+    if (_pendingWorkflows.isEmpty || _isRunning) return;
+    final next = _pendingWorkflows.removeAt(0);
+    // Fire and forget - errors logged inside runWorkflowTask
+    runWorkflowTask(binding: next.binding, note: next.note);
+  }
+
   // _performTask moved to end of file
 
   // Intervention Methods
@@ -2549,6 +2645,12 @@ Write a focused briefing for this subtask:
       generationContext: genContext,
     );
   }
+}
+
+class _PendingWorkflow {
+  final ResolvedBinding binding;
+  final Note note;
+  _PendingWorkflow(this.binding, this.note);
 }
 
 class _UnknownTool implements NativeTool {
