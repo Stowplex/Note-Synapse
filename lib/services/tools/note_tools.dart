@@ -998,6 +998,26 @@ class CreateNotesTool implements NativeTool {
               'description': 'For tasks: current status.',
               'default': 'todo',
             },
+            'link': {
+              'type': 'array',
+              'description':
+                  'Optional relationships to other notes. Created at note-creation time.',
+              'items': {
+                'type': 'object',
+                'properties': {
+                  'relation': {
+                    'type': 'string',
+                    'description':
+                        'Relationship type (e.g., derived_from, related, references).',
+                  },
+                  'target': {
+                    'type': 'string',
+                    'description': 'The ID of the target note.',
+                  },
+                },
+                'required': ['relation', 'target'],
+              },
+            },
           },
           'required': ['title', 'content'],
         },
