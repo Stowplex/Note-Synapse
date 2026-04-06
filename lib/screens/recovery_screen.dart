@@ -681,6 +681,10 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       // Step 16: Merge note_annotations (immutable: insert-or-skip by UUID)
       await _mergeNoteAnnotations(stagingDb, migratedBackupDb);
 
+      _addImportLog('Merging tag workflow bindings...');
+      // Step 17: Merge tag_workflow_bindings (upsert by pattern primary key)
+      await _mergeTagWorkflowBindings(stagingDb, migratedBackupDb);
+
       await migratedBackupDb.close();
       await stagingDb.close();
 
@@ -811,6 +815,32 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         await stagingDb.insert('note_annotations', filteredData);
       }
       // Same UUID found → skip (immutable record, idempotent)
+    }
+  }
+
+  Future<void> _mergeTagWorkflowBindings(
+    Database stagingDb,
+    Database backupDb,
+  ) async {
+    // tag_workflow_bindings may not exist in older backups — skip gracefully
+    final tables = await backupDb.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='tag_workflow_bindings'",
+    );
+    if (tables.isEmpty) return;
+
+    final backupBindings = await backupDb.query('tag_workflow_bindings');
+
+    for (final binding in backupBindings) {
+      final filteredData = await _filterDataForTable(
+        stagingDb,
+        'tag_workflow_bindings',
+        binding,
+      );
+      await stagingDb.insert(
+        'tag_workflow_bindings',
+        filteredData,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
     }
   }
 

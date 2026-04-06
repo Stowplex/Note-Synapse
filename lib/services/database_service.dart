@@ -27,6 +27,39 @@ import '../utils/global_keys.dart';
 import '../screens/recovery_screen.dart';
 import '../models/note_annotation.dart';
 
+class WorkflowBindingRow {
+  final String pattern;
+  final bool isPrefix;
+  final String skillNoteId;
+  final String prompt;
+  final bool contentImmutable;
+
+  const WorkflowBindingRow({
+    required this.pattern,
+    required this.isPrefix,
+    required this.skillNoteId,
+    required this.prompt,
+    required this.contentImmutable,
+  });
+
+  factory WorkflowBindingRow.fromRow(Map<String, dynamic> row) =>
+      WorkflowBindingRow(
+        pattern: row['pattern'] as String,
+        isPrefix: (row['isPrefix'] as int) == 1,
+        skillNoteId: row['skillNoteId'] as String,
+        prompt: row['prompt'] as String? ?? '',
+        contentImmutable: (row['contentImmutable'] as int) == 1,
+      );
+
+  Map<String, dynamic> toMap() => {
+    'pattern': pattern,
+    'isPrefix': isPrefix ? 1 : 0,
+    'skillNoteId': skillNoteId,
+    'prompt': prompt,
+    'contentImmutable': contentImmutable ? 1 : 0,
+  };
+}
+
 class MigrationStep {
   final String description;
   final Future<void> Function(Database db, {required bool isBackupMigration})
@@ -47,7 +80,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 44; // Target schema version
+  static const int DATABASE_VERSION = 45; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -344,6 +377,16 @@ class DatabaseService {
       )
   ''';
 
+  static const String _createTagWorkflowBindingsTable = '''
+      CREATE TABLE IF NOT EXISTS tag_workflow_bindings (
+        pattern TEXT PRIMARY KEY,
+        isPrefix INTEGER NOT NULL DEFAULT 0,
+        skillNoteId TEXT NOT NULL,
+        prompt TEXT NOT NULL DEFAULT '',
+        contentImmutable INTEGER NOT NULL DEFAULT 0
+      )
+  ''';
+
   // FTS4 is universally supported on all platforms (Android, iOS, macOS, Windows, Linux)
   static const String _createNotesFtsTable = '''
       CREATE VIRTUAL TABLE notes_fts USING fts4(
@@ -598,6 +641,7 @@ class DatabaseService {
 
     // Create AI-related tables (missing in previous versions' onCreate)
     await db.execute(_createTagAiConfigsTable);
+    await db.execute(_createTagWorkflowBindingsTable);
 
     // Create FTS table and triggers
     await db.execute(_createNotesFtsTable);
@@ -857,6 +901,10 @@ class DatabaseService {
       description: 'Create note_annotations table for scratchpad annotations',
       execute: _migrateToVersion44,
     ),
+    45: MigrationStep(
+      description: 'Create tag_workflow_bindings table for tag-to-workflow binding infrastructure',
+      execute: _migrateToVersion45,
+    ),
   };
 
   static Future<void> _migrateToVersion43(
@@ -932,6 +980,13 @@ class DatabaseService {
     required bool isBackupMigration,
   }) async {
     await db.execute(_createNoteAnnotationsTable);
+  }
+
+  static Future<void> _migrateToVersion45(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    await db.execute(_createTagWorkflowBindingsTable);
   }
 
   static Future<void> _migrateToVersion28(
@@ -5092,6 +5147,45 @@ class DatabaseService {
     if (results.isEmpty) return null;
     final notes = await _batchLoadNotes(results);
     return notes.isNotEmpty ? notes.first : null;
+  }
+
+  /// Get an exact (non-prefix) workflow binding for a tag name.
+  Future<WorkflowBindingRow?> getExactWorkflowBinding(String tagName) async {
+    final db = await database;
+    final result = await db.query(
+      'tag_workflow_bindings',
+      where: 'pattern = ? AND isPrefix = 0',
+      whereArgs: [tagName],
+    );
+    if (result.isEmpty) return null;
+    return WorkflowBindingRow.fromRow(result.first);
+  }
+
+  /// Get all prefix workflow bindings.
+  Future<List<WorkflowBindingRow>> getPrefixWorkflowBindings() async {
+    final db = await database;
+    final result = await db.query('tag_workflow_bindings', where: 'isPrefix = 1');
+    return result.map(WorkflowBindingRow.fromRow).toList();
+  }
+
+  /// Insert or replace a workflow binding.
+  Future<void> insertWorkflowBinding(WorkflowBindingRow binding) async {
+    final db = await database;
+    await db.insert(
+      'tag_workflow_bindings',
+      binding.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Delete a workflow binding by pattern.
+  Future<void> deleteWorkflowBinding(String pattern) async {
+    final db = await database;
+    await db.delete(
+      'tag_workflow_bindings',
+      where: 'pattern = ?',
+      whereArgs: [pattern],
+    );
   }
 
   // --- End Agent / AI Features ---
