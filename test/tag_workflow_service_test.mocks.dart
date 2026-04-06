@@ -17,6 +17,7 @@ import 'package:note_synapse/models/note_annotation.dart' as _i7;
 import 'package:note_synapse/models/relationship.dart' as _i10;
 import 'package:note_synapse/models/tag.dart' as _i9;
 import 'package:note_synapse/models/user_app.dart' as _i12;
+import 'package:note_synapse/models/workflow_binding_row.dart' as _i16;
 import 'package:note_synapse/services/database_service.dart' as _i3;
 import 'package:sqflite/sqflite.dart' as _i2;
 
@@ -1476,27 +1477,27 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i4.Future<_i5.Note?>);
 
   @override
-  _i4.Future<_i3.WorkflowBindingRow?> getExactWorkflowBinding(
+  _i4.Future<_i16.WorkflowBindingRow?> getExactWorkflowBinding(
     String? tagName,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getExactWorkflowBinding, [tagName]),
-            returnValue: _i4.Future<_i3.WorkflowBindingRow?>.value(),
+            returnValue: _i4.Future<_i16.WorkflowBindingRow?>.value(),
           )
-          as _i4.Future<_i3.WorkflowBindingRow?>);
+          as _i4.Future<_i16.WorkflowBindingRow?>);
 
   @override
-  _i4.Future<List<_i3.WorkflowBindingRow>> getPrefixWorkflowBindings() =>
+  _i4.Future<List<_i16.WorkflowBindingRow>> getPrefixWorkflowBindings() =>
       (super.noSuchMethod(
             Invocation.method(#getPrefixWorkflowBindings, []),
-            returnValue: _i4.Future<List<_i3.WorkflowBindingRow>>.value(
-              <_i3.WorkflowBindingRow>[],
+            returnValue: _i4.Future<List<_i16.WorkflowBindingRow>>.value(
+              <_i16.WorkflowBindingRow>[],
             ),
           )
-          as _i4.Future<List<_i3.WorkflowBindingRow>>);
+          as _i4.Future<List<_i16.WorkflowBindingRow>>);
 
   @override
-  _i4.Future<void> insertWorkflowBinding(_i3.WorkflowBindingRow? binding) =>
+  _i4.Future<void> insertWorkflowBinding(_i16.WorkflowBindingRow? binding) =>
       (super.noSuchMethod(
             Invocation.method(#insertWorkflowBinding, [binding]),
             returnValue: _i4.Future<void>.value(),

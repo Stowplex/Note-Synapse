@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
+import 'package:note_synapse/models/workflow_binding_row.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/tag_workflow_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
@@ -15,7 +16,6 @@ void main() {
   setUp(() async {
     await resetForTesting();
     mockDb = MockDatabaseService();
-    getIt.registerSingleton<DatabaseService>(mockDb);
     service = TagWorkflowService(mockDb);
   });
 
@@ -79,8 +79,8 @@ void main() {
           prompt: 'Ingest source note {note_id} tagged {matched_tag} into the wiki.',
           contentImmutable: true),
       ]);
-      expect(
-        () => service.resolveBindings(['wiki-source-ml', 'wiki-source-ai']),
+      await expectLater(
+        service.resolveBindings(['wiki-source-ml', 'wiki-source-ai']),
         throwsA(isA<Exception>().having((e) => e.toString(), 'message', contains('ambiguous'))),
       );
     });

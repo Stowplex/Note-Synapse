@@ -1,3 +1,4 @@
+import 'package:note_synapse/models/workflow_binding_row.dart';
 import 'package:note_synapse/services/database_service.dart';
 
 class ResolvedBinding {
