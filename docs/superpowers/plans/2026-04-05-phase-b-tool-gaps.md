@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Close the narrow tool and enforcement gaps that block reliable wiki workflows: expose `link` in `create_notes` schema, add source immutability enforcement, and add relationship deletion support.
+**Goal:** Close the narrow tool and enforcement gaps that block reliable agent workflows: expose `link` in `create_notes` schema, add relationship deletion support, and add generic tag-workflow immutability enforcement.
 
-**Architecture:** Three changes to `note_tools.dart` (schema) and `note_modification_service.dart` (enforcement logic). PDF text extraction and image reading (Tasks B2/B3 from the parent plan) are split into a separate plan because they require package evaluation — this plan covers B1, B4, and B5 which are pure logic changes.
+**Architecture:** Three changes to `note_tools.dart` (schema) and `note_modification_service.dart` (enforcement logic). PDF text extraction and image reading (Tasks B2/B3 from the parent plan) are split into a separate plan because they require package evaluation — this plan covers B1, B4, and B5 which are pure logic changes. **Task 3 (B5) depends on Phase C Task 0a** (`TagWorkflowService` infrastructure) and must be implemented after it.
 
 **Tech Stack:** Flutter, Dart, mockito
 
@@ -18,11 +18,11 @@
 |--------|------|---------------|
 | Modify | `lib/services/tools/note_tools.dart:935-1007` | B1: Add `link` to CreateNotesTool.inputSchema |
 | Modify | `lib/services/tools/note_tools.dart:841-849` | B4: Extend ModifyNoteTool link schema with `removed` |
-| Modify | `lib/services/note_modification_service.dart:20-153` | B4: Handle `link.removed` in applyModifications; B5: wiki-source guard |
-| Modify | `lib/services/content_ingestion_service.dart:166-172` | B5: Redirect output for wiki-source notes |
+| Modify | `lib/services/note_modification_service.dart:20-153` | B4: Handle `link.removed` in applyModifications; B5: immutability guard |
+| Modify | `lib/services/content_ingestion_service.dart:166-172` | B5: Redirect output for immutable-bound notes |
 | Create | `test/create_notes_link_test.dart` | B1 tests |
 | Create | `test/relationship_deletion_test.dart` | B4 tests |
-| Create | `test/source_immutability_test.dart` | B5 tests |
+| Create | `test/immutability_enforcement_test.dart` | B5 tests |
 
 ---
 
@@ -90,7 +90,7 @@ void main() {
           {
             'title': 'Compiled: Attention',
             'content': '## Summary\nAttention mechanisms...',
-            'tags': ['wiki-compiled'],
+            'tags': ['wiki-compiled-ml'],
             'link': [
               {'relation': 'derived_from', 'target': 'source-note-123'},
             ],
@@ -227,7 +227,7 @@ void main() {
     createdAt: DateTime.now(),
     updatedAt: DateTime.now(),
     subNotes: [],
-    tags: ['wiki-compiled'],
+    tags: ['wiki-compiled-ml'],
     attachmentPaths: [],
   );
 
@@ -421,198 +421,39 @@ wiki lint to clean up stale cross-references."
 
 ---
 
-### Task 3: Source Immutability Enforcement — Prefix-Aware (B5)
+### Task 3: Tag-Workflow Immutability Enforcement (B5)
 
 **Files:**
-- Create: `lib/utils/wiki_tag_utils.dart` — prefix matching and namespace extraction
-- Modify: `lib/services/note_modification_service.dart:20-32` — add prefix-aware wiki-source guard
-- Modify: `lib/services/content_ingestion_service.dart:166-172` — redirect output for wiki-source-* notes
-- Create: `test/wiki_tag_utils_test.dart`
-- Create: `test/source_immutability_test.dart`
+- Modify: `lib/services/note_modification_service.dart:20-32` — add generic immutability guard via `TagWorkflowService`
+- Modify: `lib/services/content_ingestion_service.dart:166-172` — redirect output for immutable-bound notes
+- Create: `test/immutability_enforcement_test.dart`
 
-Notes with any `wiki-source-*` tag must not have their content or title modified by agent tools. There is no flat `wiki-source` tag — all source tags carry a namespace suffix (e.g., `wiki-source-ml`, `wiki-source-harry-potter`). Multiple `wiki-source-*` tags on one note is an error.
+**Depends on:** Phase C Task 0a (`TagWorkflowService` and `tag_workflow_bindings` table). Must be implemented AFTER C0a.
 
-- [ ] **Step 1: Write the wiki_tag_utils tests**
+Notes whose tags have a workflow binding with `contentImmutable: true` must not have their content or title modified by agent tools. This is a **generic platform mechanism** — no wiki-specific code. The platform checks `TagWorkflowService.hasImmutableBinding(tags)`. Wiki is just one use case that registers immutable bindings at runtime.
 
-```dart
-// test/wiki_tag_utils_test.dart
-import 'package:flutter_test/flutter_test.dart';
-import 'package:note_synapse/utils/wiki_tag_utils.dart';
-
-void main() {
-  group('isWikiSourceTag', () {
-    test('matches wiki-source-ml', () {
-      expect(WikiTagUtils.isWikiSourceTag('wiki-source-ml'), isTrue);
-    });
-
-    test('matches wiki-source-harry-potter', () {
-      expect(WikiTagUtils.isWikiSourceTag('wiki-source-harry-potter'), isTrue);
-    });
-
-    test('rejects flat wiki-source (no namespace)', () {
-      expect(WikiTagUtils.isWikiSourceTag('wiki-source'), isFalse);
-    });
-
-    test('rejects wiki-compiled-ml', () {
-      expect(WikiTagUtils.isWikiSourceTag('wiki-compiled-ml'), isFalse);
-    });
-
-    test('rejects unrelated tags', () {
-      expect(WikiTagUtils.isWikiSourceTag('machine-learning'), isFalse);
-    });
-  });
-
-  group('getWikiSourceNamespace', () {
-    test('extracts namespace from single wiki-source tag', () {
-      final result = WikiTagUtils.getWikiSourceNamespace(['wiki-source-ml', 'other-tag']);
-      expect(result, 'ml');
-    });
-
-    test('extracts multi-word namespace', () {
-      final result = WikiTagUtils.getWikiSourceNamespace(['wiki-source-harry-potter']);
-      expect(result, 'harry-potter');
-    });
-
-    test('returns null when no wiki-source tag present', () {
-      final result = WikiTagUtils.getWikiSourceNamespace(['regular', 'wiki-compiled-ml']);
-      expect(result, isNull);
-    });
-
-    test('returns null for empty tags', () {
-      expect(WikiTagUtils.getWikiSourceNamespace([]), isNull);
-    });
-  });
-
-  group('getWikiSourceNamespaceStrict', () {
-    test('returns namespace for single wiki-source tag', () {
-      final result = WikiTagUtils.getWikiSourceNamespaceStrict(['wiki-source-ml']);
-      expect(result, 'ml');
-    });
-
-    test('throws on multiple wiki-source tags (ambiguous)', () {
-      expect(
-        () => WikiTagUtils.getWikiSourceNamespaceStrict(
-          ['wiki-source-ml', 'wiki-source-ai']),
-        throwsA(isA<Exception>().having(
-          (e) => e.toString(), 'message', contains('ambiguous'))),
-      );
-    });
-  });
-
-  group('hasWikiSourceTag', () {
-    test('true when wiki-source-* present', () {
-      expect(WikiTagUtils.hasWikiSourceTag(['wiki-source-ml', 'other']), isTrue);
-    });
-
-    test('false when no wiki-source-* present', () {
-      expect(WikiTagUtils.hasWikiSourceTag(['wiki-compiled-ml', 'other']), isFalse);
-    });
-  });
-
-  group('compiledTagForNamespace', () {
-    test('generates wiki-compiled-ml', () {
-      expect(WikiTagUtils.compiledTagForNamespace('ml'), 'wiki-compiled-ml');
-    });
-  });
-}
-```
-
-- [ ] **Step 2: Implement wiki_tag_utils.dart**
+- [ ] **Step 1: Write the immutability enforcement tests**
 
 ```dart
-// lib/utils/wiki_tag_utils.dart
-
-/// Utilities for wiki namespaced tag operations.
-/// Wiki tags follow the pattern: wiki-<role>-<namespace>
-/// e.g., wiki-source-ml, wiki-compiled-harry-potter
-class WikiTagUtils {
-  static const String _sourcePrefix = 'wiki-source-';
-
-  /// Returns true if the tag is a wiki-source tag with a namespace.
-  /// Rejects bare 'wiki-source' (no namespace).
-  static bool isWikiSourceTag(String tag) {
-    return tag.startsWith(_sourcePrefix) && tag.length > _sourcePrefix.length;
-  }
-
-  /// Returns true if any tag in the list is a wiki-source-* tag.
-  static bool hasWikiSourceTag(List<String> tags) {
-    return tags.any(isWikiSourceTag);
-  }
-
-  /// Extracts the namespace from the first wiki-source-* tag found.
-  /// Returns null if no wiki-source tag is present.
-  static String? getWikiSourceNamespace(List<String> tags) {
-    for (final tag in tags) {
-      if (isWikiSourceTag(tag)) {
-        return tag.substring(_sourcePrefix.length);
-      }
-    }
-    return null;
-  }
-
-  /// Like getWikiSourceNamespace, but throws if multiple wiki-source-* tags
-  /// are present (ambiguous namespace).
-  static String? getWikiSourceNamespaceStrict(List<String> tags) {
-    final sourceTags = tags.where(isWikiSourceTag).toList();
-    if (sourceTags.isEmpty) return null;
-    if (sourceTags.length > 1) {
-      throw Exception(
-        'Ambiguous wiki namespace: note has multiple wiki-source tags '
-        '(${sourceTags.join(", ")}). Remove all but one.',
-      );
-    }
-    return sourceTags.first.substring(_sourcePrefix.length);
-  }
-
-  /// Returns the wiki-compiled tag for a namespace.
-  static String compiledTagForNamespace(String namespace) =>
-      'wiki-compiled-$namespace';
-
-  /// Returns the wiki-index tag for a namespace.
-  static String indexTagForNamespace(String namespace) =>
-      'wiki-index-$namespace';
-
-  /// Returns the wiki-log tag for a namespace.
-  static String logTagForNamespace(String namespace) =>
-      'wiki-log-$namespace';
-}
-```
-
-- [ ] **Step 3: Run wiki_tag_utils tests**
-
-Run: `flutter test test/wiki_tag_utils_test.dart -v`
-Expected: All tests pass.
-
-- [ ] **Step 4: Commit wiki_tag_utils**
-
-```bash
-git add lib/utils/wiki_tag_utils.dart test/wiki_tag_utils_test.dart
-git commit -m "feat: add WikiTagUtils for prefix-aware wiki tag operations
-
-Supports wiki-source-<namespace> pattern with strict disambiguation
-when multiple source tags are present."
-```
-
-- [ ] **Step 5: Write the source immutability test (prefix-aware)**
-
-```dart
-// test/source_immutability_test.dart
+// test/immutability_enforcement_test.dart
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:note_synapse/models/note.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/note_modification_service.dart';
+import 'package:note_synapse/services/tag_workflow_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
 
-import 'source_immutability_test.mocks.dart';
+import 'immutability_enforcement_test.mocks.dart';
 
-@GenerateMocks([DatabaseService])
+@GenerateMocks([DatabaseService, TagWorkflowService])
 void main() {
   late MockDatabaseService mockDb;
+  late MockTagWorkflowService mockTagWorkflow;
   late NoteModificationService service;
 
-  final sourceNoteMl = Note(
+  final immutableNote = Note(
     id: 'source-1',
     title: 'Original Title',
     content: 'Original content.',
@@ -624,27 +465,15 @@ void main() {
     attachmentPaths: ['doc.pdf'],
   );
 
-  final sourceNoteHp = Note(
+  final anotherImmutableNote = Note(
     id: 'source-2',
-    title: 'HP Source',
-    content: 'Harry Potter content.',
+    title: 'Recipe Source',
+    content: 'Grandma recipe.',
     type: NoteType.note,
     createdAt: DateTime.now(),
     updatedAt: DateTime.now(),
     subNotes: [],
-    tags: ['wiki-source-harry-potter'],
-    attachmentPaths: [],
-  );
-
-  final ambiguousNote = Note(
-    id: 'source-3',
-    title: 'Ambiguous',
-    content: 'Content.',
-    type: NoteType.note,
-    createdAt: DateTime.now(),
-    updatedAt: DateTime.now(),
-    subNotes: [],
-    tags: ['wiki-source-ml', 'wiki-source-ai'],
+    tags: ['recipe-source-italian'],
     attachmentPaths: [],
   );
 
@@ -663,37 +492,45 @@ void main() {
   setUp(() async {
     await resetForTesting();
     mockDb = MockDatabaseService();
+    mockTagWorkflow = MockTagWorkflowService();
     getIt.registerSingleton<DatabaseService>(mockDb);
+    getIt.registerSingleton<TagWorkflowService>(mockTagWorkflow);
     service = NoteModificationService(mockDb);
   });
 
-  group('prefix-aware wiki-source immutability', () {
-    test('rejects content modification on wiki-source-ml note', () async {
-      when(mockDb.getNoteById('source-1')).thenAnswer((_) async => sourceNoteMl);
+  group('generic tag-workflow immutability enforcement', () {
+    test('rejects content modification when tag has immutable binding', () async {
+      when(mockDb.getNoteById('source-1')).thenAnswer((_) async => immutableNote);
+      when(mockTagWorkflow.hasImmutableBinding(immutableNote.tags))
+          .thenAnswer((_) async => true);
 
       expect(
         () => service.applyModifications('source-1', {
           'content': {'action': 'append', 'text': 'Appended'},
         }),
         throwsA(isA<Exception>().having(
-          (e) => e.toString(), 'message', contains('wiki-source'))),
+          (e) => e.toString(), 'message', contains('immutable'))),
       );
     });
 
-    test('rejects title modification on wiki-source-harry-potter note', () async {
-      when(mockDb.getNoteById('source-2')).thenAnswer((_) async => sourceNoteHp);
+    test('rejects title modification when tag has immutable binding', () async {
+      when(mockDb.getNoteById('source-2')).thenAnswer((_) async => anotherImmutableNote);
+      when(mockTagWorkflow.hasImmutableBinding(anotherImmutableNote.tags))
+          .thenAnswer((_) async => true);
 
       expect(
         () => service.applyModifications('source-2', {
           'title': {'new_title': 'Changed'},
         }),
         throwsA(isA<Exception>().having(
-          (e) => e.toString(), 'message', contains('wiki-source'))),
+          (e) => e.toString(), 'message', contains('immutable'))),
       );
     });
 
-    test('allows tag modification on wiki-source-ml note', () async {
-      when(mockDb.getNoteById('source-1')).thenAnswer((_) async => sourceNoteMl);
+    test('allows tag modification on immutable-bound note', () async {
+      when(mockDb.getNoteById('source-1')).thenAnswer((_) async => immutableNote);
+      when(mockTagWorkflow.hasImmutableBinding(immutableNote.tags))
+          .thenAnswer((_) async => true);
       when(mockDb.updateNote(any)).thenAnswer((_) async {});
 
       final result = await service.applyModifications('source-1', {
@@ -703,8 +540,10 @@ void main() {
       expect(result.tags, contains('reviewed'));
     });
 
-    test('allows link creation on wiki-source-ml note', () async {
-      when(mockDb.getNoteById('source-1')).thenAnswer((_) async => sourceNoteMl);
+    test('allows link creation on immutable-bound note', () async {
+      when(mockDb.getNoteById('source-1')).thenAnswer((_) async => immutableNote);
+      when(mockTagWorkflow.hasImmutableBinding(immutableNote.tags))
+          .thenAnswer((_) async => true);
       when(mockDb.updateNote(any)).thenAnswer((_) async {});
       when(mockDb.insertRelationship(any)).thenAnswer((_) async {});
 
@@ -715,8 +554,10 @@ void main() {
       verify(mockDb.insertRelationship(any)).called(1);
     });
 
-    test('does not affect non-wiki-source notes', () async {
+    test('does not check immutability when no bindings exist', () async {
       when(mockDb.getNoteById('regular-1')).thenAnswer((_) async => regularNote);
+      when(mockTagWorkflow.hasImmutableBinding(regularNote.tags))
+          .thenAnswer((_) async => false);
       when(mockDb.updateNote(any)).thenAnswer((_) async {});
 
       final result = await service.applyModifications('regular-1', {
@@ -726,84 +567,85 @@ void main() {
       expect(result.content, contains('New text'));
     });
 
-    test('rejects modification when multiple wiki-source tags (ambiguous)', () async {
-      when(mockDb.getNoteById('source-3')).thenAnswer((_) async => ambiguousNote);
+    test('works for non-wiki immutable bindings (generic)', () async {
+      // recipe-source-italian also has contentImmutable: true — no wiki code involved
+      when(mockDb.getNoteById('source-2')).thenAnswer((_) async => anotherImmutableNote);
+      when(mockTagWorkflow.hasImmutableBinding(anotherImmutableNote.tags))
+          .thenAnswer((_) async => true);
 
       expect(
-        () => service.applyModifications('source-3', {
+        () => service.applyModifications('source-2', {
           'content': {'action': 'append', 'text': 'text'},
         }),
         throwsA(isA<Exception>().having(
-          (e) => e.toString(), 'message', contains('ambiguous'))),
+          (e) => e.toString(), 'message', contains('immutable'))),
       );
     });
   });
 }
 ```
 
-- [ ] **Step 6: Generate mocks and run to verify failing**
+- [ ] **Step 2: Generate mocks and run to verify failing**
 
-Run: `dart run build_runner build --delete-conflicting-outputs && flutter test test/source_immutability_test.dart -v`
-Expected: Tests fail — no prefix-aware guard exists yet.
+Run: `dart run build_runner build --delete-conflicting-outputs && flutter test test/immutability_enforcement_test.dart -v`
+Expected: Tests fail — no immutability guard exists yet.
 
-- [ ] **Step 7: Add the prefix-aware guard to `applyModifications`**
+- [ ] **Step 3: Add the generic immutability guard to `applyModifications`**
 
-In `lib/services/note_modification_service.dart`, add import and guard after the note fetch (after line 32):
+In `lib/services/note_modification_service.dart`, add import:
 
 ```dart
-import '../utils/wiki_tag_utils.dart';
+import 'tag_workflow_service.dart';
 ```
 
 Then in `applyModifications`, after `if (note == null)` check:
 
 ```dart
-    // Wiki-source immutability guard (prefix-aware)
-    // Any tag matching wiki-source-* triggers protection
-    if (WikiTagUtils.hasWikiSourceTag(note.tags)) {
-      // Also check for ambiguous multiple wiki-source tags
-      WikiTagUtils.getWikiSourceNamespaceStrict(note.tags);
-
+    // Tag-workflow immutability guard (generic)
+    // If any of this note's tags have a workflow binding with contentImmutable: true,
+    // reject content and title modifications.
+    final tagWorkflow = getIt<TagWorkflowService>();
+    if (await tagWorkflow.hasImmutableBinding(note.tags)) {
       final hasContentMod = modifications.containsKey('content') &&
           (modifications['content'] as Map<String, dynamic>)['action'] != 'no-op';
       final hasTitleMod = modifications.containsKey('title');
 
       if (hasContentMod || hasTitleMod) {
         throw Exception(
-          'Cannot modify content or title of a wiki-source note. '
-          'Source notes are immutable to preserve provenance. '
-          'Tags, links, and attachments can still be modified.',
+          'Cannot modify content or title: this note has a tag with an immutable '
+          'workflow binding. Tags, links, and attachments can still be modified.',
         );
       }
     }
 ```
 
-- [ ] **Step 8: Run tests to verify they pass**
+- [ ] **Step 4: Run tests to verify they pass**
 
-Run: `flutter test test/source_immutability_test.dart -v`
+Run: `flutter test test/immutability_enforcement_test.dart -v`
 Expected: All tests pass.
 
-- [ ] **Step 9: Run full test suite**
+- [ ] **Step 5: Run full test suite**
 
 Run: `flutter test`
 Expected: No regressions.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add lib/services/note_modification_service.dart test/source_immutability_test.dart test/source_immutability_test.mocks.dart
-git commit -m "feat: prefix-aware wiki-source immutability enforcement (Phase B5)
+git add lib/services/note_modification_service.dart test/immutability_enforcement_test.dart test/immutability_enforcement_test.mocks.dart
+git commit -m "feat: generic tag-workflow immutability enforcement (Phase B5)
 
-Notes with any wiki-source-* tag reject content/title modifications.
-Uses WikiTagUtils prefix matching — supports multiple namespaces.
-Multiple wiki-source-* tags on one note produces an ambiguity error."
+Notes whose tags have a workflow binding with contentImmutable: true
+reject content/title modifications. Fully generic — no wiki-specific
+code. Wiki is just one consumer that registers immutable bindings."
 ```
 
-- [ ] **Step 11: Add ContentIngestionService redirect for wiki-source-* notes**
+- [ ] **Step 7: Add ContentIngestionService redirect for immutable-bound notes**
 
-In `lib/services/content_ingestion_service.dart`, add import and modify the write-back logic:
+In `lib/services/content_ingestion_service.dart`, add import:
 
 ```dart
-import '../utils/wiki_tag_utils.dart';
+import 'tag_workflow_service.dart';
 ```
 
 Then at line ~166, replace the write-back block:
@@ -812,38 +654,42 @@ Then at line ~166, replace the write-back block:
       if (json is Map<String, dynamic>) {
         json.remove('attachments');
 
-        final service = getIt<NoteModificationService>();
+        final modService = getIt<NoteModificationService>();
+        final tagWorkflow = getIt<TagWorkflowService>();
 
-        // If source is wiki-source-*, redirect output to a new compiled note
-        final namespace = WikiTagUtils.getWikiSourceNamespace(note.tags);
-        if (namespace != null) {
-          final compiledData = <String, dynamic>{
-            'title': 'Compiled: ${note.title}',
+        // If any of this note's tags have an immutable workflow binding,
+        // redirect output to a new note instead of mutating the source.
+        // The skill (not the platform) determines what tags the new note gets.
+        if (await tagWorkflow.hasImmutableBinding(note.tags)) {
+          final newNoteData = <String, dynamic>{
+            'title': 'Extracted: ${note.title}',
             'content': json['content']?['text'] ?? '',
-            'tags': [WikiTagUtils.compiledTagForNamespace(namespace)],
             'link': [
               {'relation': 'derived_from', 'target': note.id},
             ],
           };
-          final compiledNote = await service.createNote(compiledData);
-          await appProvider.addNote(compiledNote);
+          final newNote = await modService.createNote(newNoteData);
+          await appProvider.addNote(newNote);
         } else {
-          final updatedNote = await service.applyModifications(note.id, json);
+          final updatedNote = await modService.applyModifications(note.id, json);
           await appProvider.updateNote(updatedNote);
         }
       }
 ```
 
-- [ ] **Step 12: Run full test suite and commit**
+**Note:** The new note does NOT get wiki-specific tags like `wiki-compiled-<ns>`. That's the skill's responsibility — the platform just redirects to a new note. The skill's extraction prompt (from `tag_ai_configs`) can include instructions for the AI to set appropriate tags.
+
+- [ ] **Step 8: Run full test suite and commit**
 
 Run: `flutter test && flutter analyze`
 
 ```bash
 git add lib/services/content_ingestion_service.dart
-git commit -m "feat: redirect content ingestion for wiki-source-* notes
+git commit -m "feat: redirect content ingestion for immutable-bound notes
 
-Namespace-aware: wiki-source-ml creates wiki-compiled-ml note.
-Source note content unchanged."
+When a note's tags have an immutable workflow binding, extracted
+content goes to a new note instead of mutating the source. Tags
+on the new note are determined by the skill, not hardcoded."
 ```
 
 ---

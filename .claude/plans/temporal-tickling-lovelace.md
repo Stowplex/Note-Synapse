@@ -468,21 +468,23 @@ Terminology: "wiki pages are regular notes" throughout. Each task specifies UX c
 - [ ] Agent can create AND delete relationships via `modify_note` without `run_sql`
 - [ ] `read_note stat` provides enough relationship info for lint to assess cross-references
 
-#### Task B5: Source Immutability Enforcement (Prefix-Aware)
+#### Task B5: Tag-Workflow Immutability Enforcement (Generic)
 
-**Goal**: Prevent `modify_note` and `ContentIngestionService` from mutating notes with any `wiki-source-*` tag. Without this, the "raw sources are immutable" invariant is unenforceable. Uses prefix matching, not an exact tag — supports multiple independent wiki namespaces.
+**Goal**: Prevent `modify_note` and `ContentIngestionService` from mutating notes whose tags have a workflow binding with `contentImmutable: true`. This is a generic platform mechanism — no wiki-specific code in the platform. Wiki is just one use case that registers immutable bindings.
 
-**UX change**: When the **agent** tries to modify a `wiki-source-*` note via tool call, `modify_note` returns an error explaining the restriction. Manual edits in the note editor are unaffected.
+**UX change**: When the **agent** tries to modify a note that has any tag bound to an immutable workflow, `modify_note` returns an error. Manual edits in the note editor are unaffected.
 
 **Workflow change**:
-1. `NoteModificationService.applyModifications()` checks for any tag with `wiki-source-` prefix. If present, refuses content and title modifications. Tag, attachment, subnote, and link modifications are still allowed.
-2. `ContentIngestionService`: when processing a note with any `wiki-source-*` tag, extracted content goes to a new compiled note. The compiled note inherits the same namespace (e.g., `wiki-source-ml` → compiled note gets `wiki-compiled-ml`).
-3. A helper function `getWikiSourceNamespace(List<String> tags)` returns the namespace suffix from the first `wiki-source-*` tag, or `null` if no match. Used by both guards.
+1. `NoteModificationService.applyModifications()` queries the tag-workflow binding system (from C0) to check if any of the note's tags have `contentImmutable: true`. If so, refuses content and title modifications. Tag, attachment, subnote, and link modifications are still allowed.
+2. `ContentIngestionService`: when processing a note where any tag has an immutable workflow binding, extracted content goes to a new note instead of mutating the source. The new note's tags are determined by the skill, not hardcoded.
+
+**Depends on**: Task C0a (tag-workflow binding infrastructure). Implementation order: C0a first, then B5.
 
 **Files changed**:
-- `lib/services/note_modification_service.dart:21` — add prefix-aware guard in `applyModifications()`
-- `lib/services/content_ingestion_service.dart:121` — redirect output for `wiki-source-*` notes
-- `lib/utils/wiki_tag_utils.dart` (new) — prefix matching and namespace extraction helpers
+- `lib/services/note_modification_service.dart:21` — add immutability guard querying tag-workflow bindings
+- `lib/services/content_ingestion_service.dart:121` — redirect output for immutable-tagged notes
+
+**No wiki-specific files.** No `WikiTagUtils`. The guard checks `TagWorkflowService.hasImmutableBinding(tags)`, which is generic.
 
 **Validation method**: Unit tests + manual test.
 
@@ -490,50 +492,72 @@ Terminology: "wiki pages are regular notes" throughout. Each task specifies UX c
 
 | Test | Expected Outcome |
 |------|-----------------|
-| `modify_note` on note tagged `wiki-source-ml` with content change | Returns error: "Cannot modify content of a wiki-source note." |
-| `modify_note` on note tagged `wiki-source-harry-potter` with title change | Returns same error |
-| `modify_note` on note tagged `wiki-source-ml` with `tags: {added: ['reviewed']}` | Succeeds — tag modification allowed |
-| `modify_note` on note tagged `wiki-source-ml` with `link: [...]` | Succeeds — link creation allowed |
-| `modify_note` on note with NO `wiki-source-*` tags | Existing behavior unchanged |
-| `ContentIngestionService` processes `wiki-source-ml` note | Creates compiled note tagged `wiki-compiled-ml`; source unchanged |
-| `ContentIngestionService` processes non-wiki-source note | Existing behavior unchanged |
-| `getWikiSourceNamespace(['wiki-source-ml', 'other'])` | Returns `'ml'` |
-| `getWikiSourceNamespace(['regular-tag'])` | Returns `null` |
-| Note with both `wiki-source-ml` and `wiki-source-ai` | Fails fast with error asking user to disambiguate |
+| `modify_note` on note with tag bound to immutable workflow, with content change | Returns error: "Cannot modify content — tag [tag] has an immutable workflow binding." |
+| `modify_note` on same note with `tags: {added: ['reviewed']}` | Succeeds — tag modification allowed |
+| `modify_note` on same note with `link: [...]` | Succeeds — link creation allowed |
+| `modify_note` on note with NO immutable bindings | Existing behavior unchanged |
+| `ContentIngestionService` processes immutable-tagged note | Creates new note with extraction results; source unchanged |
+| `ContentIngestionService` processes non-immutable note | Existing behavior unchanged |
 
 **Acceptance criteria**:
 - [ ] All tests pass
-- [ ] Prefix matching works for any namespace suffix
-- [ ] Multiple `wiki-source-*` tags on one note produces a clear error
+- [ ] No wiki-specific references in `NoteModificationService` or `ContentIngestionService`
+- [ ] Immutability is driven by tag-workflow binding metadata, not hardcoded tag prefixes
 - [ ] `flutter analyze` clean on all changed files
 
 ---
 
 ### Phase C: Wiki Workflow Contract (P1)
 
-#### Task C0: Tag-Associated Workflow Bindings (Platform Mechanism)
+#### Task C0: Tag-Associated Workflow Bindings + Execution (Platform Mechanism)
 
-**Goal**: Extend the existing tag-associated prompt concept (`getTagExtractionPrompt`) into a general tag-to-workflow binding mechanism. This is the platform layer that makes wiki ingest (and future tag-driven workflows) discoverable and triggerable from tags, not just manual skill invocation.
+**Goal**: Extend the existing tag-associated prompt concept (`getTagExtractionPrompt` in `tag_ai_configs`) into a general tag-to-workflow binding mechanism. This is a generic platform layer — no wiki-specific code. Any tag pattern can bind to any skill.
 
-**UX change**: A tag can optionally bind to a skill note. When a note is processed (via ingestion, agent launch, or a future trigger), the system checks its tags for workflow bindings and executes the bound skill with the matched tag as context.
+**UX change**: A tag pattern (exact tag name or prefix like `wiki-source-`) can bind to a skill note with properties like `contentImmutable`. When a note is processed, the system checks its tags for workflow bindings and makes the binding information available.
 
-**Workflow change**: Tags gain an optional `workflow_skill_id` alongside the existing `extraction_prompt`. Resolution rules:
+**Workflow change**: New `tag_workflow_bindings` table (alongside existing `tag_ai_configs`). Each binding has:
+- `pattern`: tag name or prefix (e.g., `wiki-source-` for prefix match, `special-tag` for exact)
+- `isPrefix`: whether this is a prefix match (`true`) or exact match (`false`)
+- `skillNoteId`: the skill note to trigger
+- `prompt`: the objective/system prompt template for the workflow task (can use `{note_id}`, `{matched_tag}` template vars)
+- `contentImmutable`: whether notes with this tag should reject content/title modifications
 
-1. **Exact match first**: tag `wiki-source-ml` → its specific workflow binding
-2. **Prefix match fallback**: tag `wiki-source-ml` matches a prefix rule `wiki-source-*` → bound skill
-3. **Disambiguation**: if multiple `wiki-source-*` tags on one note, fail fast with an error asking the user to disambiguate
-4. **Context passing**: the bound workflow receives the matched tag string as execution context, so the skill knows which namespace to operate in
+Resolution rules:
+
+1. **Exact match first**: tag `wiki-source-ml` → check for exact binding on `wiki-source-ml`
+2. **Prefix match fallback**: tag `wiki-source-ml` → check prefix bindings, find `wiki-source-` matches
+3. **Disambiguation**: if multiple tags on a note match bindings for the **same prefix pattern**, fail fast. (Two different prefix patterns binding to different skills is fine.)
+4. **Context passing**: the resolved binding returns `(skillNoteId, matchedTag, pattern, prompt)`. The skill receives the matched tag string as execution context. The skill — not the platform — decides what the tag suffix means.
+
+**Workflow execution**: Bound workflows execute as a **single AgentTask** within `AgentService`, reusing the existing ReAct loop, context management, tool execution, and skill loading infrastructure. New method `AgentService.runWorkflowTask(binding, note)`:
+
+1. Creates a single `AgentTask` with the binding's `prompt` (template vars substituted: `{note_id}` → note ID, `{matched_tag}` → the matched tag string)
+2. The skill content is either pre-loaded into pinned context (fast path) or loaded by the LLM via `load_skill` on the first turn (flexible path — lets the LLM decide what to load)
+3. Runs the existing per-task ReAct loop: LLM → parse XML → execute tool → observe → loop
+4. On max turns → task pauses (existing behavior), UI can prompt for extension via `resumeTask()`
+5. Background-safe: `AgentService` is a `ChangeNotifier`, UI observes via `watch<AgentService>()`
+6. Concurrency: if agent is already running another objective, workflow is queued (future: concurrent execution via separate executor instances)
+
+**Why bind to AgentTask, not ConversationAiEngine or a new executor:**
+- AgentTask ReAct loop already provides: multi-turn with `maxTurns`, context compaction, skill loading (`load_skill` intercept), tool discovery (URI resolution), pause/resume, progress tracking
+- No code duplication — same `_performTask()`, `_executeLoop()`, `_handleLoadSkillResult()` code paths
+- Background and UI integration for free — existing agent progress UI works
 
 **Files changed**:
-- `lib/services/database_service.dart` — add `workflow_skill_id` column to tags table (or a new `tag_workflows` table)
-- `lib/services/skill_service.dart` — add `resolveTagWorkflow(List<String> tags)` method with prefix matching
-- `lib/utils/wiki_tag_utils.dart` (new) — `getWikiSourceNamespace(tags)`, `hasWikiSourceTag(tags)`, `isWikiSourceTag(tag)` helpers
+- `lib/services/database_service.dart` — add `tag_workflow_bindings` table and CRUD methods
+- `lib/services/tag_workflow_service.dart` (new) — `resolveBindings(List<String> tags)`, `hasImmutableBinding(List<String> tags)`, `registerBinding()`, `removeBinding()`
+- `lib/services/agent_service.dart` — add `runWorkflowTask(ResolvedBinding binding, Note note)` method
+
+**No wiki-specific files.** No `WikiTagUtils`. The prefix `wiki-source-` is just data registered by the Wiki Bootstrap skill at runtime, not hardcoded in platform code.
 
 **Design constraints**:
-- One workflow per tag (not many-to-many)
-- Prefix-match support for tag families (e.g., `wiki-source-*` all bind to the same skill)
-- Workflow receives the matched tag string, not just the skill — the tag carries the namespace
-- This is a platform mechanism, not wiki-specific: any tag prefix can bind to any skill
+- One binding per pattern (not many-to-many)
+- Prefix-match support for tag families
+- The binding returns the matched tag string; the skill interprets the suffix
+- `prompt` is a template: platform substitutes `{note_id}` and `{matched_tag}`, skill instructions handle the rest
+- `contentImmutable` is a binding property checked by `NoteModificationService` and `ContentIngestionService` (see B5)
+- This is fully generic: `recipe-source-`, `journal-entry-`, etc. would work the same way
+- Workflow execution reuses `AgentService._performTask()` — no separate execution engine
 
 **Validation method**: Unit tests.
 
@@ -541,20 +565,27 @@ Terminology: "wiki pages are regular notes" throughout. Each task specifies UX c
 
 | Test | Expected Outcome |
 |------|-----------------|
-| `resolveTagWorkflow(['wiki-source-ml'])` with prefix rule `wiki-source-*` → skill-id | Returns `(skillId: 'ingest-skill', matchedTag: 'wiki-source-ml', namespace: 'ml')` |
-| `resolveTagWorkflow(['regular-tag', 'wiki-source-ai'])` | Returns match for `wiki-source-ai` |
-| `resolveTagWorkflow(['wiki-source-ml', 'wiki-source-ai'])` | Returns error: ambiguous — multiple wiki-source tags |
-| `resolveTagWorkflow(['no-workflow-tags'])` | Returns null |
-| `getWikiSourceNamespace(['wiki-source-ml'])` | Returns `'ml'` |
-| `getWikiSourceNamespace(['regular'])` | Returns `null` |
-| `isWikiSourceTag('wiki-source-ml')` | Returns `true` |
-| `isWikiSourceTag('wiki-compiled-ml')` | Returns `false` |
+| `resolveBindings(['wiki-source-ml'])` with prefix binding `wiki-source-` → skill-id | Returns `[ResolvedBinding(skillNoteId: 'id', matchedTag: 'wiki-source-ml', pattern: 'wiki-source-')]` |
+| `resolveBindings(['regular-tag', 'wiki-source-ai'])` | Returns match for `wiki-source-ai` only |
+| `resolveBindings(['tag-a', 'tag-b'])` where `tag-a` has exact binding, `tag-b` has prefix binding | Returns both matches (different patterns, no ambiguity) |
+| `resolveBindings(['wiki-source-ml', 'wiki-source-ai'])` with one prefix binding `wiki-source-` | Returns error: ambiguous — two tags match the same prefix pattern |
+| `resolveBindings(['no-bindings'])` | Returns empty list |
+| `hasImmutableBinding(['wiki-source-ml'])` with `wiki-source-` binding where `contentImmutable=true` | Returns `true` |
+| `hasImmutableBinding(['regular-tag'])` | Returns `false` |
+| `registerBinding(pattern: 'wiki-source-', isPrefix: true, skillNoteId: 'x', prompt: '...', contentImmutable: true)` | Binding persisted with prompt |
+| `runWorkflowTask(binding, note)` when agent idle | Creates task, runs ReAct loop, skill loaded, tools executed |
+| `runWorkflowTask(binding, note)` when agent busy | Queued, executes after current objective completes |
+| `runWorkflowTask` max turns reached | Task paused, UI can extend via `resumeTask()` |
 
 **Acceptance criteria**:
 - [ ] All tests pass
-- [ ] Prefix matching works for any namespace suffix after `wiki-source-`
+- [ ] No wiki-specific strings hardcoded in platform code
 - [ ] Resolution is deterministic (exact match > prefix match)
-- [ ] Ambiguous multiple matches produce a clear error
+- [ ] Ambiguous same-pattern matches produce a clear error
+- [ ] `hasImmutableBinding` works for B5's enforcement
+- [ ] Workflow task runs to completion using existing ReAct loop
+- [ ] Workflow task is backgroundable (survives screen navigation)
+- [ ] Max turns pause triggers extension prompt
 
 #### Task C1: Define Wiki Schema Artifact (Namespace-Aware)
 
@@ -956,7 +987,8 @@ Phase B (P1): Critical Tool Gaps
   B5: Source immutability enforcement (prefix-aware: wiki-source-* tags)
 
 Phase C (P1): Wiki Workflow Contract
-  C0: Tag-associated workflow bindings (platform mechanism)   ← NEW
+  C0a: Tag-workflow binding infrastructure (resolution, immutability, CRUD)
+  C0b: Workflow task execution (AgentService.runWorkflowTask)   ← NEW
   C1: Wiki schema artifact (namespace-aware)
   C2: Workflow UX spec (namespace + tag-triggered)
 
