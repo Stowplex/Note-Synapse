@@ -4,30 +4,32 @@
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i6;
-import 'dart:ui' as _i23;
+import 'dart:ui' as _i25;
 
-import 'package:file_picker/file_picker.dart' as _i22;
+import 'package:file_picker/file_picker.dart' as _i23;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i8;
-import 'package:note_synapse/models/agent_task.dart' as _i19;
+import 'package:note_synapse/models/agent_task.dart' as _i20;
 import 'package:note_synapse/models/app_revision.dart' as _i15;
 import 'package:note_synapse/models/attachment.dart' as _i10;
 import 'package:note_synapse/models/conversation.dart' as _i16;
 import 'package:note_synapse/models/conversation_attachment.dart' as _i17;
 import 'package:note_synapse/models/filter.dart' as _i13;
 import 'package:note_synapse/models/mcp_endpoint.dart' as _i4;
-import 'package:note_synapse/models/model_config.dart' as _i21;
+import 'package:note_synapse/models/model_config.dart' as _i22;
 import 'package:note_synapse/models/note.dart' as _i7;
 import 'package:note_synapse/models/note_annotation.dart' as _i9;
 import 'package:note_synapse/models/relationship.dart' as _i12;
 import 'package:note_synapse/models/tag.dart' as _i11;
 import 'package:note_synapse/models/user_app.dart' as _i14;
-import 'package:note_synapse/services/agent_service.dart' as _i18;
+import 'package:note_synapse/models/workflow_binding_row.dart' as _i18;
+import 'package:note_synapse/services/agent_service.dart' as _i19;
 import 'package:note_synapse/services/context_manager_service.dart' as _i3;
 import 'package:note_synapse/services/database_service.dart' as _i5;
-import 'package:note_synapse/services/mcp_service.dart' as _i25;
-import 'package:note_synapse/services/skill_service.dart' as _i24;
-import 'package:note_synapse/services/tools/note_tools.dart' as _i20;
+import 'package:note_synapse/services/mcp_service.dart' as _i27;
+import 'package:note_synapse/services/skill_service.dart' as _i26;
+import 'package:note_synapse/services/tag_workflow_service.dart' as _i24;
+import 'package:note_synapse/services/tools/note_tools.dart' as _i21;
 import 'package:sqflite/sqflite.dart' as _i2;
 
 // ignore_for_file: type=lint
@@ -487,6 +489,21 @@ class MockDatabaseService extends _i1.Mock implements _i5.DatabaseService {
   _i6.Future<void> deleteRelationship(String? relationshipId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteRelationship, [relationshipId]),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> deleteRelationshipBetween(
+    String? fromNoteId,
+    String? toNoteId,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteRelationshipBetween, [
+              fromNoteId,
+              toNoteId,
+            ]),
             returnValue: _i6.Future<void>.value(),
             returnValueForMissingStub: _i6.Future<void>.value(),
           )
@@ -1500,15 +1517,61 @@ class MockDatabaseService extends _i1.Mock implements _i5.DatabaseService {
             returnValue: _i6.Future<_i7.Note?>.value(),
           )
           as _i6.Future<_i7.Note?>);
+
+  @override
+  _i6.Future<_i18.WorkflowBindingRow?> getExactWorkflowBinding(
+    String? tagName,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getExactWorkflowBinding, [tagName]),
+            returnValue: _i6.Future<_i18.WorkflowBindingRow?>.value(),
+          )
+          as _i6.Future<_i18.WorkflowBindingRow?>);
+
+  @override
+  _i6.Future<List<_i18.WorkflowBindingRow>> getPrefixWorkflowBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getPrefixWorkflowBindings, []),
+            returnValue: _i6.Future<List<_i18.WorkflowBindingRow>>.value(
+              <_i18.WorkflowBindingRow>[],
+            ),
+          )
+          as _i6.Future<List<_i18.WorkflowBindingRow>>);
+
+  @override
+  _i6.Future<void> insertWorkflowBinding(_i18.WorkflowBindingRow? binding) =>
+      (super.noSuchMethod(
+            Invocation.method(#insertWorkflowBinding, [binding]),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> deleteWorkflowBinding(String? pattern) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteWorkflowBinding, [pattern]),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
 }
 
 /// A class which mocks [AgentService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockAgentService extends _i1.Mock implements _i18.AgentService {
+class MockAgentService extends _i1.Mock implements _i19.AgentService {
   MockAgentService() {
     _i1.throwOnMissingStub(this);
   }
+
+  @override
+  int get pendingWorkflowCount =>
+      (super.noSuchMethod(
+            Invocation.getter(#pendingWorkflowCount),
+            returnValue: 0,
+          )
+          as int);
 
   @override
   bool get isPaused =>
@@ -1535,12 +1598,12 @@ class MockAgentService extends _i1.Mock implements _i18.AgentService {
           as List<String>);
 
   @override
-  List<_i19.AgentTask> get tasks =>
+  List<_i20.AgentTask> get tasks =>
       (super.noSuchMethod(
             Invocation.getter(#tasks),
-            returnValue: <_i19.AgentTask>[],
+            returnValue: <_i20.AgentTask>[],
           )
-          as List<_i19.AgentTask>);
+          as List<_i20.AgentTask>);
 
   @override
   Map<String, List<_i4.McpTool>> get externalTools =>
@@ -1551,12 +1614,12 @@ class MockAgentService extends _i1.Mock implements _i18.AgentService {
           as Map<String, List<_i4.McpTool>>);
 
   @override
-  List<_i20.NativeTool> get enabledNativeTools =>
+  List<_i21.NativeTool> get enabledNativeTools =>
       (super.noSuchMethod(
             Invocation.getter(#enabledNativeTools),
-            returnValue: <_i20.NativeTool>[],
+            returnValue: <_i21.NativeTool>[],
           )
-          as List<_i20.NativeTool>);
+          as List<_i21.NativeTool>);
 
   @override
   bool get isRunning =>
@@ -1564,12 +1627,12 @@ class MockAgentService extends _i1.Mock implements _i18.AgentService {
           as bool);
 
   @override
-  List<_i20.NativeTool> get nativeTools =>
+  List<_i21.NativeTool> get nativeTools =>
       (super.noSuchMethod(
             Invocation.getter(#nativeTools),
-            returnValue: <_i20.NativeTool>[],
+            returnValue: <_i21.NativeTool>[],
           )
-          as List<_i20.NativeTool>);
+          as List<_i21.NativeTool>);
 
   @override
   set onProgressUpdate(void Function(String)? value) => super.noSuchMethod(
@@ -1578,13 +1641,13 @@ class MockAgentService extends _i1.Mock implements _i18.AgentService {
   );
 
   @override
-  set modelOverride(_i21.ModelConfig? value) => super.noSuchMethod(
+  set modelOverride(_i22.ModelConfig? value) => super.noSuchMethod(
     Invocation.setter(#modelOverride, value),
     returnValueForMissingStub: null,
   );
 
   @override
-  set toolExecutor(_i18.ToolExecutor? executor) => super.noSuchMethod(
+  set toolExecutor(_i19.ToolExecutor? executor) => super.noSuchMethod(
     Invocation.setter(#toolExecutor, executor),
     returnValueForMissingStub: null,
   );
@@ -1674,7 +1737,7 @@ class MockAgentService extends _i1.Mock implements _i18.AgentService {
 
   @override
   _i6.Future<void> performTaskForTest(
-    _i19.AgentTask? task,
+    _i20.AgentTask? task,
     String? globalContext,
   ) =>
       (super.noSuchMethod(
@@ -1701,12 +1764,12 @@ class MockAgentService extends _i1.Mock implements _i18.AgentService {
           as List<String>);
 
   @override
-  _i6.Future<List<_i19.AgentTask>> generatePlan(
+  _i6.Future<List<_i20.AgentTask>> generatePlan(
     String? objective, {
     Map<String, List<_i4.McpTool>>? activeTools = const {},
-    _i18.ToolExecutor? executeTool,
+    _i19.ToolExecutor? executeTool,
     String? context,
-    List<_i22.PlatformFile>? contextAttachments = const [],
+    List<_i23.PlatformFile>? contextAttachments = const [],
     bool? skillsEnabled = true,
   }) =>
       (super.noSuchMethod(
@@ -1721,21 +1784,21 @@ class MockAgentService extends _i1.Mock implements _i18.AgentService {
                 #skillsEnabled: skillsEnabled,
               },
             ),
-            returnValue: _i6.Future<List<_i19.AgentTask>>.value(
-              <_i19.AgentTask>[],
+            returnValue: _i6.Future<List<_i20.AgentTask>>.value(
+              <_i20.AgentTask>[],
             ),
           )
-          as _i6.Future<List<_i19.AgentTask>>);
+          as _i6.Future<List<_i20.AgentTask>>);
 
   @override
-  _i6.Future<List<_i19.AgentTask>> revisePlan(String? feedback) =>
+  _i6.Future<List<_i20.AgentTask>> revisePlan(String? feedback) =>
       (super.noSuchMethod(
             Invocation.method(#revisePlan, [feedback]),
-            returnValue: _i6.Future<List<_i19.AgentTask>>.value(
-              <_i19.AgentTask>[],
+            returnValue: _i6.Future<List<_i20.AgentTask>>.value(
+              <_i20.AgentTask>[],
             ),
           )
-          as _i6.Future<List<_i19.AgentTask>>);
+          as _i6.Future<List<_i20.AgentTask>>);
 
   @override
   _i6.Future<void> executePlan() =>
@@ -1750,9 +1813,9 @@ class MockAgentService extends _i1.Mock implements _i18.AgentService {
   _i6.Future<void> startObjective(
     String? objective, {
     Map<String, List<_i4.McpTool>>? activeTools = const {},
-    _i18.ToolExecutor? executeTool,
+    _i19.ToolExecutor? executeTool,
     String? context,
-    List<_i22.PlatformFile>? contextAttachments = const [],
+    List<_i23.PlatformFile>? contextAttachments = const [],
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1775,6 +1838,21 @@ class MockAgentService extends _i1.Mock implements _i18.AgentService {
     Invocation.method(#cancel, []),
     returnValueForMissingStub: null,
   );
+
+  @override
+  _i6.Future<void> runWorkflowTask({
+    required _i24.ResolvedBinding? binding,
+    required _i7.Note? note,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#runWorkflowTask, [], {
+              #binding: binding,
+              #note: note,
+            }),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
 
   @override
   _i6.Future<void> resumeTask(String? taskId, {bool? increaseLimit = false}) =>
@@ -1802,19 +1880,19 @@ class MockAgentService extends _i1.Mock implements _i18.AgentService {
   );
 
   @override
-  void updateToolExecutor(_i18.ToolExecutor? executor) => super.noSuchMethod(
+  void updateToolExecutor(_i19.ToolExecutor? executor) => super.noSuchMethod(
     Invocation.method(#updateToolExecutor, [executor]),
     returnValueForMissingStub: null,
   );
 
   @override
-  void addListener(_i23.VoidCallback? listener) => super.noSuchMethod(
+  void addListener(_i25.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#addListener, [listener]),
     returnValueForMissingStub: null,
   );
 
   @override
-  void removeListener(_i23.VoidCallback? listener) => super.noSuchMethod(
+  void removeListener(_i25.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#removeListener, [listener]),
     returnValueForMissingStub: null,
   );
@@ -1835,17 +1913,17 @@ class MockAgentService extends _i1.Mock implements _i18.AgentService {
 /// A class which mocks [SkillService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockSkillService extends _i1.Mock implements _i24.SkillService {
+class MockSkillService extends _i1.Mock implements _i26.SkillService {
   MockSkillService() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i24.SkillMetadata? parseSkillMetadata(String? noteId, String? content) =>
+  _i26.SkillMetadata? parseSkillMetadata(String? noteId, String? content) =>
       (super.noSuchMethod(
             Invocation.method(#parseSkillMetadata, [noteId, content]),
           )
-          as _i24.SkillMetadata?);
+          as _i26.SkillMetadata?);
 
   @override
   String stripFrontmatter(String? content) =>
@@ -1859,22 +1937,33 @@ class MockSkillService extends _i1.Mock implements _i24.SkillService {
           as String);
 
   @override
-  _i6.Future<Map<String, _i24.SkillMetadata>> buildSkillIndex() =>
+  _i6.Future<Map<String, _i26.SkillMetadata>> buildSkillIndex() =>
       (super.noSuchMethod(
             Invocation.method(#buildSkillIndex, []),
-            returnValue: _i6.Future<Map<String, _i24.SkillMetadata>>.value(
-              <String, _i24.SkillMetadata>{},
+            returnValue: _i6.Future<Map<String, _i26.SkillMetadata>>.value(
+              <String, _i26.SkillMetadata>{},
             ),
           )
-          as _i6.Future<Map<String, _i24.SkillMetadata>>);
+          as _i6.Future<Map<String, _i26.SkillMetadata>>);
 
   @override
-  String buildSkillIndexPrompt(Map<String, _i24.SkillMetadata>? index) =>
+  String buildSkillIndexPrompt(
+    Map<String, _i26.SkillMetadata>? index, {
+    int? maxBudgetTokens,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#buildSkillIndexPrompt, [index]),
+            Invocation.method(
+              #buildSkillIndexPrompt,
+              [index],
+              {#maxBudgetTokens: maxBudgetTokens},
+            ),
             returnValue: _i8.dummyValue<String>(
               this,
-              Invocation.method(#buildSkillIndexPrompt, [index]),
+              Invocation.method(
+                #buildSkillIndexPrompt,
+                [index],
+                {#maxBudgetTokens: maxBudgetTokens},
+              ),
             ),
           )
           as String);
@@ -1918,7 +2007,7 @@ class MockSkillService extends _i1.Mock implements _i24.SkillService {
 /// A class which mocks [McpService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockMcpService extends _i1.Mock implements _i25.McpService {
+class MockMcpService extends _i1.Mock implements _i27.McpService {
   MockMcpService() {
     _i1.throwOnMissingStub(this);
   }

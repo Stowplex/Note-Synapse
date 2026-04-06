@@ -6,7 +6,7 @@
 import 'dart:async' as _i7;
 import 'dart:ui' as _i3;
 
-import 'package:file_picker/file_picker.dart' as _i19;
+import 'package:file_picker/file_picker.dart' as _i20;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i9;
 import 'package:note_synapse/models/app_revision.dart' as _i4;
@@ -14,14 +14,15 @@ import 'package:note_synapse/models/attachment.dart' as _i11;
 import 'package:note_synapse/models/conversation.dart' as _i15;
 import 'package:note_synapse/models/conversation_attachment.dart' as _i16;
 import 'package:note_synapse/models/filter.dart' as _i14;
-import 'package:note_synapse/models/generation_context.dart' as _i20;
-import 'package:note_synapse/models/model_config.dart' as _i18;
+import 'package:note_synapse/models/generation_context.dart' as _i21;
+import 'package:note_synapse/models/model_config.dart' as _i19;
 import 'package:note_synapse/models/note.dart' as _i8;
 import 'package:note_synapse/models/note_annotation.dart' as _i10;
 import 'package:note_synapse/models/relationship.dart' as _i13;
 import 'package:note_synapse/models/tag.dart' as _i12;
 import 'package:note_synapse/models/user_app.dart' as _i5;
-import 'package:note_synapse/providers/app_provider.dart' as _i17;
+import 'package:note_synapse/models/workflow_binding_row.dart' as _i17;
+import 'package:note_synapse/providers/app_provider.dart' as _i18;
 import 'package:note_synapse/services/database_service.dart' as _i6;
 import 'package:sqflite/sqflite.dart' as _i2;
 
@@ -481,6 +482,21 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
   _i7.Future<void> deleteRelationship(String? relationshipId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteRelationship, [relationshipId]),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
+          )
+          as _i7.Future<void>);
+
+  @override
+  _i7.Future<void> deleteRelationshipBetween(
+    String? fromNoteId,
+    String? toNoteId,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteRelationshipBetween, [
+              fromNoteId,
+              toNoteId,
+            ]),
             returnValue: _i7.Future<void>.value(),
             returnValueForMissingStub: _i7.Future<void>.value(),
           )
@@ -1494,12 +1510,50 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
             returnValue: _i7.Future<_i8.Note?>.value(),
           )
           as _i7.Future<_i8.Note?>);
+
+  @override
+  _i7.Future<_i17.WorkflowBindingRow?> getExactWorkflowBinding(
+    String? tagName,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getExactWorkflowBinding, [tagName]),
+            returnValue: _i7.Future<_i17.WorkflowBindingRow?>.value(),
+          )
+          as _i7.Future<_i17.WorkflowBindingRow?>);
+
+  @override
+  _i7.Future<List<_i17.WorkflowBindingRow>> getPrefixWorkflowBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getPrefixWorkflowBindings, []),
+            returnValue: _i7.Future<List<_i17.WorkflowBindingRow>>.value(
+              <_i17.WorkflowBindingRow>[],
+            ),
+          )
+          as _i7.Future<List<_i17.WorkflowBindingRow>>);
+
+  @override
+  _i7.Future<void> insertWorkflowBinding(_i17.WorkflowBindingRow? binding) =>
+      (super.noSuchMethod(
+            Invocation.method(#insertWorkflowBinding, [binding]),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
+          )
+          as _i7.Future<void>);
+
+  @override
+  _i7.Future<void> deleteWorkflowBinding(String? pattern) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteWorkflowBinding, [pattern]),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
+          )
+          as _i7.Future<void>);
 }
 
 /// A class which mocks [AppProvider].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockAppProvider extends _i1.Mock implements _i17.AppProvider {
+class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
   MockAppProvider() {
     _i1.throwOnMissingStub(this);
   }
@@ -1614,7 +1668,7 @@ class MockAppProvider extends _i1.Mock implements _i17.AppProvider {
           as _i7.Future<void>);
 
   @override
-  void updateModelConfig(_i18.ModelConfig? newConfig) => super.noSuchMethod(
+  void updateModelConfig(_i19.ModelConfig? newConfig) => super.noSuchMethod(
     Invocation.method(#updateModelConfig, [newConfig]),
     returnValueForMissingStub: null,
   );
@@ -1730,8 +1784,8 @@ class MockAppProvider extends _i1.Mock implements _i17.AppProvider {
   _i7.Future<String> transformNote(
     _i8.Note? note,
     String? transformationPrompt, {
-    List<_i19.PlatformFile>? attachedFiles,
-    _i20.GenerationContext? generationContext,
+    List<_i20.PlatformFile>? attachedFiles,
+    _i21.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1762,9 +1816,9 @@ class MockAppProvider extends _i1.Mock implements _i17.AppProvider {
   _i7.Future<List<_i8.Note>> createNewNotes(
     String? prompt,
     List<_i8.Note>? contextNotes, {
-    List<_i19.PlatformFile>? attachedFiles,
+    List<_i20.PlatformFile>? attachedFiles,
     bool? persist = true,
-    _i20.GenerationContext? generationContext,
+    _i21.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -2129,7 +2183,7 @@ class MockAppProvider extends _i1.Mock implements _i17.AppProvider {
     List<String>? attachmentPaths,
     List<_i8.Note>? contextNotes,
     List<_i5.UserAppLibraryInfo>? libraries,
-    _i20.GenerationContext? generationContext,
+    _i21.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#createUserApp, [], {
@@ -2167,7 +2221,7 @@ class MockAppProvider extends _i1.Mock implements _i17.AppProvider {
     List<String>? attachmentPaths,
     List<_i8.Note>? contextNotes,
     List<_i5.UserAppLibraryInfo>? libraries,
-    _i20.GenerationContext? generationContext,
+    _i21.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#editUserApp, [], {

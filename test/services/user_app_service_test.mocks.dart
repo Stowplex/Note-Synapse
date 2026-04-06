@@ -5,25 +5,26 @@
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i4;
 
-import 'package:file_picker/file_picker.dart' as _i20;
+import 'package:file_picker/file_picker.dart' as _i21;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i6;
 import 'package:note_synapse/models/app_revision.dart' as _i13;
 import 'package:note_synapse/models/attachment.dart' as _i8;
 import 'package:note_synapse/models/conversation.dart' as _i14;
 import 'package:note_synapse/models/conversation_attachment.dart' as _i15;
-import 'package:note_synapse/models/dedup_rule.dart' as _i21;
+import 'package:note_synapse/models/dedup_rule.dart' as _i22;
 import 'package:note_synapse/models/filter.dart' as _i11;
-import 'package:note_synapse/models/generation_context.dart' as _i19;
+import 'package:note_synapse/models/generation_context.dart' as _i20;
 import 'package:note_synapse/models/note.dart' as _i5;
 import 'package:note_synapse/models/note_annotation.dart' as _i7;
 import 'package:note_synapse/models/relationship.dart' as _i10;
 import 'package:note_synapse/models/tag.dart' as _i9;
 import 'package:note_synapse/models/user_app.dart' as _i12;
-import 'package:note_synapse/providers/app_provider.dart' as _i17;
-import 'package:note_synapse/services/ai_service.dart' as _i16;
+import 'package:note_synapse/models/workflow_binding_row.dart' as _i16;
+import 'package:note_synapse/providers/app_provider.dart' as _i18;
+import 'package:note_synapse/services/ai_service.dart' as _i17;
 import 'package:note_synapse/services/database_service.dart' as _i3;
-import 'package:note_synapse/services/prompts/prompt_models.dart' as _i18;
+import 'package:note_synapse/services/prompts/prompt_models.dart' as _i19;
 import 'package:sqflite/sqflite.dart' as _i2;
 
 // ignore_for_file: type=lint
@@ -467,6 +468,21 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
   _i4.Future<void> deleteRelationship(String? relationshipId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteRelationship, [relationshipId]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> deleteRelationshipBetween(
+    String? fromNoteId,
+    String? toNoteId,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteRelationshipBetween, [
+              fromNoteId,
+              toNoteId,
+            ]),
             returnValue: _i4.Future<void>.value(),
             returnValueForMissingStub: _i4.Future<void>.value(),
           )
@@ -1480,18 +1496,56 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
             returnValue: _i4.Future<_i5.Note?>.value(),
           )
           as _i4.Future<_i5.Note?>);
+
+  @override
+  _i4.Future<_i16.WorkflowBindingRow?> getExactWorkflowBinding(
+    String? tagName,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getExactWorkflowBinding, [tagName]),
+            returnValue: _i4.Future<_i16.WorkflowBindingRow?>.value(),
+          )
+          as _i4.Future<_i16.WorkflowBindingRow?>);
+
+  @override
+  _i4.Future<List<_i16.WorkflowBindingRow>> getPrefixWorkflowBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getPrefixWorkflowBindings, []),
+            returnValue: _i4.Future<List<_i16.WorkflowBindingRow>>.value(
+              <_i16.WorkflowBindingRow>[],
+            ),
+          )
+          as _i4.Future<List<_i16.WorkflowBindingRow>>);
+
+  @override
+  _i4.Future<void> insertWorkflowBinding(_i16.WorkflowBindingRow? binding) =>
+      (super.noSuchMethod(
+            Invocation.method(#insertWorkflowBinding, [binding]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> deleteWorkflowBinding(String? pattern) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteWorkflowBinding, [pattern]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
 }
 
 /// A class which mocks [AIService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockAIService extends _i1.Mock implements _i16.AIService {
+class MockAIService extends _i1.Mock implements _i17.AIService {
   MockAIService() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i4.Future<void> initialize(_i17.AppProvider? appProvider) =>
+  _i4.Future<void> initialize(_i18.AppProvider? appProvider) =>
       (super.noSuchMethod(
             Invocation.method(#initialize, [appProvider]),
             returnValue: _i4.Future<void>.value(),
@@ -1501,12 +1555,12 @@ class MockAIService extends _i1.Mock implements _i16.AIService {
 
   @override
   _i4.Future<String> executePrompt(
-    _i18.PromptRequest? request, {
+    _i19.PromptRequest? request, {
     double? temperature,
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    _i19.GenerationContext? generationContext,
+    _i20.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1543,8 +1597,8 @@ class MockAIService extends _i1.Mock implements _i16.AIService {
   _i4.Future<String> transformNote(
     _i5.Note? note,
     String? transformationPrompt, {
-    List<_i20.PlatformFile>? attachedFiles,
-    _i19.GenerationContext? generationContext,
+    List<_i21.PlatformFile>? attachedFiles,
+    _i20.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1575,7 +1629,7 @@ class MockAIService extends _i1.Mock implements _i16.AIService {
   _i4.Future<String> transformBlock(
     String? blockContent,
     String? instruction, {
-    _i19.GenerationContext? generationContext,
+    _i20.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1599,8 +1653,8 @@ class MockAIService extends _i1.Mock implements _i16.AIService {
   @override
   _i4.Future<String> generateWithAttachments(
     String? prompt,
-    List<_i20.PlatformFile>? attachedFiles, {
-    _i19.GenerationContext? generationContext,
+    List<_i21.PlatformFile>? attachedFiles, {
+    _i20.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1625,8 +1679,8 @@ class MockAIService extends _i1.Mock implements _i16.AIService {
   _i4.Future<List<_i5.Note>> createNewNotes(
     String? prompt,
     List<_i5.Note>? contextNotes, {
-    List<_i20.PlatformFile>? attachedFiles,
-    _i19.GenerationContext? generationContext,
+    List<_i21.PlatformFile>? attachedFiles,
+    _i20.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1714,7 +1768,7 @@ class MockAIService extends _i1.Mock implements _i16.AIService {
           as _i4.Future<Map<String, dynamic>>);
 
   @override
-  _i4.Future<List<_i21.DedupRule>> suggestDedupRules(
+  _i4.Future<List<_i22.DedupRule>> suggestDedupRules(
     List<String>? tagNames, {
     List<String>? protectedTags = const [],
   }) =>
@@ -1724,17 +1778,17 @@ class MockAIService extends _i1.Mock implements _i16.AIService {
               [tagNames],
               {#protectedTags: protectedTags},
             ),
-            returnValue: _i4.Future<List<_i21.DedupRule>>.value(
-              <_i21.DedupRule>[],
+            returnValue: _i4.Future<List<_i22.DedupRule>>.value(
+              <_i22.DedupRule>[],
             ),
           )
-          as _i4.Future<List<_i21.DedupRule>>);
+          as _i4.Future<List<_i22.DedupRule>>);
 
   @override
   _i4.Future<String> generateApp(
     String? prompt, {
-    List<_i20.PlatformFile>? attachedFiles,
-    _i19.GenerationContext? generationContext,
+    List<_i21.PlatformFile>? attachedFiles,
+    _i20.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1767,8 +1821,8 @@ class MockAIService extends _i1.Mock implements _i16.AIService {
     double? temperature,
     int? topK,
     double? topP,
-    List<_i20.PlatformFile>? attachedFiles,
-    _i19.GenerationContext? generationContext,
+    List<_i21.PlatformFile>? attachedFiles,
+    _i20.GenerationContext? generationContext,
     List<String>? modelHint,
   }) =>
       (super.noSuchMethod(
@@ -1810,8 +1864,8 @@ class MockAIService extends _i1.Mock implements _i16.AIService {
     double? temperature,
     int? topK,
     double? topP,
-    List<_i20.PlatformFile>? attachedFiles,
-    _i19.GenerationContext? generationContext,
+    List<_i21.PlatformFile>? attachedFiles,
+    _i20.GenerationContext? generationContext,
     List<String>? modelHint,
   }) =>
       (super.noSuchMethod(

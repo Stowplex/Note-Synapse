@@ -24,9 +24,10 @@ import 'package:note_synapse/models/relationship.dart' as _i22;
 import 'package:note_synapse/models/tag.dart' as _i21;
 import 'package:note_synapse/models/task_result_storage.dart' as _i3;
 import 'package:note_synapse/models/user_app.dart' as _i24;
+import 'package:note_synapse/models/workflow_binding_row.dart' as _i28;
 import 'package:note_synapse/providers/app_provider.dart' as _i10;
 import 'package:note_synapse/services/ai_service.dart' as _i15;
-import 'package:note_synapse/services/built_in_tools_service.dart' as _i28;
+import 'package:note_synapse/services/built_in_tools_service.dart' as _i29;
 import 'package:note_synapse/services/context_manager_service.dart' as _i5;
 import 'package:note_synapse/services/database_service.dart' as _i18;
 import 'package:note_synapse/services/model_selector.dart' as _i9;
@@ -1379,6 +1380,21 @@ class MockDatabaseService extends _i1.Mock implements _i18.DatabaseService {
           as _i6.Future<void>);
 
   @override
+  _i6.Future<void> deleteRelationshipBetween(
+    String? fromNoteId,
+    String? toNoteId,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteRelationshipBetween, [
+              fromNoteId,
+              toNoteId,
+            ]),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
   _i6.Future<void> deleteRelationshipsForNote(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteRelationshipsForNote, [noteId]),
@@ -2386,13 +2402,51 @@ class MockDatabaseService extends _i1.Mock implements _i18.DatabaseService {
             returnValue: _i6.Future<_i16.Note?>.value(),
           )
           as _i6.Future<_i16.Note?>);
+
+  @override
+  _i6.Future<_i28.WorkflowBindingRow?> getExactWorkflowBinding(
+    String? tagName,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getExactWorkflowBinding, [tagName]),
+            returnValue: _i6.Future<_i28.WorkflowBindingRow?>.value(),
+          )
+          as _i6.Future<_i28.WorkflowBindingRow?>);
+
+  @override
+  _i6.Future<List<_i28.WorkflowBindingRow>> getPrefixWorkflowBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getPrefixWorkflowBindings, []),
+            returnValue: _i6.Future<List<_i28.WorkflowBindingRow>>.value(
+              <_i28.WorkflowBindingRow>[],
+            ),
+          )
+          as _i6.Future<List<_i28.WorkflowBindingRow>>);
+
+  @override
+  _i6.Future<void> insertWorkflowBinding(_i28.WorkflowBindingRow? binding) =>
+      (super.noSuchMethod(
+            Invocation.method(#insertWorkflowBinding, [binding]),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> deleteWorkflowBinding(String? pattern) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteWorkflowBinding, [pattern]),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
 }
 
 /// A class which mocks [BuiltInToolsService].
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockBuiltInToolsService extends _i1.Mock
-    implements _i28.BuiltInToolsService {
+    implements _i29.BuiltInToolsService {
   MockBuiltInToolsService() {
     _i1.throwOnMissingStub(this);
   }

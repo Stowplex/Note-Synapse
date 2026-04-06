@@ -5,7 +5,7 @@
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i4;
 
-import 'package:file_picker/file_picker.dart' as _i20;
+import 'package:file_picker/file_picker.dart' as _i21;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i6;
 import 'package:note_synapse/models/app_revision.dart' as _i13;
@@ -13,18 +13,19 @@ import 'package:note_synapse/models/attachment.dart' as _i8;
 import 'package:note_synapse/models/conversation.dart' as _i14;
 import 'package:note_synapse/models/conversation_attachment.dart' as _i15;
 import 'package:note_synapse/models/filter.dart' as _i11;
-import 'package:note_synapse/models/generation_context.dart' as _i21;
-import 'package:note_synapse/models/model_config.dart' as _i18;
-import 'package:note_synapse/models/model_type.dart' as _i19;
+import 'package:note_synapse/models/generation_context.dart' as _i22;
+import 'package:note_synapse/models/model_config.dart' as _i19;
+import 'package:note_synapse/models/model_type.dart' as _i20;
 import 'package:note_synapse/models/note.dart' as _i5;
 import 'package:note_synapse/models/note_annotation.dart' as _i7;
 import 'package:note_synapse/models/relationship.dart' as _i10;
 import 'package:note_synapse/models/tag.dart' as _i9;
 import 'package:note_synapse/models/user_app.dart' as _i12;
-import 'package:note_synapse/providers/app_provider.dart' as _i17;
+import 'package:note_synapse/models/workflow_binding_row.dart' as _i16;
+import 'package:note_synapse/providers/app_provider.dart' as _i18;
 import 'package:note_synapse/services/database_service.dart' as _i3;
-import 'package:note_synapse/services/model_selector.dart' as _i16;
-import 'package:note_synapse/services/prompts/prompt_models.dart' as _i22;
+import 'package:note_synapse/services/model_selector.dart' as _i17;
+import 'package:note_synapse/services/prompts/prompt_models.dart' as _i23;
 import 'package:sqflite/sqflite.dart' as _i2;
 
 // ignore_for_file: type=lint
@@ -468,6 +469,21 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
   _i4.Future<void> deleteRelationship(String? relationshipId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteRelationship, [relationshipId]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> deleteRelationshipBetween(
+    String? fromNoteId,
+    String? toNoteId,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteRelationshipBetween, [
+              fromNoteId,
+              toNoteId,
+            ]),
             returnValue: _i4.Future<void>.value(),
             returnValueForMissingStub: _i4.Future<void>.value(),
           )
@@ -1481,18 +1497,56 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
             returnValue: _i4.Future<_i5.Note?>.value(),
           )
           as _i4.Future<_i5.Note?>);
+
+  @override
+  _i4.Future<_i16.WorkflowBindingRow?> getExactWorkflowBinding(
+    String? tagName,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getExactWorkflowBinding, [tagName]),
+            returnValue: _i4.Future<_i16.WorkflowBindingRow?>.value(),
+          )
+          as _i4.Future<_i16.WorkflowBindingRow?>);
+
+  @override
+  _i4.Future<List<_i16.WorkflowBindingRow>> getPrefixWorkflowBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getPrefixWorkflowBindings, []),
+            returnValue: _i4.Future<List<_i16.WorkflowBindingRow>>.value(
+              <_i16.WorkflowBindingRow>[],
+            ),
+          )
+          as _i4.Future<List<_i16.WorkflowBindingRow>>);
+
+  @override
+  _i4.Future<void> insertWorkflowBinding(_i16.WorkflowBindingRow? binding) =>
+      (super.noSuchMethod(
+            Invocation.method(#insertWorkflowBinding, [binding]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> deleteWorkflowBinding(String? pattern) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteWorkflowBinding, [pattern]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
 }
 
 /// A class which mocks [ModelSelector].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockModelSelector extends _i1.Mock implements _i16.ModelSelector {
+class MockModelSelector extends _i1.Mock implements _i17.ModelSelector {
   MockModelSelector() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i4.Future<void> initialize(_i17.AppProvider? appProvider) =>
+  _i4.Future<void> initialize(_i18.AppProvider? appProvider) =>
       (super.noSuchMethod(
             Invocation.method(#initialize, [appProvider]),
             returnValue: _i4.Future<void>.value(),
@@ -1501,7 +1555,7 @@ class MockModelSelector extends _i1.Mock implements _i16.ModelSelector {
           as _i4.Future<void>);
 
   @override
-  _i4.Future<void> switchToModel(_i18.ModelConfig? config) =>
+  _i4.Future<void> switchToModel(_i19.ModelConfig? config) =>
       (super.noSuchMethod(
             Invocation.method(#switchToModel, [config]),
             returnValue: _i4.Future<void>.value(),
@@ -1510,22 +1564,22 @@ class MockModelSelector extends _i1.Mock implements _i16.ModelSelector {
           as _i4.Future<void>);
 
   @override
-  List<_i19.ModelType> getAvailableModels() =>
+  List<_i20.ModelType> getAvailableModels() =>
       (super.noSuchMethod(
             Invocation.method(#getAvailableModels, []),
-            returnValue: <_i19.ModelType>[],
+            returnValue: <_i20.ModelType>[],
           )
-          as List<_i19.ModelType>);
+          as List<_i20.ModelType>);
 
   @override
   _i4.Future<String> generateWithAttachments(
     String? prompt,
-    List<_i20.PlatformFile>? attachedFiles, {
+    List<_i21.PlatformFile>? attachedFiles, {
     double? temperature,
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    _i21.GenerationContext? generationContext,
+    _i22.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1560,12 +1614,12 @@ class MockModelSelector extends _i1.Mock implements _i16.ModelSelector {
 
   @override
   _i4.Future<String> generateWithMessages(
-    List<_i22.PromptMessage>? messages, {
+    List<_i23.PromptMessage>? messages, {
     double? temperature,
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    _i21.GenerationContext? generationContext,
+    _i22.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1600,12 +1654,12 @@ class MockModelSelector extends _i1.Mock implements _i16.ModelSelector {
 
   @override
   _i4.Future<String> generateFromPrompt(
-    _i22.PromptRequest? request, {
+    _i23.PromptRequest? request, {
     double? temperature,
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    _i21.GenerationContext? generationContext,
+    _i22.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1640,12 +1694,12 @@ class MockModelSelector extends _i1.Mock implements _i16.ModelSelector {
 
   @override
   _i4.Future<List<Map<String, dynamic>>> generateFromPromptMultiPart(
-    _i22.PromptRequest? request, {
+    _i23.PromptRequest? request, {
     double? temperature,
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    _i21.GenerationContext? generationContext,
+    _i22.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1668,13 +1722,13 @@ class MockModelSelector extends _i1.Mock implements _i16.ModelSelector {
   @override
   _i4.Future<Map<String, dynamic>> generateWithTools(
     String? prompt,
-    List<_i20.PlatformFile>? attachedFiles,
+    List<_i21.PlatformFile>? attachedFiles,
     List<Map<String, dynamic>>? tools, {
     double? temperature,
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    _i21.GenerationContext? generationContext,
+    _i22.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1696,13 +1750,13 @@ class MockModelSelector extends _i1.Mock implements _i16.ModelSelector {
 
   @override
   _i4.Future<Map<String, dynamic>> generateWithToolsAndMessages(
-    List<_i22.PromptMessage>? messages,
+    List<_i23.PromptMessage>? messages,
     List<Map<String, dynamic>>? tools, {
     double? temperature,
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    _i21.GenerationContext? generationContext,
+    _i22.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1724,8 +1778,8 @@ class MockModelSelector extends _i1.Mock implements _i16.ModelSelector {
 
   @override
   String? checkLocalModelConstraints(
-    List<_i22.PromptMessage>? messages,
-    _i18.ModelConfig? config,
+    List<_i23.PromptMessage>? messages,
+    _i19.ModelConfig? config,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#checkLocalModelConstraints, [messages, config]),
@@ -1733,9 +1787,9 @@ class MockModelSelector extends _i1.Mock implements _i16.ModelSelector {
           as String?);
 
   @override
-  _i4.Future<_i18.ModelConfig?> getModelByHint(
+  _i4.Future<_i19.ModelConfig?> getModelByHint(
     List<String>? hints, {
-    _i18.ModelConfig? currentOverride,
+    _i19.ModelConfig? currentOverride,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1743,17 +1797,17 @@ class MockModelSelector extends _i1.Mock implements _i16.ModelSelector {
               [hints],
               {#currentOverride: currentOverride},
             ),
-            returnValue: _i4.Future<_i18.ModelConfig?>.value(),
+            returnValue: _i4.Future<_i19.ModelConfig?>.value(),
           )
-          as _i4.Future<_i18.ModelConfig?>);
+          as _i4.Future<_i19.ModelConfig?>);
 
   @override
-  _i4.Future<_i18.ModelConfig?> selectModelByPreference(
+  _i4.Future<_i19.ModelConfig?> selectModelByPreference(
     Set<String>? requiredCaps,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#selectModelByPreference, [requiredCaps]),
-            returnValue: _i4.Future<_i18.ModelConfig?>.value(),
+            returnValue: _i4.Future<_i19.ModelConfig?>.value(),
           )
-          as _i4.Future<_i18.ModelConfig?>);
+          as _i4.Future<_i19.ModelConfig?>);
 }

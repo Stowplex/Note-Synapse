@@ -660,13 +660,34 @@ If this is research/analysis, output structured findings.
   }
 
   /// Add a loaded skill to the root context node (session-scoped, deduplicated).
+  ///
+  /// If adding the full skill content would cause pinned skills to exceed 30% of
+  /// [ContextNode.maxContextTokens], a one-line summary is stored instead.
   void addLoadedSkill(String noteId, String content) {
     final root = rootContext;
     if (root == null) return;
     // Deduplicate by noteId
     if (root.loadedSkills.any((s) => s.noteId == noteId)) return;
-    root.loadedSkills.add(LoadedSkill(noteId: noteId, content: content));
+
+    final maxPinnedTokens = (root.maxContextTokens * 0.3).toInt();
+    final currentPinnedTokens = root.loadedSkills.fold<int>(
+        0, (sum, s) => sum + _estimateTokens(s.content));
+    final newTokens = _estimateTokens(content);
+
+    if (currentPinnedTokens + newTokens > maxPinnedTokens) {
+      final firstLine = content.split('\n').firstWhere(
+        (l) => l.trim().isNotEmpty, orElse: () => 'Skill');
+      root.loadedSkills.add(LoadedSkill(
+        noteId: noteId,
+        content: 'Skill loaded but summarized due to context constraints. '
+            'Key: $firstLine. Unload a skill or use a higher-context model for full content.',
+      ));
+    } else {
+      root.loadedSkills.add(LoadedSkill(noteId: noteId, content: content));
+    }
   }
+
+  int _estimateTokens(String text) => (text.length / 4).ceil();
 
   /// Marks a context as failed with an error message.
   void markContextFailed(ContextNode node, String error) {

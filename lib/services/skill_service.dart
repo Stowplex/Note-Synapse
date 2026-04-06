@@ -6,12 +6,14 @@ class SkillMetadata {
   final String name;
   final String description;
   final bool enabled;
+  final int? minContext;
 
   const SkillMetadata({
     required this.noteId,
     required this.name,
     required this.description,
     required this.enabled,
+    this.minContext,
   });
 }
 
@@ -43,8 +45,11 @@ class SkillService {
     if (name == null || name.isEmpty) return null;
     if (description == null || description.isEmpty) return null;
     final enabled = fields['enabled']?.toLowerCase() != 'false';
+    final minContextStr = fields['min_context'];
+    final minContext = minContextStr != null ? int.tryParse(minContextStr) : null;
     return SkillMetadata(
-        noteId: noteId, name: name, description: description, enabled: enabled);
+        noteId: noteId, name: name, description: description, enabled: enabled,
+        minContext: minContext);
   }
 
   String stripFrontmatter(String content) {
@@ -68,16 +73,31 @@ class SkillService {
     return index;
   }
 
-  String buildSkillIndexPrompt(Map<String, SkillMetadata> index) {
+  String buildSkillIndexPrompt(Map<String, SkillMetadata> index, {int? maxBudgetTokens}) {
     if (index.isEmpty) return '';
+    final budget = maxBudgetTokens ?? 100000;
     final sb = StringBuffer();
-    sb.writeln('\n## Available Agent Skills');
-    sb.writeln(
-      'When a skill is relevant to the task, call load_skill with the noteId to get detailed workflow instructions.\n',
-    );
-    for (final entry in index.entries) {
-      sb.writeln(
-          '${entry.key}: ${entry.value.name} — ${entry.value.description}');
+
+    if (budget < 15000) {
+      sb.writeln('\n## Available Agent Skills');
+      sb.writeln('Use load_skill with the noteId to get instructions.');
+      sb.writeln(index.entries.map((e) => '${e.key}: ${e.value.name}').join(', '));
+    } else if (budget < 50000) {
+      sb.writeln('\n## Available Agent Skills');
+      sb.writeln('Use load_skill with the noteId to get instructions.\n');
+      for (final entry in index.entries) {
+        final limited = entry.value.minContext != null && entry.value.minContext! > budget;
+        final suffix = limited ? ' (limited mode)' : '';
+        sb.writeln('${entry.key}: ${entry.value.name}$suffix');
+      }
+    } else {
+      sb.writeln('\n## Available Agent Skills');
+      sb.writeln('When a skill is relevant, call load_skill with the noteId to get workflow instructions.\n');
+      for (final entry in index.entries) {
+        final limited = entry.value.minContext != null && entry.value.minContext! > budget;
+        final suffix = limited ? ' (limited mode)' : '';
+        sb.writeln('${entry.key}: ${entry.value.name} — ${entry.value.description}$suffix');
+      }
     }
     return sb.toString();
   }
