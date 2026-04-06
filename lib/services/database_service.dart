@@ -48,7 +48,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 45; // Target schema version
+  static const int DATABASE_VERSION = 46; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -869,7 +869,7 @@ class DatabaseService {
       description: 'Create note_annotations table for scratchpad annotations',
       execute: _migrateToVersion44,
     ),
-    45: MigrationStep(
+    46: MigrationStep(
       description:
           'Create tag_workflow_bindings table for tag-to-workflow binding infrastructure',
       execute: _migrateToVersion45,
