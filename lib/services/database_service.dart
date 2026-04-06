@@ -870,7 +870,8 @@ class DatabaseService {
       execute: _migrateToVersion44,
     ),
     45: MigrationStep(
-      description: 'Create tag_workflow_bindings table for tag-to-workflow binding infrastructure',
+      description:
+          'Create tag_workflow_bindings table for tag-to-workflow binding infrastructure',
       execute: _migrateToVersion45,
     ),
   };
@@ -1901,7 +1902,8 @@ class DatabaseService {
   /// Returns all non-archived notes that have the given tag.
   Future<List<Note>> getNotesByTag(String tagName) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+    final List<Map<String, dynamic>> maps = await db.rawQuery(
+      '''
       SELECT
         n.id, n.title, n.type, n.createdAt, n.updatedAt, n.scheduledAt, n.completeBy,
         n.status, n.completionPercentage, n.pinned, n.isArchived, n.recurrenceRule,
@@ -1912,7 +1914,9 @@ class DatabaseService {
       JOIN tags t ON nt.tagId = t.id
       WHERE t.name = ? AND n.isArchived = 0
       ORDER BY n.createdAt DESC
-    ''', [tagName]);
+    ''',
+      [tagName],
+    );
 
     return await _batchLoadNotes(maps);
   }
@@ -2548,7 +2552,9 @@ class DatabaseService {
   }
 
   Future<void> deleteRelationshipBetween(
-      String fromNoteId, String toNoteId) async {
+    String fromNoteId,
+    String toNoteId,
+  ) async {
     final db = await database;
     await db.delete(
       'relationships',
@@ -5143,7 +5149,34 @@ class DatabaseService {
   /// Get all prefix workflow bindings.
   Future<List<WorkflowBindingRow>> getPrefixWorkflowBindings() async {
     final db = await database;
-    final result = await db.query('tag_workflow_bindings', where: 'isPrefix = 1');
+    final result = await db.query(
+      'tag_workflow_bindings',
+      where: 'isPrefix = 1',
+    );
+    return result.map(WorkflowBindingRow.fromRow).toList();
+  }
+
+  /// Get a workflow binding by its exact stored pattern.
+  Future<WorkflowBindingRow?> getWorkflowBindingByPattern(
+    String pattern,
+  ) async {
+    final db = await database;
+    final result = await db.query(
+      'tag_workflow_bindings',
+      where: 'pattern = ?',
+      whereArgs: [pattern],
+    );
+    if (result.isEmpty) return null;
+    return WorkflowBindingRow.fromRow(result.first);
+  }
+
+  /// Get all workflow bindings, exact and prefix.
+  Future<List<WorkflowBindingRow>> getAllWorkflowBindings() async {
+    final db = await database;
+    final result = await db.query(
+      'tag_workflow_bindings',
+      orderBy: 'isPrefix DESC, pattern COLLATE NOCASE ASC',
+    );
     return result.map(WorkflowBindingRow.fromRow).toList();
   }
 

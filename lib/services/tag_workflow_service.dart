@@ -29,17 +29,20 @@ class TagWorkflowService {
     for (final tag in tags) {
       final exact = await _db.getExactWorkflowBinding(tag);
       if (exact != null) {
-        results.add(ResolvedBinding(
-          skillNoteId: exact.skillNoteId,
-          matchedTag: tag,
-          pattern: exact.pattern,
-          prompt: exact.prompt,
-          contentImmutable: exact.contentImmutable,
-        ));
+        results.add(
+          ResolvedBinding(
+            skillNoteId: exact.skillNoteId,
+            matchedTag: tag,
+            pattern: exact.pattern,
+            prompt: exact.prompt,
+            contentImmutable: exact.contentImmutable,
+          ),
+        );
         continue;
       }
       for (final binding in prefixBindings) {
-        if (tag.startsWith(binding.pattern) && tag.length > binding.pattern.length) {
+        if (tag.startsWith(binding.pattern) &&
+            tag.length > binding.pattern.length) {
           prefixMatches.putIfAbsent(binding.pattern, () => []).add(tag);
         }
       }
@@ -53,13 +56,15 @@ class TagWorkflowService {
         );
       }
       final binding = prefixBindings.firstWhere((b) => b.pattern == entry.key);
-      results.add(ResolvedBinding(
-        skillNoteId: binding.skillNoteId,
-        matchedTag: entry.value.first,
-        pattern: entry.key,
-        prompt: binding.prompt,
-        contentImmutable: binding.contentImmutable,
-      ));
+      results.add(
+        ResolvedBinding(
+          skillNoteId: binding.skillNoteId,
+          matchedTag: entry.value.first,
+          pattern: entry.key,
+          prompt: binding.prompt,
+          contentImmutable: binding.contentImmutable,
+        ),
+      );
     }
 
     return results;
@@ -70,6 +75,14 @@ class TagWorkflowService {
     return bindings.any((b) => b.contentImmutable);
   }
 
+  Future<WorkflowBindingRow?> getBindingByPattern(String pattern) async {
+    return _db.getWorkflowBindingByPattern(pattern);
+  }
+
+  Future<List<WorkflowBindingRow>> getAllBindings() async {
+    return _db.getAllWorkflowBindings();
+  }
+
   Future<void> registerBinding({
     required String pattern,
     required bool isPrefix,
@@ -77,13 +90,15 @@ class TagWorkflowService {
     required String prompt,
     required bool contentImmutable,
   }) async {
-    await _db.insertWorkflowBinding(WorkflowBindingRow(
-      pattern: pattern,
-      isPrefix: isPrefix,
-      skillNoteId: skillNoteId,
-      prompt: prompt,
-      contentImmutable: contentImmutable,
-    ));
+    await _db.insertWorkflowBinding(
+      WorkflowBindingRow(
+        pattern: pattern,
+        isPrefix: isPrefix,
+        skillNoteId: skillNoteId,
+        prompt: prompt,
+        contentImmutable: contentImmutable,
+      ),
+    );
   }
 
   Future<void> removeBinding(String pattern) async {
