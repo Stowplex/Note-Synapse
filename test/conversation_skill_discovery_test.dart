@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
-import 'package:note_synapse/models/mcp_endpoint.dart';
 import 'package:note_synapse/services/agent_service.dart';
 import 'package:note_synapse/services/conversation_service.dart';
 import 'package:note_synapse/services/database_service.dart';
@@ -44,7 +43,6 @@ void main() {
           enabled: true,
         ),
       };
-      when(mockSkillService.resetSession()).thenReturn(null);
       when(mockSkillService.buildSkillIndex())
           .thenAnswer((_) async => expectedIndex);
 
@@ -59,7 +57,6 @@ void main() {
   group('disableSkills', () {
     test('clears index and discovered tools', () async {
       // Set up: enable skills so there is state to clear.
-      when(mockSkillService.resetSession()).thenReturn(null);
       when(mockSkillService.buildSkillIndex()).thenAnswer((_) async => {
             'note-1': SkillMetadata(
               noteId: 'note-1',
@@ -70,7 +67,7 @@ void main() {
           });
       await svc.enableSkills();
       expect(svc.skillsEnabled, isTrue);
-      expect(svc.skillIndex.isNotEmpty, isTrue);
+      expect(svc.skillIndex, isNotEmpty);
 
       // Also discover a tool to ensure that list is cleared too.
       const uri = 'notesynapse://tool/builtin/search_notes';
@@ -79,7 +76,7 @@ void main() {
           .thenReturn((namespace: 'builtin', id: 'search_notes', function: null));
       when(mockAgentService.nativeTools).thenReturn([NoteSearchTool()]);
       await svc.handleLoadSkillResult('note-1', 'content');
-      expect(svc.skillDiscoveredTools.isNotEmpty, isTrue);
+      expect(svc.skillDiscoveredTools, isNotEmpty);
 
       // Act: disable.
       svc.disableSkills();
@@ -96,7 +93,6 @@ void main() {
 
   group('handleLoadSkillResult', () {
     test('discovers builtin tool URIs from skill content', () async {
-      when(mockSkillService.resetSession()).thenReturn(null);
       when(mockSkillService.buildSkillIndex()).thenAnswer((_) async => {});
       await svc.enableSkills();
 
@@ -114,7 +110,6 @@ void main() {
     });
 
     test('second enableSkills resets state cleanly (no duplicate tools)', () async {
-      when(mockSkillService.resetSession()).thenReturn(null);
       when(mockSkillService.buildSkillIndex()).thenAnswer((_) async => {});
       await svc.enableSkills();
 
