@@ -2,7 +2,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
-import 'package:note_synapse/models/context_node.dart';
 import 'package:note_synapse/services/ai_service.dart';
 import 'package:note_synapse/services/context_manager_service.dart';
 import 'package:note_synapse/services/model_selector.dart';
@@ -47,6 +46,11 @@ void main() {
       // Act: compact the execution log
       await contextManager.compactNodeContext(root);
 
+      // Verify: AI was called for summarization
+      verify(mockAi.generateWithAttachments(any, any,
+              generationContext: anyNamed('generationContext')))
+          .called(1);
+
       // Assert: execution log was compacted
       expect(root.executionLog.length, lessThan(12),
           reason: 'Compaction should reduce log size');
@@ -78,7 +82,7 @@ void main() {
       // We need > 80 tokens => > 320 chars in the joined log
       for (var i = 0; i < 15; i++) {
         root.log(
-            'Entry $i: ${'x' * 25}'); // ~29 chars each, 15 * 29 = 435 chars => ~108 tokens
+            'Entry $i: ${'x' * 25}'); // fill enough content to cross the 80% token threshold
       }
 
       expect(root.isNearTokenLimit(), isTrue,
@@ -90,6 +94,11 @@ void main() {
 
       // Act
       await contextManager.checkAndCompact(root);
+
+      // Verify: AI was called for summarization
+      verify(mockAi.generateWithAttachments(any, any,
+              generationContext: anyNamed('generationContext')))
+          .called(1);
 
       // Assert: skill still pinned
       expect(root.loadedSkills.length, equals(1));
