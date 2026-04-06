@@ -18,6 +18,7 @@ import 'tag_image_service.dart';
 import 'note_marker_service.dart';
 import 'note_annotation_service.dart';
 import 'skill_service.dart';
+import 'tag_workflow_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -93,6 +94,12 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<SkillService>()) {
     getIt.registerLazySingleton<SkillService>(
       () => SkillService(getIt<DatabaseService>()),
+    );
+  }
+
+  if (!getIt.isRegistered<TagWorkflowService>()) {
+    getIt.registerLazySingleton<TagWorkflowService>(
+      () => TagWorkflowService(getIt<DatabaseService>()),
     );
   }
 

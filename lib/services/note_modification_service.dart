@@ -6,6 +6,8 @@ import 'database_service.dart';
 import '../utils/file_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 import 'logger_service.dart';
+import 'service_locator.dart';
+import 'tag_workflow_service.dart';
 
 class NoteModificationService {
   final DatabaseService _db;
@@ -29,6 +31,21 @@ class NoteModificationService {
     final note = await _db.getNoteById(noteId);
     if (note == null) {
       throw Exception('Note not found: $noteId');
+    }
+
+    // Tag-workflow immutability guard (generic — no wiki-specific code)
+    final tagWorkflow = getIt<TagWorkflowService>();
+    if (await tagWorkflow.hasImmutableBinding(note.tags)) {
+      final hasContentMod = modifications.containsKey('content') &&
+          (modifications['content'] as Map<String, dynamic>)['action'] != 'no-op';
+      final hasTitleMod = modifications.containsKey('title');
+
+      if (hasContentMod || hasTitleMod) {
+        throw Exception(
+          'Cannot modify content or title: this note has a tag with an immutable '
+          'workflow binding. Tags, links, and attachments can still be modified.',
+        );
+      }
     }
 
     Note updatedNote = note;

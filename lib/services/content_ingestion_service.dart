@@ -11,6 +11,7 @@ import '../providers/app_provider.dart';
 import 'dart:convert';
 import 'note_modification_service.dart';
 import 'service_locator.dart';
+import 'tag_workflow_service.dart';
 
 import 'package:json_repair_flutter/json_repair_flutter.dart';
 
@@ -167,11 +168,26 @@ Content: ${note.content}
           // Enforce restriction: Attachment modification not allowed in this context
           json.remove('attachments');
 
-          final service = getIt<NoteModificationService>();
-          // applyModifications writes to DB
-          final updatedNote = await service.applyModifications(note.id, json);
-          // Update AppProvider to reflect changes in UI (redundant DB write but safe)
-          await appProvider.updateNote(updatedNote);
+          final modService = getIt<NoteModificationService>();
+          final tagWorkflow = getIt<TagWorkflowService>();
+
+          if (await tagWorkflow.hasImmutableBinding(note.tags)) {
+            // Source note is immutable — redirect to new note
+            final newNoteData = <String, dynamic>{
+              'title': 'Extracted: ${note.title}',
+              'content': (json['content'] as Map<String, dynamic>?)?['text'] ?? '',
+              'link': [
+                {'relation': 'derived_from', 'target': note.id},
+              ],
+            };
+            final newNote = await modService.createNote(newNoteData);
+            await appProvider.addNote(newNote);
+          } else {
+            // applyModifications writes to DB
+            final updatedNote = await modService.applyModifications(note.id, json);
+            // Update AppProvider to reflect changes in UI (redundant DB write but safe)
+            await appProvider.updateNote(updatedNote);
+          }
         } else {
           throw const FormatException();
         }

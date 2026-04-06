@@ -4,19 +4,25 @@ import 'package:mockito/annotations.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/note_modification_service.dart';
+import 'package:note_synapse/services/tag_workflow_service.dart';
 import 'package:note_synapse/models/note.dart';
 
-@GenerateMocks([DatabaseService])
+@GenerateMocks([DatabaseService, TagWorkflowService])
 import 'note_modification_service_test.mocks.dart';
 
 void main() {
   late MockDatabaseService mockDb;
+  late MockTagWorkflowService mockTagWorkflow;
   late NoteModificationService service;
 
   setUp(() async {
     await resetForTesting();
     mockDb = MockDatabaseService();
+    mockTagWorkflow = MockTagWorkflowService();
     getIt.registerSingleton<DatabaseService>(mockDb);
+    getIt.registerSingleton<TagWorkflowService>(mockTagWorkflow);
+    // Default: no immutable bindings
+    when(mockTagWorkflow.hasImmutableBinding(any)).thenAnswer((_) async => false);
     service = NoteModificationService(getIt<DatabaseService>());
   });
 

@@ -4,13 +4,15 @@ import 'package:mockito/mockito.dart';
 import 'package:note_synapse/models/note.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/note_modification_service.dart';
+import 'package:note_synapse/services/tag_workflow_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
 
 import 'relationship_deletion_test.mocks.dart';
 
-@GenerateMocks([DatabaseService])
+@GenerateMocks([DatabaseService, TagWorkflowService])
 void main() {
   late MockDatabaseService mockDb;
+  late MockTagWorkflowService mockTagWorkflow;
   late NoteModificationService service;
 
   final testNote = Note(
@@ -28,7 +30,11 @@ void main() {
   setUp(() async {
     await resetForTesting();
     mockDb = MockDatabaseService();
+    mockTagWorkflow = MockTagWorkflowService();
     getIt.registerSingleton<DatabaseService>(mockDb);
+    getIt.registerSingleton<TagWorkflowService>(mockTagWorkflow);
+    // Default: no immutable bindings for these link tests
+    when(mockTagWorkflow.hasImmutableBinding(any)).thenAnswer((_) async => false);
     service = NoteModificationService(mockDb);
   });
 
