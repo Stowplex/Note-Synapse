@@ -24,8 +24,7 @@ void main() {
   });
 
   group('loaded skills survive context compaction', () {
-    test('skills remain intact after compactNodeContext clears the execution log',
-        () async {
+    test('skills remain after compaction of execution log', () async {
       // Arrange: create root context and load two skills
       final root = await contextManager.createRootContext(
         objective: 'Test objective',
@@ -100,7 +99,7 @@ void main() {
   });
 
   group('addLoadedSkill deduplication', () {
-    test('second call with same noteId is ignored', () async {
+    test('addLoadedSkill deduplicates by noteId', () async {
       await contextManager.createRootContext(
         objective: 'Dedup test',
         maxTokens: 10000,
