@@ -1,5 +1,6 @@
 import '../models/context_node.dart';
 import '../models/task_result_storage.dart';
+import '../utils/token_estimator.dart';
 import 'ai_service.dart';
 import 'agentic_settings_service.dart';
 import 'logger_service.dart';
@@ -35,6 +36,8 @@ class DependencyInfo {
 /// Handles context tree lifecycle, scoped context building, token budget
 /// management, and automatic summarization when limits are approached.
 class ContextManagerService {
+  static const double _maxPinnedSkillsRatio = 0.3;
+
   final ModelSelector _modelSelector;
   final AIService _aiService;
 
@@ -226,7 +229,7 @@ class ContextManagerService {
           if (sr.isShortSync(threshold: tocThreshold)) {
             // Short results: brief summary inline
             buffer.writeln(
-              '<Result type="summary">${sr.fullResult.length > 200 ? sr.fullResult.substring(0, 200) + "..." : sr.fullResult}</Result>',
+              '<Result type="summary">${sr.fullResult.length > 200 ? '${sr.fullResult.substring(0, 200)}...' : sr.fullResult}</Result>',
             );
           } else {
             // Long results: TOC only
@@ -669,10 +672,10 @@ If this is research/analysis, output structured findings.
     // Deduplicate by noteId
     if (root.loadedSkills.any((s) => s.noteId == noteId)) return;
 
-    final maxPinnedTokens = (root.maxContextTokens * 0.3).toInt();
+    final maxPinnedTokens = (root.maxContextTokens * _maxPinnedSkillsRatio).toInt();
     final currentPinnedTokens = root.loadedSkills.fold<int>(
-        0, (sum, s) => sum + _estimateTokens(s.content));
-    final newTokens = _estimateTokens(content);
+        0, (sum, s) => sum + TokenEstimator.estimateTokens(s.content));
+    final newTokens = TokenEstimator.estimateTokens(content);
 
     if (currentPinnedTokens + newTokens > maxPinnedTokens) {
       final firstLine = content.split('\n').firstWhere(
@@ -686,8 +689,6 @@ If this is research/analysis, output structured findings.
       root.loadedSkills.add(LoadedSkill(noteId: noteId, content: content));
     }
   }
-
-  int _estimateTokens(String text) => (text.length / 4).ceil();
 
   /// Marks a context as failed with an error message.
   void markContextFailed(ContextNode node, String error) {

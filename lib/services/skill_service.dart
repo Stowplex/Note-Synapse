@@ -19,6 +19,8 @@ class SkillMetadata {
 
 class SkillService {
   static const String agentSkillTag = 'agent-skill';
+  static const int _compactBudgetThreshold = 15000;
+  static const int _fullBudgetThreshold = 50000;
 
   final DatabaseService _db;
   final Set<String> _loadedSkillNoteIds = {};
@@ -78,11 +80,12 @@ class SkillService {
     final budget = maxBudgetTokens ?? 100000;
     final sb = StringBuffer();
 
-    if (budget < 15000) {
+    if (budget < _compactBudgetThreshold) {
+      // No per-skill annotations in minimal format — space too constrained
       sb.writeln('\n## Available Agent Skills');
       sb.writeln('Use load_skill with the noteId to get instructions.');
       sb.writeln(index.entries.map((e) => '${e.key}: ${e.value.name}').join(', '));
-    } else if (budget < 50000) {
+    } else if (budget < _fullBudgetThreshold) {
       sb.writeln('\n## Available Agent Skills');
       sb.writeln('Use load_skill with the noteId to get instructions.\n');
       for (final entry in index.entries) {

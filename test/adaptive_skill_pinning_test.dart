@@ -30,7 +30,7 @@ void main() {
         objective: 'Test',
         maxTokens: 100000,
       );
-      final skillContent = '## Skill\n' + 'Step: do something.\n' * 50;
+      final skillContent = '## Skill\n${'Step: do something.\n' * 50}';
       contextManager.addLoadedSkill('skill-1', skillContent);
       final root = contextManager.rootContext!;
       expect(root.loadedSkills.length, 1);
@@ -45,12 +45,12 @@ void main() {
       // 30% of 8K = 2400 tokens = ~9600 chars
 
       // skill1: ~1600 tokens (~6400 chars at 4 chars/token)
-      final skill1 = '## Big Skill\n' + 'Detailed step with explanation.\n' * 200;
+      final skill1 = '## Big Skill\n${'Detailed step with explanation.\n' * 200}';
       contextManager.addLoadedSkill('skill-1', skill1);
       expect(contextManager.rootContext!.loadedSkills[0].content, skill1);
 
       // skill2: ~1100 tokens more would make total ~2700 > 2400
-      final skill2 = '## Second Skill\n' + 'Another detailed step.\n' * 200;
+      final skill2 = '## Second Skill\n${'Another detailed step.\n' * 200}';
       contextManager.addLoadedSkill('skill-2', skill2);
 
       final stored = contextManager.rootContext!.loadedSkills[1];

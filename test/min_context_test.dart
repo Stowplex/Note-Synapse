@@ -1,19 +1,11 @@
 // test/min_context_test.dart
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
-import 'package:mockito/mockito.dart';
-import 'package:note_synapse/models/note.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/skill_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
 
 import 'min_context_test.mocks.dart';
-
-Note _makeNote(String id, String content) => Note(
-  id: id, title: 'title', content: content, type: NoteType.note,
-  createdAt: DateTime.now(), updatedAt: DateTime.now(),
-  subNotes: [], tags: ['agent-skill'], attachmentPaths: [],
-);
 
 @GenerateMocks([DatabaseService])
 void main() {
