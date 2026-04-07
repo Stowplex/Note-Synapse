@@ -18,5 +18,7 @@ void main() {
       content,
       contains('read_note: { note_id: "[index-id]", mode: "full" }'),
     );
+    expect(content, contains('call `create_notes` first'));
+    expect(content, contains('Do not combine `create_notes` and `modify_notes` in the same turn.'));
   });
 }

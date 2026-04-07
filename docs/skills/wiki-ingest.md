@@ -115,6 +115,9 @@ Use `wiki-entity-<ns>` or `wiki-topic-<ns>` as appropriate.
 ### Step 5: Update Namespace-Scoped Index
 
 Always use the existing index note you read in Step 1. Do not invent a fresh index, and do not treat a keyword search as a substitute for reading the index.
+If you need to create new compiled notes, call `create_notes` first and wait for the returned real note IDs before updating the index.
+Do not combine `create_notes` and `modify_notes` in the same turn.
+Do not write index or log links with guessed IDs, placeholders, or descriptive aliases.
 
 Update the correct section in the index instead of blindly appending to the end:
 
@@ -157,7 +160,7 @@ modify_notes: {
 
 ### Step 7: Tag Source as Ingested
 
-Prefer one final batched write phase after any needed `create_notes` call is complete.
+Prefer one final batched write phase after any needed `create_notes` call is complete and you have the actual created note IDs.
 
 ```
 modify_notes: {
@@ -180,6 +183,7 @@ Only report full completion after observations confirm:
 - the index note was updated successfully
 - the workspace log was updated successfully
 - the source note was tagged `ingested` successfully
+- any claimed newly created compiled notes were created successfully and returned real note IDs
 
 If any required update fails or is denied, report a partial ingest instead:
 "Partially ingested [Title] into namespace `<ns>`. Created: [list]. Updated: [list]. Missing: [list]."

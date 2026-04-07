@@ -3,7 +3,6 @@ import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:note_synapse/models/agent_task.dart';
 import 'package:note_synapse/models/context_node.dart';
-import 'package:note_synapse/models/generation_context.dart';
 import 'package:note_synapse/models/mcp_endpoint.dart';
 import 'package:note_synapse/services/agent_service.dart';
 import 'package:note_synapse/services/ai_service.dart';
@@ -45,9 +44,12 @@ void main() {
     getIt.registerLazySingleton<ModelSelector>(() => mockModelSelector);
     getIt.registerLazySingleton<AIService>(() => mockAIService);
     getIt.registerLazySingleton<DatabaseService>(() => mockDatabaseService);
-    getIt.registerLazySingleton<SkillService>(() => SkillService(mockDatabaseService));
-    when(mockDatabaseService.searchNotesFTS(any, tags: anyNamed('tags')))
-        .thenAnswer((_) async => []);
+    getIt.registerLazySingleton<SkillService>(
+      () => SkillService(mockDatabaseService),
+    );
+    when(
+      mockDatabaseService.searchNotesFTS(any, tags: anyNamed('tags')),
+    ).thenAnswer((_) async => []);
 
     agentService = AgentService(
       mockContextManager,
@@ -175,6 +177,142 @@ void main() {
       ); // Error log
       expect(task.status, isNot(equals(AgentTaskStatus.completed)));
     });
+
+    test('Rejects multiple action elements in a single turn', () async {
+      final task = AgentTask(
+        id: 't1',
+        name: 'task 1',
+        description: 'desc',
+        allowedTools: [],
+      );
+      when(
+        mockContextManager.getContext(any),
+      ).thenReturn(ContextNode(id: 'n', objective: 'o'));
+
+      when(
+        mockAIService.generateWithAttachments(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer(
+        (_) async => '''
+<Action type="tool">
+  <ToolName>mock_tool</ToolName>
+  <Content>{"arg":"value"}</Content>
+</Action>
+<Action type="tool">
+  <ToolName>mock_tool</ToolName>
+  <Content>{"arg":"value-2"}</Content>
+</Action>
+''',
+      );
+
+      var toolCalled = false;
+      agentService.toolExecutor = (_, __, ___, ____) async {
+        toolCalled = true;
+        return 'Tool Result';
+      };
+      agentService.externalToolsForTest = {
+        'mock_service': [McpTool(name: 'mock_tool', description: 'mock')],
+      };
+
+      await agentService.performTaskForTest(task, 'ctx');
+
+      expect(toolCalled, isFalse);
+      expect(
+        task.executionHistory.any(
+          (line) => line.contains('Exactly one action is allowed per turn'),
+        ),
+        isTrue,
+      );
+      expect(task.status, isNot(AgentTaskStatus.completed));
+    });
+
+    test(
+      'Blocks wiki-ingest completion claims without observed writes',
+      () async {
+        final task = AgentTask(
+          id: 't1',
+          name: 'task 1',
+          description: 'desc',
+          allowedTools: [],
+          isFinalDeliverable: true,
+          validationProfile: AgentTaskValidationProfile.wikiIngest,
+        );
+        when(
+          mockContextManager.getContext(any),
+        ).thenReturn(ContextNode(id: 'n', objective: 'o'));
+
+        when(
+          mockAIService.generateWithAttachments(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              '<Action type="answer"><Content>Completed ingest. Created two entity notes and updated the index.</Content></Action>',
+        );
+
+        await agentService.performTaskForTest(task, 'ctx');
+
+        expect(task.status, isNot(AgentTaskStatus.completed));
+        expect(
+          task.executionHistory.any(
+            (line) => line.contains('Cannot report wiki ingest completion yet'),
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'Allows wiki-ingest completion after create and modify observations',
+      () async {
+        final task = AgentTask(
+          id: 't1',
+          name: 'task 1',
+          description: 'desc',
+          allowedTools: [],
+          isFinalDeliverable: true,
+          validationProfile: AgentTaskValidationProfile.wikiIngest,
+          toolExecutionRecords: const [
+            AgentToolExecutionRecord(
+              toolName: 'create_notes',
+              args: {},
+              result: 'Created notes',
+              succeeded: true,
+            ),
+            AgentToolExecutionRecord(
+              toolName: 'modify_notes',
+              args: {},
+              result: 'Modified notes',
+              succeeded: true,
+            ),
+          ],
+        );
+        when(
+          mockContextManager.getContext(any),
+        ).thenReturn(ContextNode(id: 'n', objective: 'o'));
+
+        when(
+          mockAIService.generateWithAttachments(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              '<Action type="answer"><Content>Completed ingest. Created two entity notes and updated the index.</Content></Action>',
+        );
+
+        await agentService.performTaskForTest(task, 'ctx');
+
+        expect(task.status, AgentTaskStatus.completed);
+        expect(task.result, contains('Completed ingest.'));
+      },
+    );
 
     test('Handles "think" action', () async {
       final task = AgentTask(

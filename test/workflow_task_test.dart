@@ -256,6 +256,35 @@ void main() {
     );
 
     test(
+      'assigns wiki-ingest validation profile to wiki-source workflows',
+      () async {
+        final note = Note(
+          id: 'source-1',
+          title: 'Source',
+          content: 'content',
+          type: NoteType.note,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          subNotes: [],
+          tags: ['wiki-source-ai-research'],
+          attachmentPaths: [],
+        );
+        final binding = _makeBinding(
+          matchedTag: 'wiki-source-ai-research',
+          pattern: 'wiki-source-',
+          prompt: 'Ingest this note according to the wiki ingest skill.',
+        );
+
+        await agentService.runWorkflowTask(binding: binding, note: note);
+
+        expect(
+          agentService.tasks.single.validationProfile,
+          AgentTaskValidationProfile.wikiIngest,
+        );
+      },
+    );
+
+    test(
       'builtin tools referenced by a loaded skill become executable on later turns',
       () async {
         final note = _makeNote('note-skill');

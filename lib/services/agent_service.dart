@@ -1600,6 +1600,17 @@ Use the source note above as "this note" for the workflow. Do not search for a c
     return allowed;
   }
 
+  AgentTaskValidationProfile _workflowValidationProfileForBinding(
+    ResolvedBinding binding,
+  ) {
+    final normalizedPrompt = binding.prompt.toLowerCase();
+    if (binding.matchedTag.startsWith('wiki-source-') ||
+        normalizedPrompt.contains('wiki ingest')) {
+      return AgentTaskValidationProfile.wikiIngest;
+    }
+    return AgentTaskValidationProfile.none;
+  }
+
   void _promoteSkillDiscoveredTools(List<String> toolNames) {
     if (toolNames.isEmpty) return;
 
@@ -1692,6 +1703,7 @@ Use the source note above as "this note" for the workflow. Do not search for a c
       status: AgentTaskStatus.pending,
       allowedTools: workflowAllowedTools,
       maxTurns: workflowMaxTurns,
+      validationProfile: _workflowValidationProfileForBinding(binding),
     );
     _tasks = [task];
     notifyListeners();
@@ -1845,6 +1857,64 @@ Use the source note above as "this note" for the workflow. Do not search for a c
         message: 'Running workflow for "${workflow.matchedTag}"',
       );
     }
+  }
+
+  void _recordToolExecution(
+    AgentTask task, {
+    required String toolName,
+    required Map<String, dynamic> args,
+    required dynamic result,
+    required bool succeeded,
+  }) {
+    task.toolExecutionRecords.add(
+      AgentToolExecutionRecord(
+        toolName: toolName,
+        args: Map<String, dynamic>.from(args),
+        result: result.toString(),
+        succeeded: succeeded,
+      ),
+    );
+  }
+
+  String? _validateFinalAnswer(AgentTask task, String answerContent) {
+    switch (task.validationProfile) {
+      case AgentTaskValidationProfile.none:
+        return null;
+      case AgentTaskValidationProfile.wikiIngest:
+        return _validateWikiIngestAnswer(task, answerContent);
+    }
+  }
+
+  String? _validateWikiIngestAnswer(AgentTask task, String answerContent) {
+    final normalized = answerContent.toLowerCase();
+    final isPartial =
+        normalized.contains('partial ingest') ||
+        normalized.contains('partially ingested') ||
+        normalized.contains('incomplete');
+    if (isPartial) {
+      return null;
+    }
+
+    bool hasSuccessfulExecution(String toolName) => task.toolExecutionRecords
+        .any((record) => record.toolName == toolName && record.succeeded);
+
+    final hasSuccessfulModify =
+        hasSuccessfulExecution('modify_notes') ||
+        hasSuccessfulExecution('modify_note');
+    if (!hasSuccessfulModify) {
+      return 'Cannot report wiki ingest completion yet. No successful modify_notes or modify_note observation was recorded for index/log/source updates.';
+    }
+
+    final claimsCreatedNotes =
+        RegExp(r'\b(created?|creating)\b').hasMatch(normalized) ||
+        normalized.contains('new entity') ||
+        normalized.contains('new topic') ||
+        normalized.contains('new compiled');
+    if (claimsCreatedNotes && !hasSuccessfulExecution('create_notes')) {
+      return 'Cannot claim created wiki notes without a successful create_notes observation.';
+    }
+
+    return null;
   }
 
   List<AgentTask> _parseTasksFromJson(
@@ -2423,6 +2493,18 @@ $taskSkillSection''';
             result = actionMatch.group(1)?.trim() ?? result;
           }
 
+          final validationError = _validateFinalAnswer(task, result);
+          if (validationError != null) {
+            _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+                'IMPORTANT: $validationError';
+            task.executionHistory.add('Observation: $validationError');
+            _contextManager
+                .getContext(task.contextNodeId ?? '')
+                ?.log('Observation: $validationError');
+            notifyListeners();
+            return;
+          }
+
           task.result = result;
 
           task.status = AgentTaskStatus.completed;
@@ -2463,6 +2545,17 @@ $taskSkillSection''';
       switch (xmlResponse.actionType) {
         case 'answer':
           final answerContent = xmlResponse.content ?? '';
+          final validationError = _validateFinalAnswer(task, answerContent);
+          if (validationError != null) {
+            _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+                'IMPORTANT: $validationError';
+            task.executionHistory.add('Observation: $validationError');
+            _contextManager
+                .getContext(task.contextNodeId ?? '')
+                ?.log('Observation: $validationError');
+            notifyListeners();
+            return;
+          }
           task.result = answerContent;
           task.status = AgentTaskStatus.completed;
           // Store full answer content for findings extraction and context propagation
@@ -2551,6 +2644,7 @@ $taskSkillSection''';
       notifyListeners();
 
       dynamic result;
+      var toolSucceeded = true;
       try {
         // Try Native - use allowedNativeFn to respect tool config AND ensure read_task_result is always available
         final nativeTool = allowedNativeFn().firstWhere(
@@ -2611,6 +2705,7 @@ $taskSkillSection''';
         final errorStr = "Error executing $toolName: $e";
         LoggerService.error(errorStr);
         result = errorStr;
+        toolSucceeded = false;
 
         // Also set as last execution error for explicit visibility
         _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
@@ -2624,6 +2719,14 @@ $taskSkillSection''';
           await _handleLoadSkillResult(noteId, result);
         }
       }
+
+      _recordToolExecution(
+        task,
+        toolName: toolName,
+        args: args,
+        result: result,
+        succeeded: toolSucceeded,
+      );
 
       task.executionHistory.add("Observation: $result");
       // Log observation to hierarchical context

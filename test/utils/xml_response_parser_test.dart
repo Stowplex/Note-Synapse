@@ -268,6 +268,24 @@ This is just some text without an action.
     });
 
     group('Error cases - Invalid type', () {
+      test('returns error for multiple action elements', () {
+        const response = '''
+<Action type="tool">
+<ToolName>search_notes</ToolName>
+<Content>{"query":"first"}</Content>
+</Action>
+<Action type="tool">
+<ToolName>read_note</ToolName>
+<Content>{"note_id":"second"}</Content>
+</Action>
+''';
+        final result = parseXmlAgentResponse(response);
+
+        expect(result.hasError, isTrue);
+        expect(result.parseError, contains('multiple <Action>'));
+        expect(result.isMalformedAction, isTrue);
+      });
+
       test('returns error for invalid action type', () {
         const response = '''
 <Action type="invalid_type">
