@@ -15,6 +15,7 @@ import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/attachment.dart';
 import '../models/relationship.dart';
+import '../services/approval_service.dart';
 import '../services/audio_recording_service.dart';
 import '../services/ai_service.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
@@ -43,10 +44,13 @@ import '../services/database_service.dart';
 import '../services/conversation_service.dart';
 import '../services/media_attachment_service.dart';
 import '../services/content_ingestion_service.dart';
+import '../services/agent_service.dart';
 import '../services/service_locator.dart';
 import '../services/skill_service.dart';
 import '../models/conversation.dart';
+import '../widgets/approval_dialog.dart';
 import '../widgets/pdf_ai_context_dialog.dart';
+import '../widgets/workflow_status_banner.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -106,6 +110,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   // Attachment metadata state
   Map<String, Attachment> _attachmentsMap = {};
+  Future<ApprovalResult> Function(ApprovalRequest)? _approvalCallback;
 
   // Multi-block selection state
   bool _isSelectionMode = false;
@@ -180,6 +185,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
     // Initialize audio service on all platforms (including Linux)
     _initializeAudioService();
+    _setupApprovalCallback();
+  }
+
+  void _setupApprovalCallback() {
+    _approvalCallback = (request) async {
+      if (!mounted) return ApprovalResult(approved: false);
+      return ApprovalDialog.showWithContext(context, request);
+    };
+    ApprovalService.onApprovalRequest = _approvalCallback;
   }
 
   void _initializeAudioService() {
@@ -221,6 +235,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     _codeFocusNode.dispose();
     // Reset audio state but don't dispose the service (it's a singleton)
     _audioService?.resetState();
+    if (ApprovalService.onApprovalRequest == _approvalCallback) {
+      ApprovalService.onApprovalRequest = null;
+    }
     super.dispose();
   }
 
@@ -732,11 +749,48 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 ],
               ],
             ),
-            body: _isEditing
-                ? _buildEditingView()
-                : _buildViewingView(currentNote, l10n),
+            body: _buildBodyWithWorkflowBanner(
+              currentNote.id,
+              _isEditing
+                  ? _buildEditingView()
+                  : _buildViewingView(currentNote, l10n),
+            ),
             bottomNavigationBar: _isEditing ? null : _buildBottomBar(),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBodyWithWorkflowBanner(String noteId, Widget child) {
+    final agentService = getIt<AgentService>();
+
+    return AnimatedBuilder(
+      animation: agentService,
+      builder: (context, _) {
+        final workflowStatus = agentService.workflowStatusForNote(noteId);
+        if (workflowStatus == null ||
+            workflowStatus.state == WorkflowExecutionState.completed ||
+            workflowStatus.state == WorkflowExecutionState.failed) {
+          return child;
+        }
+
+        return Column(
+          children: [
+            WorkflowStatusBanner(
+              status: workflowStatus,
+              onAbort: () => agentService.abortTask(workflowStatus.taskId),
+              onResume: () =>
+                  workflowStatus.state == WorkflowExecutionState.pausedTurnLimit
+                  ? agentService.resumeTask(
+                      workflowStatus.taskId,
+                      increaseLimit: true,
+                    )
+                  : agentService.resumeTask(workflowStatus.taskId),
+              onBail: () => agentService.concludeTask(workflowStatus.taskId),
+            ),
+            Expanded(child: child),
+          ],
         );
       },
     );
@@ -4066,9 +4120,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       case 'mcp':
         if (mounted) {
           Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => const McpSettingsScreen(),
-            ),
+            MaterialPageRoute(builder: (context) => const McpSettingsScreen()),
           );
         }
         break;
@@ -4083,8 +4135,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           'Read note content progressively.\n\nParams:\n- noteId (string): note ID\n- mode (string): stat | toc | summary | lines | full | pdf_pages',
       'run_sql':
           'Execute SQL on the local database.\n\nParams:\n- query (string): SQL statement\n- write (bool): true for INSERT/UPDATE/DELETE',
-      'ls':
-          'List tag filters and folder structure.\n\nNo required params.',
+      'ls': 'List tag filters and folder structure.\n\nNo required params.',
       'modify_note':
           'Update a note\'s content, title, or tags.\n\nParams:\n- noteId, content, title, tags (all optional)',
       'create_notes':

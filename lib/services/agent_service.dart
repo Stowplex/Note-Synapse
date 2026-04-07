@@ -56,6 +56,51 @@ enum AgentCheckpoint {
   afterToolResult,
 }
 
+enum WorkflowExecutionState {
+  running,
+  pausedTurnLimit,
+  pausedManual,
+  completed,
+  failed,
+}
+
+class WorkflowStatusSnapshot {
+  final String noteId;
+  final String matchedTag;
+  final String taskId;
+  final WorkflowExecutionState state;
+  final String message;
+
+  const WorkflowStatusSnapshot({
+    required this.noteId,
+    required this.matchedTag,
+    required this.taskId,
+    required this.state,
+    required this.message,
+  });
+
+  bool get isTerminal =>
+      state == WorkflowExecutionState.completed ||
+      state == WorkflowExecutionState.failed;
+
+  bool get isPaused =>
+      state == WorkflowExecutionState.pausedTurnLimit ||
+      state == WorkflowExecutionState.pausedManual;
+
+  WorkflowStatusSnapshot copyWith({
+    WorkflowExecutionState? state,
+    String? message,
+  }) {
+    return WorkflowStatusSnapshot(
+      noteId: noteId,
+      matchedTag: matchedTag,
+      taskId: taskId,
+      state: state ?? this.state,
+      message: message ?? this.message,
+    );
+  }
+}
+
 class AgentService extends ChangeNotifier {
   final ContextManagerService _contextManager;
   final ModelSelector _modelSelector;
@@ -83,9 +128,17 @@ class AgentService extends ChangeNotifier {
 
   // Workflow queue (for tag-triggered workflows)
   final List<_PendingWorkflow> _pendingWorkflows = [];
+  WorkflowStatusSnapshot? _activeWorkflowStatus;
 
   /// Number of workflows queued waiting for the agent to become free.
   int get pendingWorkflowCount => _pendingWorkflows.length;
+  WorkflowStatusSnapshot? get activeWorkflowStatus => _activeWorkflowStatus;
+
+  WorkflowStatusSnapshot? workflowStatusForNote(String noteId) {
+    final status = _activeWorkflowStatus;
+    if (status == null || status.noteId != noteId) return null;
+    return status;
+  }
 
   // Pause/Resume/Stop state
   bool _isPaused = false;
@@ -200,6 +253,7 @@ class AgentService extends ChangeNotifier {
     _cachedMaxSubtaskDepth = kMaxSubtaskDepth;
     // Clear workflow queue
     _pendingWorkflows.clear();
+    _activeWorkflowStatus = null;
     notifyListeners();
   }
 
@@ -1027,7 +1081,11 @@ If no findings worth preserving, return: []
     _readTaskResultTool ??= ReadTaskResultTool(_contextManager);
     if (_skillsEnabled) {
       _loadSkillTool ??= LoadSkillTool();
-      return List.unmodifiable([..._nativeTools, _readTaskResultTool!, _loadSkillTool!]);
+      return List.unmodifiable([
+        ..._nativeTools,
+        _readTaskResultTool!,
+        _loadSkillTool!,
+      ]);
     }
     return List.unmodifiable([..._nativeTools, _readTaskResultTool!]);
   }
@@ -1445,7 +1503,11 @@ Return ONLY a valid JSON list with ALL required fields:
       onProgressUpdate?.call(_currentThought!);
     } finally {
       _isRunning = false;
-      onProgressUpdate?.call('Agent completed');
+      if (_activeWorkflowStatus == null) {
+        onProgressUpdate?.call('Agent completed');
+      }
+      _syncWorkflowStatusFromTasks();
+      _processWorkflowQueueIfReady();
       notifyListeners();
     }
   }
@@ -1500,6 +1562,74 @@ Return ONLY a valid JSON list with ALL required fields:
         .replaceAll('{matched_tag}', matchedTag);
   }
 
+  static String buildWorkflowObjective({
+    required String prompt,
+    required ResolvedBinding binding,
+    required Note note,
+  }) {
+    final otherTags = note.tags
+        .where((tag) => tag != binding.matchedTag)
+        .toList();
+    final otherTagsText = otherTags.isEmpty ? '(none)' : otherTags.join(', ');
+
+    return '''
+$prompt
+
+Workflow execution context:
+- This workflow was triggered automatically by a tag-to-workflow binding.
+- Source note ID: ${note.id}
+- Source note title: ${note.title}
+- Triggered tag on this note: ${binding.matchedTag}
+- Binding pattern: ${binding.pattern}
+- Other tags currently on the source note: $otherTagsText
+- Bound skill note ID: ${binding.skillNoteId}
+
+Use load_skill with the bound skill note ID to retrieve the workflow instructions for this run.
+Use the source note above as "this note" for the workflow. Do not search for a candidate source note unless the workflow instructions explicitly require finding related notes beyond this source note.
+'''
+        .trim();
+  }
+
+  List<String> _initialWorkflowAllowedTools() {
+    final allowed = <String>['read_task_result'];
+    if (_skillsEnabled &&
+        nativeTools.any((tool) => tool.name == 'load_skill')) {
+      allowed.add('load_skill');
+    }
+    return allowed;
+  }
+
+  void _promoteSkillDiscoveredTools(List<String> toolNames) {
+    if (toolNames.isEmpty) return;
+
+    for (final task in _tasks) {
+      if (task.allowedTools.isEmpty) continue;
+      for (final toolName in toolNames) {
+        if (!task.allowedTools.contains(toolName)) {
+          task.allowedTools.add(toolName);
+        }
+      }
+    }
+
+    final root = _contextManager.rootContext;
+    if (root != null) {
+      for (final toolName in toolNames) {
+        if (!root.allowedTools.contains(toolName)) {
+          root.allowedTools.add(toolName);
+        }
+      }
+    }
+
+    final current = _contextManager.currentContext;
+    if (current != null) {
+      for (final toolName in toolNames) {
+        if (!current.allowedTools.contains(toolName)) {
+          current.allowedTools.add(toolName);
+        }
+      }
+    }
+  }
+
   /// Executes a tag-triggered workflow as a single [AgentTask].
   ///
   /// If the agent is already running, the workflow is queued and will be
@@ -1519,6 +1649,12 @@ Return ONLY a valid JSON list with ALL required fields:
       noteId: note.id,
       matchedTag: binding.matchedTag,
     );
+    final workflowObjective = buildWorkflowObjective(
+      prompt: substitutedPrompt,
+      binding: binding,
+      note: note,
+    );
+    final workflowAllowedTools = _initialWorkflowAllowedTools();
 
     // Save pending workflows before clearing state
     final savedPendingWorkflows = List.of(_pendingWorkflows);
@@ -1529,21 +1665,32 @@ Return ONLY a valid JSON list with ALL required fields:
     // Restore pending workflows
     _pendingWorkflows.addAll(savedPendingWorkflows);
 
-    _currentObjective = substitutedPrompt;
+    _currentObjective = workflowObjective;
+    final workflowMaxTurns = await AgenticSettingsService.getMaxTurns();
+    final taskId = const Uuid().v4();
+    _activeWorkflowStatus = WorkflowStatusSnapshot(
+      noteId: note.id,
+      matchedTag: binding.matchedTag,
+      taskId: taskId,
+      state: WorkflowExecutionState.running,
+      message: 'Running workflow for "${binding.matchedTag}"',
+    );
 
     // Create root context for the workflow
     await _contextManager.createRootContext(
-      objective: substitutedPrompt,
-      allowedTools: getAllToolNames(),
+      objective: workflowObjective,
+      allowedTools: workflowAllowedTools,
     );
 
     // Create a single task for the workflow
     final task = AgentTask(
-      id: const Uuid().v4(),
-      description: substitutedPrompt,
+      id: taskId,
+      description: workflowObjective,
       name: 'workflow_task',
       isFinalDeliverable: true,
       status: AgentTaskStatus.pending,
+      allowedTools: workflowAllowedTools,
+      maxTurns: workflowMaxTurns,
     );
     _tasks = [task];
     notifyListeners();
@@ -1562,16 +1709,30 @@ Return ONLY a valid JSON list with ALL required fields:
       LoggerService.error('Workflow execution failure: $e');
       _currentThought = 'Workflow error: $e';
       onProgressUpdate?.call(_currentThought!);
+      _activeWorkflowStatus = _activeWorkflowStatus?.copyWith(
+        state: WorkflowExecutionState.failed,
+        message: 'Workflow failed: $e',
+      );
     } finally {
       _isRunning = false;
-      onProgressUpdate?.call('Workflow completed');
+      _syncWorkflowStatusFromTasks();
+      if (_activeWorkflowStatus?.state == WorkflowExecutionState.completed) {
+        onProgressUpdate?.call('Workflow completed');
+      }
+      if (_activeWorkflowStatus?.state == WorkflowExecutionState.failed) {
+        onProgressUpdate?.call(_activeWorkflowStatus!.message);
+      }
       notifyListeners();
-      _processWorkflowQueue();
+      _processWorkflowQueueIfReady();
     }
   }
 
   /// Processes the next pending workflow in the queue, if any.
-  void _processWorkflowQueue() {
+  void _processWorkflowQueueIfReady() {
+    final activeWorkflow = _activeWorkflowStatus;
+    if (activeWorkflow != null && !activeWorkflow.isTerminal) {
+      return;
+    }
     if (_pendingWorkflows.isEmpty || _isRunning) return;
     final next = _pendingWorkflows.removeAt(0);
     // Fire and forget - errors logged inside runWorkflowTask
@@ -1593,6 +1754,13 @@ Return ONLY a valid JSON list with ALL required fields:
       final increment = await AgenticSettingsService.getTurnIncrement();
       task.maxTurns += increment;
     }
+    task.isManuallyPaused = false;
+    if (_activeWorkflowStatus?.taskId == taskId) {
+      _activeWorkflowStatus = _activeWorkflowStatus?.copyWith(
+        state: WorkflowExecutionState.running,
+        message: 'Resumed workflow for "${_activeWorkflowStatus!.matchedTag}"',
+      );
+    }
 
     notifyListeners();
     // Restart execution
@@ -1604,6 +1772,7 @@ Return ONLY a valid JSON list with ALL required fields:
     final task = _tasks.firstWhere((t) => t.id == taskId);
     task.status = AgentTaskStatus.completed;
     task.result ??= "Manually concluded by user.";
+    _syncWorkflowStatusFromTasks();
     notifyListeners();
     executePlan(); // Move to next task
   }
@@ -1614,7 +1783,67 @@ Return ONLY a valid JSON list with ALL required fields:
     task.status = AgentTaskStatus.failed;
     task.result = "Aborted by user.";
     _isRunning = false;
+    _syncWorkflowStatusFromTasks();
     notifyListeners();
+    _processWorkflowQueueIfReady();
+  }
+
+  int _countTaskTurns(AgentTask task) {
+    return task.executionHistory
+        .where((entry) => entry.startsWith('Turn '))
+        .length;
+  }
+
+  bool _isTurnLimitPause(AgentTask task) {
+    return task.status == AgentTaskStatus.paused &&
+        !task.isManuallyPaused &&
+        (task.result?.startsWith('Max turns reached.') ?? false);
+  }
+
+  void _syncWorkflowStatusFromTasks() {
+    final workflow = _activeWorkflowStatus;
+    if (workflow == null) return;
+
+    final task = _tasks.where((t) => t.id == workflow.taskId).firstOrNull;
+    if (task == null) {
+      _activeWorkflowStatus = null;
+      return;
+    }
+
+    if (task.status == AgentTaskStatus.completed) {
+      _activeWorkflowStatus = workflow.copyWith(
+        state: WorkflowExecutionState.completed,
+        message: 'Workflow completed for "${workflow.matchedTag}"',
+      );
+      return;
+    }
+
+    if (task.status == AgentTaskStatus.failed) {
+      _activeWorkflowStatus = workflow.copyWith(
+        state: WorkflowExecutionState.failed,
+        message: task.result ?? 'Workflow failed',
+      );
+      return;
+    }
+
+    if (task.status == AgentTaskStatus.paused) {
+      _activeWorkflowStatus = workflow.copyWith(
+        state: _isTurnLimitPause(task)
+            ? WorkflowExecutionState.pausedTurnLimit
+            : WorkflowExecutionState.pausedManual,
+        message: task.result ?? 'Workflow paused',
+      );
+      return;
+    }
+
+    if (task.status == AgentTaskStatus.inProgress ||
+        task.status == AgentTaskStatus.pending ||
+        task.status == AgentTaskStatus.waitingForSubtasks) {
+      _activeWorkflowStatus = workflow.copyWith(
+        state: WorkflowExecutionState.running,
+        message: 'Running workflow for "${workflow.matchedTag}"',
+      );
+    }
   }
 
   List<AgentTask> _parseTasksFromJson(
@@ -1791,9 +2020,12 @@ Return ONLY a valid JSON list with ALL required fields:
 
   Future<void> _performTask(AgentTask task, String globalContext) async {
     // Check for max turns
-    if (task.executionHistory.length / 2 >= task.maxTurns) {
+    final turnsUsed = _countTaskTurns(task);
+    if (turnsUsed >= task.maxTurns) {
       task.status = AgentTaskStatus.paused;
       task.result = "Max turns reached. Paused.";
+      task.isManuallyPaused = false;
+      _syncWorkflowStatusFromTasks();
       notifyListeners();
       return;
     }
@@ -1805,7 +2037,7 @@ Return ONLY a valid JSON list with ALL required fields:
     // - Synthesize information from dependencies
     // The LLM will use action type="answer" when it completes the task.
 
-    final int turn = (task.executionHistory.length / 2).floor() + 1;
+    final int turn = turnsUsed + 1;
 
     // We only execute ONE tool at a time in the ReAct loop per original design,
     // BUT the prompt might have assigned multiple tools to this `AgentTask`.
@@ -1824,7 +2056,10 @@ Return ONLY a valid JSON list with ALL required fields:
       // read_task_result and load_skill (when skills enabled) are ALWAYS available
       // (internal mechanisms for TOC-based context and skill loading)
       // Use nativeTools (not enabledNativeTools) to ensure they're always present
-      final alwaysAvailableNames = {'read_task_result', if (_skillsEnabled) 'load_skill'};
+      final alwaysAvailableNames = {
+        'read_task_result',
+        if (_skillsEnabled) 'load_skill',
+      };
       final alwaysAvailableTools = nativeTools
           .where((t) => alwaysAvailableNames.contains(t.name))
           .toList();
@@ -1854,7 +2089,10 @@ Return ONLY a valid JSON list with ALL required fields:
     }
 
     List<McpTool> allowedExternalFn() {
-      final all = _externalTools.values.expand((x) => x).toList();
+      final all = [
+        ..._externalTools.values.expand((x) => x),
+        ..._skillDiscoveredTools,
+      ];
       // User's per-step restrictions take priority
       if (task.allowedTools.isNotEmpty) {
         return all.where((t) => task.allowedTools.contains(t.name)).toList();
@@ -1871,19 +2109,21 @@ Return ONLY a valid JSON list with ALL required fields:
 
     final skillToolsDesc = _skillDiscoveredTools.isNotEmpty
         ? '\n\nSkill-Discovered Tools (injected by loaded skills):\n'
-          '${_skillDiscoveredTools.map((t) => '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}').join('\n')}'
+              '${_skillDiscoveredTools.map((t) => '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}').join('\n')}'
         : '';
 
-    final toolsDesc = [
-      ...currentAllowedNative.map(
-        (t) =>
-            '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}',
-      ),
-      ...currentAllowedExternal.map(
-        (t) =>
-            '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}',
-      ),
-    ].join('\n') + skillToolsDesc;
+    final toolsDesc =
+        [
+          ...currentAllowedNative.map(
+            (t) =>
+                '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}',
+          ),
+          ...currentAllowedExternal.map(
+            (t) =>
+                '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}',
+          ),
+        ].join('\n') +
+        skillToolsDesc;
 
     // Build special instructions for final deliverable tasks
     final deliverableInstructions = task.isFinalDeliverable
@@ -2028,6 +2268,7 @@ $taskSkillSection''';
       if (_isPaused) {
         task.status = AgentTaskStatus.paused;
         _currentThought = 'Paused before LLM call';
+        _syncWorkflowStatusFromTasks();
         notifyListeners();
         return;
       }
@@ -2045,6 +2286,7 @@ $taskSkillSection''';
         task.status = AgentTaskStatus.paused;
         _currentThought = 'Paused after LLM response';
         task.executionHistory.add('Turn $turn: (paused after LLM response)');
+        _syncWorkflowStatusFromTasks();
         notifyListeners();
         return;
       }
@@ -2199,6 +2441,7 @@ $taskSkillSection''';
           }
 
           _currentThought = "Delivered final result.";
+          _syncWorkflowStatusFromTasks();
           notifyListeners();
           return;
         }
@@ -2233,6 +2476,7 @@ $taskSkillSection''';
               answerContent,
             );
           }
+          _syncWorkflowStatusFromTasks();
           notifyListeners();
           return;
 
@@ -2291,6 +2535,7 @@ $taskSkillSection''';
         task.executionHistory.add(
           'Turn $turn: (paused before tool call: $toolName)',
         );
+        _syncWorkflowStatusFromTasks();
         notifyListeners();
         return;
       }
@@ -2314,40 +2559,51 @@ $taskSkillSection''';
         if (nativeTool is! _UnknownTool) {
           result = await nativeTool.execute(args);
         } else {
-          // Try External
-          String? serviceName;
-          for (final entry in _externalTools.entries) {
-            if (entry.value.any((t) => t.name == toolName)) {
-              serviceName = entry.key;
-              break;
-            }
-          }
-          if (serviceName != null) {
-            final generationContext = GenerationContext(
-              values: {'type': 'agent_tool_exec'},
-            );
-            // Use injected executor if available (supports both MCP and local AI tools)
-            if (_toolExecutor != null) {
-              result = await _toolExecutor!(
-                serviceName,
-                toolName,
-                args,
-                generationContext,
-              );
-            } else {
-              // Fallback: MCP-only execution (legacy behavior)
-              final endpoints = await getIt<McpService>().getEndpoints();
-              final ids = endpoints.map((e) => e.id).toList();
-              result = await McpToolIntegrationService.executeToolCall(
-                serviceName: serviceName,
-                toolName: toolName,
-                parameters: args,
-                enabledEndpointIds: ids,
-                generationContext: generationContext,
-              );
-            }
+          final skillDiscoveredBuiltin =
+              _skillDiscoveredTools.any((t) => t.name == toolName)
+              ? _nativeTools.firstWhere(
+                  (t) => t.name == toolName,
+                  orElse: () => _UnknownTool(),
+                )
+              : _UnknownTool();
+          if (skillDiscoveredBuiltin is! _UnknownTool) {
+            result = await skillDiscoveredBuiltin.execute(args);
           } else {
-            throw "Tool $toolName not found.";
+            // Try External
+            String? serviceName;
+            for (final entry in _externalTools.entries) {
+              if (entry.value.any((t) => t.name == toolName)) {
+                serviceName = entry.key;
+                break;
+              }
+            }
+            if (serviceName != null) {
+              final generationContext = GenerationContext(
+                values: {'type': 'agent_tool_exec'},
+              );
+              // Use injected executor if available (supports both MCP and local AI tools)
+              if (_toolExecutor != null) {
+                result = await _toolExecutor!(
+                  serviceName,
+                  toolName,
+                  args,
+                  generationContext,
+                );
+              } else {
+                // Fallback: MCP-only execution (legacy behavior)
+                final endpoints = await getIt<McpService>().getEndpoints();
+                final ids = endpoints.map((e) => e.id).toList();
+                result = await McpToolIntegrationService.executeToolCall(
+                  serviceName: serviceName,
+                  toolName: toolName,
+                  parameters: args,
+                  enabledEndpointIds: ids,
+                  generationContext: generationContext,
+                );
+              }
+            } else {
+              throw "Tool $toolName not found.";
+            }
           }
         }
       } catch (e) {
@@ -2381,6 +2637,7 @@ $taskSkillSection''';
       if (_isPaused) {
         task.status = AgentTaskStatus.paused;
         _currentThought = 'Paused after tool result';
+        _syncWorkflowStatusFromTasks();
         notifyListeners();
         return;
       }
@@ -2422,6 +2679,7 @@ $taskSkillSection''';
 
     // Log trace annotation when new tools were injected
     if (newToolNames.isNotEmpty) {
+      _promoteSkillDiscoveredTools(newToolNames);
       _contextManager.rootContext?.log(
         'Skill loaded: injected tools [${newToolNames.join(', ')}]',
       );
@@ -2470,10 +2728,13 @@ $taskSkillSection''';
         // Find endpoint by name, get its tools (cached or refresh)
         final mcpService = getIt<McpService>();
         final endpoints = await mcpService.getEndpoints();
-        final endpoint = endpoints.where((e) => e.name == parsed.id).firstOrNull;
+        final endpoint = endpoints
+            .where((e) => e.name == parsed.id)
+            .firstOrNull;
         if (endpoint == null) return [];
         final cache = await mcpService.getCachedTools(endpoint.id);
-        final allTools = cache?.tools ?? (await mcpService.refreshTools(endpoint.id)).tools;
+        final allTools =
+            cache?.tools ?? (await mcpService.refreshTools(endpoint.id)).tools;
         if (parsed.function != null) {
           return allTools.where((t) => t.name == parsed.function).toList();
         }

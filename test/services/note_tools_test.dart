@@ -5,6 +5,7 @@ import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/note_modification_service.dart';
 import 'package:note_synapse/services/tools/note_tools.dart';
+import 'package:note_synapse/models/note.dart';
 
 @GenerateMocks([DatabaseService, NoteModificationService])
 import 'note_tools_test.mocks.dart';
@@ -22,7 +23,9 @@ void main() {
     mockDb = MockDatabaseService();
     mockNoteModificationService = MockNoteModificationService();
     getIt.registerSingleton<DatabaseService>(mockDb);
-    getIt.registerSingleton<NoteModificationService>(mockNoteModificationService);
+    getIt.registerSingleton<NoteModificationService>(
+      mockNoteModificationService,
+    );
   });
 
   tearDown(() async {
@@ -123,6 +126,71 @@ void main() {
       expect(schema['properties']['query'], isNotNull);
       expect(schema['properties']['tags'], isNotNull);
       expect(schema['required'], ['query']);
+    });
+
+    test('uses tag-only lookup when query is empty', () async {
+      final wikiIndex = Note(
+        id: 'index-1',
+        title: 'AI Research Index',
+        content: 'index',
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        tags: ['wiki-index-ai-research'],
+        subNotes: const [],
+        attachmentPaths: const [],
+      );
+      when(
+        mockDb.getNotesByTag('wiki-index-ai-research'),
+      ).thenAnswer((_) async => [wikiIndex]);
+
+      final result = await tool.execute({
+        'query': '',
+        'tags': ['wiki-index-ai-research'],
+      });
+
+      expect(result, hasLength(1));
+      expect(result.first['id'], 'index-1');
+      verify(mockDb.getNotesByTag('wiki-index-ai-research')).called(1);
+      verifyNever(mockDb.searchNotesFTS(any, tags: anyNamed('tags')));
+    });
+
+    test('applies AND semantics for tag-only lookup', () async {
+      final matching = Note(
+        id: 'note-1',
+        title: 'Matching',
+        content: 'content',
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        tags: ['tag-a', 'tag-b'],
+        subNotes: const [],
+        attachmentPaths: const [],
+      );
+      final nonMatching = Note(
+        id: 'note-2',
+        title: 'Partial',
+        content: 'content',
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        tags: ['tag-a'],
+        subNotes: const [],
+        attachmentPaths: const [],
+      );
+      when(
+        mockDb.getNotesByTag('tag-a'),
+      ).thenAnswer((_) async => [matching, nonMatching]);
+
+      final result = await tool.execute({
+        'query': '   ',
+        'tags': ['tag-a', 'tag-b'],
+      });
+
+      expect(result, hasLength(1));
+      expect(result.first['id'], 'note-1');
+      verify(mockDb.getNotesByTag('tag-a')).called(1);
+      verifyNever(mockDb.searchNotesFTS(any, tags: anyNamed('tags')));
     });
   });
 

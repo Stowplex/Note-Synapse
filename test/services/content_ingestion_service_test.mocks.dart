@@ -3,27 +3,33 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i7;
+import 'dart:async' as _i8;
 import 'dart:ui' as _i3;
 
-import 'package:file_picker/file_picker.dart' as _i20;
+import 'package:file_picker/file_picker.dart' as _i21;
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i9;
+import 'package:mockito/src/dummies.dart' as _i10;
+import 'package:note_synapse/models/agent_task.dart' as _i25;
 import 'package:note_synapse/models/app_revision.dart' as _i4;
-import 'package:note_synapse/models/attachment.dart' as _i11;
-import 'package:note_synapse/models/conversation.dart' as _i15;
-import 'package:note_synapse/models/conversation_attachment.dart' as _i16;
-import 'package:note_synapse/models/filter.dart' as _i14;
-import 'package:note_synapse/models/generation_context.dart' as _i21;
-import 'package:note_synapse/models/model_config.dart' as _i19;
-import 'package:note_synapse/models/note.dart' as _i8;
-import 'package:note_synapse/models/note_annotation.dart' as _i10;
-import 'package:note_synapse/models/relationship.dart' as _i13;
-import 'package:note_synapse/models/tag.dart' as _i12;
+import 'package:note_synapse/models/attachment.dart' as _i12;
+import 'package:note_synapse/models/conversation.dart' as _i16;
+import 'package:note_synapse/models/conversation_attachment.dart' as _i17;
+import 'package:note_synapse/models/filter.dart' as _i15;
+import 'package:note_synapse/models/generation_context.dart' as _i22;
+import 'package:note_synapse/models/mcp_endpoint.dart' as _i26;
+import 'package:note_synapse/models/model_config.dart' as _i20;
+import 'package:note_synapse/models/note.dart' as _i9;
+import 'package:note_synapse/models/note_annotation.dart' as _i11;
+import 'package:note_synapse/models/relationship.dart' as _i14;
+import 'package:note_synapse/models/tag.dart' as _i13;
 import 'package:note_synapse/models/user_app.dart' as _i5;
-import 'package:note_synapse/models/workflow_binding_row.dart' as _i17;
-import 'package:note_synapse/providers/app_provider.dart' as _i18;
-import 'package:note_synapse/services/database_service.dart' as _i6;
+import 'package:note_synapse/models/workflow_binding_row.dart' as _i18;
+import 'package:note_synapse/providers/app_provider.dart' as _i19;
+import 'package:note_synapse/services/agent_service.dart' as _i24;
+import 'package:note_synapse/services/context_manager_service.dart' as _i6;
+import 'package:note_synapse/services/database_service.dart' as _i7;
+import 'package:note_synapse/services/tag_workflow_service.dart' as _i23;
+import 'package:note_synapse/services/tools/note_tools.dart' as _i27;
 import 'package:sqflite/sqflite.dart' as _i2;
 
 // ignore_for_file: type=lint
@@ -61,26 +67,32 @@ class _FakeUserApp_3 extends _i1.SmartFake implements _i5.UserApp {
     : super(parent, parentInvocation);
 }
 
+class _FakeContextManagerService_4 extends _i1.SmartFake
+    implements _i6.ContextManagerService {
+  _FakeContextManagerService_4(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
 /// A class which mocks [DatabaseService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
+class MockDatabaseService extends _i1.Mock implements _i7.DatabaseService {
   MockDatabaseService() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i7.Future<_i2.Database> get database =>
+  _i8.Future<_i2.Database> get database =>
       (super.noSuchMethod(
             Invocation.getter(#database),
-            returnValue: _i7.Future<_i2.Database>.value(
+            returnValue: _i8.Future<_i2.Database>.value(
               _FakeDatabase_0(this, Invocation.getter(#database)),
             ),
           )
-          as _i7.Future<_i2.Database>);
+          as _i8.Future<_i2.Database>);
 
   @override
-  _i7.Future<void> insertConversationMessageMappingsBatch(
+  _i8.Future<void> insertConversationMessageMappingsBatch(
     String? conversationId,
     List<String>? messageIds,
   ) =>
@@ -89,110 +101,110 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               conversationId,
               messageIds,
             ]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<List<String>> validateConversationNotes(String? conversationId) =>
+  _i8.Future<List<String>> validateConversationNotes(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#validateConversationNotes, [conversationId]),
-            returnValue: _i7.Future<List<String>>.value(<String>[]),
+            returnValue: _i8.Future<List<String>>.value(<String>[]),
           )
-          as _i7.Future<List<String>>);
+          as _i8.Future<List<String>>);
 
   @override
-  _i7.Future<String> insertNote(_i8.Note? note) =>
+  _i8.Future<String> insertNote(_i9.Note? note) =>
       (super.noSuchMethod(
             Invocation.method(#insertNote, [note]),
-            returnValue: _i7.Future<String>.value(
-              _i9.dummyValue<String>(
+            returnValue: _i8.Future<String>.value(
+              _i10.dummyValue<String>(
                 this,
                 Invocation.method(#insertNote, [note]),
               ),
             ),
           )
-          as _i7.Future<String>);
+          as _i8.Future<String>);
 
   @override
-  _i7.Future<List<_i8.Note>> getAllNotes() =>
+  _i8.Future<List<_i9.Note>> getAllNotes() =>
       (super.noSuchMethod(
             Invocation.method(#getAllNotes, []),
-            returnValue: _i7.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValue: _i8.Future<List<_i9.Note>>.value(<_i9.Note>[]),
           )
-          as _i7.Future<List<_i8.Note>>);
+          as _i8.Future<List<_i9.Note>>);
 
   @override
-  _i7.Future<void> cleanupInvalidNoteReferences() =>
+  _i8.Future<void> cleanupInvalidNoteReferences() =>
       (super.noSuchMethod(
             Invocation.method(#cleanupInvalidNoteReferences, []),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<List<_i8.Note>> getNotesByArchiveStatus({bool? isArchived}) =>
+  _i8.Future<List<_i9.Note>> getNotesByArchiveStatus({bool? isArchived}) =>
       (super.noSuchMethod(
             Invocation.method(#getNotesByArchiveStatus, [], {
               #isArchived: isArchived,
             }),
-            returnValue: _i7.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValue: _i8.Future<List<_i9.Note>>.value(<_i9.Note>[]),
           )
-          as _i7.Future<List<_i8.Note>>);
+          as _i8.Future<List<_i9.Note>>);
 
   @override
-  _i7.Future<List<_i8.Note>> getPinnedNotes() =>
+  _i8.Future<List<_i9.Note>> getPinnedNotes() =>
       (super.noSuchMethod(
             Invocation.method(#getPinnedNotes, []),
-            returnValue: _i7.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValue: _i8.Future<List<_i9.Note>>.value(<_i9.Note>[]),
           )
-          as _i7.Future<List<_i8.Note>>);
+          as _i8.Future<List<_i9.Note>>);
 
   @override
-  _i7.Future<List<_i8.Note>> getArchivedNotes() =>
+  _i8.Future<List<_i9.Note>> getArchivedNotes() =>
       (super.noSuchMethod(
             Invocation.method(#getArchivedNotes, []),
-            returnValue: _i7.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValue: _i8.Future<List<_i9.Note>>.value(<_i9.Note>[]),
           )
-          as _i7.Future<List<_i8.Note>>);
+          as _i8.Future<List<_i9.Note>>);
 
   @override
-  _i7.Future<_i8.Note?> getNote(String? id) =>
+  _i8.Future<_i9.Note?> getNote(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getNote, [id]),
-            returnValue: _i7.Future<_i8.Note?>.value(),
+            returnValue: _i8.Future<_i9.Note?>.value(),
           )
-          as _i7.Future<_i8.Note?>);
+          as _i8.Future<_i9.Note?>);
 
   @override
-  _i7.Future<List<_i8.Note>> getNotesByIds(List<String>? noteIds) =>
+  _i8.Future<List<_i9.Note>> getNotesByIds(List<String>? noteIds) =>
       (super.noSuchMethod(
             Invocation.method(#getNotesByIds, [noteIds]),
-            returnValue: _i7.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValue: _i8.Future<List<_i9.Note>>.value(<_i9.Note>[]),
           )
-          as _i7.Future<List<_i8.Note>>);
+          as _i8.Future<List<_i9.Note>>);
 
   @override
-  _i7.Future<List<_i8.Note>> getNotesByTag(String? tagName) =>
+  _i8.Future<List<_i9.Note>> getNotesByTag(String? tagName) =>
       (super.noSuchMethod(
             Invocation.method(#getNotesByTag, [tagName]),
-            returnValue: _i7.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValue: _i8.Future<List<_i9.Note>>.value(<_i9.Note>[]),
           )
-          as _i7.Future<List<_i8.Note>>);
+          as _i8.Future<List<_i9.Note>>);
 
   @override
-  _i7.Future<void> updateNote(_i8.Note? note) =>
+  _i8.Future<void> updateNote(_i9.Note? note) =>
       (super.noSuchMethod(
             Invocation.method(#updateNote, [note]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> updateAttachmentAIContext(
+  _i8.Future<void> updateAttachmentAIContext(
     String? noteId,
     String? filePath,
     bool? include,
@@ -203,13 +215,13 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               filePath,
               include,
             ]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> updateAttachmentMetadata(
+  _i8.Future<void> updateAttachmentMetadata(
     String? attachmentId,
     Map<String, dynamic>? metadata,
   ) =>
@@ -218,83 +230,83 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               attachmentId,
               metadata,
             ]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> updateNoteMetadata(
+  _i8.Future<void> updateNoteMetadata(
     String? noteId,
     Map<String, dynamic>? metadata,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#updateNoteMetadata, [noteId, metadata]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<Map<String, dynamic>?> getNoteMetadata(String? noteId) =>
+  _i8.Future<Map<String, dynamic>?> getNoteMetadata(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#getNoteMetadata, [noteId]),
-            returnValue: _i7.Future<Map<String, dynamic>?>.value(),
+            returnValue: _i8.Future<Map<String, dynamic>?>.value(),
           )
-          as _i7.Future<Map<String, dynamic>?>);
+          as _i8.Future<Map<String, dynamic>?>);
 
   @override
-  _i7.Future<void> saveNoteAnnotation(_i10.NoteAnnotation? annotation) =>
+  _i8.Future<void> saveNoteAnnotation(_i11.NoteAnnotation? annotation) =>
       (super.noSuchMethod(
             Invocation.method(#saveNoteAnnotation, [annotation]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<_i10.NoteAnnotation?> getNoteAnnotation(String? id) =>
+  _i8.Future<_i11.NoteAnnotation?> getNoteAnnotation(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getNoteAnnotation, [id]),
-            returnValue: _i7.Future<_i10.NoteAnnotation?>.value(),
+            returnValue: _i8.Future<_i11.NoteAnnotation?>.value(),
           )
-          as _i7.Future<_i10.NoteAnnotation?>);
+          as _i8.Future<_i11.NoteAnnotation?>);
 
   @override
-  _i7.Future<List<_i10.NoteAnnotation>> getNoteAnnotationsForNote(
+  _i8.Future<List<_i11.NoteAnnotation>> getNoteAnnotationsForNote(
     String? noteId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getNoteAnnotationsForNote, [noteId]),
-            returnValue: _i7.Future<List<_i10.NoteAnnotation>>.value(
-              <_i10.NoteAnnotation>[],
+            returnValue: _i8.Future<List<_i11.NoteAnnotation>>.value(
+              <_i11.NoteAnnotation>[],
             ),
           )
-          as _i7.Future<List<_i10.NoteAnnotation>>);
+          as _i8.Future<List<_i11.NoteAnnotation>>);
 
   @override
-  _i7.Future<List<_i10.NoteAnnotation>> getNoteAnnotationsForAttachment(
+  _i8.Future<List<_i11.NoteAnnotation>> getNoteAnnotationsForAttachment(
     String? attachmentId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getNoteAnnotationsForAttachment, [attachmentId]),
-            returnValue: _i7.Future<List<_i10.NoteAnnotation>>.value(
-              <_i10.NoteAnnotation>[],
+            returnValue: _i8.Future<List<_i11.NoteAnnotation>>.value(
+              <_i11.NoteAnnotation>[],
             ),
           )
-          as _i7.Future<List<_i10.NoteAnnotation>>);
+          as _i8.Future<List<_i11.NoteAnnotation>>);
 
   @override
-  _i7.Future<void> deleteNoteAnnotation(String? id) =>
+  _i8.Future<void> deleteNoteAnnotation(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#deleteNoteAnnotation, [id]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> updateLastViewedPage(
+  _i8.Future<void> updateLastViewedPage(
     String? attachmentId,
     int? pageNumber,
   ) =>
@@ -303,192 +315,192 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               attachmentId,
               pageNumber,
             ]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<_i11.Attachment?> getAttachmentById(String? attachmentId) =>
+  _i8.Future<_i12.Attachment?> getAttachmentById(String? attachmentId) =>
       (super.noSuchMethod(
             Invocation.method(#getAttachmentById, [attachmentId]),
-            returnValue: _i7.Future<_i11.Attachment?>.value(),
+            returnValue: _i8.Future<_i12.Attachment?>.value(),
           )
-          as _i7.Future<_i11.Attachment?>);
+          as _i8.Future<_i12.Attachment?>);
 
   @override
-  _i7.Future<List<_i11.Attachment>> getAttachmentsForNote(String? noteId) =>
+  _i8.Future<List<_i12.Attachment>> getAttachmentsForNote(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#getAttachmentsForNote, [noteId]),
-            returnValue: _i7.Future<List<_i11.Attachment>>.value(
-              <_i11.Attachment>[],
+            returnValue: _i8.Future<List<_i12.Attachment>>.value(
+              <_i12.Attachment>[],
             ),
           )
-          as _i7.Future<List<_i11.Attachment>>);
+          as _i8.Future<List<_i12.Attachment>>);
 
   @override
-  _i7.Future<void> deleteNote(String? id) =>
+  _i8.Future<void> deleteNote(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#deleteNote, [id]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<String> insertSubNote(_i8.SubNote? subNote, String? noteId) =>
+  _i8.Future<String> insertSubNote(_i9.SubNote? subNote, String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#insertSubNote, [subNote, noteId]),
-            returnValue: _i7.Future<String>.value(
-              _i9.dummyValue<String>(
+            returnValue: _i8.Future<String>.value(
+              _i10.dummyValue<String>(
                 this,
                 Invocation.method(#insertSubNote, [subNote, noteId]),
               ),
             ),
           )
-          as _i7.Future<String>);
+          as _i8.Future<String>);
 
   @override
-  _i7.Future<List<_i8.SubNote>> getSubNotes(String? noteId) =>
+  _i8.Future<List<_i9.SubNote>> getSubNotes(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#getSubNotes, [noteId]),
-            returnValue: _i7.Future<List<_i8.SubNote>>.value(<_i8.SubNote>[]),
+            returnValue: _i8.Future<List<_i9.SubNote>>.value(<_i9.SubNote>[]),
           )
-          as _i7.Future<List<_i8.SubNote>>);
+          as _i8.Future<List<_i9.SubNote>>);
 
   @override
-  _i7.Future<String> insertTag(_i12.Tag? tag) =>
+  _i8.Future<String> insertTag(_i13.Tag? tag) =>
       (super.noSuchMethod(
             Invocation.method(#insertTag, [tag]),
-            returnValue: _i7.Future<String>.value(
-              _i9.dummyValue<String>(
+            returnValue: _i8.Future<String>.value(
+              _i10.dummyValue<String>(
                 this,
                 Invocation.method(#insertTag, [tag]),
               ),
             ),
           )
-          as _i7.Future<String>);
+          as _i8.Future<String>);
 
   @override
-  _i7.Future<List<_i12.Tag>> getAllTags() =>
+  _i8.Future<List<_i13.Tag>> getAllTags() =>
       (super.noSuchMethod(
             Invocation.method(#getAllTags, []),
-            returnValue: _i7.Future<List<_i12.Tag>>.value(<_i12.Tag>[]),
+            returnValue: _i8.Future<List<_i13.Tag>>.value(<_i13.Tag>[]),
           )
-          as _i7.Future<List<_i12.Tag>>);
+          as _i8.Future<List<_i13.Tag>>);
 
   @override
-  _i7.Future<void> deleteTag(String? tagName) =>
+  _i8.Future<void> deleteTag(String? tagName) =>
       (super.noSuchMethod(
             Invocation.method(#deleteTag, [tagName]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> setTagImage(String? tagId, String? imagePath) =>
+  _i8.Future<void> setTagImage(String? tagId, String? imagePath) =>
       (super.noSuchMethod(
             Invocation.method(#setTagImage, [tagId, imagePath]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> removeTagImage(String? tagId) =>
+  _i8.Future<void> removeTagImage(String? tagId) =>
       (super.noSuchMethod(
             Invocation.method(#removeTagImage, [tagId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<Map<String, String>> getAllTagImages() =>
+  _i8.Future<Map<String, String>> getAllTagImages() =>
       (super.noSuchMethod(
             Invocation.method(#getAllTagImages, []),
-            returnValue: _i7.Future<Map<String, String>>.value(
+            returnValue: _i8.Future<Map<String, String>>.value(
               <String, String>{},
             ),
           )
-          as _i7.Future<Map<String, String>>);
+          as _i8.Future<Map<String, String>>);
 
   @override
-  _i7.Future<String?> getTagImage(String? tagId) =>
+  _i8.Future<String?> getTagImage(String? tagId) =>
       (super.noSuchMethod(
             Invocation.method(#getTagImage, [tagId]),
-            returnValue: _i7.Future<String?>.value(),
+            returnValue: _i8.Future<String?>.value(),
           )
-          as _i7.Future<String?>);
+          as _i8.Future<String?>);
 
   @override
-  _i7.Future<void> replaceTag(String? oldTagName, String? newTagName) =>
+  _i8.Future<void> replaceTag(String? oldTagName, String? newTagName) =>
       (super.noSuchMethod(
             Invocation.method(#replaceTag, [oldTagName, newTagName]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<String> insertRelationship(_i13.Relationship? relationship) =>
+  _i8.Future<String> insertRelationship(_i14.Relationship? relationship) =>
       (super.noSuchMethod(
             Invocation.method(#insertRelationship, [relationship]),
-            returnValue: _i7.Future<String>.value(
-              _i9.dummyValue<String>(
+            returnValue: _i8.Future<String>.value(
+              _i10.dummyValue<String>(
                 this,
                 Invocation.method(#insertRelationship, [relationship]),
               ),
             ),
           )
-          as _i7.Future<String>);
+          as _i8.Future<String>);
 
   @override
-  _i7.Future<List<_i13.Relationship>> getRelationships(String? noteId) =>
+  _i8.Future<List<_i14.Relationship>> getRelationships(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#getRelationships, [noteId]),
-            returnValue: _i7.Future<List<_i13.Relationship>>.value(
-              <_i13.Relationship>[],
+            returnValue: _i8.Future<List<_i14.Relationship>>.value(
+              <_i14.Relationship>[],
             ),
           )
-          as _i7.Future<List<_i13.Relationship>>);
+          as _i8.Future<List<_i14.Relationship>>);
 
   @override
-  _i7.Future<List<_i13.Relationship>> getOutgoingRelationships(
+  _i8.Future<List<_i14.Relationship>> getOutgoingRelationships(
     String? noteId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getOutgoingRelationships, [noteId]),
-            returnValue: _i7.Future<List<_i13.Relationship>>.value(
-              <_i13.Relationship>[],
+            returnValue: _i8.Future<List<_i14.Relationship>>.value(
+              <_i14.Relationship>[],
             ),
           )
-          as _i7.Future<List<_i13.Relationship>>);
+          as _i8.Future<List<_i14.Relationship>>);
 
   @override
-  _i7.Future<List<_i13.Relationship>> getIncomingRelationships(
+  _i8.Future<List<_i14.Relationship>> getIncomingRelationships(
     String? noteId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getIncomingRelationships, [noteId]),
-            returnValue: _i7.Future<List<_i13.Relationship>>.value(
-              <_i13.Relationship>[],
+            returnValue: _i8.Future<List<_i14.Relationship>>.value(
+              <_i14.Relationship>[],
             ),
           )
-          as _i7.Future<List<_i13.Relationship>>);
+          as _i8.Future<List<_i14.Relationship>>);
 
   @override
-  _i7.Future<void> deleteRelationship(String? relationshipId) =>
+  _i8.Future<void> deleteRelationship(String? relationshipId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteRelationship, [relationshipId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteRelationshipBetween(
+  _i8.Future<void> deleteRelationshipBetween(
     String? fromNoteId,
     String? toNoteId,
   ) =>
@@ -497,22 +509,22 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               fromNoteId,
               toNoteId,
             ]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteRelationshipsForNote(String? noteId) =>
+  _i8.Future<void> deleteRelationshipsForNote(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteRelationshipsForNote, [noteId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<bool> relationshipExists(
+  _i8.Future<bool> relationshipExists(
     String? fromNoteId,
     String? toNoteId,
     String? type,
@@ -523,60 +535,60 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               toNoteId,
               type,
             ]),
-            returnValue: _i7.Future<bool>.value(false),
+            returnValue: _i8.Future<bool>.value(false),
           )
-          as _i7.Future<bool>);
+          as _i8.Future<bool>);
 
   @override
-  _i7.Future<bool> verifyAttachmentPath(String? attachmentPath) =>
+  _i8.Future<bool> verifyAttachmentPath(String? attachmentPath) =>
       (super.noSuchMethod(
             Invocation.method(#verifyAttachmentPath, [attachmentPath]),
-            returnValue: _i7.Future<bool>.value(false),
+            returnValue: _i8.Future<bool>.value(false),
           )
-          as _i7.Future<bool>);
+          as _i8.Future<bool>);
 
   @override
-  _i7.Future<String?> getNoteIdForAttachment(String? attachmentPath) =>
+  _i8.Future<String?> getNoteIdForAttachment(String? attachmentPath) =>
       (super.noSuchMethod(
             Invocation.method(#getNoteIdForAttachment, [attachmentPath]),
-            returnValue: _i7.Future<String?>.value(),
+            returnValue: _i8.Future<String?>.value(),
           )
-          as _i7.Future<String?>);
+          as _i8.Future<String?>);
 
   @override
-  _i7.Future<List<Map<String, dynamic>>> getAllAttachments() =>
+  _i8.Future<List<Map<String, dynamic>>> getAllAttachments() =>
       (super.noSuchMethod(
             Invocation.method(#getAllAttachments, []),
-            returnValue: _i7.Future<List<Map<String, dynamic>>>.value(
+            returnValue: _i8.Future<List<Map<String, dynamic>>>.value(
               <Map<String, dynamic>>[],
             ),
           )
-          as _i7.Future<List<Map<String, dynamic>>>);
+          as _i8.Future<List<Map<String, dynamic>>>);
 
   @override
-  _i7.Future<String> getDatabasePath() =>
+  _i8.Future<String> getDatabasePath() =>
       (super.noSuchMethod(
             Invocation.method(#getDatabasePath, []),
-            returnValue: _i7.Future<String>.value(
-              _i9.dummyValue<String>(
+            returnValue: _i8.Future<String>.value(
+              _i10.dummyValue<String>(
                 this,
                 Invocation.method(#getDatabasePath, []),
               ),
             ),
           )
-          as _i7.Future<String>);
+          as _i8.Future<String>);
 
   @override
-  _i7.Future<void> checkpoint() =>
+  _i8.Future<void> checkpoint() =>
       (super.noSuchMethod(
             Invocation.method(#checkpoint, []),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> migrateBackupDatabase(
+  _i8.Future<void> migrateBackupDatabase(
     _i2.Database? db,
     int? oldVersion,
     int? newVersion,
@@ -587,220 +599,220 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               oldVersion,
               newVersion,
             ]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> clearAllData() =>
+  _i8.Future<void> clearAllData() =>
       (super.noSuchMethod(
             Invocation.method(#clearAllData, []),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> close() =>
+  _i8.Future<void> close() =>
       (super.noSuchMethod(
             Invocation.method(#close, []),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<String> insertFilter(_i14.Filter? filter) =>
+  _i8.Future<String> insertFilter(_i15.Filter? filter) =>
       (super.noSuchMethod(
             Invocation.method(#insertFilter, [filter]),
-            returnValue: _i7.Future<String>.value(
-              _i9.dummyValue<String>(
+            returnValue: _i8.Future<String>.value(
+              _i10.dummyValue<String>(
                 this,
                 Invocation.method(#insertFilter, [filter]),
               ),
             ),
           )
-          as _i7.Future<String>);
+          as _i8.Future<String>);
 
   @override
-  _i7.Future<List<_i14.Filter>> getAllFilters() =>
+  _i8.Future<List<_i15.Filter>> getAllFilters() =>
       (super.noSuchMethod(
             Invocation.method(#getAllFilters, []),
-            returnValue: _i7.Future<List<_i14.Filter>>.value(<_i14.Filter>[]),
+            returnValue: _i8.Future<List<_i15.Filter>>.value(<_i15.Filter>[]),
           )
-          as _i7.Future<List<_i14.Filter>>);
+          as _i8.Future<List<_i15.Filter>>);
 
   @override
-  _i7.Future<_i14.Filter?> getFilter(String? id) =>
+  _i8.Future<_i15.Filter?> getFilter(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getFilter, [id]),
-            returnValue: _i7.Future<_i14.Filter?>.value(),
+            returnValue: _i8.Future<_i15.Filter?>.value(),
           )
-          as _i7.Future<_i14.Filter?>);
+          as _i8.Future<_i15.Filter?>);
 
   @override
-  _i7.Future<void> updateFilter(_i14.Filter? filter) =>
+  _i8.Future<void> updateFilter(_i15.Filter? filter) =>
       (super.noSuchMethod(
             Invocation.method(#updateFilter, [filter]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteFilter(String? id) =>
+  _i8.Future<void> deleteFilter(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#deleteFilter, [id]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<List<Map<String, dynamic>>> executeRawQuery(String? sql) =>
+  _i8.Future<List<Map<String, dynamic>>> executeRawQuery(String? sql) =>
       (super.noSuchMethod(
             Invocation.method(#executeRawQuery, [sql]),
-            returnValue: _i7.Future<List<Map<String, dynamic>>>.value(
+            returnValue: _i8.Future<List<Map<String, dynamic>>>.value(
               <Map<String, dynamic>>[],
             ),
           )
-          as _i7.Future<List<Map<String, dynamic>>>);
+          as _i8.Future<List<Map<String, dynamic>>>);
 
   @override
-  _i7.Future<String> insertUserApp(_i5.UserApp? app) =>
+  _i8.Future<String> insertUserApp(_i5.UserApp? app) =>
       (super.noSuchMethod(
             Invocation.method(#insertUserApp, [app]),
-            returnValue: _i7.Future<String>.value(
-              _i9.dummyValue<String>(
+            returnValue: _i8.Future<String>.value(
+              _i10.dummyValue<String>(
                 this,
                 Invocation.method(#insertUserApp, [app]),
               ),
             ),
           )
-          as _i7.Future<String>);
+          as _i8.Future<String>);
 
   @override
-  _i7.Future<List<_i5.UserApp>> getAllUserApps() =>
+  _i8.Future<List<_i5.UserApp>> getAllUserApps() =>
       (super.noSuchMethod(
             Invocation.method(#getAllUserApps, []),
-            returnValue: _i7.Future<List<_i5.UserApp>>.value(<_i5.UserApp>[]),
+            returnValue: _i8.Future<List<_i5.UserApp>>.value(<_i5.UserApp>[]),
           )
-          as _i7.Future<List<_i5.UserApp>>);
+          as _i8.Future<List<_i5.UserApp>>);
 
   @override
-  _i7.Future<_i5.UserApp?> getUserApp(String? id) =>
+  _i8.Future<_i5.UserApp?> getUserApp(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getUserApp, [id]),
-            returnValue: _i7.Future<_i5.UserApp?>.value(),
+            returnValue: _i8.Future<_i5.UserApp?>.value(),
           )
-          as _i7.Future<_i5.UserApp?>);
+          as _i8.Future<_i5.UserApp?>);
 
   @override
-  _i7.Future<void> updateUserApp(_i5.UserApp? app) =>
+  _i8.Future<void> updateUserApp(_i5.UserApp? app) =>
       (super.noSuchMethod(
             Invocation.method(#updateUserApp, [app]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteUserApp(String? id) =>
+  _i8.Future<void> deleteUserApp(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#deleteUserApp, [id]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> updateUserAppState(
+  _i8.Future<void> updateUserAppState(
     String? id,
     Map<String, dynamic>? state,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#updateUserAppState, [id, state]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<Map<String, dynamic>?> getUserAppState(String? id) =>
+  _i8.Future<Map<String, dynamic>?> getUserAppState(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getUserAppState, [id]),
-            returnValue: _i7.Future<Map<String, dynamic>?>.value(),
+            returnValue: _i8.Future<Map<String, dynamic>?>.value(),
           )
-          as _i7.Future<Map<String, dynamic>?>);
+          as _i8.Future<Map<String, dynamic>?>);
 
   @override
-  _i7.Future<String> insertAppRevision(_i4.AppRevision? revision) =>
+  _i8.Future<String> insertAppRevision(_i4.AppRevision? revision) =>
       (super.noSuchMethod(
             Invocation.method(#insertAppRevision, [revision]),
-            returnValue: _i7.Future<String>.value(
-              _i9.dummyValue<String>(
+            returnValue: _i8.Future<String>.value(
+              _i10.dummyValue<String>(
                 this,
                 Invocation.method(#insertAppRevision, [revision]),
               ),
             ),
           )
-          as _i7.Future<String>);
+          as _i8.Future<String>);
 
   @override
-  _i7.Future<List<_i4.AppRevision>> getAppRevisions(String? appId) =>
+  _i8.Future<List<_i4.AppRevision>> getAppRevisions(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#getAppRevisions, [appId]),
-            returnValue: _i7.Future<List<_i4.AppRevision>>.value(
+            returnValue: _i8.Future<List<_i4.AppRevision>>.value(
               <_i4.AppRevision>[],
             ),
           )
-          as _i7.Future<List<_i4.AppRevision>>);
+          as _i8.Future<List<_i4.AppRevision>>);
 
   @override
-  _i7.Future<_i4.AppRevision?> getAppRevision(String? id) =>
+  _i8.Future<_i4.AppRevision?> getAppRevision(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getAppRevision, [id]),
-            returnValue: _i7.Future<_i4.AppRevision?>.value(),
+            returnValue: _i8.Future<_i4.AppRevision?>.value(),
           )
-          as _i7.Future<_i4.AppRevision?>);
+          as _i8.Future<_i4.AppRevision?>);
 
   @override
-  _i7.Future<void> deleteAppRevision(String? id) =>
+  _i8.Future<void> deleteAppRevision(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#deleteAppRevision, [id]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteAppRevisions(String? appId) =>
+  _i8.Future<void> deleteAppRevisions(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteAppRevisions, [appId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<int> getNextRevisionNumber(String? appId) =>
+  _i8.Future<int> getNextRevisionNumber(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#getNextRevisionNumber, [appId]),
-            returnValue: _i7.Future<int>.value(0),
+            returnValue: _i8.Future<int>.value(0),
           )
-          as _i7.Future<int>);
+          as _i8.Future<int>);
 
   @override
-  _i7.Future<_i4.AppRevision?> getLatestAppRevision(String? appId) =>
+  _i8.Future<_i4.AppRevision?> getLatestAppRevision(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#getLatestAppRevision, [appId]),
-            returnValue: _i7.Future<_i4.AppRevision?>.value(),
+            returnValue: _i8.Future<_i4.AppRevision?>.value(),
           )
-          as _i7.Future<_i4.AppRevision?>);
+          as _i8.Future<_i4.AppRevision?>);
 
   @override
-  _i7.Future<int> insertUserAppLibrary({
+  _i8.Future<int> insertUserAppLibrary({
     required String? appUuid,
     required int? revisionId,
     required String? name,
@@ -813,43 +825,43 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               #name: name,
               #usageInstructions: usageInstructions,
             }),
-            returnValue: _i7.Future<int>.value(0),
+            returnValue: _i8.Future<int>.value(0),
           )
-          as _i7.Future<int>);
+          as _i8.Future<int>);
 
   @override
-  _i7.Future<List<Map<String, dynamic>>> getUserAppLibraries(
+  _i8.Future<List<Map<String, dynamic>>> getUserAppLibraries(
     String? appUuid,
     int? revisionId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getUserAppLibraries, [appUuid, revisionId]),
-            returnValue: _i7.Future<List<Map<String, dynamic>>>.value(
+            returnValue: _i8.Future<List<Map<String, dynamic>>>.value(
               <Map<String, dynamic>>[],
             ),
           )
-          as _i7.Future<List<Map<String, dynamic>>>);
+          as _i8.Future<List<Map<String, dynamic>>>);
 
   @override
-  _i7.Future<void> deleteUserAppLibrary(int? libraryId) =>
+  _i8.Future<void> deleteUserAppLibrary(int? libraryId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteUserAppLibrary, [libraryId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteUserAppLibrariesForRevision(int? revisionId) =>
+  _i8.Future<void> deleteUserAppLibrariesForRevision(int? revisionId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteUserAppLibrariesForRevision, [revisionId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<int> insertUserAppLibraryDependency({
+  _i8.Future<int> insertUserAppLibraryDependency({
     String? originalUrl,
     required String? localPath,
     required List<int>? bytes,
@@ -862,43 +874,43 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               #bytes: bytes,
               #libraryId: libraryId,
             }),
-            returnValue: _i7.Future<int>.value(0),
+            returnValue: _i8.Future<int>.value(0),
           )
-          as _i7.Future<int>);
+          as _i8.Future<int>);
 
   @override
-  _i7.Future<List<Map<String, dynamic>>> getUserAppLibraryDependencies(
+  _i8.Future<List<Map<String, dynamic>>> getUserAppLibraryDependencies(
     int? libraryId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getUserAppLibraryDependencies, [libraryId]),
-            returnValue: _i7.Future<List<Map<String, dynamic>>>.value(
+            returnValue: _i8.Future<List<Map<String, dynamic>>>.value(
               <Map<String, dynamic>>[],
             ),
           )
-          as _i7.Future<List<Map<String, dynamic>>>);
+          as _i8.Future<List<Map<String, dynamic>>>);
 
   @override
-  _i7.Future<Map<String, dynamic>?> getUserAppLibraryDependencyByPath(
+  _i8.Future<Map<String, dynamic>?> getUserAppLibraryDependencyByPath(
     String? localPath,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getUserAppLibraryDependencyByPath, [localPath]),
-            returnValue: _i7.Future<Map<String, dynamic>?>.value(),
+            returnValue: _i8.Future<Map<String, dynamic>?>.value(),
           )
-          as _i7.Future<Map<String, dynamic>?>);
+          as _i8.Future<Map<String, dynamic>?>);
 
   @override
-  _i7.Future<void> deleteUserAppLibraryDependency(int? dependencyId) =>
+  _i8.Future<void> deleteUserAppLibraryDependency(int? dependencyId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteUserAppLibraryDependency, [dependencyId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<Map<String, dynamic>?> getDependencyByAppAndPath(
+  _i8.Future<Map<String, dynamic>?> getDependencyByAppAndPath(
     String? appUuid,
     int? revisionId,
     String? localPath,
@@ -909,25 +921,25 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               revisionId,
               localPath,
             ]),
-            returnValue: _i7.Future<Map<String, dynamic>?>.value(),
+            returnValue: _i8.Future<Map<String, dynamic>?>.value(),
           )
-          as _i7.Future<Map<String, dynamic>?>);
+          as _i8.Future<Map<String, dynamic>?>);
 
   @override
-  _i7.Future<String> insertConversation(_i15.Conversation? conversation) =>
+  _i8.Future<String> insertConversation(_i16.Conversation? conversation) =>
       (super.noSuchMethod(
             Invocation.method(#insertConversation, [conversation]),
-            returnValue: _i7.Future<String>.value(
-              _i9.dummyValue<String>(
+            returnValue: _i8.Future<String>.value(
+              _i10.dummyValue<String>(
                 this,
                 Invocation.method(#insertConversation, [conversation]),
               ),
             ),
           )
-          as _i7.Future<String>);
+          as _i8.Future<String>);
 
   @override
-  _i7.Future<List<_i15.Conversation>> getAllConversations({
+  _i8.Future<List<_i16.Conversation>> getAllConversations({
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
@@ -940,172 +952,172 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               #tagNames: tagNames,
               #includeEmpty: includeEmpty,
             }),
-            returnValue: _i7.Future<List<_i15.Conversation>>.value(
-              <_i15.Conversation>[],
+            returnValue: _i8.Future<List<_i16.Conversation>>.value(
+              <_i16.Conversation>[],
             ),
           )
-          as _i7.Future<List<_i15.Conversation>>);
+          as _i8.Future<List<_i16.Conversation>>);
 
   @override
-  _i7.Future<List<_i15.ConversationMessage>> getConversationPreviewMessages(
+  _i8.Future<List<_i16.ConversationMessage>> getConversationPreviewMessages(
     String? conversationId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationPreviewMessages, [
               conversationId,
             ]),
-            returnValue: _i7.Future<List<_i15.ConversationMessage>>.value(
-              <_i15.ConversationMessage>[],
+            returnValue: _i8.Future<List<_i16.ConversationMessage>>.value(
+              <_i16.ConversationMessage>[],
             ),
           )
-          as _i7.Future<List<_i15.ConversationMessage>>);
+          as _i8.Future<List<_i16.ConversationMessage>>);
 
   @override
-  _i7.Future<_i15.Conversation?> getConversation(String? id) =>
+  _i8.Future<_i16.Conversation?> getConversation(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getConversation, [id]),
-            returnValue: _i7.Future<_i15.Conversation?>.value(),
+            returnValue: _i8.Future<_i16.Conversation?>.value(),
           )
-          as _i7.Future<_i15.Conversation?>);
+          as _i8.Future<_i16.Conversation?>);
 
   @override
-  _i7.Future<void> updateConversation(_i15.Conversation? conversation) =>
+  _i8.Future<void> updateConversation(_i16.Conversation? conversation) =>
       (super.noSuchMethod(
             Invocation.method(#updateConversation, [conversation]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteConversation(String? id) =>
+  _i8.Future<void> deleteConversation(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#deleteConversation, [id]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<String> insertConversationMessage(
-    _i15.ConversationMessage? message,
+  _i8.Future<String> insertConversationMessage(
+    _i16.ConversationMessage? message,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#insertConversationMessage, [message]),
-            returnValue: _i7.Future<String>.value(
-              _i9.dummyValue<String>(
+            returnValue: _i8.Future<String>.value(
+              _i10.dummyValue<String>(
                 this,
                 Invocation.method(#insertConversationMessage, [message]),
               ),
             ),
           )
-          as _i7.Future<String>);
+          as _i8.Future<String>);
 
   @override
-  _i7.Future<List<_i15.ConversationMessage>> getConversationMessages(
+  _i8.Future<List<_i16.ConversationMessage>> getConversationMessages(
     String? conversationId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationMessages, [conversationId]),
-            returnValue: _i7.Future<List<_i15.ConversationMessage>>.value(
-              <_i15.ConversationMessage>[],
+            returnValue: _i8.Future<List<_i16.ConversationMessage>>.value(
+              <_i16.ConversationMessage>[],
             ),
           )
-          as _i7.Future<List<_i15.ConversationMessage>>);
+          as _i8.Future<List<_i16.ConversationMessage>>);
 
   @override
-  _i7.Future<_i15.ConversationMessage?> getConversationMessage(String? id) =>
+  _i8.Future<_i16.ConversationMessage?> getConversationMessage(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationMessage, [id]),
-            returnValue: _i7.Future<_i15.ConversationMessage?>.value(),
+            returnValue: _i8.Future<_i16.ConversationMessage?>.value(),
           )
-          as _i7.Future<_i15.ConversationMessage?>);
+          as _i8.Future<_i16.ConversationMessage?>);
 
   @override
-  _i7.Future<void> updateConversationMessage(
-    _i15.ConversationMessage? message,
+  _i8.Future<void> updateConversationMessage(
+    _i16.ConversationMessage? message,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#updateConversationMessage, [message]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteConversationMessage(String? id) =>
+  _i8.Future<void> deleteConversationMessage(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#deleteConversationMessage, [id]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteMessageWithSubtree(String? messageId) =>
+  _i8.Future<void> deleteMessageWithSubtree(String? messageId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteMessageWithSubtree, [messageId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteConversationExplicitly(String? conversationId) =>
+  _i8.Future<void> deleteConversationExplicitly(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteConversationExplicitly, [conversationId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteMessagesFromTreeNodes(List<String>? messageIds) =>
+  _i8.Future<void> deleteMessagesFromTreeNodes(List<String>? messageIds) =>
       (super.noSuchMethod(
             Invocation.method(#deleteMessagesFromTreeNodes, [messageIds]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<String> insertConversationAttachment(
-    _i16.ConversationAttachment? attachment,
+  _i8.Future<String> insertConversationAttachment(
+    _i17.ConversationAttachment? attachment,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#insertConversationAttachment, [attachment]),
-            returnValue: _i7.Future<String>.value(
-              _i9.dummyValue<String>(
+            returnValue: _i8.Future<String>.value(
+              _i10.dummyValue<String>(
                 this,
                 Invocation.method(#insertConversationAttachment, [attachment]),
               ),
             ),
           )
-          as _i7.Future<String>);
+          as _i8.Future<String>);
 
   @override
-  _i7.Future<List<_i16.ConversationAttachment>> getConversationAttachments(
+  _i8.Future<List<_i17.ConversationAttachment>> getConversationAttachments(
     String? messageId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationAttachments, [messageId]),
-            returnValue: _i7.Future<List<_i16.ConversationAttachment>>.value(
-              <_i16.ConversationAttachment>[],
+            returnValue: _i8.Future<List<_i17.ConversationAttachment>>.value(
+              <_i17.ConversationAttachment>[],
             ),
           )
-          as _i7.Future<List<_i16.ConversationAttachment>>);
+          as _i8.Future<List<_i17.ConversationAttachment>>);
 
   @override
-  _i7.Future<void> deleteConversationAttachment(String? id) =>
+  _i8.Future<void> deleteConversationAttachment(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#deleteConversationAttachment, [id]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<String> insertConversationMessageMapping({
+  _i8.Future<String> insertConversationMessageMapping({
     required String? conversationId,
     required String? messageId,
   }) =>
@@ -1114,8 +1126,8 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               #conversationId: conversationId,
               #messageId: messageId,
             }),
-            returnValue: _i7.Future<String>.value(
-              _i9.dummyValue<String>(
+            returnValue: _i8.Future<String>.value(
+              _i10.dummyValue<String>(
                 this,
                 Invocation.method(#insertConversationMessageMapping, [], {
                   #conversationId: conversationId,
@@ -1124,32 +1136,32 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               ),
             ),
           )
-          as _i7.Future<String>);
+          as _i8.Future<String>);
 
   @override
-  _i7.Future<List<Map<String, dynamic>>> getConversationMessageMappings(
+  _i8.Future<List<Map<String, dynamic>>> getConversationMessageMappings(
     String? conversationId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationMessageMappings, [
               conversationId,
             ]),
-            returnValue: _i7.Future<List<Map<String, dynamic>>>.value(
+            returnValue: _i8.Future<List<Map<String, dynamic>>>.value(
               <Map<String, dynamic>>[],
             ),
           )
-          as _i7.Future<List<Map<String, dynamic>>>);
+          as _i8.Future<List<Map<String, dynamic>>>);
 
   @override
-  _i7.Future<List<String>> getConversationMessageIds(String? conversationId) =>
+  _i8.Future<List<String>> getConversationMessageIds(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationMessageIds, [conversationId]),
-            returnValue: _i7.Future<List<String>>.value(<String>[]),
+            returnValue: _i8.Future<List<String>>.value(<String>[]),
           )
-          as _i7.Future<List<String>>);
+          as _i8.Future<List<String>>);
 
   @override
-  _i7.Future<String> insertMessageParent({
+  _i8.Future<String> insertMessageParent({
     required String? messageId,
     required String? parentMessageId,
   }) =>
@@ -1158,8 +1170,8 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               #messageId: messageId,
               #parentMessageId: parentMessageId,
             }),
-            returnValue: _i7.Future<String>.value(
-              _i9.dummyValue<String>(
+            returnValue: _i8.Future<String>.value(
+              _i10.dummyValue<String>(
                 this,
                 Invocation.method(#insertMessageParent, [], {
                   #messageId: messageId,
@@ -1168,57 +1180,57 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               ),
             ),
           )
-          as _i7.Future<String>);
+          as _i8.Future<String>);
 
   @override
-  _i7.Future<List<Map<String, dynamic>>> getAllMessageParents() =>
+  _i8.Future<List<Map<String, dynamic>>> getAllMessageParents() =>
       (super.noSuchMethod(
             Invocation.method(#getAllMessageParents, []),
-            returnValue: _i7.Future<List<Map<String, dynamic>>>.value(
+            returnValue: _i8.Future<List<Map<String, dynamic>>>.value(
               <Map<String, dynamic>>[],
             ),
           )
-          as _i7.Future<List<Map<String, dynamic>>>);
+          as _i8.Future<List<Map<String, dynamic>>>);
 
   @override
-  _i7.Future<String?> getMessageParent(String? messageId) =>
+  _i8.Future<String?> getMessageParent(String? messageId) =>
       (super.noSuchMethod(
             Invocation.method(#getMessageParent, [messageId]),
-            returnValue: _i7.Future<String?>.value(),
+            returnValue: _i8.Future<String?>.value(),
           )
-          as _i7.Future<String?>);
+          as _i8.Future<String?>);
 
   @override
-  _i7.Future<List<String>> getMessageChildren(String? parentMessageId) =>
+  _i8.Future<List<String>> getMessageChildren(String? parentMessageId) =>
       (super.noSuchMethod(
             Invocation.method(#getMessageChildren, [parentMessageId]),
-            returnValue: _i7.Future<List<String>>.value(<String>[]),
+            returnValue: _i8.Future<List<String>>.value(<String>[]),
           )
-          as _i7.Future<List<String>>);
+          as _i8.Future<List<String>>);
 
   @override
-  _i7.Future<void> deleteEmptyConversations({required Duration? olderThan}) =>
+  _i8.Future<void> deleteEmptyConversations({required Duration? olderThan}) =>
       (super.noSuchMethod(
             Invocation.method(#deleteEmptyConversations, [], {
               #olderThan: olderThan,
             }),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<List<String>> getConversationsContainingMessage(
+  _i8.Future<List<String>> getConversationsContainingMessage(
     String? messageId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationsContainingMessage, [messageId]),
-            returnValue: _i7.Future<List<String>>.value(<String>[]),
+            returnValue: _i8.Future<List<String>>.value(<String>[]),
           )
-          as _i7.Future<List<String>>);
+          as _i8.Future<List<String>>);
 
   @override
-  _i7.Future<String> insertConversationNoteMapping({
+  _i8.Future<String> insertConversationNoteMapping({
     required String? conversationId,
     required String? noteId,
   }) =>
@@ -1227,8 +1239,8 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               #conversationId: conversationId,
               #noteId: noteId,
             }),
-            returnValue: _i7.Future<String>.value(
-              _i9.dummyValue<String>(
+            returnValue: _i8.Future<String>.value(
+              _i10.dummyValue<String>(
                 this,
                 Invocation.method(#insertConversationNoteMapping, [], {
                   #conversationId: conversationId,
@@ -1237,26 +1249,26 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               ),
             ),
           )
-          as _i7.Future<String>);
+          as _i8.Future<String>);
 
   @override
-  _i7.Future<List<String>> getConversationNoteIds(String? conversationId) =>
+  _i8.Future<List<String>> getConversationNoteIds(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationNoteIds, [conversationId]),
-            returnValue: _i7.Future<List<String>>.value(<String>[]),
+            returnValue: _i8.Future<List<String>>.value(<String>[]),
           )
-          as _i7.Future<List<String>>);
+          as _i8.Future<List<String>>);
 
   @override
-  _i7.Future<List<String>> getNoteConversationIds(String? noteId) =>
+  _i8.Future<List<String>> getNoteConversationIds(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#getNoteConversationIds, [noteId]),
-            returnValue: _i7.Future<List<String>>.value(<String>[]),
+            returnValue: _i8.Future<List<String>>.value(<String>[]),
           )
-          as _i7.Future<List<String>>);
+          as _i8.Future<List<String>>);
 
   @override
-  _i7.Future<void> deleteConversationNoteMapping({
+  _i8.Future<void> deleteConversationNoteMapping({
     required String? conversationId,
     required String? noteId,
   }) =>
@@ -1265,33 +1277,33 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               #conversationId: conversationId,
               #noteId: noteId,
             }),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteConversationNoteMappings(String? conversationId) =>
+  _i8.Future<void> deleteConversationNoteMappings(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteConversationNoteMappings, [
               conversationId,
             ]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteNoteConversationMappings(String? noteId) =>
+  _i8.Future<void> deleteNoteConversationMappings(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteNoteConversationMappings, [noteId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<bool> conversationNoteMappingExists({
+  _i8.Future<bool> conversationNoteMappingExists({
     required String? conversationId,
     required String? noteId,
   }) =>
@@ -1300,28 +1312,28 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               #conversationId: conversationId,
               #noteId: noteId,
             }),
-            returnValue: _i7.Future<bool>.value(false),
+            returnValue: _i8.Future<bool>.value(false),
           )
-          as _i7.Future<bool>);
+          as _i8.Future<bool>);
 
   @override
-  _i7.Future<int> getNoteConversationCount(String? noteId) =>
+  _i8.Future<int> getNoteConversationCount(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#getNoteConversationCount, [noteId]),
-            returnValue: _i7.Future<int>.value(0),
+            returnValue: _i8.Future<int>.value(0),
           )
-          as _i7.Future<int>);
+          as _i8.Future<int>);
 
   @override
-  _i7.Future<int> getConversationNoteCount(String? conversationId) =>
+  _i8.Future<int> getConversationNoteCount(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationNoteCount, [conversationId]),
-            returnValue: _i7.Future<int>.value(0),
+            returnValue: _i8.Future<int>.value(0),
           )
-          as _i7.Future<int>);
+          as _i8.Future<int>);
 
   @override
-  _i7.Future<void> addTagsToConversation(
+  _i8.Future<void> addTagsToConversation(
     String? conversationId,
     List<String>? tagNames,
   ) =>
@@ -1330,25 +1342,25 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               conversationId,
               tagNames,
             ]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> setConversationTags(
+  _i8.Future<void> setConversationTags(
     String? conversationId,
     List<String>? tagNames,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#setConversationTags, [conversationId, tagNames]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> removeTagFromConversation(
+  _i8.Future<void> removeTagFromConversation(
     String? conversationId,
     String? tagName,
   ) =>
@@ -1357,203 +1369,223 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               conversationId,
               tagName,
             ]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<List<_i12.Tag>> getConversationTags(String? conversationId) =>
+  _i8.Future<List<_i13.Tag>> getConversationTags(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationTags, [conversationId]),
-            returnValue: _i7.Future<List<_i12.Tag>>.value(<_i12.Tag>[]),
+            returnValue: _i8.Future<List<_i13.Tag>>.value(<_i13.Tag>[]),
           )
-          as _i7.Future<List<_i12.Tag>>);
+          as _i8.Future<List<_i13.Tag>>);
 
   @override
-  _i7.Future<List<String>> getConversationTagNames(String? conversationId) =>
+  _i8.Future<List<String>> getConversationTagNames(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationTagNames, [conversationId]),
-            returnValue: _i7.Future<List<String>>.value(<String>[]),
+            returnValue: _i8.Future<List<String>>.value(<String>[]),
           )
-          as _i7.Future<List<String>>);
+          as _i8.Future<List<String>>);
 
   @override
-  _i7.Future<void> addAppToMultiFunction(String? appId) =>
+  _i8.Future<void> addAppToMultiFunction(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#addAppToMultiFunction, [appId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> removeAppFromMultiFunction(String? appId) =>
+  _i8.Future<void> removeAppFromMultiFunction(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#removeAppFromMultiFunction, [appId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> setMultiFunctionDefaultApp(String? appId) =>
+  _i8.Future<void> setMultiFunctionDefaultApp(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#setMultiFunctionDefaultApp, [appId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> clearMultiFunctionDefaultApp() =>
+  _i8.Future<void> clearMultiFunctionDefaultApp() =>
       (super.noSuchMethod(
             Invocation.method(#clearMultiFunctionDefaultApp, []),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<List<String>> getMultiFunctionApps() =>
+  _i8.Future<List<String>> getMultiFunctionApps() =>
       (super.noSuchMethod(
             Invocation.method(#getMultiFunctionApps, []),
-            returnValue: _i7.Future<List<String>>.value(<String>[]),
+            returnValue: _i8.Future<List<String>>.value(<String>[]),
           )
-          as _i7.Future<List<String>>);
+          as _i8.Future<List<String>>);
 
   @override
-  _i7.Future<String?> getMultiFunctionDefaultAppId() =>
+  _i8.Future<String?> getMultiFunctionDefaultAppId() =>
       (super.noSuchMethod(
             Invocation.method(#getMultiFunctionDefaultAppId, []),
-            returnValue: _i7.Future<String?>.value(),
+            returnValue: _i8.Future<String?>.value(),
           )
-          as _i7.Future<String?>);
+          as _i8.Future<String?>);
 
   @override
-  _i7.Future<List<_i15.ConversationMessage>> getMessagesForConversations(
+  _i8.Future<List<_i16.ConversationMessage>> getMessagesForConversations(
     List<String>? conversationIds,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getMessagesForConversations, [conversationIds]),
-            returnValue: _i7.Future<List<_i15.ConversationMessage>>.value(
-              <_i15.ConversationMessage>[],
+            returnValue: _i8.Future<List<_i16.ConversationMessage>>.value(
+              <_i16.ConversationMessage>[],
             ),
           )
-          as _i7.Future<List<_i15.ConversationMessage>>);
+          as _i8.Future<List<_i16.ConversationMessage>>);
 
   @override
-  _i7.Future<Map<String, List<String>>> getConversationIdsForMessages(
+  _i8.Future<Map<String, List<String>>> getConversationIdsForMessages(
     List<String>? messageIds,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationIdsForMessages, [messageIds]),
-            returnValue: _i7.Future<Map<String, List<String>>>.value(
+            returnValue: _i8.Future<Map<String, List<String>>>.value(
               <String, List<String>>{},
             ),
           )
-          as _i7.Future<Map<String, List<String>>>);
+          as _i8.Future<Map<String, List<String>>>);
 
   @override
-  _i7.Future<List<_i8.Note>> searchNotesFTS(
+  _i8.Future<List<_i9.Note>> searchNotesFTS(
     String? query, {
     List<String>? tags,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#searchNotesFTS, [query], {#tags: tags}),
-            returnValue: _i7.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValue: _i8.Future<List<_i9.Note>>.value(<_i9.Note>[]),
           )
-          as _i7.Future<List<_i8.Note>>);
+          as _i8.Future<List<_i9.Note>>);
 
   @override
-  _i7.Future<List<Map<String, dynamic>>> runRawQuery(
+  _i8.Future<List<Map<String, dynamic>>> runRawQuery(
     String? query, [
     List<Object?>? arguments,
   ]) =>
       (super.noSuchMethod(
             Invocation.method(#runRawQuery, [query, arguments]),
-            returnValue: _i7.Future<List<Map<String, dynamic>>>.value(
+            returnValue: _i8.Future<List<Map<String, dynamic>>>.value(
               <Map<String, dynamic>>[],
             ),
           )
-          as _i7.Future<List<Map<String, dynamic>>>);
+          as _i8.Future<List<Map<String, dynamic>>>);
 
   @override
-  _i7.Future<List<_i8.Note>> searchNotes(String? query) =>
+  _i8.Future<List<_i9.Note>> searchNotes(String? query) =>
       (super.noSuchMethod(
             Invocation.method(#searchNotes, [query]),
-            returnValue: _i7.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValue: _i8.Future<List<_i9.Note>>.value(<_i9.Note>[]),
           )
-          as _i7.Future<List<_i8.Note>>);
+          as _i8.Future<List<_i9.Note>>);
 
   @override
-  _i7.Future<String?> getTagExtractionPrompt(String? tagId) =>
+  _i8.Future<String?> getTagExtractionPrompt(String? tagId) =>
       (super.noSuchMethod(
             Invocation.method(#getTagExtractionPrompt, [tagId]),
-            returnValue: _i7.Future<String?>.value(),
+            returnValue: _i8.Future<String?>.value(),
           )
-          as _i7.Future<String?>);
+          as _i8.Future<String?>);
 
   @override
-  _i7.Future<void> updateTagExtractionPrompt(String? tagId, String? prompt) =>
+  _i8.Future<void> updateTagExtractionPrompt(String? tagId, String? prompt) =>
       (super.noSuchMethod(
             Invocation.method(#updateTagExtractionPrompt, [tagId, prompt]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<_i8.Note?> getNoteById(String? id) =>
+  _i8.Future<_i9.Note?> getNoteById(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getNoteById, [id]),
-            returnValue: _i7.Future<_i8.Note?>.value(),
+            returnValue: _i8.Future<_i9.Note?>.value(),
           )
-          as _i7.Future<_i8.Note?>);
+          as _i8.Future<_i9.Note?>);
 
   @override
-  _i7.Future<_i17.WorkflowBindingRow?> getExactWorkflowBinding(
+  _i8.Future<_i18.WorkflowBindingRow?> getExactWorkflowBinding(
     String? tagName,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getExactWorkflowBinding, [tagName]),
-            returnValue: _i7.Future<_i17.WorkflowBindingRow?>.value(),
+            returnValue: _i8.Future<_i18.WorkflowBindingRow?>.value(),
           )
-          as _i7.Future<_i17.WorkflowBindingRow?>);
+          as _i8.Future<_i18.WorkflowBindingRow?>);
 
   @override
-  _i7.Future<List<_i17.WorkflowBindingRow>> getPrefixWorkflowBindings() =>
+  _i8.Future<List<_i18.WorkflowBindingRow>> getPrefixWorkflowBindings() =>
       (super.noSuchMethod(
             Invocation.method(#getPrefixWorkflowBindings, []),
-            returnValue: _i7.Future<List<_i17.WorkflowBindingRow>>.value(
-              <_i17.WorkflowBindingRow>[],
+            returnValue: _i8.Future<List<_i18.WorkflowBindingRow>>.value(
+              <_i18.WorkflowBindingRow>[],
             ),
           )
-          as _i7.Future<List<_i17.WorkflowBindingRow>>);
+          as _i8.Future<List<_i18.WorkflowBindingRow>>);
 
   @override
-  _i7.Future<void> insertWorkflowBinding(_i17.WorkflowBindingRow? binding) =>
+  _i8.Future<_i18.WorkflowBindingRow?> getWorkflowBindingByPattern(
+    String? pattern,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getWorkflowBindingByPattern, [pattern]),
+            returnValue: _i8.Future<_i18.WorkflowBindingRow?>.value(),
+          )
+          as _i8.Future<_i18.WorkflowBindingRow?>);
+
+  @override
+  _i8.Future<List<_i18.WorkflowBindingRow>> getAllWorkflowBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllWorkflowBindings, []),
+            returnValue: _i8.Future<List<_i18.WorkflowBindingRow>>.value(
+              <_i18.WorkflowBindingRow>[],
+            ),
+          )
+          as _i8.Future<List<_i18.WorkflowBindingRow>>);
+
+  @override
+  _i8.Future<void> insertWorkflowBinding(_i18.WorkflowBindingRow? binding) =>
       (super.noSuchMethod(
             Invocation.method(#insertWorkflowBinding, [binding]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteWorkflowBinding(String? pattern) =>
+  _i8.Future<void> deleteWorkflowBinding(String? pattern) =>
       (super.noSuchMethod(
             Invocation.method(#deleteWorkflowBinding, [pattern]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 }
 
 /// A class which mocks [AppProvider].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
+class MockAppProvider extends _i1.Mock implements _i19.AppProvider {
   MockAppProvider() {
     _i1.throwOnMissingStub(this);
   }
@@ -1575,22 +1607,22 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as bool);
 
   @override
-  List<_i8.Note> get notes =>
-      (super.noSuchMethod(Invocation.getter(#notes), returnValue: <_i8.Note>[])
-          as List<_i8.Note>);
+  List<_i9.Note> get notes =>
+      (super.noSuchMethod(Invocation.getter(#notes), returnValue: <_i9.Note>[])
+          as List<_i9.Note>);
 
   @override
-  List<_i12.Tag> get tags =>
-      (super.noSuchMethod(Invocation.getter(#tags), returnValue: <_i12.Tag>[])
-          as List<_i12.Tag>);
+  List<_i13.Tag> get tags =>
+      (super.noSuchMethod(Invocation.getter(#tags), returnValue: <_i13.Tag>[])
+          as List<_i13.Tag>);
 
   @override
-  List<_i14.Filter> get filters =>
+  List<_i15.Filter> get filters =>
       (super.noSuchMethod(
             Invocation.getter(#filters),
-            returnValue: <_i14.Filter>[],
+            returnValue: <_i15.Filter>[],
           )
-          as List<_i14.Filter>);
+          as List<_i15.Filter>);
 
   @override
   List<_i5.UserApp> get userApps =>
@@ -1659,94 +1691,94 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as bool);
 
   @override
-  _i7.Future<void> loadData() =>
+  _i8.Future<void> loadData() =>
       (super.noSuchMethod(
             Invocation.method(#loadData, []),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  void updateModelConfig(_i19.ModelConfig? newConfig) => super.noSuchMethod(
+  void updateModelConfig(_i20.ModelConfig? newConfig) => super.noSuchMethod(
     Invocation.method(#updateModelConfig, [newConfig]),
     returnValueForMissingStub: null,
   );
 
   @override
-  _i7.Future<void> addNote(_i8.Note? note, {bool? fromShare = false}) =>
+  _i8.Future<void> addNote(_i9.Note? note, {bool? fromShare = false}) =>
       (super.noSuchMethod(
             Invocation.method(#addNote, [note], {#fromShare: fromShare}),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> updateNote(_i8.Note? note) =>
+  _i8.Future<void> updateNote(_i9.Note? note) =>
       (super.noSuchMethod(
             Invocation.method(#updateNote, [note]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> updateNoteContent(String? noteId, String? newContent) =>
+  _i8.Future<void> updateNoteContent(String? noteId, String? newContent) =>
       (super.noSuchMethod(
             Invocation.method(#updateNoteContent, [noteId, newContent]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> updateTaskStatus(String? noteId, _i8.TaskStatus? status) =>
+  _i8.Future<void> updateTaskStatus(String? noteId, _i9.TaskStatus? status) =>
       (super.noSuchMethod(
             Invocation.method(#updateTaskStatus, [noteId, status]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> toggleNotePin(String? noteId) =>
+  _i8.Future<void> toggleNotePin(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#toggleNotePin, [noteId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteNote(String? noteId) =>
+  _i8.Future<void> deleteNote(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteNote, [noteId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> addRelationship(_i13.Relationship? relationship) =>
+  _i8.Future<void> addRelationship(_i14.Relationship? relationship) =>
       (super.noSuchMethod(
             Invocation.method(#addRelationship, [relationship]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteRelationship(String? relationshipId) =>
+  _i8.Future<void> deleteRelationship(String? relationshipId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteRelationship, [relationshipId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> createNoteRelationships(
+  _i8.Future<void> createNoteRelationships(
     String? fromNoteId,
     List<String>? toNoteIds,
     String? relationshipType,
@@ -1757,35 +1789,35 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               toNoteIds,
               relationshipType,
             ]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<List<_i13.Relationship>> getNoteRelationships(String? noteId) =>
+  _i8.Future<List<_i14.Relationship>> getNoteRelationships(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#getNoteRelationships, [noteId]),
-            returnValue: _i7.Future<List<_i13.Relationship>>.value(
-              <_i13.Relationship>[],
+            returnValue: _i8.Future<List<_i14.Relationship>>.value(
+              <_i14.Relationship>[],
             ),
           )
-          as _i7.Future<List<_i13.Relationship>>);
+          as _i8.Future<List<_i14.Relationship>>);
 
   @override
-  _i7.Future<List<_i8.Note>> getLinkedNotes(String? noteId) =>
+  _i8.Future<List<_i9.Note>> getLinkedNotes(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#getLinkedNotes, [noteId]),
-            returnValue: _i7.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValue: _i8.Future<List<_i9.Note>>.value(<_i9.Note>[]),
           )
-          as _i7.Future<List<_i8.Note>>);
+          as _i8.Future<List<_i9.Note>>);
 
   @override
-  _i7.Future<String> transformNote(
-    _i8.Note? note,
+  _i8.Future<String> transformNote(
+    _i9.Note? note,
     String? transformationPrompt, {
-    List<_i20.PlatformFile>? attachedFiles,
-    _i21.GenerationContext? generationContext,
+    List<_i21.PlatformFile>? attachedFiles,
+    _i22.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1796,8 +1828,8 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
                 #generationContext: generationContext,
               },
             ),
-            returnValue: _i7.Future<String>.value(
-              _i9.dummyValue<String>(
+            returnValue: _i8.Future<String>.value(
+              _i10.dummyValue<String>(
                 this,
                 Invocation.method(
                   #transformNote,
@@ -1810,15 +1842,15 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               ),
             ),
           )
-          as _i7.Future<String>);
+          as _i8.Future<String>);
 
   @override
-  _i7.Future<List<_i8.Note>> createNewNotes(
+  _i8.Future<List<_i9.Note>> createNewNotes(
     String? prompt,
-    List<_i8.Note>? contextNotes, {
-    List<_i20.PlatformFile>? attachedFiles,
+    List<_i9.Note>? contextNotes, {
+    List<_i21.PlatformFile>? attachedFiles,
     bool? persist = true,
-    _i21.GenerationContext? generationContext,
+    _i22.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -1830,26 +1862,26 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
                 #generationContext: generationContext,
               },
             ),
-            returnValue: _i7.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValue: _i8.Future<List<_i9.Note>>.value(<_i9.Note>[]),
           )
-          as _i7.Future<List<_i8.Note>>);
+          as _i8.Future<List<_i9.Note>>);
 
   @override
-  List<_i8.Note> getNotesByTag(String? tagName) =>
+  List<_i9.Note> getNotesByTag(String? tagName) =>
       (super.noSuchMethod(
             Invocation.method(#getNotesByTag, [tagName]),
-            returnValue: <_i8.Note>[],
+            returnValue: <_i9.Note>[],
           )
-          as List<_i8.Note>);
+          as List<_i9.Note>);
 
   @override
-  _i7.Future<void> addTagToNote(String? noteId, String? tagName) =>
+  _i8.Future<void> addTagToNote(String? noteId, String? tagName) =>
       (super.noSuchMethod(
             Invocation.method(#addTagToNote, [noteId, tagName]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
   List<String> getAllAvailableTags() =>
@@ -1860,67 +1892,67 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as List<String>);
 
   @override
-  _i7.Future<void> refreshTags() =>
+  _i8.Future<void> refreshTags() =>
       (super.noSuchMethod(
             Invocation.method(#refreshTags, []),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<String?> getTagExtractionPrompt(String? tagId) =>
+  _i8.Future<String?> getTagExtractionPrompt(String? tagId) =>
       (super.noSuchMethod(
             Invocation.method(#getTagExtractionPrompt, [tagId]),
-            returnValue: _i7.Future<String?>.value(),
+            returnValue: _i8.Future<String?>.value(),
           )
-          as _i7.Future<String?>);
+          as _i8.Future<String?>);
 
   @override
-  _i7.Future<void> updateTagExtractionPrompt(String? tagId, String? prompt) =>
+  _i8.Future<void> updateTagExtractionPrompt(String? tagId, String? prompt) =>
       (super.noSuchMethod(
             Invocation.method(#updateTagExtractionPrompt, [tagId, prompt]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteTag(String? tagName) =>
+  _i8.Future<void> deleteTag(String? tagName) =>
       (super.noSuchMethod(
             Invocation.method(#deleteTag, [tagName]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> replaceTag(String? oldTagName, String? newTagName) =>
+  _i8.Future<void> replaceTag(String? oldTagName, String? newTagName) =>
       (super.noSuchMethod(
             Invocation.method(#replaceTag, [oldTagName, newTagName]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  List<_i8.Note> getTasksForDate(DateTime? date) =>
+  List<_i9.Note> getTasksForDate(DateTime? date) =>
       (super.noSuchMethod(
             Invocation.method(#getTasksForDate, [date]),
-            returnValue: <_i8.Note>[],
+            returnValue: <_i9.Note>[],
           )
-          as List<_i8.Note>);
+          as List<_i9.Note>);
 
   @override
-  List<_i8.Note> getNotesForDate(DateTime? date) =>
+  List<_i9.Note> getNotesForDate(DateTime? date) =>
       (super.noSuchMethod(
             Invocation.method(#getNotesForDate, [date]),
-            returnValue: <_i8.Note>[],
+            returnValue: <_i9.Note>[],
           )
-          as List<_i8.Note>);
+          as List<_i9.Note>);
 
   @override
-  double calculateTaskCompletionPercentage(_i8.Note? task) =>
+  double calculateTaskCompletionPercentage(_i9.Note? task) =>
       (super.noSuchMethod(
             Invocation.method(#calculateTaskCompletionPercentage, [task]),
             returnValue: 0.0,
@@ -1940,13 +1972,13 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
   );
 
   @override
-  _i7.Future<void> loadThemePreference() =>
+  _i8.Future<void> loadThemePreference() =>
       (super.noSuchMethod(
             Invocation.method(#loadThemePreference, []),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
   void changeLanguage(_i3.Locale? locale) => super.noSuchMethod(
@@ -1955,13 +1987,13 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
   );
 
   @override
-  _i7.Future<void> loadLanguagePreference() =>
+  _i8.Future<void> loadLanguagePreference() =>
       (super.noSuchMethod(
             Invocation.method(#loadLanguagePreference, []),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
   void toggleHierarchy() => super.noSuchMethod(
@@ -1970,73 +2002,73 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
   );
 
   @override
-  _i7.Future<void> setOnboardingCompleted(bool? completed) =>
+  _i8.Future<void> setOnboardingCompleted(bool? completed) =>
       (super.noSuchMethod(
             Invocation.method(#setOnboardingCompleted, [completed]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> clearAllData() =>
+  _i8.Future<void> clearAllData() =>
       (super.noSuchMethod(
             Invocation.method(#clearAllData, []),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> addSubNoteToNote(String? noteId, _i8.SubNote? subNote) =>
+  _i8.Future<void> addSubNoteToNote(String? noteId, _i9.SubNote? subNote) =>
       (super.noSuchMethod(
             Invocation.method(#addSubNoteToNote, [noteId, subNote]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> updateSubNoteInNote(
+  _i8.Future<void> updateSubNoteInNote(
     String? noteId,
-    _i8.SubNote? updatedSubNote,
+    _i9.SubNote? updatedSubNote,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#updateSubNoteInNote, [noteId, updatedSubNote]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteSubNoteFromNote(String? noteId, String? subNoteId) =>
+  _i8.Future<void> deleteSubNoteFromNote(String? noteId, String? subNoteId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteSubNoteFromNote, [noteId, subNoteId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> toggleSubNoteCompletion(String? noteId, String? subNoteId) =>
+  _i8.Future<void> toggleSubNoteCompletion(String? noteId, String? subNoteId) =>
       (super.noSuchMethod(
             Invocation.method(#toggleSubNoteCompletion, [noteId, subNoteId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> removeTagFromNote(String? noteId, String? tagName) =>
+  _i8.Future<void> removeTagFromNote(String? noteId, String? tagName) =>
       (super.noSuchMethod(
             Invocation.method(#removeTagFromNote, [noteId, tagName]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> batchUpdateTags(
+  _i8.Future<void> batchUpdateTags(
     List<String>? noteIds,
     List<String>? tagsToAdd,
     List<String>? tagsToRemove,
@@ -2047,25 +2079,25 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               tagsToAdd,
               tagsToRemove,
             ]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> upsertSubNoteInNote(String? noteId, _i8.SubNote? subNote) =>
+  _i8.Future<void> upsertSubNoteInNote(String? noteId, _i9.SubNote? subNote) =>
       (super.noSuchMethod(
             Invocation.method(#upsertSubNoteInNote, [noteId, subNote]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> reparentSubNote(
+  _i8.Future<void> reparentSubNote(
     String? fromNoteId,
     String? toNoteId,
-    _i8.SubNote? subNote,
+    _i9.SubNote? subNote,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#reparentSubNote, [
@@ -2073,75 +2105,75 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               toNoteId,
               subNote,
             ]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> addFilter(_i14.Filter? filter) =>
+  _i8.Future<void> addFilter(_i15.Filter? filter) =>
       (super.noSuchMethod(
             Invocation.method(#addFilter, [filter]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> updateFilter(_i14.Filter? filter) =>
+  _i8.Future<void> updateFilter(_i15.Filter? filter) =>
       (super.noSuchMethod(
             Invocation.method(#updateFilter, [filter]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> deleteFilter(String? filterId) =>
+  _i8.Future<void> deleteFilter(String? filterId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteFilter, [filterId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  List<_i8.Note> getFilteredNotes(_i14.Filter? filter) =>
+  List<_i9.Note> getFilteredNotes(_i15.Filter? filter) =>
       (super.noSuchMethod(
             Invocation.method(#getFilteredNotes, [filter]),
-            returnValue: <_i8.Note>[],
+            returnValue: <_i9.Note>[],
           )
-          as List<_i8.Note>);
+          as List<_i9.Note>);
 
   @override
-  _i7.Future<void> addUserApp(_i5.UserApp? app) =>
+  _i8.Future<void> addUserApp(_i5.UserApp? app) =>
       (super.noSuchMethod(
             Invocation.method(#addUserApp, [app]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> refreshUserApps() =>
+  _i8.Future<void> refreshUserApps() =>
       (super.noSuchMethod(
             Invocation.method(#refreshUserApps, []),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> updateUserApp(_i5.UserApp? app) =>
+  _i8.Future<void> updateUserApp(_i5.UserApp? app) =>
       (super.noSuchMethod(
             Invocation.method(#updateUserApp, [app]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<_i4.AppRevision> saveManualCodeEdit({
+  _i8.Future<_i4.AppRevision> saveManualCodeEdit({
     required _i5.UserApp? originalApp,
     required String? newCode,
     List<String>? attachmentPaths,
@@ -2152,7 +2184,7 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               #newCode: newCode,
               #attachmentPaths: attachmentPaths,
             }),
-            returnValue: _i7.Future<_i4.AppRevision>.value(
+            returnValue: _i8.Future<_i4.AppRevision>.value(
               _FakeAppRevision_2(
                 this,
                 Invocation.method(#saveManualCodeEdit, [], {
@@ -2163,27 +2195,27 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               ),
             ),
           )
-          as _i7.Future<_i4.AppRevision>);
+          as _i8.Future<_i4.AppRevision>);
 
   @override
-  _i7.Future<void> deleteUserApp(String? appId) =>
+  _i8.Future<void> deleteUserApp(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteUserApp, [appId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<_i5.UserApp> createUserApp({
+  _i8.Future<_i5.UserApp> createUserApp({
     required String? name,
     required String? description,
     required List<String>? steps,
     _i5.UserAppType? type = _i5.UserAppType.normal,
     List<String>? attachmentPaths,
-    List<_i8.Note>? contextNotes,
+    List<_i9.Note>? contextNotes,
     List<_i5.UserAppLibraryInfo>? libraries,
-    _i21.GenerationContext? generationContext,
+    _i22.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#createUserApp, [], {
@@ -2196,7 +2228,7 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               #libraries: libraries,
               #generationContext: generationContext,
             }),
-            returnValue: _i7.Future<_i5.UserApp>.value(
+            returnValue: _i8.Future<_i5.UserApp>.value(
               _FakeUserApp_3(
                 this,
                 Invocation.method(#createUserApp, [], {
@@ -2212,16 +2244,16 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               ),
             ),
           )
-          as _i7.Future<_i5.UserApp>);
+          as _i8.Future<_i5.UserApp>);
 
   @override
-  _i7.Future<_i4.AppRevision> editUserApp({
+  _i8.Future<_i4.AppRevision> editUserApp({
     required _i5.UserApp? originalApp,
     required String? editSuggestion,
     List<String>? attachmentPaths,
-    List<_i8.Note>? contextNotes,
+    List<_i9.Note>? contextNotes,
     List<_i5.UserAppLibraryInfo>? libraries,
-    _i21.GenerationContext? generationContext,
+    _i22.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#editUserApp, [], {
@@ -2232,7 +2264,7 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               #libraries: libraries,
               #generationContext: generationContext,
             }),
-            returnValue: _i7.Future<_i4.AppRevision>.value(
+            returnValue: _i8.Future<_i4.AppRevision>.value(
               _FakeAppRevision_2(
                 this,
                 Invocation.method(#editUserApp, [], {
@@ -2246,69 +2278,69 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               ),
             ),
           )
-          as _i7.Future<_i4.AppRevision>);
+          as _i8.Future<_i4.AppRevision>);
 
   @override
-  _i7.Future<Map<String, dynamic>?> getAppState(String? appId) =>
+  _i8.Future<Map<String, dynamic>?> getAppState(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#getAppState, [appId]),
-            returnValue: _i7.Future<Map<String, dynamic>?>.value(),
+            returnValue: _i8.Future<Map<String, dynamic>?>.value(),
           )
-          as _i7.Future<Map<String, dynamic>?>);
+          as _i8.Future<Map<String, dynamic>?>);
 
   @override
-  _i7.Future<void> saveAppState(String? appId, Map<String, dynamic>? state) =>
+  _i8.Future<void> saveAppState(String? appId, Map<String, dynamic>? state) =>
       (super.noSuchMethod(
             Invocation.method(#saveAppState, [appId, state]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<List<_i4.AppRevision>> getAppRevisions(String? appId) =>
+  _i8.Future<List<_i4.AppRevision>> getAppRevisions(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#getAppRevisions, [appId]),
-            returnValue: _i7.Future<List<_i4.AppRevision>>.value(
+            returnValue: _i8.Future<List<_i4.AppRevision>>.value(
               <_i4.AppRevision>[],
             ),
           )
-          as _i7.Future<List<_i4.AppRevision>>);
+          as _i8.Future<List<_i4.AppRevision>>);
 
   @override
-  _i7.Future<_i4.AppRevision?> getAppRevision(String? revisionId) =>
+  _i8.Future<_i4.AppRevision?> getAppRevision(String? revisionId) =>
       (super.noSuchMethod(
             Invocation.method(#getAppRevision, [revisionId]),
-            returnValue: _i7.Future<_i4.AppRevision?>.value(),
+            returnValue: _i8.Future<_i4.AppRevision?>.value(),
           )
-          as _i7.Future<_i4.AppRevision?>);
+          as _i8.Future<_i4.AppRevision?>);
 
   @override
-  _i7.Future<void> deleteAppRevision(String? revisionId) =>
+  _i8.Future<void> deleteAppRevision(String? revisionId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteAppRevision, [revisionId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> setSelectedRevision(String? appId, String? revisionId) =>
+  _i8.Future<void> setSelectedRevision(String? appId, String? revisionId) =>
       (super.noSuchMethod(
             Invocation.method(#setSelectedRevision, [appId, revisionId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> refreshAppRevisions(String? appId) =>
+  _i8.Future<void> refreshAppRevisions(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#refreshAppRevisions, [appId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
   void clearAppRevisionsCache(String? appId) => super.noSuchMethod(
@@ -2317,17 +2349,17 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
   );
 
   @override
-  _i7.Future<_i4.AppRevision> createInitialRevision(String? appId) =>
+  _i8.Future<_i4.AppRevision> createInitialRevision(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#createInitialRevision, [appId]),
-            returnValue: _i7.Future<_i4.AppRevision>.value(
+            returnValue: _i8.Future<_i4.AppRevision>.value(
               _FakeAppRevision_2(
                 this,
                 Invocation.method(#createInitialRevision, [appId]),
               ),
             ),
           )
-          as _i7.Future<_i4.AppRevision>);
+          as _i8.Future<_i4.AppRevision>);
 
   @override
   bool isWebViewSupported() =>
@@ -2338,83 +2370,512 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as bool);
 
   @override
-  _i7.Future<void> deleteConversation(String? conversationId) =>
+  _i8.Future<void> deleteConversation(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteConversation, [conversationId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<int> getNoteConversationCount(String? noteId) =>
+  _i8.Future<int> getNoteConversationCount(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#getNoteConversationCount, [noteId]),
-            returnValue: _i7.Future<int>.value(0),
+            returnValue: _i8.Future<int>.value(0),
           )
-          as _i7.Future<int>);
+          as _i8.Future<int>);
 
   @override
-  _i7.Future<List<String>> getNoteConversationIds(String? noteId) =>
+  _i8.Future<List<String>> getNoteConversationIds(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#getNoteConversationIds, [noteId]),
-            returnValue: _i7.Future<List<String>>.value(<String>[]),
+            returnValue: _i8.Future<List<String>>.value(<String>[]),
           )
-          as _i7.Future<List<String>>);
+          as _i8.Future<List<String>>);
 
   @override
-  _i7.Future<void> addAppToMultiFunction(String? appId) =>
+  _i8.Future<void> addAppToMultiFunction(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#addAppToMultiFunction, [appId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> removeAppFromMultiFunction(String? appId) =>
+  _i8.Future<void> removeAppFromMultiFunction(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#removeAppFromMultiFunction, [appId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> setMultiFunctionDefaultApp(String? appId) =>
+  _i8.Future<void> setMultiFunctionDefaultApp(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#setMultiFunctionDefaultApp, [appId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> clearMultiFunctionDefaultApp() =>
+  _i8.Future<void> clearMultiFunctionDefaultApp() =>
       (super.noSuchMethod(
             Invocation.method(#clearMultiFunctionDefaultApp, []),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> setCurrentMultiFunctionApp(String? appId) =>
+  _i8.Future<void> setCurrentMultiFunctionApp(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#setCurrentMultiFunctionApp, [appId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
 
   @override
-  _i7.Future<void> toggleFilterPin(String? filterId) =>
+  _i8.Future<void> toggleFilterPin(String? filterId) =>
       (super.noSuchMethod(
             Invocation.method(#toggleFilterPin, [filterId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
           )
-          as _i7.Future<void>);
+          as _i8.Future<void>);
+
+  @override
+  void addListener(_i3.VoidCallback? listener) => super.noSuchMethod(
+    Invocation.method(#addListener, [listener]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void removeListener(_i3.VoidCallback? listener) => super.noSuchMethod(
+    Invocation.method(#removeListener, [listener]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void dispose() => super.noSuchMethod(
+    Invocation.method(#dispose, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void notifyListeners() => super.noSuchMethod(
+    Invocation.method(#notifyListeners, []),
+    returnValueForMissingStub: null,
+  );
+}
+
+/// A class which mocks [TagWorkflowService].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockTagWorkflowService extends _i1.Mock
+    implements _i23.TagWorkflowService {
+  MockTagWorkflowService() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  _i8.Future<List<_i23.ResolvedBinding>> resolveBindings(List<String>? tags) =>
+      (super.noSuchMethod(
+            Invocation.method(#resolveBindings, [tags]),
+            returnValue: _i8.Future<List<_i23.ResolvedBinding>>.value(
+              <_i23.ResolvedBinding>[],
+            ),
+          )
+          as _i8.Future<List<_i23.ResolvedBinding>>);
+
+  @override
+  _i8.Future<bool> hasImmutableBinding(List<String>? tags) =>
+      (super.noSuchMethod(
+            Invocation.method(#hasImmutableBinding, [tags]),
+            returnValue: _i8.Future<bool>.value(false),
+          )
+          as _i8.Future<bool>);
+
+  @override
+  _i8.Future<_i18.WorkflowBindingRow?> getBindingByPattern(String? pattern) =>
+      (super.noSuchMethod(
+            Invocation.method(#getBindingByPattern, [pattern]),
+            returnValue: _i8.Future<_i18.WorkflowBindingRow?>.value(),
+          )
+          as _i8.Future<_i18.WorkflowBindingRow?>);
+
+  @override
+  _i8.Future<List<_i18.WorkflowBindingRow>> getAllBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllBindings, []),
+            returnValue: _i8.Future<List<_i18.WorkflowBindingRow>>.value(
+              <_i18.WorkflowBindingRow>[],
+            ),
+          )
+          as _i8.Future<List<_i18.WorkflowBindingRow>>);
+
+  @override
+  _i8.Future<void> registerBinding({
+    required String? pattern,
+    required bool? isPrefix,
+    required String? skillNoteId,
+    required String? prompt,
+    required bool? contentImmutable,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#registerBinding, [], {
+              #pattern: pattern,
+              #isPrefix: isPrefix,
+              #skillNoteId: skillNoteId,
+              #prompt: prompt,
+              #contentImmutable: contentImmutable,
+            }),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
+          )
+          as _i8.Future<void>);
+
+  @override
+  _i8.Future<void> removeBinding(String? pattern) =>
+      (super.noSuchMethod(
+            Invocation.method(#removeBinding, [pattern]),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
+          )
+          as _i8.Future<void>);
+}
+
+/// A class which mocks [AgentService].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockAgentService extends _i1.Mock implements _i24.AgentService {
+  MockAgentService() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  int get pendingWorkflowCount =>
+      (super.noSuchMethod(
+            Invocation.getter(#pendingWorkflowCount),
+            returnValue: 0,
+          )
+          as int);
+
+  @override
+  bool get isPaused =>
+      (super.noSuchMethod(Invocation.getter(#isPaused), returnValue: false)
+          as bool);
+
+  @override
+  _i6.ContextManagerService get contextManager =>
+      (super.noSuchMethod(
+            Invocation.getter(#contextManager),
+            returnValue: _FakeContextManagerService_4(
+              this,
+              Invocation.getter(#contextManager),
+            ),
+          )
+          as _i6.ContextManagerService);
+
+  @override
+  List<String> get globalContextNoteIds =>
+      (super.noSuchMethod(
+            Invocation.getter(#globalContextNoteIds),
+            returnValue: <String>[],
+          )
+          as List<String>);
+
+  @override
+  List<_i25.AgentTask> get tasks =>
+      (super.noSuchMethod(
+            Invocation.getter(#tasks),
+            returnValue: <_i25.AgentTask>[],
+          )
+          as List<_i25.AgentTask>);
+
+  @override
+  Map<String, List<_i26.McpTool>> get externalTools =>
+      (super.noSuchMethod(
+            Invocation.getter(#externalTools),
+            returnValue: <String, List<_i26.McpTool>>{},
+          )
+          as Map<String, List<_i26.McpTool>>);
+
+  @override
+  List<_i27.NativeTool> get enabledNativeTools =>
+      (super.noSuchMethod(
+            Invocation.getter(#enabledNativeTools),
+            returnValue: <_i27.NativeTool>[],
+          )
+          as List<_i27.NativeTool>);
+
+  @override
+  bool get isRunning =>
+      (super.noSuchMethod(Invocation.getter(#isRunning), returnValue: false)
+          as bool);
+
+  @override
+  List<_i27.NativeTool> get nativeTools =>
+      (super.noSuchMethod(
+            Invocation.getter(#nativeTools),
+            returnValue: <_i27.NativeTool>[],
+          )
+          as List<_i27.NativeTool>);
+
+  @override
+  set onProgressUpdate(void Function(String)? value) => super.noSuchMethod(
+    Invocation.setter(#onProgressUpdate, value),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set modelOverride(_i20.ModelConfig? value) => super.noSuchMethod(
+    Invocation.setter(#modelOverride, value),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set toolExecutor(_i24.ToolExecutor? executor) => super.noSuchMethod(
+    Invocation.setter(#toolExecutor, executor),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set externalToolsForTest(Map<String, List<_i26.McpTool>>? tools) =>
+      super.noSuchMethod(
+        Invocation.setter(#externalToolsForTest, tools),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get hasListeners =>
+      (super.noSuchMethod(Invocation.getter(#hasListeners), returnValue: false)
+          as bool);
+
+  @override
+  void addGlobalContextNote(String? noteId) => super.noSuchMethod(
+    Invocation.method(#addGlobalContextNote, [noteId]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void removeGlobalContextNote(String? noteId) => super.noSuchMethod(
+    Invocation.method(#removeGlobalContextNote, [noteId]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void clearGlobalContextNotes() => super.noSuchMethod(
+    Invocation.method(#clearGlobalContextNotes, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void setGlobalContextNotes(List<String>? noteIds) => super.noSuchMethod(
+    Invocation.method(#setGlobalContextNotes, [noteIds]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void clearState() => super.noSuchMethod(
+    Invocation.method(#clearState, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void pauseExecution() => super.noSuchMethod(
+    Invocation.method(#pauseExecution, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i8.Future<void> resumeExecution() =>
+      (super.noSuchMethod(
+            Invocation.method(#resumeExecution, []),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
+          )
+          as _i8.Future<void>);
+
+  @override
+  void stopExecution() => super.noSuchMethod(
+    Invocation.method(#stopExecution, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void bindToConversation(String? conversationId) => super.noSuchMethod(
+    Invocation.method(#bindToConversation, [conversationId]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  bool canStartNewAgent(String? conversationId) =>
+      (super.noSuchMethod(
+            Invocation.method(#canStartNewAgent, [conversationId]),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
+  void abortCurrentTask() => super.noSuchMethod(
+    Invocation.method(#abortCurrentTask, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i8.Future<void> performTaskForTest(
+    _i25.AgentTask? task,
+    String? globalContext,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#performTaskForTest, [task, globalContext]),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
+          )
+          as _i8.Future<void>);
+
+  @override
+  Map<String, String> getToolToServiceMap() =>
+      (super.noSuchMethod(
+            Invocation.method(#getToolToServiceMap, []),
+            returnValue: <String, String>{},
+          )
+          as Map<String, String>);
+
+  @override
+  List<String> getAllToolNames() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllToolNames, []),
+            returnValue: <String>[],
+          )
+          as List<String>);
+
+  @override
+  _i8.Future<List<_i25.AgentTask>> generatePlan(
+    String? objective, {
+    Map<String, List<_i26.McpTool>>? activeTools = const {},
+    _i24.ToolExecutor? executeTool,
+    String? context,
+    List<_i21.PlatformFile>? contextAttachments = const [],
+    bool? skillsEnabled = true,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #generatePlan,
+              [objective],
+              {
+                #activeTools: activeTools,
+                #executeTool: executeTool,
+                #context: context,
+                #contextAttachments: contextAttachments,
+                #skillsEnabled: skillsEnabled,
+              },
+            ),
+            returnValue: _i8.Future<List<_i25.AgentTask>>.value(
+              <_i25.AgentTask>[],
+            ),
+          )
+          as _i8.Future<List<_i25.AgentTask>>);
+
+  @override
+  _i8.Future<List<_i25.AgentTask>> revisePlan(String? feedback) =>
+      (super.noSuchMethod(
+            Invocation.method(#revisePlan, [feedback]),
+            returnValue: _i8.Future<List<_i25.AgentTask>>.value(
+              <_i25.AgentTask>[],
+            ),
+          )
+          as _i8.Future<List<_i25.AgentTask>>);
+
+  @override
+  _i8.Future<void> executePlan() =>
+      (super.noSuchMethod(
+            Invocation.method(#executePlan, []),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
+          )
+          as _i8.Future<void>);
+
+  @override
+  _i8.Future<void> startObjective(
+    String? objective, {
+    Map<String, List<_i26.McpTool>>? activeTools = const {},
+    _i24.ToolExecutor? executeTool,
+    String? context,
+    List<_i21.PlatformFile>? contextAttachments = const [],
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #startObjective,
+              [objective],
+              {
+                #activeTools: activeTools,
+                #executeTool: executeTool,
+                #context: context,
+                #contextAttachments: contextAttachments,
+              },
+            ),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
+          )
+          as _i8.Future<void>);
+
+  @override
+  void cancel() => super.noSuchMethod(
+    Invocation.method(#cancel, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i8.Future<void> runWorkflowTask({
+    required _i23.ResolvedBinding? binding,
+    required _i9.Note? note,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#runWorkflowTask, [], {
+              #binding: binding,
+              #note: note,
+            }),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
+          )
+          as _i8.Future<void>);
+
+  @override
+  _i8.Future<void> resumeTask(String? taskId, {bool? increaseLimit = false}) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #resumeTask,
+              [taskId],
+              {#increaseLimit: increaseLimit},
+            ),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
+          )
+          as _i8.Future<void>);
+
+  @override
+  void concludeTask(String? taskId) => super.noSuchMethod(
+    Invocation.method(#concludeTask, [taskId]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void abortTask(String? taskId) => super.noSuchMethod(
+    Invocation.method(#abortTask, [taskId]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void updateToolExecutor(_i24.ToolExecutor? executor) => super.noSuchMethod(
+    Invocation.method(#updateToolExecutor, [executor]),
+    returnValueForMissingStub: null,
+  );
 
   @override
   void addListener(_i3.VoidCallback? listener) => super.noSuchMethod(

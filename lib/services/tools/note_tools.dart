@@ -61,7 +61,16 @@ Priority order for exploring user's notes:
     final query = args['query'] as String;
     final tags = (args['tags'] as List?)?.cast<String>();
 
-    final notes = await _db.searchNotesFTS(query, tags: tags);
+    final trimmedQuery = query.trim();
+    late final List notes;
+    if (trimmedQuery.isEmpty && tags != null && tags.isNotEmpty) {
+      final firstTagNotes = await _db.getNotesByTag(tags.first);
+      notes = firstTagNotes
+          .where((note) => tags.every(note.tags.contains))
+          .toList();
+    } else {
+      notes = await _db.searchNotesFTS(query, tags: tags);
+    }
 
     return notes
         .map(

@@ -11,9 +11,11 @@ import 'package:html2md/html2md.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
+import '../services/approval_service.dart';
 import '../services/share_service.dart';
 import '../services/ai_service.dart';
 import '../services/content_ingestion_service.dart';
+import '../services/agent_service.dart';
 import '../services/service_locator.dart';
 import '../services/logger_service.dart';
 import '../services/web_content_extraction_service.dart';
@@ -25,6 +27,8 @@ import '../utils/remote_image_utils.dart';
 import '../utils/html_rules.dart';
 import '../utils/markdown_cleaner.dart';
 import '../utils/web_content_processor.dart';
+import '../widgets/approval_dialog.dart';
+import '../widgets/workflow_status_banner.dart';
 import 'note_selection_dialog.dart';
 
 class ShareScreen extends StatefulWidget {
@@ -56,6 +60,7 @@ class _ShareScreenState extends State<ShareScreen> {
   final TextEditingController _newTagController = TextEditingController();
   final ScrollController _contentPreviewScrollController = ScrollController();
   final ScrollController _mediaSelectionScrollController = ScrollController();
+  Future<ApprovalResult> Function(ApprovalRequest)? _approvalCallback;
 
   /// Check if running on Linux (non-web)
   bool get _isLinux => !kIsWeb && Platform.isLinux;
@@ -63,6 +68,7 @@ class _ShareScreenState extends State<ShareScreen> {
   @override
   void initState() {
     super.initState();
+    _setupApprovalCallback();
     _processSharedData();
     // Load notes when the screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -79,7 +85,18 @@ class _ShareScreenState extends State<ShareScreen> {
     _newTagController.dispose();
     _contentPreviewScrollController.dispose();
     _mediaSelectionScrollController.dispose();
+    if (ApprovalService.onApprovalRequest == _approvalCallback) {
+      ApprovalService.onApprovalRequest = null;
+    }
     super.dispose();
+  }
+
+  void _setupApprovalCallback() {
+    _approvalCallback = (request) async {
+      if (!mounted) return ApprovalResult(approved: false);
+      return ApprovalDialog.showWithContext(context, request);
+    };
+    ApprovalService.onApprovalRequest = _approvalCallback;
   }
 
   /// Cleans up downloaded file if it exists and hasn't been added to a note
@@ -190,14 +207,53 @@ class _ShareScreenState extends State<ShareScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final activeNoteId = _selectedNote?.id ?? _preparedNote?.id;
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.sharedContent)),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? _buildErrorWidget(l10n)
-          : _buildContentWidget(l10n),
+      body: _buildBodyWithWorkflowBanner(
+        activeNoteId,
+        _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+            ? _buildErrorWidget(l10n)
+            : _buildContentWidget(l10n),
+      ),
+    );
+  }
+
+  Widget _buildBodyWithWorkflowBanner(String? noteId, Widget child) {
+    if (noteId == null) return child;
+
+    final agentService = getIt<AgentService>();
+    return AnimatedBuilder(
+      animation: agentService,
+      builder: (context, _) {
+        final workflowStatus = agentService.workflowStatusForNote(noteId);
+        if (workflowStatus == null ||
+            workflowStatus.state == WorkflowExecutionState.completed ||
+            workflowStatus.state == WorkflowExecutionState.failed) {
+          return child;
+        }
+
+        return Column(
+          children: [
+            WorkflowStatusBanner(
+              status: workflowStatus,
+              onAbort: () => agentService.abortTask(workflowStatus.taskId),
+              onResume: () =>
+                  workflowStatus.state == WorkflowExecutionState.pausedTurnLimit
+                  ? agentService.resumeTask(
+                      workflowStatus.taskId,
+                      increaseLimit: true,
+                    )
+                  : agentService.resumeTask(workflowStatus.taskId),
+              onBail: () => agentService.concludeTask(workflowStatus.taskId),
+            ),
+            Expanded(child: child),
+          ],
+        );
+      },
     );
   }
 

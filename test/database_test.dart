@@ -104,6 +104,49 @@ void main() {
       expect(retrievedNote.subNotes.first.name, 'Sub-note 1');
     });
 
+    test('should search FTS results filtered by normalized tags', () async {
+      final notes = [
+        Note(
+          id: 'fts-note-1',
+          title: 'AI index',
+          content: 'wiki source overview for machine learning',
+          type: NoteType.note,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          tags: ['wiki-source-ai'],
+        ),
+        Note(
+          id: 'fts-note-2',
+          title: 'AI index without workflow tag',
+          content: 'wiki source overview for neural networks',
+          type: NoteType.note,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          tags: ['reference'],
+        ),
+        Note(
+          id: 'fts-note-3',
+          title: 'Different content',
+          content: 'meeting notes and project planning',
+          type: NoteType.note,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          tags: ['wiki-source-ai'],
+        ),
+      ];
+
+      for (final note in notes) {
+        await databaseService.insertNote(note);
+      }
+
+      final results = await databaseService.searchNotesFTS(
+        'wiki source',
+        tags: ['wiki-source-ai'],
+      );
+
+      expect(results.map((note) => note.id), ['fts-note-1']);
+    });
+
     test('should insert and retrieve task', () async {
       final task = Note(
         id: 'test-task-1',

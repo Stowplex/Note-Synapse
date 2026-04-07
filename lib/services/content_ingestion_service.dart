@@ -2,13 +2,12 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import '../models/note.dart';
 import '../models/tag.dart';
-import '../models/attachment.dart';
 import '../utils/file_utils.dart';
 import '../services/database_service.dart';
 import '../services/ai_service.dart';
 import '../services/logger_service.dart';
 import '../providers/app_provider.dart';
-import 'dart:convert';
+import 'agent_service.dart';
 import 'note_modification_service.dart';
 import 'service_locator.dart';
 import 'tag_workflow_service.dart';
@@ -33,6 +32,25 @@ class ContentIngestionService {
   }) async {
     // Basic validation first
     if (note.tags.isEmpty) return;
+
+    final tagWorkflow = getIt<TagWorkflowService>();
+    final agentService = getIt<AgentService>();
+    List<ResolvedBinding> workflowBindings = const [];
+
+    try {
+      workflowBindings = await tagWorkflow.resolveBindings(note.tags);
+    } catch (e) {
+      LoggerService.error('Error resolving tag workflow bindings: $e');
+      onError?.call('Failed to resolve workflow bindings: $e');
+      return;
+    }
+
+    if (workflowBindings.isNotEmpty) {
+      for (final binding in workflowBindings) {
+        onMessage?.call('Starting workflow for tag "${binding.matchedTag}"...');
+        await agentService.runWorkflowTask(binding: binding, note: note);
+      }
+    }
 
     // Check availability of AI prompts for tags
     String? extractionPrompt;
@@ -61,7 +79,12 @@ class ContentIngestionService {
       return;
     }
 
-    if (extractionPrompt == null) return;
+    if (extractionPrompt == null) {
+      if (workflowBindings.isNotEmpty) {
+        onSuccess?.call();
+      }
+      return;
+    }
 
     // Show feedback
     onMessage?.call('Processing attachments with AI... Keep app open.');
@@ -73,7 +96,11 @@ class ContentIngestionService {
       );
 
       if (noteAttachments.isEmpty) {
-        onError?.call('No attachments found on this note.');
+        if (workflowBindings.isNotEmpty) {
+          onSuccess?.call();
+        } else {
+          onError?.call('No attachments found on this note.');
+        }
         return;
       }
 
@@ -113,9 +140,13 @@ class ContentIngestionService {
 
       // 3. Validate we actually have files to send
       if (attachedFiles.isEmpty) {
-        onError?.call(
-          'Could not load any valid attachments for AI processing.',
-        );
+        if (workflowBindings.isNotEmpty) {
+          onSuccess?.call();
+        } else {
+          onError?.call(
+            'Could not load any valid attachments for AI processing.',
+          );
+        }
         return;
       }
 
@@ -169,13 +200,12 @@ Content: ${note.content}
           json.remove('attachments');
 
           final modService = getIt<NoteModificationService>();
-          final tagWorkflow = getIt<TagWorkflowService>();
-
           if (await tagWorkflow.hasImmutableBinding(note.tags)) {
             // Source note is immutable — redirect to new note
             final newNoteData = <String, dynamic>{
               'title': 'Extracted: ${note.title}',
-              'content': (json['content'] as Map<String, dynamic>?)?['text'] ?? '',
+              'content':
+                  (json['content'] as Map<String, dynamic>?)?['text'] ?? '',
               'link': [
                 {'relation': 'derived_from', 'target': note.id},
               ],
@@ -184,7 +214,10 @@ Content: ${note.content}
             await appProvider.addNote(newNote);
           } else {
             // applyModifications writes to DB
-            final updatedNote = await modService.applyModifications(note.id, json);
+            final updatedNote = await modService.applyModifications(
+              note.id,
+              json,
+            );
             // Update AppProvider to reflect changes in UI (redundant DB write but safe)
             await appProvider.updateNote(updatedNote);
           }

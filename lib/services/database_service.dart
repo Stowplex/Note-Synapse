@@ -5004,8 +5004,7 @@ class DatabaseService {
   /// Search notes using Full-Text Search
   Future<List<Note>> searchNotesFTS(String query, {List<String>? tags}) async {
     final db = await database;
-    // FTS5 match query
-    // We sanitize the query to prevent syntax errors in FTS match expression
+    // Wrap the query as a phrase to avoid accidental FTS syntax errors.
     final sanitizedQuery = '"$query"';
     final hasTags = tags != null && tags.isNotEmpty;
 
@@ -5019,52 +5018,25 @@ class DatabaseService {
 
       List<Object?> args = [sanitizedQuery];
 
-      // Add tag filtering
-      // Since tags are stored as a JSON string or comma-separated string in 'tags' column (TEXT),
-      // we can use LIKE. Assuming tags is a JSON array string like "['tag1', 'tag2']".
-      // Or if it's a simple string. The Note model says List<String> tags.
-      // In DB creation (checked before), tags is TEXT.
-      // We will perform a crude check using LIKE for each tag.
-      // Ideally we should normalize tags table, but for now:
       if (hasTags) {
         for (final tag in tags) {
-          sql += ' AND n.tags LIKE ?';
-          args.add('%"$tag"%'); // Assuming JSON format "tag"
+          sql += '''
+            AND EXISTS (
+              SELECT 1
+              FROM note_tags nt
+              JOIN tags t ON t.id = nt.tagId
+              WHERE nt.noteId = n.id AND t.name = ?
+            )
+          ''';
+          args.add(tag);
         }
       }
 
-      sql += ' ORDER BY rank LIMIT 50';
+      sql += ' LIMIT 50';
 
       final results = await db.rawQuery(sql, args);
       return await _batchLoadNotes(results);
     } catch (e) {
-      // If FTS5 'rank' column is missing (FTS4 fallback), try without ordering by rank
-      if (e.toString().contains('no such column: rank')) {
-        try {
-          String sql = '''
-            SELECT n.* 
-            FROM notes_fts fts
-            JOIN notes n ON fts.rowid = n.rowid
-            WHERE notes_fts MATCH ?
-          ''';
-          List<Object?> args = [sanitizedQuery];
-
-          if (hasTags) {
-            for (final tag in tags) {
-              sql += ' AND n.tags LIKE ?';
-              args.add('%"$tag"%');
-            }
-          }
-
-          sql += ' LIMIT 50';
-
-          final results = await db.rawQuery(sql, args);
-          return await _batchLoadNotes(results);
-        } catch (e2) {
-          LoggerService.error('FTS Search failed: $e2');
-          return [];
-        }
-      }
       LoggerService.error('FTS Search failed: $e');
       return [];
     }
