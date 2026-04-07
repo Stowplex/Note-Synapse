@@ -804,7 +804,7 @@ class ModifyNoteTool implements NativeTool {
 
   @override
   String get description =>
-      'Modify a note\'s content, title, tags, attachments, subnotes, or links. Supports append/prepend/replace for content.';
+      'Modify a note\'s content, title, tags, attachments, subnotes, or links. Supports whole-note append/prepend/replace and section-targeted markdown inserts.';
 
   @override
   Map<String, dynamic> get inputSchema => {
@@ -817,100 +817,7 @@ class ModifyNoteTool implements NativeTool {
       'modification': {
         'type': 'object',
         'description': 'The modification object.',
-        'properties': {
-          'content': {
-            'type': 'object',
-            'properties': {
-              'action': {
-                'type': 'string',
-                'enum': ['append', 'prepend', 'replace', 'no-op'],
-              },
-              'text': {'type': 'string'},
-            },
-          },
-          'title': {
-            'type': 'object',
-            'properties': {
-              'new_title': {'type': 'string'},
-            },
-          },
-          'tags': {
-            'type': 'object',
-            'properties': {
-              'added': {
-                'type': 'array',
-                'items': {'type': 'string'},
-              },
-              'removed': {
-                'type': 'array',
-                'items': {'type': 'string'},
-              },
-            },
-          },
-          'link': {
-            'type': 'object',
-            'description': 'Add or remove relationships to other notes.',
-            'properties': {
-              'added': {
-                'type': 'array',
-                'description': 'Relationships to create.',
-                'items': {
-                  'type': 'object',
-                  'properties': {
-                    'relation': {
-                      'type': 'string',
-                      'description': 'Relationship type.',
-                    },
-                    'target': {
-                      'type': 'string',
-                      'description': 'Target note ID.',
-                    },
-                  },
-                  'required': ['relation', 'target'],
-                },
-              },
-              'removed': {
-                'type': 'array',
-                'description':
-                    'Target note IDs whose relationships should be deleted.',
-                'items': {'type': 'string'},
-              },
-            },
-          },
-          'attachments': {
-            'type': 'object',
-            'properties': {
-              'added': {
-                'type': 'array',
-                'items': {'type': 'string'},
-              },
-              'removed': {
-                'type': 'array',
-                'items': {'type': 'string'},
-              },
-            },
-          },
-          'subnote': {
-            'type': 'object',
-            'properties': {
-              'added': {
-                'type': 'array',
-                'items': {
-                  'type': 'object',
-                  'properties': {
-                    'name': {'type': 'string'},
-                    'content': {'type': 'string'},
-                  },
-                },
-              },
-              'removed': {
-                'type': 'array',
-                'items': {'type': 'string'},
-              },
-            },
-          },
-        },
-        'required': ['content'],
+        'properties': _modificationProperties,
       },
     },
     'required': ['note_id', 'modification'],
@@ -949,6 +856,180 @@ class ModifyNoteTool implements NativeTool {
     }
   }
 }
+
+class ModifyNotesTool implements NativeTool {
+  NoteModificationService get _service => getIt<NoteModificationService>();
+
+  @override
+  String get name => 'modify_notes';
+
+  @override
+  String get description =>
+      'Modify multiple notes in one atomic batch. Use this when index, log, source-tag, and compiled notes must be updated together. Requires a single approval for the whole batch.';
+
+  @override
+  Map<String, dynamic> get inputSchema => {
+    'type': 'object',
+    'properties': {
+      'modifications': {
+        'type': 'array',
+        'description':
+            'List of note modifications. The batch is validated first, then applied atomically.',
+        'items': {
+          'type': 'object',
+          'properties': {
+            'note_id': {
+              'type': 'string',
+              'description': 'The ID of the note to modify.',
+            },
+            'modification': {
+              'type': 'object',
+              'description': 'The modification object.',
+              'properties': _modificationProperties,
+            },
+          },
+          'required': ['note_id', 'modification'],
+        },
+      },
+    },
+    'required': ['modifications'],
+  };
+
+  @override
+  Future<dynamic> execute(Map<String, dynamic> args) async {
+    final modifications = (args['modifications'] as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+
+    if (modifications.isEmpty) {
+      return {'error': 'No note modifications provided.'};
+    }
+
+    if (!ApprovalService.sessionApprovedNoteModifications) {
+      final approved =
+          await ApprovalService.requestBatchNoteModificationApproval(
+            modifications: modifications,
+            source: 'Agent',
+          );
+      if (!approved) {
+        return {'error': 'User denied the note modification batch.'};
+      }
+    }
+
+    try {
+      final updatedNotes = await _service.applyBatchModifications(
+        modifications,
+      );
+      return {
+        'status': 'success',
+        'modified_count': updatedNotes.length,
+        'notes': updatedNotes
+            .map((note) => {'note_id': note.id, 'title': note.title})
+            .toList(),
+      };
+    } catch (e) {
+      return {'error': 'Failed to modify notes: $e'};
+    }
+  }
+}
+
+const Map<String, dynamic> _modificationProperties = {
+  'content': {
+    'type': 'object',
+    'properties': {
+      'action': {
+        'type': 'string',
+        'enum': ['append', 'prepend', 'replace', 'no-op'],
+      },
+      'text': {'type': 'string'},
+      'section': {
+        'type': 'string',
+        'description':
+            'Optional markdown heading to target, for example "## Entities".',
+      },
+      'insert_position': {
+        'type': 'string',
+        'enum': ['append', 'prepend'],
+        'description':
+            'When section is provided, insert within that section instead of editing the whole note.',
+      },
+    },
+  },
+  'title': {
+    'type': 'object',
+    'properties': {
+      'new_title': {'type': 'string'},
+    },
+  },
+  'tags': {
+    'type': 'object',
+    'properties': {
+      'added': {
+        'type': 'array',
+        'items': {'type': 'string'},
+      },
+      'removed': {
+        'type': 'array',
+        'items': {'type': 'string'},
+      },
+    },
+  },
+  'link': {
+    'type': 'object',
+    'description': 'Add or remove relationships to other notes.',
+    'properties': {
+      'added': {
+        'type': 'array',
+        'description': 'Relationships to create.',
+        'items': {
+          'type': 'object',
+          'properties': {
+            'relation': {'type': 'string', 'description': 'Relationship type.'},
+            'target': {'type': 'string', 'description': 'Target note ID.'},
+          },
+          'required': ['relation', 'target'],
+        },
+      },
+      'removed': {
+        'type': 'array',
+        'description': 'Target note IDs whose relationships should be deleted.',
+        'items': {'type': 'string'},
+      },
+    },
+  },
+  'attachments': {
+    'type': 'object',
+    'properties': {
+      'added': {
+        'type': 'array',
+        'items': {'type': 'string'},
+      },
+      'removed': {
+        'type': 'array',
+        'items': {'type': 'string'},
+      },
+    },
+  },
+  'subnote': {
+    'type': 'object',
+    'properties': {
+      'added': {
+        'type': 'array',
+        'items': {
+          'type': 'object',
+          'properties': {
+            'name': {'type': 'string'},
+            'content': {'type': 'string'},
+          },
+        },
+      },
+      'removed': {
+        'type': 'array',
+        'items': {'type': 'string'},
+      },
+    },
+  },
+};
 
 class CreateNotesTool implements NativeTool {
   NoteModificationService get _service => getIt<NoteModificationService>();

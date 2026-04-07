@@ -4138,6 +4138,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       'ls': 'List tag filters and folder structure.\n\nNo required params.',
       'modify_note':
           'Update a note\'s content, title, or tags.\n\nParams:\n- noteId, content, title, tags (all optional)',
+      'modify_notes':
+          'Update multiple notes in one atomic batch.\n\nParams:\n- modifications (list): [{note_id, modification}]',
       'create_notes':
           'Create new notes.\n\nParams:\n- notes (list): [{title, content, tags}]',
       'delete_notes':

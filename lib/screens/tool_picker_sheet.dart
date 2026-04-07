@@ -63,9 +63,18 @@ class _ToolPickerSheetState extends State<ToolPickerSheet>
             child: TabBarView(
               controller: _tabController,
               children: [
-                _BuiltinToolsTab(onSelect: _select, scrollController: scrollController),
-                _UserDefinedToolsTab(onSelect: _select, scrollController: scrollController),
-                _McpToolsTab(onSelect: _select, scrollController: scrollController),
+                _BuiltinToolsTab(
+                  onSelect: _select,
+                  scrollController: scrollController,
+                ),
+                _UserDefinedToolsTab(
+                  onSelect: _select,
+                  scrollController: scrollController,
+                ),
+                _McpToolsTab(
+                  onSelect: _select,
+                  scrollController: scrollController,
+                ),
               ],
             ),
           ),
@@ -90,6 +99,10 @@ const _kBuiltinTools = [
   _BuiltinToolEntry('run_sql', 'Execute a read-only SQL query on the database'),
   _BuiltinToolEntry('ls', 'List available note filters and tags'),
   _BuiltinToolEntry('modify_note', 'Modify the content of an existing note'),
+  _BuiltinToolEntry(
+    'modify_notes',
+    'Modify multiple notes in one atomic batch',
+  ),
   _BuiltinToolEntry('create_notes', 'Create one or more new notes'),
   _BuiltinToolEntry('delete_notes', 'Delete notes by ID'),
   _BuiltinToolEntry('load_skill', 'Load a skill note and register its tools'),
@@ -146,7 +159,9 @@ class _UserDefinedToolsTabState extends State<_UserDefinedToolsTab> {
     final db = getIt<DatabaseService>();
     final userAppService = getIt<UserAppService>();
     final allApps = await db.getAllUserApps();
-    final toolApps = allApps.where((a) => a.type == UserAppType.aiTool).toList();
+    final toolApps = allApps
+        .where((a) => a.type == UserAppType.aiTool)
+        .toList();
 
     final entries = <_AppBundleEntry>[];
     for (final app in toolApps) {
@@ -307,10 +322,13 @@ class _McpToolsTabState extends State<_McpToolsTab> {
                 ...entry.tools.map(
                   (tool) => ListTile(
                     contentPadding: const EdgeInsets.only(left: 32, right: 16),
-                    leading: const Icon(Icons.settings_input_component, size: 18),
+                    leading: const Icon(
+                      Icons.settings_input_component,
+                      size: 18,
+                    ),
                     title: Text(tool.name),
-                    subtitle: tool.description != null &&
-                            tool.description!.isNotEmpty
+                    subtitle:
+                        tool.description != null && tool.description!.isNotEmpty
                         ? Text(
                             tool.description!,
                             maxLines: 1,

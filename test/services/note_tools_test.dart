@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
+import 'package:note_synapse/services/approval_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/note_modification_service.dart';
@@ -26,6 +27,8 @@ void main() {
     getIt.registerSingleton<NoteModificationService>(
       mockNoteModificationService,
     );
+    ApprovalService.resetSession();
+    ApprovalService.onApprovalRequest = null;
   });
 
   tearDown(() async {
@@ -214,6 +217,81 @@ void main() {
       expect(contentActions, contains('replace'));
       expect(contentActions, contains('no-op'));
     });
+
+    test('supports section-targeted content updates', () {
+      final schema = tool.inputSchema;
+      final contentSchema =
+          schema['properties']['modification']['properties']['content']['properties']
+              as Map<String, dynamic>;
+      expect(contentSchema['section'], isNotNull);
+      expect(contentSchema['insert_position'], isNotNull);
+      expect(contentSchema['insert_position']['enum'], ['append', 'prepend']);
+    });
+  });
+
+  group('ModifyNotesTool', () {
+    late ModifyNotesTool tool;
+    late _FakeBatchNoteModificationService fakeService;
+
+    setUp(() {
+      fakeService = _FakeBatchNoteModificationService(mockDb);
+      if (getIt.isRegistered<NoteModificationService>()) {
+        getIt.unregister<NoteModificationService>();
+      }
+      getIt.registerSingleton<NoteModificationService>(fakeService);
+      tool = ModifyNotesTool();
+    });
+
+    test('has correct name', () {
+      expect(tool.name, 'modify_notes');
+    });
+
+    test('advertises modifications array and section fields', () {
+      final schema = tool.inputSchema;
+      final items =
+          schema['properties']['modifications']['items']['properties']['modification']['properties']
+              as Map<String, dynamic>;
+      final contentSchema =
+          items['content']['properties'] as Map<String, dynamic>;
+      expect(contentSchema['section'], isNotNull);
+      expect(contentSchema['insert_position'], isNotNull);
+    });
+
+    test('requests one approval and executes batch once', () async {
+      when(mockDb.getNotesByIds(any)).thenAnswer(
+        (_) async => [
+          Note(
+            id: 'index-1',
+            title: 'Index',
+            content: '## Entities',
+            type: NoteType.note,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        ],
+      );
+      ApprovalService.onApprovalRequest = (_) async =>
+          ApprovalResult(approved: true);
+
+      final result = await tool.execute({
+        'modifications': [
+          {
+            'note_id': 'index-1',
+            'modification': {
+              'content': {
+                'action': 'append',
+                'section': '## Entities',
+                'insert_position': 'append',
+                'text': '- Entry',
+              },
+            },
+          },
+        ],
+      });
+
+      expect(result['status'], 'success');
+      expect(fakeService.batchCalls, hasLength(1));
+    });
   });
 
   group('ListFiltersTool', () {
@@ -296,4 +374,29 @@ void main() {
       expect(''.take(5), '');
     });
   });
+}
+
+class _FakeBatchNoteModificationService extends NoteModificationService {
+  _FakeBatchNoteModificationService(super.db);
+
+  final List<List<Map<String, dynamic>>> batchCalls = [];
+
+  @override
+  Future<List<Note>> applyBatchModifications(
+    List<Map<String, dynamic>> updates,
+  ) async {
+    batchCalls.add(updates);
+    return updates
+        .map(
+          (update) => Note(
+            id: update['note_id'] as String,
+            title: 'Updated ${update['note_id']}',
+            content: '',
+            type: NoteType.note,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        )
+        .toList();
+  }
 }

@@ -1063,6 +1063,7 @@ If no findings worth preserving, return: []
     RunSqlTool(),
     ListFiltersTool(),
     ModifyNoteTool(),
+    ModifyNotesTool(),
     CreateNotesTool(),
     DeleteNoteTool(),
   ];

@@ -71,24 +71,52 @@ class ApprovalRequest {
 
   /// Create a note modification approval request.
   factory ApprovalRequest.noteModification({
-    required String noteId,
-    required Map<String, dynamic> modification,
+    String? noteId,
+    Map<String, dynamic>? modification,
+    List<Map<String, dynamic>>? modifications,
     String? source,
     String? noteTitle,
     String? noteSnippet,
+    List<Map<String, String>>? noteDetails,
   }) {
+    final isBatch = modifications != null;
+    final batchMods = modifications ?? const <Map<String, dynamic>>[];
     return ApprovalRequest(
       type: ApprovalType.noteModification,
-      title: 'Allow Note Modification?',
+      title: isBatch
+          ? 'Allow Batched Note Modification?'
+          : 'Allow Note Modification?',
       description: source != null
-          ? '$source wants to modify note:'
-          : 'The operation wants to modify note:',
-      details: {
-        'noteId': noteId,
-        'modification': modification,
-        if (noteTitle != null) 'noteTitle': noteTitle,
-        if (noteSnippet != null) 'noteSnippet': noteSnippet,
-      },
+          ? '$source wants to modify ${isBatch ? '${batchMods.length} notes' : 'note'}:'
+          : 'The operation wants to modify ${isBatch ? '${batchMods.length} notes' : 'note'}:',
+      details: isBatch
+          ? {
+              'noteIds': batchMods.map((m) => m['note_id']).toList(),
+              'noteDetails': noteDetails,
+              'modification': {
+                'isBatch': true,
+                'count': batchMods.length,
+                'updates': batchMods.take(5).map((entry) {
+                  final currentNoteId = entry['note_id']?.toString() ?? '';
+                  final noteMeta = noteDetails?.firstWhere(
+                    (detail) => detail['id'] == currentNoteId,
+                    orElse: () => const <String, String>{},
+                  );
+                  return {
+                    'id': currentNoteId,
+                    if (noteMeta != null && noteMeta.isNotEmpty)
+                      'title': noteMeta['title'],
+                    'changes': entry['modification'],
+                  };
+                }).toList(),
+              },
+            }
+          : {
+              'noteId': noteId,
+              'modification': modification,
+              if (noteTitle != null) 'noteTitle': noteTitle,
+              if (noteSnippet != null) 'noteSnippet': noteSnippet,
+            },
       warningMessage: null,
       sessionApprovalLabel: 'Allow for this session',
     );
@@ -267,6 +295,75 @@ class ApprovalService {
       source: source,
       noteTitle: title,
       noteSnippet: snippet,
+    );
+
+    try {
+      final result = await onApprovalRequest!(request);
+      if (result.approved) {
+        if (result.approvedForSession) {
+          sessionApprovedNoteModifications = true;
+          LoggerService.debug(
+            '[ApprovalService] Note modifications approved for session',
+          );
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      LoggerService.error('[ApprovalService] Error requesting approval: $e');
+      return false;
+    }
+  }
+
+  /// Request approval for a batched note modification.
+  static Future<bool> requestBatchNoteModificationApproval({
+    required List<Map<String, dynamic>> modifications,
+    String? source,
+  }) async {
+    if (sessionApprovedNoteModifications) {
+      LoggerService.debug(
+        '[ApprovalService] Note modification auto-approved (session)',
+      );
+      return true;
+    }
+
+    if (onApprovalRequest == null) {
+      LoggerService.warning(
+        '[ApprovalService] No approval callback registered for note modification',
+      );
+      return false;
+    }
+
+    final noteIds = modifications
+        .map((modification) => modification['note_id']?.toString())
+        .whereType<String>()
+        .toList();
+
+    final noteDetails = <Map<String, String>>[];
+    try {
+      final db = getIt<DatabaseService>();
+      final notes = await db.getNotesByIds(noteIds);
+      for (final note in notes) {
+        final content = note.content;
+        final snippet = content.length > 100
+            ? '${content.substring(0, 100)}...'
+            : content;
+        noteDetails.add({
+          'id': note.id,
+          'title': note.title,
+          'snippet': snippet,
+        });
+      }
+    } catch (e) {
+      LoggerService.warning(
+        '[ApprovalService] Failed to fetch batch note details: $e',
+      );
+    }
+
+    final request = ApprovalRequest.noteModification(
+      modifications: modifications,
+      source: source,
+      noteDetails: noteDetails,
     );
 
     try {
