@@ -159,6 +159,14 @@ class ContextManagerService {
     buffer.writeln('</GlobalObjective>');
     buffer.writeln();
 
+    // Add one-time workflow execution context (never repeated in children)
+    if (root.executionContext != null) {
+      buffer.writeln('<WorkflowContext>');
+      buffer.writeln(root.executionContext);
+      buffer.writeln('</WorkflowContext>');
+      buffer.writeln();
+    }
+
     // Add pinned skills (never compacted)
     if (root.loadedSkills.isNotEmpty) {
       buffer.writeln('<LoadedSkills note="These skill workflows guide your approach. Follow them.">');

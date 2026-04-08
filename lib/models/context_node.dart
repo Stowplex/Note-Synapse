@@ -64,6 +64,10 @@ class ContextNode {
   /// Displayed in `LastRoundError` section to inform the agent of failures.
   String? lastError;
 
+  /// One-time execution context (e.g., workflow binding metadata).
+  /// Rendered once per turn in <WorkflowContext>, never repeated in child/ancestor contexts.
+  String? executionContext;
+
   /// Skills pinned to this session (root node only). Session-scoped, never compacted.
   /// Deduplicated by noteId. Not serialized to JSON (runtime state only).
   List<LoadedSkill> loadedSkills = [];
@@ -83,6 +87,7 @@ class ContextNode {
     this.updatedAt,
     List<String>? allowedTools,
     this.lastError,
+    this.executionContext,
   }) : executionLog = executionLog ?? [],
        children = children ?? [],
        createdAt = createdAt ?? DateTime.now(),
