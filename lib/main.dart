@@ -23,6 +23,7 @@ import 'services/tag_image_service.dart';
 import 'services/wake_lock_service.dart' as wake_lock;
 import 'services/network_provider.dart';
 import 'utils/global_keys.dart';
+import 'widgets/workflow_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -175,7 +176,7 @@ class _AppWrapperState extends State<AppWrapper> {
     }
 
     if (_isModelConfigured) {
-      return const MainScreen();
+      return const WorkflowShell(child: MainScreen());
     } else {
       return const ModelSelectionScreen(isOnboarding: true);
     }

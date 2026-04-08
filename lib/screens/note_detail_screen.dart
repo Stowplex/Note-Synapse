@@ -44,13 +44,11 @@ import '../services/database_service.dart';
 import '../services/conversation_service.dart';
 import '../services/media_attachment_service.dart';
 import '../services/content_ingestion_service.dart';
-import '../services/agent_service.dart';
 import '../services/service_locator.dart';
 import '../services/skill_service.dart';
 import '../models/conversation.dart';
 import '../widgets/approval_dialog.dart';
 import '../widgets/pdf_ai_context_dialog.dart';
-import '../widgets/workflow_status_banner.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -763,37 +761,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Widget _buildBodyWithWorkflowBanner(String noteId, Widget child) {
-    final agentService = getIt<AgentService>();
-
-    return AnimatedBuilder(
-      animation: agentService,
-      builder: (context, _) {
-        final workflowStatus = agentService.workflowStatusForNote(noteId);
-        if (workflowStatus == null ||
-            workflowStatus.state == WorkflowExecutionState.completed ||
-            workflowStatus.state == WorkflowExecutionState.failed) {
-          return child;
-        }
-
-        return Column(
-          children: [
-            WorkflowStatusBanner(
-              status: workflowStatus,
-              onAbort: () => agentService.abortTask(workflowStatus.taskId),
-              onResume: () =>
-                  workflowStatus.state == WorkflowExecutionState.pausedTurnLimit
-                  ? agentService.resumeTask(
-                      workflowStatus.taskId,
-                      increaseLimit: true,
-                    )
-                  : agentService.resumeTask(workflowStatus.taskId),
-              onBail: () => agentService.concludeTask(workflowStatus.taskId),
-            ),
-            Expanded(child: child),
-          ],
-        );
-      },
-    );
+    // Workflow status is now shown globally via WorkflowShell + WorkflowMiniPlayer.
+    return child;
   }
 
   Future<void> _showImagePicker(BuildContext context) async {
