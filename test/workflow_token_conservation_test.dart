@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:note_synapse/models/note.dart';
 import 'package:note_synapse/services/agent_service.dart';
 import 'package:note_synapse/services/ai_service.dart';
 import 'package:note_synapse/services/context_manager_service.dart';
@@ -6,6 +7,7 @@ import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/model_selector.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/services/skill_service.dart';
+import 'package:note_synapse/services/tag_workflow_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'workflow_task_test.mocks.dart';
@@ -83,6 +85,80 @@ void main() {
       agentService.cancelPendingWorkflow(0);
       agentService.cancelPendingWorkflow(100);
       expect(agentService.pendingWorkflows, isEmpty);
+    });
+  });
+
+  group('Skill observation deduplication', () {
+    test('pinned skill observation is replaced with short reference', () {
+      final shortRef = AgentService.shortenSkillObservation(
+        skillContent: '# Skill: Wiki Ingest\n\n## Purpose\n\nIngest one source note...',
+        skillName: 'Wiki Ingest',
+        pinned: true,
+      );
+      expect(shortRef, contains('Wiki Ingest'));
+      expect(shortRef, contains('<LoadedSkills>'));
+      expect(shortRef, isNot(contains('## Purpose')));
+    });
+
+    test('unpinned skill observation preserves full content', () {
+      final fullContent = '# Skill: Wiki Ingest\n\n## Purpose\n\nIngest one source note...';
+      final result = AgentService.shortenSkillObservation(
+        skillContent: fullContent,
+        skillName: 'Wiki Ingest',
+        pinned: false,
+      );
+      expect(result, fullContent);
+    });
+  });
+
+  group('Workflow objective splitting', () {
+    test('buildWorkflowLabel produces short label', () {
+      final label = AgentService.buildWorkflowLabel(
+        prompt: 'Ingest this note according to the wiki ingest skill.',
+        binding: ResolvedBinding(
+          skillNoteId: 'skill-1',
+          matchedTag: 'wiki-source-ai-research',
+          pattern: 'wiki-source-',
+          prompt: 'Ingest this note',
+          contentImmutable: false,
+        ),
+        note: Note(
+          id: 'note-1',
+          title: 'Attention is all you need',
+          content: '',
+          type: NoteType.note,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
+      // Short label should be concise — under 100 chars
+      expect(label.length, lessThan(100));
+      expect(label, contains('Attention is all you need'));
+      expect(label, isNot(contains('Bound skill note ID')));
+    });
+
+    test('buildWorkflowContext produces full binding context', () {
+      final context = AgentService.buildWorkflowContext(
+        binding: ResolvedBinding(
+          skillNoteId: 'skill-1',
+          matchedTag: 'wiki-source-ai-research',
+          pattern: 'wiki-source-',
+          prompt: 'Ingest this note',
+          contentImmutable: false,
+        ),
+        note: Note(
+          id: 'note-1',
+          title: 'Attention is all you need',
+          content: '',
+          type: NoteType.note,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
+      expect(context, contains('Source note ID: note-1'));
+      expect(context, contains('Bound skill note ID: skill-1'));
+      expect(context, contains('wiki-source-ai-research'));
+      expect(context, contains('load_skill'));
     });
   });
 }

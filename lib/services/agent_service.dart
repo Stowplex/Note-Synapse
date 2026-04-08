@@ -179,6 +179,17 @@ class AgentService extends ChangeNotifier {
     return status;
   }
 
+  /// Returns a short reference if the skill was pinned, or the full content if not.
+  static String shortenSkillObservation({
+    required String skillContent,
+    required String skillName,
+    required bool pinned,
+  }) {
+    if (!pinned) return skillContent;
+    return "Skill '$skillName' loaded and pinned to context. "
+        'See <LoadedSkills> section above for full instructions.';
+  }
+
   // Pause/Resume/Stop state
   bool _isPaused = false;
   String? _boundConversationId;
@@ -1602,8 +1613,26 @@ Return ONLY a valid JSON list with ALL required fields:
         .replaceAll('{matched_tag}', matchedTag);
   }
 
-  static String buildWorkflowObjective({
+  /// Short label for task.description and node.objective (~20 tokens).
+  /// Repeated in ancestor goals, current task headers, and log entries.
+  static String buildWorkflowLabel({
     required String prompt,
+    required ResolvedBinding binding,
+    required Note note,
+  }) {
+    final suffix = ' — "${note.title}" [${binding.matchedTag}]';
+    const maxLength = 99;
+    // Reserve 1 char for the ellipsis when truncating
+    final maxPromptLength = maxLength - suffix.length - 1;
+    final truncatedPrompt = maxPromptLength > 0 && prompt.length > maxPromptLength
+        ? '${prompt.substring(0, maxPromptLength)}…'
+        : prompt;
+    return '$truncatedPrompt$suffix';
+  }
+
+  /// Full execution context with binding metadata (~400 tokens).
+  /// Stored once on root.executionContext, emitted once per turn.
+  static String buildWorkflowContext({
     required ResolvedBinding binding,
     required Note note,
   }) {
@@ -1613,10 +1642,7 @@ Return ONLY a valid JSON list with ALL required fields:
     final otherTagsText = otherTags.isEmpty ? '(none)' : otherTags.join(', ');
 
     return '''
-$prompt
-
-Workflow execution context:
-- This workflow was triggered automatically by a tag-to-workflow binding.
+This workflow was triggered automatically by a tag-to-workflow binding.
 - Source note ID: ${note.id}
 - Source note title: ${note.title}
 - Triggered tag on this note: ${binding.matchedTag}
@@ -1625,9 +1651,20 @@ Workflow execution context:
 - Bound skill note ID: ${binding.skillNoteId}
 
 Use load_skill with the bound skill note ID to retrieve the workflow instructions for this run.
-Use the source note above as "this note" for the workflow. Do not search for a candidate source note unless the workflow instructions explicitly require finding related notes beyond this source note.
-'''
+Use the source note above as "this note" for the workflow. Do not search for a candidate source note unless the workflow instructions explicitly require finding related notes beyond this source note.'''
         .trim();
+  }
+
+  /// Deprecated: use [buildWorkflowLabel] + [buildWorkflowContext] instead.
+  @Deprecated('Use buildWorkflowLabel and buildWorkflowContext separately')
+  static String buildWorkflowObjective({
+    required String prompt,
+    required ResolvedBinding binding,
+    required Note note,
+  }) {
+    final label = buildWorkflowLabel(prompt: prompt, binding: binding, note: note);
+    final context = buildWorkflowContext(binding: binding, note: note);
+    return '$label\n\nWorkflow execution context:\n$context';
   }
 
   List<String> _initialWorkflowAllowedTools() {
@@ -1700,8 +1737,12 @@ Use the source note above as "this note" for the workflow. Do not search for a c
       noteId: note.id,
       matchedTag: binding.matchedTag,
     );
-    final workflowObjective = buildWorkflowObjective(
+    final workflowLabel = buildWorkflowLabel(
       prompt: substitutedPrompt,
+      binding: binding,
+      note: note,
+    );
+    final workflowContext = buildWorkflowContext(
       binding: binding,
       note: note,
     );
@@ -1716,7 +1757,7 @@ Use the source note above as "this note" for the workflow. Do not search for a c
     // Restore pending workflows
     _pendingWorkflows.addAll(savedPendingWorkflows);
 
-    _currentObjective = workflowObjective;
+    _currentObjective = workflowLabel;
     final workflowMaxTurns = await AgenticSettingsService.getMaxTurns();
     final taskId = const Uuid().v4();
     _activeWorkflowStatus = WorkflowStatusSnapshot(
@@ -1732,14 +1773,15 @@ Use the source note above as "this note" for the workflow. Do not search for a c
 
     // Create root context for the workflow
     await _contextManager.createRootContext(
-      objective: workflowObjective,
+      objective: workflowLabel,
       allowedTools: workflowAllowedTools,
     );
+    _contextManager.rootContext?.executionContext = workflowContext;
 
     // Create a single task for the workflow
     final task = AgentTask(
       id: taskId,
-      description: workflowObjective,
+      description: workflowLabel,
       name: 'workflow_task',
       isFinalDeliverable: true,
       status: AgentTaskStatus.pending,
@@ -2150,6 +2192,9 @@ Use the source note above as "this note" for the workflow. Do not search for a c
       notifyListeners();
       return;
     }
+
+    // Sync workflow status for mini-player turn display
+    _syncWorkflowStatusFromTasks();
 
     // NOTE: We no longer skip tasks with empty tools.
     // Tasks with tools: [] are valid "thinking" tasks where the LLM should:
@@ -2763,10 +2808,11 @@ $taskSkillSection''';
       }
 
       // Intercept load_skill results to route to context and resolve tool URIs
+      bool skillPinned = false;
       if (toolName == 'load_skill' && result is String) {
         final noteId = (args['noteId'] as String? ?? '').trim();
         if (noteId.isNotEmpty) {
-          await _handleLoadSkillResult(noteId, result);
+          skillPinned = await _handleLoadSkillResult(noteId, result);
         }
       }
 
@@ -2778,11 +2824,29 @@ $taskSkillSection''';
         succeeded: toolSucceeded,
       );
 
-      task.executionHistory.add("Observation: $result");
+      // Shorten skill observation if it was pinned to avoid duplication with <LoadedSkills>
+      final String observationText;
+      if (toolName == 'load_skill' && skillPinned && result is String) {
+        final firstLine = result.split('\n').firstWhere(
+          (l) => l.trim().isNotEmpty,
+          orElse: () => 'Unknown skill',
+        );
+        final skillName =
+            firstLine.replaceAll(RegExp(r'^#+\s*Skill:\s*'), '').trim();
+        observationText = shortenSkillObservation(
+          skillContent: result,
+          skillName: skillName,
+          pinned: true,
+        );
+      } else {
+        observationText = result.toString();
+      }
+
+      task.executionHistory.add("Observation: $observationText");
       // Log observation to hierarchical context
       _contextManager
           .getContext(task.contextNodeId ?? '')
-          ?.log('Observation: $result');
+          ?.log('Observation: $observationText');
       notifyListeners();
 
       // Checkpoint: After tool result
@@ -2811,9 +2875,18 @@ $taskSkillSection''';
 
   /// Called when a load_skill tool call returns successfully.
   /// Routes skill content to the loadedSkills context region and resolves tool URIs.
-  Future<void> _handleLoadSkillResult(String noteId, String content) async {
+  /// Returns true if the skill was newly pinned (not a duplicate), false otherwise.
+  Future<bool> _handleLoadSkillResult(String noteId, String content) async {
+    final root = _contextManager.rootContext;
+    final alreadyLoaded = root?.loadedSkills.any((s) => s.noteId == noteId) ?? false;
+
     // Add to pinned context region (deduplicated inside addLoadedSkill)
     _contextManager.addLoadedSkill(noteId, content);
+
+    // Check if it was actually added (not just deduplicated)
+    final nowLoaded =
+        _contextManager.rootContext?.loadedSkills.any((s) => s.noteId == noteId) ?? false;
+    final newlyPinned = !alreadyLoaded && nowLoaded;
 
     // Extract and resolve tool URIs from skill content
     final skillService = getIt<SkillService>();
@@ -2839,6 +2912,8 @@ $taskSkillSection''';
       );
     }
     notifyListeners();
+
+    return newlyPinned;
   }
 
   /// Resolve a parsed tool URI to a list of McpTools.
