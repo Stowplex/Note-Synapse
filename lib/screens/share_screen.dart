@@ -91,7 +91,9 @@ class _ShareScreenState extends State<ShareScreen> {
 
   void _setupApprovalCallback() {
     _approvalCallback = (request) async {
-      if (!mounted) return ApprovalResult(approved: false);
+      if (!mounted) {
+        throw StateError('Share screen is not mounted');
+      }
       return ApprovalDialog.showWithContext(context, request);
     };
     ApprovalService.onApprovalRequest = _approvalCallback;

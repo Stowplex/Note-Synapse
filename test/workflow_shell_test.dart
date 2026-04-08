@@ -31,9 +31,16 @@ void main() {
     getIt.registerLazySingleton<DatabaseService>(() => mockDb);
     getIt.registerLazySingleton<AIService>(() => mockAIService);
     getIt.registerLazySingleton<ModelSelector>(() => mockModelSelector);
-    getIt.registerLazySingleton<ContextManagerService>(() => mockContextManager);
+    getIt.registerLazySingleton<ContextManagerService>(
+      () => mockContextManager,
+    );
 
-    agentService = AgentService(mockContextManager, mockModelSelector, mockAIService, mockDb);
+    agentService = AgentService(
+      mockContextManager,
+      mockModelSelector,
+      mockAIService,
+      mockDb,
+    );
     getIt.registerSingleton<AgentService>(agentService);
   });
 
@@ -51,7 +58,9 @@ void main() {
       expect(find.byType(WorkflowMiniPlayer), findsOneWidget);
     });
 
-    testWidgets('mini-player gets active status from agent service', (tester) async {
+    testWidgets('mini-player gets active status from agent service', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: WorkflowShell(
@@ -61,7 +70,9 @@ void main() {
       );
 
       // Verify the shell renders and mini-player exists with null status
-      final miniPlayer = tester.widget<WorkflowMiniPlayer>(find.byType(WorkflowMiniPlayer));
+      final miniPlayer = tester.widget<WorkflowMiniPlayer>(
+        find.byType(WorkflowMiniPlayer),
+      );
       expect(miniPlayer.activeStatus, isNull);
     });
   });

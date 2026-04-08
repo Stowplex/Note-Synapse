@@ -175,6 +175,13 @@ class ApprovalService {
   /// [ApprovalDialog.show] with a stable NavigatorState.
   static Future<ApprovalResult> Function(ApprovalRequest)? onApprovalRequest;
 
+  /// Root-level fallback callback for approval requests.
+  ///
+  /// This stays available even when route-specific widgets are disposed, so
+  /// background workflows can still surface approval dialogs.
+  static Future<ApprovalResult> Function(ApprovalRequest)?
+  fallbackApprovalRequest;
+
   /// Whether note modifications have been approved for this session.
   static bool sessionApprovedNoteModifications = false;
 
@@ -190,6 +197,42 @@ class ApprovalService {
     sessionApprovedNoteDeletions = false;
     sessionApprovedSqlWrites = false;
     LoggerService.debug('[ApprovalService] Session approvals reset');
+  }
+
+  static Future<ApprovalResult?> _dispatchApprovalRequest(
+    ApprovalRequest request,
+  ) async {
+    final primary = onApprovalRequest;
+    final fallback = fallbackApprovalRequest;
+
+    if (primary == null && fallback == null) {
+      LoggerService.warning(
+        '[ApprovalService] No approval callback registered for ${request.type}',
+      );
+      return null;
+    }
+
+    if (primary != null) {
+      try {
+        return await primary(request);
+      } catch (e) {
+        LoggerService.warning(
+          '[ApprovalService] Primary approval callback unavailable: $e',
+        );
+      }
+    }
+
+    if (fallback != null && !identical(primary, fallback)) {
+      try {
+        return await fallback(request);
+      } catch (e) {
+        LoggerService.error(
+          '[ApprovalService] Fallback approval callback failed: $e',
+        );
+      }
+    }
+
+    return null;
   }
 
   /// Request approval for a SQL write operation.
@@ -210,38 +253,28 @@ class ApprovalService {
       return true;
     }
 
-    // Check if approval callback is registered
-    if (onApprovalRequest == null) {
-      LoggerService.warning(
-        '[ApprovalService] No approval callback registered for SQL write',
-      );
-      return false;
-    }
-
-    // Request approval
-    final request = ApprovalRequest.sqlWrite(
-      sql: sql,
-      queryType: queryType,
-      queryTypeDescription: queryTypeDescription,
-      source: source,
+    final result = await _dispatchApprovalRequest(
+      ApprovalRequest.sqlWrite(
+        sql: sql,
+        queryType: queryType,
+        queryTypeDescription: queryTypeDescription,
+        source: source,
+      ),
     );
-
-    try {
-      final result = await onApprovalRequest!(request);
-      if (result.approved) {
-        if (result.approvedForSession) {
-          sessionApprovedSqlWrites = true;
-          LoggerService.debug(
-            '[ApprovalService] SQL writes approved for session',
-          );
-        }
-        return true;
-      }
-      return false;
-    } catch (e) {
-      LoggerService.error('[ApprovalService] Error requesting approval: $e');
+    if (result == null) {
       return false;
     }
+
+    if (result.approved) {
+      if (result.approvedForSession) {
+        sessionApprovedSqlWrites = true;
+        LoggerService.debug(
+          '[ApprovalService] SQL writes approved for session',
+        );
+      }
+      return true;
+    }
+    return false;
   }
 
   /// Request approval for a note modification.
@@ -259,14 +292,6 @@ class ApprovalService {
         '[ApprovalService] Note modification auto-approved (session)',
       );
       return true;
-    }
-
-    // Check if approval callback is registered
-    if (onApprovalRequest == null) {
-      LoggerService.warning(
-        '[ApprovalService] No approval callback registered for note modification',
-      );
-      return false;
     }
 
     // Fetch note details for better context
@@ -288,31 +313,30 @@ class ApprovalService {
       );
     }
 
-    // Request approval
-    final request = ApprovalRequest.noteModification(
-      noteId: noteId,
-      modification: modification,
-      source: source,
-      noteTitle: title,
-      noteSnippet: snippet,
+    final result = await _dispatchApprovalRequest(
+      ApprovalRequest.noteModification(
+        noteId: noteId,
+        modification: modification,
+        source: source,
+        noteTitle: title,
+        noteSnippet: snippet,
+      ),
     );
 
-    try {
-      final result = await onApprovalRequest!(request);
-      if (result.approved) {
-        if (result.approvedForSession) {
-          sessionApprovedNoteModifications = true;
-          LoggerService.debug(
-            '[ApprovalService] Note modifications approved for session',
-          );
-        }
-        return true;
-      }
-      return false;
-    } catch (e) {
-      LoggerService.error('[ApprovalService] Error requesting approval: $e');
+    if (result == null) {
       return false;
     }
+
+    if (result.approved) {
+      if (result.approvedForSession) {
+        sessionApprovedNoteModifications = true;
+        LoggerService.debug(
+          '[ApprovalService] Note modifications approved for session',
+        );
+      }
+      return true;
+    }
+    return false;
   }
 
   /// Request approval for a batched note modification.
@@ -325,13 +349,6 @@ class ApprovalService {
         '[ApprovalService] Note modification auto-approved (session)',
       );
       return true;
-    }
-
-    if (onApprovalRequest == null) {
-      LoggerService.warning(
-        '[ApprovalService] No approval callback registered for note modification',
-      );
-      return false;
     }
 
     final noteIds = modifications
@@ -360,28 +377,28 @@ class ApprovalService {
       );
     }
 
-    final request = ApprovalRequest.noteModification(
-      modifications: modifications,
-      source: source,
-      noteDetails: noteDetails,
+    final result = await _dispatchApprovalRequest(
+      ApprovalRequest.noteModification(
+        modifications: modifications,
+        source: source,
+        noteDetails: noteDetails,
+      ),
     );
 
-    try {
-      final result = await onApprovalRequest!(request);
-      if (result.approved) {
-        if (result.approvedForSession) {
-          sessionApprovedNoteModifications = true;
-          LoggerService.debug(
-            '[ApprovalService] Note modifications approved for session',
-          );
-        }
-        return true;
-      }
-      return false;
-    } catch (e) {
-      LoggerService.error('[ApprovalService] Error requesting approval: $e');
+    if (result == null) {
       return false;
     }
+
+    if (result.approved) {
+      if (result.approvedForSession) {
+        sessionApprovedNoteModifications = true;
+        LoggerService.debug(
+          '[ApprovalService] Note modifications approved for session',
+        );
+      }
+      return true;
+    }
+    return false;
   }
 
   /// Request approval for note deletion.
@@ -398,14 +415,6 @@ class ApprovalService {
         '[ApprovalService] Note deletion auto-approved (session)',
       );
       return true;
-    }
-
-    // Check if approval callback is registered
-    if (onApprovalRequest == null) {
-      LoggerService.warning(
-        '[ApprovalService] No approval callback registered for note deletion',
-      );
-      return false;
     }
 
     // Fetch note details
@@ -434,27 +443,27 @@ class ApprovalService {
     // noteDeletion factory creates details: {'noteIds': noteIds, 'count': noteIds.length}
     // I need to inject noteDetails.
     // I will modify the factory to accept it.
-    final request = ApprovalRequest.noteDeletion(
-      noteIds: noteIds,
-      source: source,
-      noteDetails: noteDetails, // New parameter
+    final result = await _dispatchApprovalRequest(
+      ApprovalRequest.noteDeletion(
+        noteIds: noteIds,
+        source: source,
+        noteDetails: noteDetails,
+      ),
     );
 
-    try {
-      final result = await onApprovalRequest!(request);
-      if (result.approved) {
-        if (result.approvedForSession) {
-          sessionApprovedNoteDeletions = true;
-          LoggerService.debug(
-            '[ApprovalService] Note deletions approved for session',
-          );
-        }
-        return true;
-      }
-      return false;
-    } catch (e) {
-      LoggerService.error('[ApprovalService] Error requesting approval: $e');
+    if (result == null) {
       return false;
     }
+
+    if (result.approved) {
+      if (result.approvedForSession) {
+        sessionApprovedNoteDeletions = true;
+        LoggerService.debug(
+          '[ApprovalService] Note deletions approved for session',
+        );
+      }
+      return true;
+    }
+    return false;
   }
 }

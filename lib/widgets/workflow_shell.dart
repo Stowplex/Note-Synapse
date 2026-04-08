@@ -8,6 +8,7 @@ import '../services/built_in_tools_service.dart';
 import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/service_locator.dart';
+import '../utils/global_keys.dart';
 import '../widgets/approval_dialog.dart';
 import 'workflow_mini_player.dart';
 
@@ -42,11 +43,18 @@ class _WorkflowShellState extends State<WorkflowShell> {
   @override
   void initState() {
     super.initState();
+    ApprovalService.fallbackApprovalRequest = _showApprovalDialog;
     _agentService.addListener(_onAgentStateChanged);
   }
 
   @override
   void dispose() {
+    if (identical(
+      ApprovalService.fallbackApprovalRequest,
+      _showApprovalDialog,
+    )) {
+      ApprovalService.fallbackApprovalRequest = null;
+    }
     _agentService.removeListener(_onAgentStateChanged);
     super.dispose();
   }
@@ -75,19 +83,21 @@ class _WorkflowShellState extends State<WorkflowShell> {
   void _wireToolExecutor() {
     _agentService.updateToolExecutor(_createToolExecutor());
     _shellOwnsExecutor = true;
-
-    // Wire approval dialog for workflow tool calls
-    ApprovalService.onApprovalRequest = (request) async {
-      if (!mounted) return ApprovalResult(approved: false);
-      return ApprovalDialog.showWithContext(context, request);
-    };
   }
 
   void _releaseToolExecutor() {
     _shellOwnsExecutor = false;
-    // Only clear approval callback if still owned by this shell
-    // (conversation screen may have re-registered its own callback)
-    ApprovalService.onApprovalRequest = null;
+  }
+
+  Future<ApprovalResult> _showApprovalDialog(ApprovalRequest request) async {
+    if (!mounted) {
+      throw StateError('Workflow shell is not mounted');
+    }
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) {
+      throw StateError('Navigator unavailable for approval dialog');
+    }
+    return ApprovalDialog.show(navigator, request);
   }
 
   ToolExecutor _createToolExecutor() {
@@ -136,9 +146,9 @@ class _WorkflowShellState extends State<WorkflowShell> {
   }
 
   void _handleViewLog() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AgentTraceScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const AgentTraceScreen()));
   }
 
   void _handleDismiss() {

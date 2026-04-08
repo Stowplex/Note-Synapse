@@ -108,7 +108,7 @@ class NoteSynapseApp extends StatelessWidget {
               },
             },
             builder: (context, child) {
-              return child ?? const SizedBox.shrink();
+              return WorkflowShell(child: child ?? const SizedBox.shrink());
             },
           );
         },
@@ -176,7 +176,7 @@ class _AppWrapperState extends State<AppWrapper> {
     }
 
     if (_isModelConfigured) {
-      return const WorkflowShell(child: MainScreen());
+      return const MainScreen();
     } else {
       return const ModelSelectionScreen(isOnboarding: true);
     }

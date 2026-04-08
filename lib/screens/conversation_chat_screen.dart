@@ -164,7 +164,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   void _setupSqlWriteApprovalCallback() {
     // Register unified approval callback
     ApprovalService.onApprovalRequest = (request) async {
-      if (!mounted) return ApprovalResult(approved: false);
+      if (!mounted) {
+        throw StateError('Conversation screen is not mounted');
+      }
       return await ApprovalDialog.showWithContext(context, request);
     };
 

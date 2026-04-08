@@ -299,7 +299,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   /// Sets up the unified approval callback for AI tools.
   void _setupApprovalCallback() {
     ApprovalService.onApprovalRequest = (request) async {
-      if (!mounted) return ApprovalResult(approved: false);
+      if (!mounted) {
+        throw StateError('Immersive note screen is not mounted');
+      }
       return await ApprovalDialog.showWithContext(context, request);
     };
   }

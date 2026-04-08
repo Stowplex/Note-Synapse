@@ -188,7 +188,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   void _setupApprovalCallback() {
     _approvalCallback = (request) async {
-      if (!mounted) return ApprovalResult(approved: false);
+      if (!mounted) {
+        throw StateError('Note detail screen is not mounted');
+      }
       return ApprovalDialog.showWithContext(context, request);
     };
     ApprovalService.onApprovalRequest = _approvalCallback;
