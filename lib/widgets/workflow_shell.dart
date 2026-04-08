@@ -3,12 +3,23 @@ import 'package:flutter/material.dart';
 
 import '../screens/agent_trace_screen.dart';
 import '../services/agent_service.dart';
+import '../services/approval_service.dart';
+import '../services/built_in_tools_service.dart';
+import '../services/mcp_service.dart';
+import '../services/mcp_tool_integration_service.dart';
 import '../services/service_locator.dart';
+import '../widgets/approval_dialog.dart';
 import 'workflow_mini_player.dart';
 
-/// Root-level wrapper that renders the [WorkflowMiniPlayer] on all screens.
+/// Root-level wrapper that renders the [WorkflowMiniPlayer] on all screens
+/// and wires a [ToolExecutor] for tag-triggered workflows.
 ///
-/// Listens to [AgentService] and passes current workflow state to [WorkflowMiniPlayer].
+/// Listens to [AgentService] and:
+/// - Provides a [ToolExecutor] (System + MCP tools) when a workflow starts
+/// - Releases the executor when all workflows finish
+/// - Registers [ApprovalService.onApprovalRequest] for workflow tool approvals
+/// - Renders child + [WorkflowMiniPlayer] in a [Column]
+///
 /// Lives above navigation so the mini-player persists across screen changes.
 class WorkflowShell extends StatefulWidget {
   final Widget child;
@@ -21,6 +32,9 @@ class WorkflowShell extends StatefulWidget {
 
 class _WorkflowShellState extends State<WorkflowShell> {
   AgentService get _agentService => getIt<AgentService>();
+
+  /// Whether the shell currently owns the tool executor.
+  bool _shellOwnsExecutor = false;
 
   /// Tracks dismissed terminal states so mini-player hides after user dismisses.
   bool _dismissed = false;
@@ -39,11 +53,66 @@ class _WorkflowShellState extends State<WorkflowShell> {
 
   void _onAgentStateChanged() {
     final status = _agentService.activeWorkflowStatus;
-    // Reset dismissed flag when a new workflow starts
-    if (status != null && status.state == WorkflowExecutionState.running && _dismissed) {
+
+    if (status != null &&
+        status.state == WorkflowExecutionState.running &&
+        !_shellOwnsExecutor) {
+      // New workflow started — wire executor and reset dismissed flag
+      _wireToolExecutor();
       _dismissed = false;
     }
+
+    if ((status == null || status.isTerminal) &&
+        _agentService.pendingWorkflows.isEmpty &&
+        _shellOwnsExecutor) {
+      // All workflows done — release executor
+      _releaseToolExecutor();
+    }
+
     if (mounted) setState(() {});
+  }
+
+  void _wireToolExecutor() {
+    _agentService.updateToolExecutor(_createToolExecutor());
+    _shellOwnsExecutor = true;
+
+    // Wire approval dialog for workflow tool calls
+    ApprovalService.onApprovalRequest = (request) async {
+      if (!mounted) return ApprovalResult(approved: false);
+      return ApprovalDialog.showWithContext(context, request);
+    };
+  }
+
+  void _releaseToolExecutor() {
+    _shellOwnsExecutor = false;
+    // Only clear approval callback if still owned by this shell
+    // (conversation screen may have re-registered its own callback)
+    ApprovalService.onApprovalRequest = null;
+  }
+
+  ToolExecutor _createToolExecutor() {
+    return (serviceName, toolName, params, ctx) async {
+      // Handle System Tools (native tools from AgentService)
+      if (serviceName == BuiltInToolsService.systemToolsServiceKey) {
+        final nativeTool = _agentService.nativeTools
+            .where((t) => t.name == toolName)
+            .firstOrNull;
+        if (nativeTool != null) {
+          final result = await nativeTool.execute(params);
+          return result is String ? result : result.toString();
+        }
+        return 'Error: System tool "$toolName" not found';
+      }
+      // Handle MCP Tools
+      final endpoints = await getIt<McpService>().getEndpoints();
+      return McpToolIntegrationService.executeToolCall(
+        serviceName: serviceName,
+        toolName: toolName,
+        parameters: params,
+        enabledEndpointIds: endpoints.map((e) => e.id).toList(),
+        generationContext: ctx,
+      );
+    };
   }
 
   void _handleStop() {
