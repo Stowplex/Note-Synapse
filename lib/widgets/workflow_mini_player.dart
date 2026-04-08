@@ -1,4 +1,6 @@
 // lib/widgets/workflow_mini_player.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../services/agent_service.dart';
 
@@ -32,6 +34,7 @@ class WorkflowMiniPlayer extends StatefulWidget {
 
 class _WorkflowMiniPlayerState extends State<WorkflowMiniPlayer> {
   bool _expanded = false;
+  Timer? _autoDismissTimer;
 
   @override
   void initState() {
@@ -41,6 +44,7 @@ class _WorkflowMiniPlayerState extends State<WorkflowMiniPlayer> {
     if (status != null && status.isPaused) {
       _expanded = true;
     }
+    _scheduleAutoDismissIfCompleted(widget.activeStatus, widget.pendingWorkflows);
   }
 
   @override
@@ -50,6 +54,27 @@ class _WorkflowMiniPlayerState extends State<WorkflowMiniPlayer> {
     final status = widget.activeStatus;
     if (status != null && status.isPaused && !_expanded) {
       setState(() => _expanded = true);
+    }
+    _scheduleAutoDismissIfCompleted(widget.activeStatus, widget.pendingWorkflows);
+  }
+
+  @override
+  void dispose() {
+    _autoDismissTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleAutoDismissIfCompleted(
+    WorkflowStatusSnapshot? status,
+    List<PendingWorkflowInfo> pending,
+  ) {
+    if (status?.state == WorkflowExecutionState.completed && pending.isEmpty) {
+      _autoDismissTimer ??= Timer(const Duration(seconds: 2), () {
+        if (mounted) widget.onDismiss();
+      });
+    } else {
+      _autoDismissTimer?.cancel();
+      _autoDismissTimer = null;
     }
   }
 

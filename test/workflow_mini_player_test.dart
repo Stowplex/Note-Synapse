@@ -138,7 +138,7 @@ void main() {
       expect(find.textContaining('Paper B'), findsOneWidget);
     });
 
-    testWidgets('shows Resume and Abort when paused', (tester) async {
+    testWidgets('shows Add Turns and Abort when pausedTurnLimit', (tester) async {
       final status = WorkflowStatusSnapshot(
         noteId: 'note-1',
         matchedTag: 'wiki-source-ml',
@@ -170,6 +170,79 @@ void main() {
       // Auto-expanded when paused
       expect(find.text('Abort'), findsOneWidget);
       expect(find.text('Add Turns'), findsOneWidget);
+    });
+
+    testWidgets('shows Resume and Abort when pausedManual', (tester) async {
+      final status = WorkflowStatusSnapshot(
+        noteId: 'note-1',
+        matchedTag: 'wiki-source-ml',
+        taskId: 'task-1',
+        state: WorkflowExecutionState.pausedManual,
+        message: 'Paused by user',
+        noteTitle: 'Paper A',
+        turnsUsed: 5,
+        maxTurns: 10,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: WorkflowMiniPlayer(
+              activeStatus: status,
+              pendingWorkflows: const [],
+              currentThought: null,
+              onStop: () {},
+              onPause: () {},
+              onResume: () {},
+              onViewLog: () {},
+              onCancelPending: (_) {},
+              onDismiss: () {},
+            ),
+          ),
+        ),
+      );
+
+      // Auto-expanded when paused
+      expect(find.text('Abort'), findsOneWidget);
+      expect(find.text('Resume'), findsOneWidget);
+      expect(find.text('Add Turns'), findsNothing);
+    });
+
+    testWidgets('completed state auto-dismisses after 2 seconds', (tester) async {
+      bool dismissed = false;
+      final status = WorkflowStatusSnapshot(
+        noteId: 'note-1',
+        matchedTag: 'wiki-source-ml',
+        taskId: 'task-1',
+        state: WorkflowExecutionState.completed,
+        message: 'Done',
+        noteTitle: 'Paper A',
+        turnsUsed: 5,
+        maxTurns: 10,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: WorkflowMiniPlayer(
+              activeStatus: status,
+              pendingWorkflows: const [],
+              currentThought: null,
+              onStop: () {},
+              onPause: () {},
+              onResume: () {},
+              onViewLog: () {},
+              onCancelPending: (_) {},
+              onDismiss: () { dismissed = true; },
+            ),
+          ),
+        ),
+      );
+
+      // Not dismissed yet
+      expect(dismissed, isFalse);
+
+      // After 2 seconds, onDismiss should be called
+      await tester.pump(const Duration(seconds: 2));
+      expect(dismissed, isTrue);
     });
   });
 }
