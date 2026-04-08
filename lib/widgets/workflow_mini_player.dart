@@ -265,8 +265,9 @@ class _WorkflowMiniPlayerState extends State<WorkflowMiniPlayer> {
               child: Text(isPausedTurnLimit ? 'Add Turns' : 'Resume'),
             ),
           ),
+          const SizedBox(width: 8),
         ],
-        const SizedBox(width: 8),
+        if (isRunning) const SizedBox(width: 8),
         Expanded(
           child: OutlinedButton(
             onPressed: widget.onViewLog,

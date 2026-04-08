@@ -65,7 +65,7 @@ class ContextNode {
   String? lastError;
 
   /// One-time execution context (e.g., workflow binding metadata).
-  /// Rendered once per turn in <WorkflowContext>, never repeated in child/ancestor contexts.
+  /// Rendered once per turn in `<WorkflowContext>`, never repeated in child/ancestor contexts.
   String? executionContext;
 
   /// Skills pinned to this session (root node only). Session-scoped, never compacted.
@@ -148,6 +148,8 @@ class ContextNode {
     DateTime? updatedAt,
     List<String>? allowedTools,
     List<LoadedSkill>? loadedSkills,
+    String? executionContext,
+    String? lastError,
   }) {
     final copy = ContextNode(
       id: id ?? this.id,
@@ -162,9 +164,9 @@ class ContextNode {
       estimatedTokens: estimatedTokens ?? this.estimatedTokens,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-
       allowedTools: allowedTools ?? List.from(this.allowedTools),
       lastError: lastError ?? this.lastError,
+      executionContext: executionContext ?? this.executionContext,
     );
     copy.loadedSkills = loadedSkills ?? List.from(this.loadedSkills);
     return copy;
