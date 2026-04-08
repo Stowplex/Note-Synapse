@@ -70,6 +70,9 @@ class WorkflowStatusSnapshot {
   final String taskId;
   final WorkflowExecutionState state;
   final String message;
+  final String noteTitle;
+  final int turnsUsed;
+  final int maxTurns;
 
   const WorkflowStatusSnapshot({
     required this.noteId,
@@ -77,6 +80,9 @@ class WorkflowStatusSnapshot {
     required this.taskId,
     required this.state,
     required this.message,
+    this.noteTitle = '',
+    this.turnsUsed = 0,
+    this.maxTurns = 0,
   });
 
   bool get isTerminal =>
@@ -90,6 +96,8 @@ class WorkflowStatusSnapshot {
   WorkflowStatusSnapshot copyWith({
     WorkflowExecutionState? state,
     String? message,
+    int? turnsUsed,
+    int? maxTurns,
   }) {
     return WorkflowStatusSnapshot(
       noteId: noteId,
@@ -97,8 +105,23 @@ class WorkflowStatusSnapshot {
       taskId: taskId,
       state: state ?? this.state,
       message: message ?? this.message,
+      noteTitle: noteTitle,
+      turnsUsed: turnsUsed ?? this.turnsUsed,
+      maxTurns: maxTurns ?? this.maxTurns,
     );
   }
+}
+
+/// Read-only snapshot of a queued workflow for UI display.
+class PendingWorkflowInfo {
+  final String noteId;
+  final String noteTitle;
+  final String matchedTag;
+  const PendingWorkflowInfo({
+    required this.noteId,
+    required this.noteTitle,
+    required this.matchedTag,
+  });
 }
 
 class AgentService extends ChangeNotifier {
@@ -133,6 +156,22 @@ class AgentService extends ChangeNotifier {
   /// Number of workflows queued waiting for the agent to become free.
   int get pendingWorkflowCount => _pendingWorkflows.length;
   WorkflowStatusSnapshot? get activeWorkflowStatus => _activeWorkflowStatus;
+
+  /// Returns a snapshot of the pending workflow queue.
+  List<PendingWorkflowInfo> get pendingWorkflows => _pendingWorkflows
+      .map((pw) => PendingWorkflowInfo(
+            noteId: pw.note.id,
+            noteTitle: pw.note.title,
+            matchedTag: pw.binding.matchedTag,
+          ))
+      .toList();
+
+  /// Cancels a pending workflow by index. No-op if index is out of range.
+  void cancelPendingWorkflow(int index) {
+    if (index < 0 || index >= _pendingWorkflows.length) return;
+    _pendingWorkflows.removeAt(index);
+    notifyListeners();
+  }
 
   WorkflowStatusSnapshot? workflowStatusForNote(String noteId) {
     final status = _activeWorkflowStatus;
@@ -1686,6 +1725,9 @@ Use the source note above as "this note" for the workflow. Do not search for a c
       taskId: taskId,
       state: WorkflowExecutionState.running,
       message: 'Running workflow for "${binding.matchedTag}"',
+      noteTitle: note.title,
+      turnsUsed: 0,
+      maxTurns: workflowMaxTurns,
     );
 
     // Create root context for the workflow
@@ -1827,6 +1869,8 @@ Use the source note above as "this note" for the workflow. Do not search for a c
       _activeWorkflowStatus = workflow.copyWith(
         state: WorkflowExecutionState.completed,
         message: 'Workflow completed for "${workflow.matchedTag}"',
+        turnsUsed: _countTaskTurns(task),
+        maxTurns: task.maxTurns,
       );
       return;
     }
@@ -1835,6 +1879,8 @@ Use the source note above as "this note" for the workflow. Do not search for a c
       _activeWorkflowStatus = workflow.copyWith(
         state: WorkflowExecutionState.failed,
         message: task.result ?? 'Workflow failed',
+        turnsUsed: _countTaskTurns(task),
+        maxTurns: task.maxTurns,
       );
       return;
     }
@@ -1845,6 +1891,8 @@ Use the source note above as "this note" for the workflow. Do not search for a c
             ? WorkflowExecutionState.pausedTurnLimit
             : WorkflowExecutionState.pausedManual,
         message: task.result ?? 'Workflow paused',
+        turnsUsed: _countTaskTurns(task),
+        maxTurns: task.maxTurns,
       );
       return;
     }
@@ -1855,6 +1903,8 @@ Use the source note above as "this note" for the workflow. Do not search for a c
       _activeWorkflowStatus = workflow.copyWith(
         state: WorkflowExecutionState.running,
         message: 'Running workflow for "${workflow.matchedTag}"',
+        turnsUsed: _countTaskTurns(task),
+        maxTurns: task.maxTurns,
       );
     }
   }
