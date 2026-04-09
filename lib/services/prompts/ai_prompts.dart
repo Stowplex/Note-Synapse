@@ -32,7 +32,9 @@ Final check before responding:
 1. If any formula still contains \$ or \$\$, rewrite it using \\( ... \\) or \\[ ... \\]
 2. Preserve all mathematical notation accurately
 3. If explaining a complex equation, break it into logical components
+''';
 
+  static const String internalLinkGuidelines = '''
 ### Internal Links (Synapse Resources)
 Create clickable links to notes/conversations/attachments:
 - Notes: [Note Title](synapseresource://note/<note_id>)

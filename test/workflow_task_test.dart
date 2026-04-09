@@ -31,6 +31,24 @@ Note _makeNote(String id) => Note(
   attachmentPaths: [],
 );
 
+Note _makeSkillNote(
+  String id, {
+  String name = 'Workflow Skill',
+  String description = 'Default workflow skill',
+  String body = 'Follow the workflow instructions.',
+}) => Note(
+  id: id,
+  title: name,
+  content:
+      '---\nname: $name\ndescription: $description\nenabled: true\n---\n\n$body',
+  type: NoteType.note,
+  createdAt: DateTime.now(),
+  updatedAt: DateTime.now(),
+  subNotes: [],
+  tags: const ['agent-skill'],
+  attachmentPaths: [],
+);
+
 ResolvedBinding _makeBinding({
   String skillNoteId = 'skill-1',
   String matchedTag = 'test-tag',
@@ -89,6 +107,9 @@ void main() {
       mockDb.searchNotesFTS(any, tags: anyNamed('tags')),
     ).thenAnswer((_) async => []);
     when(mockDb.getNotesByTag(any)).thenAnswer((_) async => []);
+    when(mockDb.getNote(any)).thenAnswer(
+      (inv) async => _makeSkillNote(inv.positionalArguments.first as String),
+    );
     when(mockDb.getNoteById(any)).thenAnswer((_) async => null);
     when(mockDb.getRelationships(any)).thenAnswer((_) async => []);
 
@@ -168,7 +189,7 @@ void main() {
     });
 
     test(
-      'adds explicit source note and tag context to workflow objective',
+      'uses a compact workflow label while detailed context lives separately',
       () async {
         final note = Note(
           id: 'source-123',
@@ -195,23 +216,13 @@ void main() {
           task.description,
           contains('Ingest this note according to the wiki ingest skill.'),
         );
-        expect(
-          task.description,
-          contains('This workflow was triggered automatically'),
-        );
-        expect(task.description, contains('source-123'));
         expect(task.description, contains('Source Note'));
         expect(task.description, contains('wiki-source-ml'));
-        expect(task.description, contains('research, important'));
-        expect(task.description, contains('skill-123'));
         expect(
           task.description,
-          contains('Use load_skill with the bound skill note ID'),
+          isNot(contains('This workflow was triggered automatically')),
         );
-        expect(
-          task.description,
-          contains('Do not search for a candidate source note'),
-        );
+        expect(task.description, isNot(contains('research, important')));
       },
     );
 
@@ -327,19 +338,10 @@ Use [search_notes](notesynapse://tool/builtin/search_notes) to find the workspac
           callCount++;
           if (callCount == 1) {
             return '''
-<MyThought>Load the workflow skill first.</MyThought>
+<MyThought>Search for the wiki index using the preloaded skill tools.</MyThought>
 <Action type="tool">
-  <ToolName>load_skill</ToolName>
-  <Content>{"noteId":"skill-1"}</Content>
-</Action>
-''';
-          }
-          if (callCount == 2) {
-            return '''
-<MyThought>Now search for the wiki index.</MyThought>
-<Action type="tool">
-  <ToolName>search_notes</ToolName>
-  <Content>{"query":"","tags":["wiki-index-ai-research"]}</Content>
+  <ToolName>call_tool</ToolName>
+  <Content>{"service_name":"System","tool_name":"search_notes","params":{"query":"","tags":["wiki-index-ai-research"]}}</Content>
 </Action>
 ''';
           }
@@ -348,7 +350,16 @@ Use [search_notes](notesynapse://tool/builtin/search_notes) to find the workspac
 
         await agentService.runWorkflowTask(binding: binding, note: note);
 
-        verify(mockDb.getNotesByTag('wiki-index-ai-research')).called(1);
+        expect(
+          agentService.tasks.single.executionHistory.first,
+          contains('Bootstrap: preloaded bound workflow skill skill-1'),
+        );
+        verify(
+          mockDb.searchNotesFTS(
+            any,
+            tags: argThat(contains('wiki-index-ai-research'), named: 'tags'),
+          ),
+        ).called(1);
       },
     );
 
@@ -377,10 +388,9 @@ Use [search_notes](notesynapse://tool/builtin/search_notes) to find the workspac
         callCount++;
         if (callCount == 1) {
           return '''
-<MyThought>Load the skill first.</MyThought>
-<Action type="tool">
-  <ToolName>load_skill</ToolName>
-  <Content>{"noteId":"skill-1"}</Content>
+<MyThought>Think through the task.</MyThought>
+<Action type="think">
+  <Content>Ready to answer.</Content>
 </Action>
 ''';
         }
@@ -415,10 +425,10 @@ Use [search_notes](notesynapse://tool/builtin/search_notes) to find the workspac
           ),
         ).thenAnswer(
           (_) async => '''
-<MyThought>Load the skill first.</MyThought>
+<MyThought>Search for relevant notes.</MyThought>
 <Action type="tool">
-  <ToolName>load_skill</ToolName>
-  <Content>{"noteId":"skill-1"}</Content>
+  <ToolName>call_tool</ToolName>
+  <Content>{"service_name":"System","tool_name":"search_notes","params":{"query":"test-tag"}}</Content>
 </Action>
 ''',
         );

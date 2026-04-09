@@ -43,6 +43,7 @@ void main() {
       expect(meta.description, 'Use when doing weekly review');
       expect(meta.enabled, true);
       expect(meta.noteId, 'note-1');
+      expect(meta.skillRef, 'weekly-review');
     });
 
     test('returns null when frontmatter is missing', () {
@@ -51,7 +52,8 @@ void main() {
     });
 
     test('returns null when name is missing from frontmatter', () {
-      const content = '---\ndescription: some desc\nenabled: true\n---\n\ncontent';
+      const content =
+          '---\ndescription: some desc\nenabled: true\n---\n\ncontent';
       expect(service.parseSkillMetadata('note-1', content), isNull);
     });
 
@@ -78,15 +80,16 @@ void main() {
     test('returns only enabled skills', () async {
       final notes = [
         _makeNote(
-            'id-1',
-            '---\nname: Skill A\ndescription: Desc A\nenabled: true\n---\n\nbody'),
+          'id-1',
+          '---\nname: Skill A\ndescription: Desc A\nenabled: true\n---\n\nbody',
+        ),
         _makeNote(
-            'id-2',
-            '---\nname: Skill B\ndescription: Desc B\nenabled: false\n---\n\nbody'),
+          'id-2',
+          '---\nname: Skill B\ndescription: Desc B\nenabled: false\n---\n\nbody',
+        ),
         _makeNote('id-3', 'no frontmatter'),
       ];
-      when(mockDb.getNotesByTag('agent-skill'))
-          .thenAnswer((_) async => notes);
+      when(mockDb.getNotesByTag('agent-skill')).thenAnswer((_) async => notes);
       final index = await service.buildSkillIndex();
       expect(index.keys, containsAll(['id-1']));
       expect(index.containsKey('id-2'), false);
@@ -99,16 +102,18 @@ void main() {
       expect(service.buildSkillIndexPrompt({}), isEmpty);
     });
 
-    test('includes noteId and description for each skill', () {
+    test('includes skillRef and description for each skill', () {
       final index = {
         'note-abc': SkillMetadata(
-            noteId: 'note-abc',
-            name: 'My Skill',
-            description: 'Use for X',
-            enabled: true),
+          noteId: 'note-abc',
+          skillRef: 'my-skill',
+          name: 'My Skill',
+          description: 'Use for X',
+          enabled: true,
+        ),
       };
       final prompt = service.buildSkillIndexPrompt(index);
-      expect(prompt, contains('note-abc'));
+      expect(prompt, contains('skillRef=my-skill'));
       expect(prompt, contains('My Skill'));
       expect(prompt, contains('Use for X'));
     });
@@ -122,11 +127,14 @@ Use [search](notesynapse://tool/builtin/search_notes) and
 Also [MCP](notesynapse://tool/mcp/my-service/search).
 ''';
       final uris = service.extractToolUris(content);
-      expect(uris, containsAll([
-        'notesynapse://tool/builtin/search_notes',
-        'notesynapse://tool/user_defined/uuid-123/analyze',
-        'notesynapse://tool/mcp/my-service/search',
-      ]));
+      expect(
+        uris,
+        containsAll([
+          'notesynapse://tool/builtin/search_notes',
+          'notesynapse://tool/user_defined/uuid-123/analyze',
+          'notesynapse://tool/mcp/my-service/search',
+        ]),
+      );
     });
 
     test('returns empty list when no tool URIs present', () {
@@ -138,8 +146,9 @@ Also [MCP](notesynapse://tool/mcp/my-service/search).
 
   group('parseToolUri', () {
     test('parses builtin URI', () {
-      final result =
-          service.parseToolUri('notesynapse://tool/builtin/search_notes');
+      final result = service.parseToolUri(
+        'notesynapse://tool/builtin/search_notes',
+      );
       expect(result, isNotNull);
       expect(result!.namespace, 'builtin');
       expect(result.id, 'search_notes');
@@ -147,16 +156,18 @@ Also [MCP](notesynapse://tool/mcp/my-service/search).
     });
 
     test('parses user_defined URI with function', () {
-      final result =
-          service.parseToolUri('notesynapse://tool/user_defined/uuid-123/analyze');
+      final result = service.parseToolUri(
+        'notesynapse://tool/user_defined/uuid-123/analyze',
+      );
       expect(result!.namespace, 'user_defined');
       expect(result.id, 'uuid-123');
       expect(result.function, 'analyze');
     });
 
     test('parses mcp URI', () {
-      final result =
-          service.parseToolUri('notesynapse://tool/mcp/my-service/search');
+      final result = service.parseToolUri(
+        'notesynapse://tool/mcp/my-service/search',
+      );
       expect(result!.namespace, 'mcp');
       expect(result.id, 'my-service');
       expect(result.function, 'search');
@@ -190,13 +201,13 @@ Also [MCP](notesynapse://tool/mcp/my-service/search).
 }
 
 Note _makeNote(String id, String content) => Note(
-      id: id,
-      title: 'title',
-      content: content,
-      type: NoteType.note,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-      subNotes: [],
-      tags: ['agent-skill'],
-      attachmentPaths: [],
-    );
+  id: id,
+  title: 'title',
+  content: content,
+  type: NoteType.note,
+  createdAt: DateTime.now(),
+  updatedAt: DateTime.now(),
+  subNotes: [],
+  tags: ['agent-skill'],
+  attachmentPaths: [],
+);

@@ -53,6 +53,7 @@ import '../widgets/model_selector_button.dart';
 import '../services/agent_service.dart';
 import '../services/background_agent_service.dart';
 import '../services/built_in_tools_service.dart';
+import '../services/context_manager_service.dart';
 import '../services/skill_service.dart';
 import '../services/tools/note_tools.dart';
 import '../services/sql_query_service.dart';
@@ -1272,10 +1273,13 @@ $historyBuffer
                   params,
                 );
                 final resultStr = result is String ? result : result.toString();
-                final noteId = (params['noteId'] as String? ?? '').trim();
-                if (noteId.isNotEmpty && result is String) {
+                final skillKey =
+                    (params['noteId'] as String? ?? '').trim().isNotEmpty
+                    ? (params['noteId'] as String).trim()
+                    : (params['skillRef'] as String? ?? '').trim();
+                if (skillKey.isNotEmpty && result is String) {
                   await _conversationService.handleLoadSkillResult(
-                    noteId,
+                    skillKey,
                     resultStr,
                   );
                 }
@@ -1366,7 +1370,6 @@ $historyBuffer
     List<PlatformFile> latestUserAttachments,
   ) async {
     final noteBuilder = NotePromptBuilder(DatabaseService());
-    final systemMessage = _buildConversationSystemMessage();
     final contextMessage = await noteBuilder.buildContextMessage(_notes);
 
     final currentModelId =
@@ -1385,6 +1388,10 @@ $historyBuffer
             contextMessage.attachments.isEmpty)
         ? <PromptMessage>[]
         : [contextMessage];
+    final systemMessage = await _buildConversationSystemMessage(
+      hasInlineContext:
+          contextMessages.isNotEmpty || latestUserAttachments.isNotEmpty,
+    );
 
     return PromptRequest(
       systemMessage: systemMessage,
@@ -1393,7 +1400,9 @@ $historyBuffer
     );
   }
 
-  PromptMessage _buildConversationSystemMessage() {
+  Future<PromptMessage> _buildConversationSystemMessage({
+    required bool hasInlineContext,
+  }) async {
     final lines = <String>[
       'Engage in a multi-turn conversation grounded in the provided note context message and attachments.',
       'Treat all prior messages as immutable history for KV-cache friendly reuse.',
@@ -1410,13 +1419,15 @@ $historyBuffer
 
     if (_notes.isEmpty) {
       lines.add(
-        'No note context is currently attached. Rely on the conversation history.',
+        'No note text is attached inline. Use enabled tools when they can retrieve the needed note or workflow context.',
       );
     }
 
+    final budget = await _getChatPromptBudget();
     final combinedTools = _buildActiveToolsMap();
     final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
       combinedTools,
+      maxBudgetTokens: budget,
     );
 
     final taskContext = lines.join('\n');
@@ -1441,6 +1452,7 @@ $historyBuffer
         _conversationService.skillIndex.isNotEmpty) {
       final skillIndexPrompt = getIt<SkillService>().buildSkillIndexPrompt(
         _conversationService.skillIndex,
+        maxBudgetTokens: budget,
       );
       if (skillIndexPrompt.trim().isNotEmpty) {
         contextBuffer
@@ -1453,13 +1465,22 @@ $historyBuffer
       taskContext: contextBuffer.toString(),
       guidelines: [
         'Reference evidence when drawing conclusions and mention uncertainties.',
-        AIPrompts.mathFormulaGuidelines,
-        AIPrompts.relationshipGuidelines,
-        AIPrompts.promptInjectionProtectionGuidelines,
+        if (_notes.isNotEmpty) AIPrompts.relationshipGuidelines,
+        if (hasInlineContext) AIPrompts.promptInjectionProtectionGuidelines,
       ],
       now: _conversationStartTime,
       needTimeInContext: false, // Precise time comes with user message.
     );
+  }
+
+  Future<int> _getChatPromptBudget() async {
+    try {
+      return await getIt<ContextManagerService>().getModelContextBudget();
+    } catch (_) {
+      return _selectedModel?.maxInputTokens ??
+          getIt<ModelSelector>().currentModelConfig?.maxInputTokens ??
+          100000;
+    }
   }
 
   Future<List<PlatformFile>> _loadConversationAttachments(

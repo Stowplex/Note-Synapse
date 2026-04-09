@@ -33,6 +33,7 @@ import '../services/logger_service.dart';
 import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/conversation_settings_service.dart';
+import '../services/context_manager_service.dart';
 import '../services/model_selector.dart';
 import '../services/service_locator.dart';
 import '../services/attachment_preprocessor.dart';
@@ -5283,7 +5284,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }) async {
     final requestId = generationContext.ensureRequestId();
     final noteBuilder = NotePromptBuilder(_databaseService);
-    final systemMessage = _buildSystemPrompt();
+    final systemMessage = await _buildSystemPrompt();
 
     // Get current PDF page for window mode context filtering
     final currentPdfPage = _activeAttachmentPath != null
@@ -5409,7 +5410,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return response;
   }
 
-  PromptMessage _buildSystemPrompt() {
+  Future<PromptMessage> _buildSystemPrompt() async {
     final lines = <String>[
       'Engage in a focused conversation grounded in the selected notes and attachments.',
       'Reference the note titles when citing content and prefer concise, direct answers.',
@@ -5424,15 +5425,17 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     if (_conversationNotes.isEmpty) {
       lines.add(
-        'No note context is currently attached. Rely on the conversation history.',
+        'No note text is attached inline. Use enabled tools when they can retrieve the needed note or workflow context.',
       );
     }
 
     final taskContext = lines.join('\n');
 
     final combinedTools = _buildActiveToolsMap();
+    final budget = await _getChatPromptBudget();
     final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
       combinedTools,
+      maxBudgetTokens: budget,
     );
 
     final systemAddOn = PromptConfigurationService.instance.getValue(
@@ -5455,13 +5458,23 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       taskContext: contextBuffer.toString(),
       guidelines: [
         'Highlight referenced note sections explicitly when possible.',
-        AIPrompts.mathFormulaGuidelines,
-        AIPrompts.relationshipGuidelines,
-        AIPrompts.promptInjectionProtectionGuidelines,
+        if (_conversationNotes.isNotEmpty) AIPrompts.relationshipGuidelines,
+        if (_conversationNotes.isNotEmpty)
+          AIPrompts.promptInjectionProtectionGuidelines,
       ],
       now: _sessionStart,
       needTimeInContext: false,
     );
+  }
+
+  Future<int> _getChatPromptBudget() async {
+    try {
+      return await getIt<ContextManagerService>().getModelContextBudget();
+    } catch (_) {
+      return _selectedModel?.maxInputTokens ??
+          getIt<ModelSelector>().currentModelConfig?.maxInputTokens ??
+          100000;
+    }
   }
 
   Future<List<PlatformFile>> _loadConversationAttachments(

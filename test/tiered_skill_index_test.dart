@@ -13,12 +13,19 @@ void main() {
   late SkillService service;
 
   final tenSkills = Map.fromEntries(
-    List.generate(10, (i) => MapEntry(
-      'id-$i',
-      SkillMetadata(noteId: 'id-$i', name: 'Skill $i',
-        description: 'Description for skill $i that is somewhat verbose',
-        enabled: true),
-    )),
+    List.generate(
+      10,
+      (i) => MapEntry(
+        'id-$i',
+        SkillMetadata(
+          noteId: 'id-$i',
+          skillRef: 'skill-$i',
+          name: 'Skill $i',
+          description: 'Description for skill $i that is somewhat verbose',
+          enabled: true,
+        ),
+      ),
+    ),
   );
 
   setUp(() async {
@@ -30,34 +37,47 @@ void main() {
 
   group('buildSkillIndexPrompt with maxBudgetTokens', () {
     test('full format when budget is large (100K+)', () {
-      final prompt = service.buildSkillIndexPrompt(tenSkills, maxBudgetTokens: 100000);
-      expect(prompt, contains('id-0'));
-      expect(prompt, contains('Skill 0'));
-      expect(prompt, contains('Description for skill 0'));
+      final prompt = service.buildSkillIndexPrompt(
+        tenSkills,
+        maxBudgetTokens: 100000,
+      );
+      expect(prompt, contains('skillRef=skill-0'));
+      expect(prompt, contains('name=Skill 0'));
+      expect(prompt, contains('when=Description for skill 0'));
     });
 
     test('compact format when budget is medium (15K-50K)', () {
-      final prompt = service.buildSkillIndexPrompt(tenSkills, maxBudgetTokens: 15000);
-      expect(prompt, contains('id-0'));
-      expect(prompt, contains('Skill 0'));
-      expect(prompt, isNot(contains('Description for skill 0')));
+      final prompt = service.buildSkillIndexPrompt(
+        tenSkills,
+        maxBudgetTokens: 15000,
+      );
+      expect(prompt, contains('skillRef=skill-0'));
+      expect(prompt, contains('name=Skill 0'));
+      expect(prompt, isNot(contains('when=Description for skill 0')));
     });
 
     test('minimal format when budget is small (<15K)', () {
-      final prompt = service.buildSkillIndexPrompt(tenSkills, maxBudgetTokens: 8000);
-      expect(prompt, contains('Skill 0'));
-      expect(prompt, contains('Skill 9'));
-      expect(prompt.length, lessThan(500));
+      final prompt = service.buildSkillIndexPrompt(
+        tenSkills,
+        maxBudgetTokens: 8000,
+      );
+      expect(prompt, contains('skillRef=skill-0'));
+      expect(prompt, contains('name=Skill 0'));
+      expect(prompt, contains('skillRef=skill-9'));
+      expect(prompt.length, lessThan(900));
     });
 
     test('returns empty string for empty index regardless of budget', () {
-      expect(service.buildSkillIndexPrompt({}, maxBudgetTokens: 100000), isEmpty);
+      expect(
+        service.buildSkillIndexPrompt({}, maxBudgetTokens: 100000),
+        isEmpty,
+      );
       expect(service.buildSkillIndexPrompt({}, maxBudgetTokens: 8000), isEmpty);
     });
 
     test('defaults to full format when maxBudgetTokens not specified', () {
       final prompt = service.buildSkillIndexPrompt(tenSkills);
-      expect(prompt, contains('Description for skill 0'));
+      expect(prompt, contains('when=Description for skill 0'));
     });
   });
 }

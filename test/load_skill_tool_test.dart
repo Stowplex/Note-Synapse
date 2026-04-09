@@ -25,8 +25,11 @@ void main() {
   });
 
   test('returns skill content when note is valid', () async {
-    const content = '---\nname: My Skill\ndescription: desc\nenabled: true\n---\n\n## Workflow\nDo this.';
-    when(mockDb.getNote('note-1')).thenAnswer((_) async => _makeNote('note-1', content));
+    const content =
+        '---\nname: My Skill\ndescription: desc\nenabled: true\n---\n\n## Workflow\nDo this.';
+    when(
+      mockDb.getNote('note-1'),
+    ).thenAnswer((_) async => _makeNote('note-1', content));
     final result = await tool.execute({'noteId': 'note-1'});
     expect(result, isA<String>());
     expect(result as String, contains('# Skill: My Skill'));
@@ -42,21 +45,29 @@ void main() {
   });
 
   test('returns error when frontmatter is missing', () async {
-    when(mockDb.getNote('note-1')).thenAnswer((_) async => _makeNote('note-1', 'no frontmatter'));
+    when(
+      mockDb.getNote('note-1'),
+    ).thenAnswer((_) async => _makeNote('note-1', 'no frontmatter'));
     final result = await tool.execute({'noteId': 'note-1'});
     expect((result as Map)['error'], contains('not a valid skill'));
   });
 
   test('returns error when skill is disabled', () async {
-    const content = '---\nname: My Skill\ndescription: desc\nenabled: false\n---\n\nbody';
-    when(mockDb.getNote('note-1')).thenAnswer((_) async => _makeNote('note-1', content));
+    const content =
+        '---\nname: My Skill\ndescription: desc\nenabled: false\n---\n\nbody';
+    when(
+      mockDb.getNote('note-1'),
+    ).thenAnswer((_) async => _makeNote('note-1', content));
     final result = await tool.execute({'noteId': 'note-1'});
     expect((result as Map)['error'], contains('disabled'));
   });
 
   test('returns cached content on second call (dedup)', () async {
-    const content = '---\nname: Skill\ndescription: desc\nenabled: true\n---\n\nbody';
-    when(mockDb.getNote('note-1')).thenAnswer((_) async => _makeNote('note-1', content));
+    const content =
+        '---\nname: Skill\ndescription: desc\nenabled: true\n---\n\nbody';
+    when(
+      mockDb.getNote('note-1'),
+    ).thenAnswer((_) async => _makeNote('note-1', content));
     await tool.execute({'noteId': 'note-1'});
     final result2 = await tool.execute({'noteId': 'note-1'});
     // Second call: getNote called only once total (cached)
@@ -66,17 +77,48 @@ void main() {
 
   test('has correct name and inputSchema', () {
     expect(tool.name, 'load_skill');
-    expect((tool.inputSchema['properties'] as Map).containsKey('noteId'), isTrue);
+    expect(
+      (tool.inputSchema['properties'] as Map).containsKey('noteId'),
+      isTrue,
+    );
+    expect(
+      (tool.inputSchema['properties'] as Map).containsKey('skillRef'),
+      isTrue,
+    );
   });
 
-  test('returns error for empty noteId', () async {
+  test('returns error for empty noteId and skillRef', () async {
     final result = await tool.execute({'noteId': ''});
-    expect((result as Map)['error'], contains('noteId'));
+    expect((result as Map)['error'], contains('skillRef or noteId'));
+  });
+
+  test('resolves skillRef to noteId', () async {
+    when(mockDb.getNotesByTag('agent-skill')).thenAnswer(
+      (_) async => [
+        _makeNote(
+          'note-1',
+          '---\nname: My Skill\nskill_ref: wiki-query\ndescription: desc\nenabled: true\n---\n\n## Workflow\nDo this.',
+        ),
+      ],
+    );
+    when(mockDb.getNote('note-1')).thenAnswer(
+      (_) async => _makeNote(
+        'note-1',
+        '---\nname: My Skill\nskill_ref: wiki-query\ndescription: desc\nenabled: true\n---\n\n## Workflow\nDo this.',
+      ),
+    );
+
+    final result = await tool.execute({'skillRef': 'wiki-query'});
+    expect(result, isA<String>());
+    expect(result as String, contains('# Skill: My Skill'));
   });
 
   test('resetSession clears cache so next call re-fetches', () async {
-    const content = '---\nname: Skill\ndescription: desc\nenabled: true\n---\n\nbody';
-    when(mockDb.getNote('note-1')).thenAnswer((_) async => _makeNote('note-1', content));
+    const content =
+        '---\nname: Skill\ndescription: desc\nenabled: true\n---\n\nbody';
+    when(
+      mockDb.getNote('note-1'),
+    ).thenAnswer((_) async => _makeNote('note-1', content));
     await tool.execute({'noteId': 'note-1'});
     tool.resetSession();
     await tool.execute({'noteId': 'note-1'});
@@ -85,7 +127,13 @@ void main() {
 }
 
 Note _makeNote(String id, String content) => Note(
-  id: id, title: 'title', content: content,
-  type: NoteType.note, createdAt: DateTime.now(), updatedAt: DateTime.now(),
-  subNotes: [], tags: ['agent-skill'], attachmentPaths: [],
+  id: id,
+  title: 'title',
+  content: content,
+  type: NoteType.note,
+  createdAt: DateTime.now(),
+  updatedAt: DateTime.now(),
+  subNotes: [],
+  tags: ['agent-skill'],
+  attachmentPaths: [],
 );

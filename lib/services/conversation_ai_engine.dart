@@ -366,15 +366,28 @@ class ConversationAiEngine {
                 currentActiveTools,
               );
               if (directTool != null) {
-                serviceName = directTool['service_name']!;
-                toolName = directTool['tool_name']!;
-                params = rawArgs is Map<String, dynamic>
-                    ? Map<String, dynamic>.from(rawArgs)
-                    : rawArgs is Map
-                    ? rawArgs.map(
-                        (key, value) => MapEntry(key.toString(), value),
-                      )
-                    : <String, dynamic>{};
+                final parsedArgs =
+                    McpToolIntegrationService.parseCallToolArguments(
+                      rawArgs,
+                      fallbackServiceName: directTool['service_name'],
+                      fallbackToolName: directTool['tool_name'],
+                      logErrors: false,
+                    );
+                serviceName =
+                    (parsedArgs?['service_name'] as String?) ??
+                    directTool['service_name']!;
+                toolName =
+                    (parsedArgs?['tool_name'] as String?) ??
+                    directTool['tool_name']!;
+                params =
+                    parsedArgs?['params'] as Map<String, dynamic>? ??
+                    (rawArgs is Map<String, dynamic>
+                        ? Map<String, dynamic>.from(rawArgs)
+                        : rawArgs is Map
+                        ? rawArgs.map(
+                            (key, value) => MapEntry(key.toString(), value),
+                          )
+                        : <String, dynamic>{});
               } else {
                 // Model called a tool directly by name instead of using call_tool wrapper
                 // Return an error with helpful guidance (like "command not found" helper)
@@ -691,6 +704,8 @@ class ConversationAiEngine {
   ) {
     final prompt = McpToolIntegrationService.buildMcpSystemPrompt(
       newTools,
+      maxBudgetTokens: 16000,
+      includeWrapperIntro: false,
     ).trim();
     return [
       'New tools became available after the previous tool call. Use them immediately if they help.',
@@ -733,7 +748,7 @@ class ConversationAiEngine {
       buffer.writeln('Did you mean to call one of these?');
       for (final match in matches) {
         buffer.writeln(
-          '  call_tool(service_name="${match.value}", tool_name="${match.key}", params={...})',
+          '  call_tool({service_name: "${match.value}", tool_name: "${match.key}", params: {...}})',
         );
       }
     } else if (activeTools.isNotEmpty) {

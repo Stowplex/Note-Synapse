@@ -21,7 +21,8 @@ void main() {
 
   group('parseSkillMetadata with min_context', () {
     test('parses min_context field', () {
-      const content = '---\nname: Wiki Ingest\ndescription: Ingest sources\nmin_context: 50000\n---\n\nbody';
+      const content =
+          '---\nname: Wiki Ingest\ndescription: Ingest sources\nmin_context: 50000\n---\n\nbody';
       final meta = service.parseSkillMetadata('note-1', content);
       expect(meta, isNotNull);
       expect(meta!.minContext, 50000);
@@ -34,7 +35,8 @@ void main() {
     });
 
     test('handles non-numeric min_context gracefully', () {
-      const content = '---\nname: Bad\ndescription: Desc\nmin_context: lots\n---\n\nbody';
+      const content =
+          '---\nname: Bad\ndescription: Desc\nmin_context: lots\n---\n\nbody';
       final meta = service.parseSkillMetadata('note-1', content);
       expect(meta!.minContext, isNull);
     });
@@ -43,12 +45,26 @@ void main() {
   group('buildSkillIndexPrompt with min_context annotations', () {
     test('annotates constrained skills when budget is small', () {
       final index = {
-        'id-1': SkillMetadata(noteId: 'id-1', name: 'Wiki Ingest', description: 'Ingest',
-          enabled: true, minContext: 50000),
-        'id-2': SkillMetadata(noteId: 'id-2', name: 'Simple', description: 'Simple skill',
-          enabled: true),
+        'id-1': SkillMetadata(
+          noteId: 'id-1',
+          skillRef: 'wiki-ingest',
+          name: 'Wiki Ingest',
+          description: 'Ingest',
+          enabled: true,
+          minContext: 50000,
+        ),
+        'id-2': SkillMetadata(
+          noteId: 'id-2',
+          skillRef: 'simple',
+          name: 'Simple',
+          description: 'Simple skill',
+          enabled: true,
+        ),
       };
-      final prompt = service.buildSkillIndexPrompt(index, maxBudgetTokens: 16000);
+      final prompt = service.buildSkillIndexPrompt(
+        index,
+        maxBudgetTokens: 16000,
+      );
       expect(prompt, contains('limited'));
       expect(prompt, contains('Wiki Ingest'));
     });

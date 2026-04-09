@@ -10,19 +10,21 @@ import 'package:note_synapse/services/service_locator.dart';
 
 import 'skill_pipeline_integration_test.mocks.dart';
 
-Note _makeNote(String id, String content,
-        {List<String> tags = const ['agent-skill']}) =>
-    Note(
-      id: id,
-      title: 'title',
-      content: content,
-      type: NoteType.note,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-      subNotes: [],
-      tags: tags,
-      attachmentPaths: [],
-    );
+Note _makeNote(
+  String id,
+  String content, {
+  List<String> tags = const ['agent-skill'],
+}) => Note(
+  id: id,
+  title: 'title',
+  content: content,
+  type: NoteType.note,
+  createdAt: DateTime.now(),
+  updatedAt: DateTime.now(),
+  subNotes: [],
+  tags: tags,
+  attachmentPaths: [],
+);
 
 @GenerateMocks([DatabaseService])
 void main() {
@@ -78,26 +80,38 @@ void main() {
 
   group('buildSkillIndex with mixed inputs', () {
     test('returns empty map when zero enabled skills exist', () async {
-      when(mockDb.getNotesByTag('agent-skill')).thenAnswer((_) async => [
-            _makeNote('id-1',
-                '---\nname: A\ndescription: D\nenabled: false\n---\n\nbody'),
-            _makeNote('id-2', 'no frontmatter at all'),
-          ]);
+      when(mockDb.getNotesByTag('agent-skill')).thenAnswer(
+        (_) async => [
+          _makeNote(
+            'id-1',
+            '---\nname: A\ndescription: D\nenabled: false\n---\n\nbody',
+          ),
+          _makeNote('id-2', 'no frontmatter at all'),
+        ],
+      );
       final index = await service.buildSkillIndex();
       expect(index, isEmpty);
     });
 
     test('filters malformed notes from index', () async {
-      when(mockDb.getNotesByTag('agent-skill')).thenAnswer((_) async => [
-            _makeNote('good',
-                '---\nname: Valid\ndescription: Works\nenabled: true\n---\n\nbody'),
-            _makeNote('bad-1',
-                '---\nname: \ndescription: Empty name\n---\n\nbody'),
-            _makeNote('bad-2', '---\nenabled: true\n---\n\nbody'),
-            _makeNote('bad-3', 'just plain text'),
-            _makeNote('disabled',
-                '---\nname: Off\ndescription: Disabled\nenabled: false\n---\n\nbody'),
-          ]);
+      when(mockDb.getNotesByTag('agent-skill')).thenAnswer(
+        (_) async => [
+          _makeNote(
+            'good',
+            '---\nname: Valid\ndescription: Works\nenabled: true\n---\n\nbody',
+          ),
+          _makeNote(
+            'bad-1',
+            '---\nname: \ndescription: Empty name\n---\n\nbody',
+          ),
+          _makeNote('bad-2', '---\nenabled: true\n---\n\nbody'),
+          _makeNote('bad-3', 'just plain text'),
+          _makeNote(
+            'disabled',
+            '---\nname: Off\ndescription: Disabled\nenabled: false\n---\n\nbody',
+          ),
+        ],
+      );
       final index = await service.buildSkillIndex();
       expect(index.length, 1);
       expect(index.containsKey('good'), true);
@@ -112,15 +126,25 @@ void main() {
     test('includes all entries for non-empty map', () {
       final index = {
         'id-a': const SkillMetadata(
-            noteId: 'id-a', name: 'Alpha', description: 'Does A', enabled: true),
+          noteId: 'id-a',
+          skillRef: 'alpha',
+          name: 'Alpha',
+          description: 'Does A',
+          enabled: true,
+        ),
         'id-b': const SkillMetadata(
-            noteId: 'id-b', name: 'Beta', description: 'Does B', enabled: true),
+          noteId: 'id-b',
+          skillRef: 'beta',
+          name: 'Beta',
+          description: 'Does B',
+          enabled: true,
+        ),
       };
       final prompt = service.buildSkillIndexPrompt(index);
-      expect(prompt, contains('id-a'));
-      expect(prompt, contains('Alpha'));
-      expect(prompt, contains('id-b'));
-      expect(prompt, contains('Beta'));
+      expect(prompt, contains('skillRef=alpha'));
+      expect(prompt, contains('name=Alpha'));
+      expect(prompt, contains('skillRef=beta'));
+      expect(prompt, contains('name=Beta'));
       expect(prompt, contains('load_skill'));
     });
   });
@@ -137,8 +161,9 @@ void main() {
       const content =
           '---\nname: Cached\ndescription: Test\nenabled: true\n---\n\n## Steps\nDo things.';
       // LoadSkillTool calls db.getNote() internally
-      when(mockDb.getNote('note-1'))
-          .thenAnswer((_) async => _makeNote('note-1', content));
+      when(
+        mockDb.getNote('note-1'),
+      ).thenAnswer((_) async => _makeNote('note-1', content));
 
       final result1 = await tool.execute({'noteId': 'note-1'});
       final result2 = await tool.execute({'noteId': 'note-1'});
@@ -151,8 +176,9 @@ void main() {
     test('resetSession clears cache so next call hits DB again', () async {
       const content =
           '---\nname: Skill\ndescription: Test\nenabled: true\n---\n\nbody';
-      when(mockDb.getNote('note-1'))
-          .thenAnswer((_) async => _makeNote('note-1', content));
+      when(
+        mockDb.getNote('note-1'),
+      ).thenAnswer((_) async => _makeNote('note-1', content));
 
       await tool.execute({'noteId': 'note-1'});
       tool.resetSession();
@@ -189,15 +215,18 @@ And [MCP tool](notesynapse://tool/mcp/server-1/query).
     });
 
     test('parses user_defined namespace with function', () {
-      final r =
-          service.parseToolUri('notesynapse://tool/user_defined/uuid-123/analyze');
+      final r = service.parseToolUri(
+        'notesynapse://tool/user_defined/uuid-123/analyze',
+      );
       expect(r!.namespace, 'user_defined');
       expect(r.id, 'uuid-123');
       expect(r.function, 'analyze');
     });
 
     test('parses mcp namespace', () {
-      final r = service.parseToolUri('notesynapse://tool/mcp/my-server/do_thing');
+      final r = service.parseToolUri(
+        'notesynapse://tool/mcp/my-server/do_thing',
+      );
       expect(r!.namespace, 'mcp');
       expect(r.id, 'my-server');
       expect(r.function, 'do_thing');

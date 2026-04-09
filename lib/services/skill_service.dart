@@ -3,6 +3,7 @@ import 'package:note_synapse/services/database_service.dart';
 
 class SkillMetadata {
   final String noteId;
+  final String skillRef;
   final String name;
   final String description;
   final bool enabled;
@@ -10,6 +11,7 @@ class SkillMetadata {
 
   const SkillMetadata({
     required this.noteId,
+    required this.skillRef,
     required this.name,
     required this.description,
     required this.enabled,
@@ -47,11 +49,23 @@ class SkillService {
     if (name == null || name.isEmpty) return null;
     if (description == null || description.isEmpty) return null;
     final enabled = fields['enabled']?.toLowerCase() != 'false';
+    final skillRef =
+        fields['skill_ref'] ??
+        fields['skillRef'] ??
+        fields['ref'] ??
+        _slugifySkillRef(name);
     final minContextStr = fields['min_context'];
-    final minContext = minContextStr != null ? int.tryParse(minContextStr) : null;
+    final minContext = minContextStr != null
+        ? int.tryParse(minContextStr)
+        : null;
     return SkillMetadata(
-        noteId: noteId, name: name, description: description, enabled: enabled,
-        minContext: minContext);
+      noteId: noteId,
+      skillRef: skillRef,
+      name: name,
+      description: description,
+      enabled: enabled,
+      minContext: minContext,
+    );
   }
 
   String stripFrontmatter(String content) {
@@ -66,43 +80,118 @@ class SkillService {
   Future<Map<String, SkillMetadata>> buildSkillIndex() async {
     final notes = await _db.getNotesByTag(agentSkillTag);
     final index = <String, SkillMetadata>{};
+    final usedRefs = <String>{};
     for (final Note note in notes) {
       final meta = parseSkillMetadata(note.id, note.content);
       if (meta != null && meta.enabled) {
-        index[note.id] = meta;
+        final stableRef = _dedupeSkillRef(meta.skillRef, usedRefs);
+        usedRefs.add(stableRef);
+        index[note.id] = SkillMetadata(
+          noteId: meta.noteId,
+          skillRef: stableRef,
+          name: meta.name,
+          description: meta.description,
+          enabled: meta.enabled,
+          minContext: meta.minContext,
+        );
       }
     }
     return index;
   }
 
-  String buildSkillIndexPrompt(Map<String, SkillMetadata> index, {int? maxBudgetTokens}) {
+  String buildSkillIndexPrompt(
+    Map<String, SkillMetadata> index, {
+    int? maxBudgetTokens,
+  }) {
     if (index.isEmpty) return '';
     final budget = maxBudgetTokens ?? 100000;
     final sb = StringBuffer();
 
     if (budget < _compactBudgetThreshold) {
-      // No per-skill annotations in minimal format — space too constrained
       sb.writeln('\n## Available Agent Skills');
-      sb.writeln('Use load_skill with the noteId to get instructions.');
-      sb.writeln(index.entries.map((e) => '${e.key}: ${e.value.name}').join(', '));
+      sb.writeln(
+        'If a skill matches the request, call load_skill using the listed skillRef.',
+      );
+      for (final entry in index.entries) {
+        sb.writeln(
+          _formatSkillEntry(entry, budget: budget, includeDescription: false),
+        );
+      }
     } else if (budget < _fullBudgetThreshold) {
       sb.writeln('\n## Available Agent Skills');
-      sb.writeln('Use load_skill with the noteId to get instructions.\n');
+      sb.writeln(
+        'If a skill matches the request, call load_skill using the listed skillRef.\n',
+      );
       for (final entry in index.entries) {
-        final limited = entry.value.minContext != null && entry.value.minContext! > budget;
-        final suffix = limited ? ' (limited mode)' : '';
-        sb.writeln('${entry.key}: ${entry.value.name}$suffix');
+        sb.writeln(
+          _formatSkillEntry(entry, budget: budget, includeDescription: false),
+        );
       }
     } else {
       sb.writeln('\n## Available Agent Skills');
-      sb.writeln('When a skill is relevant, call load_skill with the noteId to get workflow instructions.\n');
+      sb.writeln(
+        'If a skill matches the request, call load_skill using the listed skillRef to retrieve its workflow instructions.\n',
+      );
       for (final entry in index.entries) {
-        final limited = entry.value.minContext != null && entry.value.minContext! > budget;
-        final suffix = limited ? ' (limited mode)' : '';
-        sb.writeln('${entry.key}: ${entry.value.name} — ${entry.value.description}$suffix');
+        sb.writeln(
+          _formatSkillEntry(entry, budget: budget, includeDescription: true),
+        );
       }
     }
     return sb.toString();
+  }
+
+  String _formatSkillEntry(
+    MapEntry<String, SkillMetadata> entry, {
+    required int budget,
+    required bool includeDescription,
+  }) {
+    final limited =
+        entry.value.minContext != null && entry.value.minContext! > budget;
+    final parts = <String>[
+      'skillRef=${entry.value.skillRef}',
+      'name=${entry.value.name}',
+      if (includeDescription) 'when=${entry.value.description}',
+      if (limited) 'mode=limited',
+    ];
+    return '- ${parts.join(' | ')}';
+  }
+
+  String? resolveNoteIdForSkillRef(
+    Map<String, SkillMetadata> index,
+    String skillRef,
+  ) {
+    final normalized = skillRef.trim();
+    if (normalized.isEmpty) return null;
+    for (final entry in index.entries) {
+      if (entry.value.skillRef == normalized) {
+        return entry.key;
+      }
+    }
+    return null;
+  }
+
+  String _dedupeSkillRef(String baseRef, Set<String> usedRefs) {
+    final normalized = baseRef.trim().isEmpty
+        ? 'skill'
+        : _slugifySkillRef(baseRef);
+    if (!usedRefs.contains(normalized)) {
+      return normalized;
+    }
+    var counter = 2;
+    while (usedRefs.contains('$normalized-$counter')) {
+      counter++;
+    }
+    return '$normalized-$counter';
+  }
+
+  String _slugifySkillRef(String value) {
+    final lower = value.toLowerCase();
+    final slug = lower
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'-+'), '-')
+        .replaceAll(RegExp(r'^-|-$'), '');
+    return slug.isEmpty ? 'skill' : slug;
   }
 
   // --- Tool URI extraction ---

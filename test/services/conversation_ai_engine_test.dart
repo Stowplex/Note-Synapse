@@ -265,6 +265,66 @@ void main() {
       expect(result.content, contains('Done!'));
     });
 
+    test('normalizes direct tool calls with wrapper-shaped args', () async {
+      var callCount = 0;
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((_) async {
+        callCount++;
+        if (callCount == 1) {
+          return {
+            'text': null,
+            'function_calls': [
+              {
+                'name': 'load_skill',
+                'args': {
+                  'service_name': 'SkillTools',
+                  'tool_name': 'load_skill',
+                  'params': {'noteId': 'skill-1'},
+                },
+              },
+            ],
+            'parts_history': [],
+          };
+        }
+        return {'text': 'Done!', 'function_calls': null, 'parts_history': []};
+      });
+
+      final result = await engine.generate(
+        request: createTestRequest(),
+        activeTools: {
+          'SkillTools': [
+            McpTool(
+              name: 'load_skill',
+              description: 'Load a skill',
+              inputSchema: const {
+                'type': 'object',
+                'properties': {
+                  'noteId': {'type': 'string'},
+                },
+                'required': ['noteId'],
+              },
+            ),
+          ],
+        },
+        enableTools: true,
+        executeTool: (service, tool, params, ctx) async {
+          expect(service, equals('SkillTools'));
+          expect(tool, equals('load_skill'));
+          expect(params, equals({'noteId': 'skill-1'}));
+          return 'Loaded skill';
+        },
+        isCancelled: () => false,
+        generationContext: GenerationContext(),
+      );
+
+      expect(result.content, contains('Done!'));
+    });
+
     test(
       'refreshes active tools after load_skill and injects discovery prompt',
       () async {
@@ -359,7 +419,11 @@ void main() {
             .cast<Map<String, dynamic>>();
         expect(secondFunctions, isNotEmpty);
         final description = secondFunctions.first['description'] as String;
-        expect(description, contains('Tool Name Argument: search_notes'));
+        expect(
+          description,
+          contains('call_tool with {service_name, tool_name, params}'),
+        );
+        expect(description, contains('- search_notes: Search notes'));
       },
     );
 

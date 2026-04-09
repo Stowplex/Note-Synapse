@@ -91,7 +91,8 @@ void main() {
   group('Skill observation deduplication', () {
     test('pinned skill observation is replaced with short reference', () {
       final shortRef = AgentService.shortenSkillObservation(
-        skillContent: '# Skill: Wiki Ingest\n\n## Purpose\n\nIngest one source note...',
+        skillContent:
+            '# Skill: Wiki Ingest\n\n## Purpose\n\nIngest one source note...',
         skillName: 'Wiki Ingest',
         pinned: true,
       );
@@ -101,7 +102,8 @@ void main() {
     });
 
     test('unpinned skill observation preserves full content', () {
-      final fullContent = '# Skill: Wiki Ingest\n\n## Purpose\n\nIngest one source note...';
+      final fullContent =
+          '# Skill: Wiki Ingest\n\n## Purpose\n\nIngest one source note...';
       final result = AgentService.shortenSkillObservation(
         skillContent: fullContent,
         skillName: 'Wiki Ingest',
@@ -156,9 +158,12 @@ void main() {
         ),
       );
       expect(context, contains('Source note ID: note-1'));
-      expect(context, contains('Bound skill note ID: skill-1'));
       expect(context, contains('wiki-source-ai-research'));
-      expect(context, contains('load_skill'));
+      expect(
+        context,
+        contains('The bound workflow skill has already been loaded'),
+      );
+      expect(context, isNot(contains('Bound skill note ID')));
     });
   });
 }
