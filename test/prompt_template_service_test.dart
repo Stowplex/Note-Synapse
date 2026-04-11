@@ -1,3 +1,8 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/services/prompts/prompt_template_service.dart';
 
@@ -8,6 +13,43 @@ void main() {
 
   setUp(() {
     service = PromptTemplateService();
+
+    // Mock the Flutter asset channel so we can exercise preloadAll without
+    // relying on AssetManifest.json being built for the test binary. The
+    // AssetManifest lookup returns a hand-crafted manifest listing our test
+    // asset; actual .md requests are resolved by reading the real file
+    // from disk (tests run with cwd at the package root).
+    final manifest = <String, List<String>>{
+      'assets/prompts/guidelines/math_formula.md': [
+        'assets/prompts/guidelines/math_formula.md',
+      ],
+    };
+    final manifestBytes = Uint8List.fromList(
+      utf8.encode(json.encode(manifest)),
+    );
+
+    TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMessageHandler('flutter/assets', (ByteData? message) async {
+      final key = utf8.decode(message!.buffer.asUint8List());
+      if (key == 'AssetManifest.json') {
+        return ByteData.view(manifestBytes.buffer);
+      }
+      if (key.startsWith('assets/prompts/') && key.endsWith('.md')) {
+        final file = File(key);
+        if (file.existsSync()) {
+          final bytes = Uint8List.fromList(file.readAsBytesSync());
+          return ByteData.view(bytes.buffer);
+        }
+      }
+      return null;
+    });
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMessageHandler('flutter/assets', null);
   });
 
   group('PromptTemplateService', () {
@@ -24,11 +66,8 @@ void main() {
       );
     });
 
-    test('renderSync works after render caches the template', () async {
-      // In the test environment AssetManifest.json is not available,
-      // so we exercise the on-demand render path which populates the
-      // cache, then verify renderSync returns the same content.
-      await service.render('guidelines/math_formula');
+    test('renderSync works after preloadAll', () async {
+      await service.preloadAll();
       expect(service.cacheSize, greaterThan(0));
       final result = service.renderSync('guidelines/math_formula');
       expect(result, contains('Math Output Contract:'));
