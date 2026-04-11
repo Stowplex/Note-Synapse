@@ -38,10 +38,14 @@ class LoadSkillTool extends NativeTool {
     var noteId = (args['noteId'] as String? ?? '').trim();
 
     final skillService = getIt<SkillService>();
-    if (noteId.isEmpty && skillRef.isNotEmpty) {
+    // Always resolve skillRef first — it's the canonical identifier.
+    // noteId is legacy; when both are present, skillRef takes precedence.
+    if (skillRef.isNotEmpty) {
       final index = await skillService.buildSkillIndex();
-      noteId = skillService.resolveNoteIdForSkillRef(index, skillRef) ?? '';
-      if (noteId.isEmpty) {
+      final resolved = skillService.resolveNoteIdForSkillRef(index, skillRef);
+      if (resolved != null && resolved.isNotEmpty) {
+        noteId = resolved;
+      } else if (noteId.isEmpty) {
         return {'error': 'Skill ref "$skillRef" not found'};
       }
     }

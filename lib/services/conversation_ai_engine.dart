@@ -191,6 +191,23 @@ class ConversationAiEngine {
     );
   }
 
+  /// Generate a response with tool-calling support.
+  ///
+  /// Tool descriptions reach the model through three complementary paths:
+  ///
+  /// 1. **System prompt text catalog** (`buildMcpSystemPrompt`) — built by the
+  ///    caller (e.g. conversation_chat_screen) and embedded in the system
+  ///    message. Skipped for models with [AIModel.usesNativeToolDeclarations].
+  ///
+  /// 2. **Native tool declarations** (`buildToolDeclarations`) — structured
+  ///    schemas passed alongside the request. Cloud models get a single
+  ///    `call_tool` wrapper; local models get individual per-tool declarations
+  ///    for constrained decoding.
+  ///
+  /// 3. **Mid-conversation discovery** (`_buildDynamicToolDiscoveryMessage`) —
+  ///    injected as a system message when new tools appear between iterations
+  ///    (e.g. after a skill loads an MCP endpoint). Local models get a compact
+  ///    list; cloud models get the full text catalog.
   Future<ConversationAiResponse> _generateWithTools({
     required PromptRequest request,
     required Map<String, List<McpTool>> activeTools,
@@ -225,6 +242,7 @@ class ConversationAiEngine {
       final modelSelector = getIt<ModelSelector>();
       var currentActiveTools = resolveActiveTools();
       final announcedToolKeys = _toolKeys(currentActiveTools);
+      List<Map<String, dynamic>>? cachedToolDeclarations;
 
       LoggerService.info(
         'Starting conversation with ${currentActiveTools.length} tools',
@@ -244,27 +262,41 @@ class ConversationAiEngine {
       final conversationParts = <String>[];
       Map<String, dynamic>? lastAssistantMetadata;
 
-      // Streaming shortcut: if local model + no tools, stream directly.
-      // Only applies when no model override is active.
+      // Streaming-first for local models: stream with tool awareness.
+      // If pure text, return fast. If tool calls detected, seed and enter
+      // the tool loop for execution. Only applies without model override.
       final activeModel = generationContext.modelOverride == null
           ? modelSelector.currentModel
           : null;
+      Map<String, dynamic>? streamingFirstResult;
       if (activeModel is LocalMnnModel &&
           activeModel.supportsStreaming &&
-          currentActiveTools.isEmpty &&
           onStreamChunk != null) {
-        final buffer = StringBuffer();
-        await for (final chunk in activeModel.generateStreaming(
-          currentMessages,
-        )) {
-          if (isCancelled()) throw const ConversationCancelledException();
-          buffer.write(chunk);
-          onStreamChunk(chunk);
-        }
-        return ConversationAiResponse(
-          content: buffer.toString(),
-          metadata: {'modelUsed': activeModel.name},
+        final toolDeclarations = getIt<ModelSelector>().buildToolDeclarations(
+          currentActiveTools,
+          generationContext: generationContext,
         );
+        final result = await activeModel.generateStreamingWithTools(
+          currentMessages,
+          toolDeclarations,
+          onChunk: (chunk) {
+            if (isCancelled()) return;
+            onStreamChunk(chunk);
+          },
+          generationContext: generationContext,
+        );
+        if (isCancelled()) throw const ConversationCancelledException();
+
+        final calls = result['function_calls'] as List?;
+        if (calls == null || calls.isEmpty) {
+          // Pure text — fast streaming return
+          return ConversationAiResponse(
+            content: result['text'] as String? ?? '',
+            metadata: {'modelUsed': activeModel.name},
+          );
+        }
+        // Tool calls detected — store result and fall through to tool loop
+        streamingFirstResult = result;
       }
 
       while (true) {
@@ -309,22 +341,26 @@ class ConversationAiEngine {
         LoggerService.debug('MCP iteration ${iteration + 1}/$iterationLimit');
 
         currentActiveTools = resolveActiveTools();
-        final modelType =
-            (generationContext.modelOverride ??
-                    modelSelector.currentModelConfig)
-                ?.type;
-        final callToolFunction = modelType == ModelType.openaiCompatible
-            ? McpToolIntegrationService.getCallToolFunctionForOpenAI(
-                currentActiveTools,
-              )
-            : McpToolIntegrationService.getCallToolFunctionForGemini(
-                currentActiveTools,
-              );
 
-        final response = await getIt<ModelSelector>()
-            .generateWithToolsAndMessages(currentMessages, [
-              if (currentActiveTools.isNotEmpty) callToolFunction,
-            ], generationContext: generationContext);
+        // Use streaming-first result if available (first iteration only),
+        // otherwise generate normally with cached tool declarations.
+        final Map<String, dynamic> response;
+        if (streamingFirstResult != null) {
+          response = streamingFirstResult;
+          streamingFirstResult = null;
+        } else {
+          cachedToolDeclarations ??= getIt<ModelSelector>()
+              .buildToolDeclarations(
+                currentActiveTools,
+                generationContext: generationContext,
+              );
+          response = await getIt<ModelSelector>()
+              .generateWithToolsAndMessages(
+                currentMessages,
+                cachedToolDeclarations,
+                generationContext: generationContext,
+              );
+        }
 
         if (isCancelled()) {
           throw const ConversationCancelledException();
@@ -614,10 +650,16 @@ class ConversationAiEngine {
                 ...currentMessages,
                 PromptMessage(
                   role: PromptRole.system,
-                  content: _buildDynamicToolDiscoveryMessage(newTools),
+                  content: _buildDynamicToolDiscoveryMessage(
+                    newTools,
+                    isLocalModel: modelSelector
+                            .currentModel?.usesNativeToolDeclarations ??
+                        false,
+                  ),
                 ),
               ];
               announcedToolKeys.addAll(_toolKeys(newTools));
+              cachedToolDeclarations = null; // Invalidate on tool changes
             }
 
             iteration++;
@@ -700,15 +742,26 @@ class ConversationAiEngine {
   }
 
   String _buildDynamicToolDiscoveryMessage(
-    Map<String, List<McpTool>> newTools,
-  ) {
+    Map<String, List<McpTool>> newTools, {
+    bool isLocalModel = false,
+  }) {
+    if (isLocalModel) {
+      // Compact but informative for local models (Gemma) — include
+      // descriptions so the model can make informed tool selections.
+      final toolLines = newTools.values
+          .expand((tools) => tools)
+          .map((t) => '- ${t.name}: ${t.description ?? t.name}')
+          .join('\n');
+      return 'New tools available:\n$toolLines\nCall the appropriate tool if needed.';
+    }
     final prompt = McpToolIntegrationService.buildMcpSystemPrompt(
       newTools,
       maxBudgetTokens: 16000,
       includeWrapperIntro: false,
     ).trim();
     return [
-      'New tools became available after the previous tool call. Use them immediately if they help.',
+      'EXECUTE NOW: New tools are ready. Call the appropriate tool immediately to complete the user\'s request.',
+      'Do NOT explain what tools are available. Do NOT describe what you will do. Call a tool NOW.',
       prompt,
     ].where((line) => line.isNotEmpty).join('\n\n');
   }

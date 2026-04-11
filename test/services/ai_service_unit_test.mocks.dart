@@ -14,6 +14,7 @@ import 'package:note_synapse/models/conversation.dart' as _i14;
 import 'package:note_synapse/models/conversation_attachment.dart' as _i15;
 import 'package:note_synapse/models/filter.dart' as _i11;
 import 'package:note_synapse/models/generation_context.dart' as _i22;
+import 'package:note_synapse/models/mcp_endpoint.dart' as _i24;
 import 'package:note_synapse/models/model_config.dart' as _i19;
 import 'package:note_synapse/models/model_type.dart' as _i20;
 import 'package:note_synapse/models/note.dart' as _i5;
@@ -1519,6 +1520,26 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i4.Future<List<_i16.WorkflowBindingRow>>);
 
   @override
+  _i4.Future<_i16.WorkflowBindingRow?> getWorkflowBindingByPattern(
+    String? pattern,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getWorkflowBindingByPattern, [pattern]),
+            returnValue: _i4.Future<_i16.WorkflowBindingRow?>.value(),
+          )
+          as _i4.Future<_i16.WorkflowBindingRow?>);
+
+  @override
+  _i4.Future<List<_i16.WorkflowBindingRow>> getAllWorkflowBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllWorkflowBindings, []),
+            returnValue: _i4.Future<List<_i16.WorkflowBindingRow>>.value(
+              <_i16.WorkflowBindingRow>[],
+            ),
+          )
+          as _i4.Future<List<_i16.WorkflowBindingRow>>);
+
+  @override
   _i4.Future<void> insertWorkflowBinding(_i16.WorkflowBindingRow? binding) =>
       (super.noSuchMethod(
             Invocation.method(#insertWorkflowBinding, [binding]),
@@ -1747,6 +1768,21 @@ class MockModelSelector extends _i1.Mock implements _i17.ModelSelector {
             ),
           )
           as _i4.Future<Map<String, dynamic>>);
+
+  @override
+  List<Map<String, dynamic>> buildToolDeclarations(
+    Map<String, List<_i24.McpTool>>? toolsByEndpoint, {
+    _i22.GenerationContext? generationContext,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #buildToolDeclarations,
+              [toolsByEndpoint],
+              {#generationContext: generationContext},
+            ),
+            returnValue: <Map<String, dynamic>>[],
+          )
+          as List<Map<String, dynamic>>);
 
   @override
   _i4.Future<Map<String, dynamic>> generateWithToolsAndMessages(

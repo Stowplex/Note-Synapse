@@ -12,6 +12,8 @@ import 'package:note_synapse/services/context_manager_service.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/model_selector.dart';
 import 'package:note_synapse/services/tag_workflow_service.dart';
+import 'package:note_synapse/models/model_config.dart';
+import 'package:note_synapse/models/model_type.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/services/skill_service.dart';
 import 'package:note_synapse/models/context_node.dart';
@@ -158,6 +160,12 @@ void main() {
     ).thenReturn('Mock synthesis context');
     when(mockContextManager.checkAndCompact(any)).thenAnswer((_) async {});
     when(mockModelSelector.currentModelConfig).thenReturn(null);
+    when(
+      mockModelSelector.buildToolDeclarations(
+        any,
+        generationContext: anyNamed('generationContext'),
+      ),
+    ).thenReturn([]);
 
     when(
       mockAIService.generateWithAttachments(
@@ -490,5 +498,80 @@ Use [search_notes](notesynapse://tool/builtin/search_notes) to find the workspac
       // Give the queue time to drain after unblocking
       await Future.delayed(const Duration(milliseconds: 20));
     });
+  });
+
+  group('native function calling for local models', () {
+    test(
+      'uses generateWithToolsAndMessages when model is localMnn',
+      () async {
+        // Configure a local model override so _useNativeFunctionCalling()
+        // returns true.
+        final localConfig = ModelConfig(
+          type: ModelType.localMnn,
+          modelName: 'Gemma 4 E2B',
+        );
+        when(mockModelSelector.currentModelConfig).thenReturn(localConfig);
+
+        // Stub generateWithToolsAndMessages to return a text-only answer
+        when(
+          mockModelSelector.generateWithToolsAndMessages(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'text': 'The answer is 42.',
+            'function_calls': null,
+            'modelUsed': 'Gemma 4 E2B',
+          },
+        );
+
+        final note = _makeNote('note-native');
+        final binding = _makeBinding(
+          prompt: 'Process note {note_id}',
+          matchedTag: 'test-tag',
+        );
+        agentService.modelOverride = localConfig;
+
+        await agentService.runWorkflowTask(binding: binding, note: note);
+        await Future.delayed(const Duration(milliseconds: 50));
+
+        // Verify native path was used (generateWithToolsAndMessages) and NOT
+        // the XML path (generateWithAttachments).
+        verify(
+          mockModelSelector.generateWithToolsAndMessages(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).called(greaterThanOrEqualTo(1));
+      },
+    );
+
+    test(
+      'uses generateWithAttachments when model is not localMnn',
+      () async {
+        // Default config is null (non-local). Verify XML path is used.
+        when(mockModelSelector.currentModelConfig).thenReturn(null);
+
+        final note = _makeNote('note-xml');
+        final binding = _makeBinding(
+          prompt: 'Process note {note_id}',
+          matchedTag: 'test-tag',
+        );
+
+        await agentService.runWorkflowTask(binding: binding, note: note);
+        await Future.delayed(const Duration(milliseconds: 50));
+
+        verify(
+          mockAIService.generateWithAttachments(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).called(greaterThanOrEqualTo(1));
+      },
+    );
   });
 }

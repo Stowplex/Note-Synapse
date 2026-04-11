@@ -1518,6 +1518,26 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i4.Future<List<_i16.WorkflowBindingRow>>);
 
   @override
+  _i4.Future<_i16.WorkflowBindingRow?> getWorkflowBindingByPattern(
+    String? pattern,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getWorkflowBindingByPattern, [pattern]),
+            returnValue: _i4.Future<_i16.WorkflowBindingRow?>.value(),
+          )
+          as _i4.Future<_i16.WorkflowBindingRow?>);
+
+  @override
+  _i4.Future<List<_i16.WorkflowBindingRow>> getAllWorkflowBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllWorkflowBindings, []),
+            returnValue: _i4.Future<List<_i16.WorkflowBindingRow>>.value(
+              <_i16.WorkflowBindingRow>[],
+            ),
+          )
+          as _i4.Future<List<_i16.WorkflowBindingRow>>);
+
+  @override
   _i4.Future<void> insertWorkflowBinding(_i16.WorkflowBindingRow? binding) =>
       (super.noSuchMethod(
             Invocation.method(#insertWorkflowBinding, [binding]),

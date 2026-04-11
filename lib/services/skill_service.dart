@@ -102,9 +102,13 @@ class SkillService {
   String buildSkillIndexPrompt(
     Map<String, SkillMetadata> index, {
     int? maxBudgetTokens,
+    bool forLocalModel = false,
   }) {
     if (index.isEmpty) return '';
     final budget = maxBudgetTokens ?? 100000;
+    // Local models need descriptions at all budget levels to make informed
+    // skill selections — they lack the text tool catalog that cloud models get.
+    final alwaysIncludeDescription = forLocalModel;
     final sb = StringBuffer();
 
     if (budget < _compactBudgetThreshold) {
@@ -114,7 +118,11 @@ class SkillService {
       );
       for (final entry in index.entries) {
         sb.writeln(
-          _formatSkillEntry(entry, budget: budget, includeDescription: false),
+          _formatSkillEntry(
+            entry,
+            budget: budget,
+            includeDescription: alwaysIncludeDescription,
+          ),
         );
       }
     } else if (budget < _fullBudgetThreshold) {
@@ -124,7 +132,11 @@ class SkillService {
       );
       for (final entry in index.entries) {
         sb.writeln(
-          _formatSkillEntry(entry, budget: budget, includeDescription: false),
+          _formatSkillEntry(
+            entry,
+            budget: budget,
+            includeDescription: alwaysIncludeDescription,
+          ),
         );
       }
     } else {

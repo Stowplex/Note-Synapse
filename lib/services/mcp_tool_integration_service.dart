@@ -30,14 +30,17 @@ class McpToolIntegrationService {
   /// Get the call_tool function definition for Gemini
   /// This is a single function that can call any MCP tool
   static Map<String, dynamic> getCallToolFunctionForGemini(
-    Map<String, List<McpTool>> toolsByEndpoint,
-  ) {
+    Map<String, List<McpTool>> toolsByEndpoint, {
+    bool compactDescription = false,
+  }) {
     final serviceNames = toolsByEndpoint.keys.toList();
-    final toolsDescription = _buildToolCatalogDescription(
-      toolsByEndpoint,
-      compact: true,
-      includeWrapperIntro: true,
-    );
+    final toolsDescription = compactDescription
+        ? 'Call a tool. Provide service_name, tool_name, and params.'
+        : _buildToolCatalogDescription(
+            toolsByEndpoint,
+            compact: true,
+            includeWrapperIntro: true,
+          );
 
     return {
       'name': 'call_tool',
@@ -277,21 +280,24 @@ class McpToolIntegrationService {
       buffer.writeln('\n\n=== MCP TOOLS AVAILABLE ===\n');
     }
 
-    if (includeWrapperIntro) {
+    if (includeWrapperIntro && toolsByEndpoint.isNotEmpty) {
       buffer.writeln(
         'Call external tools only through call_tool with {service_name, tool_name, params}.',
       );
       buffer.writeln(
         'Put every tool argument inside params. If a required value is missing, ask the user.',
       );
+      // Use the first real endpoint name so the model sees the exact casing.
+      final exampleService = toolsByEndpoint.keys.first;
+      final exampleTool = toolsByEndpoint.values.first.first.name;
       buffer.writeln(
-        'Example: call_tool({service_name: "example", tool_name: "lookup", params: {"query": "hello"}})',
+        'Example: call_tool({service_name: "$exampleService", tool_name: "$exampleTool", params: {}})',
       );
       buffer.writeln();
     }
 
     for (final entry in toolsByEndpoint.entries) {
-      buffer.writeln('=== Endpoint: ${entry.key} ===');
+      buffer.writeln('=== Endpoint: ${entry.key} (service_name: "${entry.key}") ===');
       for (final tool in entry.value) {
         final description = tool.description?.trim();
         if (compact) {

@@ -1419,16 +1419,24 @@ $historyBuffer
 
     if (_notes.isEmpty) {
       lines.add(
-        'No note text is attached inline. Use enabled tools when they can retrieve the needed note or workflow context.',
+        'No note context is currently attached. '
+        'Rely on the conversation history and your own knowledge.',
       );
+      if (_hasAnyTools) {
+        lines.add(
+          'Tools are available if you need to look up notes or execute actions.',
+        );
+      }
     }
 
     final budget = await _getChatPromptBudget();
     final combinedTools = _buildActiveToolsMap();
-    final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
-      combinedTools,
-      maxBudgetTokens: budget,
-    );
+
+    // Models with native tool declarations (e.g. local Gemma) receive tool
+    // schemas directly, so the text-based tool catalog is redundant and
+    // wastes token budget.
+    final currentModel = getIt<ModelSelector>().currentModel;
+    final isLocalModel = currentModel?.usesNativeToolDeclarations ?? false;
 
     final taskContext = lines.join('\n');
     final systemAddOn = PromptConfigurationService.instance.getValue(
@@ -1441,10 +1449,16 @@ $historyBuffer
         ..writeln('User-defined conversation guidance:')
         ..writeln(systemAddOn.trim());
     }
-    if (mcpToolsPrompt.trim().isNotEmpty) {
-      contextBuffer
-        ..writeln()
-        ..writeln(mcpToolsPrompt.trim());
+    if (!isLocalModel) {
+      final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
+        combinedTools,
+        maxBudgetTokens: budget,
+      );
+      if (mcpToolsPrompt.trim().isNotEmpty) {
+        contextBuffer
+          ..writeln()
+          ..writeln(mcpToolsPrompt.trim());
+      }
     }
 
     // Append skill index when skills are enabled
@@ -1453,6 +1467,7 @@ $historyBuffer
       final skillIndexPrompt = getIt<SkillService>().buildSkillIndexPrompt(
         _conversationService.skillIndex,
         maxBudgetTokens: budget,
+        forLocalModel: isLocalModel,
       );
       if (skillIndexPrompt.trim().isNotEmpty) {
         contextBuffer
@@ -1465,6 +1480,7 @@ $historyBuffer
       taskContext: contextBuffer.toString(),
       guidelines: [
         'Reference evidence when drawing conclusions and mention uncertainties.',
+        AIPrompts.mathFormulaGuidelines,
         if (_notes.isNotEmpty) AIPrompts.relationshipGuidelines,
         if (hasInlineContext) AIPrompts.promptInjectionProtectionGuidelines,
       ],

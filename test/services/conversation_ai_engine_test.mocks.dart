@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart' as _i7;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i9;
 import 'package:note_synapse/models/generation_context.dart' as _i8;
+import 'package:note_synapse/models/mcp_endpoint.dart' as _i11;
 import 'package:note_synapse/models/model_config.dart' as _i5;
 import 'package:note_synapse/models/model_type.dart' as _i6;
 import 'package:note_synapse/providers/app_provider.dart' as _i4;
@@ -240,6 +241,21 @@ class MockModelSelector extends _i1.Mock implements _i2.ModelSelector {
             ),
           )
           as _i3.Future<Map<String, dynamic>>);
+
+  @override
+  List<Map<String, dynamic>> buildToolDeclarations(
+    Map<String, List<_i11.McpTool>>? toolsByEndpoint, {
+    _i8.GenerationContext? generationContext,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #buildToolDeclarations,
+              [toolsByEndpoint],
+              {#generationContext: generationContext},
+            ),
+            returnValue: <Map<String, dynamic>>[],
+          )
+          as List<Map<String, dynamic>>);
 
   @override
   _i3.Future<Map<String, dynamic>> generateWithToolsAndMessages(

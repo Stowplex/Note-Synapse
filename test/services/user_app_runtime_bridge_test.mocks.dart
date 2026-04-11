@@ -3144,6 +3144,32 @@ class MockDatabaseService extends _i1.Mock implements _i19.DatabaseService {
           as _i12.Future<List<_i24.WorkflowBindingRow>>);
 
   @override
+  _i12.Future<_i24.WorkflowBindingRow?> getWorkflowBindingByPattern(
+    String? pattern,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getWorkflowBindingByPattern, [pattern]),
+            returnValue: _i12.Future<_i24.WorkflowBindingRow?>.value(),
+            returnValueForMissingStub:
+                _i12.Future<_i24.WorkflowBindingRow?>.value(),
+          )
+          as _i12.Future<_i24.WorkflowBindingRow?>);
+
+  @override
+  _i12.Future<List<_i24.WorkflowBindingRow>> getAllWorkflowBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllWorkflowBindings, []),
+            returnValue: _i12.Future<List<_i24.WorkflowBindingRow>>.value(
+              <_i24.WorkflowBindingRow>[],
+            ),
+            returnValueForMissingStub:
+                _i12.Future<List<_i24.WorkflowBindingRow>>.value(
+                  <_i24.WorkflowBindingRow>[],
+                ),
+          )
+          as _i12.Future<List<_i24.WorkflowBindingRow>>);
+
+  @override
   _i12.Future<void> insertWorkflowBinding(_i24.WorkflowBindingRow? binding) =>
       (super.noSuchMethod(
             Invocation.method(#insertWorkflowBinding, [binding]),
@@ -5014,6 +5040,19 @@ class MockNoteModificationService extends _i1.Mock
             ),
           )
           as _i12.Future<_i8.Note>);
+
+  @override
+  _i12.Future<List<_i8.Note>> applyBatchModifications(
+    List<Map<String, dynamic>>? updates,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#applyBatchModifications, [updates]),
+            returnValue: _i12.Future<List<_i8.Note>>.value(<_i8.Note>[]),
+            returnValueForMissingStub: _i12.Future<List<_i8.Note>>.value(
+              <_i8.Note>[],
+            ),
+          )
+          as _i12.Future<List<_i8.Note>>);
 
   @override
   _i12.Future<_i8.Note> buildNote(Map<String, dynamic>? data) =>

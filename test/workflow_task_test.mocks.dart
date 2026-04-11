@@ -16,6 +16,7 @@ import 'package:note_synapse/models/conversation_attachment.dart' as _i17;
 import 'package:note_synapse/models/dedup_rule.dart' as _i24;
 import 'package:note_synapse/models/filter.dart' as _i13;
 import 'package:note_synapse/models/generation_context.dart' as _i22;
+import 'package:note_synapse/models/mcp_endpoint.dart' as _i28;
 import 'package:note_synapse/models/model_config.dart' as _i26;
 import 'package:note_synapse/models/model_type.dart' as _i27;
 import 'package:note_synapse/models/note.dart' as _i7;
@@ -27,7 +28,7 @@ import 'package:note_synapse/models/user_app.dart' as _i14;
 import 'package:note_synapse/models/workflow_binding_row.dart' as _i18;
 import 'package:note_synapse/providers/app_provider.dart' as _i20;
 import 'package:note_synapse/services/ai_service.dart' as _i19;
-import 'package:note_synapse/services/context_manager_service.dart' as _i28;
+import 'package:note_synapse/services/context_manager_service.dart' as _i29;
 import 'package:note_synapse/services/database_service.dart' as _i5;
 import 'package:note_synapse/services/model_selector.dart' as _i25;
 import 'package:note_synapse/services/prompts/prompt_models.dart' as _i21;
@@ -1535,6 +1536,26 @@ class MockDatabaseService extends _i1.Mock implements _i5.DatabaseService {
           as _i6.Future<List<_i18.WorkflowBindingRow>>);
 
   @override
+  _i6.Future<_i18.WorkflowBindingRow?> getWorkflowBindingByPattern(
+    String? pattern,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getWorkflowBindingByPattern, [pattern]),
+            returnValue: _i6.Future<_i18.WorkflowBindingRow?>.value(),
+          )
+          as _i6.Future<_i18.WorkflowBindingRow?>);
+
+  @override
+  _i6.Future<List<_i18.WorkflowBindingRow>> getAllWorkflowBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllWorkflowBindings, []),
+            returnValue: _i6.Future<List<_i18.WorkflowBindingRow>>.value(
+              <_i18.WorkflowBindingRow>[],
+            ),
+          )
+          as _i6.Future<List<_i18.WorkflowBindingRow>>);
+
+  @override
   _i6.Future<void> insertWorkflowBinding(_i18.WorkflowBindingRow? binding) =>
       (super.noSuchMethod(
             Invocation.method(#insertWorkflowBinding, [binding]),
@@ -2117,6 +2138,21 @@ class MockModelSelector extends _i1.Mock implements _i25.ModelSelector {
           as _i6.Future<Map<String, dynamic>>);
 
   @override
+  List<Map<String, dynamic>> buildToolDeclarations(
+    Map<String, List<_i28.McpTool>>? toolsByEndpoint, {
+    _i22.GenerationContext? generationContext,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #buildToolDeclarations,
+              [toolsByEndpoint],
+              {#generationContext: generationContext},
+            ),
+            returnValue: <Map<String, dynamic>>[],
+          )
+          as List<Map<String, dynamic>>);
+
+  @override
   _i6.Future<Map<String, dynamic>> generateWithToolsAndMessages(
     List<_i21.PromptMessage>? messages,
     List<Map<String, dynamic>>? tools, {
@@ -2184,7 +2220,7 @@ class MockModelSelector extends _i1.Mock implements _i25.ModelSelector {
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockContextManagerService extends _i1.Mock
-    implements _i28.ContextManagerService {
+    implements _i29.ContextManagerService {
   MockContextManagerService() {
     _i1.throwOnMissingStub(this);
   }
@@ -2293,7 +2329,7 @@ class MockContextManagerService extends _i1.Mock
   String buildContextForResearchTask(
     _i3.ContextNode? node, {
     List<String>? dependencyResults = const [],
-    List<_i28.DependencyInfo>? structuredDependencies = const [],
+    List<_i29.DependencyInfo>? structuredDependencies = const [],
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -2389,7 +2425,7 @@ class MockContextManagerService extends _i1.Mock
   @override
   String buildSynthesisContext(
     _i3.ContextNode? node, {
-    List<_i28.DependencyInfo>? structuredDependencies = const [],
+    List<_i29.DependencyInfo>? structuredDependencies = const [],
   }) =>
       (super.noSuchMethod(
             Invocation.method(

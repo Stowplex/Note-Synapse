@@ -5,11 +5,13 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'ai_model.dart';
 import '../attachment_preprocessor.dart';
+import '../mcp_tool_integration_service.dart';
 import '../model_storage_service.dart';
 import '../service_locator.dart';
 import '../logger_service.dart';
 import '../prompts/prompt_models.dart';
 import '../network_provider.dart';
+import '../../models/mcp_endpoint.dart';
 import '../../models/model_type.dart';
 import '../../models/model_config.dart';
 import '../../utils/file_type_utils.dart';
@@ -29,6 +31,12 @@ class GeminiModel implements AIModel {
   @override
   String get description =>
       'Google\'s Gemini model with full multimodal capabilities';
+
+  @override
+  bool get usesNativeToolDeclarations => false;
+
+  @override
+  bool get supportsStreaming => false;
 
   @override
   Future<bool> isReady() async {
@@ -269,6 +277,16 @@ class GeminiModel implements AIModel {
         requestId: actualRequestId,
       );
     }, requestId: actualRequestId);
+  }
+
+  @override
+  List<Map<String, dynamic>> buildToolDeclarations(
+    Map<String, List<McpTool>> toolsByEndpoint,
+  ) {
+    if (toolsByEndpoint.isEmpty) return [];
+    return [
+      McpToolIntegrationService.getCallToolFunctionForGemini(toolsByEndpoint),
+    ];
   }
 
   @override

@@ -10,6 +10,7 @@ import '../utils/token_estimator.dart';
 import 'service_locator.dart';
 import 'logger_service.dart';
 import 'prompts/prompt_models.dart';
+import '../models/mcp_endpoint.dart';
 import '../models/model_type.dart';
 import '../models/model_config.dart';
 import '../models/generation_context.dart';
@@ -396,6 +397,22 @@ class ModelSelector {
       maxOutputTokens: maxOutputTokens,
       generationContext: context,
     );
+  }
+
+  /// Build tool declarations using the active (or overridden) model's strategy.
+  ///
+  /// Each model type defines how tools are presented: Gemini/OpenAI use a
+  /// single `call_tool` wrapper, local models use individual declarations.
+  List<Map<String, dynamic>> buildToolDeclarations(
+    Map<String, List<McpTool>> toolsByEndpoint, {
+    GenerationContext? generationContext,
+  }) {
+    final modelOverride = generationContext?.modelOverride;
+    AIModel? model = _currentModel;
+    if (modelOverride != null) {
+      model = _createModel(modelOverride.type);
+    }
+    return model?.buildToolDeclarations(toolsByEndpoint) ?? [];
   }
 
   Future<Map<String, dynamic>> generateWithToolsAndMessages(

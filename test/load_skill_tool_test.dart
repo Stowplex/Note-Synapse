@@ -113,6 +113,53 @@ void main() {
     expect(result as String, contains('# Skill: My Skill'));
   });
 
+  test('skillRef takes precedence when both skillRef and noteId are present',
+      () async {
+    // Gemma passes both {skillRef: "wiki-query", noteId: "ai-research"}.
+    // skillRef should resolve and override the hallucinated noteId.
+    when(mockDb.getNotesByTag('agent-skill')).thenAnswer(
+      (_) async => [
+        _makeNote(
+          'real-note-id',
+          '---\nname: Wiki Query\nskill_ref: wiki-query\ndescription: desc\nenabled: true\n---\n\n## Query',
+        ),
+      ],
+    );
+    when(mockDb.getNote('real-note-id')).thenAnswer(
+      (_) async => _makeNote(
+        'real-note-id',
+        '---\nname: Wiki Query\nskill_ref: wiki-query\ndescription: desc\nenabled: true\n---\n\n## Query',
+      ),
+    );
+
+    final result = await tool.execute({
+      'skillRef': 'wiki-query',
+      'noteId': 'ai-research', // wrong noteId — should be ignored
+    });
+    expect(result, isA<String>());
+    expect(result as String, contains('# Skill: Wiki Query'));
+    // Should NOT have tried to load by the wrong noteId
+    verifyNever(mockDb.getNote('ai-research'));
+  });
+
+  test('falls back to noteId when skillRef resolution fails', () async {
+    // If skillRef doesn't resolve, fall back to the provided noteId.
+    when(mockDb.getNotesByTag('agent-skill')).thenAnswer((_) async => []);
+    when(mockDb.getNote('fallback-id')).thenAnswer(
+      (_) async => _makeNote(
+        'fallback-id',
+        '---\nname: Fallback\ndescription: desc\nenabled: true\n---\n\nbody',
+      ),
+    );
+
+    final result = await tool.execute({
+      'skillRef': 'nonexistent-ref',
+      'noteId': 'fallback-id',
+    });
+    expect(result, isA<String>());
+    expect(result as String, contains('# Skill: Fallback'));
+  });
+
   test('resetSession clears cache so next call re-fetches', () async {
     const content =
         '---\nname: Skill\ndescription: desc\nenabled: true\n---\n\nbody';

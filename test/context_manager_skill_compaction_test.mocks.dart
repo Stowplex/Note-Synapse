@@ -10,6 +10,7 @@ import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i7;
 import 'package:note_synapse/models/dedup_rule.dart' as _i10;
 import 'package:note_synapse/models/generation_context.dart' as _i6;
+import 'package:note_synapse/models/mcp_endpoint.dart' as _i14;
 import 'package:note_synapse/models/model_config.dart' as _i12;
 import 'package:note_synapse/models/model_type.dart' as _i13;
 import 'package:note_synapse/models/note.dart' as _i8;
@@ -595,6 +596,21 @@ class MockModelSelector extends _i1.Mock implements _i11.ModelSelector {
             ),
           )
           as _i3.Future<Map<String, dynamic>>);
+
+  @override
+  List<Map<String, dynamic>> buildToolDeclarations(
+    Map<String, List<_i14.McpTool>>? toolsByEndpoint, {
+    _i6.GenerationContext? generationContext,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #buildToolDeclarations,
+              [toolsByEndpoint],
+              {#generationContext: generationContext},
+            ),
+            returnValue: <Map<String, dynamic>>[],
+          )
+          as List<Map<String, dynamic>>);
 
   @override
   _i3.Future<Map<String, dynamic>> generateWithToolsAndMessages(

@@ -1539,6 +1539,26 @@ class MockDatabaseService extends _i1.Mock implements _i5.DatabaseService {
           as _i6.Future<List<_i18.WorkflowBindingRow>>);
 
   @override
+  _i6.Future<_i18.WorkflowBindingRow?> getWorkflowBindingByPattern(
+    String? pattern,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getWorkflowBindingByPattern, [pattern]),
+            returnValue: _i6.Future<_i18.WorkflowBindingRow?>.value(),
+          )
+          as _i6.Future<_i18.WorkflowBindingRow?>);
+
+  @override
+  _i6.Future<List<_i18.WorkflowBindingRow>> getAllWorkflowBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllWorkflowBindings, []),
+            returnValue: _i6.Future<List<_i18.WorkflowBindingRow>>.value(
+              <_i18.WorkflowBindingRow>[],
+            ),
+          )
+          as _i6.Future<List<_i18.WorkflowBindingRow>>);
+
+  @override
   _i6.Future<void> insertWorkflowBinding(_i18.WorkflowBindingRow? binding) =>
       (super.noSuchMethod(
             Invocation.method(#insertWorkflowBinding, [binding]),
@@ -1572,6 +1592,14 @@ class MockAgentService extends _i1.Mock implements _i19.AgentService {
             returnValue: 0,
           )
           as int);
+
+  @override
+  List<_i19.PendingWorkflowInfo> get pendingWorkflows =>
+      (super.noSuchMethod(
+            Invocation.getter(#pendingWorkflows),
+            returnValue: <_i19.PendingWorkflowInfo>[],
+          )
+          as List<_i19.PendingWorkflowInfo>);
 
   @override
   bool get isPaused =>
@@ -1663,6 +1691,17 @@ class MockAgentService extends _i1.Mock implements _i19.AgentService {
   bool get hasListeners =>
       (super.noSuchMethod(Invocation.getter(#hasListeners), returnValue: false)
           as bool);
+
+  @override
+  void cancelPendingWorkflow(int? index) => super.noSuchMethod(
+    Invocation.method(#cancelPendingWorkflow, [index]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i19.WorkflowStatusSnapshot? workflowStatusForNote(String? noteId) =>
+      (super.noSuchMethod(Invocation.method(#workflowStatusForNote, [noteId]))
+          as _i19.WorkflowStatusSnapshot?);
 
   @override
   void addGlobalContextNote(String? noteId) => super.noSuchMethod(
@@ -1950,23 +1989,40 @@ class MockSkillService extends _i1.Mock implements _i26.SkillService {
   String buildSkillIndexPrompt(
     Map<String, _i26.SkillMetadata>? index, {
     int? maxBudgetTokens,
+    bool? forLocalModel = false,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
               #buildSkillIndexPrompt,
               [index],
-              {#maxBudgetTokens: maxBudgetTokens},
+              {
+                #maxBudgetTokens: maxBudgetTokens,
+                #forLocalModel: forLocalModel,
+              },
             ),
             returnValue: _i8.dummyValue<String>(
               this,
               Invocation.method(
                 #buildSkillIndexPrompt,
                 [index],
-                {#maxBudgetTokens: maxBudgetTokens},
+                {
+                  #maxBudgetTokens: maxBudgetTokens,
+                  #forLocalModel: forLocalModel,
+                },
               ),
             ),
           )
           as String);
+
+  @override
+  String? resolveNoteIdForSkillRef(
+    Map<String, _i26.SkillMetadata>? index,
+    String? skillRef,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#resolveNoteIdForSkillRef, [index, skillRef]),
+          )
+          as String?);
 
   @override
   List<String> extractToolUris(String? content) =>

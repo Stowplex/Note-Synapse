@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 import 'package:json_repair_flutter/json_repair_flutter.dart';
 
 import 'package:note_synapse/models/generation_context.dart';
+import 'package:note_synapse/models/mcp_endpoint.dart';
 import 'package:note_synapse/models/model_config.dart';
 import 'package:note_synapse/services/logger_service.dart';
 import 'package:note_synapse/services/models/ai_model.dart';
@@ -20,7 +21,11 @@ class LocalMnnModel extends AIModel {
   LocalModelPreset? _preset;
   bool _isInitialized = false;
 
+  @override
   bool get supportsStreaming => true;
+
+  @override
+  bool get usesNativeToolDeclarations => true;
 
   @override
   String get id => _config?.id ?? 'local_mnn';
@@ -696,6 +701,29 @@ class LocalMnnModel extends AIModel {
   }
 
   @override
+  List<Map<String, dynamic>> buildToolDeclarations(
+    Map<String, List<McpTool>> toolsByEndpoint,
+  ) {
+    if (toolsByEndpoint.isEmpty) return [];
+    // Individual declarations — one per tool, matching Google Gallery pattern.
+    // Constrained decoding forces Gemma to output only valid tool names.
+    final declarations = <Map<String, dynamic>>[];
+    for (final entry in toolsByEndpoint.entries) {
+      for (final tool in entry.value) {
+        declarations.add({
+          'name': tool.name,
+          'description': tool.description ?? tool.name,
+          'parameters': tool.inputSchema ?? {
+            'type': 'object',
+            'properties': <String, dynamic>{},
+          },
+        });
+      }
+    }
+    return declarations;
+  }
+
+  @override
   Future<Map<String, dynamic>> generateWithToolsAndMessages(
     List<PromptMessage> messages,
     List<Map<String, dynamic>> tools, {
@@ -738,6 +766,94 @@ class LocalMnnModel extends AIModel {
         duration: DateTime.now().difference(startTime),
       );
 
+      return result;
+    } catch (e) {
+      LoggerService.logAiError(
+        error: e.toString(),
+        endpoint: endpoint,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+      rethrow;
+    } finally {
+      await _disposeModel();
+    }
+  }
+
+  /// Streaming generation with tool awareness. Streams text chunks via
+  /// [onChunk] and returns the full result including any function calls.
+  /// Combines the speed of streaming with the tool-calling path so Gemma
+  /// can answer simple questions fast while still detecting tool calls.
+  Future<Map<String, dynamic>> generateStreamingWithTools(
+    List<PromptMessage> messages,
+    List<Map<String, dynamic>> tools, {
+    required void Function(String chunk) onChunk,
+    GenerationContext? generationContext,
+  }) async {
+    final requestId =
+        generationContext?.ensureRequestId() ??
+        DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+    final endpoint = 'local-gemma://$name/stream-tools';
+
+    try {
+      LoggerService.logAiRequest(
+        endpoint: endpoint,
+        headers: {'backend': _config?.backendType ?? 'gpu'},
+        requestBody: _buildLogBody(messages, tools: tools),
+        requestId: requestId,
+      );
+
+      final chat = await _createChat(messages: messages, tools: tools);
+      final buffer = StringBuffer();
+      final functionCalls = <Map<String, dynamic>>[];
+
+      await for (final response in chat.generateChatResponseAsync()) {
+        if (response is gemma.TextResponse) {
+          buffer.write(response.token);
+          onChunk(response.token);
+        } else if (response is gemma.FunctionCallResponse) {
+          functionCalls.add({'name': response.name, 'args': response.args});
+        } else if (response is gemma.ParallelFunctionCallResponse) {
+          for (final call in response.calls) {
+            functionCalls.add({'name': call.name, 'args': call.args});
+          }
+        }
+      }
+
+      final text = buffer.toString();
+      // Check streamed text for tagged tool calls as fallback
+      if (functionCalls.isEmpty) {
+        final parsed = _extractTaggedToolCalls(text);
+        if (parsed.calls.isNotEmpty) {
+          final result = <String, dynamic>{
+            'text': parsed.cleanedText,
+            'function_calls': parsed.calls,
+            'modelUsed': name,
+          };
+          LoggerService.logAiResponse(
+            statusCode: 200,
+            headers: {'model': name},
+            responseBody: result,
+            requestId: requestId,
+            duration: DateTime.now().difference(startTime),
+          );
+          return result;
+        }
+      }
+
+      final result = <String, dynamic>{
+        'text': text,
+        'function_calls': functionCalls.isNotEmpty ? functionCalls : null,
+        'modelUsed': name,
+      };
+      LoggerService.logAiResponse(
+        statusCode: 200,
+        headers: {'model': name},
+        responseBody: result,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
       return result;
     } catch (e) {
       LoggerService.logAiError(

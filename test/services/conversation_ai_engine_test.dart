@@ -4,6 +4,7 @@ import 'package:mockito/mockito.dart';
 import 'package:note_synapse/models/generation_context.dart';
 import 'package:note_synapse/models/mcp_endpoint.dart';
 import 'package:note_synapse/services/conversation_ai_engine.dart';
+import 'package:note_synapse/services/mcp_tool_integration_service.dart';
 import 'package:note_synapse/services/model_selector.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/services/prompts/prompt_models.dart';
@@ -42,6 +43,19 @@ void main() {
     // Default: return null for currentModelConfig (Gemini path)
     when(mockModelSelector.currentModelConfig).thenReturn(null);
     when(mockModelSelector.currentModel).thenReturn(null);
+    when(
+      mockModelSelector.buildToolDeclarations(
+        any,
+        generationContext: anyNamed('generationContext'),
+      ),
+    ).thenAnswer((invocation) {
+      final tools = invocation.positionalArguments[0]
+          as Map<String, List<McpTool>>;
+      if (tools.isEmpty) return <Map<String, dynamic>>[];
+      return [
+        McpToolIntegrationService.getCallToolFunctionForGemini(tools),
+      ];
+    });
   });
 
   tearDown(() async {
@@ -409,7 +423,7 @@ void main() {
           secondMessages.any(
             (message) =>
                 message.role == PromptRole.system &&
-                message.content.contains('New tools became available') &&
+                message.content.contains('EXECUTE') &&
                 message.content.contains('search_notes'),
           ),
           isTrue,

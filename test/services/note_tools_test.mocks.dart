@@ -1518,6 +1518,26 @@ class MockDatabaseService extends _i1.Mock implements _i4.DatabaseService {
           as _i5.Future<List<_i16.WorkflowBindingRow>>);
 
   @override
+  _i5.Future<_i16.WorkflowBindingRow?> getWorkflowBindingByPattern(
+    String? pattern,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getWorkflowBindingByPattern, [pattern]),
+            returnValue: _i5.Future<_i16.WorkflowBindingRow?>.value(),
+          )
+          as _i5.Future<_i16.WorkflowBindingRow?>);
+
+  @override
+  _i5.Future<List<_i16.WorkflowBindingRow>> getAllWorkflowBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllWorkflowBindings, []),
+            returnValue: _i5.Future<List<_i16.WorkflowBindingRow>>.value(
+              <_i16.WorkflowBindingRow>[],
+            ),
+          )
+          as _i5.Future<List<_i16.WorkflowBindingRow>>);
+
+  @override
   _i5.Future<void> insertWorkflowBinding(_i16.WorkflowBindingRow? binding) =>
       (super.noSuchMethod(
             Invocation.method(#insertWorkflowBinding, [binding]),
@@ -1560,6 +1580,16 @@ class MockNoteModificationService extends _i1.Mock
             ),
           )
           as _i5.Future<_i3.Note>);
+
+  @override
+  _i5.Future<List<_i3.Note>> applyBatchModifications(
+    List<Map<String, dynamic>>? updates,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#applyBatchModifications, [updates]),
+            returnValue: _i5.Future<List<_i3.Note>>.value(<_i3.Note>[]),
+          )
+          as _i5.Future<List<_i3.Note>>);
 
   @override
   _i5.Future<_i3.Note> buildNote(Map<String, dynamic>? data) =>
