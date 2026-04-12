@@ -33,26 +33,15 @@ class AIPrompts {
     String contentType,
     String title,
   ) {
-    return '''
-Please analyze and extract the key content from this $contentType. 
-
-Title: "$title"
-
-Content:
-<DATA_ONLY_DOCUMENT>
-$text
-</DATA_ONLY_DOCUMENT>
-
-Please provide a well-structured summary that includes:
-1. Main topics and themes
-2. Key points and important information
-3. Any actionable items or insights
-4. Relevant context or background information
-
-$mathFormulaGuidelines
-
-Format the response in a clear, organized manner that would be useful for note-taking and future reference.
-''';
+    return getIt<PromptTemplateService>().renderSync(
+      'ai_prompts/content_extraction',
+      {
+        'text': text,
+        'contentType': contentType,
+        'title': title,
+        'mathFormulaGuidelines': mathFormulaGuidelines,
+      },
+    );
   }
 
   /// Build prompt for dedup rules suggestion
@@ -103,23 +92,33 @@ Only suggest rules that would genuinely improve tag organization. If no meaningf
 
   /// Build prompt for audio transcription
   static String buildAudioTranscriptionPrompt() {
-    return 'Please transcribe the following audio file. Provide only the transcribed text without any additional commentary or formatting.';
+    return getIt<PromptTemplateService>()
+        .renderSync('ai_prompts/audio_transcription')
+        .trimRight();
   }
 
   /// Build prompt for audio summarization
   static String buildAudioSummarizationPrompt({String? context}) {
-    final contextText = context != null ? "\n\nContext: $context" : "";
-    return 'Please listen to the following audio file and provide a concise summary of its main points and key information.$contextText';
+    return getIt<PromptTemplateService>()
+        .renderSync('ai_prompts/audio_summarization', {
+          'hasContext': context != null,
+          'context': context,
+        })
+        .trimRight();
   }
 
   /// Build prompt for image content extraction
   static String buildImageContentExtractionPrompt() {
-    return 'Extract and summarize the content from this image. Provide a detailed description of what you see, including any text, objects, people, or important visual elements.';
+    return getIt<PromptTemplateService>()
+        .renderSync('ai_prompts/image_content_extraction')
+        .trimRight();
   }
 
   /// Build prompt for PDF content extraction
   static String buildPdfContentExtractionPrompt() {
-    return 'Extract and summarize the content from this PDF document. Provide a detailed summary of the main topics, key points, and important information contained in the document.';
+    return getIt<PromptTemplateService>()
+        .renderSync('ai_prompts/pdf_content_extraction')
+        .trimRight();
   }
 
   /// Build prompt for app generation

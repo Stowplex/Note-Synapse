@@ -29,6 +29,21 @@ void main() {
       'assets/prompts/guidelines/prompt_injection_protection.md': [
         'assets/prompts/guidelines/prompt_injection_protection.md',
       ],
+      'assets/prompts/ai_prompts/content_extraction.md': [
+        'assets/prompts/ai_prompts/content_extraction.md',
+      ],
+      'assets/prompts/ai_prompts/audio_transcription.md': [
+        'assets/prompts/ai_prompts/audio_transcription.md',
+      ],
+      'assets/prompts/ai_prompts/audio_summarization.md': [
+        'assets/prompts/ai_prompts/audio_summarization.md',
+      ],
+      'assets/prompts/ai_prompts/image_content_extraction.md': [
+        'assets/prompts/ai_prompts/image_content_extraction.md',
+      ],
+      'assets/prompts/ai_prompts/pdf_content_extraction.md': [
+        'assets/prompts/ai_prompts/pdf_content_extraction.md',
+      ],
     };
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMessageHandler('flutter/assets', (message) async {
@@ -98,6 +113,76 @@ void main() {
       expect(result, contains('## Output Formatting'));
       expect(result, contains('### Markdown Structure'));
       expect(result, contains(r'\( E = mc^2 \)'));
+    });
+  });
+
+  group('AI prompts regression', () {
+    test('buildContentExtractionPrompt renders correctly', () {
+      final result = AIPrompts.buildContentExtractionPrompt(
+        'sample text here',
+        'article',
+        'Test Title',
+      );
+      expect(result, contains('extract the key content from this article'));
+      expect(result, contains('Title: "Test Title"'));
+      expect(result, contains('<DATA_ONLY_DOCUMENT>'));
+      expect(result, contains('sample text here'));
+      expect(result, contains('</DATA_ONLY_DOCUMENT>'));
+      expect(result, contains('Math Output Contract:'));
+      // Structural check: prompt starts with a blank line (matches original)
+      expect(result.startsWith('\n'), isTrue);
+    });
+
+    test('buildAudioTranscriptionPrompt is static text without trailing newline', () {
+      final result = AIPrompts.buildAudioTranscriptionPrompt();
+      expect(
+        result,
+        equals(
+          'Please transcribe the following audio file. Provide only the transcribed text without any additional commentary or formatting.',
+        ),
+      );
+    });
+
+    test('buildAudioSummarizationPrompt without context', () {
+      final result = AIPrompts.buildAudioSummarizationPrompt();
+      expect(
+        result,
+        equals(
+          'Please listen to the following audio file and provide a concise summary of its main points and key information.',
+        ),
+      );
+    });
+
+    test('buildAudioSummarizationPrompt with context', () {
+      final result = AIPrompts.buildAudioSummarizationPrompt(
+        context: 'This is a meeting recording',
+      );
+      expect(
+        result,
+        equals(
+          'Please listen to the following audio file and provide a concise summary of its main points and key information.\n\nContext: This is a meeting recording',
+        ),
+      );
+    });
+
+    test('buildImageContentExtractionPrompt is static text', () {
+      final result = AIPrompts.buildImageContentExtractionPrompt();
+      expect(
+        result,
+        equals(
+          'Extract and summarize the content from this image. Provide a detailed description of what you see, including any text, objects, people, or important visual elements.',
+        ),
+      );
+    });
+
+    test('buildPdfContentExtractionPrompt is static text', () {
+      final result = AIPrompts.buildPdfContentExtractionPrompt();
+      expect(
+        result,
+        equals(
+          'Extract and summarize the content from this PDF document. Provide a detailed summary of the main topics, key points, and important information contained in the document.',
+        ),
+      );
     });
   });
 }
