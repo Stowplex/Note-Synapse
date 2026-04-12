@@ -62,6 +62,18 @@ void main() {
       'assets/prompts/note_prompts/question_user.md': [
         'assets/prompts/note_prompts/question_user.md',
       ],
+      'assets/prompts/note_prompts/transformation_system.md': [
+        'assets/prompts/note_prompts/transformation_system.md',
+      ],
+      'assets/prompts/note_prompts/transformation_user.md': [
+        'assets/prompts/note_prompts/transformation_user.md',
+      ],
+      'assets/prompts/note_prompts/block_transformation_system.md': [
+        'assets/prompts/note_prompts/block_transformation_system.md',
+      ],
+      'assets/prompts/note_prompts/block_transformation_user.md': [
+        'assets/prompts/note_prompts/block_transformation_user.md',
+      ],
     };
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMessageHandler('flutter/assets', (message) async {
@@ -417,6 +429,78 @@ void main() {
       expect(
         result.systemMessage.content,
         isNot(contains('Do not use outside knowledge')),
+      );
+    });
+  });
+
+  group('NotePromptBuilder transformation regression', () {
+    late NotePromptBuilder builder;
+
+    setUp(() {
+      final fakeDb = _FakeDatabaseService();
+      if (getIt.isRegistered<DatabaseService>()) {
+        getIt.unregister<DatabaseService>();
+      }
+      getIt.registerSingleton<DatabaseService>(fakeDb);
+      builder = NotePromptBuilder(fakeDb);
+    });
+
+    tearDown(() {
+      if (getIt.isRegistered<DatabaseService>()) {
+        getIt.unregister<DatabaseService>();
+      }
+    });
+
+    test('byte-match: block transformation user message', () {
+      final result = builder.buildBlockTransformationPrompt(
+        blockContent: '# Hello World\nSome content here.',
+        instruction: 'Make it more concise',
+      );
+      final expected =
+          'Transformation instruction: "Make it more concise"\n'
+          '\n'
+          'Block content to transform:\n'
+          '# Hello World\n'
+          'Some content here.';
+      expect(result.conversationMessages.first.content, equals(expected));
+    });
+
+    test('block transformation system message contains format markers', () {
+      final result = builder.buildBlockTransformationPrompt(
+        blockContent: 'X',
+        instruction: 'Y',
+      );
+      expect(result.systemMessage.content, contains('<transformed>'));
+      expect(result.systemMessage.content, contains('</transformed>'));
+      expect(result.systemMessage.content, contains('<notes>'));
+      expect(
+        result.systemMessage.content,
+        contains(
+          'IMPORTANT: The <transformed> section must contain ONLY',
+        ),
+      );
+    });
+
+    test(
+        'block transformation system message preserves task context structure',
+        () {
+      final result = builder.buildBlockTransformationPrompt(
+        blockContent: 'X',
+        instruction: 'Y',
+      );
+      // The task context should contain the exact framing sentence.
+      expect(
+        result.systemMessage.content,
+        contains(
+          'Transform the provided markdown block based on the user instruction.',
+        ),
+      );
+      // Guidelines section should include the preserve-info guideline.
+      expect(
+        result.systemMessage.content,
+        contains(
+          '- Preserve critical information unless explicitly told to remove it.',
+        ),
       );
     });
   });

@@ -1,0 +1,1 @@
+Transform the provided note content based on the user instruction while respecting structure and metadata. The upcoming context message includes the original note, sub-notes, tags, and linked references.

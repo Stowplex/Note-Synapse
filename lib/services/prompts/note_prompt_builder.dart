@@ -108,10 +108,14 @@ class NotePromptBuilder {
     required String instruction,
     List<PlatformFile> additionalAttachments = const [],
   }) async {
+    final templateService = getIt<PromptTemplateService>();
+
+    final taskContext = templateService
+        .renderSync('note_prompts/transformation_system')
+        .trimRight();
+
     final systemMessage = SystemPromptBuilder.build(
-      taskContext:
-          'Transform the provided note content based on the user instruction while respecting structure and metadata. '
-          'The upcoming context message includes the original note, sub-notes, tags, and linked references.',
+      taskContext: taskContext,
       guidelines: _transformationGuidelines,
     );
 
@@ -122,28 +126,24 @@ class NotePromptBuilder {
         noteContextMessage,
     ];
 
-    final buffer = StringBuffer();
-    buffer.writeln('Transformation instruction: "$instruction"');
-    buffer.writeln(
-      'Apply the changes while preserving the note\'s existing structure (title, sections, sub-notes, tags, metadata) unless explicitly instructed otherwise.',
-    );
-    buffer.writeln(
-      'Incorporate relevant linked note context and attachments when appropriate.',
-    );
-    buffer.writeln('Return only the transformed note content.');
-
     final transformationAddOn = PromptConfigurationService.instance.getValue(
       NotePromptConfiguration.transformationAddendumId,
     );
-    if (transformationAddOn != null && transformationAddOn.trim().isNotEmpty) {
-      buffer
-        ..writeln()
-        ..writeln(transformationAddOn.trim());
-    }
+    final trimmedAddOn = transformationAddOn?.trim();
+    final hasAddendum = trimmedAddOn != null && trimmedAddOn.isNotEmpty;
+
+    final userContent = templateService.renderSync(
+      'note_prompts/transformation_user',
+      {
+        'instruction': instruction,
+        'hasAddendum': hasAddendum,
+        'addendum': trimmedAddOn ?? '',
+      },
+    );
 
     final userMessage = PromptMessage(
       role: PromptRole.user,
-      content: buffer.toString().trim(),
+      content: userContent.trim(),
       attachments: additionalAttachments,
     );
 
@@ -160,18 +160,14 @@ class NotePromptBuilder {
     required String blockContent,
     required String instruction,
   }) {
+    final templateService = getIt<PromptTemplateService>();
+
+    final taskContext = templateService
+        .renderSync('note_prompts/block_transformation_system')
+        .trimRight();
+
     final systemMessage = SystemPromptBuilder.build(
-      taskContext:
-          'Transform the provided markdown block based on the user instruction. '
-          'You MUST use the following output format:\n\n'
-          '<transformed>\n'
-          '(the transformed block content here)\n'
-          '</transformed>\n\n'
-          'If you have any notes, assumptions, or explanations, put them AFTER the closing </transformed> tag in a separate <notes> section:\n\n'
-          '<notes>\n'
-          '(optional notes here)\n'
-          '</notes>\n\n'
-          'IMPORTANT: The <transformed> section must contain ONLY the final block content with no extra commentary, explanations, or preamble.',
+      taskContext: taskContext,
       guidelines: [
         'Preserve critical information unless explicitly told to remove it.',
         AIPrompts.mathFormulaGuidelines,
@@ -179,15 +175,17 @@ class NotePromptBuilder {
       ],
     );
 
-    final buffer = StringBuffer();
-    buffer.writeln('Transformation instruction: "$instruction"');
-    buffer.writeln();
-    buffer.writeln('Block content to transform:');
-    buffer.writeln(blockContent);
+    final userContent = templateService.renderSync(
+      'note_prompts/block_transformation_user',
+      {
+        'instruction': instruction,
+        'blockContent': blockContent,
+      },
+    );
 
     final userMessage = PromptMessage(
       role: PromptRole.user,
-      content: buffer.toString().trim(),
+      content: userContent.trim(),
     );
 
     return PromptRequest(
