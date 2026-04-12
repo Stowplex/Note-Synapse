@@ -44,6 +44,9 @@ void main() {
       'assets/prompts/ai_prompts/pdf_content_extraction.md': [
         'assets/prompts/ai_prompts/pdf_content_extraction.md',
       ],
+      'assets/prompts/ai_prompts/dedup_rules_suggestion.md': [
+        'assets/prompts/ai_prompts/dedup_rules_suggestion.md',
+      ],
     };
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMessageHandler('flutter/assets', (message) async {
@@ -183,6 +186,63 @@ void main() {
           'Extract and summarize the content from this PDF document. Provide a detailed summary of the main topics, key points, and important information contained in the document.',
         ),
       );
+    });
+
+    test('buildDedupRulesSuggestionPrompt without protected tags', () {
+      final result = AIPrompts.buildDedupRulesSuggestionPrompt(
+        ['work', 'job', 'career', 'employment'],
+      );
+      expect(result, contains('Tags: work, job, career, employment'));
+      expect(result, isNot(contains('PROTECTED TAGS')));
+      expect(result, isNot(contains('8. PROTECTED TAGS')));
+      expect(result, contains('"leftTag"'));
+      expect(result, contains('Only suggest rules that would genuinely improve'));
+    });
+
+    test('buildDedupRulesSuggestionPrompt with protected tags', () {
+      final result = AIPrompts.buildDedupRulesSuggestionPrompt(
+        ['work', 'job', 'important'],
+        protectedTags: ['important', 'urgent'],
+      );
+      expect(result, contains('Tags: work, job, important'));
+      expect(result, contains('PROTECTED TAGS (filter tags'));
+      expect(result, contains('important, urgent'));
+      expect(result, contains('8. PROTECTED TAGS must NEVER appear as leftTag'));
+    });
+
+    test('buildDedupRulesSuggestionPrompt byte-match without protected (reference comparison)', () {
+      const tagsJoined = 'a, b';
+      final expected = '\n'
+          'Analyze the following list of tags and suggest deduplication rules to consolidate similar or redundant tags. \n'
+          '\n'
+          'Tags: $tagsJoined\n'
+          '\n'
+          'Please suggest rules in the format "leftTag -> rightTag" where:\n'
+          '- leftTag is the tag that should be replaced\n'
+          '- rightTag is the tag that should replace it\n'
+          '\n'
+          'Rules to follow:\n'
+          '1. No tag should appear as leftTag in multiple rules (each tag can only be replaced once)\n'
+          '2. No tag should appear as both leftTag in one rule and rightTag in another rule (no cross-references)\n'
+          '3. Do not suggest self-replacement (A -> A)\n'
+          '4. It IS allowed for a tag to appear as rightTag in multiple rules (consolidating multiple tags into one)\n'
+          '5. Focus on consolidating similar tags, typos, or variations\n'
+          '6. Prefer shorter, more standard tag names\n'
+          '7. Consider semantic similarity (e.g., "work" and "job" could be consolidated)\n'
+          '\n'
+          '\n'
+          'Please respond with a JSON array of objects in this format:\n'
+          '[\n'
+          '  {"leftTag": "old_tag_name", "rightTag": "new_tag_name"},\n'
+          '  {"leftTag": "another_old_tag", "rightTag": "another_new_tag"}\n'
+          ']\n'
+          '\n'
+          'IMPORTANT: Ensure all tag names are properly escaped for valid JSON (escape special characters like backslashes and quotes).\n'
+          '\n'
+          'Only suggest rules that would genuinely improve tag organization. If no meaningful consolidations are possible, return an empty array.\n';
+
+      final actual = AIPrompts.buildDedupRulesSuggestionPrompt(['a', 'b']);
+      expect(actual, equals(expected));
     });
   });
 }
