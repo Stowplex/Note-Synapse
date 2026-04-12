@@ -74,6 +74,12 @@ void main() {
       'assets/prompts/note_prompts/block_transformation_user.md': [
         'assets/prompts/note_prompts/block_transformation_user.md',
       ],
+      'assets/prompts/note_prompts/new_note_creation_system.md': [
+        'assets/prompts/note_prompts/new_note_creation_system.md',
+      ],
+      'assets/prompts/note_prompts/new_note_creation_user.md': [
+        'assets/prompts/note_prompts/new_note_creation_user.md',
+      ],
     };
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMessageHandler('flutter/assets', (message) async {
@@ -501,6 +507,89 @@ void main() {
         contains(
           '- Preserve critical information unless explicitly told to remove it.',
         ),
+      );
+    });
+  });
+
+  group('NotePromptBuilder new note creation regression', () {
+    late NotePromptBuilder builder;
+
+    setUp(() {
+      final fakeDb = _FakeDatabaseService();
+      if (getIt.isRegistered<DatabaseService>()) {
+        getIt.unregister<DatabaseService>();
+      }
+      getIt.registerSingleton<DatabaseService>(fakeDb);
+      builder = NotePromptBuilder(fakeDb);
+    });
+
+    tearDown(() {
+      if (getIt.isRegistered<DatabaseService>()) {
+        getIt.unregister<DatabaseService>();
+      }
+    });
+
+    test('byte-match: new note creation without context or addendum',
+        () async {
+      final result = await builder.buildNewNoteCreationPrompt(
+        userInstruction: 'Create a task for grocery shopping',
+        contextNotes: const [],
+      );
+      const expected =
+          'Use the provided note context (previous message) and the instruction below to create new notes.\n'
+          '\n'
+          'User Prompt: "Create a task for grocery shopping"\n'
+          '\n'
+          'Return a single JSON object with the following structure:\n'
+          '{\n'
+          '  "notes": [\n'
+          '    {\n'
+          '      "title": "Note Title",\n'
+          '      "content": "Note content here",\n'
+          '      "type": "note" or "task",\n'
+          '      "tags": ["tag1", "tag2"],\n'
+          '      "subNotes": [\n'
+          '        {\n'
+          '          "name": "Sub-note name",\n'
+          '          "content": "Sub-note content",\n'
+          '          "isCompleted": false\n'
+          '        }\n'
+          '      ],\n'
+          '      "scheduledAt": "YYYY-MM-DD" (only for tasks),\n'
+          '      "completeBy": "YYYY-MM-DD" (only for tasks),\n'
+          '      "status": "todo" (only for tasks)\n'
+          '    }\n'
+          '  ]\n'
+          '}\n'
+          '\n'
+          'Critical JSON rules:\n'
+          '1. The response must be valid JSON with no additional commentary.\n'
+          '2. Escape all quotes, backslashes, newlines, and control characters.\n'
+          r'3. When using LaTeX (e.g., \( E = mc^2 \)), double-escape backslashes (\\) to keep JSON valid.'
+          '\n'
+          '4. Preserve arrays even when empty (e.g., "tags": []).\n'
+          '\n'
+          'Additional requirements:\n'
+          '- Calculate relative dates (e.g., "next Wednesday") using the current date/time provided in the system message.\n'
+          '- Ensure each generated note relates to the user prompt and the supplied context hierarchy.\n'
+          '- Reference note relationships (answers, causality, related, etc.) when deciding how new notes connect.\n'
+          '- Follow the LaTeX formatting guidance from the system message when including formulas.';
+
+      expect(result.conversationMessages.first.content, equals(expected));
+    });
+
+    test('new note creation system contains relationships mention', () async {
+      final result = await builder.buildNewNoteCreationPrompt(
+        userInstruction: 'X',
+        contextNotes: const [],
+      );
+      expect(
+        result.systemMessage.content,
+        contains('Generate new notes based on user goals'),
+      );
+      expect(
+        result.systemMessage.content,
+        contains('including relationships'),
       );
     });
   });

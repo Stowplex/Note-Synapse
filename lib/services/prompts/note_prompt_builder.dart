@@ -200,9 +200,14 @@ class NotePromptBuilder {
     required List<Note> contextNotes,
     List<PlatformFile> additionalAttachments = const [],
   }) async {
+    final templateService = getIt<PromptTemplateService>();
+
+    final taskContext = templateService
+        .renderSync('note_prompts/new_note_creation_system')
+        .trimRight();
+
     final systemMessage = SystemPromptBuilder.build(
-      taskContext:
-          'Generate new notes based on user goals. The next message contains the existing note graph for context, including relationships.',
+      taskContext: taskContext,
       guidelines: [
         'Output valid JSON exactly as specified below without extra prose or markdown fences.',
         'Derive relative dates using the current date/time context before responding.',
@@ -219,15 +224,8 @@ class NotePromptBuilder {
         contextMessage,
     ];
 
-    final buffer = StringBuffer();
-    buffer.writeln(
-      'Use the provided note context (previous message) and the instruction below to create new notes.',
-    );
-    buffer.writeln();
-    buffer.writeln('User Prompt: "$userInstruction"');
-    buffer.writeln();
-    buffer.writeln('Return a single JSON object with the following structure:');
-    buffer.writeln('''{
+    // JSON schema as a pre-rendered constant to avoid Mustache delimiter conflicts.
+    const jsonSchema = '''{
   "notes": [
     {
       "title": "Note Title",
@@ -246,46 +244,27 @@ class NotePromptBuilder {
       "status": "todo" (only for tasks)
     }
   ]
-}''');
-    buffer.writeln();
-    buffer.writeln('Critical JSON rules:');
-    buffer.writeln(
-      '1. The response must be valid JSON with no additional commentary.',
-    );
-    buffer.writeln(
-      '2. Escape all quotes, backslashes, newlines, and control characters.',
-    );
-    buffer.writeln(
-      '3. When using LaTeX (e.g., \\( E = mc^2 \\)), double-escape backslashes (\\\\) to keep JSON valid.',
-    );
-    buffer.writeln('4. Preserve arrays even when empty (e.g., "tags": []).');
-    buffer.writeln();
-    buffer.writeln('Additional requirements:');
-    buffer.writeln(
-      '- Calculate relative dates (e.g., "next Wednesday") using the current date/time provided in the system message.',
-    );
-    buffer.writeln(
-      '- Ensure each generated note relates to the user prompt and the supplied context hierarchy.',
-    );
-    buffer.writeln(
-      '- Reference note relationships (answers, causality, related, etc.) when deciding how new notes connect.',
-    );
-    buffer.writeln(
-      '- Follow the LaTeX formatting guidance from the system message when including formulas.',
-    );
+}''';
 
     final creationAddOn = PromptConfigurationService.instance.getValue(
       NotePromptConfiguration.creationAddendumId,
     );
-    if (creationAddOn != null && creationAddOn.trim().isNotEmpty) {
-      buffer
-        ..writeln()
-        ..writeln(creationAddOn.trim());
-    }
+    final trimmedAddOn = creationAddOn?.trim();
+    final hasAddendum = trimmedAddOn != null && trimmedAddOn.isNotEmpty;
+
+    final userContent = templateService.renderSync(
+      'note_prompts/new_note_creation_user',
+      {
+        'userInstruction': userInstruction,
+        'jsonSchema': jsonSchema,
+        'hasAddendum': hasAddendum,
+        'addendum': trimmedAddOn ?? '',
+      },
+    );
 
     final userMessage = PromptMessage(
       role: PromptRole.user,
-      content: buffer.toString().trim(),
+      content: userContent.trim(),
       attachments: additionalAttachments,
     );
 
