@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/services.dart';
 import 'package:mustache_template/mustache_template.dart';
 
@@ -16,9 +14,9 @@ class PromptTemplateService {
   /// Pre-load and compile every template under assets/prompts/.
   /// Must be called after [WidgetsFlutterBinding.ensureInitialized].
   Future<void> preloadAll() async {
-    final manifestJson = await rootBundle.loadString('AssetManifest.json');
-    final manifest = json.decode(manifestJson) as Map<String, dynamic>;
-    final promptPaths = manifest.keys
+    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+    final promptPaths = manifest
+        .listAssets()
         .where((key) => key.startsWith('assets/prompts/') && key.endsWith('.md'));
     for (final fullPath in promptPaths) {
       final templatePath = fullPath

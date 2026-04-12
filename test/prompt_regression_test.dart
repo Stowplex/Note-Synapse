@@ -122,6 +122,10 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMessageHandler('flutter/assets', (message) async {
       final key = utf8.decode(message!.buffer.asUint8List());
+      if (key == 'AssetManifest.bin') {
+        // Flutter 3.7+ uses a StandardMessageCodec-encoded binary manifest.
+        return const StandardMessageCodec().encodeMessage(manifest);
+      }
       if (key == 'AssetManifest.json') {
         return ByteData.view(
           Uint8List.fromList(utf8.encode(json.encode(manifest))).buffer,
