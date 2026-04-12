@@ -538,63 +538,29 @@ Use these notes (including linked relationships) to ground the edits and incorpo
 '''
           : '';
 
-      final prompt =
-          '''
-Edit the following HTML application based on the user's suggestion:
-
-Original App Name: $name
-Description: $description
-Steps: ${steps.join(', ')}
-
-$librariesSection
-$noteContextSection
-
-Original HTML:
-$originalHtml
-
-User's Edit Suggestion: $editSuggestion
-
-${_buildDatabaseSchemaSection()}
-
-IMPORTANT - REQUIREMENTS:
-1. The HTML must be completely self-contained with embedded CSS and JavaScript
-2. Do not reference any external resources unless explicitly instructed by user.
-3. Document the purpose, requirements, and approach in comments
-4. Use the following APIs to interact with the Flutter app, generated code should strictly follow the API parameter types.
-${_buildApiDocumentationSection()}
-
-${_buildLibrariesSection()}
-${_buildRequirementsSection()}
-
-${type == UserAppType.noteAction
-              ? _getNoteActionAppInstructions()
-              : type == UserAppType.aiTool
+      final typeInstructions = type == UserAppType.noteAction
+          ? _getNoteActionAppInstructions()
+          : type == UserAppType.aiTool
               ? _getAiToolAppInstructions()
-              : ''}
+              : '';
 
-Please generate the updated HTML application that incorporates the user's suggestions while maintaining the same structure and API integrations.
-
-IMPORTANT: Your response must be formatted as follows:
-1. First, provide a brief explanation of the changes made
-2. Then, provide the complete HTML code wrapped in ```html code blocks
-
-Example format:
-Here's the updated application with your requested changes:
-
-[Brief explanation of changes]
-
-```html
-<!DOCTYPE html>
-<html>
-<head>
-    <!-- Complete HTML code here -->
-</head>
-<body>
-    <!-- Complete HTML code here -->
-</body>
-</html>
-```
-''';
+      final prompt = getIt<PromptTemplateService>().renderSync(
+        'user_app/app_edit',
+        {
+          'name': name,
+          'description': description,
+          'stepsJoined': steps.join(', '),
+          'librariesSection': librariesSection,
+          'noteContextSection': noteContextSection,
+          'originalHtml': originalHtml,
+          'editSuggestion': editSuggestion,
+          'databaseSchema': _buildDatabaseSchemaSection(),
+          'apiDocumentation': _buildApiDocumentationSection(),
+          'librariesFromService': _buildLibrariesSection(),
+          'requirementsSection': _buildRequirementsSection(),
+          'typeSpecificInstructions': typeInstructions,
+        },
+      );
 
       final attachedFiles = await _prepareAttachments(
         attachmentPaths: attachmentPaths,
@@ -622,85 +588,44 @@ Here's the updated application with your requested changes:
     List<UserAppLibraryInfo>? libraries,
     String? noteContext,
   }) {
-    final librariesSection = _buildLibrariesSectionForPrompt(libraries);
+    final templateService = getIt<PromptTemplateService>();
 
+    final librariesSection = _buildLibrariesSectionForPrompt(libraries);
     final noteContextSection =
         (noteContext != null && noteContext.trim().isNotEmpty)
-        ? '''
-Additional Note Context:
-$noteContext
+            ? 'Additional Note Context:\n$noteContext\n\n'
+                'Use these notes (including linked relationships) to shape '
+                "the app's functionality, data access patterns, and UI examples."
+            : '';
 
-Use these notes (including linked relationships) to shape the app's functionality, data access patterns, and UI examples.
-'''
-        : '';
-
-    final basePrompt =
-        '''
-Create a single-page self-contained HTML application based on the following requirements:
-
-App Name: $name
-Description: $description
-Steps: 
-- ${steps.join('\n - ')}
-
-$librariesSection
-$noteContextSection
-
-IMPORTANT - REQUIREMENTS:
-1. The HTML must be completely self-contained with embedded CSS and JavaScript
-2. Do not reference any external resources
-3. Document the purpose, requirements, and approach in comments
-4. Use the following APIs to interact with the Flutter app, generated code should strictly follow the API parameter types.
-${_buildApiDocumentationSection()}
-
-${_buildLibrariesSection()}
-${_buildRequirementsSection()}
-
-${_buildDatabaseSchemaSection()}
-
-${type == UserAppType.noteAction
-            ? _getNoteActionAppInstructions()
-            : type == UserAppType.aiTool
+    final typeInstructions = type == UserAppType.noteAction
+        ? _getNoteActionAppInstructions()
+        : type == UserAppType.aiTool
             ? _getAiToolAppInstructions()
-            : ''}
-
-Generate the complete HTML application now.
-
-IMPORTANT: Your response must be formatted as follows:
-1. First, provide a brief explanation of the application and its features
-2. Then, provide the complete HTML code wrapped in ```html code blocks
-
-Example format:
-Here's the complete HTML application:
-
-[Brief explanation of the application and its features]
-
-```html
-<!DOCTYPE html>
-<html>
-<head>
-    <!-- Complete HTML code here -->
-</head>
-<body>
-    <!-- Complete HTML code here -->
-</body>
-</html>
-```
-''';
+            : '';
 
     final addOn = PromptConfigurationService.instance.getValue(
       AppPromptConfiguration.generationAddendumId,
     );
-    if (addOn == null || addOn.trim().isEmpty) {
-      return basePrompt;
-    }
+    final trimmedAddOn = addOn?.trim();
 
-    final buffer = StringBuffer(basePrompt.trimRight());
-    buffer
-      ..writeln()
-      ..writeln('User-defined guidance:')
-      ..writeln(addOn.trim());
-    return buffer.toString();
+    return templateService.renderSync(
+      'user_app/app_generation',
+      {
+        'name': name,
+        'description': description,
+        'stepsJoined': steps.join('\n - '),
+        'librariesSection': librariesSection,
+        'noteContextSection': noteContextSection,
+        'apiDocumentation': _buildApiDocumentationSection(),
+        'librariesFromService': _buildLibrariesSection(),
+        'requirementsSection': _buildRequirementsSection(),
+        'databaseSchema': _buildDatabaseSchemaSection(),
+        'typeSpecificInstructions': typeInstructions,
+        'hasAddendum': trimmedAddOn != null && trimmedAddOn.isNotEmpty,
+        'addendum': trimmedAddOn,
+      },
+    );
   }
 
   Future<_NoteContextPayload?> _buildNoteContextPayload(
@@ -837,13 +762,29 @@ IMPORTANT:
     if (libraries == null || libraries.isEmpty) {
       return '';
     }
-    return '''
-  - User-provided libraries:
-${libraries.map((lib) => '''
-    - ${lib.name}: ${lib.usage ?? 'No usage instructions provided'}
-      Import with: ${lib.links.map((link) => link.replaceAll('https://', 'synapseuser://')).map((link) => link.endsWith('.css') ? '<link rel="stylesheet" href="$link">' : '<script src="$link"></script>').join('\n      ')}
-''').join('')}
-''';
+    final templateService = getIt<PromptTemplateService>();
+
+    final libraryContexts = libraries.map((lib) {
+      final importTags = lib.links
+          .map((link) => link.replaceAll('https://', 'synapseuser://'))
+          .map(
+            (link) => link.endsWith('.css')
+                ? '<link rel="stylesheet" href="$link">'
+                : '<script src="$link"></script>',
+          )
+          .join('\n      ');
+
+      return {
+        'name': lib.name,
+        'usage': lib.usage ?? 'No usage instructions provided',
+        'importTags': importTags,
+      };
+    }).toList();
+
+    return templateService.renderSync(
+      'user_app/libraries_for_prompt',
+      {'libraries': libraryContexts},
+    );
   }
 
   // Get Note Action App specific instructions
@@ -1371,6 +1312,18 @@ ${libraries.map((lib) => '''
   static String testGetNoteActionAppInstructions() => _getNoteActionAppInstructions();
   @visibleForTesting
   static String testGetAiToolAppInstructions() => _getAiToolAppInstructions();
+  @visibleForTesting
+  static String testBuildAppGenerationPrompt(
+    String name,
+    String description,
+    List<String> steps,
+    UserAppType type, {
+    List<UserAppLibraryInfo>? libraries,
+    String? noteContext,
+  }) => _buildAppGenerationPrompt(
+        name, description, steps, type,
+        libraries: libraries, noteContext: noteContext,
+      );
 }
 
 class _NoteContextPayload {

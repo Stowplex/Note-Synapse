@@ -8,6 +8,7 @@ import 'package:note_synapse/models/attachment.dart';
 import 'package:note_synapse/models/relationship.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/prompts/ai_prompts.dart';
+import 'package:note_synapse/models/user_app.dart';
 import 'package:note_synapse/services/user_app_service.dart';
 import 'package:note_synapse/services/prompts/note_prompt_builder.dart';
 import 'package:note_synapse/services/prompts/prompt_models.dart';
@@ -102,6 +103,15 @@ void main() {
       ],
       'assets/prompts/user_app/ai_tool_instructions.md': [
         'assets/prompts/user_app/ai_tool_instructions.md',
+      ],
+      'assets/prompts/user_app/app_generation.md': [
+        'assets/prompts/user_app/app_generation.md',
+      ],
+      'assets/prompts/user_app/app_edit.md': [
+        'assets/prompts/user_app/app_edit.md',
+      ],
+      'assets/prompts/user_app/libraries_for_prompt.md': [
+        'assets/prompts/user_app/libraries_for_prompt.md',
       ],
     };
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -716,6 +726,34 @@ void main() {
         maxBudgetTokens: 100000,
       );
       expect(result, contains('mode=limited'));
+    });
+  });
+
+  group('UserAppService app generation regression', () {
+    test('app generation prompt contains all sections', () {
+      final result = UserAppService.testBuildAppGenerationPrompt(
+        'Test App',
+        'A test application',
+        ['Step 1', 'Step 2'],
+        UserAppType.normal,
+      );
+      expect(result, contains('App Name: Test App'));
+      expect(result, contains('Description: A test application'));
+      expect(result, contains('Step 1'));
+      expect(result, contains('Synapse.runQuery'));
+      expect(result, contains('Database Schema:'));
+      expect(result, contains('```html'));
+    });
+
+    test('note action type includes Synapse.Notes instructions', () {
+      final result = UserAppService.testBuildAppGenerationPrompt(
+        'Note App',
+        'Processes notes',
+        ['Process'],
+        UserAppType.noteAction,
+      );
+      expect(result, contains('NOTE ACTION APP'));
+      expect(result, contains('window.Synapse.Notes'));
     });
   });
 
