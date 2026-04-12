@@ -5,7 +5,9 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/services/prompts/ai_prompts.dart';
+import 'package:note_synapse/services/prompts/prompt_models.dart';
 import 'package:note_synapse/services/prompts/prompt_template_service.dart';
+import 'package:note_synapse/services/prompts/system_prompt_builder.dart';
 import 'package:note_synapse/services/service_locator.dart';
 
 void main() {
@@ -46,6 +48,9 @@ void main() {
       ],
       'assets/prompts/ai_prompts/dedup_rules_suggestion.md': [
         'assets/prompts/ai_prompts/dedup_rules_suggestion.md',
+      ],
+      'assets/prompts/system_prompt/system.md': [
+        'assets/prompts/system_prompt/system.md',
       ],
     };
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -243,6 +248,90 @@ void main() {
 
       final actual = AIPrompts.buildDedupRulesSuggestionPrompt(['a', 'b']);
       expect(actual, equals(expected));
+    });
+  });
+
+  group('SystemPromptBuilder regression', () {
+    test('byte-match: minimal (default persona, no task context, no guidelines)', () {
+      final result = SystemPromptBuilder.build(
+        now: DateTime(2026, 4, 11, 10, 30, 0),
+        needTimeInContext: false,
+      );
+      final expected =
+          'Persona: ${SystemPromptBuilder.defaultPersona}\n'
+          'Conversation start at: ${SystemPromptBuilder.formatTimestamp(DateTime(2026, 4, 11, 10, 30, 0), needTimeInContext: false)}';
+      expect(result.content, equals(expected));
+      expect(result.role, equals(PromptRole.system));
+    });
+
+    test('byte-match: with custom persona', () {
+      final result = SystemPromptBuilder.build(
+        persona: 'Custom AI',
+        now: DateTime(2026, 4, 11),
+        needTimeInContext: false,
+      );
+      final ts = SystemPromptBuilder.formatTimestamp(
+        DateTime(2026, 4, 11),
+        needTimeInContext: false,
+      );
+      expect(
+        result.content,
+        equals('Persona: Custom AI\nConversation start at: $ts'),
+      );
+    });
+
+    test('byte-match: with task context', () {
+      final result = SystemPromptBuilder.build(
+        taskContext: '  Transform the note content.  ',
+        now: DateTime(2026, 4, 11),
+        needTimeInContext: false,
+      );
+      final ts = SystemPromptBuilder.formatTimestamp(
+        DateTime(2026, 4, 11),
+        needTimeInContext: false,
+      );
+      final expected =
+          'Persona: ${SystemPromptBuilder.defaultPersona}\n'
+          'Conversation start at: $ts\n'
+          '\n'
+          'Task Context:\n'
+          'Transform the note content.';
+      expect(result.content, equals(expected));
+    });
+
+    test('byte-match: with guidelines (tests dash prefix logic)', () {
+      final result = SystemPromptBuilder.build(
+        guidelines: [
+          'Be concise.',
+          '- Already dashed',
+          'Multi\nline',
+          '  ',
+        ],
+        now: DateTime(2026, 4, 11),
+        needTimeInContext: false,
+      );
+      final ts = SystemPromptBuilder.formatTimestamp(
+        DateTime(2026, 4, 11),
+        needTimeInContext: false,
+      );
+      final expected =
+          'Persona: ${SystemPromptBuilder.defaultPersona}\n'
+          'Conversation start at: $ts\n'
+          '\n'
+          'Guidelines:\n'
+          '- Be concise.\n'
+          '- Already dashed\n'
+          'Multi\nline';
+      expect(result.content, equals(expected));
+    });
+
+    test('byte-match: empty task context is skipped', () {
+      final result = SystemPromptBuilder.build(
+        taskContext: '   ',
+        now: DateTime(2026, 4, 11),
+        needTimeInContext: false,
+      );
+      expect(result.content, isNot(contains('Task Context:')));
     });
   });
 }

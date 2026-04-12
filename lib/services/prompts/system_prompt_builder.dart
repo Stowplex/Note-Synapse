@@ -1,7 +1,9 @@
 import 'package:intl/intl.dart';
 
+import '../service_locator.dart';
 import 'prompt_models.dart';
 import 'prompt_configuration_service.dart';
+import 'prompt_template_service.dart';
 import 'registrations/system_prompt_configuration.dart';
 
 /// Centralized builder for system prompts that establishes persona, temporal
@@ -22,50 +24,48 @@ class SystemPromptBuilder {
     DateTime? now,
     bool needTimeInContext = true,
   }) {
-    final buffer = StringBuffer();
-
-    buffer.writeln('Persona: ${persona ?? defaultPersona}');
-
     final timestamp = formatTimestamp(
       now ?? DateTime.now(),
       needTimeInContext: needTimeInContext,
     );
-    buffer.writeln('Conversation start at: $timestamp');
 
-    if ((taskContext ?? '').trim().isNotEmpty) {
-      buffer.writeln();
-      buffer.writeln('Task Context:');
-      buffer.writeln(taskContext!.trim());
-    }
-
-    if (guidelines.isNotEmpty) {
-      buffer.writeln();
-      buffer.writeln('Guidelines:');
-      for (final line in guidelines) {
-        final trimmed = line.trim();
-        if (trimmed.isEmpty) continue;
-        if (trimmed.contains('\n')) {
-          buffer.writeln(trimmed);
-        } else if (trimmed.startsWith('-')) {
-          buffer.writeln(trimmed);
-        } else {
-          buffer.writeln('- $trimmed');
-        }
+    // Pre-format guidelines (existing logic preserved)
+    final formattedGuidelines = <String>[];
+    for (final line in guidelines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      if (trimmed.contains('\n')) {
+        formattedGuidelines.add(trimmed);
+      } else if (trimmed.startsWith('-')) {
+        formattedGuidelines.add(trimmed);
+      } else {
+        formattedGuidelines.add('- $trimmed');
       }
     }
 
     final globalAddendum = PromptConfigurationService.instance.getValue(
       SystemPromptConfiguration.globalAddendumId,
     );
-    if (globalAddendum != null && globalAddendum.trim().isNotEmpty) {
-      buffer.writeln();
-      buffer.writeln('User-defined guidance:');
-      buffer.writeln(globalAddendum.trim());
-    }
+    final trimmedAddendum = globalAddendum?.trim();
+    final hasAddendum = trimmedAddendum != null && trimmedAddendum.isNotEmpty;
+
+    final content = getIt<PromptTemplateService>().renderSync(
+      'system_prompt/system',
+      {
+        'persona': persona ?? defaultPersona,
+        'timestamp': timestamp,
+        'hasTaskContext': (taskContext ?? '').trim().isNotEmpty,
+        'taskContext': taskContext?.trim() ?? '',
+        'hasGuidelines': formattedGuidelines.isNotEmpty,
+        'guidelines': formattedGuidelines,
+        'hasGlobalAddendum': hasAddendum,
+        'globalAddendum': trimmedAddendum ?? '',
+      },
+    );
 
     return PromptMessage(
       role: PromptRole.system,
-      content: buffer.toString().trim(),
+      content: content.trim(),
     );
   }
 
