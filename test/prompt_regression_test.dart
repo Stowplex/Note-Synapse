@@ -13,6 +13,7 @@ import 'package:note_synapse/services/prompts/prompt_models.dart';
 import 'package:note_synapse/services/prompts/prompt_template_service.dart';
 import 'package:note_synapse/services/prompts/system_prompt_builder.dart';
 import 'package:note_synapse/services/service_locator.dart';
+import 'package:note_synapse/services/skill_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -79,6 +80,15 @@ void main() {
       ],
       'assets/prompts/note_prompts/new_note_creation_user.md': [
         'assets/prompts/note_prompts/new_note_creation_user.md',
+      ],
+      'assets/prompts/skills/skill_index_compact.md': [
+        'assets/prompts/skills/skill_index_compact.md',
+      ],
+      'assets/prompts/skills/skill_index_medium.md': [
+        'assets/prompts/skills/skill_index_medium.md',
+      ],
+      'assets/prompts/skills/skill_index_full.md': [
+        'assets/prompts/skills/skill_index_full.md',
       ],
     };
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -591,6 +601,108 @@ void main() {
         result.systemMessage.content,
         contains('including relationships'),
       );
+    });
+  });
+
+  group('SkillService skill index regression', () {
+    late SkillService service;
+
+    setUp(() {
+      final fakeDb = _FakeDatabaseService();
+      if (getIt.isRegistered<DatabaseService>()) {
+        getIt.unregister<DatabaseService>();
+      }
+      getIt.registerSingleton<DatabaseService>(fakeDb);
+      service = SkillService(fakeDb);
+    });
+
+    tearDown(() {
+      if (getIt.isRegistered<DatabaseService>()) {
+        getIt.unregister<DatabaseService>();
+      }
+    });
+
+    SkillMetadata makeSkill({
+      String noteId = 'note-1',
+      String skillRef = 'skill1',
+      String name = 'Test Skill',
+      String description = 'A description',
+      int? minContext,
+    }) {
+      return SkillMetadata(
+        noteId: noteId,
+        skillRef: skillRef,
+        name: name,
+        description: description,
+        enabled: true,
+        minContext: minContext,
+      );
+    }
+
+    test('returns empty string for empty index', () {
+      final result = service.buildSkillIndexPrompt({});
+      expect(result, equals(''));
+    });
+
+    test('byte-match: compact tier with one skill (no description)', () {
+      final index = {'note-1': makeSkill()};
+      final result = service.buildSkillIndexPrompt(
+        index,
+        maxBudgetTokens: 1000,
+      );
+      const expected =
+          '\n## Available Agent Skills\n'
+          'If a skill matches the request, call load_skill using the listed skillRef.\n'
+          '- skillRef=skill1 | name=Test Skill\n';
+      expect(result, equals(expected));
+    });
+
+    test('byte-match: medium tier with one skill (no description)', () {
+      final index = {'note-1': makeSkill()};
+      final result = service.buildSkillIndexPrompt(
+        index,
+        maxBudgetTokens: 20000,
+      );
+      const expected =
+          '\n## Available Agent Skills\n'
+          'If a skill matches the request, call load_skill using the listed skillRef.\n'
+          '\n'
+          '- skillRef=skill1 | name=Test Skill\n';
+      expect(result, equals(expected));
+    });
+
+    test('byte-match: full tier with one skill (always includes description)',
+        () {
+      final index = {'note-1': makeSkill()};
+      final result = service.buildSkillIndexPrompt(
+        index,
+        maxBudgetTokens: 100000,
+      );
+      const expected =
+          '\n## Available Agent Skills\n'
+          'If a skill matches the request, call load_skill using the listed skillRef to retrieve its workflow instructions.\n'
+          '\n'
+          '- skillRef=skill1 | name=Test Skill | when=A description\n';
+      expect(result, equals(expected));
+    });
+
+    test('forLocalModel=true includes description in compact tier', () {
+      final index = {'note-1': makeSkill(description: 'Use for X')};
+      final result = service.buildSkillIndexPrompt(
+        index,
+        maxBudgetTokens: 1000,
+        forLocalModel: true,
+      );
+      expect(result, contains('when=Use for X'));
+    });
+
+    test('limited mode shown when minContext exceeds budget', () {
+      final index = {'note-1': makeSkill(minContext: 200000)};
+      final result = service.buildSkillIndexPrompt(
+        index,
+        maxBudgetTokens: 100000,
+      );
+      expect(result, contains('mode=limited'));
     });
   });
 }

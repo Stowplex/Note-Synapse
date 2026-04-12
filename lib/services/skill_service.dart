@@ -1,5 +1,7 @@
 import 'package:note_synapse/models/note.dart';
 import 'package:note_synapse/services/database_service.dart';
+import 'package:note_synapse/services/prompts/prompt_template_service.dart';
+import 'package:note_synapse/services/service_locator.dart';
 
 class SkillMetadata {
   final String noteId;
@@ -109,48 +111,34 @@ class SkillService {
     // Local models need descriptions at all budget levels to make informed
     // skill selections — they lack the text tool catalog that cloud models get.
     final alwaysIncludeDescription = forLocalModel;
-    final sb = StringBuffer();
 
+    final String templatePath;
+    final bool includeDescription;
     if (budget < _compactBudgetThreshold) {
-      sb.writeln('\n## Available Agent Skills');
-      sb.writeln(
-        'If a skill matches the request, call load_skill using the listed skillRef.',
-      );
-      for (final entry in index.entries) {
-        sb.writeln(
-          _formatSkillEntry(
-            entry,
-            budget: budget,
-            includeDescription: alwaysIncludeDescription,
-          ),
-        );
-      }
+      templatePath = 'skills/skill_index_compact';
+      includeDescription = alwaysIncludeDescription;
     } else if (budget < _fullBudgetThreshold) {
-      sb.writeln('\n## Available Agent Skills');
-      sb.writeln(
-        'If a skill matches the request, call load_skill using the listed skillRef.\n',
-      );
-      for (final entry in index.entries) {
-        sb.writeln(
-          _formatSkillEntry(
-            entry,
-            budget: budget,
-            includeDescription: alwaysIncludeDescription,
-          ),
-        );
-      }
+      templatePath = 'skills/skill_index_medium';
+      includeDescription = alwaysIncludeDescription;
     } else {
-      sb.writeln('\n## Available Agent Skills');
-      sb.writeln(
-        'If a skill matches the request, call load_skill using the listed skillRef to retrieve its workflow instructions.\n',
-      );
-      for (final entry in index.entries) {
-        sb.writeln(
-          _formatSkillEntry(entry, budget: budget, includeDescription: true),
-        );
-      }
+      templatePath = 'skills/skill_index_full';
+      includeDescription = true;
     }
-    return sb.toString();
+
+    final skills = index.entries.map((entry) {
+      return {
+        'entryLine': _formatSkillEntry(
+          entry,
+          budget: budget,
+          includeDescription: includeDescription,
+        ),
+      };
+    }).toList();
+
+    return getIt<PromptTemplateService>().renderSync(
+      templatePath,
+      {'skills': skills},
+    );
   }
 
   String _formatSkillEntry(
