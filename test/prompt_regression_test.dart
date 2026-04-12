@@ -834,6 +834,15 @@ void main() {
       expect(result, contains('- test_tool: A test tool'));
     });
   });
+
+  group('PromptTemplateService preload', () {
+    test('preloadAll loads all expected templates', () {
+      // setUpAll at the top of main() loads all templates via mock manifest.
+      // Verify the cache contains all template files across all 7 directories.
+      final service = getIt<PromptTemplateService>();
+      expect(service.cacheSize, greaterThanOrEqualTo(29));
+    });
+  });
 }
 
 class _FakeDatabaseService extends Fake implements DatabaseService {
