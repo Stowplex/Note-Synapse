@@ -8,6 +8,7 @@ import 'package:note_synapse/models/attachment.dart';
 import 'package:note_synapse/models/relationship.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/prompts/ai_prompts.dart';
+import 'package:note_synapse/services/user_app_service.dart';
 import 'package:note_synapse/services/prompts/note_prompt_builder.dart';
 import 'package:note_synapse/services/prompts/prompt_models.dart';
 import 'package:note_synapse/services/prompts/prompt_template_service.dart';
@@ -89,6 +90,18 @@ void main() {
       ],
       'assets/prompts/skills/skill_index_full.md': [
         'assets/prompts/skills/skill_index_full.md',
+      ],
+      'assets/prompts/user_app/api_documentation.md': [
+        'assets/prompts/user_app/api_documentation.md',
+      ],
+      'assets/prompts/user_app/requirements.md': [
+        'assets/prompts/user_app/requirements.md',
+      ],
+      'assets/prompts/user_app/note_action_instructions.md': [
+        'assets/prompts/user_app/note_action_instructions.md',
+      ],
+      'assets/prompts/user_app/ai_tool_instructions.md': [
+        'assets/prompts/user_app/ai_tool_instructions.md',
       ],
     };
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -703,6 +716,44 @@ void main() {
         maxBudgetTokens: 100000,
       );
       expect(result, contains('mode=limited'));
+    });
+  });
+
+  group('UserAppService static sections regression', () {
+    test('API documentation contains all Synapse methods', () {
+      final result = UserAppService.testBuildApiDocumentationSection();
+      expect(result, contains('Synapse.runQuery'));
+      expect(result, contains('Synapse.storeAppState'));
+      expect(result, contains('Synapse.chatAI'));
+      expect(result, contains('Synapse.proxyFetch'));
+      expect(result, contains('Synapse.fetchWebPage'));
+      expect(result, contains('Synapse.readAttachment'));
+      expect(result, contains('Synapse.saveTemp'));
+      expect(result, contains('Synapse.saveNotes'));
+      expect(result, contains('Synapse.updateNotes'));
+      expect(result, contains('Synapse.deleteNotes'));
+      expect(result, contains('Synapse.openNote'));
+      expect(result, contains('Synapse.openConversations'));
+      expect(result, contains('Synapse.openAIActions'));
+      expect(result, contains(r'${result1.updatedCount}'));
+    });
+
+    test('requirements section contains numbered rules', () {
+      final result = UserAppService.testBuildRequirementsSection();
+      expect(result, contains('DO NOT mock Synapse'));
+      expect(result, contains('PROMPT INJECTION PROTECTION'));
+    });
+
+    test('note action instructions contain Synapse.Notes', () {
+      final result = UserAppService.testGetNoteActionAppInstructions();
+      expect(result, contains('window.Synapse.Notes'));
+      expect(result, contains('NOTE ACTION APP'));
+    });
+
+    test('AI tool instructions contain tool_spec', () {
+      final result = UserAppService.testGetAiToolAppInstructions();
+      expect(result, contains('AI TOOL APP'));
+      expect(result, contains('tool_spec'));
     });
   });
 }
