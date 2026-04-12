@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/models/attachment.dart';
 import 'package:note_synapse/models/relationship.dart';
 import 'package:note_synapse/services/database_service.dart';
+import 'package:note_synapse/models/mcp_endpoint.dart';
+import 'package:note_synapse/services/mcp_tool_integration_service.dart';
 import 'package:note_synapse/services/prompts/ai_prompts.dart';
 import 'package:note_synapse/models/user_app.dart';
 import 'package:note_synapse/services/user_app_service.dart';
@@ -112,6 +114,9 @@ void main() {
       ],
       'assets/prompts/user_app/libraries_for_prompt.md': [
         'assets/prompts/user_app/libraries_for_prompt.md',
+      ],
+      'assets/prompts/mcp/tool_catalog.md': [
+        'assets/prompts/mcp/tool_catalog.md',
       ],
     };
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -792,6 +797,41 @@ void main() {
       final result = UserAppService.testGetAiToolAppInstructions();
       expect(result, contains('AI TOOL APP'));
       expect(result, contains('tool_spec'));
+    });
+  });
+
+  group('MCP tool catalog regression', () {
+    test('renders tool catalog with header and intro', () {
+      final tools = {
+        'weather-api': [
+          McpTool(name: 'get_forecast', description: 'Get weather forecast'),
+        ],
+      };
+      final result = McpToolIntegrationService.testBuildToolCatalogDescription(
+        tools,
+        compact: false,
+        includeHeader: true,
+        includeWrapperIntro: true,
+      );
+      expect(result, contains('=== MCP TOOLS AVAILABLE ==='));
+      expect(result, contains('call_tool'));
+      expect(result, contains('weather-api'));
+      expect(result, contains('get_forecast'));
+    });
+
+    test('renders compact catalog without header', () {
+      final tools = {
+        'test': [
+          McpTool(name: 'test_tool', description: 'A test tool'),
+        ],
+      };
+      final result = McpToolIntegrationService.testBuildToolCatalogDescription(
+        tools,
+        compact: true,
+        includeHeader: false,
+      );
+      expect(result, isNot(contains('=== MCP TOOLS AVAILABLE ===')));
+      expect(result, contains('- test_tool: A test tool'));
     });
   });
 }

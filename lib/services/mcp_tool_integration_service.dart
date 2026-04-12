@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/generation_context.dart';
 import 'mcp_service.dart';
 import 'logger_service.dart';
+import 'prompts/prompt_template_service.dart';
 import 'service_locator.dart';
 
 /// Service for integrating MCP tools with AI models
@@ -274,42 +276,26 @@ class McpToolIntegrationService {
     bool includeWrapperIntro = true,
     bool includeHeader = false,
   }) {
-    final buffer = StringBuffer();
+    final templateService = getIt<PromptTemplateService>();
 
-    if (includeHeader) {
-      buffer.writeln('\n\n=== MCP TOOLS AVAILABLE ===\n');
-    }
-
-    if (includeWrapperIntro && toolsByEndpoint.isNotEmpty) {
-      buffer.writeln(
-        'Call external tools only through call_tool with {service_name, tool_name, params}.',
-      );
-      buffer.writeln(
-        'Put every tool argument inside params. If a required value is missing, ask the user.',
-      );
-      // Use the first real endpoint name so the model sees the exact casing.
-      final exampleService = toolsByEndpoint.keys.first;
-      final exampleTool = toolsByEndpoint.values.first.first.name;
-      buffer.writeln(
-        'Example: call_tool({service_name: "$exampleService", tool_name: "$exampleTool", params: {}})',
-      );
-      buffer.writeln();
-    }
-
+    // Build the per-tool details in Dart (data assembly stays here)
+    final detailsBuffer = StringBuffer();
     for (final entry in toolsByEndpoint.entries) {
-      buffer.writeln('=== Endpoint: ${entry.key} (service_name: "${entry.key}") ===');
+      detailsBuffer.writeln(
+        '=== Endpoint: ${entry.key} (service_name: "${entry.key}") ===',
+      );
       for (final tool in entry.value) {
         final description = tool.description?.trim();
         if (compact) {
-          buffer.write('- ${tool.name}');
+          detailsBuffer.write('- ${tool.name}');
           if (description != null && description.isNotEmpty) {
-            buffer.write(': $description');
+            detailsBuffer.write(': $description');
           }
-          buffer.writeln();
+          detailsBuffer.writeln();
         } else {
-          buffer.writeln('Tool Name Argument: ${tool.name}');
+          detailsBuffer.writeln('Tool Name Argument: ${tool.name}');
           if (description != null && description.isNotEmpty) {
-            buffer.writeln('Description: $description');
+            detailsBuffer.writeln('Description: $description');
           }
         }
 
@@ -318,7 +304,7 @@ class McpToolIntegrationService {
           final properties = schema['properties'] as Map<String, dynamic>?;
           final required = schema['required'] as List?;
           if (required != null && required.isNotEmpty) {
-            buffer.writeln(
+            detailsBuffer.writeln(
               compact
                   ? '  Required: ${required.join(", ")}'
                   : 'Required parameters: ${required.join(", ")}',
@@ -326,25 +312,55 @@ class McpToolIntegrationService {
           }
           if (properties != null && properties.isNotEmpty) {
             if (!compact) {
-              buffer.writeln('Parameters:');
+              detailsBuffer.writeln('Parameters:');
             }
             properties.forEach((paramName, paramDetails) {
               final details = paramDetails as Map<String, dynamic>;
               final paramType = details['type'] ?? 'any';
               final paramDesc = details['description'] ?? '';
-              buffer.writeln('  - $paramName ($paramType): $paramDesc');
+              detailsBuffer.writeln('  - $paramName ($paramType): $paramDesc');
               if (!compact && details.containsKey('enum')) {
-                buffer.writeln('    Allowed values: ${details['enum']}');
+                detailsBuffer.writeln('    Allowed values: ${details['enum']}');
               }
             });
           }
         }
-        buffer.writeln();
+        detailsBuffer.writeln();
       }
     }
 
-    return buffer.toString();
+    // Determine example service/tool for the intro
+    String exampleService = '';
+    String exampleTool = '';
+    if (toolsByEndpoint.isNotEmpty) {
+      exampleService = toolsByEndpoint.keys.first;
+      exampleTool = toolsByEndpoint.values.first.first.name;
+    }
+
+    return templateService.renderSync(
+      'mcp/tool_catalog',
+      {
+        'includeHeader': includeHeader,
+        'includeWrapperIntro': includeWrapperIntro && toolsByEndpoint.isNotEmpty,
+        'exampleService': exampleService,
+        'exampleTool': exampleTool,
+        'toolDetails': detailsBuffer.toString(),
+      },
+    );
   }
+
+  @visibleForTesting
+  static String testBuildToolCatalogDescription(
+    Map<String, List<McpTool>> toolsByEndpoint, {
+    required bool compact,
+    bool includeWrapperIntro = true,
+    bool includeHeader = false,
+  }) => _buildToolCatalogDescription(
+        toolsByEndpoint,
+        compact: compact,
+        includeWrapperIntro: includeWrapperIntro,
+        includeHeader: includeHeader,
+      );
 
   /// Execute an MCP tool call
   static Future<String> executeToolCall({
