@@ -4,7 +4,11 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:note_synapse/models/attachment.dart';
+import 'package:note_synapse/models/relationship.dart';
+import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/prompts/ai_prompts.dart';
+import 'package:note_synapse/services/prompts/note_prompt_builder.dart';
 import 'package:note_synapse/services/prompts/prompt_models.dart';
 import 'package:note_synapse/services/prompts/prompt_template_service.dart';
 import 'package:note_synapse/services/prompts/system_prompt_builder.dart';
@@ -51,6 +55,12 @@ void main() {
       ],
       'assets/prompts/system_prompt/system.md': [
         'assets/prompts/system_prompt/system.md',
+      ],
+      'assets/prompts/note_prompts/question_system.md': [
+        'assets/prompts/note_prompts/question_system.md',
+      ],
+      'assets/prompts/note_prompts/question_user.md': [
+        'assets/prompts/note_prompts/question_user.md',
       ],
     };
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -334,4 +344,88 @@ void main() {
       expect(result.content, isNot(contains('Task Context:')));
     });
   });
+
+  group('NotePromptBuilder question regression', () {
+    late NotePromptBuilder builder;
+
+    setUp(() {
+      final fakeDb = _FakeDatabaseService();
+      if (getIt.isRegistered<DatabaseService>()) {
+        getIt.unregister<DatabaseService>();
+      }
+      getIt.registerSingleton<DatabaseService>(fakeDb);
+      builder = NotePromptBuilder(fakeDb);
+    });
+
+    tearDown(() {
+      if (getIt.isRegistered<DatabaseService>()) {
+        getIt.unregister<DatabaseService>();
+      }
+    });
+
+    test('byte-match: question prompt without context notes, no own knowledge',
+        () async {
+      final result = await builder.buildQuestionPrompt(
+        question: 'What is Flutter?',
+        contextNotes: const [],
+        useOwnKnowledge: false,
+      );
+      final expected =
+          'Question: "What is Flutter?"\n'
+          'No note context is provided. Use the system guidance to determine how to answer.\n'
+          'Do not rely on information outside the provided materials.\n'
+          'If the answer cannot be found, state explicitly that the information is unavailable.';
+      expect(result.conversationMessages.first.content, equals(expected));
+      expect(
+        result.systemMessage.content,
+        contains("You answer detailed questions about the user's notes."),
+      );
+      expect(
+        result.systemMessage.content,
+        contains(
+          'Do not use outside knowledge unless the notes lack the answer.',
+        ),
+      );
+      expect(
+        result.systemMessage.content,
+        isNot(contains('You may augment answers with general knowledge')),
+      );
+      // No context notes -> no context message emitted
+      expect(result.contextMessages, isEmpty);
+    });
+
+    test(
+        'byte-match: question prompt without context notes, with own knowledge',
+        () async {
+      final result = await builder.buildQuestionPrompt(
+        question: 'Explain AI',
+        contextNotes: const [],
+        useOwnKnowledge: true,
+      );
+      final expected =
+          'Question: "Explain AI"\n'
+          'No note context is provided. Use the system guidance to determine how to answer.\n'
+          'Supplement with general knowledge only when it clarifies gaps, and identify assumptions.\n'
+          'If the answer cannot be found, state explicitly that the information is unavailable.';
+      expect(result.conversationMessages.first.content, equals(expected));
+      expect(
+        result.systemMessage.content,
+        contains(
+          'You may augment answers with general knowledge when helpful.',
+        ),
+      );
+      expect(
+        result.systemMessage.content,
+        isNot(contains('Do not use outside knowledge')),
+      );
+    });
+  });
+}
+
+class _FakeDatabaseService extends Fake implements DatabaseService {
+  @override
+  Future<List<Attachment>> getAttachmentsForNote(String noteId) async => [];
+
+  @override
+  Future<List<Relationship>> getRelationships(String noteId) async => [];
 }

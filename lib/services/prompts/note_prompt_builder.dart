@@ -15,9 +15,11 @@ import '../../utils/remote_image_utils.dart';
 import '../../utils/synapse_temp_utils.dart';
 import '../database_service.dart';
 import '../logger_service.dart';
+import '../service_locator.dart';
 import 'ai_prompts.dart';
 import 'prompt_models.dart';
 import 'prompt_configuration_service.dart';
+import 'prompt_template_service.dart';
 import 'registrations/note_prompt_configuration.dart';
 import 'system_prompt_builder.dart';
 
@@ -42,6 +44,8 @@ class NotePromptBuilder {
     bool useOwnKnowledge = false,
     List<PlatformFile> additionalAttachments = const [],
   }) async {
+    final templateService = getIt<PromptTemplateService>();
+
     final relationshipGuidance = contextNotes.isEmpty
         ? null
         : 'Note relationship reminders:\n${AIPrompts.relationshipGuidelines}';
@@ -56,10 +60,13 @@ class NotePromptBuilder {
       AIPrompts.mathFormulaGuidelines,
     ];
 
+    final taskContext = templateService.renderSync(
+      'note_prompts/question_system',
+      {'useOwnKnowledge': useOwnKnowledge},
+    ).trimRight();
+
     final systemMessage = SystemPromptBuilder.build(
-      taskContext:
-          'You answer detailed questions about the user\'s notes. The next message contains note context with optional attachments. '
-          '${useOwnKnowledge ? 'You may augment answers with general knowledge when helpful.' : 'Do not use outside knowledge unless the notes lack the answer.'}',
+      taskContext: taskContext,
       guidelines: [
         ...guidelines,
         AIPrompts.promptInjectionProtectionGuidelines,
@@ -73,31 +80,18 @@ class NotePromptBuilder {
         contextMessage,
     ];
 
-    final buffer = StringBuffer();
-    buffer.writeln('Question: "$question"');
-    if (contextNotes.isNotEmpty) {
-      buffer.writeln('Base your answer on the supplied note context.');
-    } else {
-      buffer.writeln(
-        'No note context is provided. Use the system guidance to determine how to answer.',
-      );
-    }
-    if (useOwnKnowledge) {
-      buffer.writeln(
-        'Supplement with general knowledge only when it clarifies gaps, and identify assumptions.',
-      );
-    } else {
-      buffer.writeln(
-        'Do not rely on information outside the provided materials.',
-      );
-    }
-    buffer.writeln(
-      'If the answer cannot be found, state explicitly that the information is unavailable.',
+    final userContent = templateService.renderSync(
+      'note_prompts/question_user',
+      {
+        'question': question,
+        'hasContextNotes': contextNotes.isNotEmpty,
+        'useOwnKnowledge': useOwnKnowledge,
+      },
     );
 
     final userMessage = PromptMessage(
       role: PromptRole.user,
-      content: buffer.toString().trim(),
+      content: userContent.trim(),
       attachments: additionalAttachments,
     );
 
