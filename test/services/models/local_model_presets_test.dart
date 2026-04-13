@@ -19,6 +19,7 @@ void main() {
       expect(preset.supportsVision, isTrue);
       expect(preset.supportsThinking, isFalse);
       expect(preset.supportsToolCalls, isTrue);
+      expect(preset.supportsToolOrchestration, isFalse);
       expect(preset.defaultTokenWindow, 16384);
       expect(preset.minTokenWindow, 2048);
       expect(preset.maxTokenWindow, 32768);
