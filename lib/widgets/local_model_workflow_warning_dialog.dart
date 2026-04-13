@@ -5,8 +5,10 @@ import '../l10n/app_localizations.dart';
 enum LocalModelWorkflowApproval {
   /// Proceed; show warning again next time.
   proceed,
+
   /// Proceed and suppress this dialog for the rest of the app session.
   proceedAndSuppress,
+
   /// Do not run the workflow.
   cancel,
 }
