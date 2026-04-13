@@ -13,6 +13,7 @@ class LocalModelPreset {
   final bool supportsVision;
   final bool supportsThinking;
   final bool supportsToolCalls;
+  final bool supportsToolOrchestration;
   final bool experimental;
   final bool foregroundDownload;
   final int defaultTokenWindow;
@@ -40,6 +41,7 @@ class LocalModelPreset {
     required this.maxTokenWindow,
     this.experimental = false,
     this.foregroundDownload = false,
+    this.supportsToolOrchestration = false,
     this.maxNumImages,
     this.temperature = 1.0,
     this.topK = 64,

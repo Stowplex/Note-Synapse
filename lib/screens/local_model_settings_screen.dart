@@ -84,7 +84,7 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
         supportsDocuments: false,
         supportsAudio: false,
         supportsVideo: false,
-        supportsToolOrchestration: widget.preset.supportsToolCalls,
+        supportsToolOrchestration: widget.preset.supportsToolOrchestration,
       ),
     );
 
