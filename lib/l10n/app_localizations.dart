@@ -7802,6 +7802,24 @@ abstract class AppLocalizations {
   /// **'Switch Model'**
   String get toolOrchestrationSwitchModel;
 
+  /// No description provided for @localModelWorkflowWarningTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Local Model Performance Warning'**
+  String get localModelWorkflowWarningTitle;
+
+  /// No description provided for @localModelWorkflowWarningBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This model may not deliver the best experience with tag workflows.'**
+  String get localModelWorkflowWarningBody;
+
+  /// No description provided for @localModelWorkflowWarningContinueNoWarn.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue, Don\'t Warn This Session'**
+  String get localModelWorkflowWarningContinueNoWarn;
+
   /// No description provided for @nightMode.
   ///
   /// In en, this message translates to:

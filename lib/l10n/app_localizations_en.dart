@@ -4475,6 +4475,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get toolOrchestrationSwitchModel => 'Switch Model';
 
   @override
+  String get localModelWorkflowWarningTitle =>
+      'Local Model Performance Warning';
+
+  @override
+  String get localModelWorkflowWarningBody =>
+      'This model may not deliver the best experience with tag workflows.';
+
+  @override
+  String get localModelWorkflowWarningContinueNoWarn =>
+      'Continue, Don\'t Warn This Session';
+
+  @override
   String get nightMode => 'Night Mode';
 
   @override
