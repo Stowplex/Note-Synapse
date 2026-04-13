@@ -218,7 +218,34 @@ class _TagManagementScreenState extends State<TagManagementScreen>
           tabs: [
             Tab(text: l10n.deleteTags),
             Tab(text: l10n.dedupTags),
-            const Tab(text: 'Workflows'),
+            Builder(
+              builder: (ctx) {
+                final supportsOrchestration = ctx
+                        .watch<AppProvider>()
+                        .modelConfig
+                        ?.customCapabilitiesObject
+                        ?.supportsToolOrchestration ??
+                    true;
+                return Tab(
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      const Text('Workflows'),
+                      if (!supportsOrchestration)
+                        Positioned(
+                          right: -10,
+                          top: -4,
+                          child: Icon(
+                            Icons.warning_amber_rounded,
+                            size: 10,
+                            color: Colors.amber.shade700,
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
