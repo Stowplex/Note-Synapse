@@ -142,18 +142,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _selectedModel = widget.initialModelOverride;
-    _skillsEnabled = widget.skillsEnabled;
-    if (widget.skillsEnabled) {
-      _conversationService.enableSkills().then((_) {
-        if (mounted)
-          setState(() => _skillCount = _conversationService.skillIndex.length);
-      });
-    } else {
-      _conversationService.disableSkills();
-      getIt<SkillService>().buildSkillIndex().then((index) {
-        if (mounted) setState(() => _skillCount = index.length);
-      });
-    }
+    // Skills start disabled; _initSkillsWithModelCheck runs after first frame
+    // when BuildContext is available to read the active model's capabilities.
+    _skillsEnabled = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initSkillsWithModelCheck());
     _loadMcpEndpoints();
     _loadIterationPreference();
     _setupSqlWriteApprovalCallback();
@@ -184,6 +176,27 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       );
       return result;
     };
+  }
+
+  void _initSkillsWithModelCheck() {
+    if (!mounted) return;
+    final modelConfig = _selectedModel ?? context.read<AppProvider>().modelConfig;
+    final supportsOrchestration =
+        modelConfig?.customCapabilitiesObject?.supportsToolOrchestration ?? true;
+    final enable = widget.skillsEnabled && supportsOrchestration;
+    if (enable) {
+      setState(() => _skillsEnabled = true);
+      _conversationService.enableSkills().then((_) {
+        if (mounted) {
+          setState(() => _skillCount = _conversationService.skillIndex.length);
+        }
+      });
+    } else {
+      _conversationService.disableSkills();
+      getIt<SkillService>().buildSkillIndex().then((index) {
+        if (mounted) setState(() => _skillCount = index.length);
+      });
+    }
   }
 
   @override
@@ -2380,34 +2393,49 @@ $historyBuffer
                         spacing: 8,
                         runSpacing: 4,
                         children: [
-                          FilterChip(
-                            label: Text('$_skillCount available'),
-                            selected: _skillsEnabled,
-                            onSelected: (selected) {
-                              setState(() => _skillsEnabled = selected);
-                              if (selected) {
-                                _conversationService.enableSkills().then((_) {
-                                  if (mounted) {
-                                    setState(
-                                      () => _skillCount = _conversationService
-                                          .skillIndex
-                                          .length,
-                                    );
+                          Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              FilterChip(
+                                label: Text('$_skillCount available'),
+                                selected: _skillsEnabled,
+                                onSelected: (selected) {
+                                  setState(() => _skillsEnabled = selected);
+                                  if (selected) {
+                                    _conversationService.enableSkills().then((_) {
+                                      if (mounted) {
+                                        setState(
+                                          () => _skillCount = _conversationService
+                                              .skillIndex
+                                              .length,
+                                        );
+                                      }
+                                    });
+                                  } else {
+                                    _conversationService.disableSkills();
                                   }
-                                });
-                              } else {
-                                _conversationService.disableSkills();
-                              }
-                            },
-                            avatar: Icon(
-                              Icons.auto_awesome,
-                              size: 16,
-                              color: _skillsEnabled
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(
-                                      context,
-                                    ).colorScheme.onSurface.withOpacity(0.6),
-                            ),
+                                },
+                                avatar: Icon(
+                                  Icons.auto_awesome,
+                                  size: 16,
+                                  color: _skillsEnabled
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(
+                                          context,
+                                        ).colorScheme.onSurface.withOpacity(0.6),
+                                ),
+                              ),
+                              if (!supportsToolOrchestration)
+                                Positioned(
+                                  right: -4,
+                                  top: -4,
+                                  child: Icon(
+                                    Icons.warning_amber_rounded,
+                                    size: 12,
+                                    color: Colors.amber.shade700,
+                                  ),
+                                ),
+                            ],
                           ),
                         ],
                       ),
