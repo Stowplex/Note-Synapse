@@ -132,6 +132,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   // Agent Skills
   bool _skillsEnabled = false;
   int _skillCount = 0;
+  bool? _lastOrchestrationSupport; // tracks model's capability to detect changes
 
   bool _hasInitialized = false;
   bool _waitingForAgentResult = false;
@@ -183,6 +184,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     final modelConfig = _selectedModel ?? context.read<AppProvider>().modelConfig;
     final supportsOrchestration =
         modelConfig?.customCapabilitiesObject?.supportsToolOrchestration ?? true;
+    _lastOrchestrationSupport = supportsOrchestration;
     final enable = widget.skillsEnabled && supportsOrchestration;
     if (enable) {
       setState(() => _skillsEnabled = true);
@@ -257,6 +259,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       // Refresh model features when model config changes
       _loadModelFeatures();
     }
+
+    // Re-evaluate skills if the active model's orchestration capability changed.
+    final modelConfig = context.read<AppProvider>().modelConfig;
+    final nowSupports =
+        modelConfig?.customCapabilitiesObject?.supportsToolOrchestration ?? true;
+    if (_lastOrchestrationSupport != null && _lastOrchestrationSupport != nowSupports) {
+      _initSkillsWithModelCheck();
+    }
+    _lastOrchestrationSupport = nowSupports;
   }
 
   Future<void> _initializeConversation() async {
