@@ -533,8 +533,20 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       }
 
       final backupDb = await openDatabase(backupDbPath);
-      final versionResult = await backupDb.rawQuery('PRAGMA user_version');
-      final backupVersion = versionResult.first['user_version'] as int;
+      // Use _schema_version table (authoritative), not PRAGMA user_version which
+      // is set to 999 as a sentinel to prevent sqflite's built-in onUpgrade.
+      int backupVersion;
+      final schemaTableCheck = await backupDb.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='_schema_version'",
+      );
+      if (schemaTableCheck.isNotEmpty) {
+        final sv = await backupDb.query('_schema_version');
+        backupVersion = sv.isNotEmpty ? sv.first['version'] as int : 0;
+      } else {
+        // Legacy DB: _schema_version doesn't exist, read PRAGMA user_version.
+        final versionResult = await backupDb.rawQuery('PRAGMA user_version');
+        backupVersion = versionResult.first['user_version'] as int;
+      }
       await backupDb.close();
 
       // Check if backup version is compatible

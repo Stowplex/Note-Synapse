@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:yaml/yaml.dart';
 import '../models/model_config.dart';
@@ -24,11 +23,10 @@ class ModelPresetService {
     }
 
     try {
-      final manifestContent = await rootBundle.loadString('AssetManifest.json');
-      final Map<String, dynamic> manifestMap = json.decode(manifestContent);
-
-      final presetFiles = manifestMap.keys
-          .where((String key) => key.startsWith('assets/model_presets/'))
+      final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+      final presetFiles = manifest
+          .listAssets()
+          .where((key) => key.startsWith('assets/model_presets/'))
           .toList();
 
       List<ModelConfig> presets = [];
