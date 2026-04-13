@@ -2750,6 +2750,12 @@ abstract class AppLocalizations {
   /// **'Dedup Tags'**
   String get dedupTags;
 
+  /// No description provided for @workflows.
+  ///
+  /// In en, this message translates to:
+  /// **'Workflows'**
+  String get workflows;
+
   /// No description provided for @dedupRules.
   ///
   /// In en, this message translates to:

@@ -230,7 +230,7 @@ class _TagManagementScreenState extends State<TagManagementScreen>
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      const Text('Workflows'),
+                      Text(l10n.workflows),
                       if (!supportsOrchestration)
                         Positioned(
                           right: -10,

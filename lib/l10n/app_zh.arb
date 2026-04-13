@@ -518,6 +518,7 @@
   "tagUsage": "使用情况",
   "deleteTags": "删除标签",
   "dedupTags": "去重标签",
+  "workflows": "工作流",
   "dedupRules": "去重规则",
   "addDedupRule": "添加去重规则",
   "leftTag": "左侧标签",

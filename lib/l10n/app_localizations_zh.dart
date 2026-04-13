@@ -1457,6 +1457,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dedupTags => '去重标签';
 
   @override
+  String get workflows => '工作流';
+
+  @override
   String get dedupRules => '去重规则';
 
   @override

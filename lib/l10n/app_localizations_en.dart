@@ -1504,6 +1504,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dedupTags => 'Dedup Tags';
 
   @override
+  String get workflows => 'Workflows';
+
+  @override
   String get dedupRules => 'Dedup Rules';
 
   @override

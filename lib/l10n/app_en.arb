@@ -523,6 +523,7 @@
   "tagUsage": "Usage",
   "deleteTags": "Delete Tags",
   "dedupTags": "Dedup Tags",
+  "workflows": "Workflows",
   "dedupRules": "Dedup Rules",
   "addDedupRule": "Add Dedup Rule",
   "leftTag": "Left Tag",
