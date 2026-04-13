@@ -24,6 +24,9 @@ abstract class AIModel {
   /// Initialize the model
   Future<void> initialize({ModelConfig? config});
 
+  /// Dispose of model resources (e.g. close local runtimes)
+  Future<void> dispose();
+
   /// High-level prompt execution entry point.
   Future<String> generateFromPrompt(
     PromptRequest request, {

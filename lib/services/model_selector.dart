@@ -26,11 +26,49 @@ class ModelSelector {
   AIModel? _currentModel;
   ModelConfig? _currentModelConfig;
 
+  /// Cache for models by their unique config ID
+  final Map<String, AIModel> _modelCache = {};
+
   /// Get the current model
   AIModel? get currentModel => _currentModel;
 
   /// Get the current model config
   ModelConfig? get currentModelConfig => _currentModelConfig;
+
+  /// Ensures a model is selected and initialized
+  Future<AIModel> _ensureModelAvailable() async {
+    if (_currentModel != null) {
+      final isReady = await _currentModel!.isReady();
+      if (isReady) return _currentModel!;
+    }
+
+    // Try to recover from config
+    if (_currentModelConfig != null) {
+      await switchToModel(_currentModelConfig!);
+      if (_currentModel != null) return _currentModel!;
+    }
+
+    // Try to load from storage
+    final config = await _modelStorage.getActiveModel();
+    if (config != null) {
+      await switchToModel(config);
+      if (_currentModel != null) return _currentModel!;
+    }
+
+    throw Exception(
+      'No model is currently selected. Please select a model first in settings.',
+    );
+  }
+
+  /// Dispose of all cached models
+  Future<void> dispose() async {
+    for (final model in _modelCache.values) {
+      await model.dispose();
+    }
+    // We do NOT clear _modelCache or _currentModel pointers here.
+    // The models themselves (e.g. LocalMnnModel) will handle re-initialization
+    // of their internal runtimes on the next generation call if needed.
+  }
 
   /// Initialize with the selected model
   Future<void> initialize(AppProvider appProvider) async {
@@ -68,9 +106,19 @@ class ModelSelector {
         'ModelSelector: Previous model was: ${_currentModelConfig?.displayName ?? "None"}',
       );
 
-      // Create model instance
-      final model = _createModel(config.type);
-      LoggerService.debug('ModelSelector: Created model: ${model.runtimeType}');
+      // Get or create model instance from cache
+      var model = _modelCache[config.id];
+      if (model == null) {
+        model = _createModel(config.type);
+        LoggerService.debug(
+          'ModelSelector: Created new model instance: ${model.runtimeType}',
+        );
+        _modelCache[config.id] = model;
+      } else {
+        LoggerService.debug(
+          'ModelSelector: Using cached model instance: ${model.runtimeType}',
+        );
+      }
 
       // Initialize the model
       LoggerService.debug('ModelSelector: About to initialize model...');
@@ -125,15 +173,19 @@ class ModelSelector {
     final context = generationContext ?? GenerationContext();
     final modelOverride = context.modelOverride;
 
-    AIModel? modelToUse = _currentModel;
+    AIModel? modelToUse;
 
-    // If override is provided, create a temporary model instance
+    // If override is provided, get or create from cache
     if (modelOverride != null) {
       LoggerService.debug(
         'ModelSelector: Using model override: ${modelOverride.displayName} (${modelOverride.id})',
       );
       try {
-        final tempModel = _createModel(modelOverride.type);
+        var tempModel = _modelCache[modelOverride.id];
+        if (tempModel == null) {
+          tempModel = _createModel(modelOverride.type);
+          _modelCache[modelOverride.id] = tempModel;
+        }
         await tempModel.initialize(config: modelOverride);
         if (await tempModel.isReady()) {
           modelToUse = tempModel;
@@ -149,11 +201,8 @@ class ModelSelector {
       }
     }
 
-    if (modelToUse == null) {
-      throw Exception(
-        'No model is currently selected. Please select a model first.',
-      );
-    }
+    // Fallback to default model if no override or override not ready
+    modelToUse ??= await _ensureModelAvailable();
 
     // Model will handle capability limitations gracefully through limitation notes
     return await modelToUse.generateWithAttachments(
@@ -179,11 +228,15 @@ class ModelSelector {
     final context = generationContext ?? GenerationContext();
     final modelOverride = context.modelOverride;
 
-    AIModel? modelToUse = _currentModel;
+    AIModel? modelToUse;
 
     if (modelOverride != null) {
       try {
-        final tempModel = _createModel(modelOverride.type);
+        var tempModel = _modelCache[modelOverride.id];
+        if (tempModel == null) {
+          tempModel = _createModel(modelOverride.type);
+          _modelCache[modelOverride.id] = tempModel;
+        }
         await tempModel.initialize(config: modelOverride);
         if (await tempModel.isReady()) {
           modelToUse = tempModel;
@@ -195,11 +248,7 @@ class ModelSelector {
       }
     }
 
-    if (modelToUse == null) {
-      throw Exception(
-        'No model is currently selected. Please select a model first.',
-      );
-    }
+    modelToUse ??= await _ensureModelAvailable();
 
     return await modelToUse.generateWithMessages(
       messages,
@@ -233,11 +282,15 @@ class ModelSelector {
 
     final modelOverride = context.modelOverride;
 
-    AIModel? modelToUse = _currentModel;
+    AIModel? modelToUse;
 
     if (modelOverride != null) {
       try {
-        final tempModel = _createModel(modelOverride.type);
+        var tempModel = _modelCache[modelOverride.id];
+        if (tempModel == null) {
+          tempModel = _createModel(modelOverride.type);
+          _modelCache[modelOverride.id] = tempModel;
+        }
         await tempModel.initialize(config: modelOverride);
         if (await tempModel.isReady()) {
           modelToUse = tempModel;
@@ -249,11 +302,7 @@ class ModelSelector {
       }
     }
 
-    if (modelToUse == null) {
-      throw Exception(
-        'No model is currently selected. Please select a model first.',
-      );
-    }
+    modelToUse ??= await _ensureModelAvailable();
 
     return await modelToUse.generateFromPrompt(
       request,
@@ -291,11 +340,15 @@ class ModelSelector {
 
     final modelOverride = context.modelOverride;
 
-    AIModel? modelToUse = _currentModel;
+    AIModel? modelToUse;
 
     if (modelOverride != null) {
       try {
-        final tempModel = _createModel(modelOverride.type);
+        var tempModel = _modelCache[modelOverride.id];
+        if (tempModel == null) {
+          tempModel = _createModel(modelOverride.type);
+          _modelCache[modelOverride.id] = tempModel;
+        }
         await tempModel.initialize(config: modelOverride);
         if (await tempModel.isReady()) {
           modelToUse = tempModel;
@@ -307,11 +360,7 @@ class ModelSelector {
       }
     }
 
-    if (modelToUse == null) {
-      throw Exception(
-        'No model is currently selected. Please select a model first.',
-      );
-    }
+    modelToUse ??= await _ensureModelAvailable();
 
     // Check if the model supports multi-part response
     if (modelToUse is GeminiModel) {
@@ -365,11 +414,15 @@ class ModelSelector {
 
     final modelOverride = context.modelOverride;
 
-    AIModel? modelToUse = _currentModel;
+    AIModel? modelToUse;
 
     if (modelOverride != null) {
       try {
-        final tempModel = _createModel(modelOverride.type);
+        var tempModel = _modelCache[modelOverride.id];
+        if (tempModel == null) {
+          tempModel = _createModel(modelOverride.type);
+          _modelCache[modelOverride.id] = tempModel;
+        }
         await tempModel.initialize(config: modelOverride);
         if (await tempModel.isReady()) {
           modelToUse = tempModel;
@@ -381,11 +434,7 @@ class ModelSelector {
       }
     }
 
-    if (modelToUse == null) {
-      throw Exception(
-        'No model is currently selected. Please select a model first.',
-      );
-    }
+    modelToUse ??= await _ensureModelAvailable();
 
     return await modelToUse.generateWithTools(
       prompt,
@@ -399,19 +448,23 @@ class ModelSelector {
     );
   }
 
-  /// Build tool declarations using the active (or overridden) model's strategy.
-  ///
-  /// Each model type defines how tools are presented: Gemini/OpenAI use a
-  /// single `call_tool` wrapper, local models use individual declarations.
   List<Map<String, dynamic>> buildToolDeclarations(
     Map<String, List<McpTool>> toolsByEndpoint, {
     GenerationContext? generationContext,
   }) {
     final modelOverride = generationContext?.modelOverride;
-    AIModel? model = _currentModel;
+    AIModel? model;
     if (modelOverride != null) {
-      model = _createModel(modelOverride.type);
+      model = _modelCache[modelOverride.id];
+      if (model == null) {
+        model = _createModel(modelOverride.type);
+        _modelCache[modelOverride.id] = model;
+      }
     }
+    
+    // Fallback to current model if no override or instance not in cache
+    model ??= _currentModel;
+    
     return model?.buildToolDeclarations(toolsByEndpoint) ?? [];
   }
 
@@ -433,11 +486,15 @@ class ModelSelector {
 
     final modelOverride = context.modelOverride;
 
-    AIModel? modelToUse = _currentModel;
+    AIModel? modelToUse;
 
     if (modelOverride != null) {
       try {
-        final tempModel = _createModel(modelOverride.type);
+        var tempModel = _modelCache[modelOverride.id];
+        if (tempModel == null) {
+          tempModel = _createModel(modelOverride.type);
+          _modelCache[modelOverride.id] = tempModel;
+        }
         await tempModel.initialize(config: modelOverride);
         if (await tempModel.isReady()) {
           modelToUse = tempModel;
@@ -449,11 +506,7 @@ class ModelSelector {
       }
     }
 
-    if (modelToUse == null) {
-      throw Exception(
-        'No model is currently selected. Please select a model first.',
-      );
-    }
+    modelToUse ??= await _ensureModelAvailable();
 
     final response = await modelToUse.generateWithToolsAndMessages(
       messages,

@@ -164,6 +164,11 @@ class OpenAIModel implements AIModel {
   }
 
   @override
+  Future<void> dispose() async {
+    // No local resources to dispose for cloud model
+  }
+
+  @override
   Future<String> generateWithMessages(
     List<PromptMessage> messages, {
     double? temperature,

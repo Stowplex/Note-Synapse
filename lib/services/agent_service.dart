@@ -331,6 +331,7 @@ class AgentService extends ChangeNotifier {
     _activeWorkflowStatus = null;
     _skillDiscoveredTools.clear();
     _skillToolServiceNames.clear();
+
     notifyListeners();
   }
 
@@ -367,6 +368,7 @@ class AgentService extends ChangeNotifier {
   /// Stops agent execution and clears all state.
   void stopExecution() {
     clearState();
+    _modelSelector.dispose();
   }
 
   /// Binds this agent to a conversation.
@@ -375,6 +377,7 @@ class AgentService extends ChangeNotifier {
         _boundConversationId != conversationId) {
       // Switched conversations - ensure we don't leak state
       clearState();
+      _modelSelector.dispose();
     }
     _boundConversationId = conversationId;
   }
@@ -1623,6 +1626,10 @@ Return ONLY a valid JSON list with ALL required fields:
       }
       _syncWorkflowStatusFromTasks();
       _processWorkflowQueueIfReady();
+
+      // Dispose models to free resources after workflow completes
+      _modelSelector.dispose();
+
       notifyListeners();
     }
   }
@@ -1654,6 +1661,8 @@ Return ONLY a valid JSON list with ALL required fields:
       await executePlan();
     } finally {
       _isRunning = false;
+      // Dispose models to free resources after objective completes
+      _modelSelector.dispose();
       notifyListeners();
     }
   }
@@ -1789,6 +1798,7 @@ Use the source note above as "this note" for the workflow. Do not search for a c
     final pinned = await _handleLoadSkillResult(
       binding.skillNoteId,
       skillContent,
+      task: task,
     );
     final observation = pinned
         ? shortenSkillObservation(
@@ -1845,22 +1855,28 @@ Use the source note above as "this note" for the workflow. Do not search for a c
     required List<McpTool> externalTools,
   }) {
     final grouped = <String, List<McpTool>>{};
+    final seenToolNames = <String>{};
 
     if (nativeTools.isNotEmpty) {
-      grouped[_systemToolServiceName] = nativeTools
-          .map(
-            (tool) => McpTool(
-              name: tool.name,
-              description: tool.description,
-              inputSchema: tool.inputSchema,
-            ),
-          )
-          .toList();
+      final nativeMcpTools = <McpTool>[];
+      for (final tool in nativeTools) {
+        if (seenToolNames.add(tool.name)) {
+          nativeMcpTools.add(McpTool(
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+          ));
+        }
+      }
+      if (nativeMcpTools.isNotEmpty) {
+        grouped[_systemToolServiceName] = nativeMcpTools;
+      }
     }
 
     for (final tool in externalTools) {
-      final serviceName =
-          _skillToolServiceNames[tool.name] ??
+      if (!seenToolNames.add(tool.name)) continue;
+
+      final serviceName = _skillToolServiceNames[tool.name] ??
           _externalTools.entries
               .where(
                 (entry) =>
@@ -1887,8 +1903,13 @@ Use the source note above as "this note" for the workflow. Do not search for a c
     if (requestedToolName == 'call_tool') {
       parsed = McpToolIntegrationService.parseCallToolArguments(args);
     } else {
+      // Handle optional prefixes like "System." or "Mcp." from local models
+      final normalizedName = requestedToolName.contains('.')
+          ? requestedToolName.split('.').last
+          : requestedToolName;
+
       final directTool = _resolveUniqueToolByName(
-        requestedToolName,
+        normalizedName,
         toolsByService,
       );
       if (directTool != null) {
@@ -2136,6 +2157,10 @@ Use the source note above as "this note" for the workflow. Do not search for a c
       if (_activeWorkflowStatus?.state == WorkflowExecutionState.failed) {
         onProgressUpdate?.call(_activeWorkflowStatus!.message);
       }
+
+      // Dispose models to free resources after workflow completes
+      _modelSelector.dispose();
+
       notifyListeners();
       _processWorkflowQueueIfReady();
     }
@@ -2581,12 +2606,18 @@ Use the source note above as "this note" for the workflow. Do not search for a c
         ..._externalTools.values.expand((x) => x),
         ..._skillDiscoveredTools,
       ];
+      // Deduplicate by name to prevent list bloat/drift
+      final seen = <String>{};
+      final unique = all.where((t) => seen.add(t.name)).toList();
+
       // User's per-step restrictions take priority
       if (task.allowedTools.isNotEmpty) {
-        return all.where((t) => task.allowedTools.contains(t.name)).toList();
+        return unique
+            .where((t) => task.allowedTools.contains(t.name))
+            .toList();
       }
       // No user restriction - all external tools available
-      return all;
+      return unique;
     }
 
     final currentAllowedNative = allowedNativeFn();
@@ -2609,7 +2640,7 @@ Use the source note above as "this note" for the workflow. Do not search for a c
 
 IMPORTANT: This is the FINAL DELIVERABLE task.
 - If you have all the information you need, provide the complete, detailed output the user requested (report, analysis, etc.).
-- If you still need more information to fulfill the specific request of this task, you MUST use the canonical call_tool action format.
+- If you still need more information to fulfill the specific request of this task, you MUST use a tool call.
 - Do NOT provide a generic summary - give the full, detailed deliverable requested.
 - Include all relevant data, citations, and findings from the context above.
 
@@ -2705,9 +2736,18 @@ The investigation reveals that...
 Current task depth: ${task.depth} / $_cachedMaxSubtaskDepth
 ''';
 
-    final taskSkillSection = _skillsEnabled && _skillIndex.isNotEmpty
+    // Filter skill index to remove already loaded skills from the available list.
+    // This prevents models from hallucinating redundant load_skill calls.
+    final loadedNoteIds = _contextManager.rootContext?.loadedSkills
+            .map((s) => s.noteId)
+            .toSet() ??
+        {};
+    final filteredSkillIndex = Map<String, SkillMetadata>.from(_skillIndex)
+      ..removeWhere((key, value) => loadedNoteIds.contains(value.noteId));
+
+    final taskSkillSection = _skillsEnabled && filteredSkillIndex.isNotEmpty
         ? getIt<SkillService>().buildSkillIndexPrompt(
-            _skillIndex,
+            filteredSkillIndex,
             maxBudgetTokens: 16000,
             forLocalModel: _useNativeFunctionCalling(),
           )
@@ -3140,14 +3180,18 @@ $taskSkillSection''';
       }
 
       // Intercept load_skill results to route to context and resolve tool URIs
+      // Handle load_skill results
       bool skillPinned = false;
       if (toolName == 'load_skill' && result is String) {
         final noteId = await _resolveSkillNoteId(params);
         if (noteId.isNotEmpty) {
-          skillPinned = await _handleLoadSkillResult(noteId, result);
+          skillPinned = await _handleLoadSkillResult(
+            noteId,
+            result,
+            task: task,
+          );
         }
       }
-
       _recordToolExecution(
         task,
         toolName: '$serviceName.$toolName',
@@ -3199,6 +3243,59 @@ $taskSkillSection''';
     }
   }
 
+  /// Builds a tailored system prompt for local models (Gemma).
+  String _buildLocalSystemPrompt({
+    required AgentTask task,
+    required String taskSkillSection,
+    required bool hasLoadedSkills,
+  }) {
+    final isWorkflow = task.name == 'workflow_task';
+
+    if (isWorkflow && hasLoadedSkills) {
+      return '''
+You are a task-execution agent currently running a specialized workflow. 
+
+CRITICAL RULE: You MUST execute all steps silently. Do NOT generate or output any internal thoughts, reasoning, explanations, or intermediate text. Output ONLY tool calls or the final answer.
+
+A skill workflow has been pre-loaded for you in the <LoadedSkills> section of the conversation context.
+You MUST follow the "Workflow" steps in that skill exactly to complete this task. 
+
+DEDUP RULE: The necessary skill is ALREADY LOADED. Do NOT call 'System.load_skill' again for this workflow. Move directly to the first step of the skill's "Workflow" section.
+
+EVIDENCE-BASED EXECUTION:
+- You are FORBIDDEN from stating a task is complete unless you have received successful tool observations in this conversation history that prove the work is done.
+- If the workflow requires searching, reading, or modifying notes, you MUST call the relevant tools immediately.
+- NEVER hallucinate or "fake" a successful result.
+
+PRECISION RULE: When calling tools with note IDs (UUIDs), you MUST copy the ID character-for-character from the context. Do NOT shorten, reformat, or modify UUIDs.
+
+When the workflow is complete based on EVIDENCE, provide a concise markdown summary of the final result.
+''';
+    }
+
+    // General task prompt
+    return '''
+You are a task-execution agent that helps users complete tasks using tools and skills.
+
+CRITICAL RULE: You MUST execute all steps silently. Do NOT generate or output any internal thoughts, reasoning, explanations, or intermediate text. Output ONLY tool calls or the final answer.
+
+EVIDENCE-BASED EXECUTION:
+- You are FORBIDDEN from stating a task is complete unless you have received successful tool observations in this conversation history that prove the work is done.
+- NEVER hallucinate or "fake" a result.
+
+PRECISION RULE: When calling tools with note IDs (UUIDs), you MUST copy the ID character-for-character from the context. Do NOT shorten, reformat, or modify UUIDs.
+
+INSTRUCTIONS:
+1. If a relevant skill is already in <LoadedSkills>, follow its instructions exactly.
+2. If no relevant skill is loaded, check the "Available Agent Skills" list below. If one matches, use 'System.load_skill' to retrieve its instructions.
+3. If no skill applies, use your available tools to complete the task directly.
+4. When the task is complete based on EVIDENCE, provide a concise markdown result.
+
+=== AVAILABLE AGENT SKILLS ===
+$taskSkillSection
+''';
+  }
+
   /// Native function-calling path for local models (Gemma).
   /// Uses actual tool declarations instead of XML-based text parsing.
   Future<void> _performTaskNativeFunctionCalling({
@@ -3213,12 +3310,17 @@ $taskSkillSection''';
     required List<NativeTool> currentAllowedNative,
     void Function(String)? onProgressUpdate,
   }) async {
-    // Compact system prompt following Google Gallery's silent execution pattern
-    const systemPrompt =
-        'You are a task-execution agent. Execute silently \u2014 do NOT explain '
-        'your reasoning or describe what you will do. Just call tools and '
-        'produce results. When you have the complete answer, respond with your '
-        'final result as text.';
+    final hasLoadedSkills =
+        _contextManager.rootContext?.loadedSkills.isNotEmpty ?? false;
+    final systemPrompt = _buildLocalSystemPrompt(
+      task: task,
+      taskSkillSection: taskSkillSection,
+      hasLoadedSkills: hasLoadedSkills,
+    );
+
+    final turnGuidance = turn == 1
+        ? 'Turn $turn: Analyze the task and context. Decide if you need to call a tool or load a skill to begin. If you already have all necessary information, you may provide the final answer directly.'
+        : 'Turn $turn: Continue with the next step based on the tool observations above. If the task is complete, provide the final answer.';
 
     // User message: task + context + compact instructions (no XML format, no tool catalog)
     final userPrompt = '''
@@ -3227,9 +3329,9 @@ Task: "${task.description}"
 $globalContext
 $deliverableInstructions
 
-Call tools when you need information. You may call tools multiple times.
-When you have a complete answer, respond with the result as markdown text.
-$taskSkillSection''';
+$turnGuidance
+
+Call tools when you need information. When you have a complete answer, respond with the result as markdown text.''';
 
     final response = await _generateLlmResponseWithTools(
       systemPrompt,
@@ -3378,7 +3480,11 @@ $taskSkillSection''';
       if (toolName == 'load_skill' && result is String) {
         final noteId = await _resolveSkillNoteId(params);
         if (noteId.isNotEmpty) {
-          skillPinned = await _handleLoadSkillResult(noteId, result);
+          skillPinned = await _handleLoadSkillResult(
+            noteId,
+            result,
+            task: task,
+          );
         }
       }
 
@@ -3503,7 +3609,11 @@ $taskSkillSection''';
   /// Called when a load_skill tool call returns successfully.
   /// Routes skill content to the loadedSkills context region and resolves tool URIs.
   /// Returns true if the skill was newly pinned (not a duplicate), false otherwise.
-  Future<bool> _handleLoadSkillResult(String noteId, String content) async {
+  Future<bool> _handleLoadSkillResult(
+    String noteId,
+    String content, {
+    AgentTask? task,
+  }) async {
     final root = _contextManager.rootContext;
     final alreadyLoaded =
         root?.loadedSkills.any((s) => s.noteId == noteId) ?? false;
@@ -3523,16 +3633,39 @@ $taskSkillSection''';
     final skillService = getIt<SkillService>();
     final uris = skillService.extractToolUris(content);
     final newToolNames = <String>[];
+    final allMentionedToolNames = <String>[];
+
     for (final uri in uris) {
       final parsed = skillService.parseToolUri(uri);
       if (parsed == null) continue;
       final tools = await _resolveSkillToolUri(parsed);
       for (final resolved in tools) {
         final tool = resolved.tool;
-        if (!_skillDiscoveredTools.any((t) => t.name == tool.name)) {
+        allMentionedToolNames.add(tool.name);
+
+        // Deduplicate against all available tools to prevent list bloat/drift
+        final isNative = nativeTools.any((t) => t.name == tool.name);
+        final isExternal = _externalTools.values
+            .expand((x) => x)
+            .any((t) => t.name == tool.name);
+        final isDiscovered =
+            _skillDiscoveredTools.any((t) => t.name == tool.name);
+
+        if (!isNative && !isExternal && !isDiscovered) {
           _skillDiscoveredTools.add(tool);
           _skillToolServiceNames[tool.name] = resolved.serviceName;
           newToolNames.add(tool.name);
+        }
+      }
+    }
+
+    // If we have a restricted tool list, add ALL mentioned tools to it
+    if (task != null &&
+        task.allowedTools.isNotEmpty &&
+        allMentionedToolNames.isNotEmpty) {
+      for (final name in allMentionedToolNames) {
+        if (!task.allowedTools.contains(name)) {
+          task.allowedTools.add(name);
         }
       }
     }

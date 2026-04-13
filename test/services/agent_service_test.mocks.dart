@@ -32,6 +32,8 @@ import 'package:note_synapse/services/context_manager_service.dart' as _i5;
 import 'package:note_synapse/services/database_service.dart' as _i19;
 import 'package:note_synapse/services/model_selector.dart' as _i9;
 import 'package:note_synapse/services/prompts/prompt_models.dart' as _i14;
+import 'package:note_synapse/services/prompts/prompt_template_service.dart'
+    as _i30;
 import 'package:sqflite/sqflite.dart' as _i4;
 
 // ignore_for_file: type=lint
@@ -333,6 +335,15 @@ class MockModelSelector extends _i1.Mock implements _i9.ModelSelector {
   MockModelSelector() {
     _i1.throwOnMissingStub(this);
   }
+
+  @override
+  _i6.Future<void> dispose() =>
+      (super.noSuchMethod(
+            Invocation.method(#dispose, []),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
 
   @override
   _i6.Future<void> initialize(_i10.AppProvider? appProvider) =>
@@ -2475,4 +2486,55 @@ class MockDatabaseService extends _i1.Mock implements _i19.DatabaseService {
             returnValueForMissingStub: _i6.Future<void>.value(),
           )
           as _i6.Future<void>);
+}
+
+/// A class which mocks [PromptTemplateService].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockPromptTemplateService extends _i1.Mock
+    implements _i30.PromptTemplateService {
+  MockPromptTemplateService() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  int get cacheSize =>
+      (super.noSuchMethod(Invocation.getter(#cacheSize), returnValue: 0)
+          as int);
+
+  @override
+  _i6.Future<void> preloadAll() =>
+      (super.noSuchMethod(
+            Invocation.method(#preloadAll, []),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
+  String renderSync(String? templatePath, [Map<String, dynamic>? context]) =>
+      (super.noSuchMethod(
+            Invocation.method(#renderSync, [templatePath, context]),
+            returnValue: _i7.dummyValue<String>(
+              this,
+              Invocation.method(#renderSync, [templatePath, context]),
+            ),
+          )
+          as String);
+
+  @override
+  _i6.Future<String> render(
+    String? templatePath, [
+    Map<String, dynamic>? context,
+  ]) =>
+      (super.noSuchMethod(
+            Invocation.method(#render, [templatePath, context]),
+            returnValue: _i6.Future<String>.value(
+              _i7.dummyValue<String>(
+                this,
+                Invocation.method(#render, [templatePath, context]),
+              ),
+            ),
+          )
+          as _i6.Future<String>);
 }

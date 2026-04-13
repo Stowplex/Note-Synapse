@@ -463,11 +463,14 @@ class LocalMnnModel extends AIModel {
     }
 
     final text = response is gemma.TextResponse ? response.token : '';
-    final parsedToolCalls = _extractTaggedToolCalls(text);
-    if (parsedToolCalls.calls.isNotEmpty) {
+
+    // Primary Fallback: Try to parse as the JSON format injected by flutter_gemma/litert-lm
+    // format: {"name": function_name, "parameters": {argument: value}}
+    final jsonToolCall = _tryParseInjectedJsonToolCall(text);
+    if (jsonToolCall != null) {
       return {
-        'text': parsedToolCalls.cleanedText,
-        'function_calls': parsedToolCalls.calls,
+        'text': '',
+        'function_calls': [jsonToolCall],
         'modelUsed': name,
       };
     }
@@ -475,130 +478,31 @@ class LocalMnnModel extends AIModel {
     return {'text': text, 'function_calls': null, 'modelUsed': name};
   }
 
-  @visibleForTesting
-  ParsedToolCallText extractTaggedToolCallsForTest(String text) {
-    return _extractTaggedToolCalls(text);
-  }
-
-  ParsedToolCallText _extractTaggedToolCalls(String text) {
-    if (text.isEmpty) {
-      return const ParsedToolCallText(cleanedText: '', calls: []);
-    }
-
-    final matches = _toolCallTagPattern
-        .allMatches(text)
-        .toList(growable: false);
-    if (matches.isEmpty) {
-      return ParsedToolCallText(cleanedText: text, calls: const []);
-    }
-
-    final calls = <Map<String, dynamic>>[];
-    for (final match in matches) {
-      final payload = match.group(1)?.trim();
-      if (payload == null || payload.isEmpty) {
-        continue;
-      }
-
-      final call = _parseTaggedToolCallPayload(payload);
-      if (call != null) {
-        calls.add(call);
-      }
-    }
-
-    final cleanedText = text.replaceAll(_toolCallTagPattern, '').trim();
-    return ParsedToolCallText(cleanedText: cleanedText, calls: calls);
-  }
-
-  Map<String, dynamic>? _parseTaggedToolCallPayload(String payload) {
-    final argsStart = payload.indexOf('{');
-    if (argsStart <= 0) {
+  Map<String, dynamic>? _tryParseInjectedJsonToolCall(String text) {
+    final trimmed = text.trim();
+    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
       return null;
-    }
-
-    final functionName = payload.substring(0, argsStart).trim();
-    if (functionName.isEmpty) {
-      return null;
-    }
-
-    final argsText = _extractBalancedSegment(payload, argsStart);
-    if (argsText == null) {
-      return null;
-    }
-
-    final decodedArgs = _decodeLooseMap(argsText);
-    if (decodedArgs == null) {
-      return null;
-    }
-
-    return {'name': functionName, 'args': decodedArgs};
-  }
-
-  String? _extractBalancedSegment(String content, int startIdx) {
-    int depth = 0;
-    var inString = false;
-    var escapeNext = false;
-
-    for (int i = startIdx; i < content.length; i++) {
-      final char = content[i];
-
-      if (escapeNext) {
-        escapeNext = false;
-        continue;
-      }
-
-      if (char == '\\' && inString) {
-        escapeNext = true;
-        continue;
-      }
-
-      if (char == '"') {
-        inString = !inString;
-        continue;
-      }
-
-      if (inString) {
-        continue;
-      }
-
-      if (char == '{') {
-        depth++;
-      } else if (char == '}') {
-        depth--;
-        if (depth == 0) {
-          return content.substring(startIdx, i + 1);
-        }
-      }
-    }
-
-    return null;
-  }
-
-  Map<String, dynamic>? _decodeLooseMap(String text) {
-    try {
-      final decoded = jsonDecode(text);
-      if (decoded is Map<String, dynamic>) {
-        return decoded;
-      }
-      if (decoded is Map) {
-        return decoded.map((key, value) => MapEntry(key.toString(), value));
-      }
-    } catch (_) {
-      // Fall through to repairJson for Gemma's relaxed object syntax.
     }
 
     try {
-      final repaired = repairJson(text);
-      if (repaired is Map<String, dynamic>) {
-        return repaired;
-      }
-      if (repaired is Map) {
-        return repaired.map((key, value) => MapEntry(key.toString(), value));
+      final data = jsonDecode(trimmed);
+      if (data is Map<String, dynamic> &&
+          data.containsKey('name') &&
+          (data.containsKey('parameters') || data.containsKey('args') || data.containsKey('params'))) {
+        return {
+          'name': data['name'],
+          'args': data['parameters'] ?? data['args'] ?? data['params'],
+        };
       }
     } catch (_) {
-      return null;
+      // Not valid JSON or doesn't match format
     }
-
     return null;
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _disposeModel();
   }
 
   Future<void> _disposeModel() async {
@@ -695,8 +599,6 @@ class LocalMnnModel extends AIModel {
         duration: DateTime.now().difference(startTime),
       );
       rethrow;
-    } finally {
-      await _disposeModel();
     }
   }
 
@@ -775,8 +677,6 @@ class LocalMnnModel extends AIModel {
         duration: DateTime.now().difference(startTime),
       );
       rethrow;
-    } finally {
-      await _disposeModel();
     }
   }
 
@@ -822,13 +722,13 @@ class LocalMnnModel extends AIModel {
       }
 
       final text = buffer.toString();
-      // Check streamed text for tagged tool calls as fallback
+      // Check streamed text for injected JSON tool calls as fallback
       if (functionCalls.isEmpty) {
-        final parsed = _extractTaggedToolCalls(text);
-        if (parsed.calls.isNotEmpty) {
+        final jsonToolCall = _tryParseInjectedJsonToolCall(text);
+        if (jsonToolCall != null) {
           final result = <String, dynamic>{
-            'text': parsed.cleanedText,
-            'function_calls': parsed.calls,
+            'text': '',
+            'function_calls': [jsonToolCall],
             'modelUsed': name,
           };
           LoggerService.logAiResponse(
@@ -863,8 +763,6 @@ class LocalMnnModel extends AIModel {
         duration: DateTime.now().difference(startTime),
       );
       rethrow;
-    } finally {
-      await _disposeModel();
     }
   }
 
@@ -910,21 +808,12 @@ class LocalMnnModel extends AIModel {
         duration: DateTime.now().difference(startTime),
       );
       rethrow;
-    } finally {
-      await _disposeModel();
     }
+  }
+
+  @visibleForTesting
+  Map<String, dynamic>? parseInjectedJsonToolCallForTest(String text) {
+    return _tryParseInjectedJsonToolCall(text);
   }
 }
 
-@visibleForTesting
-class ParsedToolCallText {
-  final String cleanedText;
-  final List<Map<String, dynamic>> calls;
-
-  const ParsedToolCallText({required this.cleanedText, required this.calls});
-}
-
-final _toolCallTagPattern = RegExp(
-  r'<\|tool_call\>([\s\S]*?)<tool_call\|>',
-  dotAll: true,
-);

@@ -198,7 +198,7 @@ class SkillService {
 
   List<String> extractToolUris(String content) {
     final regex = RegExp(r'notesynapse://tool/[^\s\)\"\x27.,;>]+');
-    return regex.allMatches(content).map((m) => m.group(0)!).toList();
+    return regex.allMatches(content).map((m) => m.group(0)!).toSet().toList();
   }
 
   /// Parse a notesynapse://tool/ URI into its components.
