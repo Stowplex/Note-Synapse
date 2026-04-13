@@ -163,9 +163,9 @@ class _WorkflowShellState extends State<WorkflowShell> {
   }
 
   void _handleViewLog() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const AgentTraceScreen()));
+    navigatorKey.currentState?.push(
+      MaterialPageRoute(builder: (_) => const AgentTraceScreen()),
+    );
   }
 
   void _handleDismiss() {
