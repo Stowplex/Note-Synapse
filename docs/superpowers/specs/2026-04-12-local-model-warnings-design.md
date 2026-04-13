@@ -61,9 +61,16 @@ The dialog follows the visual pattern of `ToolOrchestrationWarningDialog` for co
 
 If the session flag is set, workflow triggers proceed directly to the progress snackbar with no dialog.
 
-**Implementation note:** The dialog cannot live inside `ContentIngestionService.processNote()` (a service). The approval check must be added at the UI call site(s) that invoke `processNote` — before calling the method, the UI checks the active model's `supportsToolOrchestration` flag and shows the dialog if needed. The session suppression flag lives on the call site's widget state or a thin wrapper (e.g., injected via a new `onApprovalRequired` callback on `processNote`, resolved by the calling screen/widget).
+**Implementation note:** Follows the existing `ApprovalService.fallbackApprovalRequest` pattern used by `WorkflowShell`:
 
-**Files:** `lib/services/content_ingestion_service.dart` (add optional `onApprovalRequired` callback to `processNote`); call sites that invoke `processNote` in the UI layer.
+- Add a static callback field on `ContentIngestionService`:
+  `static Future<bool> Function(String matchedTag)? onLocalModelApprovalRequired`
+- `WorkflowShell.initState()` registers the handler (using `navigatorKey.currentState` to show the dialog); `dispose()` clears it — identical to how it handles `ApprovalService.fallbackApprovalRequest`
+- `ContentIngestionService.processNote()` calls the callback before each `agentService.runWorkflowTask()`; if the callback returns `false`, the workflow is skipped
+- Session suppression flag: instance field `bool _suppressLocalModelWarning = false` on `ContentIngestionService` (registered as `registerLazySingleton` — instance fields are session-scoped, reset on app restart)
+- If `_suppressLocalModelWarning` is true, the callback is not invoked and the workflow proceeds directly
+
+**Files:** `lib/services/content_ingestion_service.dart`, `lib/widgets/workflow_shell.dart`
 
 ## Warning Surface Summary
 
