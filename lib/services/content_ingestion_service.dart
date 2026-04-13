@@ -21,7 +21,7 @@ class ContentIngestionService {
 
   /// Registered by [WorkflowShell] to show the local model warning dialog.
   /// Mirrors the [ApprovalService.fallbackApprovalRequest] pattern.
-  /// Returns null (treated as [LocalModelWorkflowApproval.cancel]) when unset.
+  /// When unset, the gate is bypassed and workflows run without prompting.
   static Future<LocalModelWorkflowApproval> Function()? onLocalModelApprovalRequired;
 
   /// Session flag — set to true when user picks "don't warn this session".
@@ -60,18 +60,20 @@ class ContentIngestionService {
       final supportsOrchestration = appProvider.modelConfig
               ?.customCapabilitiesObject?.supportsToolOrchestration ??
           true;
-      for (final binding in workflowBindings) {
-        if (!supportsOrchestration &&
-            !_suppressLocalModelWarning &&
-            onLocalModelApprovalRequired != null) {
-          final approval = await onLocalModelApprovalRequired!();
-          if (approval == LocalModelWorkflowApproval.proceedAndSuppress) {
-            _suppressLocalModelWarning = true;
-          } else if (approval == LocalModelWorkflowApproval.cancel) {
-            continue;
-          }
-          // LocalModelWorkflowApproval.proceed falls through.
+
+      if (!supportsOrchestration &&
+          !_suppressLocalModelWarning &&
+          onLocalModelApprovalRequired != null) {
+        final approval = await onLocalModelApprovalRequired!();
+        if (approval == LocalModelWorkflowApproval.cancel) {
+          workflowBindings = const [];
+        } else if (approval == LocalModelWorkflowApproval.proceedAndSuppress) {
+          _suppressLocalModelWarning = true;
         }
+        // LocalModelWorkflowApproval.proceed falls through.
+      }
+
+      for (final binding in workflowBindings) {
         onMessage?.call('Starting workflow for tag "${binding.matchedTag}"...');
         await agentService.runWorkflowTask(binding: binding, note: note);
       }

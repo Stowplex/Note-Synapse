@@ -117,6 +117,25 @@ void main() {
       ));
     });
 
+    test('cancel with multiple bindings skips all of them', () async {
+      when(mockTagWorkflowService.resolveBindings(any))
+          .thenAnswer((_) async => [testBinding, testBinding]);
+
+      var callCount = 0;
+      ContentIngestionService.onLocalModelApprovalRequired = () async {
+        callCount++;
+        return LocalModelWorkflowApproval.cancel;
+      };
+
+      await service.processNote(testNote, mockAppProvider);
+
+      expect(callCount, 1);
+      verifyNever(mockAgentService.runWorkflowTask(
+        binding: anyNamed('binding'),
+        note: anyNamed('note'),
+      ));
+    });
+
     test('runs workflow and suppresses subsequent dialogs on proceedAndSuppress', () async {
       when(mockTagWorkflowService.resolveBindings(any))
           .thenAnswer((_) async => [testBinding, testBinding]);
@@ -160,8 +179,10 @@ void main() {
           .thenAnswer((_) async => []);
 
       var callbackCalled = false;
-      ContentIngestionService.onLocalModelApprovalRequired =
-          () async { callbackCalled = true; return LocalModelWorkflowApproval.proceed; };
+      ContentIngestionService.onLocalModelApprovalRequired = () async {
+        callbackCalled = true;
+        return LocalModelWorkflowApproval.proceed;
+      };
 
       await service.processNote(testNote, mockAppProvider);
 
