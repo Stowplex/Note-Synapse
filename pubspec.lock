@@ -465,11 +465,10 @@ packages:
   flutter_gemma:
     dependency: "direct main"
     description:
-      name: flutter_gemma
-      sha256: "29333b30fdcc2e18952ab3083b5218bc093d17a72a1feb46f11c2003fe52ff88"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.13.0"
+      path: "third_party/flutter_gemma"
+      relative: true
+    source: path
+    version: "0.13.2"
   flutter_inappwebview:
     dependency: "direct main"
     description:
