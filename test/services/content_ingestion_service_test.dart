@@ -100,6 +100,7 @@ void main() {
         );
         var onSuccessCalled = false;
 
+        when(mockAppProvider.modelConfig).thenReturn(null);
         when(
           mockTagWorkflowService.resolveBindings(note.tags),
         ).thenAnswer((_) async => [binding]);

@@ -10,6 +10,8 @@ import '../services/mcp_tool_integration_service.dart';
 import '../services/service_locator.dart';
 import '../utils/global_keys.dart';
 import '../widgets/approval_dialog.dart';
+import '../services/content_ingestion_service.dart';
+import '../widgets/local_model_workflow_warning_dialog.dart';
 import 'workflow_mini_player.dart';
 
 /// Root-level wrapper that renders the [WorkflowMiniPlayer] on all screens
@@ -44,6 +46,7 @@ class _WorkflowShellState extends State<WorkflowShell> {
   void initState() {
     super.initState();
     ApprovalService.fallbackApprovalRequest = _showApprovalDialog;
+    ContentIngestionService.onLocalModelApprovalRequired = _showLocalModelWorkflowDialog;
     _agentService.addListener(_onAgentStateChanged);
   }
 
@@ -54,6 +57,12 @@ class _WorkflowShellState extends State<WorkflowShell> {
       _showApprovalDialog,
     )) {
       ApprovalService.fallbackApprovalRequest = null;
+    }
+    if (identical(
+      ContentIngestionService.onLocalModelApprovalRequired,
+      _showLocalModelWorkflowDialog,
+    )) {
+      ContentIngestionService.onLocalModelApprovalRequired = null;
     }
     _agentService.removeListener(_onAgentStateChanged);
     super.dispose();
@@ -87,6 +96,14 @@ class _WorkflowShellState extends State<WorkflowShell> {
 
   void _releaseToolExecutor() {
     _shellOwnsExecutor = false;
+  }
+
+  Future<LocalModelWorkflowApproval> _showLocalModelWorkflowDialog() async {
+    if (!mounted) return LocalModelWorkflowApproval.cancel;
+    final context = navigatorKey.currentContext;
+    if (context == null) return LocalModelWorkflowApproval.cancel;
+    final result = await LocalModelWorkflowWarningDialog.show(context);
+    return result ?? LocalModelWorkflowApproval.cancel;
   }
 
   Future<ApprovalResult> _showApprovalDialog(ApprovalRequest request) async {

@@ -14,8 +14,19 @@ import 'tag_workflow_service.dart';
 
 import 'package:json_repair_flutter/json_repair_flutter.dart';
 
+import '../widgets/local_model_workflow_warning_dialog.dart';
+
 class ContentIngestionService {
   final DatabaseService _databaseService;
+
+  /// Registered by [WorkflowShell] to show the local model warning dialog.
+  /// Mirrors the [ApprovalService.fallbackApprovalRequest] pattern.
+  /// Returns null (treated as [LocalModelWorkflowApproval.cancel]) when unset.
+  static Future<LocalModelWorkflowApproval> Function()? onLocalModelApprovalRequired;
+
+  /// Session flag — set to true when user picks "don't warn this session".
+  /// Resets when a new [ContentIngestionService] instance is created (app restart).
+  bool _suppressLocalModelWarning = false;
 
   /// Creates a ContentIngestionService.
   ///
@@ -46,7 +57,21 @@ class ContentIngestionService {
     }
 
     if (workflowBindings.isNotEmpty) {
+      final supportsOrchestration = appProvider.modelConfig
+              ?.customCapabilitiesObject?.supportsToolOrchestration ??
+          true;
       for (final binding in workflowBindings) {
+        if (!supportsOrchestration &&
+            !_suppressLocalModelWarning &&
+            onLocalModelApprovalRequired != null) {
+          final approval = await onLocalModelApprovalRequired!();
+          if (approval == LocalModelWorkflowApproval.proceedAndSuppress) {
+            _suppressLocalModelWarning = true;
+          } else if (approval == LocalModelWorkflowApproval.cancel) {
+            continue;
+          }
+          // LocalModelWorkflowApproval.proceed falls through.
+        }
         onMessage?.call('Starting workflow for tag "${binding.matchedTag}"...');
         await agentService.runWorkflowTask(binding: binding, note: note);
       }
