@@ -1318,8 +1318,11 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
           'attachments',
           newAttachment,
         );
-        filteredAttachment.remove('id');
-        await stagingDb.insert('attachments', filteredAttachment);
+        await stagingDb.insert(
+          'attachments',
+          filteredAttachment,
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
       }
     }
   }
