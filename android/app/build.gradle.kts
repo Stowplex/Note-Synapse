@@ -49,6 +49,9 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
+            manifestPlaceholders["oauthRedirectScheme"] = "notesynapse"
+            manifestPlaceholders["googleRedirectScheme"] =
+                "com.googleusercontent.apps.438894533578-i9ecrp6g518tdenpq5fo4dkv90ce2rig"
         }
 
         release {
@@ -57,6 +60,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            manifestPlaceholders["oauthRedirectScheme"] = "notesynapse"
+
+            // TODO: replace with Android release OAuth client ID when available
+            manifestPlaceholders["googleRedirectScheme"] =
+                "com.googleusercontent.apps.TODO_ANDROID_RELEASE_CLIENT_ID"
         }
     }
 }
