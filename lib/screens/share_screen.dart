@@ -26,6 +26,7 @@ import '../utils/html_rules.dart';
 import '../utils/markdown_cleaner.dart';
 import '../utils/web_content_processor.dart';
 import 'note_selection_dialog.dart';
+import '../widgets/hierarchy_dialog.dart';
 
 class ShareScreen extends StatefulWidget {
   final Map<String, dynamic> sharedData;
@@ -53,6 +54,7 @@ class _ShareScreenState extends State<ShareScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
   final Set<String> _selectedTags = <String>{};
+  final Set<String> _filterDerivedTags = <String>{};
   final TextEditingController _newTagController = TextEditingController();
   final ScrollController _contentPreviewScrollController = ScrollController();
   final ScrollController _mediaSelectionScrollController = ScrollController();
@@ -584,10 +586,15 @@ class _ShareScreenState extends State<ShareScreen> {
                         children: _selectedTags.map((tag) {
                           return Chip(
                             label: Text(tag),
+                            backgroundColor:
+                                _filterDerivedTags.contains(tag)
+                                    ? Colors.purple.withOpacity(0.1)
+                                    : null,
                             deleteIcon: const Icon(Icons.close, size: 18),
                             onDeleted: () {
                               setState(() {
                                 _selectedTags.remove(tag);
+                                _filterDerivedTags.remove(tag);
                                 _updatePreparedNoteTags();
                               });
                             },
@@ -653,6 +660,16 @@ class _ShareScreenState extends State<ShareScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () =>
+                            _openFilterSelectionForTags(context, appProvider),
+                        icon: const Icon(Icons.filter_list, size: 18),
+                        label: Text(l10n.addFromFilter),
+                      ),
+                    ),
 
                     // Available tags to select from
                     if (availableTags.isNotEmpty) ...[
@@ -697,6 +714,39 @@ class _ShareScreenState extends State<ShareScreen> {
     if (_preparedNote != null) {
       _preparedNote = _preparedNote!.copyWith(tags: _selectedTags.toList());
     }
+  }
+
+  void _openFilterSelectionForTags(
+      BuildContext context, AppProvider appProvider) {
+    showDialog(
+      context: context,
+      builder: (context) => HierarchyDialog(
+        allFilters: appProvider.filters,
+        filterPredicate: (f) => f.includeTags.isNotEmpty,
+        onConfirmSelection: (selectedIds) {
+          setState(() {
+            for (final filterId in selectedIds) {
+              try {
+                final filter =
+                    appProvider.filters.firstWhere((f) => f.id == filterId);
+                for (final tag in filter.includeTags) {
+                  if (!_selectedTags.contains(tag)) {
+                    _selectedTags.add(tag);
+                    _filterDerivedTags.add(tag);
+                  } else {
+                    _filterDerivedTags.add(tag);
+                  }
+                }
+              } catch (_) {}
+            }
+            _updatePreparedNoteTags();
+          });
+        },
+        onEdit: (_) {},
+        onPin: (_) {},
+        onDelete: (_) {},
+      ),
+    );
   }
 
   Widget _buildUrlExtractionWidget() {
