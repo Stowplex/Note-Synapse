@@ -35,25 +35,34 @@ class BlockEditorData {
       editedContent = content;
 }
 
-/// Callback type for image picker that returns markdown string
-typedef ImagePickerCallback = Future<String?> Function();
+/// Callback type for pickers that return a markdown string to insert
+typedef MarkdownPickerCallback = Future<String?> Function();
+
+/// Backwards-compatible alias for the image picker callback
+typedef ImagePickerCallback = MarkdownPickerCallback;
 
 /// A dialog for editing a specific markdown block
 class BlockEditorDialog extends StatefulWidget {
   final String initialContent;
-  final ImagePickerCallback? onPickImage;
+  final MarkdownPickerCallback? onPickImage;
+  final MarkdownPickerCallback? onPickNoteLink;
+  final MarkdownPickerCallback? onPickAttachmentLink;
 
   const BlockEditorDialog({
     super.key,
     required this.initialContent,
     this.onPickImage,
+    this.onPickNoteLink,
+    this.onPickAttachmentLink,
   });
 
   /// Shows the block editor dialog and returns the result
   static Future<BlockEditorData?> show(
     BuildContext context,
     String initialContent, {
-    ImagePickerCallback? onPickImage,
+    MarkdownPickerCallback? onPickImage,
+    MarkdownPickerCallback? onPickNoteLink,
+    MarkdownPickerCallback? onPickAttachmentLink,
   }) async {
     return showDialog<BlockEditorData>(
       context: context,
@@ -61,6 +70,8 @@ class BlockEditorDialog extends StatefulWidget {
       builder: (context) => BlockEditorDialog(
         initialContent: initialContent,
         onPickImage: onPickImage,
+        onPickNoteLink: onPickNoteLink,
+        onPickAttachmentLink: onPickAttachmentLink,
       ),
     );
   }
@@ -132,9 +143,25 @@ class _BlockEditorDialogState extends State<BlockEditorDialog> {
 
   /// Handle image picking by calling the callback and inserting result into our controller
   Future<void> _handlePickImage() async {
-    if (widget.onPickImage == null) return;
+    await _handleMarkdownPicker(widget.onPickImage);
+  }
 
-    final markdown = await widget.onPickImage!();
+  /// Handle note link picking by calling the callback and inserting result into our controller
+  Future<void> _handlePickNoteLink() async {
+    await _handleMarkdownPicker(widget.onPickNoteLink);
+  }
+
+  /// Handle attachment link picking by calling the callback and inserting result into our controller
+  Future<void> _handlePickAttachmentLink() async {
+    await _handleMarkdownPicker(widget.onPickAttachmentLink);
+  }
+
+  /// Shared helper that invokes a markdown picker callback and inserts the
+  /// returned markdown at the current cursor position in the local controller.
+  Future<void> _handleMarkdownPicker(MarkdownPickerCallback? callback) async {
+    if (callback == null) return;
+
+    final markdown = await callback();
     if (markdown != null && markdown.isNotEmpty && mounted) {
       // Insert markdown at current cursor position in our controller
       final sel = _controller.selection;
@@ -220,6 +247,12 @@ class _BlockEditorDialogState extends State<BlockEditorDialog> {
                   language: 'markdown',
                   onPickImage: widget.onPickImage != null
                       ? _handlePickImage
+                      : null,
+                  onPickNoteLink: widget.onPickNoteLink != null
+                      ? _handlePickNoteLink
+                      : null,
+                  onPickAttachmentLink: widget.onPickAttachmentLink != null
+                      ? _handlePickAttachmentLink
                       : null,
                 ),
               ),
