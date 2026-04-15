@@ -427,6 +427,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       context,
       initialContent,
       onPickImage: () => _pickImageAndReturnMarkdown(context),
+      onPickNoteLink: () => _pickNoteLinkAndReturnMarkdown(context),
+      onPickAttachmentLink: () => _pickAttachmentLinkAndReturnMarkdown(context),
     );
 
     if (result == null || !mounted) return;
@@ -1480,7 +1482,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Future<void> _showNoteLinkPicker(BuildContext context) async {
-    final result = await showDialog<String>(
+    final result = await _pickNoteLinkAndReturnMarkdown(context);
+    if (result != null) {
+      _insertText(result);
+    }
+  }
+
+  Future<void> _showAttachmentLinkPicker(BuildContext context) async {
+    final result = await _pickAttachmentLinkAndReturnMarkdown(context);
+    if (result != null) {
+      _insertText(result);
+    }
+  }
+
+  /// Like _showNoteLinkPicker but returns the markdown string instead of inserting
+  Future<String?> _pickNoteLinkAndReturnMarkdown(BuildContext context) async {
+    return showDialog<String>(
       context: context,
       builder: (context) => _NoteLinkPickerDialog(
         existingLinkedNotes: _linkedNotes,
@@ -1489,21 +1506,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         },
       ),
     );
-
-    if (result != null) {
-      _insertText(result);
-    }
   }
 
-  Future<void> _showAttachmentLinkPicker(BuildContext context) async {
-    final result = await showDialog<String>(
+  /// Like _showAttachmentLinkPicker but returns the markdown string instead of inserting
+  Future<String?> _pickAttachmentLinkAndReturnMarkdown(
+    BuildContext context,
+  ) async {
+    return showDialog<String>(
       context: context,
       builder: (context) => const InsertAttachmentLinkDialog(),
     );
-
-    if (result != null) {
-      _insertText(result);
-    }
   }
 
   Future<void> _showToolLinkPicker(BuildContext context) async {
@@ -3984,6 +3996,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       context,
       block.content,
       onPickImage: () => _pickImageAndReturnMarkdown(context),
+      onPickNoteLink: () => _pickNoteLinkAndReturnMarkdown(context),
+      onPickAttachmentLink: () => _pickAttachmentLinkAndReturnMarkdown(context),
     );
     if (result == null || result.result == BlockEditorResult.cancelled) {
       return;

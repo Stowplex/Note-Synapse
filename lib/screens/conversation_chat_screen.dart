@@ -19,6 +19,7 @@ import '../services/conversation_service.dart';
 import '../services/model_selector.dart';
 import '../services/service_locator.dart';
 import '../services/attachment_preprocessor.dart';
+import '../services/local_model_attachment_constraint_service.dart';
 import '../services/logger_service.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/mcp_service.dart';
@@ -60,6 +61,7 @@ import '../services/sql_query_service.dart';
 import '../widgets/agent_plan_review_widget.dart';
 import '../widgets/agent_task_tree_widget.dart';
 import '../widgets/attachment_preview_tile.dart';
+import '../widgets/local_model_attachment_warning_dialog.dart';
 import '../widgets/tool_orchestration_warning_dialog.dart';
 
 class ConversationChatScreen extends StatefulWidget {
@@ -917,19 +919,44 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     // Capture ScaffoldMessenger and Navigator before any async operations
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
+    final content = _messageController.text;
+    final attachments = List<PlatformFile>.from(_attachedFiles);
+
+    final activeConfig =
+        _selectedModel ?? context.read<AppProvider>().modelConfig;
+    final localAttachmentWarning =
+        await LocalModelAttachmentConstraintService.analyzeForGemma4(
+          config: activeConfig,
+          prompt: content,
+          attachments: attachments,
+        );
+    if (!mounted) return;
+    if (localAttachmentWarning != null) {
+      final result = await LocalModelAttachmentWarningDialog.show(
+        context,
+        currentModel: activeConfig,
+        warning: localAttachmentWarning,
+      );
+      if (!mounted) return;
+      if (result == null || result is LocalModelAttachmentWarningStop) return;
+      if (result is LocalModelAttachmentWarningContinue &&
+          result.modelOverride != null) {
+        _selectedModel = result.modelOverride;
+      }
+    }
 
     // Check tool orchestration capability before sending
     final hasTools =
         _selectedBuiltInTools.isNotEmpty || _selectedMcpEndpointIds.isNotEmpty;
-    final activeConfig =
+    final toolCheckConfig =
         _selectedModel ?? context.read<AppProvider>().modelConfig;
     final supportsOrchestration =
-        activeConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
+        toolCheckConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
         true;
     if (hasTools && !supportsOrchestration) {
       final result = await ToolOrchestrationWarningDialog.show(
         context,
-        activeConfig,
+        toolCheckConfig,
       );
       if (!mounted) return;
       if (result == null || result is ToolOrchestrationStop) return;
@@ -938,8 +965,6 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       }
     }
 
-    final content = _messageController.text;
-    final attachments = List<PlatformFile>.from(_attachedFiles);
     String? requestId;
     GenerationContext? generationContext;
     _messageController.clear();

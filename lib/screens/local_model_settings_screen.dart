@@ -54,9 +54,8 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
           'gpu';
       _enableThinking =
           widget.preset.supportsThinking && (existing.enableThinking ?? false);
-      _tokenWindow = (
-        existing.tokenWindow ?? widget.preset.defaultTokenWindow
-      ).clamp(widget.preset.minTokenWindow, widget.preset.maxTokenWindow);
+      _tokenWindow = (existing.tokenWindow ?? widget.preset.defaultTokenWindow)
+          .clamp(widget.preset.minTokenWindow, widget.preset.maxTokenWindow);
     } else {
       _backendType = widget.preset.defaultBackend[_platformKey] ?? 'gpu';
       _tokenWindow = widget.preset.defaultTokenWindow;
@@ -85,6 +84,8 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
         supportsAudio: false,
         supportsVideo: false,
         supportsToolOrchestration: widget.preset.supportsToolOrchestration,
+        supportedImageFormats: const ['png', 'jpg', 'jpeg'],
+        supportedDocumentFormats: const [],
       ),
     );
 
@@ -182,9 +183,9 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
                   max: widget.preset.maxTokenWindow.toDouble(),
                   divisions:
                       ((widget.preset.maxTokenWindow -
-                                      widget.preset.minTokenWindow) /
-                                  2048)
-                              .round(),
+                                  widget.preset.minTokenWindow) /
+                              2048)
+                          .round(),
                   label: _tokenWindow.toString(),
                   onChanged: (v) => setState(() => _tokenWindow = v.round()),
                 ),
