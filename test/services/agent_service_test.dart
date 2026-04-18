@@ -10,7 +10,9 @@ import 'package:note_synapse/services/ai_service.dart';
 import 'package:note_synapse/services/context_manager_service.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/model_selector.dart';
+import 'package:note_synapse/services/prompts/prompt_template_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
+import 'package:note_synapse/services/skill_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 @GenerateMocks([
@@ -18,6 +20,7 @@ import 'package:shared_preferences/shared_preferences.dart';
   ModelSelector,
   AIService,
   DatabaseService,
+  PromptTemplateService,
 ])
 import 'agent_service_test.mocks.dart';
 
@@ -31,6 +34,7 @@ void main() {
   late MockModelSelector mockModelSelector;
   late MockAIService mockAIService;
   late MockDatabaseService mockDatabaseService;
+  late MockPromptTemplateService mockPromptTemplateService;
   late AgentService agentService;
 
   setUp(() async {
@@ -39,6 +43,7 @@ void main() {
     mockModelSelector = MockModelSelector();
     mockAIService = MockAIService();
     mockDatabaseService = MockDatabaseService();
+    mockPromptTemplateService = MockPromptTemplateService();
 
     getIt.registerLazySingleton<ContextManagerService>(
       () => mockContextManager,
@@ -46,6 +51,15 @@ void main() {
     getIt.registerLazySingleton<ModelSelector>(() => mockModelSelector);
     getIt.registerLazySingleton<AIService>(() => mockAIService);
     getIt.registerLazySingleton<DatabaseService>(() => mockDatabaseService);
+    getIt.registerLazySingleton<PromptTemplateService>(() => mockPromptTemplateService);
+    getIt.registerLazySingleton<SkillService>(() => SkillService(mockDatabaseService));
+    
+    when(mockDatabaseService.getNotesByTag('agent-skill'))
+        .thenAnswer((_) async => []);
+    when(mockDatabaseService.searchNotesFTS(any, tags: anyNamed('tags')))
+        .thenAnswer((_) async => []);
+    when(mockPromptTemplateService.renderSync(any, any))
+        .thenReturn('Mock Template Content');
 
     agentService = AgentService(
       mockContextManager,
@@ -125,6 +139,7 @@ void main() {
 
     // Default ModelSelector stubs
     when(mockModelSelector.currentModelConfig).thenReturn(null);
+    when(mockModelSelector.dispose()).thenAnswer((_) => Future.value());
   });
 
   tearDown(() async {
@@ -733,7 +748,7 @@ This is the content that should remain.
         await runStep(task, llmResponse);
         expect(
           task.executionHistory.any(
-            (h) => h.contains('Action: Call search_notes'),
+            (h) => h.contains('Action: Call System.search_notes'),
           ),
           isTrue,
         );
@@ -773,7 +788,7 @@ This is the content that should remain.
         await runStep(task, llmResponse);
         expect(
           task.executionHistory.any(
-            (h) => h.contains('Action: Call search_notes'),
+            (h) => h.contains('Action: Call System.search_notes'),
           ),
           isTrue,
         );
@@ -964,7 +979,7 @@ The investigation reveals important findings.
       await runStep(task, llmResponse);
       expect(
         task.executionHistory.any(
-          (h) => h.contains('Action: Call search_notes'),
+          (h) => h.contains('Action: Call System.search_notes'),
         ),
         isTrue,
       );

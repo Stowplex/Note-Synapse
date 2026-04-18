@@ -15,6 +15,8 @@ import 'conversation_chat_screen.dart';
 import '../widgets/model_selector_button.dart';
 import '../models/generation_context.dart';
 import '../models/model_config.dart';
+import '../services/skill_service.dart';
+import '../services/service_locator.dart';
 
 enum AIInteractionType { noteTransformation, newNoteCreation, aiConversation }
 
@@ -34,6 +36,19 @@ class _AIActionScreenState extends State<AIActionScreen> {
   String? _response;
   final List<PlatformFile> _attachedFiles = [];
   ModelConfig? _selectedModel;
+  bool _skillsEnabled = true;
+  int _skillCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSkillCount();
+  }
+
+  Future<void> _loadSkillCount() async {
+    final index = await getIt<SkillService>().buildSkillIndex();
+    if (mounted) setState(() => _skillCount = index.length);
+  }
 
   @override
   void dispose() {
@@ -100,6 +115,21 @@ class _AIActionScreenState extends State<AIActionScreen> {
           ),
           const SizedBox(height: 24),
           if (_selectedAction != null) ...[
+            if (_selectedAction == AIInteractionType.aiConversation) ...[
+              SwitchListTile(
+                title: const Text('Agent Skills'),
+                subtitle: Text(
+                  _skillCount > 0
+                      ? '$_skillCount skill${_skillCount == 1 ? '' : 's'} available'
+                      : 'No skills found — create a note tagged "agent-skill"',
+                ),
+                value: _skillsEnabled,
+                onChanged: _skillCount > 0
+                    ? (val) => setState(() => _skillsEnabled = val)
+                    : null,
+              ),
+              const SizedBox(height: 8),
+            ],
             if (_selectedAction != AIInteractionType.aiConversation) ...[
               Text(
                 l10n.enterYourPrompt,
@@ -450,6 +480,7 @@ class _AIActionScreenState extends State<AIActionScreen> {
                       .map((note) => note.id)
                       .toList(),
                   initialModelOverride: _selectedModel,
+                  skillsEnabled: _skillsEnabled,
                 ),
               ),
             );

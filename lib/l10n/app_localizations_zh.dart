@@ -1038,6 +1038,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get insertAttachmentLink => '插入附件链接';
 
   @override
+  String get insertToolLink => '插入工具链接';
+
+  @override
   String get selectAttachment => '选择附件';
 
   @override
@@ -1452,6 +1455,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dedupTags => '去重标签';
+
+  @override
+  String get workflows => '工作流';
 
   @override
   String get dedupRules => '去重规则';
@@ -4271,6 +4277,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get toolOrchestrationSwitchModel => '切换模型';
+
+  @override
+  String get localModelWorkflowWarningTitle => '本地模型性能警告';
+
+  @override
+  String get localModelWorkflowWarningBody => '此模型在标签工作流中可能无法提供最佳体验。';
+
+  @override
+  String get localModelWorkflowWarningContinueNoWarn => '继续且本次会话不再提示';
 
   @override
   String get nightMode => '夜间模式';

@@ -17,7 +17,9 @@ import 'package:note_synapse/models/note_annotation.dart' as _i7;
 import 'package:note_synapse/models/relationship.dart' as _i10;
 import 'package:note_synapse/models/tag.dart' as _i9;
 import 'package:note_synapse/models/user_app.dart' as _i12;
+import 'package:note_synapse/models/workflow_binding_row.dart' as _i16;
 import 'package:note_synapse/services/database_service.dart' as _i3;
+import 'package:note_synapse/services/tag_workflow_service.dart' as _i17;
 import 'package:sqflite/sqflite.dart' as _i2;
 
 // ignore_for_file: type=lint
@@ -149,6 +151,14 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
   _i4.Future<List<_i5.Note>> getNotesByIds(List<String>? noteIds) =>
       (super.noSuchMethod(
             Invocation.method(#getNotesByIds, [noteIds]),
+            returnValue: _i4.Future<List<_i5.Note>>.value(<_i5.Note>[]),
+          )
+          as _i4.Future<List<_i5.Note>>);
+
+  @override
+  _i4.Future<List<_i5.Note>> getNotesByTag(String? tagName) =>
+      (super.noSuchMethod(
+            Invocation.method(#getNotesByTag, [tagName]),
             returnValue: _i4.Future<List<_i5.Note>>.value(<_i5.Note>[]),
           )
           as _i4.Future<List<_i5.Note>>);
@@ -453,6 +463,21 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
   _i4.Future<void> deleteRelationship(String? relationshipId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteRelationship, [relationshipId]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> deleteRelationshipBetween(
+    String? fromNoteId,
+    String? toNoteId,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteRelationshipBetween, [
+              fromNoteId,
+              toNoteId,
+            ]),
             returnValue: _i4.Future<void>.value(),
             returnValueForMissingStub: _i4.Future<void>.value(),
           )
@@ -1466,4 +1491,138 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
             returnValue: _i4.Future<_i5.Note?>.value(),
           )
           as _i4.Future<_i5.Note?>);
+
+  @override
+  _i4.Future<_i16.WorkflowBindingRow?> getExactWorkflowBinding(
+    String? tagName,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getExactWorkflowBinding, [tagName]),
+            returnValue: _i4.Future<_i16.WorkflowBindingRow?>.value(),
+          )
+          as _i4.Future<_i16.WorkflowBindingRow?>);
+
+  @override
+  _i4.Future<List<_i16.WorkflowBindingRow>> getPrefixWorkflowBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getPrefixWorkflowBindings, []),
+            returnValue: _i4.Future<List<_i16.WorkflowBindingRow>>.value(
+              <_i16.WorkflowBindingRow>[],
+            ),
+          )
+          as _i4.Future<List<_i16.WorkflowBindingRow>>);
+
+  @override
+  _i4.Future<_i16.WorkflowBindingRow?> getWorkflowBindingByPattern(
+    String? pattern,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getWorkflowBindingByPattern, [pattern]),
+            returnValue: _i4.Future<_i16.WorkflowBindingRow?>.value(),
+          )
+          as _i4.Future<_i16.WorkflowBindingRow?>);
+
+  @override
+  _i4.Future<List<_i16.WorkflowBindingRow>> getAllWorkflowBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllWorkflowBindings, []),
+            returnValue: _i4.Future<List<_i16.WorkflowBindingRow>>.value(
+              <_i16.WorkflowBindingRow>[],
+            ),
+          )
+          as _i4.Future<List<_i16.WorkflowBindingRow>>);
+
+  @override
+  _i4.Future<void> insertWorkflowBinding(_i16.WorkflowBindingRow? binding) =>
+      (super.noSuchMethod(
+            Invocation.method(#insertWorkflowBinding, [binding]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> deleteWorkflowBinding(String? pattern) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteWorkflowBinding, [pattern]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+}
+
+/// A class which mocks [TagWorkflowService].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockTagWorkflowService extends _i1.Mock
+    implements _i17.TagWorkflowService {
+  MockTagWorkflowService() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  _i4.Future<List<_i17.ResolvedBinding>> resolveBindings(List<String>? tags) =>
+      (super.noSuchMethod(
+            Invocation.method(#resolveBindings, [tags]),
+            returnValue: _i4.Future<List<_i17.ResolvedBinding>>.value(
+              <_i17.ResolvedBinding>[],
+            ),
+          )
+          as _i4.Future<List<_i17.ResolvedBinding>>);
+
+  @override
+  _i4.Future<bool> hasImmutableBinding(List<String>? tags) =>
+      (super.noSuchMethod(
+            Invocation.method(#hasImmutableBinding, [tags]),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
+
+  @override
+  _i4.Future<_i16.WorkflowBindingRow?> getBindingByPattern(String? pattern) =>
+      (super.noSuchMethod(
+            Invocation.method(#getBindingByPattern, [pattern]),
+            returnValue: _i4.Future<_i16.WorkflowBindingRow?>.value(),
+          )
+          as _i4.Future<_i16.WorkflowBindingRow?>);
+
+  @override
+  _i4.Future<List<_i16.WorkflowBindingRow>> getAllBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllBindings, []),
+            returnValue: _i4.Future<List<_i16.WorkflowBindingRow>>.value(
+              <_i16.WorkflowBindingRow>[],
+            ),
+          )
+          as _i4.Future<List<_i16.WorkflowBindingRow>>);
+
+  @override
+  _i4.Future<void> registerBinding({
+    required String? pattern,
+    required bool? isPrefix,
+    required String? skillNoteId,
+    required String? prompt,
+    required bool? contentImmutable,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#registerBinding, [], {
+              #pattern: pattern,
+              #isPrefix: isPrefix,
+              #skillNoteId: skillNoteId,
+              #prompt: prompt,
+              #contentImmutable: contentImmutable,
+            }),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> removeBinding(String? pattern) =>
+      (super.noSuchMethod(
+            Invocation.method(#removeBinding, [pattern]),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
 }

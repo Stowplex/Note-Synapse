@@ -71,24 +71,52 @@ class ApprovalRequest {
 
   /// Create a note modification approval request.
   factory ApprovalRequest.noteModification({
-    required String noteId,
-    required Map<String, dynamic> modification,
+    String? noteId,
+    Map<String, dynamic>? modification,
+    List<Map<String, dynamic>>? modifications,
     String? source,
     String? noteTitle,
     String? noteSnippet,
+    List<Map<String, String>>? noteDetails,
   }) {
+    final isBatch = modifications != null;
+    final batchMods = modifications ?? const <Map<String, dynamic>>[];
     return ApprovalRequest(
       type: ApprovalType.noteModification,
-      title: 'Allow Note Modification?',
+      title: isBatch
+          ? 'Allow Batched Note Modification?'
+          : 'Allow Note Modification?',
       description: source != null
-          ? '$source wants to modify note:'
-          : 'The operation wants to modify note:',
-      details: {
-        'noteId': noteId,
-        'modification': modification,
-        if (noteTitle != null) 'noteTitle': noteTitle,
-        if (noteSnippet != null) 'noteSnippet': noteSnippet,
-      },
+          ? '$source wants to modify ${isBatch ? '${batchMods.length} notes' : 'note'}:'
+          : 'The operation wants to modify ${isBatch ? '${batchMods.length} notes' : 'note'}:',
+      details: isBatch
+          ? {
+              'noteIds': batchMods.map((m) => m['note_id']).toList(),
+              'noteDetails': noteDetails,
+              'modification': {
+                'isBatch': true,
+                'count': batchMods.length,
+                'updates': batchMods.take(5).map((entry) {
+                  final currentNoteId = entry['note_id']?.toString() ?? '';
+                  final noteMeta = noteDetails?.firstWhere(
+                    (detail) => detail['id'] == currentNoteId,
+                    orElse: () => const <String, String>{},
+                  );
+                  return {
+                    'id': currentNoteId,
+                    if (noteMeta != null && noteMeta.isNotEmpty)
+                      'title': noteMeta['title'],
+                    'changes': entry['modification'],
+                  };
+                }).toList(),
+              },
+            }
+          : {
+              'noteId': noteId,
+              'modification': modification,
+              if (noteTitle != null) 'noteTitle': noteTitle,
+              if (noteSnippet != null) 'noteSnippet': noteSnippet,
+            },
       warningMessage: null,
       sessionApprovalLabel: 'Allow for this session',
     );
@@ -147,6 +175,13 @@ class ApprovalService {
   /// [ApprovalDialog.show] with a stable NavigatorState.
   static Future<ApprovalResult> Function(ApprovalRequest)? onApprovalRequest;
 
+  /// Root-level fallback callback for approval requests.
+  ///
+  /// This stays available even when route-specific widgets are disposed, so
+  /// background workflows can still surface approval dialogs.
+  static Future<ApprovalResult> Function(ApprovalRequest)?
+  fallbackApprovalRequest;
+
   /// Whether note modifications have been approved for this session.
   static bool sessionApprovedNoteModifications = false;
 
@@ -162,6 +197,42 @@ class ApprovalService {
     sessionApprovedNoteDeletions = false;
     sessionApprovedSqlWrites = false;
     LoggerService.debug('[ApprovalService] Session approvals reset');
+  }
+
+  static Future<ApprovalResult?> _dispatchApprovalRequest(
+    ApprovalRequest request,
+  ) async {
+    final primary = onApprovalRequest;
+    final fallback = fallbackApprovalRequest;
+
+    if (primary == null && fallback == null) {
+      LoggerService.warning(
+        '[ApprovalService] No approval callback registered for ${request.type}',
+      );
+      return null;
+    }
+
+    if (primary != null) {
+      try {
+        return await primary(request);
+      } catch (e) {
+        LoggerService.warning(
+          '[ApprovalService] Primary approval callback unavailable: $e',
+        );
+      }
+    }
+
+    if (fallback != null && !identical(primary, fallback)) {
+      try {
+        return await fallback(request);
+      } catch (e) {
+        LoggerService.error(
+          '[ApprovalService] Fallback approval callback failed: $e',
+        );
+      }
+    }
+
+    return null;
   }
 
   /// Request approval for a SQL write operation.
@@ -182,38 +253,28 @@ class ApprovalService {
       return true;
     }
 
-    // Check if approval callback is registered
-    if (onApprovalRequest == null) {
-      LoggerService.warning(
-        '[ApprovalService] No approval callback registered for SQL write',
-      );
-      return false;
-    }
-
-    // Request approval
-    final request = ApprovalRequest.sqlWrite(
-      sql: sql,
-      queryType: queryType,
-      queryTypeDescription: queryTypeDescription,
-      source: source,
+    final result = await _dispatchApprovalRequest(
+      ApprovalRequest.sqlWrite(
+        sql: sql,
+        queryType: queryType,
+        queryTypeDescription: queryTypeDescription,
+        source: source,
+      ),
     );
-
-    try {
-      final result = await onApprovalRequest!(request);
-      if (result.approved) {
-        if (result.approvedForSession) {
-          sessionApprovedSqlWrites = true;
-          LoggerService.debug(
-            '[ApprovalService] SQL writes approved for session',
-          );
-        }
-        return true;
-      }
-      return false;
-    } catch (e) {
-      LoggerService.error('[ApprovalService] Error requesting approval: $e');
+    if (result == null) {
       return false;
     }
+
+    if (result.approved) {
+      if (result.approvedForSession) {
+        sessionApprovedSqlWrites = true;
+        LoggerService.debug(
+          '[ApprovalService] SQL writes approved for session',
+        );
+      }
+      return true;
+    }
+    return false;
   }
 
   /// Request approval for a note modification.
@@ -231,14 +292,6 @@ class ApprovalService {
         '[ApprovalService] Note modification auto-approved (session)',
       );
       return true;
-    }
-
-    // Check if approval callback is registered
-    if (onApprovalRequest == null) {
-      LoggerService.warning(
-        '[ApprovalService] No approval callback registered for note modification',
-      );
-      return false;
     }
 
     // Fetch note details for better context
@@ -260,31 +313,92 @@ class ApprovalService {
       );
     }
 
-    // Request approval
-    final request = ApprovalRequest.noteModification(
-      noteId: noteId,
-      modification: modification,
-      source: source,
-      noteTitle: title,
-      noteSnippet: snippet,
+    final result = await _dispatchApprovalRequest(
+      ApprovalRequest.noteModification(
+        noteId: noteId,
+        modification: modification,
+        source: source,
+        noteTitle: title,
+        noteSnippet: snippet,
+      ),
     );
 
-    try {
-      final result = await onApprovalRequest!(request);
-      if (result.approved) {
-        if (result.approvedForSession) {
-          sessionApprovedNoteModifications = true;
-          LoggerService.debug(
-            '[ApprovalService] Note modifications approved for session',
-          );
-        }
-        return true;
-      }
-      return false;
-    } catch (e) {
-      LoggerService.error('[ApprovalService] Error requesting approval: $e');
+    if (result == null) {
       return false;
     }
+
+    if (result.approved) {
+      if (result.approvedForSession) {
+        sessionApprovedNoteModifications = true;
+        LoggerService.debug(
+          '[ApprovalService] Note modifications approved for session',
+        );
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /// Request approval for a batched note modification.
+  static Future<bool> requestBatchNoteModificationApproval({
+    required List<Map<String, dynamic>> modifications,
+    String? source,
+  }) async {
+    if (sessionApprovedNoteModifications) {
+      LoggerService.debug(
+        '[ApprovalService] Note modification auto-approved (session)',
+      );
+      return true;
+    }
+
+    final noteIds = modifications
+        .map((modification) => modification['note_id']?.toString())
+        .whereType<String>()
+        .toList();
+
+    final noteDetails = <Map<String, String>>[];
+    try {
+      final db = getIt<DatabaseService>();
+      final notes = await db.getNotesByIds(noteIds);
+      for (final note in notes) {
+        final content = note.content;
+        final snippet = content.length > 100
+            ? '${content.substring(0, 100)}...'
+            : content;
+        noteDetails.add({
+          'id': note.id,
+          'title': note.title,
+          'snippet': snippet,
+        });
+      }
+    } catch (e) {
+      LoggerService.warning(
+        '[ApprovalService] Failed to fetch batch note details: $e',
+      );
+    }
+
+    final result = await _dispatchApprovalRequest(
+      ApprovalRequest.noteModification(
+        modifications: modifications,
+        source: source,
+        noteDetails: noteDetails,
+      ),
+    );
+
+    if (result == null) {
+      return false;
+    }
+
+    if (result.approved) {
+      if (result.approvedForSession) {
+        sessionApprovedNoteModifications = true;
+        LoggerService.debug(
+          '[ApprovalService] Note modifications approved for session',
+        );
+      }
+      return true;
+    }
+    return false;
   }
 
   /// Request approval for note deletion.
@@ -301,14 +415,6 @@ class ApprovalService {
         '[ApprovalService] Note deletion auto-approved (session)',
       );
       return true;
-    }
-
-    // Check if approval callback is registered
-    if (onApprovalRequest == null) {
-      LoggerService.warning(
-        '[ApprovalService] No approval callback registered for note deletion',
-      );
-      return false;
     }
 
     // Fetch note details
@@ -337,27 +443,27 @@ class ApprovalService {
     // noteDeletion factory creates details: {'noteIds': noteIds, 'count': noteIds.length}
     // I need to inject noteDetails.
     // I will modify the factory to accept it.
-    final request = ApprovalRequest.noteDeletion(
-      noteIds: noteIds,
-      source: source,
-      noteDetails: noteDetails, // New parameter
+    final result = await _dispatchApprovalRequest(
+      ApprovalRequest.noteDeletion(
+        noteIds: noteIds,
+        source: source,
+        noteDetails: noteDetails,
+      ),
     );
 
-    try {
-      final result = await onApprovalRequest!(request);
-      if (result.approved) {
-        if (result.approvedForSession) {
-          sessionApprovedNoteDeletions = true;
-          LoggerService.debug(
-            '[ApprovalService] Note deletions approved for session',
-          );
-        }
-        return true;
-      }
-      return false;
-    } catch (e) {
-      LoggerService.error('[ApprovalService] Error requesting approval: $e');
+    if (result == null) {
       return false;
     }
+
+    if (result.approved) {
+      if (result.approvedForSession) {
+        sessionApprovedNoteDeletions = true;
+        LoggerService.debug(
+          '[ApprovalService] Note deletions approved for session',
+        );
+      }
+      return true;
+    }
+    return false;
   }
 }

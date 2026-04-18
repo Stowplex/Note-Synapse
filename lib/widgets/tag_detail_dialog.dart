@@ -10,11 +10,15 @@ import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/conversation.dart';
 import '../models/tag.dart';
+import '../models/workflow_binding_row.dart';
 import '../services/conversation_service.dart';
+import '../services/skill_service.dart';
 import '../services/service_locator.dart';
 import '../services/tag_image_service.dart';
+import '../services/tag_workflow_service.dart';
 import '../screens/conversation_chat_screen.dart';
 import '../screens/note_detail_screen.dart';
+import 'tag_workflow_binding_dialog.dart';
 
 class TagDetailDialog extends StatefulWidget {
   final String tagName;
@@ -29,11 +33,16 @@ class TagDetailDialog extends StatefulWidget {
 class _TagDetailDialogState extends State<TagDetailDialog> {
   ConversationService get _conversationService => getIt<ConversationService>();
   TagImageService get _tagImageService => getIt<TagImageService>();
+  TagWorkflowService get _tagWorkflowService => getIt<TagWorkflowService>();
   List<Note> _notes = [];
   List<Conversation> _conversations = [];
   bool _isLoading = true;
   final TextEditingController _promptController = TextEditingController();
   bool _isSavingPrompt = false;
+  WorkflowBindingRow? _exactBinding;
+  Map<String, SkillMetadata> _skillIndex = {};
+  bool _isLoadingWorkflow = true;
+  bool _isSavingWorkflow = false;
   bool _isImportingImage = false;
   int _imageVersion = 0;
   String? _appDocsPath;
@@ -43,6 +52,7 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
     super.initState();
     _loadData();
     _loadPrompt();
+    _loadWorkflowBinding();
     _initAppDocsPath();
   }
 
@@ -132,6 +142,131 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
     } finally {
       if (mounted) setState(() => _isSavingPrompt = false);
     }
+  }
+
+  Future<void> _loadWorkflowBinding() async {
+    try {
+      final binding = await _tagWorkflowService.getBindingByPattern(
+        widget.tagName,
+      );
+      final skillIndex = await getIt<SkillService>().buildSkillIndex();
+      if (!mounted) return;
+      setState(() {
+        _exactBinding = binding?.isPrefix == true ? null : binding;
+        _skillIndex = skillIndex;
+        _isLoadingWorkflow = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingWorkflow = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading workflow binding: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _editWorkflowBinding() async {
+    final existingPatterns = (await _tagWorkflowService.getAllBindings())
+        .map((binding) => binding.pattern)
+        .toSet();
+
+    if (!mounted) return;
+    final draft = await TagWorkflowBindingDialog.show(
+      context,
+      skillIndex: _skillIndex,
+      allTagNames: [widget.tagName],
+      existingPatterns: existingPatterns,
+      fixedExactTag: widget.tagName,
+      initialBinding: _exactBinding,
+    );
+    if (draft == null) return;
+
+    setState(() => _isSavingWorkflow = true);
+    try {
+      await _tagWorkflowService.registerBinding(
+        pattern: draft.pattern,
+        isPrefix: false,
+        skillNoteId: draft.skillNoteId,
+        prompt: draft.prompt,
+        contentImmutable: draft.contentImmutable,
+      );
+      await _loadWorkflowBinding();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Workflow binding saved'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error saving workflow binding: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSavingWorkflow = false);
+    }
+  }
+
+  Future<void> _removeWorkflowBinding() async {
+    if (_exactBinding == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Workflow Binding'),
+        content: Text(
+          'Remove the exact workflow binding for "${widget.tagName}"?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _isSavingWorkflow = true);
+    try {
+      await _tagWorkflowService.removeBinding(widget.tagName);
+      await _loadWorkflowBinding();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Workflow binding removed'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error removing workflow binding: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSavingWorkflow = false);
+    }
+  }
+
+  void _openWorkflowManagement() {
+    Navigator.of(context).pop();
   }
 
   Future<void> _unlinkNote(Note note) async {
@@ -333,9 +468,9 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
               const SizedBox(width: 8),
               Text(
                 'Tag Image',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -360,10 +495,15 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                   ),
                   TextButton.icon(
                     onPressed: _removeTagImage,
-                    icon: const Icon(Icons.delete_outline, size: 18,
-                        color: Colors.red),
-                    label: const Text('Remove',
-                        style: TextStyle(color: Colors.red)),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 18,
+                      color: Colors.red,
+                    ),
+                    label: const Text(
+                      'Remove',
+                      style: TextStyle(color: Colors.red),
+                    ),
                   ),
                 ],
               ),
@@ -388,9 +528,9 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
               const SizedBox(width: 8),
               Text(
                 'Tag Image',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -400,27 +540,29 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
-                ...builtins.map((name) => Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: GestureDetector(
-                        onTap: () => _setBuiltinImage(name),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.asset(
-                            TagImageService.builtinAssetPath(name),
+                ...builtins.map(
+                  (name) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: GestureDetector(
+                      onTap: () => _setBuiltinImage(name),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.asset(
+                          TagImageService.builtinAssetPath(name),
+                          width: 100,
+                          height: 70,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
                             width: 100,
                             height: 70,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              width: 100,
-                              height: 70,
-                              color: Colors.grey[300],
-                              child: const Icon(Icons.broken_image),
-                            ),
+                            color: Colors.grey[300],
+                            child: const Icon(Icons.broken_image),
                           ),
                         ),
                       ),
-                    )),
+                    ),
+                  ),
+                ),
                 _isImportingImage
                     ? Container(
                         width: 100,
@@ -445,10 +587,9 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                           height: 70,
                           decoration: BoxDecoration(
                             border: Border.all(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .outline
-                                  .withValues(alpha: 0.5),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outline.withValues(alpha: 0.5),
                             ),
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -462,12 +603,11 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                               const SizedBox(height: 4),
                               Text(
                                 'Gallery',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
+                                style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(
-                                      color:
-                                          Theme.of(context).colorScheme.primary,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
                                     ),
                               ),
                             ],
@@ -479,6 +619,147 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildWorkflowBindingSection() {
+    if (_isLoadingWorkflow) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final binding = _exactBinding;
+    final skill = binding == null ? null : _skillIndex[binding.skillNoteId];
+    final hasSkillChoices = _skillIndex.isNotEmpty;
+
+    return ExpansionTile(
+      title: Row(
+        children: [
+          const Icon(Icons.account_tree_outlined, size: 20),
+          const SizedBox(width: 8),
+          const Text('Workflow Binding'),
+        ],
+      ),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                binding == null
+                    ? 'No exact workflow binding for this tag. Prefix bindings are managed from Tag Management.'
+                    : 'This tag runs a skill workflow when matched.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.grey),
+              ),
+              const SizedBox(height: 12),
+              if (binding == null)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text('No exact binding configured'),
+                )
+              else
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        skill?.name ?? 'Missing or disabled skill',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        skill?.description ??
+                            'The bound skill is no longer enabled or valid.',
+                      ),
+                      if (binding.prompt.trim().isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Override: ${binding.prompt}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                      if (binding.contentImmutable) ...[
+                        const SizedBox(height: 8),
+                        const Chip(
+                          label: Text('Immutable content'),
+                          avatar: Icon(Icons.lock_outline, size: 16),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  FilledButton.icon(
+                    onPressed: _isSavingWorkflow || !hasSkillChoices
+                        ? null
+                        : _editWorkflowBinding,
+                    icon: _isSavingWorkflow
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(
+                            binding == null
+                                ? Icons.add_link
+                                : Icons.edit_outlined,
+                          ),
+                    label: Text(
+                      binding == null ? 'Set Binding' : 'Edit Binding',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton(
+                    onPressed: _openWorkflowManagement,
+                    child: const Text('Open Full Workflow Rules'),
+                  ),
+                  if (binding != null) ...[
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: _isSavingWorkflow
+                          ? null
+                          : _removeWorkflowBinding,
+                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                      child: const Text('Remove'),
+                    ),
+                  ],
+                ],
+              ),
+              if (!hasSkillChoices) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'No enabled skills are available. Create or enable a note tagged "agent-skill" first.',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.orange[800]),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -588,6 +869,8 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                 ),
               ],
             ),
+
+            _buildWorkflowBindingSection(),
 
             // Content with divider
             Expanded(
@@ -840,7 +1123,7 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
                                 ),
                                 backgroundColor: Theme.of(
                                   context,
-                                ).colorScheme.primary.withOpacity(0.1),
+                                ).colorScheme.primary.withValues(alpha: 0.1),
                                 labelStyle: TextStyle(
                                   color: Theme.of(context).colorScheme.primary,
                                 ),
@@ -875,7 +1158,7 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(
-          color: Theme.of(context).colorScheme.outline.withOpacity(0.5),
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
           width: 1,
         ),
       ),

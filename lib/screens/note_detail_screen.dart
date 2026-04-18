@@ -15,6 +15,7 @@ import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/attachment.dart';
 import '../models/relationship.dart';
+import '../services/approval_service.dart';
 import '../services/audio_recording_service.dart';
 import '../services/ai_service.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
@@ -37,13 +38,16 @@ import 'subnote_edit_screen.dart';
 import 'note_action_app_selection_screen.dart';
 import 'note_selection_dialog.dart';
 import '../widgets/insert_attachment_link_dialog.dart';
+import 'tool_picker_sheet.dart';
 import '../services/logger_service.dart';
 import '../services/database_service.dart';
 import '../services/conversation_service.dart';
 import '../services/media_attachment_service.dart';
 import '../services/content_ingestion_service.dart';
 import '../services/service_locator.dart';
+import '../services/skill_service.dart';
 import '../models/conversation.dart';
+import '../widgets/approval_dialog.dart';
 import '../widgets/pdf_ai_context_dialog.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:path_provider/path_provider.dart';
@@ -51,6 +55,8 @@ import 'package:path_provider/path_provider.dart';
 import 'conversation_tree_screen.dart';
 import 'immersive_note_screen.dart';
 import 'conversation_chat_screen.dart';
+import 'user_app_view_screen.dart';
+import 'mcp_settings_screen.dart';
 import '../utils/remote_image_utils.dart';
 import '../models/recurrence_rule.dart';
 
@@ -102,6 +108,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   // Attachment metadata state
   Map<String, Attachment> _attachmentsMap = {};
+  Future<ApprovalResult> Function(ApprovalRequest)? _approvalCallback;
 
   // Multi-block selection state
   bool _isSelectionMode = false;
@@ -176,6 +183,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
     // Initialize audio service on all platforms (including Linux)
     _initializeAudioService();
+    _setupApprovalCallback();
+  }
+
+  void _setupApprovalCallback() {
+    _approvalCallback = (request) async {
+      if (!mounted) {
+        throw StateError('Note detail screen is not mounted');
+      }
+      return ApprovalDialog.showWithContext(context, request);
+    };
+    ApprovalService.onApprovalRequest = _approvalCallback;
   }
 
   void _initializeAudioService() {
@@ -217,6 +235,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     _codeFocusNode.dispose();
     // Reset audio state but don't dispose the service (it's a singleton)
     _audioService?.resetState();
+    if (ApprovalService.onApprovalRequest == _approvalCallback) {
+      ApprovalService.onApprovalRequest = null;
+    }
     super.dispose();
   }
 
@@ -406,6 +427,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       context,
       initialContent,
       onPickImage: () => _pickImageAndReturnMarkdown(context),
+      onPickNoteLink: () => _pickNoteLinkAndReturnMarkdown(context),
+      onPickAttachmentLink: () => _pickAttachmentLinkAndReturnMarkdown(context),
     );
 
     if (result == null || !mounted) return;
@@ -728,14 +751,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 ],
               ],
             ),
-            body: _isEditing
-                ? _buildEditingView()
-                : _buildViewingView(currentNote, l10n),
+            body: _buildBodyWithWorkflowBanner(
+              currentNote.id,
+              _isEditing
+                  ? _buildEditingView()
+                  : _buildViewingView(currentNote, l10n),
+            ),
             bottomNavigationBar: _isEditing ? null : _buildBottomBar(),
           ),
         );
       },
     );
+  }
+
+  Widget _buildBodyWithWorkflowBanner(String noteId, Widget child) {
+    // Workflow status is now shown globally via WorkflowShell + WorkflowMiniPlayer.
+    return child;
   }
 
   Future<void> _showImagePicker(BuildContext context) async {
@@ -1441,6 +1472,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               onPickImage: () => _showImagePicker(context),
               onPickNoteLink: () => _showNoteLinkPicker(context),
               onPickAttachmentLink: () => _showAttachmentLinkPicker(context),
+              onPickToolLink: () => _showToolLinkPicker(context),
               language: 'markdown',
             ),
           ),
@@ -1450,7 +1482,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Future<void> _showNoteLinkPicker(BuildContext context) async {
-    final result = await showDialog<String>(
+    final result = await _pickNoteLinkAndReturnMarkdown(context);
+    if (result != null) {
+      _insertText(result);
+    }
+  }
+
+  Future<void> _showAttachmentLinkPicker(BuildContext context) async {
+    final result = await _pickAttachmentLinkAndReturnMarkdown(context);
+    if (result != null) {
+      _insertText(result);
+    }
+  }
+
+  /// Like _showNoteLinkPicker but returns the markdown string instead of inserting
+  Future<String?> _pickNoteLinkAndReturnMarkdown(BuildContext context) async {
+    return showDialog<String>(
       context: context,
       builder: (context) => _NoteLinkPickerDialog(
         existingLinkedNotes: _linkedNotes,
@@ -1459,20 +1506,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         },
       ),
     );
-
-    if (result != null) {
-      _insertText(result);
-    }
   }
 
-  Future<void> _showAttachmentLinkPicker(BuildContext context) async {
-    final result = await showDialog<String>(
+  /// Like _showAttachmentLinkPicker but returns the markdown string instead of inserting
+  Future<String?> _pickAttachmentLinkAndReturnMarkdown(
+    BuildContext context,
+  ) async {
+    return showDialog<String>(
       context: context,
       builder: (context) => const InsertAttachmentLinkDialog(),
     );
+  }
 
-    if (result != null) {
-      _insertText(result);
+  Future<void> _showToolLinkPicker(BuildContext context) async {
+    final link = await ToolPickerSheet.show(context);
+    if (link != null && mounted) {
+      _insertText(link);
     }
   }
 
@@ -3410,6 +3459,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       context: context,
       builder: (context) => NoteSelectionDialog(
         onNotesSelected: (notes) => Navigator.of(context).pop(notes),
+        initialTags: widget.note.tags.contains('agent-skill')
+            ? ['agent-skill']
+            : null,
       ),
     );
 
@@ -3944,6 +3996,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       context,
       block.content,
       onPickImage: () => _pickImageAndReturnMarkdown(context),
+      onPickNoteLink: () => _pickNoteLinkAndReturnMarkdown(context),
+      onPickAttachmentLink: () => _pickAttachmentLinkAndReturnMarkdown(context),
     );
     if (result == null || result.result == BlockEditorResult.cancelled) {
       return;
@@ -4017,7 +4071,82 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   void _handleLinkTap(String url, String? text) {
     // Note: gpt_markdown passes parameters in reverse order
     // First parameter is the actual URL, second is the display text
+    if (url.startsWith('notesynapse://tool/')) {
+      _handleToolLinkTap(url);
+      return;
+    }
     _launchUrl(url);
+  }
+
+  Future<void> _handleToolLinkTap(String href) async {
+    final skillService = getIt<SkillService>();
+    final parsed = skillService.parseToolUri(href);
+    if (parsed == null) return;
+
+    switch (parsed.namespace) {
+      case 'builtin':
+        _showBuiltinToolDocDialog(parsed.id);
+        break;
+
+      case 'user_defined':
+        final db = getIt<DatabaseService>();
+        final allApps = await db.getAllUserApps();
+        final app = allApps.where((a) => a.uuid == parsed.id).firstOrNull;
+        if (app != null && mounted) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) =>
+                  UserAppViewScreen(app: app, selectedNotes: const []),
+            ),
+          );
+        }
+        break;
+
+      case 'mcp':
+        if (mounted) {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (context) => const McpSettingsScreen()),
+          );
+        }
+        break;
+    }
+  }
+
+  void _showBuiltinToolDocDialog(String toolName) {
+    const toolDocs = {
+      'search_notes':
+          'Search notes by keyword with optional tag filters.\n\nParams:\n- query (string): search terms\n- tags (list, optional): filter by tags',
+      'read_note':
+          'Read note content progressively.\n\nParams:\n- noteId (string): note ID\n- mode (string): stat | toc | summary | lines | full | pdf_pages',
+      'run_sql':
+          'Execute SQL on the local database.\n\nParams:\n- query (string): SQL statement\n- write (bool): true for INSERT/UPDATE/DELETE',
+      'ls': 'List tag filters and folder structure.\n\nNo required params.',
+      'modify_note':
+          'Update a note\'s content, title, or tags.\n\nParams:\n- noteId, content, title, tags (all optional)',
+      'modify_notes':
+          'Update multiple notes in one atomic batch.\n\nParams:\n- modifications (list): [{note_id, modification}]',
+      'create_notes':
+          'Create new notes.\n\nParams:\n- notes (list): [{title, content, tags}]',
+      'delete_notes':
+          'Delete notes by ID.\n\nParams:\n- noteIds (list): note IDs to delete',
+      'load_skill':
+          'Load a skill note by ID to get detailed workflow instructions.\n\nParams:\n- noteId (string): the skill note ID',
+    };
+    final doc =
+        toolDocs[toolName] ?? 'No documentation available for $toolName.';
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(toolName),
+        content: Text(doc),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _launchUrl(String url) async {

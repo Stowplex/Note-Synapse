@@ -5,8 +5,12 @@ import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/tag.dart';
 import '../models/dedup_rule.dart';
+import '../models/workflow_binding_row.dart';
 import '../services/ai_service.dart';
+import '../services/skill_service.dart';
+import '../services/tag_workflow_service.dart';
 import '../widgets/tag_detail_dialog.dart';
+import '../widgets/tag_workflow_binding_dialog.dart';
 import '../utils/dedup_suggestion_utils.dart';
 import '../services/service_locator.dart';
 
@@ -28,13 +32,17 @@ class _TagManagementScreenState extends State<TagManagementScreen>
   // Dedup rules state
   final List<DedupRule> _dedupRules = [];
   bool _isAiSuggesting = false;
+  List<WorkflowBindingRow> _workflowBindings = [];
+  Map<String, SkillMetadata> _skillIndex = {};
+  bool _isWorkflowLoading = true;
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadTagsWithUsage();
+    _loadWorkflowData();
   }
 
   @override
@@ -96,10 +104,43 @@ class _TagManagementScreenState extends State<TagManagementScreen>
     );
     // Reload tags after dialog is closed in case tags were updated
     await _loadTagsWithUsage();
+    await _loadWorkflowData();
+  }
+
+  Future<void> _loadWorkflowData() async {
+    setState(() {
+      _isWorkflowLoading = true;
+    });
+
+    try {
+      final workflowService = getIt<TagWorkflowService>();
+      final skillService = getIt<SkillService>();
+      final bindings = await workflowService.getAllBindings();
+      final skillIndex = await skillService.buildSkillIndex();
+
+      if (!mounted) return;
+      setState(() {
+        _workflowBindings = bindings;
+        _skillIndex = skillIndex;
+        _isWorkflowLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isWorkflowLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading workflow bindings: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<void> _deleteTag(TagWithUsage tagWithUsage) async {
     final l10n = AppLocalizations.of(context)!;
+    final appProvider = context.read<AppProvider>();
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -139,7 +180,7 @@ class _TagManagementScreenState extends State<TagManagementScreen>
 
     if (confirmed == true) {
       try {
-        await context.read<AppProvider>().deleteTag(tagWithUsage.tag.name);
+        await appProvider.deleteTag(tagWithUsage.tag.name);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -177,12 +218,44 @@ class _TagManagementScreenState extends State<TagManagementScreen>
           tabs: [
             Tab(text: l10n.deleteTags),
             Tab(text: l10n.dedupTags),
+            Builder(
+              builder: (ctx) {
+                final supportsOrchestration = ctx
+                        .watch<AppProvider>()
+                        .modelConfig
+                        ?.customCapabilitiesObject
+                        ?.supportsToolOrchestration ??
+                    true;
+                return Tab(
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Text(l10n.workflows),
+                      if (!supportsOrchestration)
+                        Positioned(
+                          right: -10,
+                          top: -4,
+                          child: Icon(
+                            Icons.warning_amber_rounded,
+                            size: 10,
+                            color: Colors.amber.shade700,
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
-        children: [_buildDeleteTagsTab(l10n), _buildDedupTagsTab(l10n)],
+        children: [
+          _buildDeleteTagsTab(l10n),
+          _buildDedupTagsTab(l10n),
+          _buildWorkflowsTab(),
+        ],
       ),
     );
   }
@@ -402,6 +475,280 @@ class _TagManagementScreenState extends State<TagManagementScreen>
     );
   }
 
+  Widget _buildWorkflowsTab() {
+    if (_isWorkflowLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final allTagNames = _tagsWithUsage.map((tag) => tag.tag.name).toList();
+    final existingPatterns = _workflowBindings
+        .map((binding) => binding.pattern)
+        .toSet();
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              ElevatedButton.icon(
+                onPressed: _skillIndex.isEmpty
+                    ? null
+                    : () => _openWorkflowBindingEditor(
+                        allTagNames: allTagNames,
+                        existingPatterns: existingPatterns,
+                      ),
+                icon: const Icon(Icons.add_link),
+                label: const Text('Add Exact Binding'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: _skillIndex.isEmpty
+                    ? null
+                    : () => _openWorkflowBindingEditor(
+                        allTagNames: allTagNames,
+                        existingPatterns: existingPatterns,
+                        initialIsPrefix: true,
+                      ),
+                icon: const Icon(Icons.alt_route),
+                label: const Text('Add Prefix Binding'),
+              ),
+            ],
+          ),
+        ),
+        if (_skillIndex.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Colors.orange.withValues(alpha: 0.35),
+                ),
+              ),
+              child: const Text(
+                'No enabled agent skills are available. Create or enable a note tagged "agent-skill" before adding workflow bindings.',
+              ),
+            ),
+          ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: _workflowBindings.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.account_tree_outlined,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No workflow bindings yet',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(color: Colors.grey[600]),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Bind a tag or tag prefix to a skill workflow.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: _workflowBindings.length,
+                  itemBuilder: (context, index) {
+                    final binding = _workflowBindings[index];
+                    final skill = _skillIndex[binding.skillNoteId];
+                    final skillLabel = skill == null
+                        ? 'Missing or disabled skill (${binding.skillNoteId})'
+                        : '${skill.name} — ${skill.description}';
+                    final chips = <Widget>[
+                      Chip(
+                        label: Text(binding.isPrefix ? 'Prefix' : 'Exact'),
+                        avatar: Icon(
+                          binding.isPrefix
+                              ? Icons.alt_route
+                              : Icons.sell_outlined,
+                          size: 16,
+                        ),
+                      ),
+                    ];
+                    if (binding.contentImmutable) {
+                      chips.add(
+                        const Chip(
+                          label: Text('Immutable'),
+                          avatar: Icon(Icons.lock_outline, size: 16),
+                        ),
+                      );
+                    }
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(16),
+                        title: Text(
+                          binding.isPrefix
+                              ? '${binding.pattern}*'
+                              : binding.pattern,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Wrap(spacing: 8, runSpacing: 4, children: chips),
+                              const SizedBox(height: 8),
+                              Text(skillLabel),
+                              if (binding.prompt.trim().isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  binding.prompt,
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined),
+                              tooltip: 'Edit binding',
+                              onPressed: _skillIndex.isEmpty
+                                  ? null
+                                  : () => _openWorkflowBindingEditor(
+                                      allTagNames: allTagNames,
+                                      existingPatterns: existingPatterns,
+                                      initialBinding: binding,
+                                    ),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.red,
+                              ),
+                              tooltip: 'Delete binding',
+                              onPressed: () => _deleteWorkflowBinding(binding),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _openWorkflowBindingEditor({
+    required List<String> allTagNames,
+    required Set<String> existingPatterns,
+    WorkflowBindingRow? initialBinding,
+    bool initialIsPrefix = false,
+  }) async {
+    final draft = await TagWorkflowBindingDialog.show(
+      context,
+      skillIndex: _skillIndex,
+      allTagNames: allTagNames,
+      existingPatterns: existingPatterns,
+      initialBinding: initialBinding,
+      initialIsPrefix: initialIsPrefix,
+    );
+    if (draft == null) return;
+
+    try {
+      if (initialBinding != null && initialBinding.pattern != draft.pattern) {
+        await getIt<TagWorkflowService>().removeBinding(initialBinding.pattern);
+      }
+      await getIt<TagWorkflowService>().registerBinding(
+        pattern: draft.pattern,
+        isPrefix: draft.isPrefix,
+        skillNoteId: draft.skillNoteId,
+        prompt: draft.prompt,
+        contentImmutable: draft.contentImmutable,
+      );
+      await _loadWorkflowData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            initialBinding == null
+                ? 'Workflow binding added'
+                : 'Workflow binding updated',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error saving workflow binding: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteWorkflowBinding(WorkflowBindingRow binding) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Workflow Binding'),
+        content: Text(
+          'Remove the workflow binding for "${binding.pattern}${binding.isPrefix ? '*' : ''}"?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await getIt<TagWorkflowService>().removeBinding(binding.pattern);
+      await _loadWorkflowData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Workflow binding removed'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error deleting workflow binding: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   Widget _buildDedupRuleCard(DedupRule rule, AppLocalizations l10n) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -578,6 +925,7 @@ class _TagManagementScreenState extends State<TagManagementScreen>
 
   Future<void> _executeDedupRules() async {
     final l10n = AppLocalizations.of(context)!;
+    final appProvider = context.read<AppProvider>();
 
     // Validate rules
     final validationError = _validateDedupRules();
@@ -613,8 +961,6 @@ class _TagManagementScreenState extends State<TagManagementScreen>
 
     if (confirmed == true) {
       try {
-        final appProvider = context.read<AppProvider>();
-
         // Execute each rule
         for (final rule in _dedupRules) {
           await appProvider.replaceTag(rule.leftTag, rule.rightTag);

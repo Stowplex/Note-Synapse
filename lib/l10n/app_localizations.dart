@@ -2000,6 +2000,12 @@ abstract class AppLocalizations {
   /// **'Insert Attachment Link'**
   String get insertAttachmentLink;
 
+  /// No description provided for @insertToolLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert Tool Link'**
+  String get insertToolLink;
+
   /// No description provided for @selectAttachment.
   ///
   /// In en, this message translates to:
@@ -2743,6 +2749,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Dedup Tags'**
   String get dedupTags;
+
+  /// No description provided for @workflows.
+  ///
+  /// In en, this message translates to:
+  /// **'Workflows'**
+  String get workflows;
 
   /// No description provided for @dedupRules.
   ///
@@ -7789,6 +7801,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Switch Model'**
   String get toolOrchestrationSwitchModel;
+
+  /// No description provided for @localModelWorkflowWarningTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Local Model Performance Warning'**
+  String get localModelWorkflowWarningTitle;
+
+  /// No description provided for @localModelWorkflowWarningBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This model may not deliver the best experience with tag workflows.'**
+  String get localModelWorkflowWarningBody;
+
+  /// No description provided for @localModelWorkflowWarningContinueNoWarn.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue, Don\'t Warn This Session'**
+  String get localModelWorkflowWarningContinueNoWarn;
 
   /// No description provided for @nightMode.
   ///

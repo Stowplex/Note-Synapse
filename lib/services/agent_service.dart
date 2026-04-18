@@ -11,6 +11,10 @@ import '../models/context_node.dart';
 import '../models/generation_context.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/model_config.dart';
+import '../models/model_type.dart';
+import '../models/note.dart';
+import 'tag_workflow_service.dart';
+import 'tools/load_skill_tool.dart';
 import 'tools/note_tools.dart';
 import 'tools/read_task_result_tool.dart';
 import 'ai_service.dart';
@@ -18,9 +22,13 @@ import 'agentic_settings_service.dart';
 import 'context_manager_service.dart';
 import 'model_selector.dart';
 import 'logger_service.dart';
+import 'ai_tool_service.dart';
 import 'mcp_service.dart';
+import 'skill_service.dart';
+import 'user_app_service.dart';
 import '../utils/xml_response_parser.dart';
 import 'mcp_tool_integration_service.dart';
+import 'prompts/prompt_models.dart';
 import 'database_service.dart';
 import 'service_locator.dart';
 
@@ -50,6 +58,95 @@ enum AgentCheckpoint {
   afterToolResult,
 }
 
+enum WorkflowExecutionState {
+  running,
+  pausedTurnLimit,
+  pausedManual,
+  completed,
+  failed,
+}
+
+const String _systemToolServiceName = 'System';
+
+class _RecoveredToolCall {
+  final String serviceName;
+  final String toolName;
+  final Map<String, dynamic> params;
+
+  const _RecoveredToolCall({
+    required this.serviceName,
+    required this.toolName,
+    required this.params,
+  });
+}
+
+class _ResolvedSkillTool {
+  final String serviceName;
+  final McpTool tool;
+
+  const _ResolvedSkillTool({required this.serviceName, required this.tool});
+}
+
+class WorkflowStatusSnapshot {
+  final String noteId;
+  final String matchedTag;
+  final String taskId;
+  final WorkflowExecutionState state;
+  final String message;
+  final String noteTitle;
+  final int turnsUsed;
+  final int maxTurns;
+
+  const WorkflowStatusSnapshot({
+    required this.noteId,
+    required this.matchedTag,
+    required this.taskId,
+    required this.state,
+    required this.message,
+    this.noteTitle = '',
+    this.turnsUsed = 0,
+    this.maxTurns = 0,
+  });
+
+  bool get isTerminal =>
+      state == WorkflowExecutionState.completed ||
+      state == WorkflowExecutionState.failed;
+
+  bool get isPaused =>
+      state == WorkflowExecutionState.pausedTurnLimit ||
+      state == WorkflowExecutionState.pausedManual;
+
+  WorkflowStatusSnapshot copyWith({
+    WorkflowExecutionState? state,
+    String? message,
+    int? turnsUsed,
+    int? maxTurns,
+  }) {
+    return WorkflowStatusSnapshot(
+      noteId: noteId,
+      matchedTag: matchedTag,
+      taskId: taskId,
+      state: state ?? this.state,
+      message: message ?? this.message,
+      noteTitle: noteTitle,
+      turnsUsed: turnsUsed ?? this.turnsUsed,
+      maxTurns: maxTurns ?? this.maxTurns,
+    );
+  }
+}
+
+/// Read-only snapshot of a queued workflow for UI display.
+class PendingWorkflowInfo {
+  final String noteId;
+  final String noteTitle;
+  final String matchedTag;
+  const PendingWorkflowInfo({
+    required this.noteId,
+    required this.noteTitle,
+    required this.matchedTag,
+  });
+}
+
 class AgentService extends ChangeNotifier {
   final ContextManagerService _contextManager;
   final ModelSelector _modelSelector;
@@ -74,6 +171,49 @@ class AgentService extends ChangeNotifier {
 
   /// Cached max subtask depth from settings (loaded at execution start).
   int _cachedMaxSubtaskDepth = kMaxSubtaskDepth;
+
+  // Workflow queue (for tag-triggered workflows)
+  final List<_PendingWorkflow> _pendingWorkflows = [];
+  WorkflowStatusSnapshot? _activeWorkflowStatus;
+
+  /// Number of workflows queued waiting for the agent to become free.
+  int get pendingWorkflowCount => _pendingWorkflows.length;
+  WorkflowStatusSnapshot? get activeWorkflowStatus => _activeWorkflowStatus;
+
+  /// Returns a snapshot of the pending workflow queue.
+  List<PendingWorkflowInfo> get pendingWorkflows => _pendingWorkflows
+      .map(
+        (pw) => PendingWorkflowInfo(
+          noteId: pw.note.id,
+          noteTitle: pw.note.title,
+          matchedTag: pw.binding.matchedTag,
+        ),
+      )
+      .toList();
+
+  /// Cancels a pending workflow by index. No-op if index is out of range.
+  void cancelPendingWorkflow(int index) {
+    if (index < 0 || index >= _pendingWorkflows.length) return;
+    _pendingWorkflows.removeAt(index);
+    notifyListeners();
+  }
+
+  WorkflowStatusSnapshot? workflowStatusForNote(String noteId) {
+    final status = _activeWorkflowStatus;
+    if (status == null || status.noteId != noteId) return null;
+    return status;
+  }
+
+  /// Returns a short reference if the skill was pinned, or the full content if not.
+  static String shortenSkillObservation({
+    required String skillContent,
+    required String skillName,
+    required bool pinned,
+  }) {
+    if (!pinned) return skillContent;
+    return "Skill '$skillName' loaded and pinned to context. "
+        'See <LoadedSkills> section above for full instructions.';
+  }
 
   // Pause/Resume/Stop state
   bool _isPaused = false;
@@ -186,6 +326,12 @@ class AgentService extends ChangeNotifier {
     _enabledNativeToolNames = null;
     // Reset cached settings
     _cachedMaxSubtaskDepth = kMaxSubtaskDepth;
+    // Clear workflow queue
+    _pendingWorkflows.clear();
+    _activeWorkflowStatus = null;
+    _skillDiscoveredTools.clear();
+    _skillToolServiceNames.clear();
+
     notifyListeners();
   }
 
@@ -222,6 +368,7 @@ class AgentService extends ChangeNotifier {
   /// Stops agent execution and clears all state.
   void stopExecution() {
     clearState();
+    _modelSelector.dispose();
   }
 
   /// Binds this agent to a conversation.
@@ -230,6 +377,7 @@ class AgentService extends ChangeNotifier {
         _boundConversationId != conversationId) {
       // Switched conversations - ensure we don't leak state
       clearState();
+      _modelSelector.dispose();
     }
     _boundConversationId = conversationId;
   }
@@ -288,6 +436,38 @@ class AgentService extends ChangeNotifier {
     return await _aiService.generateWithAttachments(
       prompt,
       [],
+      generationContext: context,
+    );
+  }
+
+  /// Whether the effective model should use native function calling instead of
+  /// XML-based tool actions. Currently gated to local models (Gemma) only.
+  bool _useNativeFunctionCalling() {
+    final config = _modelOverride ?? _modelSelector.currentModelConfig;
+    if (config == null) return false;
+    return config.type == ModelType.localMnn;
+  }
+
+  /// Generate a response using native function declarations (for models that
+  /// support tool calling). Returns the raw model response map containing
+  /// `text`, `function_calls`, and `modelUsed`.
+  Future<Map<String, dynamic>> _generateLlmResponseWithTools(
+    String systemPrompt,
+    String userPrompt,
+    Map<String, List<McpTool>> toolsByService, {
+    required GenerationContext context,
+  }) async {
+    final tools = _modelSelector.buildToolDeclarations(
+      toolsByService,
+      generationContext: context,
+    );
+    final messages = [
+      PromptMessage(role: PromptRole.system, content: systemPrompt),
+      PromptMessage(role: PromptRole.user, content: userPrompt),
+    ];
+    return await _modelSelector.generateWithToolsAndMessages(
+      messages,
+      tools,
       generationContext: context,
     );
   }
@@ -995,6 +1175,7 @@ If no findings worth preserving, return: []
     RunSqlTool(),
     ListFiltersTool(),
     ModifyNoteTool(),
+    ModifyNotesTool(),
     CreateNotesTool(),
     DeleteNoteTool(),
   ];
@@ -1002,16 +1183,31 @@ If no findings worth preserving, return: []
   /// Cached ReadTaskResultTool instance (requires contextManager)
   ReadTaskResultTool? _readTaskResultTool;
 
+  // Skill state
+  bool _skillsEnabled = true;
+  Map<String, SkillMetadata> _skillIndex = {};
+  final List<McpTool> _skillDiscoveredTools = [];
+  final Map<String, String> _skillToolServiceNames = {};
+  LoadSkillTool? _loadSkillTool;
+
   /// Gets all native tools including the read_task_result tool.
   List<NativeTool> get nativeTools {
     _readTaskResultTool ??= ReadTaskResultTool(_contextManager);
+    if (_skillsEnabled) {
+      _loadSkillTool ??= LoadSkillTool();
+      return List.unmodifiable([
+        ..._nativeTools,
+        _readTaskResultTool!,
+        _loadSkillTool!,
+      ]);
+    }
     return List.unmodifiable([..._nativeTools, _readTaskResultTool!]);
   }
 
   Map<String, String> getToolToServiceMap() {
     final map = <String, String>{};
-    for (final t in _nativeTools) {
-      map[t.name] = 'System';
+    for (final t in nativeTools) {
+      map[t.name] = _systemToolServiceName;
     }
     for (final entry in _externalTools.entries) {
       for (final t in entry.value) {
@@ -1041,9 +1237,22 @@ If no findings worth preserving, return: []
     ToolExecutor? executeTool,
     String? context,
     List<PlatformFile> contextAttachments = const [],
+    bool skillsEnabled = true,
   }) async {
     _externalTools = activeTools;
     _toolExecutor = executeTool;
+    _skillsEnabled = skillsEnabled;
+    _skillDiscoveredTools.clear();
+    _skillToolServiceNames.clear();
+    getIt<SkillService>().resetSession();
+    _loadSkillTool?.resetSession();
+
+    if (_skillsEnabled) {
+      _skillIndex = await getIt<SkillService>().buildSkillIndex();
+    } else {
+      _skillIndex = {};
+    }
+
     _currentThought = 'Generating plan...';
     // Reset previous results
     _finalAnswer = null;
@@ -1134,6 +1343,13 @@ Example: "identify knowledge gaps in transformer notes":
 '''
         : '';
 
+    final skillIndexSection = _skillsEnabled
+        ? getIt<SkillService>().buildSkillIndexPrompt(
+            _skillIndex,
+            forLocalModel: _useNativeFunctionCalling(),
+          )
+        : '';
+
     final prompt =
         '''
 You are an intelligent agent that plans and executes tasks to solve an objective.
@@ -1215,7 +1431,7 @@ Example (note exploration):
 
 If no tools are needed for a step (e.g. analysis), use: "tools": [].
 Only use the tools listed above.
-''';
+$skillIndexSection''';
 
     const maxRetries = 3;
     String? lastError;
@@ -1405,7 +1621,15 @@ Return ONLY a valid JSON list with ALL required fields:
       onProgressUpdate?.call(_currentThought!);
     } finally {
       _isRunning = false;
-      onProgressUpdate?.call('Agent completed');
+      if (_activeWorkflowStatus == null) {
+        onProgressUpdate?.call('Agent completed');
+      }
+      _syncWorkflowStatusFromTasks();
+      _processWorkflowQueueIfReady();
+
+      // Dispose models to free resources after workflow completes
+      _modelSelector.dispose();
+
       notifyListeners();
     }
   }
@@ -1437,6 +1661,8 @@ Return ONLY a valid JSON list with ALL required fields:
       await executePlan();
     } finally {
       _isRunning = false;
+      // Dispose models to free resources after objective completes
+      _modelSelector.dispose();
       notifyListeners();
     }
   }
@@ -1445,6 +1671,511 @@ Return ONLY a valid JSON list with ALL required fields:
     _isRunning = false;
     _currentThought = 'Cancelled by user.';
     notifyListeners();
+  }
+
+  /// Substitutes template variables in a workflow prompt.
+  ///
+  /// Replaces `{note_id}` with [noteId] and `{matched_tag}` with [matchedTag].
+  static String substitutePromptTemplate(
+    String template, {
+    required String noteId,
+    required String matchedTag,
+  }) {
+    return template
+        .replaceAll('{note_id}', noteId)
+        .replaceAll('{matched_tag}', matchedTag);
+  }
+
+  /// Short label for task.description and node.objective (~20 tokens).
+  /// Repeated in ancestor goals, current task headers, and log entries.
+  static String buildWorkflowLabel({
+    required String prompt,
+    required ResolvedBinding binding,
+    required Note note,
+  }) {
+    final suffix = ' — "${note.title}" [${binding.matchedTag}]';
+    const maxLength = 99;
+    // Reserve 1 char for the ellipsis when truncating
+    final maxPromptLength = maxLength - suffix.length - 1;
+    final truncatedPrompt =
+        maxPromptLength > 0 && prompt.length > maxPromptLength
+        ? '${prompt.substring(0, maxPromptLength)}…'
+        : prompt;
+    return '$truncatedPrompt$suffix';
+  }
+
+  /// Full execution context with binding metadata (~400 tokens).
+  /// Stored once on root.executionContext, emitted once per turn.
+  static String buildWorkflowContext({
+    required ResolvedBinding binding,
+    required Note note,
+  }) {
+    final otherTags = note.tags
+        .where((tag) => tag != binding.matchedTag)
+        .toList();
+    final otherTagsText = otherTags.isEmpty ? '(none)' : otherTags.join(', ');
+
+    return '''
+This workflow was triggered automatically by a tag-to-workflow binding.
+- Source note ID: ${note.id}
+- Source note title: ${note.title}
+- Triggered tag on this note: ${binding.matchedTag}
+- Binding pattern: ${binding.pattern}
+- Other tags currently on the source note: $otherTagsText
+
+The bound workflow skill has already been loaded into <LoadedSkills> for this run.
+Use the source note above as "this note" for the workflow. Do not search for a candidate source note unless the workflow instructions explicitly require finding related notes beyond this source note.'''
+        .trim();
+  }
+
+  /// Deprecated: use [buildWorkflowLabel] + [buildWorkflowContext] instead.
+  @Deprecated('Use buildWorkflowLabel and buildWorkflowContext separately')
+  static String buildWorkflowObjective({
+    required String prompt,
+    required ResolvedBinding binding,
+    required Note note,
+  }) {
+    final label = buildWorkflowLabel(
+      prompt: prompt,
+      binding: binding,
+      note: note,
+    );
+    final context = buildWorkflowContext(binding: binding, note: note);
+    return '$label\n\nWorkflow execution context:\n$context';
+  }
+
+  List<String> _initialWorkflowAllowedTools() {
+    final allowed = <String>['read_task_result'];
+    if (_skillsEnabled &&
+        nativeTools.any((tool) => tool.name == 'load_skill')) {
+      allowed.add('load_skill');
+    }
+    return allowed;
+  }
+
+  AgentTaskValidationProfile _workflowValidationProfileForBinding(
+    ResolvedBinding binding,
+  ) {
+    final normalizedPrompt = binding.prompt.toLowerCase();
+    if (binding.matchedTag.startsWith('wiki-source-') ||
+        normalizedPrompt.contains('wiki ingest')) {
+      return AgentTaskValidationProfile.wikiIngest;
+    }
+    return AgentTaskValidationProfile.none;
+  }
+
+  Future<String?> _preloadBoundWorkflowSkill({
+    required ResolvedBinding binding,
+    required AgentTask task,
+  }) async {
+    if (!_skillsEnabled) {
+      return null;
+    }
+
+    final loadSkillTool = nativeTools
+        .where((tool) => tool.name == 'load_skill')
+        .firstOrNull;
+    if (loadSkillTool is! LoadSkillTool) {
+      return 'Workflow setup failed: load_skill is unavailable.';
+    }
+
+    final result = await loadSkillTool.execute({'noteId': binding.skillNoteId});
+    if (result is! String) {
+      return 'Workflow setup failed: unable to load bound skill ${binding.skillNoteId}. '
+          'Result: $result';
+    }
+
+    // Substitute <ns> placeholder with the actual namespace from the binding.
+    // Skill notes use <ns> as a template variable (e.g., "wiki-source-<ns>").
+    // For tag "wiki-source-ai-research" with pattern "wiki-source-", namespace
+    // is "ai-research".
+    var skillContent = result;
+    if (binding.matchedTag.length > binding.pattern.length) {
+      final namespace = binding.matchedTag.substring(binding.pattern.length);
+      skillContent = skillContent.replaceAll('<ns>', namespace);
+    }
+
+    final pinned = await _handleLoadSkillResult(
+      binding.skillNoteId,
+      skillContent,
+      task: task,
+    );
+    final observation = pinned
+        ? shortenSkillObservation(
+            skillContent: skillContent,
+            skillName: _extractSkillName(skillContent),
+            pinned: true,
+          )
+        : 'Skill already loaded: ${_extractSkillName(skillContent)}';
+
+    task.executionHistory.add(
+      'Bootstrap: preloaded bound workflow skill ${binding.skillNoteId}',
+    );
+    task.executionHistory.add('Observation: $observation');
+    _contextManager.rootContext?.log(
+      'Bootstrap: preloaded bound workflow skill ${binding.skillNoteId}',
+    );
+    _contextManager.rootContext?.log('Observation: $observation');
+    return null;
+  }
+
+  void _promoteSkillDiscoveredTools(List<String> toolNames) {
+    if (toolNames.isEmpty) return;
+
+    for (final task in _tasks) {
+      if (task.allowedTools.isEmpty) continue;
+      for (final toolName in toolNames) {
+        if (!task.allowedTools.contains(toolName)) {
+          task.allowedTools.add(toolName);
+        }
+      }
+    }
+
+    final root = _contextManager.rootContext;
+    if (root != null) {
+      for (final toolName in toolNames) {
+        if (!root.allowedTools.contains(toolName)) {
+          root.allowedTools.add(toolName);
+        }
+      }
+    }
+
+    final current = _contextManager.currentContext;
+    if (current != null) {
+      for (final toolName in toolNames) {
+        if (!current.allowedTools.contains(toolName)) {
+          current.allowedTools.add(toolName);
+        }
+      }
+    }
+  }
+
+  Map<String, List<McpTool>> _buildAgentToolsByService({
+    required List<NativeTool> nativeTools,
+    required List<McpTool> externalTools,
+  }) {
+    final grouped = <String, List<McpTool>>{};
+    final seenToolNames = <String>{};
+
+    if (nativeTools.isNotEmpty) {
+      final nativeMcpTools = <McpTool>[];
+      for (final tool in nativeTools) {
+        if (seenToolNames.add(tool.name)) {
+          nativeMcpTools.add(McpTool(
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+          ));
+        }
+      }
+      if (nativeMcpTools.isNotEmpty) {
+        grouped[_systemToolServiceName] = nativeMcpTools;
+      }
+    }
+
+    for (final tool in externalTools) {
+      if (!seenToolNames.add(tool.name)) continue;
+
+      final serviceName = _skillToolServiceNames[tool.name] ??
+          _externalTools.entries
+              .where(
+                (entry) =>
+                    entry.value.any((candidate) => candidate.name == tool.name),
+              )
+              .map((entry) => entry.key)
+              .firstOrNull;
+      if (serviceName == null || serviceName.isEmpty) {
+        continue;
+      }
+      grouped.putIfAbsent(serviceName, () => <McpTool>[]).add(tool);
+    }
+
+    return grouped;
+  }
+
+  _RecoveredToolCall? _recoverAgentToolCall(
+    String requestedToolName,
+    Map<String, dynamic> args, {
+    required Map<String, List<McpTool>> toolsByService,
+    String? fallbackSearchQuery,
+  }) {
+    Map<String, dynamic>? parsed;
+    if (requestedToolName == 'call_tool') {
+      parsed = McpToolIntegrationService.parseCallToolArguments(args);
+    } else {
+      // Handle optional prefixes like "System." or "Mcp." from local models
+      final normalizedName = requestedToolName.contains('.')
+          ? requestedToolName.split('.').last
+          : requestedToolName;
+
+      final directTool = _resolveUniqueToolByName(
+        normalizedName,
+        toolsByService,
+      );
+      if (directTool != null) {
+        parsed = McpToolIntegrationService.parseCallToolArguments(
+          args,
+          fallbackServiceName: directTool['service_name'],
+          fallbackToolName: directTool['tool_name'],
+          logErrors: false,
+        );
+        parsed ??= {
+          'service_name': directTool['service_name'],
+          'tool_name': directTool['tool_name'],
+          'params': Map<String, dynamic>.from(args),
+        };
+      }
+    }
+
+    if (parsed == null) {
+      return null;
+    }
+
+    final toolName = parsed['tool_name'] as String;
+    final params =
+        (parsed['params'] as Map<String, dynamic>? ?? <String, dynamic>{});
+
+    if (toolName == 'search_notes') {
+      final query = (params['query'] as String? ?? '').trim();
+      if (query.isEmpty &&
+          fallbackSearchQuery != null &&
+          fallbackSearchQuery.isNotEmpty) {
+        params['query'] = fallbackSearchQuery;
+      }
+    }
+
+    return _RecoveredToolCall(
+      serviceName: parsed['service_name'] as String,
+      toolName: toolName,
+      params: params,
+    );
+  }
+
+  Map<String, String>? _resolveUniqueToolByName(
+    String toolName,
+    Map<String, List<McpTool>> toolsByService,
+  ) {
+    final matches = <Map<String, String>>[];
+    for (final entry in toolsByService.entries) {
+      for (final tool in entry.value) {
+        if (tool.name == toolName) {
+          matches.add({'service_name': entry.key, 'tool_name': tool.name});
+        }
+      }
+    }
+    return matches.length == 1 ? matches.first : null;
+  }
+
+  Future<dynamic> _executeSystemTool({
+    required String toolName,
+    required Map<String, dynamic> args,
+    required List<NativeTool> allowedNativeTools,
+  }) async {
+    final nativeTool = allowedNativeTools.firstWhere(
+      (tool) => tool.name == toolName,
+      orElse: () => _UnknownTool(),
+    );
+    if (nativeTool is! _UnknownTool) {
+      return nativeTool.execute(args);
+    }
+
+    final skillDiscoveredBuiltin =
+        _skillDiscoveredTools.any((tool) => tool.name == toolName)
+        ? _nativeTools.firstWhere(
+            (tool) => tool.name == toolName,
+            orElse: () => _UnknownTool(),
+          )
+        : _UnknownTool();
+    if (skillDiscoveredBuiltin is! _UnknownTool) {
+      return skillDiscoveredBuiltin.execute(args);
+    }
+
+    throw 'Tool $toolName not found.';
+  }
+
+  Future<String> _resolveSkillNoteId(Map<String, dynamic> args) async {
+    final noteId = (args['noteId'] as String? ?? '').trim();
+    if (noteId.isNotEmpty) {
+      return noteId;
+    }
+
+    final skillRef = (args['skillRef'] as String? ?? '').trim();
+    if (skillRef.isEmpty) {
+      return '';
+    }
+
+    final noteIdForRef = getIt<SkillService>().resolveNoteIdForSkillRef(
+      _skillIndex,
+      skillRef,
+    );
+    if (noteIdForRef != null && noteIdForRef.isNotEmpty) {
+      return noteIdForRef;
+    }
+
+    final refreshedIndex = await getIt<SkillService>().buildSkillIndex();
+    _skillIndex = refreshedIndex;
+    return getIt<SkillService>().resolveNoteIdForSkillRef(
+          refreshedIndex,
+          skillRef,
+        ) ??
+        '';
+  }
+
+  String? _inferSearchQueryForTask(AgentTask task) {
+    final lower = task.description.toLowerCase();
+    final patterns = <RegExp>[
+      RegExp(r'"([^"]+)"'),
+      RegExp(r'what is ([^?]+)\??', caseSensitive: false),
+      RegExp(r'who is ([^?]+)\??', caseSensitive: false),
+      RegExp(r'about ([^.?]+)', caseSensitive: false),
+    ];
+
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(task.description);
+      final query = match?.group(1)?.trim();
+      if (query != null && query.isNotEmpty && query.toLowerCase() != lower) {
+        return query;
+      }
+    }
+    return null;
+  }
+
+  /// Executes a tag-triggered workflow as a single [AgentTask].
+  ///
+  /// If the agent is already running, the workflow is queued and will be
+  /// executed when the agent becomes free.
+  Future<void> runWorkflowTask({
+    required ResolvedBinding binding,
+    required Note note,
+  }) async {
+    if (_isRunning) {
+      _pendingWorkflows.add(_PendingWorkflow(binding, note));
+      notifyListeners();
+      return;
+    }
+
+    final substitutedPrompt = substitutePromptTemplate(
+      binding.prompt,
+      noteId: note.id,
+      matchedTag: binding.matchedTag,
+    );
+    final workflowLabel = buildWorkflowLabel(
+      prompt: substitutedPrompt,
+      binding: binding,
+      note: note,
+    );
+    final workflowContext = buildWorkflowContext(binding: binding, note: note);
+    final workflowAllowedTools = _initialWorkflowAllowedTools();
+
+    // Save pending workflows before clearing state
+    final savedPendingWorkflows = List.of(_pendingWorkflows);
+
+    // Clear all previous state
+    clearState();
+
+    // Restore pending workflows
+    _pendingWorkflows.addAll(savedPendingWorkflows);
+
+    _currentObjective = workflowLabel;
+    final workflowMaxTurns = await AgenticSettingsService.getMaxTurns();
+    final taskId = const Uuid().v4();
+    _activeWorkflowStatus = WorkflowStatusSnapshot(
+      noteId: note.id,
+      matchedTag: binding.matchedTag,
+      taskId: taskId,
+      state: WorkflowExecutionState.running,
+      message: 'Running workflow for "${binding.matchedTag}"',
+      noteTitle: note.title,
+      turnsUsed: 0,
+      maxTurns: workflowMaxTurns,
+    );
+
+    // Create root context for the workflow
+    await _contextManager.createRootContext(
+      objective: workflowLabel,
+      allowedTools: workflowAllowedTools,
+    );
+    _contextManager.rootContext?.executionContext = workflowContext;
+    final task = AgentTask(
+      id: taskId,
+      description: workflowLabel,
+      name: 'workflow_task',
+      isFinalDeliverable: true,
+      status: AgentTaskStatus.pending,
+      allowedTools: workflowAllowedTools,
+      maxTurns: workflowMaxTurns,
+      validationProfile: _workflowValidationProfileForBinding(binding),
+    );
+    _tasks = [task];
+
+    final preloadError = await _preloadBoundWorkflowSkill(
+      binding: binding,
+      task: task,
+    );
+    if (preloadError != null) {
+      task.status = AgentTaskStatus.failed;
+      task.result = preloadError;
+      task.executionHistory.add('Observation: $preloadError');
+      _contextManager.rootContext?.log('Observation: $preloadError');
+      _currentThought = preloadError;
+      _activeWorkflowStatus = _activeWorkflowStatus?.copyWith(
+        state: WorkflowExecutionState.failed,
+        message: preloadError,
+      );
+      _isRunning = false;
+      notifyListeners();
+      _processWorkflowQueueIfReady();
+      return;
+    }
+
+    notifyListeners();
+
+    _isRunning = true;
+    _currentThought = 'Starting workflow: ${binding.matchedTag}';
+    onProgressUpdate?.call(_currentThought!);
+    notifyListeners();
+
+    // Load cached max subtask depth from settings
+    _cachedMaxSubtaskDepth = await AgenticSettingsService.getMaxSubtaskDepth();
+
+    try {
+      await _executeLoop();
+    } catch (e) {
+      LoggerService.error('Workflow execution failure: $e');
+      _currentThought = 'Workflow error: $e';
+      onProgressUpdate?.call(_currentThought!);
+      _activeWorkflowStatus = _activeWorkflowStatus?.copyWith(
+        state: WorkflowExecutionState.failed,
+        message: 'Workflow failed: $e',
+      );
+    } finally {
+      _isRunning = false;
+      _syncWorkflowStatusFromTasks();
+      if (_activeWorkflowStatus?.state == WorkflowExecutionState.completed) {
+        onProgressUpdate?.call('Workflow completed');
+      }
+      if (_activeWorkflowStatus?.state == WorkflowExecutionState.failed) {
+        onProgressUpdate?.call(_activeWorkflowStatus!.message);
+      }
+
+      // Dispose models to free resources after workflow completes
+      _modelSelector.dispose();
+
+      notifyListeners();
+      _processWorkflowQueueIfReady();
+    }
+  }
+
+  /// Processes the next pending workflow in the queue, if any.
+  void _processWorkflowQueueIfReady() {
+    final activeWorkflow = _activeWorkflowStatus;
+    if (activeWorkflow != null && !activeWorkflow.isTerminal) {
+      return;
+    }
+    if (_pendingWorkflows.isEmpty || _isRunning) return;
+    final next = _pendingWorkflows.removeAt(0);
+    // Fire and forget - errors logged inside runWorkflowTask
+    runWorkflowTask(binding: next.binding, note: next.note);
   }
 
   // _performTask moved to end of file
@@ -1462,6 +2193,13 @@ Return ONLY a valid JSON list with ALL required fields:
       final increment = await AgenticSettingsService.getTurnIncrement();
       task.maxTurns += increment;
     }
+    task.isManuallyPaused = false;
+    if (_activeWorkflowStatus?.taskId == taskId) {
+      _activeWorkflowStatus = _activeWorkflowStatus?.copyWith(
+        state: WorkflowExecutionState.running,
+        message: 'Resumed workflow for "${_activeWorkflowStatus!.matchedTag}"',
+      );
+    }
 
     notifyListeners();
     // Restart execution
@@ -1473,6 +2211,7 @@ Return ONLY a valid JSON list with ALL required fields:
     final task = _tasks.firstWhere((t) => t.id == taskId);
     task.status = AgentTaskStatus.completed;
     task.result ??= "Manually concluded by user.";
+    _syncWorkflowStatusFromTasks();
     notifyListeners();
     executePlan(); // Move to next task
   }
@@ -1483,7 +2222,138 @@ Return ONLY a valid JSON list with ALL required fields:
     task.status = AgentTaskStatus.failed;
     task.result = "Aborted by user.";
     _isRunning = false;
+    _syncWorkflowStatusFromTasks();
     notifyListeners();
+    _processWorkflowQueueIfReady();
+  }
+
+  int _countTaskTurns(AgentTask task) {
+    return task.executionHistory
+        .where((entry) => entry.startsWith('Turn '))
+        .length;
+  }
+
+  bool _isTurnLimitPause(AgentTask task) {
+    return task.status == AgentTaskStatus.paused &&
+        !task.isManuallyPaused &&
+        (task.result?.startsWith('Max turns reached.') ?? false);
+  }
+
+  void _syncWorkflowStatusFromTasks() {
+    final workflow = _activeWorkflowStatus;
+    if (workflow == null) return;
+
+    final task = _tasks.where((t) => t.id == workflow.taskId).firstOrNull;
+    if (task == null) {
+      _activeWorkflowStatus = null;
+      return;
+    }
+
+    if (task.status == AgentTaskStatus.completed) {
+      _activeWorkflowStatus = workflow.copyWith(
+        state: WorkflowExecutionState.completed,
+        message: 'Workflow completed for "${workflow.matchedTag}"',
+        turnsUsed: _countTaskTurns(task),
+        maxTurns: task.maxTurns,
+      );
+      return;
+    }
+
+    if (task.status == AgentTaskStatus.failed) {
+      _activeWorkflowStatus = workflow.copyWith(
+        state: WorkflowExecutionState.failed,
+        message: task.result ?? 'Workflow failed',
+        turnsUsed: _countTaskTurns(task),
+        maxTurns: task.maxTurns,
+      );
+      return;
+    }
+
+    if (task.status == AgentTaskStatus.paused) {
+      _activeWorkflowStatus = workflow.copyWith(
+        state: _isTurnLimitPause(task)
+            ? WorkflowExecutionState.pausedTurnLimit
+            : WorkflowExecutionState.pausedManual,
+        message: task.result ?? 'Workflow paused',
+        turnsUsed: _countTaskTurns(task),
+        maxTurns: task.maxTurns,
+      );
+      return;
+    }
+
+    if (task.status == AgentTaskStatus.inProgress ||
+        task.status == AgentTaskStatus.pending ||
+        task.status == AgentTaskStatus.waitingForSubtasks) {
+      _activeWorkflowStatus = workflow.copyWith(
+        state: WorkflowExecutionState.running,
+        message: 'Running workflow for "${workflow.matchedTag}"',
+        turnsUsed: _countTaskTurns(task),
+        maxTurns: task.maxTurns,
+      );
+    }
+  }
+
+  void _recordToolExecution(
+    AgentTask task, {
+    required String toolName,
+    required Map<String, dynamic> args,
+    required dynamic result,
+    required bool succeeded,
+  }) {
+    task.toolExecutionRecords.add(
+      AgentToolExecutionRecord(
+        toolName: toolName,
+        args: Map<String, dynamic>.from(args),
+        result: result.toString(),
+        succeeded: succeeded,
+      ),
+    );
+  }
+
+  String? _validateFinalAnswer(AgentTask task, String answerContent) {
+    switch (task.validationProfile) {
+      case AgentTaskValidationProfile.none:
+        return null;
+      case AgentTaskValidationProfile.wikiIngest:
+        return _validateWikiIngestAnswer(task, answerContent);
+    }
+  }
+
+  String? _validateWikiIngestAnswer(AgentTask task, String answerContent) {
+    final normalized = answerContent.toLowerCase();
+    final isPartial =
+        normalized.contains('partial ingest') ||
+        normalized.contains('partially ingested') ||
+        normalized.contains('incomplete');
+    if (isPartial) {
+      return null;
+    }
+
+    bool hasSuccessfulExecution(String toolName) =>
+        task.toolExecutionRecords.any(
+          (record) =>
+              record.succeeded &&
+              (record.toolName == toolName ||
+                  record.toolName.endsWith('.$toolName')),
+        );
+
+    final hasSuccessfulModify =
+        hasSuccessfulExecution('modify_notes') ||
+        hasSuccessfulExecution('modify_note');
+    if (!hasSuccessfulModify) {
+      return 'Cannot report wiki ingest completion yet. No successful modify_notes or modify_note observation was recorded for index/log/source updates.';
+    }
+
+    final claimsCreatedNotes =
+        RegExp(r'\b(created?|creating)\b').hasMatch(normalized) ||
+        normalized.contains('new entity') ||
+        normalized.contains('new topic') ||
+        normalized.contains('new compiled');
+    if (claimsCreatedNotes && !hasSuccessfulExecution('create_notes')) {
+      return 'Cannot claim created wiki notes without a successful create_notes observation.';
+    }
+
+    return null;
   }
 
   List<AgentTask> _parseTasksFromJson(
@@ -1660,12 +2530,18 @@ Return ONLY a valid JSON list with ALL required fields:
 
   Future<void> _performTask(AgentTask task, String globalContext) async {
     // Check for max turns
-    if (task.executionHistory.length / 2 >= task.maxTurns) {
+    final turnsUsed = _countTaskTurns(task);
+    if (turnsUsed >= task.maxTurns) {
       task.status = AgentTaskStatus.paused;
       task.result = "Max turns reached. Paused.";
+      task.isManuallyPaused = false;
+      _syncWorkflowStatusFromTasks();
       notifyListeners();
       return;
     }
+
+    // Sync workflow status for mini-player turn display
+    _syncWorkflowStatusFromTasks();
 
     // NOTE: We no longer skip tasks with empty tools.
     // Tasks with tools: [] are valid "thinking" tasks where the LLM should:
@@ -1674,7 +2550,7 @@ Return ONLY a valid JSON list with ALL required fields:
     // - Synthesize information from dependencies
     // The LLM will use action type="answer" when it completes the task.
 
-    final int turn = (task.executionHistory.length / 2).floor() + 1;
+    final int turn = turnsUsed + 1;
 
     // We only execute ONE tool at a time in the ReAct loop per original design,
     // BUT the prompt might have assigned multiple tools to this `AgentTask`.
@@ -1690,10 +2566,15 @@ Return ONLY a valid JSON list with ALL required fields:
     // 2. If empty, use all enabled tools
     // Note: task.toolNames (planner's suggestions) are hints only, not filters
     List<NativeTool> allowedNativeFn() {
-      // read_task_result is ALWAYS available (internal mechanism for TOC-based context)
-      // Use nativeTools (not enabledNativeTools) to ensure it's always present
-      final readTaskResultTool = nativeTools
-          .where((t) => t.name == 'read_task_result')
+      // read_task_result and load_skill (when skills enabled) are ALWAYS available
+      // (internal mechanisms for TOC-based context and skill loading)
+      // Use nativeTools (not enabledNativeTools) to ensure they're always present
+      final alwaysAvailableNames = {
+        'read_task_result',
+        if (_skillsEnabled) 'load_skill',
+      };
+      final alwaysAvailableTools = nativeTools
+          .where((t) => alwaysAvailableNames.contains(t.name))
           .toList();
 
       // User's per-step restrictions take priority
@@ -1701,45 +2582,57 @@ Return ONLY a valid JSON list with ALL required fields:
         final userFiltered = enabledNativeTools
             .where((t) => task.allowedTools.contains(t.name))
             .toList();
-        // Ensure read_task_result is always included
-        if (!userFiltered.any((t) => t.name == 'read_task_result')) {
-          return [...userFiltered, ...readTaskResultTool];
+        // Ensure always-available tools are included
+        final missing = alwaysAvailableTools
+            .where((t) => !userFiltered.any((u) => u.name == t.name))
+            .toList();
+        if (missing.isNotEmpty) {
+          return [...userFiltered, ...missing];
         }
         return userFiltered;
       }
-      // No user restriction - all enabled tools available + read_task_result
-      if (!enabledNativeTools.any((t) => t.name == 'read_task_result')) {
-        return [...enabledNativeTools, ...readTaskResultTool];
+      // No user restriction - all enabled tools available + always-available tools
+      final missing = alwaysAvailableTools
+          .where((t) => !enabledNativeTools.any((u) => u.name == t.name))
+          .toList();
+      if (missing.isNotEmpty) {
+        return [...enabledNativeTools, ...missing];
       }
       return enabledNativeTools;
     }
 
     List<McpTool> allowedExternalFn() {
-      final all = _externalTools.values.expand((x) => x).toList();
+      final all = [
+        ..._externalTools.values.expand((x) => x),
+        ..._skillDiscoveredTools,
+      ];
+      // Deduplicate by name to prevent list bloat/drift
+      final seen = <String>{};
+      final unique = all.where((t) => seen.add(t.name)).toList();
+
       // User's per-step restrictions take priority
       if (task.allowedTools.isNotEmpty) {
-        return all.where((t) => task.allowedTools.contains(t.name)).toList();
+        return unique
+            .where((t) => task.allowedTools.contains(t.name))
+            .toList();
       }
       // No user restriction - all external tools available
-      return all;
+      return unique;
     }
 
     final currentAllowedNative = allowedNativeFn();
     final currentAllowedExternal = allowedExternalFn();
+    final toolsByService = _buildAgentToolsByService(
+      nativeTools: currentAllowedNative,
+      externalTools: currentAllowedExternal,
+    );
 
     // Fallback: If for some reason the planned tool isn't found in native/external,
     // we should alert or fail? For now, we proceed with what we found.
-
-    final toolsDesc = [
-      ...currentAllowedNative.map(
-        (t) =>
-            '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}',
-      ),
-      ...currentAllowedExternal.map(
-        (t) =>
-            '- ${t.name}: ${t.description}\n  Params: ${jsonEncode(t.inputSchema)}',
-      ),
-    ].join('\n');
+    final toolsDesc = McpToolIntegrationService.buildMcpSystemPrompt(
+      toolsByService,
+      maxBudgetTokens: 16000,
+    ).trim();
 
     // Build special instructions for final deliverable tasks
     final deliverableInstructions = task.isFinalDeliverable
@@ -1747,8 +2640,7 @@ Return ONLY a valid JSON list with ALL required fields:
 
 IMPORTANT: This is the FINAL DELIVERABLE task.
 - If you have all the information you need, provide the complete, detailed output the user requested (report, analysis, etc.).
-- You can provide your final result as a JSON action: ```json { "answer": "Full result here..." } ``` OR just write the result directly in Markdown.
-- If you still need more information to fulfill the specific request of this task, you MUST use tool calls in JSON format.
+- If you still need more information to fulfill the specific request of this task, you MUST use a tool call.
 - Do NOT provide a generic summary - give the full, detailed deliverable requested.
 - Include all relevant data, citations, and findings from the context above.
 
@@ -1757,18 +2649,31 @@ ${AIPrompts.agenticDeliverableGuidelines}
         : '';
 
     // Use different format instructions based on whether this is a final deliverable
+    // Build a concrete service_name example from the available tools so
+    // the model doesn't have to guess casing or naming conventions.
+    final exampleServiceName = toolsByService.keys.isNotEmpty
+        ? toolsByService.keys.first
+        : _systemToolServiceName;
     final formatInstructions = task.isFinalDeliverable
         ? '''
 RESPONSE FORMAT (XML-based):
 
-<MyThought>Your reasoning about what to do next</MyThought>
-<Action type="ACTION_TYPE">
-  <ToolName>tool_name</ToolName>
-  <Content>action content</Content>
+Two action types are available. Pick ONE per turn.
+
+1. TOOL CALL (to fetch data or execute an action):
+<MyThought>why you need this tool</MyThought>
+<Action type="tool">
+<ToolName>call_tool</ToolName>
+<Content>{"service_name":"$exampleServiceName", "tool_name":"TOOL_NAME", "params": {...}}</Content>
 </Action>
 
-If you need more information, use type="tool".
-If you have the complete answer, use type="answer" with your markdown result in <Content>.
+2. FINAL ANSWER (when the task is complete — NO <ToolName> tag):
+<MyThought>why you are done</MyThought>
+<Action type="answer">
+<Content>
+Your markdown answer here.
+</Content>
+</Action>
 '''
         : '''
 RESPONSE FORMAT (XML-based for reliable parsing):
@@ -1776,15 +2681,15 @@ RESPONSE FORMAT (XML-based for reliable parsing):
 Structure your response as:
 <MyThought>Your reasoning about what to do next</MyThought>
 <Action type="ACTION_TYPE">
-  <ToolName>tool_name</ToolName>
+  <ToolName>call_tool</ToolName>
   <Content>action content</Content>
 </Action>
 
 ACTION TYPES AND CONTENT FORMAT:
-- **tool**: Execute a tool. Content MUST be a JSON object that is the arguments to the tool: {"arg1": "value", ...}. <ToolName> tag is REQUIRED.
+- **tool**: Execute a tool. <ToolName> MUST be `call_tool`. Content MUST be a JSON object in this exact shape: {"service_name":"...", "tool_name":"...", "params": {...}}.
 - **think**: Analyze data in context. Content is free-form text.
 - **spawn_subtasks**: Decompose into 1-5 child tasks. Content MUST be a JSON array: [{"description": "...", "tools": [...]}]
-- **answer**: Complete the task. Content is your markdown result.
+- **answer**: Complete the task. Content is your markdown result. Do NOT include <ToolName>.
 
 > For "tool" and "spawn_subtasks", Content must be valid JSON (no code fences).
 
@@ -1793,8 +2698,8 @@ EXAMPLES:
 <Example>
 <MyThought>I need to search for relevant notes.</MyThought>
 <Action type="tool">
-<ToolName>search_notes</ToolName>
-<Content>{"query": "machine learning"}</Content>
+<ToolName>call_tool</ToolName>
+<Content>{"service_name":"$_systemToolServiceName","tool_name":"search_notes","params":{"query":"machine learning"}}</Content>
 </Action>
 </Example>
 
@@ -1831,6 +2736,23 @@ The investigation reveals that...
 Current task depth: ${task.depth} / $_cachedMaxSubtaskDepth
 ''';
 
+    // Filter skill index to remove already loaded skills from the available list.
+    // This prevents models from hallucinating redundant load_skill calls.
+    final loadedNoteIds = _contextManager.rootContext?.loadedSkills
+            .map((s) => s.noteId)
+            .toSet() ??
+        {};
+    final filteredSkillIndex = Map<String, SkillMetadata>.from(_skillIndex)
+      ..removeWhere((key, value) => loadedNoteIds.contains(value.noteId));
+
+    final taskSkillSection = _skillsEnabled && filteredSkillIndex.isNotEmpty
+        ? getIt<SkillService>().buildSkillIndexPrompt(
+            filteredSkillIndex,
+            maxBudgetTokens: 16000,
+            forLocalModel: _useNativeFunctionCalling(),
+          )
+        : '';
+
     final prompt =
         '''
 You are an intelligent agent working on a task.
@@ -1839,7 +2761,7 @@ Task Description: "${task.description}"
 Global Context (includes current task execution log in <ExecutionLog> section):
 $globalContext
 
-Available Tools (read_task_result is always available for fetching context):
+Available Tools:
 $toolsDesc
 
 ## ITERATION PROTOCOL
@@ -1852,14 +2774,6 @@ After each action, evaluate:
 You may call tools MULTIPLE TIMES per task if needed.
 Don't settle for incomplete information when tools are available.
 
-## RESPONSE FORMAT (preserved for UI display)
-
-Always structure your response as:
-1. <MyThought>your reasoning about what to do next</MyThought>
-2. <Action type="next_action"></Action> tag group for tool, think, spawn_subtasks, or answer
-
-This format is shown to the user to help them understand your reasoning.
-
 INSTRUCTIONS:
 1. Analyze the context and history.
 2. Formulate a CLEAR THOUGHT about what to do next.
@@ -1871,7 +2785,7 @@ INSTRUCTIONS:
 $deliverableInstructions
 
 $formatInstructions
-''';
+$taskSkillSection''';
 
     try {
       // Checkpoint: Before LLM call
@@ -1880,6 +2794,7 @@ $formatInstructions
       if (_isPaused) {
         task.status = AgentTaskStatus.paused;
         _currentThought = 'Paused before LLM call';
+        _syncWorkflowStatusFromTasks();
         notifyListeners();
         return;
       }
@@ -1888,6 +2803,24 @@ $formatInstructions
         values: {'type': 'agent_step', 'taskId': task.id, 'turn': turn},
       );
       if (_modelOverride != null) genContext.modelOverride = _modelOverride;
+
+      // Branch: native function calling for local models vs XML for others
+      if (_useNativeFunctionCalling()) {
+        await _performTaskNativeFunctionCalling(
+          task: task,
+          turn: turn,
+          globalContext: globalContext,
+          deliverableInstructions: deliverableInstructions,
+          taskSkillSection: taskSkillSection,
+          toolsByService: toolsByService,
+          genContext: genContext,
+          allowedNativeFn: allowedNativeFn,
+          currentAllowedNative: currentAllowedNative,
+          onProgressUpdate: onProgressUpdate,
+        );
+        return;
+      }
+
       final response = await _generateLlmResponse(prompt, context: genContext);
 
       // Checkpoint: After LLM response
@@ -1897,6 +2830,7 @@ $formatInstructions
         task.status = AgentTaskStatus.paused;
         _currentThought = 'Paused after LLM response';
         task.executionHistory.add('Turn $turn: (paused after LLM response)');
+        _syncWorkflowStatusFromTasks();
         notifyListeners();
         return;
       }
@@ -2032,6 +2966,18 @@ $formatInstructions
             result = actionMatch.group(1)?.trim() ?? result;
           }
 
+          final validationError = _validateFinalAnswer(task, result);
+          if (validationError != null) {
+            _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+                'IMPORTANT: $validationError';
+            task.executionHistory.add('Observation: $validationError');
+            _contextManager
+                .getContext(task.contextNodeId ?? '')
+                ?.log('Observation: $validationError');
+            notifyListeners();
+            return;
+          }
+
           task.result = result;
 
           task.status = AgentTaskStatus.completed;
@@ -2051,6 +2997,7 @@ $formatInstructions
           }
 
           _currentThought = "Delivered final result.";
+          _syncWorkflowStatusFromTasks();
           notifyListeners();
           return;
         }
@@ -2071,6 +3018,17 @@ $formatInstructions
       switch (xmlResponse.actionType) {
         case 'answer':
           final answerContent = xmlResponse.content ?? '';
+          final validationError = _validateFinalAnswer(task, answerContent);
+          if (validationError != null) {
+            _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+                'IMPORTANT: $validationError';
+            task.executionHistory.add('Observation: $validationError');
+            _contextManager
+                .getContext(task.contextNodeId ?? '')
+                ?.log('Observation: $validationError');
+            notifyListeners();
+            return;
+          }
           task.result = answerContent;
           task.status = AgentTaskStatus.completed;
           // Store full answer content for findings extraction and context propagation
@@ -2085,6 +3043,7 @@ $formatInstructions
               answerContent,
             );
           }
+          _syncWorkflowStatusFromTasks();
           notifyListeners();
           return;
 
@@ -2126,97 +3085,138 @@ $formatInstructions
       }
 
       // Handle tool action
-      final toolName = xmlResponse.toolName;
+      final requestedToolName = xmlResponse.toolName;
       final args = xmlResponse.parsedContent as Map<String, dynamic>? ?? {};
 
-      if (toolName == null || toolName.isEmpty) {
+      if (requestedToolName == null || requestedToolName.isEmpty) {
         task.executionHistory.add("Error: Missing tool name.");
         return;
       }
+
+      final recoveredToolCall = _recoverAgentToolCall(
+        requestedToolName,
+        args,
+        toolsByService: toolsByService,
+        fallbackSearchQuery: _inferSearchQueryForTask(task),
+      );
+      if (recoveredToolCall == null) {
+        final errorMsg =
+            'Unable to resolve tool call "$requestedToolName". Use <ToolName>call_tool</ToolName> with {"service_name":"...", "tool_name":"...", "params": {...}}.';
+        task.executionHistory.add('Observation: $errorMsg');
+        _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+            'IMPORTANT: $errorMsg';
+        notifyListeners();
+        return;
+      }
+
+      final serviceName = recoveredToolCall.serviceName;
+      final toolName = recoveredToolCall.toolName;
+      final params = recoveredToolCall.params;
 
       // Checkpoint: Before tool call
       _currentCheckpoint = AgentCheckpoint.beforeToolCall;
       notifyListeners();
       if (_isPaused) {
         task.status = AgentTaskStatus.paused;
-        _currentThought = 'Paused before tool call: $toolName';
+        _currentThought = 'Paused before tool call: $serviceName.$toolName';
         task.executionHistory.add(
-          'Turn $turn: (paused before tool call: $toolName)',
+          'Turn $turn: (paused before tool call: $serviceName.$toolName)',
         );
+        _syncWorkflowStatusFromTasks();
         notifyListeners();
         return;
       }
 
       // Execute Tool
-      task.executionHistory.add('Action: Call $toolName');
+      task.executionHistory.add('Action: Call $serviceName.$toolName');
       _contextManager
           .getContext(task.contextNodeId ?? '')
           ?.log(
-            'Action: Calling tool $toolName with args: ${jsonEncode(args)}',
+            'Action: Calling tool $serviceName.$toolName with args: ${jsonEncode(params)}',
           );
       notifyListeners();
 
       dynamic result;
+      var toolSucceeded = true;
       try {
-        // Try Native - use allowedNativeFn to respect tool config AND ensure read_task_result is always available
-        final nativeTool = allowedNativeFn().firstWhere(
-          (t) => t.name == toolName,
-          orElse: () => _UnknownTool(),
-        );
-        if (nativeTool is! _UnknownTool) {
-          result = await nativeTool.execute(args);
+        if (serviceName == _systemToolServiceName) {
+          result = await _executeSystemTool(
+            toolName: toolName,
+            args: params,
+            allowedNativeTools: currentAllowedNative,
+          );
         } else {
-          // Try External
-          String? serviceName;
-          for (final entry in _externalTools.entries) {
-            if (entry.value.any((t) => t.name == toolName)) {
-              serviceName = entry.key;
-              break;
-            }
-          }
-          if (serviceName != null) {
-            final generationContext = GenerationContext(
-              values: {'type': 'agent_tool_exec'},
+          final generationContext = GenerationContext(
+            values: {'type': 'agent_tool_exec'},
+          );
+          if (_toolExecutor != null) {
+            result = await _toolExecutor!(
+              serviceName,
+              toolName,
+              params,
+              generationContext,
             );
-            // Use injected executor if available (supports both MCP and local AI tools)
-            if (_toolExecutor != null) {
-              result = await _toolExecutor!(
-                serviceName,
-                toolName,
-                args,
-                generationContext,
-              );
-            } else {
-              // Fallback: MCP-only execution (legacy behavior)
-              final endpoints = await getIt<McpService>().getEndpoints();
-              final ids = endpoints.map((e) => e.id).toList();
-              result = await McpToolIntegrationService.executeToolCall(
-                serviceName: serviceName,
-                toolName: toolName,
-                parameters: args,
-                enabledEndpointIds: ids,
-                generationContext: generationContext,
-              );
-            }
           } else {
-            throw "Tool $toolName not found.";
+            final endpoints = await getIt<McpService>().getEndpoints();
+            final ids = endpoints.map((e) => e.id).toList();
+            result = await McpToolIntegrationService.executeToolCall(
+              serviceName: serviceName,
+              toolName: toolName,
+              parameters: params,
+              enabledEndpointIds: ids,
+              generationContext: generationContext,
+            );
           }
         }
       } catch (e) {
-        final errorStr = "Error executing $toolName: $e";
+        final errorStr = "Error executing $serviceName.$toolName: $e";
         LoggerService.error(errorStr);
         result = errorStr;
+        toolSucceeded = false;
 
         // Also set as last execution error for explicit visibility
         _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
             "Tool Execution Error: $e";
       }
 
-      task.executionHistory.add("Observation: $result");
+      // Intercept load_skill results to route to context and resolve tool URIs
+      // Handle load_skill results
+      bool skillPinned = false;
+      if (toolName == 'load_skill' && result is String) {
+        final noteId = await _resolveSkillNoteId(params);
+        if (noteId.isNotEmpty) {
+          skillPinned = await _handleLoadSkillResult(
+            noteId,
+            result,
+            task: task,
+          );
+        }
+      }
+      _recordToolExecution(
+        task,
+        toolName: '$serviceName.$toolName',
+        args: params,
+        result: result,
+        succeeded: toolSucceeded,
+      );
+
+      // Shorten skill observation if it was pinned to avoid duplication with <LoadedSkills>
+      final String observationText;
+      if (toolName == 'load_skill' && skillPinned && result is String) {
+        observationText = shortenSkillObservation(
+          skillContent: result,
+          skillName: _extractSkillName(result),
+          pinned: true,
+        );
+      } else {
+        observationText = result.toString();
+      }
+
+      task.executionHistory.add("Observation: $observationText");
       // Log observation to hierarchical context
       _contextManager
           .getContext(task.contextNodeId ?? '')
-          ?.log('Observation: $result');
+          ?.log('Observation: $observationText');
       notifyListeners();
 
       // Checkpoint: After tool result
@@ -2225,6 +3225,7 @@ $formatInstructions
       if (_isPaused) {
         task.status = AgentTaskStatus.paused;
         _currentThought = 'Paused after tool result';
+        _syncWorkflowStatusFromTasks();
         notifyListeners();
         return;
       }
@@ -2239,6 +3240,542 @@ $formatInstructions
 
       // Also log to execution log to keep history straight
       _contextManager.getContext(task.contextNodeId ?? '')?.log(errorMsg);
+    }
+  }
+
+  /// Builds a tailored system prompt for local models (Gemma).
+  String _buildLocalSystemPrompt({
+    required AgentTask task,
+    required String taskSkillSection,
+    required bool hasLoadedSkills,
+  }) {
+    final isWorkflow = task.name == 'workflow_task';
+
+    if (isWorkflow && hasLoadedSkills) {
+      return '''
+You are a task-execution agent currently running a specialized workflow. 
+
+CRITICAL RULE: You MUST execute all steps silently. Do NOT generate or output any internal thoughts, reasoning, explanations, or intermediate text. Output ONLY tool calls or the final answer.
+
+A skill workflow has been pre-loaded for you in the <LoadedSkills> section of the conversation context.
+You MUST follow the "Workflow" steps in that skill exactly to complete this task. 
+
+DEDUP RULE: The necessary skill is ALREADY LOADED. Do NOT call 'System.load_skill' again for this workflow. Move directly to the first step of the skill's "Workflow" section.
+
+EVIDENCE-BASED EXECUTION:
+- You are FORBIDDEN from stating a task is complete unless you have received successful tool observations in this conversation history that prove the work is done.
+- If the workflow requires searching, reading, or modifying notes, you MUST call the relevant tools immediately.
+- NEVER hallucinate or "fake" a successful result.
+
+PRECISION RULE: When calling tools with note IDs (UUIDs), you MUST copy the ID character-for-character from the context. Do NOT shorten, reformat, or modify UUIDs.
+
+When the workflow is complete based on EVIDENCE, provide a concise markdown summary of the final result.
+''';
+    }
+
+    // General task prompt
+    return '''
+You are a task-execution agent that helps users complete tasks using tools and skills.
+
+CRITICAL RULE: You MUST execute all steps silently. Do NOT generate or output any internal thoughts, reasoning, explanations, or intermediate text. Output ONLY tool calls or the final answer.
+
+EVIDENCE-BASED EXECUTION:
+- You are FORBIDDEN from stating a task is complete unless you have received successful tool observations in this conversation history that prove the work is done.
+- NEVER hallucinate or "fake" a result.
+
+PRECISION RULE: When calling tools with note IDs (UUIDs), you MUST copy the ID character-for-character from the context. Do NOT shorten, reformat, or modify UUIDs.
+
+INSTRUCTIONS:
+1. If a relevant skill is already in <LoadedSkills>, follow its instructions exactly.
+2. If no relevant skill is loaded, check the "Available Agent Skills" list below. If one matches, use 'System.load_skill' to retrieve its instructions.
+3. If no skill applies, use your available tools to complete the task directly.
+4. When the task is complete based on EVIDENCE, provide a concise markdown result.
+
+=== AVAILABLE AGENT SKILLS ===
+$taskSkillSection
+''';
+  }
+
+  /// Native function-calling path for local models (Gemma).
+  /// Uses actual tool declarations instead of XML-based text parsing.
+  Future<void> _performTaskNativeFunctionCalling({
+    required AgentTask task,
+    required int turn,
+    required String globalContext,
+    required String deliverableInstructions,
+    required String taskSkillSection,
+    required Map<String, List<McpTool>> toolsByService,
+    required GenerationContext genContext,
+    required List<NativeTool> Function() allowedNativeFn,
+    required List<NativeTool> currentAllowedNative,
+    void Function(String)? onProgressUpdate,
+  }) async {
+    final hasLoadedSkills =
+        _contextManager.rootContext?.loadedSkills.isNotEmpty ?? false;
+    final systemPrompt = _buildLocalSystemPrompt(
+      task: task,
+      taskSkillSection: taskSkillSection,
+      hasLoadedSkills: hasLoadedSkills,
+    );
+
+    final turnGuidance = turn == 1
+        ? 'Turn $turn: Analyze the task and context. Decide if you need to call a tool or load a skill to begin. If you already have all necessary information, you may provide the final answer directly.'
+        : 'Turn $turn: Continue with the next step based on the tool observations above. If the task is complete, provide the final answer.';
+
+    // User message: task + context + compact instructions (no XML format, no tool catalog)
+    final userPrompt = '''
+Task: "${task.description}"
+
+$globalContext
+$deliverableInstructions
+
+$turnGuidance
+
+Call tools when you need information. When you have a complete answer, respond with the result as markdown text.''';
+
+    final response = await _generateLlmResponseWithTools(
+      systemPrompt,
+      userPrompt,
+      toolsByService,
+      context: genContext,
+    );
+
+    // Checkpoint: After LLM response
+    _currentCheckpoint = AgentCheckpoint.afterLlmResponse;
+    notifyListeners();
+    if (_isPaused) {
+      task.status = AgentTaskStatus.paused;
+      _currentThought = 'Paused after LLM response';
+      task.executionHistory.add('Turn $turn: (paused after LLM response)');
+      _syncWorkflowStatusFromTasks();
+      notifyListeners();
+      return;
+    }
+
+    final textResponse = response['text']?.toString() ?? '';
+    final functionCalls = response['function_calls'] as List?;
+
+    // Extract thought from text portion (model may still include <MyThought>)
+    final thinkResult = stripThinkTags(textResponse);
+    String thought = '';
+    if (thinkResult.thinkContent != null &&
+        thinkResult.thinkContent!.isNotEmpty) {
+      thought = thinkResult.thinkContent!;
+    }
+    // Also check for <MyThought> in the cleaned text
+    final myThoughtMatch = RegExp(
+      r'<MyThought>(.*?)</MyThought>',
+      dotAll: true,
+    ).firstMatch(thinkResult.cleanedContent);
+    if (myThoughtMatch != null) {
+      thought = myThoughtMatch.group(1)?.trim() ?? thought;
+    }
+
+    _currentThought =
+        thought.isNotEmpty ? thought : 'Executing (native tool call)...';
+    onProgressUpdate?.call(_currentThought!);
+    notifyListeners();
+
+    task.executionHistory.add('Turn $turn:');
+    if (thought.isNotEmpty) {
+      task.executionHistory.add('Thought: $thought');
+    }
+    if (task.contextNodeId != null) {
+      _contextManager
+          .getContext(task.contextNodeId!)
+          ?.log('Turn $turn - Thought: $_currentThought');
+    }
+
+    // Process function calls if present
+    if (functionCalls != null && functionCalls.isNotEmpty) {
+      final fc = functionCalls.first as Map<String, dynamic>;
+      final fcName = fc['name']?.toString() ?? '';
+      final fcArgs = fc['args'] as Map<String, dynamic>? ?? {};
+
+      final recoveredToolCall = _recoverAgentToolCall(
+        fcName,
+        fcArgs,
+        toolsByService: toolsByService,
+        fallbackSearchQuery: _inferSearchQueryForTask(task),
+      );
+      if (recoveredToolCall == null) {
+        final errorMsg =
+            'Unable to resolve tool call "$fcName". Available tools: '
+            '${toolsByService.values.expand((t) => t).map((t) => t.name).join(", ")}';
+        task.executionHistory.add('Observation: $errorMsg');
+        _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+            'IMPORTANT: $errorMsg';
+        notifyListeners();
+        return;
+      }
+
+      final serviceName = recoveredToolCall.serviceName;
+      final toolName = recoveredToolCall.toolName;
+      final params = recoveredToolCall.params;
+
+      // Checkpoint: Before tool call
+      _currentCheckpoint = AgentCheckpoint.beforeToolCall;
+      notifyListeners();
+      if (_isPaused) {
+        task.status = AgentTaskStatus.paused;
+        _currentThought = 'Paused before tool call: $serviceName.$toolName';
+        task.executionHistory.add(
+          'Turn $turn: (paused before tool call: $serviceName.$toolName)',
+        );
+        _syncWorkflowStatusFromTasks();
+        notifyListeners();
+        return;
+      }
+
+      // Execute tool
+      task.executionHistory.add('Action: Call $serviceName.$toolName');
+      _contextManager
+          .getContext(task.contextNodeId ?? '')
+          ?.log(
+            'Action: Calling tool $serviceName.$toolName with args: ${jsonEncode(params)}',
+          );
+      notifyListeners();
+
+      dynamic result;
+      var toolSucceeded = true;
+      try {
+        if (serviceName == _systemToolServiceName) {
+          result = await _executeSystemTool(
+            toolName: toolName,
+            args: params,
+            allowedNativeTools: currentAllowedNative,
+          );
+        } else {
+          final generationContext = GenerationContext(
+            values: {'type': 'agent_tool_exec'},
+          );
+          if (_toolExecutor != null) {
+            result = await _toolExecutor!(
+              serviceName,
+              toolName,
+              params,
+              generationContext,
+            );
+          } else {
+            final endpoints = await getIt<McpService>().getEndpoints();
+            final ids = endpoints.map((e) => e.id).toList();
+            result = await McpToolIntegrationService.executeToolCall(
+              serviceName: serviceName,
+              toolName: toolName,
+              parameters: params,
+              enabledEndpointIds: ids,
+              generationContext: generationContext,
+            );
+          }
+        }
+      } catch (e) {
+        final errorStr = 'Error executing $serviceName.$toolName: $e';
+        LoggerService.error(errorStr);
+        result = errorStr;
+        toolSucceeded = false;
+      }
+
+      // Handle load_skill results
+      bool skillPinned = false;
+      if (toolName == 'load_skill' && result is String) {
+        final noteId = await _resolveSkillNoteId(params);
+        if (noteId.isNotEmpty) {
+          skillPinned = await _handleLoadSkillResult(
+            noteId,
+            result,
+            task: task,
+          );
+        }
+      }
+
+      _recordToolExecution(
+        task,
+        toolName: '$serviceName.$toolName',
+        args: params,
+        result: result,
+        succeeded: toolSucceeded,
+      );
+
+      final String observationText;
+      if (toolName == 'load_skill' && skillPinned && result is String) {
+        observationText = shortenSkillObservation(
+          skillContent: result,
+          skillName: _extractSkillName(result),
+          pinned: true,
+        );
+      } else {
+        observationText = result.toString();
+      }
+
+      task.executionHistory.add('Observation: $observationText');
+      _contextManager
+          .getContext(task.contextNodeId ?? '')
+          ?.log('Observation: $observationText');
+      notifyListeners();
+
+      // Checkpoint: After tool result
+      _currentCheckpoint = AgentCheckpoint.afterToolResult;
+      notifyListeners();
+      if (_isPaused) {
+        task.status = AgentTaskStatus.paused;
+        _currentThought = 'Paused after tool result';
+        _syncWorkflowStatusFromTasks();
+        notifyListeners();
+        return;
+      }
+      return;
+    }
+
+    // No function calls — model responded with text only.
+    // Try XML fallback (model may have produced XML in text).
+    final cleanedText = thinkResult.cleanedContent.replaceFirst(
+      RegExp(r'<MyThought>.*?</MyThought>\s*', dotAll: true),
+      '',
+    ).trim();
+    final xmlResponse = parseXmlAgentResponse(cleanedText);
+
+    if (!xmlResponse.hasError && xmlResponse.actionType == 'tool') {
+      // Model produced XML tool action in text — process via XML path
+      final requestedToolName = xmlResponse.toolName;
+      final args = xmlResponse.parsedContent as Map<String, dynamic>? ?? {};
+      if (requestedToolName != null && requestedToolName.isNotEmpty) {
+        final recoveredToolCall = _recoverAgentToolCall(
+          requestedToolName,
+          args,
+          toolsByService: toolsByService,
+          fallbackSearchQuery: _inferSearchQueryForTask(task),
+        );
+        if (recoveredToolCall != null) {
+          // Re-enter this method's tool execution path would duplicate code.
+          // Instead, record a corrective error so the next turn uses function calling.
+          final errorMsg =
+              'Use native function calling instead of XML. Call call_tool directly.';
+          task.executionHistory.add('Observation: $errorMsg');
+          _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+              errorMsg;
+          notifyListeners();
+          return;
+        }
+      }
+    }
+
+    // Treat as final answer if deliverable or if substantial text
+    if (task.isFinalDeliverable && cleanedText.isNotEmpty) {
+      final validationError = _validateFinalAnswer(task, cleanedText);
+      if (validationError != null) {
+        _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+            'IMPORTANT: $validationError';
+        task.executionHistory.add('Observation: $validationError');
+        notifyListeners();
+        return;
+      }
+      task.result = cleanedText;
+      task.status = AgentTaskStatus.completed;
+      task.executionHistory.add('Final deliverable produced directly.');
+      if (task.contextNodeId != null) {
+        final ctx = _contextManager.getContext(task.contextNodeId!);
+        if (ctx != null) {
+          ctx.log('Turn $turn - Final deliverable produced directly');
+          ctx.structuredResult = _contextManager.generateTocFromResult(
+            task.contextNodeId!,
+            task.description,
+            cleanedText,
+          );
+        }
+      }
+      _currentThought = 'Delivered final result.';
+      _syncWorkflowStatusFromTasks();
+      notifyListeners();
+      return;
+    }
+
+    // Non-deliverable text response — treat as a think action
+    if (cleanedText.isNotEmpty) {
+      task.executionHistory.add('Analysis: $cleanedText');
+      _contextManager
+          .getContext(task.contextNodeId ?? '')
+          ?.log('Analysis: $cleanedText');
+    } else {
+      // Empty response — report error
+      task.executionHistory.add(
+        'Observation: Model returned empty response with no tool calls.',
+      );
+      _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+          'IMPORTANT: You must call a tool or provide an answer. Do not respond with empty text.';
+    }
+    notifyListeners();
+  }
+
+  /// Called when a load_skill tool call returns successfully.
+  /// Routes skill content to the loadedSkills context region and resolves tool URIs.
+  /// Returns true if the skill was newly pinned (not a duplicate), false otherwise.
+  Future<bool> _handleLoadSkillResult(
+    String noteId,
+    String content, {
+    AgentTask? task,
+  }) async {
+    final root = _contextManager.rootContext;
+    final alreadyLoaded =
+        root?.loadedSkills.any((s) => s.noteId == noteId) ?? false;
+
+    // Add to pinned context region (deduplicated inside addLoadedSkill)
+    _contextManager.addLoadedSkill(noteId, content);
+
+    // Check if it was actually added (not just deduplicated)
+    final nowLoaded =
+        _contextManager.rootContext?.loadedSkills.any(
+          (s) => s.noteId == noteId,
+        ) ??
+        false;
+    final newlyPinned = !alreadyLoaded && nowLoaded;
+
+    // Extract and resolve tool URIs from skill content
+    final skillService = getIt<SkillService>();
+    final uris = skillService.extractToolUris(content);
+    final newToolNames = <String>[];
+    final allMentionedToolNames = <String>[];
+
+    for (final uri in uris) {
+      final parsed = skillService.parseToolUri(uri);
+      if (parsed == null) continue;
+      final tools = await _resolveSkillToolUri(parsed);
+      for (final resolved in tools) {
+        final tool = resolved.tool;
+        allMentionedToolNames.add(tool.name);
+
+        // Deduplicate against all available tools to prevent list bloat/drift
+        final isNative = nativeTools.any((t) => t.name == tool.name);
+        final isExternal = _externalTools.values
+            .expand((x) => x)
+            .any((t) => t.name == tool.name);
+        final isDiscovered =
+            _skillDiscoveredTools.any((t) => t.name == tool.name);
+
+        if (!isNative && !isExternal && !isDiscovered) {
+          _skillDiscoveredTools.add(tool);
+          _skillToolServiceNames[tool.name] = resolved.serviceName;
+          newToolNames.add(tool.name);
+        }
+      }
+    }
+
+    // If we have a restricted tool list, add ALL mentioned tools to it
+    if (task != null &&
+        task.allowedTools.isNotEmpty &&
+        allMentionedToolNames.isNotEmpty) {
+      for (final name in allMentionedToolNames) {
+        if (!task.allowedTools.contains(name)) {
+          task.allowedTools.add(name);
+        }
+      }
+    }
+
+    // Log trace annotation when new tools were injected
+    if (newToolNames.isNotEmpty) {
+      _promoteSkillDiscoveredTools(newToolNames);
+      _contextManager.rootContext?.log(
+        'Skill loaded: injected tools [${newToolNames.join(', ')}]',
+      );
+    }
+    notifyListeners();
+
+    return newlyPinned;
+  }
+
+  String _extractSkillName(String content) {
+    final firstLine = content
+        .split('\n')
+        .firstWhere(
+          (line) => line.trim().isNotEmpty,
+          orElse: () => 'Unknown skill',
+        );
+    return firstLine.replaceAll(RegExp(r'^#+\s*Skill:\s*'), '').trim();
+  }
+
+  /// Resolve a parsed tool URI to a list of tools paired with service names.
+  Future<List<_ResolvedSkillTool>> _resolveSkillToolUri(
+    ({String namespace, String id, String? function}) parsed,
+  ) async {
+    switch (parsed.namespace) {
+      case 'builtin':
+        // Find in native tools list, convert to McpTool format
+        final tool = _nativeTools.where((t) => t.name == parsed.id).firstOrNull;
+        if (tool == null) return [];
+        return [
+          _ResolvedSkillTool(
+            serviceName: _systemToolServiceName,
+            tool: McpTool(
+              name: tool.name,
+              description: tool.description,
+              inputSchema: tool.inputSchema,
+            ),
+          ),
+        ];
+
+      case 'user_defined':
+        // Find UserApp by UUID, load its bundle and convert to McpTools
+        final allApps = await _databaseService.getAllUserApps();
+        final app = allApps.where((a) => a.uuid == parsed.id).firstOrNull;
+        if (app == null || app.selectedRevisionId == null) return [];
+        final revision = await getIt<UserAppService>().getAppRevision(
+          app.selectedRevisionId!,
+        );
+        if (revision == null) return [];
+        final bundle = await AiToolService.loadAppBundle(
+          app: app,
+          revision: revision,
+        );
+        if (bundle == null) return [];
+        final allTools = bundle.toMcpTools();
+        if (parsed.function != null) {
+          return allTools
+              .where((t) => t.name == parsed.function)
+              .map(
+                (tool) => _ResolvedSkillTool(
+                  serviceName: bundle.serviceName,
+                  tool: tool,
+                ),
+              )
+              .toList();
+        }
+        return allTools
+            .map(
+              (tool) => _ResolvedSkillTool(
+                serviceName: bundle.serviceName,
+                tool: tool,
+              ),
+            )
+            .toList();
+
+      case 'mcp':
+        // Find endpoint by name, get its tools (cached or refresh)
+        final mcpService = getIt<McpService>();
+        final endpoints = await mcpService.getEndpoints();
+        final endpoint = endpoints
+            .where((e) => e.name == parsed.id)
+            .firstOrNull;
+        if (endpoint == null) return [];
+        final cache = await mcpService.getCachedTools(endpoint.id);
+        final allTools =
+            cache?.tools ?? (await mcpService.refreshTools(endpoint.id)).tools;
+        if (parsed.function != null) {
+          return allTools
+              .where((t) => t.name == parsed.function)
+              .map(
+                (tool) =>
+                    _ResolvedSkillTool(serviceName: endpoint.name, tool: tool),
+              )
+              .toList();
+        }
+        return allTools
+            .map(
+              (tool) =>
+                  _ResolvedSkillTool(serviceName: endpoint.name, tool: tool),
+            )
+            .toList();
+
+      default:
+        return [];
     }
   }
 
@@ -2408,6 +3945,12 @@ Write a focused briefing for this subtask:
       generationContext: genContext,
     );
   }
+}
+
+class _PendingWorkflow {
+  final ResolvedBinding binding;
+  final Note note;
+  _PendingWorkflow(this.binding, this.note);
 }
 
 class _UnknownTool implements NativeTool {

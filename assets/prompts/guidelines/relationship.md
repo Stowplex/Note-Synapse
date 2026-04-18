@@ -1,0 +1,4 @@
+- The hierarchical structure shown (indented linked notes)
+- The relationship types between notes (answers, causality, related, subnote, parent, references, expands, contradicts, supports)
+- How linked notes might provide additional context or clarification
+- The direction of relationships (→ for outgoing, ← for incoming)

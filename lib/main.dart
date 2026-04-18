@@ -15,6 +15,7 @@ import 'services/secure_storage_service.dart';
 import 'services/ai_service.dart';
 import 'services/share_service.dart';
 import 'services/prompts/prompt_configuration_bootstrapper.dart';
+import 'services/prompts/prompt_template_service.dart';
 import 'services/global_library_service.dart';
 import 'services/agent_service.dart';
 import 'services/background_agent_service.dart';
@@ -23,6 +24,7 @@ import 'services/tag_image_service.dart';
 import 'services/wake_lock_service.dart' as wake_lock;
 import 'services/network_provider.dart';
 import 'utils/global_keys.dart';
+import 'widgets/workflow_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,6 +44,9 @@ void main() async {
 
   // Initialize service locator for dependency injection
   setupServiceLocator();
+
+  // Pre-load prompt templates so later services can render synchronously
+  await getIt<PromptTemplateService>().preloadAll();
 
   // Load tag image mappings into memory
   await getIt<TagImageService>().loadAll();
@@ -107,7 +112,7 @@ class NoteSynapseApp extends StatelessWidget {
               },
             },
             builder: (context, child) {
-              return child ?? const SizedBox.shrink();
+              return WorkflowShell(child: child ?? const SizedBox.shrink());
             },
           );
         },

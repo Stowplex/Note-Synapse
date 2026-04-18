@@ -15,9 +15,11 @@ import '../../utils/remote_image_utils.dart';
 import '../../utils/synapse_temp_utils.dart';
 import '../database_service.dart';
 import '../logger_service.dart';
+import '../service_locator.dart';
 import 'ai_prompts.dart';
 import 'prompt_models.dart';
 import 'prompt_configuration_service.dart';
+import 'prompt_template_service.dart';
 import 'registrations/note_prompt_configuration.dart';
 import 'system_prompt_builder.dart';
 
@@ -42,6 +44,8 @@ class NotePromptBuilder {
     bool useOwnKnowledge = false,
     List<PlatformFile> additionalAttachments = const [],
   }) async {
+    final templateService = getIt<PromptTemplateService>();
+
     final relationshipGuidance = contextNotes.isEmpty
         ? null
         : 'Note relationship reminders:\n${AIPrompts.relationshipGuidelines}';
@@ -56,10 +60,13 @@ class NotePromptBuilder {
       AIPrompts.mathFormulaGuidelines,
     ];
 
+    final taskContext = templateService.renderSync(
+      'note_prompts/question_system',
+      {'useOwnKnowledge': useOwnKnowledge},
+    ).trimRight();
+
     final systemMessage = SystemPromptBuilder.build(
-      taskContext:
-          'You answer detailed questions about the user\'s notes. The next message contains note context with optional attachments. '
-          '${useOwnKnowledge ? 'You may augment answers with general knowledge when helpful.' : 'Do not use outside knowledge unless the notes lack the answer.'}',
+      taskContext: taskContext,
       guidelines: [
         ...guidelines,
         AIPrompts.promptInjectionProtectionGuidelines,
@@ -73,31 +80,18 @@ class NotePromptBuilder {
         contextMessage,
     ];
 
-    final buffer = StringBuffer();
-    buffer.writeln('Question: "$question"');
-    if (contextNotes.isNotEmpty) {
-      buffer.writeln('Base your answer on the supplied note context.');
-    } else {
-      buffer.writeln(
-        'No note context is provided. Use the system guidance to determine how to answer.',
-      );
-    }
-    if (useOwnKnowledge) {
-      buffer.writeln(
-        'Supplement with general knowledge only when it clarifies gaps, and identify assumptions.',
-      );
-    } else {
-      buffer.writeln(
-        'Do not rely on information outside the provided materials.',
-      );
-    }
-    buffer.writeln(
-      'If the answer cannot be found, state explicitly that the information is unavailable.',
+    final userContent = templateService.renderSync(
+      'note_prompts/question_user',
+      {
+        'question': question,
+        'hasContextNotes': contextNotes.isNotEmpty,
+        'useOwnKnowledge': useOwnKnowledge,
+      },
     );
 
     final userMessage = PromptMessage(
       role: PromptRole.user,
-      content: buffer.toString().trim(),
+      content: userContent.trim(),
       attachments: additionalAttachments,
     );
 
@@ -114,10 +108,14 @@ class NotePromptBuilder {
     required String instruction,
     List<PlatformFile> additionalAttachments = const [],
   }) async {
+    final templateService = getIt<PromptTemplateService>();
+
+    final taskContext = templateService
+        .renderSync('note_prompts/transformation_system')
+        .trimRight();
+
     final systemMessage = SystemPromptBuilder.build(
-      taskContext:
-          'Transform the provided note content based on the user instruction while respecting structure and metadata. '
-          'The upcoming context message includes the original note, sub-notes, tags, and linked references.',
+      taskContext: taskContext,
       guidelines: _transformationGuidelines,
     );
 
@@ -128,28 +126,24 @@ class NotePromptBuilder {
         noteContextMessage,
     ];
 
-    final buffer = StringBuffer();
-    buffer.writeln('Transformation instruction: "$instruction"');
-    buffer.writeln(
-      'Apply the changes while preserving the note\'s existing structure (title, sections, sub-notes, tags, metadata) unless explicitly instructed otherwise.',
-    );
-    buffer.writeln(
-      'Incorporate relevant linked note context and attachments when appropriate.',
-    );
-    buffer.writeln('Return only the transformed note content.');
-
     final transformationAddOn = PromptConfigurationService.instance.getValue(
       NotePromptConfiguration.transformationAddendumId,
     );
-    if (transformationAddOn != null && transformationAddOn.trim().isNotEmpty) {
-      buffer
-        ..writeln()
-        ..writeln(transformationAddOn.trim());
-    }
+    final trimmedAddOn = transformationAddOn?.trim();
+    final hasAddendum = trimmedAddOn != null && trimmedAddOn.isNotEmpty;
+
+    final userContent = templateService.renderSync(
+      'note_prompts/transformation_user',
+      {
+        'instruction': instruction,
+        'hasAddendum': hasAddendum,
+        'addendum': trimmedAddOn ?? '',
+      },
+    );
 
     final userMessage = PromptMessage(
       role: PromptRole.user,
-      content: buffer.toString().trim(),
+      content: userContent.trim(),
       attachments: additionalAttachments,
     );
 
@@ -166,18 +160,14 @@ class NotePromptBuilder {
     required String blockContent,
     required String instruction,
   }) {
+    final templateService = getIt<PromptTemplateService>();
+
+    final taskContext = templateService
+        .renderSync('note_prompts/block_transformation_system')
+        .trimRight();
+
     final systemMessage = SystemPromptBuilder.build(
-      taskContext:
-          'Transform the provided markdown block based on the user instruction. '
-          'You MUST use the following output format:\n\n'
-          '<transformed>\n'
-          '(the transformed block content here)\n'
-          '</transformed>\n\n'
-          'If you have any notes, assumptions, or explanations, put them AFTER the closing </transformed> tag in a separate <notes> section:\n\n'
-          '<notes>\n'
-          '(optional notes here)\n'
-          '</notes>\n\n'
-          'IMPORTANT: The <transformed> section must contain ONLY the final block content with no extra commentary, explanations, or preamble.',
+      taskContext: taskContext,
       guidelines: [
         'Preserve critical information unless explicitly told to remove it.',
         AIPrompts.mathFormulaGuidelines,
@@ -185,15 +175,17 @@ class NotePromptBuilder {
       ],
     );
 
-    final buffer = StringBuffer();
-    buffer.writeln('Transformation instruction: "$instruction"');
-    buffer.writeln();
-    buffer.writeln('Block content to transform:');
-    buffer.writeln(blockContent);
+    final userContent = templateService.renderSync(
+      'note_prompts/block_transformation_user',
+      {
+        'instruction': instruction,
+        'blockContent': blockContent,
+      },
+    );
 
     final userMessage = PromptMessage(
       role: PromptRole.user,
-      content: buffer.toString().trim(),
+      content: userContent.trim(),
     );
 
     return PromptRequest(
@@ -208,9 +200,14 @@ class NotePromptBuilder {
     required List<Note> contextNotes,
     List<PlatformFile> additionalAttachments = const [],
   }) async {
+    final templateService = getIt<PromptTemplateService>();
+
+    final taskContext = templateService
+        .renderSync('note_prompts/new_note_creation_system')
+        .trimRight();
+
     final systemMessage = SystemPromptBuilder.build(
-      taskContext:
-          'Generate new notes based on user goals. The next message contains the existing note graph for context, including relationships.',
+      taskContext: taskContext,
       guidelines: [
         'Output valid JSON exactly as specified below without extra prose or markdown fences.',
         'Derive relative dates using the current date/time context before responding.',
@@ -227,15 +224,8 @@ class NotePromptBuilder {
         contextMessage,
     ];
 
-    final buffer = StringBuffer();
-    buffer.writeln(
-      'Use the provided note context (previous message) and the instruction below to create new notes.',
-    );
-    buffer.writeln();
-    buffer.writeln('User Prompt: "$userInstruction"');
-    buffer.writeln();
-    buffer.writeln('Return a single JSON object with the following structure:');
-    buffer.writeln('''{
+    // JSON schema as a pre-rendered constant to avoid Mustache delimiter conflicts.
+    const jsonSchema = '''{
   "notes": [
     {
       "title": "Note Title",
@@ -254,46 +244,27 @@ class NotePromptBuilder {
       "status": "todo" (only for tasks)
     }
   ]
-}''');
-    buffer.writeln();
-    buffer.writeln('Critical JSON rules:');
-    buffer.writeln(
-      '1. The response must be valid JSON with no additional commentary.',
-    );
-    buffer.writeln(
-      '2. Escape all quotes, backslashes, newlines, and control characters.',
-    );
-    buffer.writeln(
-      '3. When using LaTeX (e.g., \\( E = mc^2 \\)), double-escape backslashes (\\\\) to keep JSON valid.',
-    );
-    buffer.writeln('4. Preserve arrays even when empty (e.g., "tags": []).');
-    buffer.writeln();
-    buffer.writeln('Additional requirements:');
-    buffer.writeln(
-      '- Calculate relative dates (e.g., "next Wednesday") using the current date/time provided in the system message.',
-    );
-    buffer.writeln(
-      '- Ensure each generated note relates to the user prompt and the supplied context hierarchy.',
-    );
-    buffer.writeln(
-      '- Reference note relationships (answers, causality, related, etc.) when deciding how new notes connect.',
-    );
-    buffer.writeln(
-      '- Follow the LaTeX formatting guidance from the system message when including formulas.',
-    );
+}''';
 
     final creationAddOn = PromptConfigurationService.instance.getValue(
       NotePromptConfiguration.creationAddendumId,
     );
-    if (creationAddOn != null && creationAddOn.trim().isNotEmpty) {
-      buffer
-        ..writeln()
-        ..writeln(creationAddOn.trim());
-    }
+    final trimmedAddOn = creationAddOn?.trim();
+    final hasAddendum = trimmedAddOn != null && trimmedAddOn.isNotEmpty;
+
+    final userContent = templateService.renderSync(
+      'note_prompts/new_note_creation_user',
+      {
+        'userInstruction': userInstruction,
+        'jsonSchema': jsonSchema,
+        'hasAddendum': hasAddendum,
+        'addendum': trimmedAddOn ?? '',
+      },
+    );
 
     final userMessage = PromptMessage(
       role: PromptRole.user,
-      content: buffer.toString().trim(),
+      content: userContent.trim(),
       attachments: additionalAttachments,
     );
 

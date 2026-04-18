@@ -7,6 +7,29 @@ enum AgentTaskStatus {
   paused,
 }
 
+enum AgentTaskValidationProfile { none, wikiIngest }
+
+class AgentToolExecutionRecord {
+  final String toolName;
+  final Map<String, dynamic> args;
+  final String result;
+  final bool succeeded;
+
+  const AgentToolExecutionRecord({
+    required this.toolName,
+    required this.args,
+    required this.result,
+    required this.succeeded,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'toolName': toolName,
+    'args': args,
+    'result': result,
+    'succeeded': succeeded,
+  };
+}
+
 class AgentTask {
   final String id;
   final String description;
@@ -53,6 +76,8 @@ class AgentTask {
   List<String> executionHistory;
   int maxTurns;
   List<String> allowedTools;
+  final AgentTaskValidationProfile validationProfile;
+  List<AgentToolExecutionRecord> toolExecutionRecords;
 
   /// User-attached notes to provide context for this specific task.
   /// These notes are included only in this task's context.
@@ -90,6 +115,8 @@ class AgentTask {
     List<String>? executionHistory,
     this.maxTurns = 10,
     List<String>? allowedTools,
+    this.validationProfile = AgentTaskValidationProfile.none,
+    List<AgentToolExecutionRecord>? toolExecutionRecords,
     List<String>? contextNoteIds,
     List<String>? spawnedSubtaskIds,
     this.isManuallyPaused = false,
@@ -97,6 +124,7 @@ class AgentTask {
        toolNames = toolNames ?? [],
        executionHistory = executionHistory ?? [],
        allowedTools = allowedTools ?? [],
+       toolExecutionRecords = toolExecutionRecords ?? [],
        contextNoteIds = contextNoteIds ?? [],
        spawnedSubtaskIds = spawnedSubtaskIds ?? [];
 
@@ -126,6 +154,10 @@ class AgentTask {
     'executionHistory': executionHistory,
     'maxTurns': maxTurns,
     'allowedTools': allowedTools,
+    'validationProfile': validationProfile.name,
+    'toolExecutionRecords': toolExecutionRecords
+        .map((r) => r.toJson())
+        .toList(),
     'contextNoteIds': contextNoteIds,
     'spawnedSubtaskIds': spawnedSubtaskIds,
     'isManuallyPaused': isManuallyPaused,

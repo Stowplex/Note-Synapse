@@ -1,10 +1,21 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/annotations.dart';
+import 'package:mockito/mockito.dart';
 import 'package:note_synapse/models/conversation.dart';
 import 'package:note_synapse/models/conversation_attachment.dart';
+import 'package:note_synapse/models/mcp_endpoint.dart';
 import 'package:note_synapse/models/note.dart';
+import 'package:note_synapse/services/agent_service.dart';
 import 'package:note_synapse/services/conversation_service.dart';
 import 'package:note_synapse/services/database_service.dart';
+import 'package:note_synapse/services/mcp_service.dart';
+import 'package:note_synapse/services/service_locator.dart';
+import 'package:note_synapse/services/skill_service.dart';
+import 'package:note_synapse/services/tools/note_tools.dart';
 
+import 'conversation_service_test.mocks.dart';
+
+@GenerateMocks([DatabaseService, AgentService, SkillService, McpService])
 void main() {
   group('Conversation Service Tests', () {
     late ConversationService conversationService;
@@ -769,6 +780,94 @@ void main() {
           expect(formatted.contains('Initial context:'), isFalse);
         },
       );
+    });
+  });
+
+  group('handleLoadSkillResult', () {
+    late MockDatabaseService mockDb;
+    late MockAgentService mockAgentService;
+    late MockSkillService mockSkillService;
+    late MockMcpService mockMcpService;
+    late ConversationService svc;
+
+    setUp(() async {
+      await resetForTesting();
+      mockDb = MockDatabaseService();
+      mockAgentService = MockAgentService();
+      mockSkillService = MockSkillService();
+      mockMcpService = MockMcpService();
+      getIt.registerSingleton<DatabaseService>(mockDb);
+      getIt.registerSingleton<AgentService>(mockAgentService);
+      getIt.registerSingleton<SkillService>(mockSkillService);
+      getIt.registerSingleton<McpService>(mockMcpService);
+      // Stub methods needed by enableSkills()
+      when(mockSkillService.resetSession()).thenReturn(null);
+      when(mockSkillService.buildSkillIndex()).thenAnswer((_) async => {});
+      svc = ConversationService.createForTesting(mockDb);
+      await svc.enableSkills();
+    });
+
+    test('builtin namespace adds McpTool and native tool name; dedup on second call', () async {
+      const uri = 'notesynapse://tool/builtin/search_notes';
+      when(mockSkillService.extractToolUris(any)).thenReturn([uri]);
+      when(mockSkillService.parseToolUri(uri)).thenReturn(
+        (namespace: 'builtin', id: 'search_notes', function: null),
+      );
+      when(mockAgentService.nativeTools).thenReturn([NoteSearchTool()]);
+
+      await svc.handleLoadSkillResult('note-1', 'some skill content');
+
+      expect(svc.skillDiscoveredTools.length, equals(1));
+      expect(svc.skillDiscoveredTools.first.name, equals('search_notes'));
+      expect(svc.skillDiscoveredNativeToolNames, contains('search_notes'));
+
+      // Second call should not duplicate.
+      await svc.handleLoadSkillResult('note-1', 'some skill content');
+      expect(svc.skillDiscoveredTools.length, equals(1));
+    });
+
+    test('mcp namespace adds tools and populates skillToolEndpointNames', () async {
+      const uri = 'notesynapse://tool/mcp/my_service';
+      when(mockSkillService.extractToolUris(any)).thenReturn([uri]);
+      when(mockSkillService.parseToolUri(uri)).thenReturn(
+        (namespace: 'mcp', id: 'my_service', function: null),
+      );
+
+      final endpoint = McpEndpoint(
+        id: 'ep-1',
+        name: 'my_service',
+        baseUrl: 'http://localhost:3000',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+      final toolA = McpTool(name: 'tool_a', description: 'Tool A');
+      when(mockMcpService.getEndpoints()).thenAnswer((_) async => [endpoint]);
+      when(mockMcpService.getCachedTools('ep-1')).thenAnswer(
+        (_) async => McpToolsCache(
+          endpointId: 'ep-1',
+          tools: [toolA],
+          fetchedAt: DateTime.now(),
+        ),
+      );
+
+      await svc.handleLoadSkillResult('note-1', 'some skill content');
+
+      expect(svc.skillDiscoveredTools.length, equals(1));
+      expect(svc.skillDiscoveredTools.first.name, equals('tool_a'));
+      expect(svc.skillToolEndpointNames['tool_a'], equals('my_service'));
+    });
+
+    test('unknown namespace does not crash and adds nothing', () async {
+      const uri = 'notesynapse://tool/unknown/foo';
+      when(mockSkillService.extractToolUris(any)).thenReturn([uri]);
+      when(mockSkillService.parseToolUri(uri)).thenReturn(
+        (namespace: 'unknown', id: 'foo', function: null),
+      );
+
+      await svc.handleLoadSkillResult('note-1', 'some skill content');
+
+      expect(svc.skillDiscoveredTools, isEmpty);
+      expect(svc.skillDiscoveredNativeToolNames, isEmpty);
     });
   });
 }

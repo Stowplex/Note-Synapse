@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../widgets/note_card.dart';
+import '../widgets/tag_selection_dialog.dart';
 import '../l10n/app_localizations.dart';
 import '../services/note_selection_service.dart';
 
@@ -11,6 +12,7 @@ class NoteSelectionDialog extends StatefulWidget {
   final String? title;
   final bool singleSelection;
   final List<String> initialSelectedNoteIds;
+  final List<String>? initialTags;
 
   const NoteSelectionDialog({
     super.key,
@@ -18,6 +20,7 @@ class NoteSelectionDialog extends StatefulWidget {
     this.title,
     this.singleSelection = false,
     this.initialSelectedNoteIds = const [],
+    this.initialTags,
   });
 
   @override
@@ -30,6 +33,13 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
   String _searchQuery = '';
   final NoteSelectionService _noteSelectionService = NoteSelectionService();
   bool _initialized = false;
+  List<String> _activeTagFilters = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _activeTagFilters = List.from(widget.initialTags ?? []);
+  }
 
   @override
   void didChangeDependencies() {
@@ -88,6 +98,30 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                         color: Theme.of(context).colorScheme.onPrimary,
                       ),
                     ),
+                  ),
+                  IconButton(
+                    icon: Stack(
+                      children: [
+                        Icon(
+                          Icons.filter_list,
+                          color: Theme.of(context).colorScheme.onPrimary,
+                        ),
+                        if (_activeTagFilters.isNotEmpty)
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.tertiary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    onPressed: _showTagFilterDialog,
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
@@ -154,10 +188,19 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                   final allNotes = appProvider.notes;
 
                   // Use the service to filter and sort notes
-                  final filteredNotes = _noteSelectionService.filterNotes(
+                  var filteredNotes = _noteSelectionService.filterNotes(
                     allNotes: allNotes,
                     searchQuery: _searchQuery,
                   );
+
+                  // Apply tag filters if active
+                  if (_activeTagFilters.isNotEmpty) {
+                    filteredNotes = filteredNotes.where((note) {
+                      return _activeTagFilters.every(
+                        (tag) => note.tags.contains(tag),
+                      );
+                    }).toList();
+                  }
 
                   if (filteredNotes.isEmpty) {
                     return Center(
@@ -303,5 +346,33 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
 
   void _updateNoteContent(String noteId, String newContent) {
     context.read<AppProvider>().updateNoteContent(noteId, newContent);
+  }
+
+  void _applyFilters() {
+    setState(() {
+      // Trigger rebuild with updated _activeTagFilters
+    });
+  }
+
+  Future<void> _showTagFilterDialog() async {
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+    final selected = await showDialog<Set<String>>(
+      context: context,
+      builder: (ctx) => TagSelectionDialog(
+        title: l10n.filter,
+        initialSelectedTags: _activeTagFilters,
+        allowCreateNew: false,
+        allowEmptySelection: true,
+        showManageTagsButton: true,
+        returnAsSet: true,
+      ),
+    );
+    if (selected != null) {
+      setState(() {
+        _activeTagFilters = selected.toList();
+      });
+      _applyFilters();
+    }
   }
 }

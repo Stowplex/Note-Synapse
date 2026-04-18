@@ -51,6 +51,15 @@ class ApprovalDialog extends StatefulWidget {
 class _ApprovalDialogState extends State<ApprovalDialog> {
   bool _allowForSession = false;
 
+  bool get _isBatchModification {
+    final details = widget.request.details;
+    if (details is! Map) {
+      return false;
+    }
+    final modification = details['modification'];
+    return modification is Map && modification['isBatch'] == true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -66,7 +75,9 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
             Text(widget.request.description),
             if (widget.request.type == ApprovalType.noteModification) ...[
               const SizedBox(height: 4),
-              _buildNoteIdDisplay(colorScheme),
+              _isBatchModification
+                  ? _buildNoteIdsDisplay(colorScheme)
+                  : _buildNoteIdDisplay(colorScheme),
             ],
             if (widget.request.type == ApprovalType.noteDeletion) ...[
               const SizedBox(height: 4),

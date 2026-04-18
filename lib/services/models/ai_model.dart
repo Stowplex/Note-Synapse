@@ -2,8 +2,10 @@ import 'package:file_picker/file_picker.dart';
 
 import '../prompts/prompt_models.dart';
 import '../prompts/system_prompt_builder.dart';
+import '../mcp_tool_integration_service.dart';
 import '../../models/model_config.dart';
 import '../../models/generation_context.dart';
+import '../../models/mcp_endpoint.dart';
 
 /// Base interface for AI models
 abstract class AIModel {
@@ -21,6 +23,9 @@ abstract class AIModel {
 
   /// Initialize the model
   Future<void> initialize({ModelConfig? config});
+
+  /// Dispose of model resources (e.g. close local runtimes)
+  Future<void> dispose();
 
   /// High-level prompt execution entry point.
   Future<String> generateFromPrompt(
@@ -140,6 +145,36 @@ abstract class AIModel {
     GenerationContext? generationContext,
   }) {
     throw UnimplementedError('generateWithToolsAndMessages must be implemented.');
+  }
+
+  /// Whether this model receives tool descriptions via native declarations
+  /// (true) or needs them in the system prompt text (false).
+  ///
+  /// When true, the text-based tool catalog (buildMcpSystemPrompt) should be
+  /// skipped from the system prompt to avoid redundancy and save tokens.
+  /// Tool declarations are delivered via [buildToolDeclarations] instead.
+  bool get usesNativeToolDeclarations => false;
+
+  /// Whether this model supports streaming text generation.
+  bool get supportsStreaming => false;
+
+  /// Build function declarations for tool calling.
+  ///
+  /// Each model type defines its own strategy. Default: single `call_tool`
+  /// wrapper in Gemini format. Local models override to return individual
+  /// per-tool declarations (matching Google Gallery's pattern).
+  ///
+  /// Tool description routing:
+  /// - Cloud models: text catalog in system prompt + call_tool wrapper
+  /// - Local models: native per-tool declarations only (no text catalog)
+  /// - Mid-conversation: [buildToolDiscoveryMessage] for new tools
+  List<Map<String, dynamic>> buildToolDeclarations(
+    Map<String, List<McpTool>> toolsByEndpoint,
+  ) {
+    if (toolsByEndpoint.isEmpty) return [];
+    return [
+      McpToolIntegrationService.getCallToolFunctionForGemini(toolsByEndpoint),
+    ];
   }
 
   /// Common utility methods for all AI models

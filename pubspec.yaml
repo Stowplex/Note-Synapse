@@ -50,8 +50,9 @@ dependencies:
     path: third_party/rhttp/rhttp
   crypto: ^3.0.3
 
-  # Local AI inference
-  flutter_gemma: 0.13.0
+  # Local AI inference (forked — multi-image + CPU vision backend fix)
+  flutter_gemma:
+    path: third_party/flutter_gemma
 
   # Image handling
   image: ^4.2.0
@@ -167,6 +168,7 @@ dependencies:
   phosphor_flutter: ^2.1.0
   json_repair_flutter: ^2.0.2
   package_info_plus: ^9.0.0
+  mustache_template: ^2.0.0
 
 
 dev_dependencies:
@@ -220,6 +222,13 @@ flutter:
     - assets/starter/
     - assets/starter/apps/
     - assets/tag_images/
+    - assets/prompts/guidelines/
+    - assets/prompts/ai_prompts/
+    - assets/prompts/note_prompts/
+    - assets/prompts/system_prompt/
+    - assets/prompts/skills/
+    - assets/prompts/user_app/
+    - assets/prompts/mcp/
 
   # Internationalization
   generate: true

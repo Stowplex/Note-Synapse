@@ -107,6 +107,7 @@ void main() {
       expect(toolIds, contains('run_sql'));
       expect(toolIds, contains('ls'));
       expect(toolIds, contains('modify_note'));
+      expect(toolIds, contains('modify_notes'));
       expect(toolIds, contains('create_notes'));
       expect(toolIds, contains('delete_notes'));
     });
@@ -172,6 +173,7 @@ void main() {
         'run_sql',
         'ls',
         'modify_note',
+        'modify_notes',
         'create_notes',
         'delete_notes',
       ];

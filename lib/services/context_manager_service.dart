@@ -1,5 +1,6 @@
 import '../models/context_node.dart';
 import '../models/task_result_storage.dart';
+import '../utils/token_estimator.dart';
 import 'ai_service.dart';
 import 'agentic_settings_service.dart';
 import 'logger_service.dart';
@@ -35,6 +36,8 @@ class DependencyInfo {
 /// Handles context tree lifecycle, scoped context building, token budget
 /// management, and automatic summarization when limits are approached.
 class ContextManagerService {
+  static const double _maxPinnedSkillsRatio = 0.3;
+
   final ModelSelector _modelSelector;
   final AIService _aiService;
 
@@ -156,6 +159,25 @@ class ContextManagerService {
     buffer.writeln('</GlobalObjective>');
     buffer.writeln();
 
+    // Add one-time workflow execution context (never repeated in children)
+    if (root.executionContext != null) {
+      buffer.writeln('<WorkflowContext>');
+      buffer.writeln(root.executionContext);
+      buffer.writeln('</WorkflowContext>');
+      buffer.writeln();
+    }
+
+    // Add pinned skills (never compacted)
+    if (root.loadedSkills.isNotEmpty) {
+      buffer.writeln('<LoadedSkills note="These skill workflows guide your approach. Follow them.">');
+      for (final skill in root.loadedSkills) {
+        buffer.writeln(skill.content);
+        buffer.writeln();
+      }
+      buffer.writeln('</LoadedSkills>');
+      buffer.writeln();
+    }
+
     // Add ancestor context (TOC-based for lazy loading)
     final ancestors = _getAncestors(node);
     if (ancestors.isNotEmpty) {
@@ -215,7 +237,7 @@ class ContextManagerService {
           if (sr.isShortSync(threshold: tocThreshold)) {
             // Short results: brief summary inline
             buffer.writeln(
-              '<Result type="summary">${sr.fullResult.length > 200 ? sr.fullResult.substring(0, 200) + "..." : sr.fullResult}</Result>',
+              '<Result type="summary">${sr.fullResult.length > 200 ? '${sr.fullResult.substring(0, 200)}...' : sr.fullResult}</Result>',
             );
           } else {
             // Long results: TOC only
@@ -339,6 +361,18 @@ class ContextManagerService {
     List<DependencyInfo> structuredDependencies = const [],
   }) {
     final buffer = StringBuffer();
+
+    // Add pinned skills (never compacted)
+    final root = _getRoot(node);
+    if (root.loadedSkills.isNotEmpty) {
+      buffer.writeln('<LoadedSkills note="These skill workflows guide your approach. Follow them.">');
+      for (final skill in root.loadedSkills) {
+        buffer.writeln(skill.content);
+        buffer.writeln();
+      }
+      buffer.writeln('</LoadedSkills>');
+      buffer.writeln();
+    }
 
     // Use structured dependencies if available (TOC-based rendering)
     if (structuredDependencies.isNotEmpty) {
@@ -634,6 +668,34 @@ If this is research/analysis, output structured findings.
     }
 
     return node.summary!;
+  }
+
+  /// Add a loaded skill to the root context node (session-scoped, deduplicated).
+  ///
+  /// If adding the full skill content would cause pinned skills to exceed 30% of
+  /// [ContextNode.maxContextTokens], a one-line summary is stored instead.
+  void addLoadedSkill(String noteId, String content) {
+    final root = rootContext;
+    if (root == null) return;
+    // Deduplicate by noteId
+    if (root.loadedSkills.any((s) => s.noteId == noteId)) return;
+
+    final maxPinnedTokens = (root.maxContextTokens * _maxPinnedSkillsRatio).toInt();
+    final currentPinnedTokens = root.loadedSkills.fold<int>(
+        0, (sum, s) => sum + TokenEstimator.estimateTokens(s.content));
+    final newTokens = TokenEstimator.estimateTokens(content);
+
+    if (currentPinnedTokens + newTokens > maxPinnedTokens) {
+      final firstLine = content.split('\n').firstWhere(
+        (l) => l.trim().isNotEmpty, orElse: () => 'Skill');
+      root.loadedSkills.add(LoadedSkill(
+        noteId: noteId,
+        content: 'Skill loaded but summarized due to context constraints. '
+            'Key: $firstLine. Unload a skill or use a higher-context model for full content.',
+      ));
+    } else {
+      root.loadedSkills.add(LoadedSkill(noteId: noteId, content: content));
+    }
   }
 
   /// Marks a context as failed with an error message.

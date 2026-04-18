@@ -6,10 +6,14 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:image/image.dart' as img;
 import 'package:mime/mime.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdfrx/pdfrx.dart';
 
 import '../models/model_capabilities.dart';
 import '../models/model_config.dart';
+import '../models/model_type.dart';
 import '../services/logger_service.dart';
+import '../services/pdf_thumbnail_service.dart';
 import '../services/svg_renderer_service.dart';
 import '../utils/file_type_utils.dart';
 import 'prompts/prompt_models.dart';
@@ -58,8 +62,19 @@ class MessageSanitizationOutcome {
   final List<UnsupportedAttachmentLogEntry> ignored;
 }
 
+class AttachmentProcessingOutcome {
+  const AttachmentProcessingOutcome({required this.attachments, this.ignored});
+
+  final List<PlatformFile> attachments;
+  final UnsupportedAttachmentLogEntry? ignored;
+}
+
 /// Normalizes attachments before they are sent to model adapters.
 class AttachmentPreprocessor {
+  static final PdfThumbnailService _pdfThumbnailService = PdfThumbnailService(
+    maxCacheSize: 128,
+  );
+
   /// Detect required capabilities from attachments.
   /// Returns set of capability hints: 'images', 'video', 'documents', 'audio'.
   static Future<Set<String>> detectRequiredCapabilities(
@@ -109,12 +124,12 @@ class AttachmentPreprocessor {
         allowedMimeSet: allowedMimeSet,
         enforceMimeSet: enforceMimeSet,
         capabilities: capabilities,
+        config: config,
       );
 
-      if (result.$1 != null) {
-        sanitized.add(result.$1!);
-      } else if (result.$2 != null) {
-        ignored.add(result.$2!);
+      sanitized.addAll(result.attachments);
+      if (result.ignored != null) {
+        ignored.add(result.ignored!);
       }
     }
 
@@ -181,26 +196,26 @@ class AttachmentPreprocessor {
     };
   }
 
-  static Future<(PlatformFile?, UnsupportedAttachmentLogEntry?)>
-  _processSingleAttachment(
+  static Future<AttachmentProcessingOutcome> _processSingleAttachment(
     PlatformFile file, {
     required Set<String> allowedMimeSet,
     required bool enforceMimeSet,
     required ModelCapabilities? capabilities,
+    required ModelConfig? config,
   }) async {
     // Check if it's a URI attachment - bypass filtering
     if (file.path != null &&
         (file.path!.startsWith('http://') ||
             file.path!.startsWith('https://') ||
             file.path!.startsWith('gs://'))) {
-      return (file, null);
+      return AttachmentProcessingOutcome(attachments: [file]);
     }
 
     final bytes = await _readBytes(file);
     if (bytes == null || bytes.isEmpty) {
-      return (
-        null,
-        _buildIgnoredEntry(
+      return AttachmentProcessingOutcome(
+        attachments: const [],
+        ignored: _buildIgnoredEntry(
           file,
           mimeType: 'unknown',
           reason: 'unreadable',
@@ -240,12 +255,18 @@ class AttachmentPreprocessor {
 
     if (currentMime == 'image/svg+xml') {
       if (!isMimeAllowed('image/png')) {
-        return (null, await reject('svg not convertible to allowed mime'));
+        return AttachmentProcessingOutcome(
+          attachments: const [],
+          ignored: await reject('svg not convertible to allowed mime'),
+        );
       }
 
       final svgContent = _decodeSvgContent(processedBytes);
       if (svgContent == null) {
-        return (null, await reject('svg decode failed'));
+        return AttachmentProcessingOutcome(
+          attachments: const [],
+          ignored: await reject('svg decode failed'),
+        );
       }
 
       final pngBytes = await SvgRendererService.renderSvgToPng(
@@ -255,7 +276,10 @@ class AttachmentPreprocessor {
       );
 
       if (pngBytes == null) {
-        return (null, await reject('svg conversion failed'));
+        return AttachmentProcessingOutcome(
+          attachments: const [],
+          ignored: await reject('svg conversion failed'),
+        );
       }
 
       processedBytes = pngBytes;
@@ -264,26 +288,71 @@ class AttachmentPreprocessor {
       pathToKeep = null;
     } else if (currentMime == 'image/gif') {
       if (!isMimeAllowed('image/jpeg')) {
-        return (null, await reject('gif not supported'));
+        return AttachmentProcessingOutcome(
+          attachments: const [],
+          ignored: await reject('gif not supported'),
+        );
       }
 
       final decoded = img.decodeImage(processedBytes);
       if (decoded == null) {
-        return (null, await reject('gif decode failed'));
+        return AttachmentProcessingOutcome(
+          attachments: const [],
+          ignored: await reject('gif decode failed'),
+        );
       }
 
       processedBytes = Uint8List.fromList(img.encodeJpg(decoded, quality: 90));
       currentMime = 'image/jpeg';
       processedName = _replaceExtension(processedName, 'jpg');
       pathToKeep = null;
+    } else if (_shouldConvertImageForGemma(currentMime, config)) {
+      if (!isMimeAllowed('image/png')) {
+        return AttachmentProcessingOutcome(
+          attachments: const [],
+          ignored: await reject('image not convertible to allowed mime'),
+        );
+      }
+
+      final decoded = img.decodeImage(processedBytes);
+      if (decoded == null) {
+        return AttachmentProcessingOutcome(
+          attachments: const [],
+          ignored: await reject('image decode failed'),
+        );
+      }
+
+      processedBytes = Uint8List.fromList(img.encodePng(decoded));
+      currentMime = 'image/png';
+      processedName = _replaceExtension(processedName, 'png');
+      pathToKeep = null;
+    } else if (_shouldRenderPdfForGemma(currentMime, config)) {
+      final renderedPages = await _renderPdfForGemma(
+        file,
+        processedName,
+        bytes,
+      );
+      if (renderedPages == null || renderedPages.isEmpty) {
+        return AttachmentProcessingOutcome(
+          attachments: const [],
+          ignored: await reject('pdf render failed'),
+        );
+      }
+      return AttachmentProcessingOutcome(attachments: renderedPages);
     }
 
     if (!_isCapabilityAllowed(currentMime, capabilities)) {
-      return (null, await reject('capability disabled'));
+      return AttachmentProcessingOutcome(
+        attachments: const [],
+        ignored: await reject('capability disabled'),
+      );
     }
 
     if (!isMimeAllowed(currentMime)) {
-      return (null, await reject('mime not supported'));
+      return AttachmentProcessingOutcome(
+        attachments: const [],
+        ignored: await reject('mime not supported'),
+      );
     }
 
     final sanitized = PlatformFile(
@@ -293,7 +362,91 @@ class AttachmentPreprocessor {
       path: pathToKeep,
     );
 
-    return (sanitized, null);
+    return AttachmentProcessingOutcome(attachments: [sanitized]);
+  }
+
+  static bool _isGemmaLocalModel(ModelConfig? config) {
+    return config?.type == ModelType.localMnn &&
+        config?.modelName == 'gemma4_e2b';
+  }
+
+  static bool _shouldConvertImageForGemma(String mime, ModelConfig? config) {
+    if (!_isGemmaLocalModel(config) || !mime.startsWith('image/')) {
+      return false;
+    }
+    return mime != 'image/png' && mime != 'image/jpeg';
+  }
+
+  static bool _shouldRenderPdfForGemma(String mime, ModelConfig? config) {
+    return _isGemmaLocalModel(config) && mime == 'application/pdf';
+  }
+
+  static Future<List<PlatformFile>?> _renderPdfForGemma(
+    PlatformFile file,
+    String processedName,
+    Uint8List bytes,
+  ) async {
+    final pdfPath = await _ensurePdfPath(file, bytes);
+    if (pdfPath == null) return null;
+
+    try {
+      Pdfrx.getCacheDirectory ??= () async {
+        final tempDir = await getTemporaryDirectory();
+        return tempDir.path;
+      };
+
+      final document = await PdfDocument.openFile(pdfPath);
+      try {
+        final rendered = <PlatformFile>[];
+        final baseName = _stripExtension(processedName);
+
+        for (int page = 0; page < document.pages.length; page++) {
+          final pngBytes = await _pdfThumbnailService.renderPage(
+            pdfPath: pdfPath,
+            page: page,
+            width: 1024,
+          );
+          if (pngBytes == null || pngBytes.isEmpty) {
+            return null;
+          }
+
+          rendered.add(
+            PlatformFile(
+              name: '${baseName}_page_${page + 1}.png',
+              bytes: pngBytes,
+              size: pngBytes.length,
+              path: null,
+            ),
+          );
+        }
+
+        return rendered;
+      } finally {
+        document.dispose();
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<String?> _ensurePdfPath(
+    PlatformFile file,
+    Uint8List bytes,
+  ) async {
+    if (file.path != null && file.path!.isNotEmpty) {
+      return file.path;
+    }
+
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File(
+        '${tempDir.path}/${DateTime.now().microsecondsSinceEpoch}_${file.name}',
+      );
+      await tempFile.writeAsBytes(bytes, flush: true);
+      return tempFile.path;
+    } catch (_) {
+      return null;
+    }
   }
 
   static UnsupportedAttachmentLogEntry _buildIgnoredEntry(
@@ -389,5 +542,14 @@ class AttachmentPreprocessor {
     }
     segments.removeLast();
     return '${segments.join('.')}.${newExt}';
+  }
+
+  static String _stripExtension(String fileName) {
+    final segments = fileName.split('.');
+    if (segments.length <= 1) {
+      return fileName;
+    }
+    segments.removeLast();
+    return segments.join('.');
   }
 }

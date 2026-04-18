@@ -4,11 +4,13 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'ai_model.dart';
 import '../attachment_preprocessor.dart';
+import '../mcp_tool_integration_service.dart';
 import '../model_storage_service.dart';
 import '../service_locator.dart';
 import '../logger_service.dart';
 import '../prompts/prompt_models.dart';
 import '../network_provider.dart';
+import '../../models/mcp_endpoint.dart';
 import '../../models/model_type.dart';
 import '../../models/model_config.dart';
 import '../../utils/file_type_utils.dart';
@@ -28,6 +30,12 @@ class OpenAIModel implements AIModel {
   @override
   String get description =>
       'OpenAI compatible API endpoint with configurable capabilities';
+
+  @override
+  bool get usesNativeToolDeclarations => false;
+
+  @override
+  bool get supportsStreaming => false;
 
   @override
   Future<bool> isReady() async {
@@ -156,6 +164,11 @@ class OpenAIModel implements AIModel {
   }
 
   @override
+  Future<void> dispose() async {
+    // No local resources to dispose for cloud model
+  }
+
+  @override
   Future<String> generateWithMessages(
     List<PromptMessage> messages, {
     double? temperature,
@@ -252,6 +265,16 @@ class OpenAIModel implements AIModel {
 
       return await _makeOpenAiRequestWithTools(requestBody, actualRequestId);
     }, requestId: actualRequestId);
+  }
+
+  @override
+  List<Map<String, dynamic>> buildToolDeclarations(
+    Map<String, List<McpTool>> toolsByEndpoint,
+  ) {
+    if (toolsByEndpoint.isEmpty) return [];
+    return [
+      McpToolIntegrationService.getCallToolFunctionForOpenAI(toolsByEndpoint),
+    ];
   }
 
   @override

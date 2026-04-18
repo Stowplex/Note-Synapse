@@ -2,20 +2,31 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import '../models/note.dart';
 import '../models/tag.dart';
-import '../models/attachment.dart';
 import '../utils/file_utils.dart';
 import '../services/database_service.dart';
 import '../services/ai_service.dart';
 import '../services/logger_service.dart';
 import '../providers/app_provider.dart';
-import 'dart:convert';
+import 'agent_service.dart';
 import 'note_modification_service.dart';
 import 'service_locator.dart';
+import 'tag_workflow_service.dart';
 
 import 'package:json_repair_flutter/json_repair_flutter.dart';
 
+import '../widgets/local_model_workflow_warning_dialog.dart';
+
 class ContentIngestionService {
   final DatabaseService _databaseService;
+
+  /// Registered by [WorkflowShell] to show the local model warning dialog.
+  /// Mirrors the [ApprovalService.fallbackApprovalRequest] pattern.
+  /// When unset, the gate is bypassed and workflows run without prompting.
+  static Future<LocalModelWorkflowApproval> Function()? onLocalModelApprovalRequired;
+
+  /// Session flag — set to true when user picks "don't warn this session".
+  /// Resets when a new [ContentIngestionService] instance is created (app restart).
+  bool _suppressLocalModelWarning = false;
 
   /// Creates a ContentIngestionService.
   ///
@@ -32,6 +43,41 @@ class ContentIngestionService {
   }) async {
     // Basic validation first
     if (note.tags.isEmpty) return;
+
+    final tagWorkflow = getIt<TagWorkflowService>();
+    final agentService = getIt<AgentService>();
+    List<ResolvedBinding> workflowBindings = const [];
+
+    try {
+      workflowBindings = await tagWorkflow.resolveBindings(note.tags);
+    } catch (e) {
+      LoggerService.error('Error resolving tag workflow bindings: $e');
+      onError?.call('Failed to resolve workflow bindings: $e');
+      return;
+    }
+
+    if (workflowBindings.isNotEmpty) {
+      final supportsOrchestration = appProvider.modelConfig
+              ?.customCapabilitiesObject?.supportsToolOrchestration ??
+          true;
+
+      if (!supportsOrchestration &&
+          !_suppressLocalModelWarning &&
+          onLocalModelApprovalRequired != null) {
+        final approval = await onLocalModelApprovalRequired!();
+        if (approval == LocalModelWorkflowApproval.cancel) {
+          workflowBindings = const [];
+        } else if (approval == LocalModelWorkflowApproval.proceedAndSuppress) {
+          _suppressLocalModelWarning = true;
+        }
+        // LocalModelWorkflowApproval.proceed falls through.
+      }
+
+      for (final binding in workflowBindings) {
+        onMessage?.call('Starting workflow for tag "${binding.matchedTag}"...');
+        await agentService.runWorkflowTask(binding: binding, note: note);
+      }
+    }
 
     // Check availability of AI prompts for tags
     String? extractionPrompt;
@@ -60,7 +106,12 @@ class ContentIngestionService {
       return;
     }
 
-    if (extractionPrompt == null) return;
+    if (extractionPrompt == null) {
+      if (workflowBindings.isNotEmpty) {
+        onSuccess?.call();
+      }
+      return;
+    }
 
     // Show feedback
     onMessage?.call('Processing attachments with AI... Keep app open.');
@@ -72,7 +123,11 @@ class ContentIngestionService {
       );
 
       if (noteAttachments.isEmpty) {
-        onError?.call('No attachments found on this note.');
+        if (workflowBindings.isNotEmpty) {
+          onSuccess?.call();
+        } else {
+          onError?.call('No attachments found on this note.');
+        }
         return;
       }
 
@@ -112,9 +167,13 @@ class ContentIngestionService {
 
       // 3. Validate we actually have files to send
       if (attachedFiles.isEmpty) {
-        onError?.call(
-          'Could not load any valid attachments for AI processing.',
-        );
+        if (workflowBindings.isNotEmpty) {
+          onSuccess?.call();
+        } else {
+          onError?.call(
+            'Could not load any valid attachments for AI processing.',
+          );
+        }
         return;
       }
 
@@ -167,11 +226,28 @@ Content: ${note.content}
           // Enforce restriction: Attachment modification not allowed in this context
           json.remove('attachments');
 
-          final service = getIt<NoteModificationService>();
-          // applyModifications writes to DB
-          final updatedNote = await service.applyModifications(note.id, json);
-          // Update AppProvider to reflect changes in UI (redundant DB write but safe)
-          await appProvider.updateNote(updatedNote);
+          final modService = getIt<NoteModificationService>();
+          if (await tagWorkflow.hasImmutableBinding(note.tags)) {
+            // Source note is immutable — redirect to new note
+            final newNoteData = <String, dynamic>{
+              'title': 'Extracted: ${note.title}',
+              'content':
+                  (json['content'] as Map<String, dynamic>?)?['text'] ?? '',
+              'link': [
+                {'relation': 'derived_from', 'target': note.id},
+              ],
+            };
+            final newNote = await modService.createNote(newNoteData);
+            await appProvider.addNote(newNote);
+          } else {
+            // applyModifications writes to DB
+            final updatedNote = await modService.applyModifications(
+              note.id,
+              json,
+            );
+            // Update AppProvider to reflect changes in UI (redundant DB write but safe)
+            await appProvider.updateNote(updatedNote);
+          }
         } else {
           throw const FormatException();
         }

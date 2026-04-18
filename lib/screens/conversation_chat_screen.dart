@@ -19,6 +19,7 @@ import '../services/conversation_service.dart';
 import '../services/model_selector.dart';
 import '../services/service_locator.dart';
 import '../services/attachment_preprocessor.dart';
+import '../services/local_model_attachment_constraint_service.dart';
 import '../services/logger_service.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/mcp_service.dart';
@@ -53,11 +54,14 @@ import '../widgets/model_selector_button.dart';
 import '../services/agent_service.dart';
 import '../services/background_agent_service.dart';
 import '../services/built_in_tools_service.dart';
+import '../services/context_manager_service.dart';
+import '../services/skill_service.dart';
 import '../services/tools/note_tools.dart';
 import '../services/sql_query_service.dart';
 import '../widgets/agent_plan_review_widget.dart';
 import '../widgets/agent_task_tree_widget.dart';
 import '../widgets/attachment_preview_tile.dart';
+import '../widgets/local_model_attachment_warning_dialog.dart';
 import '../widgets/tool_orchestration_warning_dialog.dart';
 
 class ConversationChatScreen extends StatefulWidget {
@@ -65,6 +69,7 @@ class ConversationChatScreen extends StatefulWidget {
   final List<String>? initialNoteIds;
   final ModelConfig? initialModelOverride;
   final String? initialMessageId;
+  final bool skillsEnabled;
 
   const ConversationChatScreen({
     super.key,
@@ -72,6 +77,7 @@ class ConversationChatScreen extends StatefulWidget {
     this.initialNoteIds,
     this.initialModelOverride,
     this.initialMessageId,
+    this.skillsEnabled = true,
   });
 
   @override
@@ -125,6 +131,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   // System Tools (native tools from AgentService)
   final Set<String> _selectedSystemTools = {};
 
+  // Agent Skills
+  bool _skillsEnabled = false;
+  int _skillCount = 0;
+  bool? _lastOrchestrationSupport; // tracks model's capability to detect changes
+
   bool _hasInitialized = false;
   bool _waitingForAgentResult = false;
   AgentService? _agentService;
@@ -134,6 +145,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _selectedModel = widget.initialModelOverride;
+    // Skills start disabled; _initSkillsWithModelCheck runs after first frame
+    // when BuildContext is available to read the active model's capabilities.
+    _skillsEnabled = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initSkillsWithModelCheck());
     _loadMcpEndpoints();
     _loadIterationPreference();
     _setupSqlWriteApprovalCallback();
@@ -145,7 +160,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   void _setupSqlWriteApprovalCallback() {
     // Register unified approval callback
     ApprovalService.onApprovalRequest = (request) async {
-      if (!mounted) return ApprovalResult(approved: false);
+      if (!mounted) {
+        throw StateError('Conversation screen is not mounted');
+      }
       return await ApprovalDialog.showWithContext(context, request);
     };
 
@@ -162,6 +179,28 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       );
       return result;
     };
+  }
+
+  void _initSkillsWithModelCheck() {
+    if (!mounted) return;
+    final modelConfig = _selectedModel ?? context.read<AppProvider>().modelConfig;
+    final supportsOrchestration =
+        modelConfig?.customCapabilitiesObject?.supportsToolOrchestration ?? true;
+    _lastOrchestrationSupport = supportsOrchestration;
+    final enable = widget.skillsEnabled && supportsOrchestration;
+    if (enable) {
+      setState(() => _skillsEnabled = true);
+      _conversationService.enableSkills().then((_) {
+        if (mounted) {
+          setState(() => _skillCount = _conversationService.skillIndex.length);
+        }
+      });
+    } else {
+      _conversationService.disableSkills();
+      getIt<SkillService>().buildSkillIndex().then((index) {
+        if (mounted) setState(() => _skillCount = index.length);
+      });
+    }
   }
 
   @override
@@ -222,6 +261,15 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       // Refresh model features when model config changes
       _loadModelFeatures();
     }
+
+    // Re-evaluate skills if the active model's orchestration capability changed.
+    final modelConfig = context.read<AppProvider>().modelConfig;
+    final nowSupports =
+        modelConfig?.customCapabilitiesObject?.supportsToolOrchestration ?? true;
+    if (_lastOrchestrationSupport != null && _lastOrchestrationSupport != nowSupports) {
+      _initSkillsWithModelCheck();
+    }
+    _lastOrchestrationSupport = nowSupports;
   }
 
   Future<void> _initializeConversation() async {
@@ -551,8 +599,30 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       }
     }
 
+    // Add Skill tools when skills are enabled
+    if (_conversationService.skillsEnabled) {
+      final skillTools = <McpTool>[];
+      final loadSkillTool = _conversationService.loadSkillTool;
+      skillTools.add(
+        McpTool(
+          name: loadSkillTool.name,
+          description: loadSkillTool.description,
+          inputSchema: loadSkillTool.inputSchema,
+        ),
+      );
+      for (final t in _conversationService.skillDiscoveredTools) {
+        if (!skillTools.any((s) => s.name == t.name)) {
+          skillTools.add(t);
+        }
+      }
+      combined[_skillToolsServiceKey] = skillTools;
+    }
+
     return combined;
   }
+
+  /// Service key used to route skill tool calls in the executeTool callback.
+  static const String _skillToolsServiceKey = 'SkillTools';
 
   Future<int?> _handleIterationsExhausted(int exhaustedLimit) async {
     if (!mounted) return null;
@@ -790,6 +860,28 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     return runtime;
   }
 
+  /// Gets or creates an [AiToolRuntime] for a skill-discovered user_defined tool.
+  ///
+  /// Unlike [_getAiToolRuntime], this uses the provided [bundle] directly rather
+  /// than looking it up from [_aiToolBundles].
+  Future<AiToolRuntime> _getSkillAiToolRuntime(
+    String serviceName,
+    AiToolAppBundle bundle,
+  ) async {
+    final existing = _aiToolRuntimes[serviceName];
+    if (existing != null) {
+      return existing;
+    }
+    final runtime = AiToolRuntime(
+      bundle: bundle,
+      appProvider: context.read<AppProvider>(),
+      onModificationRequest: _handleModificationRequest,
+      onSqlWriteApprovalRequest: _handleSqlWriteApprovalRequest,
+    );
+    _aiToolRuntimes[serviceName] = runtime;
+    return runtime;
+  }
+
   /// Handle note modification approval requests from AI tools.
   Future<bool> _handleModificationRequest(
     dynamic source,
@@ -827,19 +919,44 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     // Capture ScaffoldMessenger and Navigator before any async operations
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
+    final content = _messageController.text;
+    final attachments = List<PlatformFile>.from(_attachedFiles);
+
+    final activeConfig =
+        _selectedModel ?? context.read<AppProvider>().modelConfig;
+    final localAttachmentWarning =
+        await LocalModelAttachmentConstraintService.analyzeForGemma4(
+          config: activeConfig,
+          prompt: content,
+          attachments: attachments,
+        );
+    if (!mounted) return;
+    if (localAttachmentWarning != null) {
+      final result = await LocalModelAttachmentWarningDialog.show(
+        context,
+        currentModel: activeConfig,
+        warning: localAttachmentWarning,
+      );
+      if (!mounted) return;
+      if (result == null || result is LocalModelAttachmentWarningStop) return;
+      if (result is LocalModelAttachmentWarningContinue &&
+          result.modelOverride != null) {
+        _selectedModel = result.modelOverride;
+      }
+    }
 
     // Check tool orchestration capability before sending
     final hasTools =
         _selectedBuiltInTools.isNotEmpty || _selectedMcpEndpointIds.isNotEmpty;
-    final activeConfig =
+    final toolCheckConfig =
         _selectedModel ?? context.read<AppProvider>().modelConfig;
     final supportsOrchestration =
-        activeConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
+        toolCheckConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
         true;
     if (hasTools && !supportsOrchestration) {
       final result = await ToolOrchestrationWarningDialog.show(
         context,
-        activeConfig,
+        toolCheckConfig,
       );
       if (!mounted) return;
       if (result == null || result is ToolOrchestrationStop) return;
@@ -848,8 +965,6 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       }
     }
 
-    final content = _messageController.text;
-    final attachments = List<PlatformFile>.from(_attachedFiles);
     String? requestId;
     GenerationContext? generationContext;
     _messageController.clear();
@@ -1177,6 +1292,7 @@ $historyBuffer
       final aiResponse = await _aiEngine.generate(
         request: request,
         activeTools: _buildActiveToolsMap(),
+        activeToolsProvider: _buildActiveToolsMap,
         enableTools: _hasAnyTools || _selectedModelFeatures.isNotEmpty,
         executeTool: (serviceName, toolName, params, context) async {
           return _runWithToolStatus(serviceName, toolName, () async {
@@ -1197,6 +1313,69 @@ $historyBuffer
                 return result is String ? result : result.toString();
               }
               return 'Error: System tool "$toolName" not found';
+            }
+
+            // Handle Skill Tools (load_skill + skill-discovered tools)
+            if (serviceName == _skillToolsServiceKey) {
+              if (toolName == 'load_skill') {
+                final result = await _conversationService.loadSkillTool.execute(
+                  params,
+                );
+                final resultStr = result is String ? result : result.toString();
+                final skillKey =
+                    (params['noteId'] as String? ?? '').trim().isNotEmpty
+                    ? (params['noteId'] as String).trim()
+                    : (params['skillRef'] as String? ?? '').trim();
+                if (skillKey.isNotEmpty && result is String) {
+                  await _conversationService.handleLoadSkillResult(
+                    skillKey,
+                    resultStr,
+                  );
+                }
+                return resultStr;
+              }
+              // Skill-discovered native (builtin) tool — route to native execution
+              if (_conversationService.skillDiscoveredNativeToolNames.contains(
+                toolName,
+              )) {
+                final agentService = this.context.read<AgentService>();
+                final nativeTool = agentService.nativeTools
+                    .where((t) => t.name == toolName)
+                    .firstOrNull;
+                if (nativeTool != null) {
+                  final result = await nativeTool.execute(params);
+                  return result is String ? result : result.toString();
+                }
+                return 'Error: Native tool "$toolName" not found';
+              }
+              // Skill-discovered user_defined tool — route via AI tool bundle
+              for (final entry
+                  in _conversationService.skillDiscoveredBundles.entries) {
+                if (entry.value.toolDefinitions.any(
+                  (d) => d.toolName == toolName,
+                )) {
+                  final runtime = await _getSkillAiToolRuntime(
+                    entry.key,
+                    entry.value,
+                  );
+                  return runtime.invoke(toolName, params, context);
+                }
+              }
+              // Skill-discovered MCP tool — use the real endpoint name
+              final endpointName =
+                  _conversationService.skillToolEndpointNames[toolName];
+              final endpointId =
+                  _conversationService.skillToolEndpointIds[toolName];
+              if (endpointName != null && endpointId != null) {
+                return McpToolIntegrationService.executeToolCall(
+                  serviceName: endpointName,
+                  toolName: toolName,
+                  parameters: params,
+                  enabledEndpointIds: [..._selectedMcpEndpointIds, endpointId],
+                  generationContext: context,
+                );
+              }
+              return 'Error: Skill tool "$toolName" not found';
             }
 
             // Handle MCP Tools
@@ -1240,7 +1419,6 @@ $historyBuffer
     List<PlatformFile> latestUserAttachments,
   ) async {
     final noteBuilder = NotePromptBuilder(DatabaseService());
-    final systemMessage = _buildConversationSystemMessage();
     final contextMessage = await noteBuilder.buildContextMessage(_notes);
 
     final currentModelId =
@@ -1259,6 +1437,10 @@ $historyBuffer
             contextMessage.attachments.isEmpty)
         ? <PromptMessage>[]
         : [contextMessage];
+    final systemMessage = await _buildConversationSystemMessage(
+      hasInlineContext:
+          contextMessages.isNotEmpty || latestUserAttachments.isNotEmpty,
+    );
 
     return PromptRequest(
       systemMessage: systemMessage,
@@ -1267,7 +1449,9 @@ $historyBuffer
     );
   }
 
-  PromptMessage _buildConversationSystemMessage() {
+  Future<PromptMessage> _buildConversationSystemMessage({
+    required bool hasInlineContext,
+  }) async {
     final lines = <String>[
       'Engage in a multi-turn conversation grounded in the provided note context message and attachments.',
       'Treat all prior messages as immutable history for KV-cache friendly reuse.',
@@ -1284,14 +1468,24 @@ $historyBuffer
 
     if (_notes.isEmpty) {
       lines.add(
-        'No note context is currently attached. Rely on the conversation history.',
+        'No note context is currently attached. '
+        'Rely on the conversation history and your own knowledge.',
       );
+      if (_hasAnyTools) {
+        lines.add(
+          'Tools are available if you need to look up notes or execute actions.',
+        );
+      }
     }
 
+    final budget = await _getChatPromptBudget();
     final combinedTools = _buildActiveToolsMap();
-    final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
-      combinedTools,
-    );
+
+    // Models with native tool declarations (e.g. local Gemma) receive tool
+    // schemas directly, so the text-based tool catalog is redundant and
+    // wastes token budget.
+    final currentModel = getIt<ModelSelector>().currentModel;
+    final isLocalModel = currentModel?.usesNativeToolDeclarations ?? false;
 
     final taskContext = lines.join('\n');
     final systemAddOn = PromptConfigurationService.instance.getValue(
@@ -1304,10 +1498,31 @@ $historyBuffer
         ..writeln('User-defined conversation guidance:')
         ..writeln(systemAddOn.trim());
     }
-    if (mcpToolsPrompt.trim().isNotEmpty) {
-      contextBuffer
-        ..writeln()
-        ..writeln(mcpToolsPrompt.trim());
+    if (!isLocalModel) {
+      final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
+        combinedTools,
+        maxBudgetTokens: budget,
+      );
+      if (mcpToolsPrompt.trim().isNotEmpty) {
+        contextBuffer
+          ..writeln()
+          ..writeln(mcpToolsPrompt.trim());
+      }
+    }
+
+    // Append skill index when skills are enabled
+    if (_conversationService.skillsEnabled &&
+        _conversationService.skillIndex.isNotEmpty) {
+      final skillIndexPrompt = getIt<SkillService>().buildSkillIndexPrompt(
+        _conversationService.skillIndex,
+        maxBudgetTokens: budget,
+        forLocalModel: isLocalModel,
+      );
+      if (skillIndexPrompt.trim().isNotEmpty) {
+        contextBuffer
+          ..writeln()
+          ..write(skillIndexPrompt.trim());
+      }
     }
 
     return SystemPromptBuilder.build(
@@ -1315,12 +1530,22 @@ $historyBuffer
       guidelines: [
         'Reference evidence when drawing conclusions and mention uncertainties.',
         AIPrompts.mathFormulaGuidelines,
-        AIPrompts.relationshipGuidelines,
-        AIPrompts.promptInjectionProtectionGuidelines,
+        if (_notes.isNotEmpty) AIPrompts.relationshipGuidelines,
+        if (hasInlineContext) AIPrompts.promptInjectionProtectionGuidelines,
       ],
       now: _conversationStartTime,
       needTimeInContext: false, // Precise time comes with user message.
     );
+  }
+
+  Future<int> _getChatPromptBudget() async {
+    try {
+      return await getIt<ContextManagerService>().getModelContextBudget();
+    } catch (_) {
+      return _selectedModel?.maxInputTokens ??
+          getIt<ModelSelector>().currentModelConfig?.maxInputTokens ??
+          100000;
+    }
   }
 
   Future<List<PlatformFile>> _loadConversationAttachments(
@@ -1832,7 +2057,8 @@ $historyBuffer
         activeLocalCount +
         activeModelFeaturesCount +
         activeBuiltInToolsCount +
-        activeSystemToolsCount;
+        activeSystemToolsCount +
+        (_skillsEnabled ? 1 : 0);
     final headerTitle = l10n.mcpAndLocalTools;
 
     // Get current model config to check for features
@@ -2168,6 +2394,86 @@ $historyBuffer
                             ),
                           );
                         }).toList(),
+                      ),
+                    ],
+                    // Agent Skills
+                    if (_skillCount > 0) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.auto_awesome,
+                            size: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Agent Skills',
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.8),
+                                ),
+                          ),
+                          const Spacer(),
+                          if (_skillsEnabled)
+                            ActiveToolCountBadge(count: 1, label: l10n.active),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              FilterChip(
+                                label: Text('$_skillCount available'),
+                                selected: _skillsEnabled,
+                                onSelected: (selected) {
+                                  setState(() => _skillsEnabled = selected);
+                                  if (selected) {
+                                    _conversationService.enableSkills().then((_) {
+                                      if (mounted) {
+                                        setState(
+                                          () => _skillCount = _conversationService
+                                              .skillIndex
+                                              .length,
+                                        );
+                                      }
+                                    });
+                                  } else {
+                                    _conversationService.disableSkills();
+                                  }
+                                },
+                                avatar: Icon(
+                                  Icons.auto_awesome,
+                                  size: 16,
+                                  color: _skillsEnabled
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(
+                                          context,
+                                        ).colorScheme.onSurface.withOpacity(0.6),
+                                ),
+                              ),
+                              if (!supportsToolOrchestration)
+                                Positioned(
+                                  right: -4,
+                                  top: -4,
+                                  child: Icon(
+                                    Icons.warning_amber_rounded,
+                                    size: 12,
+                                    color: Colors.amber.shade700,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
                       ),
                     ],
                     if (modelConfig?.modelFeatures != null &&

@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart' as _i7;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i9;
 import 'package:note_synapse/models/generation_context.dart' as _i8;
+import 'package:note_synapse/models/mcp_endpoint.dart' as _i11;
 import 'package:note_synapse/models/model_config.dart' as _i5;
 import 'package:note_synapse/models/model_type.dart' as _i6;
 import 'package:note_synapse/providers/app_provider.dart' as _i4;
@@ -37,6 +38,15 @@ class MockModelSelector extends _i1.Mock implements _i2.ModelSelector {
   MockModelSelector() {
     _i1.throwOnMissingStub(this);
   }
+
+  @override
+  _i3.Future<void> dispose() =>
+      (super.noSuchMethod(
+            Invocation.method(#dispose, []),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
 
   @override
   _i3.Future<void> initialize(_i4.AppProvider? appProvider) =>
@@ -242,6 +252,21 @@ class MockModelSelector extends _i1.Mock implements _i2.ModelSelector {
           as _i3.Future<Map<String, dynamic>>);
 
   @override
+  List<Map<String, dynamic>> buildToolDeclarations(
+    Map<String, List<_i11.McpTool>>? toolsByEndpoint, {
+    _i8.GenerationContext? generationContext,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #buildToolDeclarations,
+              [toolsByEndpoint],
+              {#generationContext: generationContext},
+            ),
+            returnValue: <Map<String, dynamic>>[],
+          )
+          as List<Map<String, dynamic>>);
+
+  @override
   _i3.Future<Map<String, dynamic>> generateWithToolsAndMessages(
     List<_i10.PromptMessage>? messages,
     List<Map<String, dynamic>>? tools, {
@@ -268,6 +293,16 @@ class MockModelSelector extends _i1.Mock implements _i2.ModelSelector {
             ),
           )
           as _i3.Future<Map<String, dynamic>>);
+
+  @override
+  String? checkLocalModelConstraints(
+    List<_i10.PromptMessage>? messages,
+    _i5.ModelConfig? config,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#checkLocalModelConstraints, [messages, config]),
+          )
+          as String?);
 
   @override
   _i3.Future<_i5.ModelConfig?> getModelByHint(

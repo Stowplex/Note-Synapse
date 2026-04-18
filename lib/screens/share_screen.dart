@@ -11,6 +11,7 @@ import 'package:html2md/html2md.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
+import '../services/approval_service.dart';
 import '../services/share_service.dart';
 import '../services/ai_service.dart';
 import '../services/content_ingestion_service.dart';
@@ -25,7 +26,9 @@ import '../utils/remote_image_utils.dart';
 import '../utils/html_rules.dart';
 import '../utils/markdown_cleaner.dart';
 import '../utils/web_content_processor.dart';
+import '../widgets/approval_dialog.dart';
 import 'note_selection_dialog.dart';
+import '../widgets/hierarchy_dialog.dart';
 
 class ShareScreen extends StatefulWidget {
   final Map<String, dynamic> sharedData;
@@ -53,9 +56,11 @@ class _ShareScreenState extends State<ShareScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
   final Set<String> _selectedTags = <String>{};
+  final Set<String> _filterDerivedTags = <String>{};
   final TextEditingController _newTagController = TextEditingController();
   final ScrollController _contentPreviewScrollController = ScrollController();
   final ScrollController _mediaSelectionScrollController = ScrollController();
+  Future<ApprovalResult> Function(ApprovalRequest)? _approvalCallback;
 
   /// Check if running on Linux (non-web)
   bool get _isLinux => !kIsWeb && Platform.isLinux;
@@ -63,6 +68,7 @@ class _ShareScreenState extends State<ShareScreen> {
   @override
   void initState() {
     super.initState();
+    _setupApprovalCallback();
     _processSharedData();
     // Load notes when the screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -79,7 +85,20 @@ class _ShareScreenState extends State<ShareScreen> {
     _newTagController.dispose();
     _contentPreviewScrollController.dispose();
     _mediaSelectionScrollController.dispose();
+    if (ApprovalService.onApprovalRequest == _approvalCallback) {
+      ApprovalService.onApprovalRequest = null;
+    }
     super.dispose();
+  }
+
+  void _setupApprovalCallback() {
+    _approvalCallback = (request) async {
+      if (!mounted) {
+        throw StateError('Share screen is not mounted');
+      }
+      return ApprovalDialog.showWithContext(context, request);
+    };
+    ApprovalService.onApprovalRequest = _approvalCallback;
   }
 
   /// Cleans up downloaded file if it exists and hasn't been added to a note
@@ -190,15 +209,24 @@ class _ShareScreenState extends State<ShareScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final activeNoteId = _selectedNote?.id ?? _preparedNote?.id;
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.sharedContent)),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? _buildErrorWidget(l10n)
-          : _buildContentWidget(l10n),
+      body: _buildBodyWithWorkflowBanner(
+        activeNoteId,
+        _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+            ? _buildErrorWidget(l10n)
+            : _buildContentWidget(l10n),
+      ),
     );
+  }
+
+  Widget _buildBodyWithWorkflowBanner(String? noteId, Widget child) {
+    // Workflow status is now shown globally via WorkflowShell + WorkflowMiniPlayer.
+    return child;
   }
 
   Widget _buildErrorWidget(AppLocalizations l10n) {
@@ -584,10 +612,15 @@ class _ShareScreenState extends State<ShareScreen> {
                         children: _selectedTags.map((tag) {
                           return Chip(
                             label: Text(tag),
+                            backgroundColor:
+                                _filterDerivedTags.contains(tag)
+                                    ? Colors.purple.withOpacity(0.1)
+                                    : null,
                             deleteIcon: const Icon(Icons.close, size: 18),
                             onDeleted: () {
                               setState(() {
                                 _selectedTags.remove(tag);
+                                _filterDerivedTags.remove(tag);
                                 _updatePreparedNoteTags();
                               });
                             },
@@ -653,6 +686,16 @@ class _ShareScreenState extends State<ShareScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () =>
+                            _openFilterSelectionForTags(context, appProvider),
+                        icon: const Icon(Icons.filter_list, size: 18),
+                        label: Text(l10n.addFromFilter),
+                      ),
+                    ),
 
                     // Available tags to select from
                     if (availableTags.isNotEmpty) ...[
@@ -697,6 +740,39 @@ class _ShareScreenState extends State<ShareScreen> {
     if (_preparedNote != null) {
       _preparedNote = _preparedNote!.copyWith(tags: _selectedTags.toList());
     }
+  }
+
+  void _openFilterSelectionForTags(
+      BuildContext context, AppProvider appProvider) {
+    showDialog(
+      context: context,
+      builder: (context) => HierarchyDialog(
+        allFilters: appProvider.filters,
+        filterPredicate: (f) => f.includeTags.isNotEmpty,
+        onConfirmSelection: (selectedIds) {
+          setState(() {
+            for (final filterId in selectedIds) {
+              try {
+                final filter =
+                    appProvider.filters.firstWhere((f) => f.id == filterId);
+                for (final tag in filter.includeTags) {
+                  if (!_selectedTags.contains(tag)) {
+                    _selectedTags.add(tag);
+                    _filterDerivedTags.add(tag);
+                  } else {
+                    _filterDerivedTags.add(tag);
+                  }
+                }
+              } catch (_) {}
+            }
+            _updatePreparedNoteTags();
+          });
+        },
+        onEdit: (_) {},
+        onPin: (_) {},
+        onDelete: (_) {},
+      ),
+    );
   }
 
   Widget _buildUrlExtractionWidget() {

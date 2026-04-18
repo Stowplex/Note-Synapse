@@ -33,9 +33,11 @@ import '../services/logger_service.dart';
 import '../services/mcp_service.dart';
 import '../services/mcp_tool_integration_service.dart';
 import '../services/conversation_settings_service.dart';
+import '../services/context_manager_service.dart';
 import '../services/model_selector.dart';
 import '../services/service_locator.dart';
 import '../services/attachment_preprocessor.dart';
+import '../services/local_model_attachment_constraint_service.dart';
 import '../services/conversation_attachment_service.dart';
 import '../services/marker_cluster_service.dart';
 import '../services/prompts/ai_prompts.dart';
@@ -67,6 +69,7 @@ import 'settings_screen.dart';
 import '../widgets/model_selector_button.dart';
 import '../widgets/attachment_preview_tile.dart';
 import '../services/built_in_tools_service.dart';
+import '../services/skill_service.dart';
 import '../models/in_note_marker.dart';
 import '../models/note_annotation.dart';
 import '../services/note_marker_service.dart';
@@ -74,6 +77,7 @@ import '../services/note_annotation_service.dart';
 import '../widgets/in_note_marker_badge.dart';
 import '../widgets/in_note_marker_preview.dart';
 import '../widgets/tool_orchestration_warning_dialog.dart';
+import '../widgets/local_model_attachment_warning_dialog.dart';
 import '../widgets/in_note_annotation_preview.dart';
 
 enum DrawingTool { pen, rectangle }
@@ -207,6 +211,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   // System Tools (native tools from AgentService)
   final Set<String> _selectedSystemTools = {};
 
+  // Agent Skills
+  bool _skillsEnabled = false;
+  int _skillCount = 0;
+
   // Drawing State
   List<DrawingAction> _drawingActions = [];
   List<DrawingAction> _redoStack = [];
@@ -241,6 +249,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     _conversationNotes = List<Note>.from(widget.notes);
     _loadIterationPreference();
     _setupApprovalCallback();
+    getIt<SkillService>().buildSkillIndex().then((index) {
+      if (mounted) setState(() => _skillCount = index.length);
+    });
 
     if (widget.initialConversation != null) {
       _conversation = widget.initialConversation;
@@ -291,7 +302,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   /// Sets up the unified approval callback for AI tools.
   void _setupApprovalCallback() {
     ApprovalService.onApprovalRequest = (request) async {
-      if (!mounted) return ApprovalResult(approved: false);
+      if (!mounted) {
+        throw StateError('Immersive note screen is not mounted');
+      }
       return await ApprovalDialog.showWithContext(context, request);
     };
   }
@@ -2480,7 +2493,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         activeLocalCount +
         activeModelFeaturesCount +
         activeBuiltInToolsCount +
-        activeSystemToolsCount;
+        activeSystemToolsCount +
+        (_skillsEnabled ? 1 : 0);
     final headerTitle = l10n.mcpAndLocalTools;
     final modelConfig = context.read<AppProvider>().modelConfig;
     final supportsToolOrchestration =
@@ -2798,6 +2812,68 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                             ),
                           );
                         }).toList(),
+                      ),
+                    ],
+                    // Agent Skills
+                    if (_skillCount > 0) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.auto_awesome,
+                            size: 16,
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Agent Skills',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.8,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (_skillsEnabled)
+                            ActiveToolCountBadge(count: 1, label: l10n.active),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          FilterChip(
+                            label: Text('$_skillCount available'),
+                            selected: _skillsEnabled,
+                            onSelected: (selected) {
+                              setState(() => _skillsEnabled = selected);
+                              if (selected) {
+                                _conversationService.enableSkills().then((_) {
+                                  if (mounted) {
+                                    setState(
+                                      () => _skillCount = _conversationService
+                                          .skillIndex
+                                          .length,
+                                    );
+                                  }
+                                });
+                              } else {
+                                _conversationService.disableSkills();
+                              }
+                            },
+                            avatar: Icon(
+                              Icons.auto_awesome,
+                              size: 16,
+                              color: _skillsEnabled
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface.withOpacity(
+                                      0.6,
+                                    ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                     // Model Features Section
@@ -4976,19 +5052,43 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       await _confirmDrawing(silent: true);
     }
 
+    final activeConfig =
+        _selectedModel ?? context.read<AppProvider>().modelConfig;
+    final pendingAttachments = List<PlatformFile>.from(_pendingAttachments);
+    final localAttachmentWarning =
+        await LocalModelAttachmentConstraintService.analyzeForGemma4(
+          config: activeConfig,
+          prompt: trimmed,
+          attachments: pendingAttachments,
+        );
+    if (!mounted) return;
+    if (localAttachmentWarning != null) {
+      final result = await LocalModelAttachmentWarningDialog.show(
+        context,
+        currentModel: activeConfig,
+        warning: localAttachmentWarning,
+      );
+      if (!mounted) return;
+      if (result == null || result is LocalModelAttachmentWarningStop) return;
+      if (result is LocalModelAttachmentWarningContinue &&
+          result.modelOverride != null) {
+        _selectedModel = result.modelOverride;
+      }
+    }
+
     // Check tool orchestration capability before sending
     if (!mounted) return;
     final hasTools =
         _selectedBuiltInTools.isNotEmpty || _selectedMcpEndpointIds.isNotEmpty;
-    final activeConfig =
+    final toolCheckConfig =
         _selectedModel ?? context.read<AppProvider>().modelConfig;
     final supportsOrchestration =
-        activeConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
+        toolCheckConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
         true;
     if (hasTools && !supportsOrchestration) {
       final result = await ToolOrchestrationWarningDialog.show(
         context,
-        activeConfig,
+        toolCheckConfig,
       );
       if (!mounted) return;
       if (result == null || result is ToolOrchestrationStop) return;
@@ -5210,7 +5310,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }) async {
     final requestId = generationContext.ensureRequestId();
     final noteBuilder = NotePromptBuilder(_databaseService);
-    final systemMessage = _buildSystemPrompt();
+    final systemMessage = await _buildSystemPrompt();
 
     // Get current PDF page for window mode context filtering
     final currentPdfPage = _activeAttachmentPath != null
@@ -5289,6 +5389,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final response = await _aiEngine.generate(
       request: request,
       activeTools: activeTools,
+      activeToolsProvider: _buildActiveToolsMap,
       enableTools: activeTools.isNotEmpty || _selectedModelFeatures.isNotEmpty,
       executeTool: (serviceName, toolName, params, context) async {
         return _runWithToolStatus(serviceName, toolName, () async {
@@ -5335,7 +5436,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return response;
   }
 
-  PromptMessage _buildSystemPrompt() {
+  Future<PromptMessage> _buildSystemPrompt() async {
     final lines = <String>[
       'Engage in a focused conversation grounded in the selected notes and attachments.',
       'Reference the note titles when citing content and prefer concise, direct answers.',
@@ -5350,15 +5451,17 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     if (_conversationNotes.isEmpty) {
       lines.add(
-        'No note context is currently attached. Rely on the conversation history.',
+        'No note text is attached inline. Use enabled tools when they can retrieve the needed note or workflow context.',
       );
     }
 
     final taskContext = lines.join('\n');
 
     final combinedTools = _buildActiveToolsMap();
+    final budget = await _getChatPromptBudget();
     final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
       combinedTools,
+      maxBudgetTokens: budget,
     );
 
     final systemAddOn = PromptConfigurationService.instance.getValue(
@@ -5381,13 +5484,23 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       taskContext: contextBuffer.toString(),
       guidelines: [
         'Highlight referenced note sections explicitly when possible.',
-        AIPrompts.mathFormulaGuidelines,
-        AIPrompts.relationshipGuidelines,
-        AIPrompts.promptInjectionProtectionGuidelines,
+        if (_conversationNotes.isNotEmpty) AIPrompts.relationshipGuidelines,
+        if (_conversationNotes.isNotEmpty)
+          AIPrompts.promptInjectionProtectionGuidelines,
       ],
       now: _sessionStart,
       needTimeInContext: false,
     );
+  }
+
+  Future<int> _getChatPromptBudget() async {
+    try {
+      return await getIt<ContextManagerService>().getModelContextBudget();
+    } catch (_) {
+      return _selectedModel?.maxInputTokens ??
+          getIt<ModelSelector>().currentModelConfig?.maxInputTokens ??
+          100000;
+    }
   }
 
   Future<List<PlatformFile>> _loadConversationAttachments(

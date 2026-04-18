@@ -17,8 +17,9 @@ import 'package:note_synapse/models/note_annotation.dart' as _i7;
 import 'package:note_synapse/models/relationship.dart' as _i10;
 import 'package:note_synapse/models/tag.dart' as _i9;
 import 'package:note_synapse/models/user_app.dart' as _i12;
+import 'package:note_synapse/models/workflow_binding_row.dart' as _i16;
 import 'package:note_synapse/services/database_service.dart' as _i4;
-import 'package:note_synapse/services/note_modification_service.dart' as _i16;
+import 'package:note_synapse/services/note_modification_service.dart' as _i17;
 import 'package:sqflite/sqflite.dart' as _i2;
 
 // ignore_for_file: type=lint
@@ -155,6 +156,14 @@ class MockDatabaseService extends _i1.Mock implements _i4.DatabaseService {
   _i5.Future<List<_i3.Note>> getNotesByIds(List<String>? noteIds) =>
       (super.noSuchMethod(
             Invocation.method(#getNotesByIds, [noteIds]),
+            returnValue: _i5.Future<List<_i3.Note>>.value(<_i3.Note>[]),
+          )
+          as _i5.Future<List<_i3.Note>>);
+
+  @override
+  _i5.Future<List<_i3.Note>> getNotesByTag(String? tagName) =>
+      (super.noSuchMethod(
+            Invocation.method(#getNotesByTag, [tagName]),
             returnValue: _i5.Future<List<_i3.Note>>.value(<_i3.Note>[]),
           )
           as _i5.Future<List<_i3.Note>>);
@@ -459,6 +468,21 @@ class MockDatabaseService extends _i1.Mock implements _i4.DatabaseService {
   _i5.Future<void> deleteRelationship(String? relationshipId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteRelationship, [relationshipId]),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> deleteRelationshipBetween(
+    String? fromNoteId,
+    String? toNoteId,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteRelationshipBetween, [
+              fromNoteId,
+              toNoteId,
+            ]),
             returnValue: _i5.Future<void>.value(),
             returnValueForMissingStub: _i5.Future<void>.value(),
           )
@@ -1472,13 +1496,71 @@ class MockDatabaseService extends _i1.Mock implements _i4.DatabaseService {
             returnValue: _i5.Future<_i3.Note?>.value(),
           )
           as _i5.Future<_i3.Note?>);
+
+  @override
+  _i5.Future<_i16.WorkflowBindingRow?> getExactWorkflowBinding(
+    String? tagName,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getExactWorkflowBinding, [tagName]),
+            returnValue: _i5.Future<_i16.WorkflowBindingRow?>.value(),
+          )
+          as _i5.Future<_i16.WorkflowBindingRow?>);
+
+  @override
+  _i5.Future<List<_i16.WorkflowBindingRow>> getPrefixWorkflowBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getPrefixWorkflowBindings, []),
+            returnValue: _i5.Future<List<_i16.WorkflowBindingRow>>.value(
+              <_i16.WorkflowBindingRow>[],
+            ),
+          )
+          as _i5.Future<List<_i16.WorkflowBindingRow>>);
+
+  @override
+  _i5.Future<_i16.WorkflowBindingRow?> getWorkflowBindingByPattern(
+    String? pattern,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getWorkflowBindingByPattern, [pattern]),
+            returnValue: _i5.Future<_i16.WorkflowBindingRow?>.value(),
+          )
+          as _i5.Future<_i16.WorkflowBindingRow?>);
+
+  @override
+  _i5.Future<List<_i16.WorkflowBindingRow>> getAllWorkflowBindings() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllWorkflowBindings, []),
+            returnValue: _i5.Future<List<_i16.WorkflowBindingRow>>.value(
+              <_i16.WorkflowBindingRow>[],
+            ),
+          )
+          as _i5.Future<List<_i16.WorkflowBindingRow>>);
+
+  @override
+  _i5.Future<void> insertWorkflowBinding(_i16.WorkflowBindingRow? binding) =>
+      (super.noSuchMethod(
+            Invocation.method(#insertWorkflowBinding, [binding]),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> deleteWorkflowBinding(String? pattern) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteWorkflowBinding, [pattern]),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
 }
 
 /// A class which mocks [NoteModificationService].
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockNoteModificationService extends _i1.Mock
-    implements _i16.NoteModificationService {
+    implements _i17.NoteModificationService {
   MockNoteModificationService() {
     _i1.throwOnMissingStub(this);
   }
@@ -1498,6 +1580,16 @@ class MockNoteModificationService extends _i1.Mock
             ),
           )
           as _i5.Future<_i3.Note>);
+
+  @override
+  _i5.Future<List<_i3.Note>> applyBatchModifications(
+    List<Map<String, dynamic>>? updates,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#applyBatchModifications, [updates]),
+            returnValue: _i5.Future<List<_i3.Note>>.value(<_i3.Note>[]),
+          )
+          as _i5.Future<List<_i3.Note>>);
 
   @override
   _i5.Future<_i3.Note> buildNote(Map<String, dynamic>? data) =>

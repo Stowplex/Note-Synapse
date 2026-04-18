@@ -35,7 +35,7 @@ class PdfThumbnailService {
   }) async {
     if (pdfPath.isEmpty || page < 0) return null;
 
-    final cacheKey = '$pdfPath:$page';
+    final cacheKey = '$pdfPath:$page:${width.round()}';
     if (_cache.containsKey(cacheKey)) {
       // Move to end (most recently used)
       final value = _cache.remove(cacheKey)!;

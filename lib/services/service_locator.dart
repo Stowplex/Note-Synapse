@@ -17,6 +17,9 @@ import 'mcp_service.dart';
 import 'tag_image_service.dart';
 import 'note_marker_service.dart';
 import 'note_annotation_service.dart';
+import 'skill_service.dart';
+import 'tag_workflow_service.dart';
+import 'prompts/prompt_template_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -42,6 +45,12 @@ void setupServiceLocator() {
   // ============================================================
   // WAVE 1: Foundation - No dependencies
   // ============================================================
+  if (!getIt.isRegistered<PromptTemplateService>()) {
+    getIt.registerLazySingleton<PromptTemplateService>(
+      () => PromptTemplateService(),
+    );
+  }
+
   if (!getIt.isRegistered<DatabaseService>()) {
     getIt.registerLazySingleton<DatabaseService>(() => DatabaseService());
   }
@@ -86,6 +95,18 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<NoteAnnotationService>()) {
     getIt.registerLazySingleton<NoteAnnotationService>(
       () => NoteAnnotationService(getIt<DatabaseService>()),
+    );
+  }
+
+  if (!getIt.isRegistered<SkillService>()) {
+    getIt.registerLazySingleton<SkillService>(
+      () => SkillService(getIt<DatabaseService>()),
+    );
+  }
+
+  if (!getIt.isRegistered<TagWorkflowService>()) {
+    getIt.registerLazySingleton<TagWorkflowService>(
+      () => TagWorkflowService(getIt<DatabaseService>()),
     );
   }
 

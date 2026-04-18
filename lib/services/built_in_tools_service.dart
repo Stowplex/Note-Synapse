@@ -79,6 +79,14 @@ class BuiltInToolsService {
       color: Colors.amber,
     ),
     const BuiltInTool(
+      id: 'modify_notes',
+      name: 'Modify Notes',
+      description:
+          'Modify multiple notes in one atomic batch. Requires approval.',
+      icon: Icons.edit_note,
+      color: Colors.deepOrange,
+    ),
+    const BuiltInTool(
       id: 'create_notes',
       name: 'Create Note',
       description:

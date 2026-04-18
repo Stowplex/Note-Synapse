@@ -102,43 +102,41 @@ void main() {
       expect(result[2].content, 'Second');
     });
 
-    test('extracts Gemma tagged tool calls from text fallback', () {
+    test('extracts Gemma injected JSON tool calls from text fallback', () {
       final model = LocalMnnModel();
 
-      final result = model.extractTaggedToolCallsForTest(
-        '<|tool_call>call_tool{service_name: "NS/ytfetcher_327c5c2c", tool_name: "fetch_youtube_data", params: {video_url: "https://youtu.be/tyknmLug2mY?si=79cgwHxw_3T-81cC"}}<tool_call|>',
+      final result = model.parseInjectedJsonToolCallForTest(
+        '{"name": "search_notes", "parameters": {"query": "test"}}',
       );
 
-      expect(result.cleanedText, isEmpty);
-      expect(result.calls, hasLength(1));
-      expect(result.calls.single['name'], 'call_tool');
-      expect(result.calls.single['args'], {
-        'service_name': 'NS/ytfetcher_327c5c2c',
-        'tool_name': 'fetch_youtube_data',
-        'params': {
-          'video_url': 'https://youtu.be/tyknmLug2mY?si=79cgwHxw_3T-81cC',
-        },
-      });
+      expect(result, isNotNull);
+      expect(result!['name'], 'search_notes');
+      expect(result['args'], {'query': 'test'});
     });
 
-    test('preserves surrounding text when Gemma tool call is embedded', () {
+    test('supports "args" field in injected JSON tool calls', () {
       final model = LocalMnnModel();
 
-      final result = model.extractTaggedToolCallsForTest(
-        'Let me check that.\n<|tool_call>call_tool{service_name: "svc", tool_name: "lookup", params: {q: "hello"}}<tool_call|>\nI will summarize after.',
+      final result = model.parseInjectedJsonToolCallForTest(
+        '{"name": "read_note", "args": {"note_id": "abc"}}',
       );
 
+      expect(result, isNotNull);
+      expect(result!['name'], 'read_note');
+      expect(result['args'], {'note_id': 'abc'});
+    });
+
+    test('returns null for invalid tool call JSON', () {
+      final model = LocalMnnModel();
+
       expect(
-        result.cleanedText,
-        'Let me check that.\n\nI will summarize after.',
+        model.parseInjectedJsonToolCallForTest('not json'),
+        isNull,
       );
-      expect(result.calls, hasLength(1));
-      expect(result.calls.single['name'], 'call_tool');
-      expect(result.calls.single['args'], {
-        'service_name': 'svc',
-        'tool_name': 'lookup',
-        'params': {'q': 'hello'},
-      });
+      expect(
+        model.parseInjectedJsonToolCallForTest('{"only": "name"}'),
+        isNull,
+      );
     });
   });
 }

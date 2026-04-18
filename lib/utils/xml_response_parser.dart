@@ -103,21 +103,30 @@ XmlAgentResponse parseXmlAgentResponse(String response) {
 
   // Step 3: Extract <Action> element with type attribute
   // Use [^"]* to allow empty type (which will be caught as invalid later)
-  final actionMatch = RegExp(
+  final doubleQuotedMatches = RegExp(
     r'<Action\s+type\s*=\s*"([^"]*)"[^>]*>(.*?)</Action>',
     caseSensitive: false,
     dotAll: true,
-  ).firstMatch(content);
+  ).allMatches(content).toList();
+  final singleQuotedMatches = RegExp(
+    r"<Action\s+type\s*=\s*'([^']*)'[^>]*>(.*?)</Action>",
+    caseSensitive: false,
+    dotAll: true,
+  ).allMatches(content).toList();
+  final totalActions = doubleQuotedMatches.length + singleQuotedMatches.length;
+
+  if (totalActions > 1) {
+    return XmlAgentResponse.malformedAction(
+      'Found multiple <Action> elements. Exactly one action is allowed per turn.',
+    );
+  }
+
+  final actionMatch = doubleQuotedMatches.isNotEmpty
+      ? doubleQuotedMatches.first
+      : null;
 
   if (actionMatch == null) {
-    // Try alternate formats (single quotes)
-    final altActionMatch = RegExp(
-      r"<Action\s+type\s*=\s*'([^']*)'[^>]*>(.*?)</Action>",
-      caseSensitive: false,
-      dotAll: true,
-    ).firstMatch(content);
-
-    if (altActionMatch == null) {
+    if (singleQuotedMatches.isEmpty) {
       // Check if there's an Action-like tag that's malformed
       // (e.g., <Action> without type, or <Action type=something> without quotes)
       final malformedActionPattern = RegExp(
@@ -140,8 +149,8 @@ XmlAgentResponse parseXmlAgentResponse(String response) {
     // Use alternate match
     return _parseActionContent(
       thought: thought,
-      actionType: altActionMatch.group(1)!.trim().toLowerCase(),
-      actionBody: altActionMatch.group(2)!,
+      actionType: singleQuotedMatches.first.group(1)!.trim().toLowerCase(),
+      actionBody: singleQuotedMatches.first.group(2)!,
     );
   }
 

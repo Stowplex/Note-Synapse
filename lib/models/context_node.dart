@@ -3,6 +3,15 @@ import 'task_result_storage.dart';
 /// Status of a context node in the hierarchical execution tree.
 enum ContextNodeStatus { pending, active, completed, failed, paused }
 
+/// Represents a skill loaded into an agent session.
+///
+/// Skills are session-scoped, pinned (never compacted), and deduplicated by noteId.
+class LoadedSkill {
+  final String noteId;
+  final String content;
+  const LoadedSkill({required this.noteId, required this.content});
+}
+
 /// Represents a node in the hierarchical context tree.
 ///
 /// Each node represents a task/subtask with its own isolated execution context.
@@ -52,8 +61,16 @@ class ContextNode {
   TaskResultStorage? structuredResult;
 
   /// The most recent error encountered during execution in this context.
-  /// Displayed in <LastRoundError> section to inform the agent of failures.
+  /// Displayed in `LastRoundError` section to inform the agent of failures.
   String? lastError;
+
+  /// One-time execution context (e.g., workflow binding metadata).
+  /// Rendered once per turn in `<WorkflowContext>`, never repeated in child/ancestor contexts.
+  String? executionContext;
+
+  /// Skills pinned to this session (root node only). Session-scoped, never compacted.
+  /// Deduplicated by noteId. Not serialized to JSON (runtime state only).
+  List<LoadedSkill> loadedSkills = [];
 
   ContextNode({
     required this.id,
@@ -70,6 +87,7 @@ class ContextNode {
     this.updatedAt,
     List<String>? allowedTools,
     this.lastError,
+    this.executionContext,
   }) : executionLog = executionLog ?? [],
        children = children ?? [],
        createdAt = createdAt ?? DateTime.now(),
@@ -129,8 +147,11 @@ class ContextNode {
     DateTime? createdAt,
     DateTime? updatedAt,
     List<String>? allowedTools,
+    List<LoadedSkill>? loadedSkills,
+    String? executionContext,
+    String? lastError,
   }) {
-    return ContextNode(
+    final copy = ContextNode(
       id: id ?? this.id,
       parentId: parentId ?? this.parentId,
       objective: objective ?? this.objective,
@@ -143,10 +164,12 @@ class ContextNode {
       estimatedTokens: estimatedTokens ?? this.estimatedTokens,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-
       allowedTools: allowedTools ?? List.from(this.allowedTools),
       lastError: lastError ?? this.lastError,
+      executionContext: executionContext ?? this.executionContext,
     );
+    copy.loadedSkills = loadedSkills ?? List.from(this.loadedSkills);
+    return copy;
   }
 
   /// Serializes to JSON for potential snapshot/persistence.

@@ -1,26 +1,38 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/note_modification_service.dart';
+import 'package:note_synapse/services/tag_workflow_service.dart';
 import 'package:note_synapse/models/note.dart';
 
-@GenerateMocks([DatabaseService])
+@GenerateMocks([DatabaseService, TagWorkflowService])
 import 'note_modification_service_test.mocks.dart';
 
 void main() {
   late MockDatabaseService mockDb;
+  late MockTagWorkflowService mockTagWorkflow;
   late NoteModificationService service;
+  Database? rawDb;
 
   setUp(() async {
     await resetForTesting();
     mockDb = MockDatabaseService();
+    mockTagWorkflow = MockTagWorkflowService();
     getIt.registerSingleton<DatabaseService>(mockDb);
+    getIt.registerSingleton<TagWorkflowService>(mockTagWorkflow);
+    // Default: no immutable bindings
+    when(
+      mockTagWorkflow.hasImmutableBinding(any),
+    ).thenAnswer((_) async => false);
     service = NoteModificationService(getIt<DatabaseService>());
   });
 
   tearDown(() async {
+    await rawDb?.close();
+    rawDb = null;
     await resetForTesting();
   });
 
@@ -69,8 +81,249 @@ void main() {
         'content': {'action': 'append', 'text': ' appended'},
       });
 
-      final captured = verify(mockDb.updateNote(captureAny)).captured.single as Note;
+      final captured =
+          verify(mockDb.updateNote(captureAny)).captured.single as Note;
       expect(captured.content, 'Original\n appended');
     });
+
+    test('applyModifications can append within a markdown section', () async {
+      final note = Note(
+        id: 'test-id',
+        title: 'Index',
+        content: '# Index\n\n## Entities\n- Existing\n\n## Topics\n- Topic',
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      when(mockDb.getNoteById('test-id')).thenAnswer((_) async => note);
+      when(mockDb.updateNote(any)).thenAnswer((_) async {});
+
+      await service.applyModifications('test-id', {
+        'content': {
+          'action': 'append',
+          'section': '## Entities',
+          'insert_position': 'append',
+          'text': '- Added entity',
+        },
+      });
+
+      final captured =
+          verify(mockDb.updateNote(captureAny)).captured.single as Note;
+      expect(
+        captured.content,
+        contains('## Entities\n- Existing\n\n- Added entity'),
+      );
+      expect(captured.content, contains('## Topics\n- Topic'));
+    });
+
+    test('applyModifications throws when section does not exist', () async {
+      final note = Note(
+        id: 'test-id',
+        title: 'Index',
+        content: '# Index\n\n## Topics\n- Topic',
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      when(mockDb.getNoteById('test-id')).thenAnswer((_) async => note);
+
+      expect(
+        () => service.applyModifications('test-id', {
+          'content': {
+            'action': 'append',
+            'section': '## Entities',
+            'insert_position': 'append',
+            'text': '- Added entity',
+          },
+        }),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test(
+      'applyBatchModifications validates all notes before writing',
+      () async {
+        when(mockDb.getNoteById('note-1')).thenAnswer(
+          (_) async => Note(
+            id: 'note-1',
+            title: 'One',
+            content: 'A',
+            type: NoteType.note,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
+        when(mockDb.getNoteById('missing')).thenAnswer((_) async => null);
+
+        expect(
+          () => service.applyBatchModifications([
+            {
+              'note_id': 'note-1',
+              'modification': {
+                'content': {'action': 'append', 'text': 'x'},
+              },
+            },
+            {
+              'note_id': 'missing',
+              'modification': {
+                'content': {'action': 'append', 'text': 'y'},
+              },
+            },
+          ]),
+          throwsA(isA<Exception>()),
+        );
+        verifyNever(mockDb.database);
+      },
+    );
+
+    test(
+      'applyBatchModifications writes atomically on in-memory database',
+      () async {
+        sqfliteFfiInit();
+        databaseFactory = databaseFactoryFfi;
+        rawDb = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+
+        await rawDb!.execute('''
+        CREATE TABLE notes (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          content TEXT NOT NULL,
+          type TEXT NOT NULL,
+          createdAt INTEGER NOT NULL,
+          updatedAt INTEGER NOT NULL,
+          scheduledAt TEXT,
+          completeBy TEXT,
+          status TEXT,
+          completionPercentage REAL,
+          pinned INTEGER NOT NULL DEFAULT 0,
+          isArchived INTEGER NOT NULL DEFAULT 0,
+          recurrenceRule TEXT,
+          metadata TEXT
+        )
+      ''');
+        await rawDb!.execute('''
+        CREATE TABLE subnotes (
+          id TEXT PRIMARY KEY,
+          noteId TEXT NOT NULL,
+          name TEXT NOT NULL,
+          content TEXT NOT NULL,
+          createdAt INTEGER NOT NULL,
+          isCompleted INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+        await rawDb!.execute('''
+        CREATE TABLE tags (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL UNIQUE,
+          color TEXT,
+          createdAt INTEGER NOT NULL,
+          usageCount INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+        await rawDb!.execute('''
+        CREATE TABLE note_tags (
+          noteId TEXT NOT NULL,
+          tagId TEXT NOT NULL,
+          PRIMARY KEY (noteId, tagId)
+        )
+      ''');
+        await rawDb!.execute('''
+        CREATE TABLE attachments (
+          id TEXT PRIMARY KEY,
+          noteId TEXT NOT NULL,
+          filePath TEXT NOT NULL,
+          fileName TEXT NOT NULL,
+          fileType TEXT NOT NULL,
+          isRelativePath INTEGER NOT NULL DEFAULT 0,
+          createdAt INTEGER NOT NULL,
+          includeInAIContext INTEGER NOT NULL DEFAULT 1
+        )
+      ''');
+        await rawDb!.execute('''
+        CREATE TABLE relationships (
+          id TEXT PRIMARY KEY,
+          fromNoteId TEXT NOT NULL,
+          toNoteId TEXT NOT NULL,
+          type TEXT NOT NULL,
+          createdAt INTEGER NOT NULL
+        )
+      ''');
+
+        final now = DateTime.now();
+        final indexNote = Note(
+          id: 'index-1',
+          title: 'Index',
+          content: '# Index\n\n## Entities\n- Existing',
+          type: NoteType.note,
+          createdAt: now,
+          updatedAt: now,
+        );
+        final logNote = Note(
+          id: 'log-1',
+          title: 'Log',
+          content: '## Log',
+          type: NoteType.note,
+          createdAt: now,
+          updatedAt: now,
+        );
+        for (final note in [indexNote, logNote]) {
+          await rawDb!.insert('notes', {
+            'id': note.id,
+            'title': note.title,
+            'content': note.content,
+            'type': 'note',
+            'createdAt': note.createdAt.millisecondsSinceEpoch,
+            'updatedAt': note.updatedAt.millisecondsSinceEpoch,
+            'pinned': 0,
+            'isArchived': 0,
+          });
+        }
+
+        when(mockDb.getNoteById('index-1')).thenAnswer((_) async => indexNote);
+        when(mockDb.getNoteById('log-1')).thenAnswer((_) async => logNote);
+        when(mockDb.database).thenAnswer((_) async => rawDb!);
+
+        final updated = await service.applyBatchModifications([
+          {
+            'note_id': 'index-1',
+            'modification': {
+              'content': {
+                'action': 'append',
+                'section': '## Entities',
+                'insert_position': 'append',
+                'text': '- Added entity',
+              },
+            },
+          },
+          {
+            'note_id': 'log-1',
+            'modification': {
+              'content': {
+                'action': 'append',
+                'text': '\n## 2026-04-06\n- Added entity',
+              },
+            },
+          },
+        ]);
+
+        expect(updated, hasLength(2));
+        final indexRow = await rawDb!.query(
+          'notes',
+          columns: ['content'],
+          where: 'id = ?',
+          whereArgs: ['index-1'],
+        );
+        final logRow = await rawDb!.query(
+          'notes',
+          columns: ['content'],
+          where: 'id = ?',
+          whereArgs: ['log-1'],
+        );
+        expect(indexRow.single['content'], contains('- Added entity'));
+        expect(logRow.single['content'], contains('## 2026-04-06'));
+      },
+    );
   });
 }

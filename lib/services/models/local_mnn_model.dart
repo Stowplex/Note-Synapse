@@ -8,7 +8,9 @@ import 'package:image/image.dart' as img;
 import 'package:json_repair_flutter/json_repair_flutter.dart';
 
 import 'package:note_synapse/models/generation_context.dart';
+import 'package:note_synapse/models/mcp_endpoint.dart';
 import 'package:note_synapse/models/model_config.dart';
+import 'package:note_synapse/services/attachment_preprocessor.dart';
 import 'package:note_synapse/services/logger_service.dart';
 import 'package:note_synapse/services/models/ai_model.dart';
 import 'package:note_synapse/services/models/local_model_presets.dart';
@@ -20,7 +22,11 @@ class LocalMnnModel extends AIModel {
   LocalModelPreset? _preset;
   bool _isInitialized = false;
 
+  @override
   bool get supportsStreaming => true;
+
+  @override
+  bool get usesNativeToolDeclarations => true;
 
   @override
   String get id => _config?.id ?? 'local_mnn';
@@ -458,11 +464,14 @@ class LocalMnnModel extends AIModel {
     }
 
     final text = response is gemma.TextResponse ? response.token : '';
-    final parsedToolCalls = _extractTaggedToolCalls(text);
-    if (parsedToolCalls.calls.isNotEmpty) {
+
+    // Primary Fallback: Try to parse as the JSON format injected by flutter_gemma/litert-lm
+    // format: {"name": function_name, "parameters": {argument: value}}
+    final jsonToolCall = _tryParseInjectedJsonToolCall(text);
+    if (jsonToolCall != null) {
       return {
-        'text': parsedToolCalls.cleanedText,
-        'function_calls': parsedToolCalls.calls,
+        'text': '',
+        'function_calls': [jsonToolCall],
         'modelUsed': name,
       };
     }
@@ -470,130 +479,31 @@ class LocalMnnModel extends AIModel {
     return {'text': text, 'function_calls': null, 'modelUsed': name};
   }
 
-  @visibleForTesting
-  ParsedToolCallText extractTaggedToolCallsForTest(String text) {
-    return _extractTaggedToolCalls(text);
-  }
-
-  ParsedToolCallText _extractTaggedToolCalls(String text) {
-    if (text.isEmpty) {
-      return const ParsedToolCallText(cleanedText: '', calls: []);
-    }
-
-    final matches = _toolCallTagPattern
-        .allMatches(text)
-        .toList(growable: false);
-    if (matches.isEmpty) {
-      return ParsedToolCallText(cleanedText: text, calls: const []);
-    }
-
-    final calls = <Map<String, dynamic>>[];
-    for (final match in matches) {
-      final payload = match.group(1)?.trim();
-      if (payload == null || payload.isEmpty) {
-        continue;
-      }
-
-      final call = _parseTaggedToolCallPayload(payload);
-      if (call != null) {
-        calls.add(call);
-      }
-    }
-
-    final cleanedText = text.replaceAll(_toolCallTagPattern, '').trim();
-    return ParsedToolCallText(cleanedText: cleanedText, calls: calls);
-  }
-
-  Map<String, dynamic>? _parseTaggedToolCallPayload(String payload) {
-    final argsStart = payload.indexOf('{');
-    if (argsStart <= 0) {
+  Map<String, dynamic>? _tryParseInjectedJsonToolCall(String text) {
+    final trimmed = text.trim();
+    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
       return null;
-    }
-
-    final functionName = payload.substring(0, argsStart).trim();
-    if (functionName.isEmpty) {
-      return null;
-    }
-
-    final argsText = _extractBalancedSegment(payload, argsStart);
-    if (argsText == null) {
-      return null;
-    }
-
-    final decodedArgs = _decodeLooseMap(argsText);
-    if (decodedArgs == null) {
-      return null;
-    }
-
-    return {'name': functionName, 'args': decodedArgs};
-  }
-
-  String? _extractBalancedSegment(String content, int startIdx) {
-    int depth = 0;
-    var inString = false;
-    var escapeNext = false;
-
-    for (int i = startIdx; i < content.length; i++) {
-      final char = content[i];
-
-      if (escapeNext) {
-        escapeNext = false;
-        continue;
-      }
-
-      if (char == '\\' && inString) {
-        escapeNext = true;
-        continue;
-      }
-
-      if (char == '"') {
-        inString = !inString;
-        continue;
-      }
-
-      if (inString) {
-        continue;
-      }
-
-      if (char == '{') {
-        depth++;
-      } else if (char == '}') {
-        depth--;
-        if (depth == 0) {
-          return content.substring(startIdx, i + 1);
-        }
-      }
-    }
-
-    return null;
-  }
-
-  Map<String, dynamic>? _decodeLooseMap(String text) {
-    try {
-      final decoded = jsonDecode(text);
-      if (decoded is Map<String, dynamic>) {
-        return decoded;
-      }
-      if (decoded is Map) {
-        return decoded.map((key, value) => MapEntry(key.toString(), value));
-      }
-    } catch (_) {
-      // Fall through to repairJson for Gemma's relaxed object syntax.
     }
 
     try {
-      final repaired = repairJson(text);
-      if (repaired is Map<String, dynamic>) {
-        return repaired;
-      }
-      if (repaired is Map) {
-        return repaired.map((key, value) => MapEntry(key.toString(), value));
+      final data = jsonDecode(trimmed);
+      if (data is Map<String, dynamic> &&
+          data.containsKey('name') &&
+          (data.containsKey('parameters') || data.containsKey('args') || data.containsKey('params'))) {
+        return {
+          'name': data['name'],
+          'args': data['parameters'] ?? data['args'] ?? data['params'],
+        };
       }
     } catch (_) {
-      return null;
+      // Not valid JSON or doesn't match format
     }
-
     return null;
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _disposeModel();
   }
 
   Future<void> _disposeModel() async {
@@ -654,15 +564,16 @@ class LocalMnnModel extends AIModel {
     final endpoint = 'local-gemma://$name';
 
     try {
+      final sanitizedMessages = await _sanitizeMessages(messages, requestId);
       LoggerService.logAiRequest(
         endpoint: endpoint,
         headers: {'backend': _config?.backendType ?? 'gpu'},
-        requestBody: _buildLogBody(messages, tools: const []),
+        requestBody: _buildLogBody(sanitizedMessages, tools: const []),
         requestId: requestId,
       );
 
       final chat = await _createChat(
-        messages: messages,
+        messages: sanitizedMessages,
         tools: const [],
         temperature: temperature,
         topK: topK,
@@ -690,9 +601,30 @@ class LocalMnnModel extends AIModel {
         duration: DateTime.now().difference(startTime),
       );
       rethrow;
-    } finally {
-      await _disposeModel();
     }
+  }
+
+  @override
+  List<Map<String, dynamic>> buildToolDeclarations(
+    Map<String, List<McpTool>> toolsByEndpoint,
+  ) {
+    if (toolsByEndpoint.isEmpty) return [];
+    // Individual declarations — one per tool, matching Google Gallery pattern.
+    // Constrained decoding forces Gemma to output only valid tool names.
+    final declarations = <Map<String, dynamic>>[];
+    for (final entry in toolsByEndpoint.entries) {
+      for (final tool in entry.value) {
+        declarations.add({
+          'name': tool.name,
+          'description': tool.description ?? tool.name,
+          'parameters': tool.inputSchema ?? {
+            'type': 'object',
+            'properties': <String, dynamic>{},
+          },
+        });
+      }
+    }
+    return declarations;
   }
 
   @override
@@ -712,15 +644,16 @@ class LocalMnnModel extends AIModel {
     final endpoint = 'local-gemma://$name/tools';
 
     try {
+      final sanitizedMessages = await _sanitizeMessages(messages, requestId);
       LoggerService.logAiRequest(
         endpoint: endpoint,
         headers: {'backend': _config?.backendType ?? 'gpu'},
-        requestBody: _buildLogBody(messages, tools: tools),
+        requestBody: _buildLogBody(sanitizedMessages, tools: tools),
         requestId: requestId,
       );
 
       final chat = await _createChat(
-        messages: messages,
+        messages: sanitizedMessages,
         tools: tools,
         temperature: temperature,
         topK: topK,
@@ -747,8 +680,92 @@ class LocalMnnModel extends AIModel {
         duration: DateTime.now().difference(startTime),
       );
       rethrow;
-    } finally {
-      await _disposeModel();
+    }
+  }
+
+  /// Streaming generation with tool awareness. Streams text chunks via
+  /// [onChunk] and returns the full result including any function calls.
+  /// Combines the speed of streaming with the tool-calling path so Gemma
+  /// can answer simple questions fast while still detecting tool calls.
+  Future<Map<String, dynamic>> generateStreamingWithTools(
+    List<PromptMessage> messages,
+    List<Map<String, dynamic>> tools, {
+    required void Function(String chunk) onChunk,
+    GenerationContext? generationContext,
+  }) async {
+    final requestId =
+        generationContext?.ensureRequestId() ??
+        DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+    final endpoint = 'local-gemma://$name/stream-tools';
+
+    try {
+      LoggerService.logAiRequest(
+        endpoint: endpoint,
+        headers: {'backend': _config?.backendType ?? 'gpu'},
+        requestBody: _buildLogBody(messages, tools: tools),
+        requestId: requestId,
+      );
+
+      final chat = await _createChat(messages: messages, tools: tools);
+      final buffer = StringBuffer();
+      final functionCalls = <Map<String, dynamic>>[];
+
+      await for (final response in chat.generateChatResponseAsync()) {
+        if (response is gemma.TextResponse) {
+          buffer.write(response.token);
+          onChunk(response.token);
+        } else if (response is gemma.FunctionCallResponse) {
+          functionCalls.add({'name': response.name, 'args': response.args});
+        } else if (response is gemma.ParallelFunctionCallResponse) {
+          for (final call in response.calls) {
+            functionCalls.add({'name': call.name, 'args': call.args});
+          }
+        }
+      }
+
+      final text = buffer.toString();
+      // Check streamed text for injected JSON tool calls as fallback
+      if (functionCalls.isEmpty) {
+        final jsonToolCall = _tryParseInjectedJsonToolCall(text);
+        if (jsonToolCall != null) {
+          final result = <String, dynamic>{
+            'text': '',
+            'function_calls': [jsonToolCall],
+            'modelUsed': name,
+          };
+          LoggerService.logAiResponse(
+            statusCode: 200,
+            headers: {'model': name},
+            responseBody: result,
+            requestId: requestId,
+            duration: DateTime.now().difference(startTime),
+          );
+          return result;
+        }
+      }
+
+      final result = <String, dynamic>{
+        'text': text,
+        'function_calls': functionCalls.isNotEmpty ? functionCalls : null,
+        'modelUsed': name,
+      };
+      LoggerService.logAiResponse(
+        statusCode: 200,
+        headers: {'model': name},
+        responseBody: result,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+      return result;
+    } catch (e) {
+      LoggerService.logAiError(
+        error: e.toString(),
+        endpoint: endpoint,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+      rethrow;
     }
   }
 
@@ -762,14 +779,18 @@ class LocalMnnModel extends AIModel {
     final endpoint = 'local-gemma://$name/stream';
 
     try {
+      final sanitizedMessages = await _sanitizeMessages(messages, reqId);
       LoggerService.logAiRequest(
         endpoint: endpoint,
         headers: {'backend': _config?.backendType ?? 'gpu'},
-        requestBody: _buildLogBody(messages, tools: const []),
+        requestBody: _buildLogBody(sanitizedMessages, tools: const []),
         requestId: reqId,
       );
 
-      final chat = await _createChat(messages: messages, tools: const []);
+      final chat = await _createChat(
+        messages: sanitizedMessages,
+        tools: const [],
+      );
       final buffer = StringBuffer();
 
       await for (final response in chat.generateChatResponseAsync()) {
@@ -794,21 +815,34 @@ class LocalMnnModel extends AIModel {
         duration: DateTime.now().difference(startTime),
       );
       rethrow;
-    } finally {
-      await _disposeModel();
     }
+  }
+
+  @visibleForTesting
+  Map<String, dynamic>? parseInjectedJsonToolCallForTest(String text) {
+    return _tryParseInjectedJsonToolCall(text);
+  }
+
+  Future<List<PromptMessage>> _sanitizeMessages(
+    List<PromptMessage> messages,
+    String requestId,
+  ) async {
+    if (messages.isEmpty) {
+      return messages;
+    }
+
+    final outcome = await AttachmentPreprocessor.sanitizeMessages(
+      messages,
+      config: _config,
+    );
+
+    AttachmentPreprocessor.logIgnoredAttachments(
+      outcome.ignored,
+      endpoint: '${name} attachment_filter',
+      requestId: requestId,
+    );
+
+    return outcome.messages;
   }
 }
 
-@visibleForTesting
-class ParsedToolCallText {
-  final String cleanedText;
-  final List<Map<String, dynamic>> calls;
-
-  const ParsedToolCallText({required this.cleanedText, required this.calls});
-}
-
-final _toolCallTagPattern = RegExp(
-  r'<\|tool_call\>([\s\S]*?)<tool_call\|>',
-  dotAll: true,
-);

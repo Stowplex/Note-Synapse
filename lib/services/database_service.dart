@@ -26,6 +26,7 @@ import '../utils/file_utils.dart';
 import '../utils/global_keys.dart';
 import '../screens/recovery_screen.dart';
 import '../models/note_annotation.dart';
+import '../models/workflow_binding_row.dart';
 
 class MigrationStep {
   final String description;
@@ -47,7 +48,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 44; // Target schema version
+  static const int DATABASE_VERSION = 46; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -344,6 +345,16 @@ class DatabaseService {
       )
   ''';
 
+  static const String _createTagWorkflowBindingsTable = '''
+      CREATE TABLE IF NOT EXISTS tag_workflow_bindings (
+        pattern TEXT PRIMARY KEY,
+        isPrefix INTEGER NOT NULL DEFAULT 0,
+        skillNoteId TEXT NOT NULL,
+        prompt TEXT NOT NULL DEFAULT '',
+        contentImmutable INTEGER NOT NULL DEFAULT 0
+      )
+  ''';
+
   // FTS4 is universally supported on all platforms (Android, iOS, macOS, Windows, Linux)
   static const String _createNotesFtsTable = '''
       CREATE VIRTUAL TABLE notes_fts USING fts4(
@@ -598,6 +609,7 @@ class DatabaseService {
 
     // Create AI-related tables (missing in previous versions' onCreate)
     await db.execute(_createTagAiConfigsTable);
+    await db.execute(_createTagWorkflowBindingsTable);
 
     // Create FTS table and triggers
     await db.execute(_createNotesFtsTable);
@@ -857,6 +869,11 @@ class DatabaseService {
       description: 'Create note_annotations table for scratchpad annotations',
       execute: _migrateToVersion44,
     ),
+    46: MigrationStep(
+      description:
+          'Create tag_workflow_bindings table for tag-to-workflow binding infrastructure',
+      execute: _migrateToVersion45,
+    ),
   };
 
   static Future<void> _migrateToVersion43(
@@ -932,6 +949,13 @@ class DatabaseService {
     required bool isBackupMigration,
   }) async {
     await db.execute(_createNoteAnnotationsTable);
+  }
+
+  static Future<void> _migrateToVersion45(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    await db.execute(_createTagWorkflowBindingsTable);
   }
 
   static Future<void> _migrateToVersion28(
@@ -1875,6 +1899,28 @@ class DatabaseService {
     return await _batchLoadNotes(maps);
   }
 
+  /// Returns all non-archived notes that have the given tag.
+  Future<List<Note>> getNotesByTag(String tagName) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.rawQuery(
+      '''
+      SELECT
+        n.id, n.title, n.type, n.createdAt, n.updatedAt, n.scheduledAt, n.completeBy,
+        n.status, n.completionPercentage, n.pinned, n.isArchived, n.recurrenceRule,
+        CASE WHEN length(n.content) < 500000 THEN n.content ELSE NULL END as content,
+        length(n.content) as _contentLength
+      FROM notes n
+      JOIN note_tags nt ON n.id = nt.noteId
+      JOIN tags t ON nt.tagId = t.id
+      WHERE t.name = ? AND n.isArchived = 0
+      ORDER BY n.createdAt DESC
+    ''',
+      [tagName],
+    );
+
+    return await _batchLoadNotes(maps);
+  }
+
   Future<void> updateNote(Note note) async {
     final db = await database;
     final json = note.toJson();
@@ -2502,6 +2548,19 @@ class DatabaseService {
       'relationships',
       where: 'id = ?',
       whereArgs: [relationshipId],
+    );
+  }
+
+  Future<void> deleteRelationshipBetween(
+    String fromNoteId,
+    String toNoteId,
+  ) async {
+    final db = await database;
+    await db.delete(
+      'relationships',
+      where:
+          '(fromNoteId = ? AND toNoteId = ?) OR (fromNoteId = ? AND toNoteId = ?)',
+      whereArgs: [fromNoteId, toNoteId, toNoteId, fromNoteId],
     );
   }
 
@@ -4945,8 +5004,7 @@ class DatabaseService {
   /// Search notes using Full-Text Search
   Future<List<Note>> searchNotesFTS(String query, {List<String>? tags}) async {
     final db = await database;
-    // FTS5 match query
-    // We sanitize the query to prevent syntax errors in FTS match expression
+    // Wrap the query as a phrase to avoid accidental FTS syntax errors.
     final sanitizedQuery = '"$query"';
     final hasTags = tags != null && tags.isNotEmpty;
 
@@ -4960,52 +5018,25 @@ class DatabaseService {
 
       List<Object?> args = [sanitizedQuery];
 
-      // Add tag filtering
-      // Since tags are stored as a JSON string or comma-separated string in 'tags' column (TEXT),
-      // we can use LIKE. Assuming tags is a JSON array string like "['tag1', 'tag2']".
-      // Or if it's a simple string. The Note model says List<String> tags.
-      // In DB creation (checked before), tags is TEXT.
-      // We will perform a crude check using LIKE for each tag.
-      // Ideally we should normalize tags table, but for now:
       if (hasTags) {
         for (final tag in tags) {
-          sql += ' AND n.tags LIKE ?';
-          args.add('%"$tag"%'); // Assuming JSON format "tag"
+          sql += '''
+            AND EXISTS (
+              SELECT 1
+              FROM note_tags nt
+              JOIN tags t ON t.id = nt.tagId
+              WHERE nt.noteId = n.id AND t.name = ?
+            )
+          ''';
+          args.add(tag);
         }
       }
 
-      sql += ' ORDER BY rank LIMIT 50';
+      sql += ' LIMIT 50';
 
       final results = await db.rawQuery(sql, args);
       return await _batchLoadNotes(results);
     } catch (e) {
-      // If FTS5 'rank' column is missing (FTS4 fallback), try without ordering by rank
-      if (e.toString().contains('no such column: rank')) {
-        try {
-          String sql = '''
-            SELECT n.* 
-            FROM notes_fts fts
-            JOIN notes n ON fts.rowid = n.rowid
-            WHERE notes_fts MATCH ?
-          ''';
-          List<Object?> args = [sanitizedQuery];
-
-          if (hasTags) {
-            for (final tag in tags) {
-              sql += ' AND n.tags LIKE ?';
-              args.add('%"$tag"%');
-            }
-          }
-
-          sql += ' LIMIT 50';
-
-          final results = await db.rawQuery(sql, args);
-          return await _batchLoadNotes(results);
-        } catch (e2) {
-          LoggerService.error('FTS Search failed: $e2');
-          return [];
-        }
-      }
       LoggerService.error('FTS Search failed: $e');
       return [];
     }
@@ -5073,6 +5104,72 @@ class DatabaseService {
     if (results.isEmpty) return null;
     final notes = await _batchLoadNotes(results);
     return notes.isNotEmpty ? notes.first : null;
+  }
+
+  /// Get an exact (non-prefix) workflow binding for a tag name.
+  Future<WorkflowBindingRow?> getExactWorkflowBinding(String tagName) async {
+    final db = await database;
+    final result = await db.query(
+      'tag_workflow_bindings',
+      where: 'pattern = ? AND isPrefix = 0',
+      whereArgs: [tagName],
+    );
+    if (result.isEmpty) return null;
+    return WorkflowBindingRow.fromRow(result.first);
+  }
+
+  /// Get all prefix workflow bindings.
+  Future<List<WorkflowBindingRow>> getPrefixWorkflowBindings() async {
+    final db = await database;
+    final result = await db.query(
+      'tag_workflow_bindings',
+      where: 'isPrefix = 1',
+    );
+    return result.map(WorkflowBindingRow.fromRow).toList();
+  }
+
+  /// Get a workflow binding by its exact stored pattern.
+  Future<WorkflowBindingRow?> getWorkflowBindingByPattern(
+    String pattern,
+  ) async {
+    final db = await database;
+    final result = await db.query(
+      'tag_workflow_bindings',
+      where: 'pattern = ?',
+      whereArgs: [pattern],
+    );
+    if (result.isEmpty) return null;
+    return WorkflowBindingRow.fromRow(result.first);
+  }
+
+  /// Get all workflow bindings, exact and prefix.
+  Future<List<WorkflowBindingRow>> getAllWorkflowBindings() async {
+    final db = await database;
+    final result = await db.query(
+      'tag_workflow_bindings',
+      orderBy: 'isPrefix DESC, pattern COLLATE NOCASE ASC',
+    );
+    return result.map(WorkflowBindingRow.fromRow).toList();
+  }
+
+  /// Insert or replace a workflow binding.
+  Future<void> insertWorkflowBinding(WorkflowBindingRow binding) async {
+    final db = await database;
+    await db.insert(
+      'tag_workflow_bindings',
+      binding.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Delete a workflow binding by pattern.
+  Future<void> deleteWorkflowBinding(String pattern) async {
+    final db = await database;
+    await db.delete(
+      'tag_workflow_bindings',
+      where: 'pattern = ?',
+      whereArgs: [pattern],
+    );
   }
 
   // --- End Agent / AI Features ---
