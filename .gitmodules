@@ -4,6 +4,6 @@
 [submodule "third_party/flutter_json_view"]
 	path = third_party/flutter_json_view
 	url = git@github.com:Stowplex/flutter_json_view.git
-[submodule "/Users/liwen/develop/projects/Note-Synapse/.worktrees/agent_skills/third_party/flutter_gemma"]
-	path = /Users/liwen/develop/projects/Note-Synapse/.worktrees/agent_skills/third_party/flutter_gemma
+[submodule "third_party/flutter_gemma"]
+	path = third_party/flutter_gemma
 	url = git@github.com:kkspeed/flutter_gemma.git
