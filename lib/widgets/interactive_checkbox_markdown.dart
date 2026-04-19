@@ -1292,9 +1292,108 @@ class _InteractiveCheckboxMarkdownState
           );
         },
         codeBuilder: _buildCodeBlock,
+        tableBuilder: _buildConstrainedTable,
         components: components,
         inlineComponents: inlineComponents,
         useDollarSignsForLatex: true,
+      ),
+    );
+  }
+
+  /// Custom table builder that caps total table width at ~1.5x the screen
+  /// width and allows text in each cell to wrap instead of growing the
+  /// table unboundedly. Horizontal scroll is still available up to the cap.
+  Widget _buildConstrainedTable(
+    BuildContext context,
+    List<CustomTableRow> tableRows,
+    TextStyle textStyle,
+    GptMarkdownConfig config,
+  ) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final maxTableWidth = screenWidth * 1.5;
+    final perColumnCap = screenWidth * 0.6;
+    final controller = ScrollController();
+
+    final colCount = tableRows
+        .map((r) => r.fields.length)
+        .fold<int>(0, (a, b) => a > b ? a : b);
+
+    final headerColor = Theme.of(context).colorScheme.surfaceContainerHighest;
+    final borderColor = Theme.of(context).colorScheme.onSurface;
+
+    final rows = tableRows.map<TableRow>((row) {
+      final fields = row.fields;
+      return TableRow(
+        decoration: row.isHeader ? BoxDecoration(color: headerColor) : null,
+        children: List.generate(colCount, (index) {
+          final field = index < fields.length ? fields[index] : null;
+          final data = field?.data.trim() ?? '';
+
+          Widget content = Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: GptMarkdown(
+              data,
+              style: textStyle,
+              textDirection: config.textDirection,
+              onLinkTap: config.onLinkTap,
+              latexBuilder: _customLatexBuilder,
+              imageBuilder: (context, url, {alt, height, title, width}) {
+                return _customImageBuilder(
+                  context,
+                  url,
+                  width: width,
+                  height: height,
+                  title: title,
+                  alt: alt,
+                );
+              },
+              codeBuilder: _buildCodeBlock,
+              useDollarSignsForLatex: true,
+            ),
+          );
+
+          switch (field?.alignment) {
+            case TextAlign.center:
+              content = Center(child: content);
+              break;
+            case TextAlign.right:
+              content = Align(
+                alignment: Alignment.centerRight,
+                child: content,
+              );
+              break;
+            case TextAlign.left:
+            default:
+              content = Align(
+                alignment: Alignment.centerLeft,
+                child: content,
+              );
+              break;
+          }
+
+          return content;
+        }),
+      );
+    }).toList();
+
+    return Scrollbar(
+      controller: controller,
+      child: SingleChildScrollView(
+        controller: controller,
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxTableWidth),
+          child: Table(
+            textDirection: config.textDirection,
+            defaultColumnWidth: MinColumnWidth(
+              const IntrinsicColumnWidth(),
+              FixedColumnWidth(perColumnCap),
+            ),
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            border: TableBorder.all(width: 1, color: borderColor),
+            children: rows,
+          ),
+        ),
       ),
     );
   }
