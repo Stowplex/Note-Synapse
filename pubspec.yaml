@@ -50,9 +50,16 @@ dependencies:
     path: third_party/rhttp/rhttp
   crypto: ^3.0.3
 
-  # Local AI inference (forked — multi-image + CPU vision backend fix)
+  # Local AI inference (forked — multi-image + CPU vision backend fix).
+  # Being replaced by the MNN-backed edge_gen bridge below; will be removed
+  # once local_mnn_model.dart is fully migrated off flutter_gemma.
   flutter_gemma:
     path: third_party/flutter_gemma
+
+  # MNN-backed local model runtime (Stowplex/edge_gen, kkspeed/mnn-3.5.0
+  # branch). Supersedes flutter_gemma for local inference.
+  edge_gen:
+    path: third_party/edge_gen
 
   # Image handling
   image: ^4.2.0
