@@ -1795,6 +1795,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
   bool _downloadFailed = false;
   bool _fileCheckCompleted = false;
   bool _hasStartedFileCheck = false;
+  bool _stopRequested = false;
   String _status = '';
   String? _errorMessage;
   String? _downloadedFilePath;
@@ -2254,6 +2255,30 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     await _controller!.reload();
   }
 
+  Future<void> _handleStopLoading() async {
+    if (_controller == null || !_isLoading) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    _stopRequested = true;
+    try {
+      await _controller!.stopLoading();
+    } catch (_) {
+      // stopLoading may throw on some platforms if nothing is loading; ignore.
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _isLoading = false;
+      _status = l10n.webExtractionStatusStopped;
+      _errorMessage = null;
+    });
+    if (_readabilityEnabled) {
+      await _applyReadabilityMode();
+    }
+  }
+
   Future<bool> _applyReadabilityMode() async {
     if (_controller == null) {
       return false;
@@ -2638,6 +2663,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
   }
 
   Widget _buildStatusSection() {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -2660,6 +2686,41 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
+              if (_isLoading && _controller != null) ...[
+                const SizedBox(width: 8),
+                Tooltip(
+                  message: l10n.webExtractionStopLoading,
+                  child: InkWell(
+                    onTap: _handleStopLoading,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.stop_circle_outlined,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            l10n.webExtractionStopLoading,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
           if (_errorMessage != null) ...[
@@ -2802,6 +2863,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       onLoadStart: (controller, url) {
         setState(() {
           _isLoading = true;
+          _stopRequested = false;
           _status = l10n.loadingWebPage;
           _errorMessage = null;
           _isApplyingReadability = false;
@@ -2809,6 +2871,10 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       },
       onLoadStop: (controller, url) async {
         if (!mounted) {
+          return;
+        }
+        if (_stopRequested) {
+          // Stop was already handled by the user pressing the stop button.
           return;
         }
         setState(() {
