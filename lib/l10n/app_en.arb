@@ -1820,5 +1820,27 @@
   "dayMode": "Day Mode",
   "userAppSettingsTitle": "User App",
   "userAppSettingsSubtitle": "Manage user app settings and libraries",
-  "addFromFilter": "Add from filter"
+  "addFromFilter": "Add from filter",
+  "insertUserApp": "Insert User App",
+  "insertUserAppTitle": "Embed a user app",
+  "insertUserAppSearchHint": "Search apps…",
+  "insertUserAppIncludeAllTypes": "Include note-action & AI-tool apps",
+  "insertUserAppConfigureTitle": "Embed {appName}",
+  "@insertUserAppConfigureTitle": {
+    "placeholders": {
+      "appName": { "type": "String" }
+    }
+  },
+  "insertUserAppSize": "Size",
+  "insertUserAppSizeSmall": "Small (320×200)",
+  "insertUserAppSizeMedium": "Medium (480×300)",
+  "insertUserAppSizeLarge": "Large (640×400)",
+  "insertUserAppSizeCustom": "Custom",
+  "insertUserAppCustomWidth": "Width",
+  "insertUserAppCustomHeight": "Height",
+  "insertUserAppPassCurrentNote": "Pass current note to app",
+  "insertUserAppAdvanced": "Advanced: generate fenced block",
+  "insertUserAppInsertButton": "Insert",
+  "insertUserAppBackButton": "Back",
+  "insertUserAppNoAppsMessage": "You haven't installed any apps yet."
 }

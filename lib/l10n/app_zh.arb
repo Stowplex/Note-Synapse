@@ -1774,5 +1774,27 @@
   "dayMode": "日间模式",
   "userAppSettingsTitle": "用户应用",
   "userAppSettingsSubtitle": "管理用户应用设置和库",
-  "addFromFilter": "从筛选器添加"
+  "addFromFilter": "从筛选器添加",
+  "insertUserApp": "插入用户应用",
+  "insertUserAppTitle": "嵌入用户应用",
+  "insertUserAppSearchHint": "搜索应用…",
+  "insertUserAppIncludeAllTypes": "包含笔记操作与 AI 工具应用",
+  "insertUserAppConfigureTitle": "嵌入 {appName}",
+  "@insertUserAppConfigureTitle": {
+    "placeholders": {
+      "appName": { "type": "String" }
+    }
+  },
+  "insertUserAppSize": "尺寸",
+  "insertUserAppSizeSmall": "小 (320×200)",
+  "insertUserAppSizeMedium": "中 (480×300)",
+  "insertUserAppSizeLarge": "大 (640×400)",
+  "insertUserAppSizeCustom": "自定义",
+  "insertUserAppCustomWidth": "宽度",
+  "insertUserAppCustomHeight": "高度",
+  "insertUserAppPassCurrentNote": "将当前笔记传给应用",
+  "insertUserAppAdvanced": "高级：生成围栏代码块",
+  "insertUserAppInsertButton": "插入",
+  "insertUserAppBackButton": "返回",
+  "insertUserAppNoAppsMessage": "尚未安装任何应用。"
 }

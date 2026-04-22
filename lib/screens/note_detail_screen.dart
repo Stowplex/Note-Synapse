@@ -23,6 +23,7 @@ import '../widgets/interactive_checkbox_component.dart';
 import '../widgets/share_dialog.dart';
 import '../widgets/tag_selection_dialog.dart';
 import '../widgets/synapse_note_editor.dart';
+import '../widgets/app_embed_picker_sheet.dart';
 import '../widgets/block_editor_dialog.dart';
 import '../widgets/block_ai_edit_dialog.dart';
 import '../widgets/block_diff_preview_dialog.dart';
@@ -1473,6 +1474,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               onPickNoteLink: () => _showNoteLinkPicker(context),
               onPickAttachmentLink: () => _showAttachmentLinkPicker(context),
               onPickToolLink: () => _showToolLinkPicker(context),
+              onPickUserApp: () => _showUserAppPicker(context),
               language: 'markdown',
             ),
           ),
@@ -1522,6 +1524,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     final link = await ToolPickerSheet.show(context);
     if (link != null && mounted) {
       _insertText(link);
+    }
+  }
+
+  Future<void> _showUserAppPicker(BuildContext context) async {
+    final result = await AppEmbedPickerSheet.show(context);
+    if (result != null && mounted) {
+      _insertText(
+        result.markdown,
+        selectionOffset: result.selectionOffset,
+      );
     }
   }
 
