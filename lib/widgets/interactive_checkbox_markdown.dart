@@ -20,10 +20,14 @@ import 'package:re_highlight/styles/atom-one-dark.dart';
 import 'package:re_highlight/styles/atom-one-light.dart';
 
 import 'package:crypto/crypto.dart';
+import '../models/note.dart';
+import '../utils/synapse_app_block_syntax.dart';
 import '../utils/synapse_temp_utils.dart';
 import '../utils/synapse_resource_uri.dart';
 import '../services/attachment_link_service.dart';
 import '../services/database_service.dart';
+import '../services/logger_service.dart';
+import 'embedded_user_app_view.dart';
 import '../services/network_provider.dart';
 import '../screens/immersive_note_screen.dart';
 import '../screens/note_detail_screen.dart';
@@ -144,6 +148,16 @@ class _InteractiveCheckboxMarkdownState
     extends State<InteractiveCheckboxMarkdown> {
   late String _currentContent;
 
+  /// Preprocessed copy of [_currentContent] in which every
+  /// ```synapse-app``` fenced block has been replaced with a synthetic
+  /// `@[WxH](synapseresource://app/<uuid>?__blockRef=<id>)` inline embed.
+  /// The actual block body is stored in [_appBlockBodies] keyed by the
+  /// `<id>` so the inline dispatcher can recover it at render time without
+  /// forcing large payloads through a URL query string.
+  String _renderedContent = '';
+  String? _preprocessedSourceCache;
+  final Map<String, SynapseAppBlockBody> _appBlockBodies = {};
+
   /// Tracks how many times each checkbox line has been seen during the current
   /// build pass.  Reset at the start of every [build] call so that occurrence
   /// indices stay in sync with the rendered order.
@@ -153,6 +167,52 @@ class _InteractiveCheckboxMarkdownState
     final count = _checkboxOccurrenceCounters[blockText] ?? 0;
     _checkboxOccurrenceCounters[blockText] = count + 1;
     return count;
+  }
+
+  /// Rewrites [_currentContent] into [_renderedContent], replacing every
+  /// ```synapse-app``` fenced block with a synthetic inline embed that
+  /// references the block body via [_appBlockBodies]. Memoises the result
+  /// so repeated rebuilds with unchanged source are cheap.
+  void _refreshPreprocessedContent() {
+    if (_currentContent == _preprocessedSourceCache) {
+      return;
+    }
+    _preprocessedSourceCache = _currentContent;
+    _appBlockBodies.clear();
+
+    final matches = findSynapseAppBlocks(_currentContent).toList();
+    if (matches.isEmpty) {
+      _renderedContent = _currentContent;
+      return;
+    }
+
+    final buffer = StringBuffer();
+    int cursor = 0;
+    int idCounter = 0;
+    for (final match in matches) {
+      buffer.write(_currentContent.substring(cursor, match.startOffset));
+      final body = match.body;
+      if (body.isValid) {
+        final refId = 'b${idCounter++}';
+        _appBlockBodies[refId] = body;
+        final w =
+            (body.width ?? widget.defaultWebViewSize.width).toInt();
+        final h =
+            (body.height ?? widget.defaultWebViewSize.height).toInt();
+        buffer.write(
+          '@[${w}x$h](${SynapseResourceUri.scheme}://app/${Uri.encodeComponent(body.appUuid)}'
+          '?$synapseAppBlockRefKey=$refId)',
+        );
+      } else {
+        buffer.write(
+          '> **Embedded app error**: '
+          '${body.error ?? 'invalid synapse-app block'}',
+        );
+      }
+      cursor = match.endOffset;
+    }
+    buffer.write(_currentContent.substring(cursor));
+    _renderedContent = buffer.toString();
   }
 
   @override
@@ -226,6 +286,10 @@ class _InteractiveCheckboxMarkdownState
             context,
           ).showSnackBar(const SnackBar(content: Text('Attachment not found')));
         }
+      case SynapseResourceType.app:
+        // App URIs are rendered inline via _AppEmbedFromUri; clicking the
+        // rendered widget is not expected to route here.
+        break;
     }
   }
 
@@ -1182,6 +1246,8 @@ class _InteractiveCheckboxMarkdownState
     // Reset occurrence counters so they match the order of rendered checkboxes.
     _checkboxOccurrenceCounters.clear();
 
+    _refreshPreprocessedContent();
+
     // Basic inline components
     final inlineComponents = [
       CustomImageMd(
@@ -1211,6 +1277,7 @@ class _InteractiveCheckboxMarkdownState
         defaultSize: widget.defaultWebViewSize,
         noteId: widget.noteId,
         hasWebViewNotifier: widget.hasWebViewNotifier,
+        appBlockLookup: (id) => _appBlockBodies[id],
       ),
       if (widget.onLinkTap != null || widget.noteId != null)
         // Helper to ensure links are handled if needed, usually default ATag is fine
@@ -1253,7 +1320,7 @@ class _InteractiveCheckboxMarkdownState
     return KeyedSubtree(
       key: ValueKey('md_${_imageVersions.values.join()}'),
       child: GptMarkdown(
-        _currentContent,
+        _renderedContent,
         style: widget.style,
         textDirection: widget.textDirection,
         onLinkTap: (url, text) {
@@ -1405,11 +1472,17 @@ class _EmbeddedWebViewMd extends InlineMd {
     required this.defaultSize,
     this.noteId,
     this.hasWebViewNotifier,
+    this.appBlockLookup,
   });
 
   final Size defaultSize;
   final String? noteId;
   final ValueNotifier<bool>? hasWebViewNotifier;
+
+  /// Resolves a fenced-block reference id (the `__blockRef` URI query value)
+  /// to its parsed body. Injected by the host widget so inline URI
+  /// dispatch can pull parameters that don't fit in a URI query.
+  final SynapseAppBlockBody? Function(String blockRefId)? appBlockLookup;
 
   @override
   RegExp get exp => RegExp(r"@\[[^\[\]]*\]\([^\s]*\)");
@@ -1443,6 +1516,27 @@ class _EmbeddedWebViewMd extends InlineMd {
       parsedSize.height ?? defaultSize.height,
       defaultSize.height,
     );
+
+    if (isSynapseAppUri(url)) {
+      hasWebViewNotifier?.value = true;
+      return WidgetSpan(
+        alignment: PlaceholderAlignment.baseline,
+        baseline: TextBaseline.alphabetic,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: SelectionContainer.disabled(
+            child: _AppEmbedFromUri(
+              url: url,
+              width: resolvedWidth,
+              height: resolvedHeight,
+              parentNoteId: noteId,
+              appBlockLookup: appBlockLookup,
+              defaultSize: defaultSize,
+            ),
+          ),
+        ),
+      );
+    }
 
     hasWebViewNotifier?.value = true;
 
@@ -3415,4 +3509,226 @@ class CustomImageMd extends InlineMd {
     }
     return TextSpan(text: text);
   }
+}
+
+/// Resolves a `synapseresource://app/...` URI (either an inline
+/// `@[WxH](...)` embed or a preprocessed `__blockRef` sentinel for a
+/// ```synapse-app``` fenced block) into an [EmbeddedUserAppView].
+///
+/// Handles:
+/// - Parsing query parameters into the [EmbeddedUserAppView.params] map.
+/// - Resolving `note=current` / `notes=current,<id>,...` selectors into a
+///   real `List<Note>` by looking up ids in [DatabaseService] and
+///   substituting the host note for `current`.
+/// - Looking up the fenced-block body via `appBlockLookup` when the URI
+///   contains a `__blockRef` key (allows embeds with params too large for a
+///   URL).
+class _AppEmbedFromUri extends StatefulWidget {
+  const _AppEmbedFromUri({
+    required this.url,
+    required this.width,
+    required this.height,
+    required this.defaultSize,
+    this.parentNoteId,
+    this.appBlockLookup,
+  });
+
+  final String url;
+  final double width;
+  final double height;
+  final Size defaultSize;
+  final String? parentNoteId;
+  final SynapseAppBlockBody? Function(String blockRefId)? appBlockLookup;
+
+  @override
+  State<_AppEmbedFromUri> createState() => _AppEmbedFromUriState();
+}
+
+class _AppEmbedFromUriState extends State<_AppEmbedFromUri> {
+  late Future<_EmbedRequest> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _resolve();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AppEmbedFromUri oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url ||
+        oldWidget.parentNoteId != widget.parentNoteId) {
+      setState(() {
+        _future = _resolve();
+      });
+    }
+  }
+
+  Future<_EmbedRequest> _resolve() async {
+    final link = SynapseResourceUri.parse(widget.url);
+    if (link == null || link.type != SynapseResourceType.app) {
+      return _EmbedRequest.error('Invalid synapseresource://app URI');
+    }
+
+    final appUuid = link.id;
+    final query = link.queryParameters;
+
+    SynapseAppBlockBody? blockBody;
+    final blockRefId = query[synapseAppBlockRefKey];
+    if (blockRefId != null && widget.appBlockLookup != null) {
+      blockBody = widget.appBlockLookup!(blockRefId);
+    }
+
+    final revisionRaw = blockBody?.revisionNumber?.toString() ??
+        query['revision'];
+    final int? revisionNumber = revisionRaw == null
+        ? null
+        : int.tryParse(revisionRaw);
+
+    final noteSelectors = <String>[];
+    if (blockBody != null) {
+      noteSelectors.addAll(blockBody.noteSelectors);
+    } else {
+      final singleNote = query['note'];
+      if (singleNote != null && singleNote.trim().isNotEmpty) {
+        noteSelectors.add(singleNote.trim());
+      }
+      final manyNotes = query['notes'];
+      if (manyNotes != null && manyNotes.trim().isNotEmpty) {
+        noteSelectors.addAll(
+          manyNotes.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty),
+        );
+      }
+    }
+
+    final resolvedNotes = await _resolveNoteSelectors(noteSelectors);
+
+    Map<String, dynamic> params;
+    if (blockBody != null) {
+      params = Map<String, dynamic>.from(blockBody.params);
+    } else {
+      params = <String, dynamic>{};
+      for (final entry in query.entries) {
+        if (synapseAppReservedQueryKeys.contains(entry.key)) continue;
+        params[entry.key] = entry.value;
+      }
+    }
+
+    return _EmbedRequest.ok(
+      appUuid: appUuid,
+      revisionNumber: revisionNumber,
+      selectedNotes: resolvedNotes,
+      params: params,
+    );
+  }
+
+  Future<List<Note>> _resolveNoteSelectors(List<String> selectors) async {
+    if (selectors.isEmpty) return const [];
+
+    final db = DatabaseService();
+    final concreteIds = <String>{};
+    bool includesCurrent = false;
+    for (final s in selectors) {
+      if (s.toLowerCase() == 'current') {
+        includesCurrent = true;
+      } else {
+        concreteIds.add(s);
+      }
+    }
+
+    if (includesCurrent) {
+      if (widget.parentNoteId != null) {
+        concreteIds.add(widget.parentNoteId!);
+      } else {
+        LoggerService.warning(
+          "[EmbeddedUserApp] 'current' note selector used without a parent note id; "
+          'the app will receive an empty Notes list for that slot.',
+        );
+      }
+    }
+
+    if (concreteIds.isEmpty) return const [];
+    final notes = await db.getNotesByIds(concreteIds.toList());
+    // Preserve selector order where possible.
+    final byId = {for (final n in notes) n.id: n};
+    final ordered = <Note>[];
+    for (final s in selectors) {
+      final id = s.toLowerCase() == 'current' ? widget.parentNoteId : s;
+      if (id == null) continue;
+      final note = byId[id];
+      if (note != null && !ordered.contains(note)) {
+        ordered.add(note);
+      }
+    }
+    return ordered;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<_EmbedRequest>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return SizedBox(
+            width: widget.width,
+            height: widget.height,
+            child: const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          );
+        }
+        final request = snapshot.data;
+        if (request == null || !request.ok) {
+          return _EmbeddedWebViewError(
+            message: request?.error ?? 'Unable to resolve embedded app',
+          );
+        }
+        return EmbeddedUserAppView(
+          appUuid: request.appUuid!,
+          revisionNumber: request.revisionNumber,
+          selectedNotes: request.selectedNotes!,
+          params: request.params!,
+          width: widget.width,
+          height: widget.height,
+          parentNoteId: widget.parentNoteId,
+        );
+      },
+    );
+  }
+}
+
+class _EmbedRequest {
+  const _EmbedRequest._({
+    this.appUuid,
+    this.revisionNumber,
+    this.selectedNotes,
+    this.params,
+    this.error,
+  });
+  factory _EmbedRequest.ok({
+    required String appUuid,
+    int? revisionNumber,
+    required List<Note> selectedNotes,
+    required Map<String, dynamic> params,
+  }) =>
+      _EmbedRequest._(
+        appUuid: appUuid,
+        revisionNumber: revisionNumber,
+        selectedNotes: selectedNotes,
+        params: params,
+      );
+  factory _EmbedRequest.error(String message) =>
+      _EmbedRequest._(error: message);
+
+  final String? appUuid;
+  final int? revisionNumber;
+  final List<Note>? selectedNotes;
+  final Map<String, dynamic>? params;
+  final String? error;
+
+  bool get ok => error == null && appUuid != null && selectedNotes != null;
 }

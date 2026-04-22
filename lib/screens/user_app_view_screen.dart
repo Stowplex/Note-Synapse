@@ -1,25 +1,14 @@
-import 'dart:collection';
-import 'dart:convert';
-import 'dart:io';
-import '../services/database_service.dart'; // Add DatabaseService import
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import '../models/note.dart';
-import '../services/approval_service.dart';
 import '../services/user_app_service.dart';
 import '../services/logger_service.dart';
-import '../services/user_app_runtime_bridge.dart';
-import '../services/sql_query_service.dart';
-import '../services/global_library_service.dart';
 import '../utils/file_utils.dart';
-import '../widgets/approval_dialog.dart';
+import '../widgets/user_app_web_view.dart';
 import 'user_app_edit_screen.dart';
 import 'note_detail_screen.dart';
 import 'conversation_chat_screen.dart';
@@ -56,39 +45,6 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
   bool _isLoading = true;
   AppRevision? _selectedRevision;
   bool _showRevisionDetails = false;
-
-  String _getQueryTypeDescription(SqlQueryType queryType) {
-    switch (queryType) {
-      case SqlQueryType.insert:
-        return 'INSERT (add data)';
-      case SqlQueryType.update:
-        return 'UPDATE (modify data)';
-      case SqlQueryType.delete:
-        return 'DELETE (remove data)';
-      case SqlQueryType.createTable:
-        return 'CREATE TABLE';
-      case SqlQueryType.createIndex:
-        return 'CREATE INDEX';
-      case SqlQueryType.createTrigger:
-        return 'CREATE TRIGGER';
-      case SqlQueryType.createView:
-        return 'CREATE VIEW';
-      case SqlQueryType.dropTable:
-        return 'DROP TABLE';
-      case SqlQueryType.dropIndex:
-        return 'DROP INDEX';
-      case SqlQueryType.dropTrigger:
-        return 'DROP TRIGGER';
-      case SqlQueryType.dropView:
-        return 'DROP VIEW';
-      case SqlQueryType.alterTable:
-        return 'ALTER TABLE';
-      case SqlQueryType.select:
-      case SqlQueryType.pragma:
-      case SqlQueryType.other:
-        return 'SQL';
-    }
-  }
 
   @override
   void initState() {
@@ -543,319 +499,82 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
   }
 
   Widget _buildWebView(UserApp currentApp) {
-    final htmlData = _selectedRevision?.appCode ?? '';
-    LoggerService.debug('WebView loading data: ${htmlData.length} characters');
+    final revision = _selectedRevision;
+    if (revision == null) {
+      return const SizedBox.shrink();
+    }
     LoggerService.debug(
-      'Using revision: ${_selectedRevision?.id ?? 'none'} (revision ${_selectedRevision?.revisionNumber ?? 'N/A'})',
+      'WebView loading data: ${revision.appCode.length} characters',
     );
     LoggerService.debug(
-      'Data preview: ${htmlData.substring(0, htmlData.length > 200 ? 200 : htmlData.length)}...',
-    );
-    LoggerService.debug(
-      'WebView key: ${_selectedRevision?.id ?? 'app_${widget.app.id}'}',
-    );
-
-    final bridge = UserAppRuntimeBridge(
-      app: currentApp,
-      appProvider: context.read<AppProvider>(),
-      revisionNumber: _selectedRevision?.revisionNumber ?? 1,
-      isInteractive: true,
-      selectedNotes: widget.selectedNotes ?? const [],
-      onOpenNote: (note, replaceWindow) async {
-        if (!mounted) return;
-        if (replaceWindow) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => NoteDetailScreen(note: note),
-            ),
-          );
-        } else {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => NoteDetailScreen(note: note),
-            ),
-          );
-        }
-      },
-      onOpenConversations: (notes, immersiveMode) async {
-        if (!mounted) return;
-        if (immersiveMode) {
-          if (notes.isEmpty) {
-            LoggerService.warning(
-              '[UserAppViewScreen] Cannot open immersive mode without notes',
-            );
-            return;
-          }
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => ImmersiveNoteScreen(notes: notes),
-            ),
-          );
-        } else {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => ConversationChatScreen(
-                initialNoteIds: notes.map((note) => note.id).toList(),
-              ),
-            ),
-          );
-        }
-      },
-      onOpenAIActions: (notes) async {
-        if (!mounted) return;
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => AIActionScreen(selectedNotes: notes),
-          ),
-        );
-      },
-      onModificationRequest: (source, noteId, modification) async {
-        if (!mounted) return false;
-
-        // Fetch note details
-        String? title;
-        String? snippet;
-        try {
-          final db = DatabaseService();
-          final note = await db.getNote(noteId);
-          if (note != null) {
-            title = note.title;
-            final content = note.content;
-            snippet = content.length > 200
-                ? '${content.substring(0, 200)}...'
-                : content;
-          }
-        } catch (e) {
-          LoggerService.warning('Failed to fetch note details: $e');
-        }
-
-        final request = ApprovalRequest.noteModification(
-          noteId: noteId,
-          modification: modification,
-          source: 'App: ${widget.app.name}',
-          noteTitle: title,
-          noteSnippet: snippet,
-        );
-        final result = await ApprovalDialog.showWithContext(context, request);
-
-        if (result.approved) {
-          if (result.approvedForSession) {
-            source.approveSession();
-          }
-          return true;
-        }
-        return false;
-      },
-      onSqlWriteApprovalRequest: (source, sql, queryType) async {
-        if (!mounted) return false;
-
-        final request = ApprovalRequest.sqlWrite(
-          sql: sql,
-          queryType: queryType,
-          queryTypeDescription: _getQueryTypeDescription(queryType),
-          source: 'App: ${widget.app.name}',
-        );
-        final result = await ApprovalDialog.showWithContext(context, request);
-
-        if (result.approved) {
-          if (result.approvedForSession) {
-            source.approveSqlWritesForSession();
-          }
-          return true;
-        }
-        return false;
-      },
-      onDeletionApprovalRequest: (source, noteIds) async {
-        if (!mounted) return false;
-
-        // Fetch note details
-        final noteDetails = <Map<String, String>>[];
-        try {
-          final db = DatabaseService();
-          final notes = await db.getNotesByIds(noteIds);
-          for (final note in notes) {
-            final content = note.content;
-            final snippet = content.length > 100
-                ? '${content.substring(0, 100)}...'
-                : content;
-            noteDetails.add({
-              'id': note.id,
-              'title': note.title,
-              'snippet': snippet,
-            });
-          }
-        } catch (e) {
-          LoggerService.warning('Failed to fetch note details: $e');
-        }
-
-        final request = ApprovalRequest.noteDeletion(
-          noteIds: noteIds,
-          source: 'App: ${widget.app.name}',
-          noteDetails: noteDetails,
-        );
-        final result = await ApprovalDialog.showWithContext(context, request);
-
-        if (result.approved) {
-          if (result.approvedForSession) {
-            source.approveDeletionsForSession();
-          }
-          return true;
-        }
-        return false;
-      },
+      'Using revision: ${revision.id} (revision ${revision.revisionNumber})',
     );
 
     return Stack(
       children: [
-        InAppWebView(
-          key: ValueKey(
-            _selectedRevision?.id ?? 'app_${widget.app.id}',
-          ), // Force rebuild when revision changes
-          initialData: InAppWebViewInitialData(
-            data: htmlData,
-            mimeType: 'text/html',
-            encoding: 'utf8',
-          ),
-          initialSettings: InAppWebViewSettings(
-            javaScriptEnabled: true,
-            domStorageEnabled: true,
-            databaseEnabled: true,
-            clearCache: true,
-            cacheEnabled: true,
-            supportZoom: true,
-            builtInZoomControls: true,
-            displayZoomControls: false,
-            resourceCustomSchemes: ['synapse', 'synapseuser', 'synapsetemp'],
-          ),
-          onLoadResourceWithCustomScheme: (controller, request) async {
-            LoggerService.debug(
-              'onLoadResourceWithCustomScheme: ${request.url} - ${request.url.path}',
-            );
-            if (request.url.scheme.toLowerCase() == 'synapse') {
-              final fileName = request.url.host;
-              final service = GlobalLibraryService();
-
-              // Check if it's a custom library first (or built-in that we want to serve from file)
-              final customPath = await service.resolveLibraryPath(fileName);
-
-              if (customPath != null) {
-                // Serve from file system
-                final file = File(customPath);
-                if (await file.exists()) {
-                  final data = await file.readAsBytes();
-                  // Determine content type based on extension
-                  final contentType = fileName.endsWith('.css')
-                      ? 'text/css'
-                      : 'application/javascript';
-                  return CustomSchemeResponse(
-                    contentType: contentType,
-                    data: data,
-                  );
-                }
-              }
-
-              // Fallback to assets/scripts for built-ins if not found via service or if service returns null
-              // (This maintains backward compatibility and handles built-ins if they are not fully migrated to file paths yet,
-              // though our service should handle them if we mapped them correctly.
-              // However, built-ins in YAML point to assets/scripts/..., so resolveLibraryPath might return that relative path?
-              // Wait, resolveLibraryPath implementation:
-              // For custom libs, it returns full path.
-              // For built-ins, I didn't implement logic to return asset path in resolveLibraryPath yet.
-              // Let's check GlobalLibraryService.resolveLibraryPath implementation again.
-
-              // Actually, I should probably update resolveLibraryPath to handle built-ins too or handle it here.
-              // In GlobalLibraryService, I only checked custom libs.
-              // Let's stick to the plan: built-ins are in assets/scripts.
-
-              try {
-                final data = await rootBundle.loadString(
-                  "assets/scripts/$fileName",
-                );
-                return CustomSchemeResponse(
-                  contentType: 'text/plain',
-                  data: Uint8List.fromList(utf8.encode(data)),
-                );
-              } catch (e) {
+        UserAppWebView(
+          key: ValueKey(revision.id),
+          app: currentApp,
+          revision: revision,
+          selectedNotes: widget.selectedNotes ?? const [],
+          sourceLabel: 'App: ${widget.app.name}',
+          onOpenNote: (note, replaceWindow) async {
+            if (!mounted) return;
+            if (replaceWindow) {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (context) => NoteDetailScreen(note: note),
+                ),
+              );
+            } else {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => NoteDetailScreen(note: note),
+                ),
+              );
+            }
+          },
+          onOpenConversations: (notes, immersiveMode) async {
+            if (!mounted) return;
+            if (immersiveMode) {
+              if (notes.isEmpty) {
                 LoggerService.warning(
-                  'Failed to load asset: assets/scripts/$fileName',
+                  '[UserAppViewScreen] Cannot open immersive mode without notes',
                 );
-                return CustomSchemeResponse(
-                  contentType: 'text/plain',
-                  data: Uint8List.fromList(
-                    utf8.encode('/* Asset not found: $fileName */'),
-                  ),
-                );
+                return;
               }
-            } else if (request.url.scheme.toLowerCase() == 'synapseuser') {
-              return await bridge.handleSynapseUserScheme(request.url);
-            } else if (request.url.scheme.toLowerCase() == 'synapsetemp') {
-              return await bridge.handleSynapseTempScheme(request.url);
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => ImmersiveNoteScreen(notes: notes),
+                ),
+              );
+            } else {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => ConversationChatScreen(
+                    initialNoteIds: notes.map((note) => note.id).toList(),
+                  ),
+                ),
+              );
             }
-            return null;
           },
-          shouldOverrideUrlLoading: (controller, request) async {
-            final url = request.request.url;
-            if (url == null) return NavigationActionPolicy.CANCEL;
-
-            final scheme = url.scheme.toLowerCase();
-            if (scheme == 'about' || scheme == 'data') {
-              return NavigationActionPolicy.ALLOW;
-            }
-
-            if (scheme == 'http' || scheme == 'https') {
-              launchUrl(url.uriValue);
-            }
-            return NavigationActionPolicy.CANCEL;
+          onOpenAIActions: (notes) async {
+            if (!mounted) return;
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => AIActionScreen(selectedNotes: notes),
+              ),
+            );
           },
-          initialUserScripts: UnmodifiableListView<UserScript>([
-            bridge.buildBootstrapScript(),
-          ]),
-          onWebViewCreated: (controller) {
-            bridge.registerJavaScriptHandlers(controller);
-          },
-          onLoadStart: (controller, url) {
+          onLoadStart: (_, __) {
             setState(() {
               _isLoading = true;
             });
           },
-          onLoadStop: (controller, url) {
+          onLoadStop: (_, __) {
             setState(() {
               _isLoading = false;
             });
-
-            // Override navigator.clipboard.writeText for Android clipboard fix
-            controller.evaluateJavascript(
-              source: '''
-                  if (!navigator.clipboard) {
-                    navigator.clipboard = {
-                      writeText: (msg) => {
-                        return window.flutter_inappwebview?.callHandler("copy-to-clipboard", msg);
-                      }
-                    };
-                  } else {
-                    navigator.clipboard.writeText = (msg) => { 
-                      return window.flutter_inappwebview?.callHandler("copy-to-clipboard", msg); 
-                    };
-                  }
-
-                  
-                  // Fallback for older browsers - create a global copy function
-                  window.copyToClipboard = (text) => {
-                    return window.flutter_inappwebview?.callHandler("copy-to-clipboard", text);
-                  };
-                  
-                  // Override common copy functions
-                  if (typeof document !== 'undefined') {
-                    const originalExecCommand = document.execCommand;
-                    document.execCommand = function(command, showUI, value) {
-                      if (command === 'copy' && value) {
-                        return window.flutter_inappwebview?.callHandler("copy-to-clipboard", value);
-                      }
-                      return originalExecCommand.call(this, command, showUI, value);
-                    };
-                  }
-                ''',
-            );
           },
           onConsoleMessage: (controller, consoleMessage) {
             setState(() {

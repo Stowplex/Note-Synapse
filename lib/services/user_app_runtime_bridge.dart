@@ -50,19 +50,22 @@ class UserAppRuntimeBridge {
     required this.revisionNumber,
     required this.isInteractive,
     List<Note>? selectedNotes,
+    Map<String, dynamic>? params,
     this.onOpenNote,
     this.onOpenConversations,
     this.onOpenAIActions,
     this.onModificationRequest,
     this.onSqlWriteApprovalRequest,
     this.onDeletionApprovalRequest,
-  }) : _selectedNotes = selectedNotes ?? const [];
+  }) : _selectedNotes = selectedNotes ?? const [],
+       _params = params ?? const {};
 
   final UserApp app;
   final AppProvider appProvider;
   final int revisionNumber;
   final bool isInteractive;
   final List<Note> _selectedNotes;
+  final Map<String, dynamic> _params;
   final OpenNoteCallback? onOpenNote;
   final OpenConversationsCallback? onOpenConversations;
   final OpenAIActionsCallback? onOpenAIActions;
@@ -100,6 +103,7 @@ class UserAppRuntimeBridge {
   /// Creates the bootstrap user script that initialises the Synapse namespace.
   UserScript buildBootstrapScript() {
     final notesJson = _buildSelectedNotesJson();
+    final paramsJson = _buildParamsJson();
     final toolEnvFlag = isInteractive ? 'true' : 'false';
 
     final script =
@@ -240,6 +244,7 @@ class UserAppRuntimeBridge {
             return result;
           },
           Notes: $notesJson,
+          Params: $paramsJson,
         };
 
         if (!window.Synapse.tool) {
@@ -1178,6 +1183,21 @@ class UserAppRuntimeBridge {
           utf8.encode('// Temporary resource unavailable'),
         ),
       );
+    }
+  }
+
+  String _buildParamsJson() {
+    if (_params.isEmpty) {
+      return '{}';
+    }
+    try {
+      return jsonEncode(_params);
+    } catch (e) {
+      LoggerService.warning(
+        '[UserAppRuntimeBridge] Params are not JSON-serializable, '
+        'falling back to {}: $e',
+      );
+      return '{}';
     }
   }
 
