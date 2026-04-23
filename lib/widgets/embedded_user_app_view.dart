@@ -7,6 +7,7 @@ import '../screens/ai_action_screen.dart';
 import '../screens/conversation_chat_screen.dart';
 import '../screens/immersive_note_screen.dart';
 import '../screens/note_detail_screen.dart';
+import '../screens/user_app_view_screen.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
 import 'user_app_web_view.dart';
@@ -142,9 +143,34 @@ class _EmbeddedUserAppViewState extends State<EmbeddedUserAppView> {
               if (!resolved.ok) {
                 return _EmbeddedAppErrorCard(message: resolved.error!);
               }
-              return _buildWebView(resolved.app!, resolved.revision!);
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    child: _buildWebView(resolved.app!, resolved.revision!),
+                  ),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: _FullscreenButton(
+                      onTap: () => _openFullscreen(resolved.app!),
+                    ),
+                  ),
+                ],
+              );
             },
           ),
+        ),
+      ),
+    );
+  }
+
+  void _openFullscreen(UserApp app) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => UserAppViewScreen(
+          app: app,
+          selectedNotes: widget.selectedNotes,
         ),
       ),
     );
@@ -222,6 +248,35 @@ class _ResolvedApp {
   final String? error;
 
   bool get ok => error == null && app != null && revision != null;
+}
+
+class _FullscreenButton extends StatelessWidget {
+  const _FullscreenButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: const Icon(
+            Icons.fullscreen,
+            size: 16,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _EmbeddedAppErrorCard extends StatelessWidget {
