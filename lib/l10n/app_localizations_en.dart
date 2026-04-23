@@ -4516,7 +4516,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Include note-action & AI-tool apps';
 
   @override
-  String insertUserAppConfigureTitle(String appName) => 'Embed $appName';
+  String insertUserAppConfigureTitle(String appName) {
+    return 'Embed $appName';
+  }
 
   @override
   String get insertUserAppSize => 'Size';

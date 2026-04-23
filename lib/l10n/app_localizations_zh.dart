@@ -4315,7 +4315,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get insertUserAppIncludeAllTypes => '包含笔记操作与 AI 工具应用';
 
   @override
-  String insertUserAppConfigureTitle(String appName) => '嵌入 $appName';
+  String insertUserAppConfigureTitle(String appName) {
+    return '嵌入 $appName';
+  }
 
   @override
   String get insertUserAppSize => '尺寸';
