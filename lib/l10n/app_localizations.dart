@@ -6254,6 +6254,18 @@ abstract class AppLocalizations {
   /// **'Page ready. Interact before extracting.'**
   String get webExtractionStatusReady;
 
+  /// No description provided for @webExtractionStatusStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading stopped. Page ready for extraction.'**
+  String get webExtractionStatusStopped;
+
+  /// No description provided for @webExtractionStopLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop loading'**
+  String get webExtractionStopLoading;
+
   /// No description provided for @webExtractionStatusApplyingReadability.
   ///
   /// In en, this message translates to:

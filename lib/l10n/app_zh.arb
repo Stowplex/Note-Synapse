@@ -1198,6 +1198,8 @@
     }
   },
   "webExtractionStatusReady": "页面已就绪，可在提取前进行交互。",
+  "webExtractionStatusStopped": "加载已停止。页面可进行提取。",
+  "webExtractionStopLoading": "停止加载",
   "webExtractionStatusApplyingReadability": "正在启用阅读模式...",
   "webExtractionStatusReloadingOriginal": "正在重新加载原始页面...",
   "webExtractionStatusReadabilityEnabled": "已启用阅读模式。",

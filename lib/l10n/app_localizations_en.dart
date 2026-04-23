@@ -3512,6 +3512,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Page ready. Interact before extracting.';
 
   @override
+  String get webExtractionStatusStopped =>
+      'Loading stopped. Page ready for extraction.';
+
+  @override
+  String get webExtractionStopLoading => 'Stop loading';
+
+  @override
   String get webExtractionStatusApplyingReadability =>
       'Applying readability view...';
 

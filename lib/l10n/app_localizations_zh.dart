@@ -3385,6 +3385,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get webExtractionStatusReady => '页面已就绪，可在提取前进行交互。';
 
   @override
+  String get webExtractionStatusStopped => '加载已停止。页面可进行提取。';
+
+  @override
+  String get webExtractionStopLoading => '停止加载';
+
+  @override
   String get webExtractionStatusApplyingReadability => '正在启用阅读模式...';
 
   @override

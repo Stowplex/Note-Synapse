@@ -1230,6 +1230,8 @@
     }
   },
   "webExtractionStatusReady": "Page ready. Interact before extracting.",
+  "webExtractionStatusStopped": "Loading stopped. Page ready for extraction.",
+  "webExtractionStopLoading": "Stop loading",
   "webExtractionStatusApplyingReadability": "Applying readability view...",
   "webExtractionStatusReloadingOriginal": "Reloading original page...",
   "webExtractionStatusReadabilityEnabled": "Readability view enabled.",
