@@ -121,6 +121,46 @@ void main() {
       expect(jsHandlers.containsKey('saveNotes'), isTrue);
     });
 
+    group('buildBootstrapScript', () {
+      test('emits Synapse.Notes and Synapse.Params from the bridge params',
+          () {
+        final localBridge = UserAppRuntimeBridge(
+          app: UserApp(
+            id: 'a',
+            uuid: 'u',
+            name: 'App',
+            description: '',
+            steps: const [],
+            htmlContent: '',
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+          appProvider: mockAppProvider,
+          revisionNumber: 1,
+          isInteractive: true,
+          params: const {
+            'zoom': 12,
+            'style': 'dark',
+            'pins': [
+              {'lat': 37.77, 'lng': -122.41},
+            ],
+          },
+        );
+
+        final source = localBridge.buildBootstrapScript().source;
+        expect(source, contains('Notes:'));
+        expect(source, contains('Params:'));
+        expect(source, contains('"zoom":12'));
+        expect(source, contains('"style":"dark"'));
+        expect(source, contains('"pins":[{"lat":37.77,"lng":-122.41}]'));
+      });
+
+      test('emits empty Params object when no params are passed', () {
+        final source = bridge.buildBootstrapScript().source;
+        expect(source, contains('Params: {}'));
+      });
+    });
+
     group('runQuery', () {
       setUp(() {
         bridge.registerJavaScriptHandlers(mockWebViewController);

@@ -83,6 +83,30 @@ void main() {
         expect(link.queryParameters, {'page': '5'});
       });
 
+      test('parses app URI with multiple query parameters', () {
+        final link = SynapseResourceUri.parse(
+          'synapseresource://app/my-app-uuid?note=current&zoom=12&style=dark',
+        );
+        expect(link, isNotNull);
+        expect(link!.type, SynapseResourceType.app);
+        expect(link.id, 'my-app-uuid');
+        expect(link.queryParameters, {
+          'note': 'current',
+          'zoom': '12',
+          'style': 'dark',
+        });
+      });
+
+      test('parses app URI without query parameters', () {
+        final link = SynapseResourceUri.parse(
+          'synapseresource://app/my-app-uuid',
+        );
+        expect(link, isNotNull);
+        expect(link!.type, SynapseResourceType.app);
+        expect(link.id, 'my-app-uuid');
+        expect(link.queryParameters, isEmpty);
+      });
+
       test('parses URI with uppercase scheme', () {
         final link = SynapseResourceUri.parse('SYNAPSERESOURCE://note/abc');
         expect(link, isNotNull);
@@ -163,6 +187,37 @@ void main() {
       });
     });
 
+    group('appUri', () {
+      test('generates correct app URI without params', () {
+        expect(
+          SynapseResourceUri.appUri('app-uuid-1'),
+          'synapseresource://app/app-uuid-1',
+        );
+      });
+
+      test('generates correct app URI with params', () {
+        final uri = SynapseResourceUri.appUri(
+          'app-uuid-1',
+          params: {'note': 'current', 'zoom': '12'},
+        );
+        final parsed = SynapseResourceUri.parse(uri);
+        expect(parsed, isNotNull);
+        expect(parsed!.type, SynapseResourceType.app);
+        expect(parsed.id, 'app-uuid-1');
+        expect(parsed.queryParameters['note'], 'current');
+        expect(parsed.queryParameters['zoom'], '12');
+      });
+
+      test('encodes values with special characters', () {
+        final uri = SynapseResourceUri.appUri(
+          'app-uuid-1',
+          params: {'q': 'hello world & stuff'},
+        );
+        final parsed = SynapseResourceUri.parse(uri);
+        expect(parsed!.queryParameters['q'], 'hello world & stuff');
+      });
+    });
+
     group('roundtrip', () {
       test('noteUri can be parsed back', () {
         const noteId = 'test-note-123';
@@ -200,6 +255,20 @@ void main() {
         expect(parsed!.type, SynapseResourceType.attachment);
         expect(parsed.id, attachmentId);
         expect(parsed.queryParameters['page'], '42');
+      });
+
+      test('appUri with params can be parsed back', () {
+        const appUuid = 'test-app-uuid';
+        final uri = SynapseResourceUri.appUri(
+          appUuid,
+          params: {'note': 'current', 'style': 'dark'},
+        );
+        final parsed = SynapseResourceUri.parse(uri);
+        expect(parsed, isNotNull);
+        expect(parsed!.type, SynapseResourceType.app);
+        expect(parsed.id, appUuid);
+        expect(parsed.queryParameters['note'], 'current');
+        expect(parsed.queryParameters['style'], 'dark');
       });
     });
 

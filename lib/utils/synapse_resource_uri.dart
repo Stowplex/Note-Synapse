@@ -1,19 +1,21 @@
 /// Utility class for parsing and generating synapseresource:// URIs
 ///
 /// This enables in-app navigation to notes, conversations, and attachments
-/// via clickable markdown links.
+/// via clickable markdown links, and in-markdown rendering of sandboxed user
+/// apps.
 ///
 /// URI Format:
 /// - synapseresource://note/<note_id>
 /// - synapseresource://conversation/<conversation_id>
 /// - synapseresource://attachment/<attachment_id>
 /// - synapseresource://attachment/<attachment_id>?page=5
+/// - synapseresource://app/<app_uuid>?note=current&key=value
 library;
 
 import 'package:flutter/foundation.dart';
 
 /// The type of resource a SynapseResourceLink points to.
-enum SynapseResourceType { note, conversation, attachment }
+enum SynapseResourceType { note, conversation, attachment, app }
 
 /// A parsed synapseresource:// link.
 class SynapseResourceLink {
@@ -90,6 +92,8 @@ class SynapseResourceUri {
           type = SynapseResourceType.conversation;
         case 'attachment':
           type = SynapseResourceType.attachment;
+        case 'app':
+          type = SynapseResourceType.app;
         default:
           return null;
       }
@@ -121,5 +125,24 @@ class SynapseResourceUri {
       return '$base?page=$page';
     }
     return base;
+  }
+
+  /// Generates a synapseresource:// URI for an embedded user app.
+  ///
+  /// [params] key/value pairs are URI-encoded and appended as the query
+  /// string. Use the special value `current` for the `note` or `notes`
+  /// parameter to reference the host note at render time.
+  static String appUri(String appUuid, {Map<String, String>? params}) {
+    final base = '$scheme://app/$appUuid';
+    if (params == null || params.isEmpty) {
+      return base;
+    }
+    final query = params.entries
+        .map(
+          (e) =>
+              '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}',
+        )
+        .join('&');
+    return '$base?$query';
   }
 }

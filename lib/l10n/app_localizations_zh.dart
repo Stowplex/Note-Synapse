@@ -4307,4 +4307,57 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get addFromFilter => '从筛选器添加';
+
+  @override
+  String get insertUserApp => '插入用户应用';
+
+  @override
+  String get insertUserAppTitle => '嵌入用户应用';
+
+  @override
+  String get insertUserAppSearchHint => '搜索应用…';
+
+  @override
+  String get insertUserAppIncludeAllTypes => '包含笔记操作与 AI 工具应用';
+
+  @override
+  String insertUserAppConfigureTitle(String appName) {
+    return '嵌入 $appName';
+  }
+
+  @override
+  String get insertUserAppSize => '尺寸';
+
+  @override
+  String get insertUserAppSizeSmall => '小 (320×200)';
+
+  @override
+  String get insertUserAppSizeMedium => '中 (480×300)';
+
+  @override
+  String get insertUserAppSizeLarge => '大 (640×400)';
+
+  @override
+  String get insertUserAppSizeCustom => '自定义';
+
+  @override
+  String get insertUserAppCustomWidth => '宽度';
+
+  @override
+  String get insertUserAppCustomHeight => '高度';
+
+  @override
+  String get insertUserAppPassCurrentNote => '将当前笔记传给应用';
+
+  @override
+  String get insertUserAppAdvanced => '高级：生成围栏代码块';
+
+  @override
+  String get insertUserAppInsertButton => '插入';
+
+  @override
+  String get insertUserAppBackButton => '返回';
+
+  @override
+  String get insertUserAppNoAppsMessage => '尚未安装任何应用。';
 }

@@ -3159,6 +3159,24 @@ class DatabaseService {
     return null;
   }
 
+  Future<UserApp?> getUserAppByUuid(String uuid) async {
+    final db = await database;
+    final maps = await db.rawQuery(
+      '''
+      SELECT id, uuid, name, description, steps, htmlContent, type,
+             selectedRevisionId, author, license, createdAt, updatedAt
+      FROM user_apps
+      WHERE uuid = ?
+      LIMIT 1
+    ''',
+      [uuid],
+    );
+    if (maps.isNotEmpty) {
+      return _userAppFromMap(maps.first);
+    }
+    return null;
+  }
+
   Future<void> updateUserApp(UserApp app) async {
     final db = await database;
     // Build JSON manually to avoid conflicts with toJson() DateTime serialization

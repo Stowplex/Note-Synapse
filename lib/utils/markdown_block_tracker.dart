@@ -3,6 +3,8 @@
 import 'package:markdown/markdown.dart' as md;
 import 'package:markdown/src/line.dart'; // Internal import for line tracking
 
+import 'synapse_app_block_syntax.dart';
+
 /// Represents a type of markdown block
 enum MarkdownBlockType {
   codeBlock,
@@ -81,7 +83,7 @@ class MarkdownBlockTracker {
     final document = md.Document(
       // We enable common extensions to ensure we catch lists, tables, etc.
       extensionSet: md.ExtensionSet.gitHubFlavored,
-      blockSyntaxes: [const LatexBlockSyntax()],
+      blockSyntaxes: const [LatexBlockSyntax(), SynapseAppBlockSyntax()],
       encodeHtml: false,
     );
 
@@ -302,6 +304,8 @@ class MarkdownBlockTracker {
         // Custom or HTML extensions
         case 'latex':
           return MarkdownBlockType.latexBlock;
+        case 'synapse-app-embed':
+          return MarkdownBlockType.other;
         default:
           return MarkdownBlockType.other;
       }

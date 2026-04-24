@@ -7861,6 +7861,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add from filter'**
   String get addFromFilter;
+
+  /// No description provided for @insertUserApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert User App'**
+  String get insertUserApp;
+
+  /// No description provided for @insertUserAppTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Embed a user app'**
+  String get insertUserAppTitle;
+
+  /// No description provided for @insertUserAppSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search apps…'**
+  String get insertUserAppSearchHint;
+
+  /// No description provided for @insertUserAppIncludeAllTypes.
+  ///
+  /// In en, this message translates to:
+  /// **'Include note-action & AI-tool apps'**
+  String get insertUserAppIncludeAllTypes;
+
+  /// No description provided for @insertUserAppConfigureTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Embed {appName}'**
+  String insertUserAppConfigureTitle(String appName);
+
+  /// No description provided for @insertUserAppSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Size'**
+  String get insertUserAppSize;
+
+  /// No description provided for @insertUserAppSizeSmall.
+  ///
+  /// In en, this message translates to:
+  /// **'Small (320×200)'**
+  String get insertUserAppSizeSmall;
+
+  /// No description provided for @insertUserAppSizeMedium.
+  ///
+  /// In en, this message translates to:
+  /// **'Medium (480×300)'**
+  String get insertUserAppSizeMedium;
+
+  /// No description provided for @insertUserAppSizeLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'Large (640×400)'**
+  String get insertUserAppSizeLarge;
+
+  /// No description provided for @insertUserAppSizeCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom'**
+  String get insertUserAppSizeCustom;
+
+  /// No description provided for @insertUserAppCustomWidth.
+  ///
+  /// In en, this message translates to:
+  /// **'Width'**
+  String get insertUserAppCustomWidth;
+
+  /// No description provided for @insertUserAppCustomHeight.
+  ///
+  /// In en, this message translates to:
+  /// **'Height'**
+  String get insertUserAppCustomHeight;
+
+  /// No description provided for @insertUserAppPassCurrentNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Pass current note to app'**
+  String get insertUserAppPassCurrentNote;
+
+  /// No description provided for @insertUserAppAdvanced.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced: generate fenced block'**
+  String get insertUserAppAdvanced;
+
+  /// No description provided for @insertUserAppInsertButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert'**
+  String get insertUserAppInsertButton;
+
+  /// No description provided for @insertUserAppBackButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get insertUserAppBackButton;
+
+  /// No description provided for @insertUserAppNoAppsMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'You haven\'t installed any apps yet.'**
+  String get insertUserAppNoAppsMessage;
 }
 
 class _AppLocalizationsDelegate

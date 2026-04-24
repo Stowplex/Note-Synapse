@@ -487,3 +487,64 @@
    const noteIds = Synapse.Notes.map(note => note.id);
    await Synapse.openAIActions(noteIds);
    ```
+
+   - Synapse.Notes (array, read-only) - The notes the app was launched with.
+     Each entry is an object with id, title, content, tags, createdAt, updatedAt,
+     isTask, status, pinned, isArchived, and attachmentPaths.
+
+   - Synapse.Params (object, read-only) - Parameters passed in when the app is
+     embedded inline in markdown. Populated from the query string of the
+     `synapseresource://app/<uuid>` URI or from the `params:` block of a
+     ```synapse-app``` fenced block. Values from URI queries are strings; values
+     from fenced blocks preserve their YAML/JSON types (numbers, arrays,
+     nested objects).
+
+   ### Embedding apps inline in markdown
+
+   Any user app can be embedded inside notes and chat-message markdown. The
+   embedded app runs in the same sandbox with the same `window.Synapse` API,
+   so it can read `Synapse.Notes` and `Synapse.Params` and call any write
+   method (writes still surface the usual approval dialog, labelled
+   "Embedded app: <name>").
+
+   Two embedding forms are supported:
+
+   1. Inline (uniform with other embeds, good for small params):
+
+      ```
+      @[WIDTHxHEIGHT](synapseresource://app/<app-uuid>?note=current&key=value)
+      ```
+
+      - `note=current` passes the host note. Use a concrete id (or a
+        comma-separated list via `notes=<id1>,<id2>,current`) to pass specific
+        notes.
+      - `revision=<n>` selects a specific revision number. Omit to use the
+        app's currently selected revision.
+      - All other query keys are forwarded to `Synapse.Params` as strings.
+
+   2. Fenced block (when params are too large for a URI or contain nested
+      structures):
+
+      ```
+      ```synapse-app
+      app: <app-uuid>
+      revision: 3         # optional
+      width: 600          # optional, defaults to the embed's default size
+      height: 400         # optional
+      notes: [current, <note-id>]
+      params:
+        zoom: 12
+        style: dark
+        pins:
+          - {lat: 37.77, lng: -122.41, label: "SF"}
+      ```
+      ```
+
+      The body is YAML (JSON also accepted). `notes` may be a list or a
+      comma-separated string. `params` is forwarded to `Synapse.Params`
+      preserving types.
+
+   Apps that want to be embeddable should read their inputs from
+   `Synapse.Notes` and `Synapse.Params` (falling back to sensible defaults
+   when empty), and should treat every render as self-contained since each
+   embed mounts its own sandbox.

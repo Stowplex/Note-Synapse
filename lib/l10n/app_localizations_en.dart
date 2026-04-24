@@ -4508,4 +4508,59 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addFromFilter => 'Add from filter';
+
+  @override
+  String get insertUserApp => 'Insert User App';
+
+  @override
+  String get insertUserAppTitle => 'Embed a user app';
+
+  @override
+  String get insertUserAppSearchHint => 'Search apps…';
+
+  @override
+  String get insertUserAppIncludeAllTypes =>
+      'Include note-action & AI-tool apps';
+
+  @override
+  String insertUserAppConfigureTitle(String appName) {
+    return 'Embed $appName';
+  }
+
+  @override
+  String get insertUserAppSize => 'Size';
+
+  @override
+  String get insertUserAppSizeSmall => 'Small (320×200)';
+
+  @override
+  String get insertUserAppSizeMedium => 'Medium (480×300)';
+
+  @override
+  String get insertUserAppSizeLarge => 'Large (640×400)';
+
+  @override
+  String get insertUserAppSizeCustom => 'Custom';
+
+  @override
+  String get insertUserAppCustomWidth => 'Width';
+
+  @override
+  String get insertUserAppCustomHeight => 'Height';
+
+  @override
+  String get insertUserAppPassCurrentNote => 'Pass current note to app';
+
+  @override
+  String get insertUserAppAdvanced => 'Advanced: generate fenced block';
+
+  @override
+  String get insertUserAppInsertButton => 'Insert';
+
+  @override
+  String get insertUserAppBackButton => 'Back';
+
+  @override
+  String get insertUserAppNoAppsMessage =>
+      'You haven\'t installed any apps yet.';
 }
