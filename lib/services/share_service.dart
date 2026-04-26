@@ -19,6 +19,7 @@ import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 import 'package:archive/archive_io.dart';
+import 'package:crypto/crypto.dart';
 import 'package:intl/intl.dart';
 import '../models/note.dart';
 import '../providers/app_provider.dart';
@@ -57,6 +58,27 @@ class ShareService {
     Rect? bounds,
   })?
   printingSharePdfOverride;
+
+  /// For testing purposes only — exposes the SVG loader so the
+  /// `synapsetemp:///` → permanent attachment fallback can be exercised
+  /// without spinning up a full PDF render.
+  @visibleForTesting
+  static Future<String?> debugLoadSvgStringFromSource(
+    String source, {
+    String? noteId,
+  }) {
+    return _loadSvgStringFromSource(source, noteId: noteId);
+  }
+
+  /// For testing purposes only — exposes the raster image loader so the
+  /// `synapsetemp:///` → permanent attachment fallback can be exercised.
+  @visibleForTesting
+  static Future<Uint8List?> debugLoadImageBytesFromSource(
+    String source, {
+    String? noteId,
+  }) {
+    return _loadImageBytesFromSource(source, noteId: noteId);
+  }
 
   static final List<Map<String, dynamic>> _pendingSharedQueue =
       <Map<String, dynamic>>[];
@@ -838,15 +860,59 @@ class ShareService {
     return pdfAttachments;
   }
 
-  static Future<Uint8List?> _loadImageBytesFromSource(String source) async {
+  /// Resolves a `synapsetemp:///` URI to its promoted permanent attachment
+  /// file, if one exists in the private storage directory under the
+  /// `<noteId>_<sha256(uri)>.<ext>` naming convention used at note-save time.
+  ///
+  /// Returns null when [noteId] is missing or no matching file is found.
+  static Future<File?> _resolveSynapseTempAttachmentFile(
+    String uri,
+    String? noteId,
+  ) async {
+    if (noteId == null || noteId.isEmpty) {
+      return null;
+    }
+    try {
+      final hash = sha256.convert(utf8.encode(uri)).toString();
+      final dir = await FileUtils.getPrivateStorageDirectory();
+      if (!await dir.exists()) {
+        return null;
+      }
+      final prefix = '${noteId}_$hash';
+      await for (final entity in dir.list()) {
+        if (entity is File && p.basename(entity.path).startsWith(prefix)) {
+          return entity;
+        }
+      }
+    } catch (e, stackTrace) {
+      LoggerService.warning(
+        'Failed to resolve synapsetemp attachment for $uri: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+    return null;
+  }
+
+  static Future<Uint8List?> _loadImageBytesFromSource(
+    String source, {
+    String? noteId,
+  }) async {
     if (source.isEmpty) {
       return null;
     }
 
     try {
       if (SynapseTempUtils.isSynapseTempUri(source)) {
-        final tempFile = await SynapseTempUtils.loadFile(source);
-        return tempFile.bytes;
+        try {
+          final tempFile = await SynapseTempUtils.loadFile(source);
+          return tempFile.bytes;
+        } catch (_) {
+          // Temp cache miss — fall through to the hash-based attachment
+          // lookup below.
+        }
+        final file = await _resolveSynapseTempAttachmentFile(source, noteId);
+        return await file?.readAsBytes();
       }
 
       // Handle simple filenames (local attachments)
@@ -961,11 +1027,21 @@ class ShareService {
     }
   }
 
-  static Future<String?> _loadSvgStringFromSource(String source) async {
+  static Future<String?> _loadSvgStringFromSource(
+    String source, {
+    String? noteId,
+  }) async {
     try {
       if (SynapseTempUtils.isSynapseTempUri(source)) {
-        final tempFile = await SynapseTempUtils.loadFile(source);
-        return _decodeBytesToString(tempFile.bytes);
+        try {
+          final tempFile = await SynapseTempUtils.loadFile(source);
+          return _decodeBytesToString(tempFile.bytes);
+        } catch (_) {
+          // Temp cache miss — fall through to the hash-based attachment
+          // lookup below.
+        }
+        final file = await _resolveSynapseTempAttachmentFile(source, noteId);
+        return await file?.readAsString();
       }
 
       // Handle simple filenames (local attachments)
@@ -1780,7 +1856,10 @@ class _PdfNoteRenderer {
 
       final content = note.content.trim();
       if (content.isNotEmpty) {
-        final markdownWidgets = await _markdownRenderer.render(content);
+        final markdownWidgets = await _markdownRenderer.render(
+          content,
+          noteId: note.id,
+        );
         for (final widget in markdownWidgets) {
           widgets.add(
             pw.Padding(
@@ -2187,8 +2266,10 @@ class _MarkdownPdfRenderer {
   final pw.TextStyle _imageFallbackStyle;
 
   final Map<String, pw.ImageProvider> _imageCache = {};
+  String? _currentNoteId;
 
-  Future<List<pw.Widget>> render(String markdown) async {
+  Future<List<pw.Widget>> render(String markdown, {String? noteId}) async {
+    _currentNoteId = noteId;
     final sanitized = markdown.replaceAll('\r\n', '\n');
     final document = md.Document(
       extensionSet: md.ExtensionSet.gitHubFlavored,
@@ -2699,17 +2780,21 @@ class _MarkdownPdfRenderer {
       return null;
     }
 
-    if (_imageCache.containsKey(src)) {
-      return _imageCache[src];
+    final cacheKey = '${_currentNoteId ?? ''}::$src';
+    if (_imageCache.containsKey(cacheKey)) {
+      return _imageCache[cacheKey];
     }
 
-    final bytes = await ShareService._loadImageBytesFromSource(src);
+    final bytes = await ShareService._loadImageBytesFromSource(
+      src,
+      noteId: _currentNoteId,
+    );
     if (bytes == null) {
       return null;
     }
 
     final image = pw.MemoryImage(bytes);
-    _imageCache[src] = image;
+    _imageCache[cacheKey] = image;
     return image;
   }
 
@@ -2718,7 +2803,10 @@ class _MarkdownPdfRenderer {
     final alt = element.attributes['alt'] ?? '';
 
     if (ShareService._isSvgSource(src)) {
-      final svgContent = await ShareService._loadSvgStringFromSource(src);
+      final svgContent = await ShareService._loadSvgStringFromSource(
+        src,
+        noteId: _currentNoteId,
+      );
       if (svgContent != null && svgContent.trim().isNotEmpty) {
         final pngBytes = await SvgRendererService.renderSvgToPng(svgContent);
         if (pngBytes != null) {

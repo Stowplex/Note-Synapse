@@ -180,7 +180,7 @@ hooks:
   user_defines:
     sqlite3:
       source: source
-      path: vendor/sqlite3/sqlite3.c
+      path: third_party/sqlite3/sqlite3.c
       defines:
         defines:
           - SQLITE_ENABLE_FTS3
