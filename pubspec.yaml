@@ -170,6 +170,23 @@ dependencies:
   package_info_plus: ^9.0.0
   mustache_template: ^2.0.0
 
+# Compile sqlite3 from the bundled amalgamation with FTS3/FTS4 enabled.
+# Reason: production code uses `CREATE VIRTUAL TABLE notes_fts USING fts4`,
+# but the precompiled binary that `package:sqlite3` ships with — and the
+# macOS system libsqlite on macOS 15+ — only ship FTS5. Compiling our own
+# build with FTS3/4/5 keeps notes_fts working everywhere (tests on macOS,
+# and downstream Flutter builds that ride on the dart sqlite3 native asset).
+hooks:
+  user_defines:
+    sqlite3:
+      source: source
+      path: vendor/sqlite3/sqlite3.c
+      defines:
+        defines:
+          - SQLITE_ENABLE_FTS3
+          - SQLITE_ENABLE_FTS3_PARENTHESIS
+          - SQLITE_ENABLE_FTS4
+          - SQLITE_ENABLE_FTS5
 
 dev_dependencies:
   flutter_test:

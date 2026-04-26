@@ -18,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
   DatabaseService,
 ])
 import 'agent_service_global_context_test.mocks.dart';
+import '../utils/test_prompt_template_setup.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -45,6 +46,9 @@ void main() {
     getIt.registerLazySingleton<SkillService>(() => SkillService(mockDatabaseService));
     when(mockDatabaseService.searchNotesFTS(any, tags: anyNamed('tags')))
         .thenAnswer((_) async => []);
+    when(mockDatabaseService.getNotesByTag(any))
+        .thenAnswer((_) async => []);
+    await registerTestPromptTemplateService();
 
     agentService = AgentService(
       mockContextManager,

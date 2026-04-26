@@ -476,7 +476,6 @@ class NoteModificationService {
     DatabaseExecutor? txn,
   }) async {
     if (linkData == null) return;
-    final db = txn ?? await _db.database;
 
     List<dynamic> addedLinks = [];
     List<String> removedTargets = [];
@@ -493,24 +492,35 @@ class NoteModificationService {
         final relationType = link['relation'] as String? ?? 'related';
         final targetId = link['target'] as String?;
         if (targetId != null) {
-          await db.insert('relationships', {
-            'id': _uuid.v4(),
-            'fromNoteId': noteId,
-            'toNoteId': targetId,
-            'type': relationType,
-            'createdAt': DateTime.now().millisecondsSinceEpoch,
-          });
+          final relationship = Relationship(
+            id: _uuid.v4(),
+            fromNoteId: noteId,
+            toNoteId: targetId,
+            type: relationType,
+            createdAt: DateTime.now(),
+          );
+          if (txn != null) {
+            final json = relationship.toJson();
+            json['createdAt'] = relationship.createdAt.millisecondsSinceEpoch;
+            await txn.insert('relationships', json);
+          } else {
+            await _db.insertRelationship(relationship);
+          }
         }
       }
     }
 
     for (final targetId in removedTargets) {
-      await db.delete(
-        'relationships',
-        where:
-            '(fromNoteId = ? AND toNoteId = ?) OR (fromNoteId = ? AND toNoteId = ?)',
-        whereArgs: [noteId, targetId, targetId, noteId],
-      );
+      if (txn != null) {
+        await txn.delete(
+          'relationships',
+          where:
+              '(fromNoteId = ? AND toNoteId = ?) OR (fromNoteId = ? AND toNoteId = ?)',
+          whereArgs: [noteId, targetId, targetId, noteId],
+        );
+      } else {
+        await _db.deleteRelationshipBetween(noteId, targetId);
+      }
     }
   }
 

@@ -19,21 +19,20 @@ void main() {
     // AssetManifest lookup returns a hand-crafted manifest listing our test
     // asset; actual .md requests are resolved by reading the real file
     // from disk (tests run with cwd at the package root).
-    final manifest = <String, List<String>>{
+    final manifest = <String, List<Object>>{
       'assets/prompts/guidelines/math_formula.md': [
-        'assets/prompts/guidelines/math_formula.md',
+        {'asset': 'assets/prompts/guidelines/math_formula.md'},
       ],
     };
-    final manifestBytes = Uint8List.fromList(
-      utf8.encode(json.encode(manifest)),
-    );
+    final manifestBytes =
+        const StandardMessageCodec().encodeMessage(manifest)!;
 
     TestDefaultBinaryMessengerBinding
         .instance.defaultBinaryMessenger
         .setMockMessageHandler('flutter/assets', (ByteData? message) async {
       final key = utf8.decode(message!.buffer.asUint8List());
-      if (key == 'AssetManifest.json') {
-        return ByteData.view(manifestBytes.buffer);
+      if (key == 'AssetManifest.bin') {
+        return manifestBytes;
       }
       if (key.startsWith('assets/prompts/') && key.endsWith('.md')) {
         final file = File(key);

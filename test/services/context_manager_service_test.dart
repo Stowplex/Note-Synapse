@@ -11,6 +11,7 @@ import 'package:note_synapse/services/service_locator.dart';
 import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
 import 'context_manager_service_test.mocks.dart';
+import '../utils/test_prompt_template_setup.dart';
 
 @GenerateMocks([
   ContextManagerService,
@@ -38,6 +39,7 @@ void main() {
 
       service = ContextManagerService(mockModelSelector, mockAIService);
       getIt.registerSingleton<ContextManagerService>(service);
+      await registerTestPromptTemplateService();
 
       // Default stubs
       when(mockModelSelector.currentModelConfig).thenReturn(null);
@@ -405,6 +407,7 @@ void main() {
       // Register ContextManagerService so AgentService can find it
       final cms = ContextManagerService(mockModelSelector, mockAIService);
       getIt.registerSingleton<ContextManagerService>(cms);
+      await registerTestPromptTemplateService();
 
       agentService = AgentService(
         cms,

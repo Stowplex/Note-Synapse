@@ -20,6 +20,7 @@ import 'package:note_synapse/models/context_node.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'workflow_task_test.mocks.dart';
+import 'utils/test_prompt_template_setup.dart';
 
 Note _makeNote(String id) => Note(
   id: id,
@@ -96,6 +97,7 @@ void main() {
       () => mockContextManager,
     );
     getIt.registerLazySingleton<SkillService>(() => SkillService(mockDb));
+    await registerTestPromptTemplateService();
 
     agentService = AgentService(
       mockContextManager,

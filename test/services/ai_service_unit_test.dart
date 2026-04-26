@@ -12,6 +12,7 @@ import 'package:note_synapse/services/prompts/prompt_models.dart';
 
 @GenerateMocks([DatabaseService, ModelSelector])
 import 'ai_service_unit_test.mocks.dart';
+import '../utils/test_prompt_template_setup.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +28,7 @@ void main() {
     mockModelSelector = MockModelSelector();
     getIt.registerSingleton<DatabaseService>(mockDb);
     getIt.registerSingleton<ModelSelector>(mockModelSelector);
+    await registerTestPromptTemplateService();
     service = AIService(mockDb, mockModelSelector);
   });
 

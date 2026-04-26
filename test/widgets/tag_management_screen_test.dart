@@ -2,11 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:mockito/mockito.dart';
+import 'package:note_synapse/models/workflow_binding_row.dart';
 import 'package:note_synapse/screens/tag_management_screen.dart';
 import 'package:note_synapse/providers/app_provider.dart';
 import 'package:note_synapse/models/tag.dart';
 import 'package:note_synapse/models/filter.dart';
 import 'package:note_synapse/l10n/app_localizations.dart';
+import 'package:note_synapse/services/service_locator.dart';
+import 'package:note_synapse/services/skill_service.dart';
+import 'package:note_synapse/services/tag_workflow_service.dart';
+
+class _FakeTagWorkflowService extends Fake implements TagWorkflowService {
+  @override
+  Future<List<WorkflowBindingRow>> getAllBindings() async => const [];
+}
+
+class _FakeSkillService extends Fake implements SkillService {
+  @override
+  Future<Map<String, SkillMetadata>> buildSkillIndex() async => const {};
+}
 
 // Mock AppProvider
 class MockAppProvider extends Mock implements AppProvider {
@@ -69,7 +83,7 @@ void main() {
 
   late MockAppProvider mockAppProvider;
 
-  setUp(() {
+  setUp(() async {
     mockAppProvider = MockAppProvider();
 
     // Stub methods
@@ -79,6 +93,17 @@ void main() {
     when(mockAppProvider.addListener(any)).thenReturn(null);
     when(mockAppProvider.removeListener(any)).thenReturn(null);
     when(mockAppProvider.deleteTag(any)).thenAnswer((_) async {});
+
+    // The screen's initState fetches workflow bindings + skill index from
+    // GetIt; stub them so we never reach the catch-and-snackbar path that
+    // pulls ScaffoldMessenger.of(context) before initState completes.
+    await getIt.reset();
+    getIt.registerSingleton<TagWorkflowService>(_FakeTagWorkflowService());
+    getIt.registerSingleton<SkillService>(_FakeSkillService());
+  });
+
+  tearDown(() async {
+    await getIt.reset();
   });
 
   Widget createScreen(AppProvider appProvider) {

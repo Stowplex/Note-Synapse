@@ -20,6 +20,7 @@ import 'package:shared_preferences/shared_preferences.dart';
   DatabaseService,
 ])
 import 'agent_service_execution_loop_test.mocks.dart';
+import '../utils/test_prompt_template_setup.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -47,9 +48,14 @@ void main() {
     getIt.registerLazySingleton<SkillService>(
       () => SkillService(mockDatabaseService),
     );
+    await registerTestPromptTemplateService();
     when(
       mockDatabaseService.searchNotesFTS(any, tags: anyNamed('tags')),
     ).thenAnswer((_) async => []);
+    when(mockDatabaseService.getNotesByTag(any))
+        .thenAnswer((_) async => []);
+    when(mockContextManager.rootContext).thenReturn(null);
+    when(mockModelSelector.currentModelConfig).thenReturn(null);
 
     agentService = AgentService(
       mockContextManager,
@@ -134,9 +140,12 @@ void main() {
       await agentService.performTaskForTest(task, 'global context');
 
       expect(toolCalled, isTrue);
-      // Verify history contains tool call execution
+      // Verify history contains tool call execution. Production format is
+      // 'Action: Call <service>.<tool>'.
       expect(
-        task.executionHistory.any((l) => l.contains('Action: Call mock_tool')),
+        task.executionHistory.any(
+          (l) => l.contains('Action: Call mock_service.mock_tool'),
+        ),
         isTrue,
       );
       // Verify history contains observation

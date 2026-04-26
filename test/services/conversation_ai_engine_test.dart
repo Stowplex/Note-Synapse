@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 @GenerateMocks([ModelSelector])
 import 'conversation_ai_engine_test.mocks.dart';
+import '../utils/test_prompt_template_setup.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -38,6 +39,7 @@ void main() {
     await resetForTesting();
     mockModelSelector = MockModelSelector();
     getIt.registerSingleton<ModelSelector>(mockModelSelector);
+    await registerTestPromptTemplateService();
     engine = const ConversationAiEngine();
 
     // Default: return null for currentModelConfig (Gemini path)

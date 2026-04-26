@@ -2,7 +2,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/services/prompts/ai_prompts.dart';
 import 'package:note_synapse/services/prompts/system_prompt_builder.dart';
 
+import '../utils/test_prompt_template_setup.dart';
+
 void main() {
+  setUpAll(() async {
+    await registerTestPromptTemplateService();
+  });
+
   test(
     'math formula guidelines use explicit hierarchy and ban dollar math',
     () {

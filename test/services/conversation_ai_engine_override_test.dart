@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:note_synapse/models/generation_context.dart';
+import 'package:note_synapse/models/mcp_endpoint.dart';
 import 'package:note_synapse/models/model_config.dart';
 import 'package:note_synapse/models/model_type.dart';
 import 'package:note_synapse/services/conversation_ai_engine.dart';
@@ -8,6 +9,8 @@ import 'package:note_synapse/services/model_selector.dart';
 import 'package:note_synapse/services/prompts/prompt_models.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:get_it/get_it.dart';
+
+import '../utils/test_prompt_template_setup.dart';
 
 // Mock ModelSelector
 class MockModelSelector extends Mock implements ModelSelector {
@@ -44,6 +47,21 @@ class MockModelSelector extends Mock implements ModelSelector {
             returnValue: Future.value(<String, dynamic>{}),
           )
           as Future<Map<String, dynamic>>;
+
+  @override
+  List<Map<String, dynamic>> buildToolDeclarations(
+    Map<String, List<McpTool>>? toolsByEndpoint, {
+    GenerationContext? generationContext,
+  }) =>
+      super.noSuchMethod(
+            Invocation.method(
+              #buildToolDeclarations,
+              [toolsByEndpoint],
+              {#generationContext: generationContext},
+            ),
+            returnValue: <Map<String, dynamic>>[],
+          )
+          as List<Map<String, dynamic>>;
 }
 
 void main() {
@@ -51,10 +69,17 @@ void main() {
   late MockModelSelector mockModelSelector;
   late ConversationAiEngine engine;
 
-  setUp(() {
-    getIt.reset();
+  setUp(() async {
+    await getIt.reset();
     mockModelSelector = MockModelSelector();
     getIt.registerSingleton<ModelSelector>(mockModelSelector);
+    await registerTestPromptTemplateService();
+    when(
+      mockModelSelector.buildToolDeclarations(
+        argThat(isA<Map<String, List<McpTool>>>()),
+        generationContext: anyNamed('generationContext'),
+      ),
+    ).thenReturn(<Map<String, dynamic>>[]);
     engine = const ConversationAiEngine();
   });
 

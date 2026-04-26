@@ -6,6 +6,7 @@ import 'package:note_synapse/services/skill_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
 
 import 'min_context_test.mocks.dart';
+import 'utils/test_prompt_template_setup.dart';
 
 @GenerateMocks([DatabaseService])
 void main() {
@@ -16,6 +17,7 @@ void main() {
     await resetForTesting();
     mockDb = MockDatabaseService();
     getIt.registerSingleton<DatabaseService>(mockDb);
+    await registerTestPromptTemplateService();
     service = SkillService(mockDb);
   });
 
