@@ -23,6 +23,7 @@ import 'package:note_synapse/services/built_in_tools_service.dart';
   BuiltInToolsService,
 ])
 import 'agent_service_task_control_test.mocks.dart';
+import '../utils/test_prompt_template_setup.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -50,6 +51,9 @@ void main() {
     getIt.registerLazySingleton<SkillService>(() => SkillService(mockDatabaseService));
     when(mockDatabaseService.searchNotesFTS(any, tags: anyNamed('tags')))
         .thenAnswer((_) async => []);
+    when(mockDatabaseService.getNotesByTag(any))
+        .thenAnswer((_) async => []);
+    await registerTestPromptTemplateService();
 
     agentService = AgentService(
       mockContextManager,
@@ -61,6 +65,7 @@ void main() {
     // Default mock behaviors
     when(mockContextManager.rootContext).thenReturn(null);
     when(mockContextManager.clear()).thenReturn(null);
+    when(mockModelSelector.currentModelConfig).thenReturn(null);
     when(
       mockContextManager.createRootContext(
         objective: anyNamed('objective'),

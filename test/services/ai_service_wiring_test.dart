@@ -13,6 +13,8 @@ import 'package:note_synapse/models/model_type.dart';
 import 'package:note_synapse/models/model_capabilities.dart';
 import 'package:note_synapse/providers/app_provider.dart';
 
+import '../utils/test_prompt_template_setup.dart';
+
 // Mock AppProvider since initialization requires it
 class MockAppProvider extends Mock implements AppProvider {}
 
@@ -32,6 +34,7 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({});
 
     setupServiceLocator();
+    await registerTestPromptTemplateService();
 
     // 1. Setup temporary directory for file I/O
     tempDir = await Directory.systemTemp.createTemp('ai_service_test');

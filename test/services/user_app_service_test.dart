@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 @GenerateMocks([DatabaseService, AIService])
 import 'user_app_service_test.mocks.dart';
+import '../utils/test_prompt_template_setup.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -26,6 +27,7 @@ void main() {
     mockAi = MockAIService();
     getIt.registerSingleton<DatabaseService>(mockDb);
     getIt.registerSingleton<AIService>(mockAi);
+    await registerTestPromptTemplateService();
     service = UserAppService.createForTesting(mockDb, mockAi);
   });
 

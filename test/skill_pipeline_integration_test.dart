@@ -9,6 +9,7 @@ import 'package:note_synapse/services/tools/load_skill_tool.dart';
 import 'package:note_synapse/services/service_locator.dart';
 
 import 'skill_pipeline_integration_test.mocks.dart';
+import 'utils/test_prompt_template_setup.dart';
 
 Note _makeNote(
   String id,
@@ -35,6 +36,7 @@ void main() {
     await resetForTesting();
     mockDb = MockDatabaseService();
     getIt.registerSingleton<DatabaseService>(mockDb);
+    await registerTestPromptTemplateService();
     service = SkillService(mockDb);
   });
 

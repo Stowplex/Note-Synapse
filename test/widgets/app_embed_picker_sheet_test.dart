@@ -83,7 +83,9 @@ void main() {
   final aiToolApp = _app(
     id: 'id-3',
     uuid: 'uuid-ai',
-    name: 'AI Tool',
+    // Name intentionally distinct from the localized "AI Tool" type chip so
+    // `find.text('AI Tool')` only matches the chip and not the app name.
+    name: 'Vision Helper',
     type: UserAppType.aiTool,
   );
 

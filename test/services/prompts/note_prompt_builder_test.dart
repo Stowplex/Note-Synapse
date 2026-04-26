@@ -8,6 +8,7 @@ import 'package:note_synapse/services/service_locator.dart';
 
 @GenerateMocks([DatabaseService])
 import 'note_prompt_builder_test.mocks.dart';
+import '../../utils/test_prompt_template_setup.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +20,7 @@ void main() {
     await resetForTesting();
     mockDb = MockDatabaseService();
     getIt.registerSingleton<DatabaseService>(mockDb);
+    await registerTestPromptTemplateService();
     builder = NotePromptBuilder(mockDb);
   });
 
@@ -33,11 +35,14 @@ void main() {
         instruction: 'Make it more concise',
       );
 
-      // System message should contain shared transformation guidelines
+      // System message should contain shared transformation guidelines.
+      // Compare against the trimmed guideline text — the system prompt is
+      // .trim()ed by SystemPromptBuilder, which strips the .md file's trailing
+      // newline when the guideline lands at the end of the prompt.
       expect(request.systemMessage.content,
-          contains(AIPrompts.mathFormulaGuidelines));
+          contains(AIPrompts.mathFormulaGuidelines.trim()));
       expect(request.systemMessage.content,
-          contains(AIPrompts.promptInjectionProtectionGuidelines));
+          contains(AIPrompts.promptInjectionProtectionGuidelines.trim()));
 
       // User message should contain the instruction and block content
       final userContent = request.conversationMessages.first.content;

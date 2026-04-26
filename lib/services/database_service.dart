@@ -355,10 +355,12 @@ class DatabaseService {
       )
   ''';
 
-  // FTS4 is universally supported on all platforms (Android, iOS, macOS, Windows, Linux)
+  // FTS4 is required because Android system sqlite ships without FTS5.
+  // macOS system sqlite (3.52+) lacks FTS4, so flutter test on macOS needs a
+  // sqlite3 binary that includes it — see test/flutter_test_config.dart.
   static const String _createNotesFtsTable = '''
       CREATE VIRTUAL TABLE notes_fts USING fts4(
-        title, 
+        title,
         content
       );
   ''';

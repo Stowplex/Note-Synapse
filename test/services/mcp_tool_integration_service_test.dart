@@ -4,7 +4,13 @@ import 'package:note_synapse/services/mcp_tool_integration_service.dart';
 import 'package:note_synapse/services/models/local_mnn_model.dart';
 import 'package:note_synapse/services/models/gemini_model.dart';
 
+import '../utils/test_prompt_template_setup.dart';
+
 void main() {
+  setUpAll(() async {
+    await registerTestPromptTemplateService();
+  });
+
   group('McpToolIntegrationService', () {
     group('parseCallToolArguments', () {
       test('parses normal arguments', () {
