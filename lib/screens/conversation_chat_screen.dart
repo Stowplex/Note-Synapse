@@ -35,6 +35,7 @@ import '../services/database_service.dart';
 import '../services/conversation_settings_service.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../utils/file_utils.dart';
+import '../utils/text_field_selection_guard.dart';
 import '../l10n/app_localizations.dart';
 import '../services/conversation_ai_engine.dart';
 import 'note_selection_dialog.dart';
@@ -3064,6 +3065,7 @@ $historyBuffer
                         ),
                         minLines: 1,
                         maxLines: 10,
+                        onTap: () => guardStuckSelection(_messageController),
                         onSubmitted: (_) => _isSending ? null : _sendMessage(),
                       ),
                     ),

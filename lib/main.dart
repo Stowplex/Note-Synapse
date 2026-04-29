@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -128,14 +129,29 @@ class AppWrapper extends StatefulWidget {
   State<AppWrapper> createState() => _AppWrapperState();
 }
 
-class _AppWrapperState extends State<AppWrapper> {
+class _AppWrapperState extends State<AppWrapper> with WidgetsBindingObserver {
   bool _isLoading = true;
   bool _isModelConfigured = false;
 
   @override
   void initState() {
     super.initState();
+    // TODO(stuck-selection): see text_field_selection_guard.dart
+    WidgetsBinding.instance.addObserver(this);
+    HardwareKeyboard.instance.clearState();
     _initializeApp();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // TODO(stuck-selection): see text_field_selection_guard.dart
+    HardwareKeyboard.instance.clearState();
   }
 
   Future<void> _initializeApp() async {
