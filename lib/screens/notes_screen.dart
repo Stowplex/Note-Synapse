@@ -10,6 +10,7 @@ import '../widgets/multi_select_tag_filter.dart';
 import '../widgets/share_dialog.dart';
 import '../widgets/filter_tab_strip.dart';
 import '../widgets/tag_selection_dialog.dart';
+import '../utils/text_field_selection_guard.dart';
 import '../models/filter.dart';
 import 'note_detail_screen.dart';
 import 'ai_action_screen.dart';
@@ -357,6 +358,7 @@ class _NotesScreenState extends State<NotesScreen> {
                             vertical: 8,
                           ),
                         ),
+                        onTap: () => guardStuckSelection(_searchController),
                         onChanged: (value) {
                           setState(() {});
                         },

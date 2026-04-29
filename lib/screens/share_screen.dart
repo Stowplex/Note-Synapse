@@ -25,6 +25,7 @@ import '../utils/file_type_utils.dart';
 import '../utils/remote_image_utils.dart';
 import '../utils/html_rules.dart';
 import '../utils/markdown_cleaner.dart';
+import '../utils/text_field_selection_guard.dart';
 import '../utils/web_content_processor.dart';
 import '../widgets/approval_dialog.dart';
 import 'note_selection_dialog.dart';
@@ -472,6 +473,7 @@ class _ShareScreenState extends State<ShareScreen> {
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.title),
                       ),
+                      onTap: () => guardStuckSelection(_titleController),
                       onChanged: (value) {
                         setState(() {
                           // Update the prepared note with new title

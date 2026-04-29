@@ -19,6 +19,7 @@ import '../services/approval_service.dart';
 import '../services/audio_recording_service.dart';
 import '../services/ai_service.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
+import '../utils/text_field_selection_guard.dart';
 import '../widgets/interactive_checkbox_component.dart';
 import '../widgets/share_dialog.dart';
 import '../widgets/tag_selection_dialog.dart';
@@ -1458,6 +1459,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               border: const OutlineInputBorder(),
             ),
             style: Theme.of(context).textTheme.headlineSmall,
+            onTap: () => guardStuckSelection(_titleController),
           ),
           const SizedBox(height: 16),
           if (widget.note.isTask) ...[
