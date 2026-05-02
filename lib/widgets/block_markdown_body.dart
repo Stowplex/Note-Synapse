@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:note_synapse/utils/markdown_block_tracker.dart';
 import 'package:note_synapse/widgets/interactive_checkbox_markdown.dart';
@@ -76,21 +77,11 @@ class _BlockMarkdownBodyState extends State<BlockMarkdownBody> {
   void _maybeNotifyChips(List<ChipAction> chips) {
     final cb = widget.onChipsExtracted;
     if (cb == null) return;
-    if (_chipsListEquals(_lastNotifiedChips, chips)) return;
+    if (listEquals(_lastNotifiedChips, chips)) return;
     _lastNotifiedChips = List.of(chips);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) cb(chips);
     });
-  }
-
-  bool _chipsListEquals(List<ChipAction>? a, List<ChipAction>? b) {
-    if (a == null) return b == null;
-    if (b == null) return false;
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
   }
 
   @override
