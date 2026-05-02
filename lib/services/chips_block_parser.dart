@@ -56,19 +56,42 @@ class ChipsBlockParser {
       chips.addAll(_parseBlockBody(m.group(1)!));
     }
 
-    // Strip the matched blocks. Walk forward through the matches and
-    // copy non-block segments into a buffer.
+    // Strip the matched blocks. For each block, copy the segment before it,
+    // then collapse the boundary newlines (the trailing `\n` of the prior
+    // segment + the leading newlines of the next segment) so removing a
+    // block surrounded by blank lines doesn't leave a 3+ newline run.
+    //
+    // The collapse is local to the strip seams — content elsewhere in the
+    // markdown is preserved verbatim, including legitimate triple-newlines
+    // inside code blocks or pre-formatted text.
     final buf = StringBuffer();
     int cursor = 0;
     for (final m in matches) {
-      buf.write(markdown.substring(cursor, m.start));
+      // Trim trailing newlines from the segment ending right before this block.
+      final before = markdown
+          .substring(cursor, m.start)
+          .replaceAll(RegExp(r'\n+$'), '');
+      buf.write(before);
       cursor = m.end;
+      // Skip leading newlines of the segment that follows the block; we'll
+      // emit a single `\n\n` separator below if both before and after are
+      // non-empty.
+      while (cursor < markdown.length && markdown[cursor] == '\n') {
+        cursor++;
+      }
+      // If both sides have content, separate with a paragraph break.
+      if (before.isNotEmpty && cursor < markdown.length) {
+        buf.write('\n\n');
+      } else if (before.isEmpty && cursor < markdown.length) {
+        // Block was at the start; do not emit a leading newline.
+      } else if (before.isNotEmpty && cursor >= markdown.length) {
+        // Block was at the end; one trailing newline for clean termination.
+        buf.write('\n');
+      }
     }
     buf.write(markdown.substring(cursor));
-    // Collapse 3+ consecutive newlines left by the strip into 2.
-    final stripped = buf.toString().replaceAll(RegExp(r'\n{3,}'), '\n\n');
 
-    return ChipsParseResult(chips: chips, strippedMarkdown: stripped);
+    return ChipsParseResult(chips: chips, strippedMarkdown: buf.toString());
   }
 
   /// Walk the body of a single chips block, splitting on `## ` headings.

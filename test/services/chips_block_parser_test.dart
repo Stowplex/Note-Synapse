@@ -177,5 +177,42 @@ After.''';
       expect(r.strippedMarkdown, contains('Before.'));
       expect(r.strippedMarkdown, contains('After.'));
     });
+
+    test('preserves legitimate triple-newlines OUTSIDE the chips block', () {
+      // The strip should only collapse newlines at the seam where a block
+      // was removed — not damage user content elsewhere (e.g. inside a
+      // pre-formatted segment or code block).
+      const md = '''Para one.
+
+
+
+Para two has intentional spacing above.
+
+```chips
+## L
+Body.
+```
+End.''';
+      final r = parser.parse(md);
+      // The pre-block triple-newline run between "Para one." and "Para two"
+      // is NOT at a strip seam, so it must survive.
+      expect(r.strippedMarkdown, contains('Para one.\n\n\n\nPara two'),
+          reason: 'Triple-newline outside strip seam must be preserved verbatim');
+    });
+
+    test('lines before the first ## inside a chips block are silently dropped', () {
+      const md = '''```chips
+some preamble text that the AI accidentally emitted
+before the first heading
+
+## the first label
+The actual prompt body for the first chip.
+```''';
+      final r = parser.parse(md);
+      expect(r.chips, hasLength(1));
+      expect(r.chips[0].label, 'the first label');
+      expect(r.chips[0].prompt, isNot(contains('preamble')),
+          reason: 'Pre-heading content must not pollute the first chip prompt');
+    });
   });
 }
