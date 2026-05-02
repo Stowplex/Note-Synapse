@@ -88,6 +88,7 @@ class ConversationChatScreen extends StatefulWidget {
 class _ConversationChatScreenState extends State<ConversationChatScreen>
     with NoteActionMixin<ConversationChatScreen>, WidgetsBindingObserver {
   ConversationService get _conversationService => getIt<ConversationService>();
+  final ForkService _forkService = ForkService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _messageFocusNode = FocusNode();
@@ -2629,7 +2630,7 @@ $historyBuffer
       final navigator = Navigator.of(context);
 
       try {
-        final forkedConversation = await ForkService().forkFromMessageInContext(
+        final forkedConversation = await _forkService.forkFromMessageInContext(
           forkFromMessageId: messageId,
           sourceConversationId: _conversation!.id,
           suggestedTitle: 'Forked conversation',
@@ -2637,7 +2638,7 @@ $historyBuffer
         if (forkedConversation == null) {
           if (mounted) {
             messenger.showSnackBar(
-              const SnackBar(content: Text('Failed to fork: source conversation not found')),
+              const SnackBar(content: Text('Could not fork conversation')),
             );
           }
           return;
