@@ -11,6 +11,12 @@ class SkillMetadata {
   final bool enabled;
   final int? minContext;
 
+  /// Optional prompt-injection instruction telling the AI how to emit
+  /// follow-up action chips (a fenced ```chips block) for this skill's
+  /// mode. Null if the skill doesn't declare one. Concatenated with
+  /// other loaded skills' defaultAction strings into the system prompt.
+  final String? defaultAction;
+
   const SkillMetadata({
     required this.noteId,
     required this.skillRef,
@@ -18,6 +24,7 @@ class SkillMetadata {
     required this.description,
     required this.enabled,
     this.minContext,
+    this.defaultAction,
   });
 }
 
@@ -39,12 +46,48 @@ class SkillService {
     if (endIdx == -1) return null;
     final frontmatter = content.substring(4, endIdx);
     final fields = <String, String>{};
-    for (final line in frontmatter.split('\n')) {
+    final lines = frontmatter.split('\n');
+    int i = 0;
+    while (i < lines.length) {
+      final line = lines[i];
       final colonIdx = line.indexOf(':');
-      if (colonIdx == -1) continue;
+      if (colonIdx == -1) {
+        i++;
+        continue;
+      }
       final key = line.substring(0, colonIdx).trim();
-      final value = line.substring(colonIdx + 1).trim();
-      if (key.isNotEmpty) fields[key] = value;
+      final rawValue = line.substring(colonIdx + 1).trim();
+      if (key.isEmpty) {
+        i++;
+        continue;
+      }
+      // Block scalar (`key: |` or `key: >`) — consume indented continuation.
+      if (rawValue == '|' || rawValue == '>') {
+        final buffer = StringBuffer();
+        i++;
+        int? indent;
+        bool hasContent = false;
+        while (i < lines.length) {
+          final next = lines[i];
+          if (next.trim().isEmpty) {
+            if (hasContent) buffer.writeln();
+            i++;
+            continue;
+          }
+          final leadingSpaces = next.length - next.trimLeft().length;
+          if (leadingSpaces == 0) break;
+          indent ??= leadingSpaces;
+          if (leadingSpaces < indent) break;
+          if (hasContent) buffer.writeln();
+          buffer.write(next.substring(indent));
+          hasContent = true;
+          i++;
+        }
+        fields[key] = buffer.toString();
+      } else {
+        fields[key] = rawValue;
+        i++;
+      }
     }
     final name = fields['name'];
     final description = fields['description'];
@@ -60,6 +103,11 @@ class SkillService {
     final minContext = minContextStr != null
         ? int.tryParse(minContextStr)
         : null;
+    final rawDefaultAction = fields['default_action']?.trim();
+    final defaultAction =
+        (rawDefaultAction == null || rawDefaultAction.isEmpty)
+            ? null
+            : rawDefaultAction;
     return SkillMetadata(
       noteId: noteId,
       skillRef: skillRef,
@@ -67,6 +115,7 @@ class SkillService {
       description: description,
       enabled: enabled,
       minContext: minContext,
+      defaultAction: defaultAction,
     );
   }
 
@@ -95,6 +144,7 @@ class SkillService {
           description: meta.description,
           enabled: meta.enabled,
           minContext: meta.minContext,
+          defaultAction: meta.defaultAction,
         );
       }
     }
