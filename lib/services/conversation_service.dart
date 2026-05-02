@@ -1305,6 +1305,11 @@ class ConversationService {
   /// in the result only when a post-fork message in that conversation has
   /// [parentMessageId] as its parent in [message_parents]. This guarantees the
   /// strip renders only when 2+ real children of the fork point exist.
+  ///
+  /// Note: this method does NOT exclude any particular conversation from the
+  /// result. Callers that need to suppress the active conversation (typically
+  /// ChatPanel) should either use [getAllForkPointBranches] (which excludes
+  /// the queried conversation) or filter by `conversationId` themselves.
   Future<List<ConversationBranchSummary>> getChildBranches(
     String parentMessageId,
   ) async {
@@ -1327,9 +1332,17 @@ class ConversationService {
   ) async {
     final db = await _databaseService.database;
     // For every message in [conversationId] that is a parent in message_parents,
-    // find its child messages that live in OTHER conversations. Group by
-    // (parentMessageId, childConversationId) so a child conversation appears
-    // at most once per fork-point.
+    // find its child messages that ONLY live in OTHER conversations (i.e., the
+    // child message is post-divergence content of a sibling branch, not a copy
+    // of an active-conversation message).
+    //
+    // The "child not in active" filter is what guarantees the strip renders
+    // at the *actual* fork point, not at every ancestor of it. Without it,
+    // a copied shared message (e.g. Q2 forked into both branches) would make
+    // the sibling appear at every preceding parent in message_parents.
+    //
+    // Group by (parentMessageId, childConversationId) — at most one entry
+    // per (fork-point, child) pair.
     final rows = await db.rawQuery('''
       SELECT mp.parentMessageId AS parent_id,
              cmm.conversationId AS child_conv_id,
@@ -1355,13 +1368,22 @@ class ConversationService {
               WHERE mm.conversationId = ?
             )
          AND cmm.conversationId != ?
+         AND NOT EXISTS (
+              SELECT 1 FROM conversation_message_mapping active_cmm
+               WHERE active_cmm.messageId = mp.messageId
+                 AND active_cmm.conversationId = ?
+            )
        GROUP BY mp.parentMessageId, cmm.conversationId
-    ''', [conversationId, conversationId]);
+    ''', [conversationId, conversationId, conversationId]);
 
     return _materializeBranchSummaries(rows);
   }
 
-  /// Single-parent variant of the fork-point query used by [getChildBranches].
+  /// IN-list variant of the fork-point query: accepts an explicit list of
+  /// [parentMessageIds] (one or more). Returns all child conversations,
+  /// **including the calling conversation** if it has a qualifying row.
+  /// Used by [getChildBranches]; consumers that need self-exclusion should
+  /// use [getAllForkPointBranches] (which adds `cmm.conversationId != ?`).
   Future<Map<String, List<ConversationBranchSummary>>>
       _getForkPointBranchesForParents(List<String> parentMessageIds) async {
     if (parentMessageIds.isEmpty) return const {};
@@ -1393,8 +1415,9 @@ class ConversationService {
   }
 
   /// Internal: turn raw rows from the branch query into the public
-  /// ConversationBranchSummary map. Bulk-fetches noteIds for every
-  /// distinct child conversation appearing in the result.
+  /// ConversationBranchSummary map. Fetches noteIds per distinct child
+  /// conversation appearing in the result (one DB call per unique child;
+  /// bounded by typical fan-out per spec, < 5).
   Future<Map<String, List<ConversationBranchSummary>>>
       _materializeBranchSummaries(List<Map<String, Object?>> rows) async {
     if (rows.isEmpty) return const {};
@@ -1411,6 +1434,9 @@ class ConversationService {
         conversationId: childConvId,
         title: row['child_title'] as String,
         forkPointMessageId: parentId,
+        // Subquery is guaranteed non-null: the outer mp.messageId itself
+        // satisfies the subquery's WHERE clause (same parentMessageId, same
+        // conversationId), so it always returns at least one row.
         firstChildMessageId: row['first_child_message_id'] as String,
         noteIds: notesByConv[childConvId] ?? const [],
       );

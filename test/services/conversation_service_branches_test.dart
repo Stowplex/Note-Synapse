@@ -170,6 +170,35 @@ void main() {
     expect(single.first.conversationId, batched[m.id]!.first.conversationId);
   });
 
+  test('cross-fork-point dedup: a child conversation appears at most once across all of the parent\'s fork points', () async {
+    // Parent has two messages; child is forked from msg2. The SQL GROUP BY
+    // only dedups within a single (parentMessageId, conversationId) pair —
+    // this test asserts the application-layer invariant that addUserMessage's
+    // parent-writing logic never ties a single child branch back to multiple
+    // distinct fork-point messages in the parent. If a future change broke
+    // this, the strip would render the same child twice, confusing users.
+    final parent = await convService.createConversation(
+      title: 'Parent', noteIds: const []);
+    await convService.addUserMessage(
+      conversationId: parent.id, content: 'Q1?');
+    final forkPoint = await convService.addUserMessage(
+      conversationId: parent.id, content: 'Q2?');
+    final child = await convService.forkConversation(
+      originalConversationId: parent.id,
+      forkFromMessageId: forkPoint.id,
+      newTitle: 'Child',
+    );
+    await convService.addUserMessage(
+      conversationId: child.id, content: 'C1');
+
+    final result = await convService.getAllForkPointBranches(parent.id);
+    final allBranches = result.values.expand((l) => l).toList();
+    final childCount =
+        allBranches.where((b) => b.conversationId == child.id).length;
+    expect(childCount, lessThanOrEqualTo(1),
+        reason: 'A child conversation should appear at most once across all of the parent\'s fork points');
+  });
+
   test('EXPLAIN QUERY PLAN uses idx_message_parents_parentMessageId', () async {
     final dbInst = await db.database;
     final plan = await dbInst.rawQuery('''
