@@ -18,6 +18,10 @@ void main() {
     getIt.registerSingleton<ConversationService>(mockConv);
   });
 
+  tearDown(() async {
+    await resetForTesting();
+  });
+
   test('forkFromMessageInContext emits parentMessageId on forkCreatedStream',
       () async {
     final now = DateTime.now();
@@ -67,6 +71,11 @@ void main() {
     expect(result, isNotNull);
     expect(result!.id, 'forked-id');
     expect(emissions, ['parent-msg']);
+    verify(mockConv.forkConversationWithContext(
+      forkFromMessageId: 'parent-msg',
+      selectedContext: anyNamed('selectedContext'),
+      newTitle: 'My new branch',
+    )).called(1);
   });
 
   test(

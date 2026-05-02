@@ -24,8 +24,14 @@ class ForkService {
   /// (chip taps, chat-screen direct fork, programmatic callers). Skips
   /// the context-selection dialog. Does NOT require BuildContext.
   ///
-  /// Returns null if the source conversation does not contain the
-  /// fork message; rethrows on unexpected failure.
+  /// Returns null **only** when [sourceConversationId] is not present in
+  /// the message's available conversation contexts. This is a defensive
+  /// check against programming errors (every caller is expected to pass
+  /// a sourceConversationId that the message belongs to). Callers should
+  /// log + abort gracefully on null rather than ignore it; surfacing a
+  /// silent no-op to the user is a UX bug.
+  ///
+  /// Rethrows on unexpected failure (database, IO, etc.).
   Future<Conversation?> forkFromMessageInContext({
     required String forkFromMessageId,
     required String sourceConversationId,
