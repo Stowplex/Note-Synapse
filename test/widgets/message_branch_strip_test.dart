@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:note_synapse/l10n/app_localizations.dart';
 import 'package:note_synapse/models/conversation_branch_summary.dart';
 import 'package:note_synapse/widgets/message_branch_strip.dart';
 
@@ -12,7 +14,16 @@ ConversationBranchSummary _summary(String id, String title, {List<String>? notes
       noteIds: notes ?? const ['note-X'],
     );
 
-Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
+Widget _wrap(Widget child) => MaterialApp(
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: child),
+    );
 
 void main() {
   testWidgets('renders nothing when only one branch (single-child fork-points are not shown)', (tester) async {

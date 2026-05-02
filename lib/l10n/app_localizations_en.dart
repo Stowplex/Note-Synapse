@@ -4563,4 +4563,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get insertUserAppNoAppsMessage =>
       'You haven\'t installed any apps yet.';
+
+  @override
+  String get branchStripDocumentSwapMessage =>
+      'This branch is associated with a different document. Switch document?';
+
+  @override
+  String get branchStripDocumentSwapConfirm => 'Switch';
 }

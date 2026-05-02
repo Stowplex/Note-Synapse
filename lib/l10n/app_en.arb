@@ -1844,5 +1844,7 @@
   "insertUserAppAdvanced": "Advanced: generate fenced block",
   "insertUserAppInsertButton": "Insert",
   "insertUserAppBackButton": "Back",
-  "insertUserAppNoAppsMessage": "You haven't installed any apps yet."
+  "insertUserAppNoAppsMessage": "You haven't installed any apps yet.",
+  "branchStripDocumentSwapMessage": "This branch is associated with a different document. Switch document?",
+  "branchStripDocumentSwapConfirm": "Switch"
 }

@@ -7963,6 +7963,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You haven\'t installed any apps yet.'**
   String get insertUserAppNoAppsMessage;
+
+  /// No description provided for @branchStripDocumentSwapMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This branch is associated with a different document. Switch document?'**
+  String get branchStripDocumentSwapMessage;
+
+  /// No description provided for @branchStripDocumentSwapConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch'**
+  String get branchStripDocumentSwapConfirm;
 }
 
 class _AppLocalizationsDelegate

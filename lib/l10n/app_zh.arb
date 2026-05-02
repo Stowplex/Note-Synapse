@@ -1798,5 +1798,7 @@
   "insertUserAppAdvanced": "高级：生成围栏代码块",
   "insertUserAppInsertButton": "插入",
   "insertUserAppBackButton": "返回",
-  "insertUserAppNoAppsMessage": "尚未安装任何应用。"
+  "insertUserAppNoAppsMessage": "尚未安装任何应用。",
+  "branchStripDocumentSwapMessage": "此分支关联到另一个文档。是否切换文档？",
+  "branchStripDocumentSwapConfirm": "切换"
 }

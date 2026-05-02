@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../models/conversation_branch_summary.dart';
 
 /// Inline strip rendered below a fork-point message card. One row per
@@ -105,20 +106,19 @@ class _MessageBranchStripState extends State<MessageBranchStrip> {
       widget.onSwitchBranch(b.conversationId, false);
       return;
     }
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        content: const Text(
-          'This branch is associated with a different document. Switch document?',
-        ),
+        content: Text(l10n.branchStripDocumentSwapMessage),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Switch'),
+            child: Text(l10n.branchStripDocumentSwapConfirm),
           ),
         ],
       ),

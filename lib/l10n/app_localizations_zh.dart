@@ -4360,4 +4360,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get insertUserAppNoAppsMessage => '尚未安装任何应用。';
+
+  @override
+  String get branchStripDocumentSwapMessage => '此分支关联到另一个文档。是否切换文档？';
+
+  @override
+  String get branchStripDocumentSwapConfirm => '切换';
 }
