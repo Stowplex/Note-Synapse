@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../models/conversation.dart';
 import '../models/conversation_context.dart';
@@ -10,6 +12,55 @@ class ForkService {
   static final ForkService _instance = ForkService._internal();
   factory ForkService() => _instance;
   ForkService._internal();
+
+  final _forkCreatedController = StreamController<String>.broadcast();
+
+  /// Emits the parent message ID of every fork created via this service.
+  /// Subscribers (typically ChatPanel widgets) use this to invalidate
+  /// their branch-summary caches when a sibling appears.
+  Stream<String> get forkCreatedStream => _forkCreatedController.stream;
+
+  /// Forks from a message when the source conversation is already known
+  /// (chip taps, chat-screen direct fork, programmatic callers). Skips
+  /// the context-selection dialog. Does NOT require BuildContext.
+  ///
+  /// Returns null if the source conversation does not contain the
+  /// fork message; rethrows on unexpected failure.
+  Future<Conversation?> forkFromMessageInContext({
+    required String forkFromMessageId,
+    required String sourceConversationId,
+    required String suggestedTitle,
+  }) async {
+    try {
+      final selection = await _conversationService
+          .prepareForkContextSelection(forkFromMessageId);
+      ConversationContext? matched;
+      for (final ctx in selection.availableContexts) {
+        if (ctx.conversationId == sourceConversationId) {
+          matched = ctx;
+          break;
+        }
+      }
+      if (matched == null) {
+        LoggerService.warning(
+          'forkFromMessageInContext: source $sourceConversationId does not contain message $forkFromMessageId',
+        );
+        return null;
+      }
+
+      final result = await _conversationService.forkConversationWithContext(
+        forkFromMessageId: forkFromMessageId,
+        selectedContext: matched,
+        newTitle: suggestedTitle,
+      );
+
+      _forkCreatedController.add(forkFromMessageId);
+      return result;
+    } catch (e) {
+      LoggerService.error('forkFromMessageInContext failed: $e', error: e);
+      rethrow;
+    }
+  }
 
   ConversationService get _conversationService => getIt<ConversationService>();
 
