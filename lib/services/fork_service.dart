@@ -174,6 +174,9 @@ class ForkService {
       // TODO(perf): forkFromMessageInContext re-runs prepareForkContextSelection
       // internally. Acceptable for v1 (user-driven path, not hot loop). Optimize
       // later if needed by adding an overload that accepts a ConversationContext.
+      // Note: between this call and the inner one, if contexts change (race),
+      // forkFromMessageInContext returns null without throwing — caller observes
+      // null but LoggerService.warning fires inside the inner method.
       final selection = await _conversationService
           .prepareForkContextSelection(forkFromMessageId);
 

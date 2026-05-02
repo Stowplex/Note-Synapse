@@ -160,6 +160,11 @@ void main() {
     expect(result, isNotNull);
     expect(result!.id, 'forked-id');
     expect(emissions, ['parent-msg']);
+    verify(mockConv.forkConversationWithContext(
+      forkFromMessageId: 'parent-msg',
+      selectedContext: anyNamed('selectedContext'),
+      newTitle: 'Quick',
+    )).called(1);
   });
 
   test(
