@@ -1343,12 +1343,19 @@ Example: "identify knowledge gaps in transformer notes":
 '''
         : '';
 
-    final skillIndexSection = _skillsEnabled
-        ? getIt<SkillService>().buildSkillIndexPrompt(
-            _skillIndex,
-            forLocalModel: _useNativeFunctionCalling(),
-          )
-        : '';
+    final skillIndexSection = () {
+      if (!_skillsEnabled) return '';
+      final index = getIt<SkillService>().buildSkillIndexPrompt(
+        _skillIndex,
+        forLocalModel: _useNativeFunctionCalling(),
+      );
+      final defaultAction =
+          getIt<SkillService>().buildDefaultActionPromptSection(_skillIndex);
+      if (defaultAction.isNotEmpty) {
+        return '$index\n\n$defaultAction';
+      }
+      return index;
+    }();
 
     final prompt =
         '''
@@ -2745,13 +2752,20 @@ Current task depth: ${task.depth} / $_cachedMaxSubtaskDepth
     final filteredSkillIndex = Map<String, SkillMetadata>.from(_skillIndex)
       ..removeWhere((key, value) => loadedNoteIds.contains(value.noteId));
 
-    final taskSkillSection = _skillsEnabled && filteredSkillIndex.isNotEmpty
-        ? getIt<SkillService>().buildSkillIndexPrompt(
-            filteredSkillIndex,
-            maxBudgetTokens: 16000,
-            forLocalModel: _useNativeFunctionCalling(),
-          )
-        : '';
+    final taskSkillSection = () {
+      if (!_skillsEnabled || filteredSkillIndex.isEmpty) return '';
+      final index = getIt<SkillService>().buildSkillIndexPrompt(
+        filteredSkillIndex,
+        maxBudgetTokens: 16000,
+        forLocalModel: _useNativeFunctionCalling(),
+      );
+      final defaultAction = getIt<SkillService>()
+          .buildDefaultActionPromptSection(filteredSkillIndex);
+      if (defaultAction.isNotEmpty) {
+        return '$index\n\n$defaultAction';
+      }
+      return index;
+    }();
 
     final prompt =
         '''

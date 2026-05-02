@@ -124,4 +124,58 @@ name: N
 ''';
     expect(svc.parseSkillMetadata('y', noDescription), isNull);
   });
+
+  test('buildDefaultActionPromptSection returns empty string when no skills declare default_action', () {
+    final index = <String, SkillMetadata>{
+      'a': SkillMetadata(
+        noteId: 'a', skillRef: 'a', name: 'A', description: 'd', enabled: true),
+    };
+    expect(svc.buildDefaultActionPromptSection(index), '');
+  });
+
+  test('buildDefaultActionPromptSection returns empty string for empty index', () {
+    expect(svc.buildDefaultActionPromptSection(const {}), '');
+  });
+
+  test('buildDefaultActionPromptSection concatenates default_action strings ordered by skillRef', () {
+    final index = <String, SkillMetadata>{
+      'note-z': SkillMetadata(
+        noteId: 'note-z', skillRef: 'z-skill',
+        name: 'Z', description: 'd', enabled: true,
+        defaultAction: 'Z action instructions'),
+      'note-a': SkillMetadata(
+        noteId: 'note-a', skillRef: 'a-skill',
+        name: 'A', description: 'd', enabled: true,
+        defaultAction: 'A action instructions'),
+      'note-b': SkillMetadata(
+        noteId: 'note-b', skillRef: 'b-skill',
+        name: 'B', description: 'd', enabled: true),  // no defaultAction
+    };
+    final out = svc.buildDefaultActionPromptSection(index);
+    expect(out, isNotEmpty);
+    final aIdx = out.indexOf('A action instructions');
+    final zIdx = out.indexOf('Z action instructions');
+    expect(aIdx, greaterThan(-1));
+    expect(zIdx, greaterThan(-1));
+    expect(aIdx, lessThan(zIdx),
+        reason: 'Should be ordered alphabetically by skillRef (a < z)');
+    expect(out.contains('B'), isFalse,
+        reason: 'Skills without defaultAction should be omitted entirely from the section');
+    // The output should clearly delimit per-skill sections so the AI can
+    // attribute the instructions to a source.
+    expect(out, contains('a-skill'));
+    expect(out, contains('z-skill'));
+  });
+
+  test('buildDefaultActionPromptSection includes a section header so the AI knows the role of the text', () {
+    final index = <String, SkillMetadata>{
+      'note-x': SkillMetadata(
+        noteId: 'note-x', skillRef: 'x-skill',
+        name: 'X', description: 'd', enabled: true,
+        defaultAction: 'do X'),
+    };
+    final out = svc.buildDefaultActionPromptSection(index);
+    // Section heading exists (matches an `## ` prefix line — markdown H2).
+    expect(out, contains(RegExp(r'^## ', multiLine: true)));
+  });
 }

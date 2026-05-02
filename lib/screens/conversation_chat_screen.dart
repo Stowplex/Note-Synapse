@@ -1525,6 +1525,14 @@ $historyBuffer
           ..writeln()
           ..write(skillIndexPrompt.trim());
       }
+      final defaultActionSection = getIt<SkillService>()
+          .buildDefaultActionPromptSection(_conversationService.skillIndex);
+      if (defaultActionSection.isNotEmpty) {
+        contextBuffer
+          ..writeln()
+          ..writeln()
+          ..write(defaultActionSection);
+      }
     }
 
     return SystemPromptBuilder.build(

@@ -216,6 +216,34 @@ class SkillService {
     return '- ${parts.join(' | ')}';
   }
 
+  /// Returns a system-prompt section containing the concatenated
+  /// default_action instruction text from every skill in [index] whose
+  /// `defaultAction` is non-null. Skills are sorted by `skillRef`
+  /// (alphabetical) so the output is reproducible across runs.
+  ///
+  /// Returns an empty string if no skill declares a defaultAction —
+  /// callers should append the result unconditionally; an empty append
+  /// is a no-op.
+  String buildDefaultActionPromptSection(Map<String, SkillMetadata> index) {
+    final withAction = index.values
+        .where((m) => m.defaultAction != null && m.defaultAction!.isNotEmpty)
+        .toList()
+      ..sort((a, b) => a.skillRef.compareTo(b.skillRef));
+    if (withAction.isEmpty) return '';
+    final buf = StringBuffer();
+    buf.writeln('## Skill Default Actions');
+    buf.writeln(
+      'The following skill-driven instructions modify how you should '
+      'present follow-up actions to the reader. Apply all that are relevant.',
+    );
+    for (final m in withAction) {
+      buf.writeln();
+      buf.writeln('### From skill `${m.skillRef}` (${m.name})');
+      buf.writeln(m.defaultAction);
+    }
+    return buf.toString().trimRight();
+  }
+
   String? resolveNoteIdForSkillRef(
     Map<String, SkillMetadata> index,
     String skillRef,
