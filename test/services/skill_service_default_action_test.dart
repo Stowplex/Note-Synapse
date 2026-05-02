@@ -178,4 +178,33 @@ name: N
     // Section heading exists (matches an `## ` prefix line — markdown H2).
     expect(out, contains(RegExp(r'^## ', multiLine: true)));
   });
+
+  test('buildDefaultActionPromptSection excludes disabled skills (defense in depth)', () {
+    // The buildSkillIndex pipeline already filters to enabled skills, but
+    // this method has its own guard so callers passing pre-built maps
+    // can't accidentally inject disabled-skill text into the system prompt.
+    final index = <String, SkillMetadata>{
+      'note-on': SkillMetadata(
+        noteId: 'note-on', skillRef: 'on-skill',
+        name: 'On', description: 'd', enabled: true,
+        defaultAction: 'enabled action'),
+      'note-off': SkillMetadata(
+        noteId: 'note-off', skillRef: 'off-skill',
+        name: 'Off', description: 'd', enabled: false,
+        defaultAction: 'disabled action'),
+    };
+    final out = svc.buildDefaultActionPromptSection(index);
+    expect(out, contains('enabled action'));
+    expect(out, isNot(contains('disabled action')));
+  });
+
+  test('buildDefaultActionPromptSection treats whitespace-only defaultAction as null', () {
+    final index = <String, SkillMetadata>{
+      'note-w': SkillMetadata(
+        noteId: 'note-w', skillRef: 'w-skill',
+        name: 'W', description: 'd', enabled: true,
+        defaultAction: '   \n  \t  '),
+    };
+    expect(svc.buildDefaultActionPromptSection(index), '');
+  });
 }

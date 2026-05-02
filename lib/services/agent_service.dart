@@ -1345,12 +1345,12 @@ Example: "identify knowledge gaps in transformer notes":
 
     final skillIndexSection = () {
       if (!_skillsEnabled) return '';
-      final index = getIt<SkillService>().buildSkillIndexPrompt(
+      final skillSvc = getIt<SkillService>();
+      final index = skillSvc.buildSkillIndexPrompt(
         _skillIndex,
         forLocalModel: _useNativeFunctionCalling(),
       );
-      final defaultAction =
-          getIt<SkillService>().buildDefaultActionPromptSection(_skillIndex);
+      final defaultAction = skillSvc.buildDefaultActionPromptSection(_skillIndex);
       if (defaultAction.isNotEmpty) {
         return '$index\n\n$defaultAction';
       }
@@ -2754,13 +2754,14 @@ Current task depth: ${task.depth} / $_cachedMaxSubtaskDepth
 
     final taskSkillSection = () {
       if (!_skillsEnabled || filteredSkillIndex.isEmpty) return '';
-      final index = getIt<SkillService>().buildSkillIndexPrompt(
+      final skillSvc = getIt<SkillService>();
+      final index = skillSvc.buildSkillIndexPrompt(
         filteredSkillIndex,
         maxBudgetTokens: 16000,
         forLocalModel: _useNativeFunctionCalling(),
       );
-      final defaultAction = getIt<SkillService>()
-          .buildDefaultActionPromptSection(filteredSkillIndex);
+      final defaultAction =
+          skillSvc.buildDefaultActionPromptSection(filteredSkillIndex);
       if (defaultAction.isNotEmpty) {
         return '$index\n\n$defaultAction';
       }

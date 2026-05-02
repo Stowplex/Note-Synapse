@@ -226,7 +226,10 @@ class SkillService {
   /// is a no-op.
   String buildDefaultActionPromptSection(Map<String, SkillMetadata> index) {
     final withAction = index.values
-        .where((m) => m.defaultAction != null && m.defaultAction!.isNotEmpty)
+        .where((m) =>
+            m.enabled &&
+            m.defaultAction != null &&
+            m.defaultAction!.trim().isNotEmpty)
         .toList()
       ..sort((a, b) => a.skillRef.compareTo(b.skillRef));
     if (withAction.isEmpty) return '';
