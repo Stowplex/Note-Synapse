@@ -113,4 +113,69 @@ void main() {
     expect(result, isNull);
     expect(emissions, isEmpty);
   });
+
+  test('quickFork delegates through forkFromMessageInContext (stream emits)',
+      () async {
+    final now = DateTime.now();
+    final fakeForked = Conversation(
+      id: 'forked-id',
+      title: 'Q',
+      noteIds: const [],
+      createdAt: now,
+      updatedAt: now,
+    );
+    final fakeCtx = ConversationContext(
+      conversationId: 'only-conv',
+      title: 'Only',
+      noteIds: const [],
+      notes: const [],
+      createdAt: now,
+      messageCount: 0,
+    );
+    final selection = ForkContextSelection(
+      forkMessageId: 'parent-msg',
+      availableContexts: [fakeCtx],
+      selectedContext: fakeCtx,
+    );
+    when(mockConv.prepareForkContextSelection('parent-msg'))
+        .thenAnswer((_) async => selection);
+    when(mockConv.forkConversationWithContext(
+      forkFromMessageId: anyNamed('forkFromMessageId'),
+      selectedContext: anyNamed('selectedContext'),
+      newTitle: anyNamed('newTitle'),
+    )).thenAnswer((_) async => fakeForked);
+
+    final service = ForkService();
+    final emissions = <String>[];
+    final sub = service.forkCreatedStream.listen(emissions.add);
+
+    final result = await service.quickFork(
+      forkFromMessageId: 'parent-msg',
+      newTitle: 'Quick',
+    );
+
+    await Future<void>.delayed(Duration.zero);
+    await sub.cancel();
+
+    expect(result, isNotNull);
+    expect(result!.id, 'forked-id');
+    expect(emissions, ['parent-msg']);
+  });
+
+  test(
+      'quickFork still returns null when no contexts available (delegation preserves contract)',
+      () async {
+    when(mockConv.prepareForkContextSelection('parent-msg'))
+        .thenAnswer((_) async => ForkContextSelection(
+              forkMessageId: 'parent-msg',
+              availableContexts: const [],
+            ));
+    // quickFork catches exceptions and returns null per existing contract.
+    final service = ForkService();
+    final result = await service.quickFork(
+      forkFromMessageId: 'parent-msg',
+      newTitle: 'X',
+    );
+    expect(result, isNull);
+  });
 }

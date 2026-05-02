@@ -88,18 +88,18 @@ class ForkService {
 
       // If no conflicts, use the first (and only) context
       if (!selection.requiresUserSelection) {
-        final context =
+        final ctx =
             selection.selectedContext ??
             (selection.availableContexts.isNotEmpty
                 ? selection.availableContexts.first
                 : null);
-        if (context == null) {
+        if (ctx == null) {
           return null;
         }
-        return await _conversationService.forkConversationWithContext(
+        return await forkFromMessageInContext(
           forkFromMessageId: forkFromMessageId,
-          selectedContext: context,
-          newTitle: suggestedTitle ?? 'Fork from ${context.title}',
+          sourceConversationId: ctx.conversationId,
+          suggestedTitle: suggestedTitle ?? 'Fork from ${ctx.title}',
         );
       }
 
@@ -138,10 +138,10 @@ class ForkService {
     );
 
     if (result == true && selectedContext != null && customTitle != null) {
-      return await _conversationService.forkConversationWithContext(
+      return await forkFromMessageInContext(
         forkFromMessageId: selection.forkMessageId,
-        selectedContext: selectedContext!,
-        newTitle: customTitle!,
+        sourceConversationId: selectedContext!.conversationId,
+        suggestedTitle: customTitle!,
       );
     }
 
@@ -171,9 +171,11 @@ class ForkService {
     required String newTitle,
   }) async {
     try {
-      final selection = await _conversationService.prepareForkContextSelection(
-        forkFromMessageId,
-      );
+      // TODO(perf): forkFromMessageInContext re-runs prepareForkContextSelection
+      // internally. Acceptable for v1 (user-driven path, not hot loop). Optimize
+      // later if needed by adding an overload that accepts a ConversationContext.
+      final selection = await _conversationService
+          .prepareForkContextSelection(forkFromMessageId);
 
       if (selection.availableContexts.isEmpty) {
         throw Exception('No conversations found containing this message');
@@ -185,11 +187,10 @@ class ForkService {
         );
       }
 
-      final context = selection.availableContexts.first;
-      return await _conversationService.forkConversationWithContext(
+      return await forkFromMessageInContext(
         forkFromMessageId: forkFromMessageId,
-        selectedContext: context,
-        newTitle: newTitle,
+        sourceConversationId: selection.availableContexts.first.conversationId,
+        suggestedTitle: newTitle,
       );
     } catch (e) {
       LoggerService.error('Error during quick fork: $e', error: e);
