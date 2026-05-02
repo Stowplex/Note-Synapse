@@ -39,6 +39,12 @@ class InNoteMarker {
   final int? charStart;
   final int? charEnd;
 
+  /// The conversation the user was last viewing in this marker's subtree.
+  /// Used by the marker re-entry flow to restore the previously-viewed
+  /// branch (Kindle resumption semantics). Null for markers that haven't
+  /// had their branch switched yet, or for pre-v1 markers.
+  final String? lastViewedConversationId;
+
   const InNoteMarker({
     required this.id,
     required this.index,
@@ -51,6 +57,7 @@ class InNoteMarker {
     this.normalizedRects,
     this.charStart,
     this.charEnd,
+    this.lastViewedConversationId,
   });
 
   factory InNoteMarker.forAttachment({
@@ -63,6 +70,7 @@ class InNoteMarker {
     required String messageId,
     DateTime? createdAt,
     MarkerType type = MarkerType.ai,
+    String? lastViewedConversationId,
   }) => InNoteMarker(
     id: id ?? const Uuid().v4(),
     index: index,
@@ -73,6 +81,7 @@ class InNoteMarker {
     messageId: messageId,
     createdAt: createdAt ?? DateTime.now(),
     type: type,
+    lastViewedConversationId: lastViewedConversationId,
   );
 
   factory InNoteMarker.forNote({
@@ -86,6 +95,7 @@ class InNoteMarker {
     required String messageId,
     DateTime? createdAt,
     MarkerType type = MarkerType.ai,
+    String? lastViewedConversationId,
   }) => InNoteMarker(
     id: id ?? const Uuid().v4(),
     index: index,
@@ -97,6 +107,7 @@ class InNoteMarker {
     messageId: messageId,
     createdAt: createdAt ?? DateTime.now(),
     type: type,
+    lastViewedConversationId: lastViewedConversationId,
   );
 
   factory InNoteMarker.fromJson(Map<String, dynamic> json) {
@@ -119,6 +130,7 @@ class InNoteMarker {
           .toList(),
       charStart: json['charStart'] as int?,
       charEnd: json['charEnd'] as int?,
+      lastViewedConversationId: json['lastViewedConversationId'] as String?,
     );
   }
 
@@ -135,5 +147,7 @@ class InNoteMarker {
       'normalizedRects': normalizedRects!.map((r) => r.toJson()).toList(),
     if (charStart != null) 'charStart': charStart,
     if (charEnd != null) 'charEnd': charEnd,
+    if (lastViewedConversationId != null)
+      'lastViewedConversationId': lastViewedConversationId,
   };
 }
