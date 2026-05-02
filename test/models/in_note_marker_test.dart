@@ -76,5 +76,35 @@ void main() {
       final restored = InNoteMarker.fromJson(original.toJson());
       expect(restored.lastViewedConversationId, 'branch-Z');
     });
+
+    test('forAttachment round-trip preserves lastViewedConversationId', () {
+      final original = InNoteMarker.forAttachment(
+        index: 1,
+        page: 3,
+        conversationId: 'c',
+        messageId: 'm',
+        lastViewedConversationId: 'attachment-branch',
+      );
+      final restored = InNoteMarker.fromJson(original.toJson());
+      expect(restored.lastViewedConversationId, 'attachment-branch');
+    });
+
+    test('toJson serializes empty string as-is (does not omit) — caller must validate', () {
+      // Documents the boundary: toJson omits ONLY when null. An empty
+      // string is preserved through serialization. Task 24's writers
+      // must not store '' as a sentinel for "no last view" — use null.
+      final m = InNoteMarker.forNote(
+        index: 0,
+        charStart: 0,
+        charEnd: 1,
+        conversationId: 'c',
+        messageId: 'm',
+        lastViewedConversationId: '',
+      );
+      final json = m.toJson();
+      expect(json['lastViewedConversationId'], '');
+      final restored = InNoteMarker.fromJson(json);
+      expect(restored.lastViewedConversationId, '');
+    });
   });
 }
