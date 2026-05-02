@@ -63,6 +63,7 @@ import '../widgets/agent_task_tree_widget.dart';
 import '../widgets/attachment_preview_tile.dart';
 import '../widgets/local_model_attachment_warning_dialog.dart';
 import '../widgets/tool_orchestration_warning_dialog.dart';
+import '../services/fork_service.dart';
 
 class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
@@ -2628,11 +2629,19 @@ $historyBuffer
       final navigator = Navigator.of(context);
 
       try {
-        final forkedConversation = await _conversationService.forkConversation(
-          originalConversationId: _conversation!.id,
+        final forkedConversation = await ForkService().forkFromMessageInContext(
           forkFromMessageId: messageId,
-          newTitle: 'Forked conversation',
+          sourceConversationId: _conversation!.id,
+          suggestedTitle: 'Forked conversation',
         );
+        if (forkedConversation == null) {
+          if (mounted) {
+            messenger.showSnackBar(
+              const SnackBar(content: Text('Failed to fork: source conversation not found')),
+            );
+          }
+          return;
+        }
 
         // Navigate to the forked conversation
         if (mounted) {
