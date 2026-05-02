@@ -69,7 +69,10 @@ void main() {
     // within the screen.
     final positioned = tester.widget<Positioned>(find.byType(Positioned));
     expect(positioned.left, isNotNull);
-    expect(positioned.left! + 360.0, lessThanOrEqualTo(mediaSize.width + 8.0),
-        reason: 'Popover (max 360px wide) must not run past right edge of screen (with 8px margin)');
+    // Popover right edge = positioned.left + maxWidth (360). Must stay
+    // within the screen with the 8px gap, i.e. <= mediaSize.width - 8.
+    expect(positioned.left! + 360.0, lessThanOrEqualTo(mediaSize.width - 8.0),
+        reason: 'Popover (max 360px wide) must not run past right edge of screen with 8px margin');
+    entry.remove();
   });
 }

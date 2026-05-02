@@ -26,7 +26,7 @@ void main() {
     await resetForTesting();
   });
 
-  ConversationMessage _stubMsg(String id, String content) {
+  ConversationMessage stubMsg(String id, String content) {
     return ConversationMessage(
       id: id,
       conversationId: 'forked-id',
@@ -36,7 +36,7 @@ void main() {
     );
   }
 
-  Conversation _stubConv(String id, String title) {
+  Conversation stubConv(String id, String title) {
     final now = DateTime.now();
     return Conversation(
       id: id,
@@ -53,11 +53,11 @@ void main() {
       forkFromMessageId: anyNamed('forkFromMessageId'),
       sourceConversationId: anyNamed('sourceConversationId'),
       suggestedTitle: anyNamed('suggestedTitle'),
-    )).thenAnswer((_) async => _stubConv('forked-id', 'explain X'));
+    )).thenAnswer((_) async => stubConv('forked-id', 'explain X'));
     when(mockConv.addUserMessage(
       conversationId: anyNamed('conversationId'),
       content: anyNamed('content'),
-    )).thenAnswer((_) async => _stubMsg('msg-1', 'You are a tutor. Explain X.'));
+    )).thenAnswer((_) async => stubMsg('msg-1', 'You are a tutor. Explain X.'));
 
     String? sentConv;
     String? sentPrompt;
@@ -120,14 +120,17 @@ void main() {
     )).thenThrow(Exception('DB went sideways'));
 
     final handler = ChipTapHandler();
-    expect(
-      () => handler.handle(
+    // Pass the Future directly to expect (not a synchronous lambda) so the
+    // matcher actually awaits it. A wrapped-in-lambda form would silently
+    // pass even if the rethrow behavior were removed.
+    await expectLater(
+      handler.handle(
         parentMessageId: 'parent',
         chip: chip,
         sourceConversationId: 'src',
         onSendUserPrompt: (_, __) async {},
       ),
-      throwsException,
+      throwsA(isA<Exception>()),
     );
   });
 }
