@@ -62,6 +62,11 @@ class SkillService {
         continue;
       }
       // Block scalar (`key: |` or `key: >`) — consume indented continuation.
+      // Note: `>` is treated as `|` here (no folding-into-spaces). Real YAML
+      // folds single newlines into spaces for `>`, but the use case (skill
+      // default_action with multi-line prompt text) wants line structure
+      // preserved either way. Tabs in continuation lines count as one column;
+      // mix tabs and spaces at your own risk.
       if (rawValue == '|' || rawValue == '>') {
         final buffer = StringBuffer();
         i++;
@@ -104,10 +109,14 @@ class SkillService {
         ? int.tryParse(minContextStr)
         : null;
     final rawDefaultAction = fields['default_action']?.trim();
-    final defaultAction =
-        (rawDefaultAction == null || rawDefaultAction.isEmpty)
-            ? null
-            : rawDefaultAction;
+    // Treat a value that is solely a YAML comment ("# ...") as no value.
+    // The hand-rolled parser doesn't strip inline trailing comments, but a
+    // value that *starts* with `#` is unambiguously commentary, not content.
+    final defaultAction = (rawDefaultAction == null ||
+            rawDefaultAction.isEmpty ||
+            rawDefaultAction.startsWith('#'))
+        ? null
+        : rawDefaultAction;
     return SkillMetadata(
       noteId: noteId,
       skillRef: skillRef,

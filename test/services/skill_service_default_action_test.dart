@@ -24,11 +24,23 @@ body text here
 ''';
     final meta = svc.parseSkillMetadata('note-1', content);
     expect(meta, isNotNull);
-    expect(meta!.defaultAction, isNotNull);
-    expect(meta.defaultAction, contains('propose up to 5 follow-up'));
-    expect(meta.defaultAction, contains('Format as fenced chips block'));
-    // The block-scalar continuation must be preserved as multi-line.
-    expect(meta.defaultAction!.split('\n').length, greaterThan(1));
+    expect(
+      meta!.defaultAction,
+      'After your reply, propose up to 5 follow-up explorations.\n'
+      'Format as fenced chips block, with H2 headings as labels.',
+    );
+  });
+
+  test('default_action that is solely a YAML comment is treated as null', () {
+    const content = '''---
+name: A
+description: D
+default_action: # currently unused
+---
+''';
+    final meta = svc.parseSkillMetadata('note-c', content);
+    expect(meta, isNotNull);
+    expect(meta!.defaultAction, isNull);
   });
 
   test('defaultAction is null when frontmatter omits the field', () {
