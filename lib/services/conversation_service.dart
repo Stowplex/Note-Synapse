@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/conversation.dart';
 import '../models/conversation_attachment.dart';
+import '../models/conversation_branch_summary.dart';
 import '../models/conversation_context.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/note.dart';
@@ -1294,6 +1295,144 @@ class ConversationService {
   // Get a specific conversation message
   Future<ConversationMessage?> getConversationMessage(String messageId) async {
     return await _databaseService.getConversationMessage(messageId);
+  }
+
+  /// Returns child branches forking off [parentMessageId]. One entry per
+  /// child conversation that diverges at this message. Empty list if the
+  /// message has no children branching into different conversations.
+  ///
+  /// The fork point is detected via shared messages in
+  /// conversation_message_mapping: any conversation that contains
+  /// [parentMessageId] AND where [parentMessageId] is the last message
+  /// shared with another conversation that also contains it.
+  /// Returns child branches forking off [parentMessageId]. One entry per
+  /// child conversation that diverges at this message. Empty list if the
+  /// message has no children branching into different conversations.
+  ///
+  /// "Child" is defined as a conversation created AFTER another conversation
+  /// that also shares [parentMessageId] — i.e., the newer conversation in
+  /// each sibling pair. [parentMessageId] must be the last shared message
+  /// between the parent and the child conversation.
+  Future<List<ConversationBranchSummary>> getChildBranches(
+    String parentMessageId,
+  ) async {
+    final db = await _databaseService.database;
+    // Find pairs (older_conv, newer_conv) where both share parentMessageId,
+    // parentMessageId is the last shared message, and newer_conv was created
+    // after older_conv. The newer conversation is the "branch".
+    final rows = await db.rawQuery('''
+      SELECT
+        cmm_b.conversationId AS child_conv_id,
+        c_b.title            AS child_title
+      FROM conversation_message_mapping cmm_a
+      JOIN conversations c_a ON c_a.id = cmm_a.conversationId
+      JOIN conversation_message_mapping cmm_b
+        ON cmm_b.messageId = cmm_a.messageId
+        AND cmm_b.conversationId != cmm_a.conversationId
+      JOIN conversations c_b ON c_b.id = cmm_b.conversationId
+      WHERE cmm_a.messageId = ?
+        -- child conversation must be newer than the parent conversation
+        AND c_b.createdAt > c_a.createdAt
+        -- parentMessageId must be the LAST message shared between these two convs
+        AND NOT EXISTS (
+          SELECT 1
+          FROM conversation_message_mapping p2
+          JOIN conversation_message_mapping c2 ON c2.messageId = p2.messageId
+          JOIN conversation_messages m2 ON m2.id = p2.messageId
+          WHERE p2.conversationId = cmm_a.conversationId
+            AND c2.conversationId = cmm_b.conversationId
+            AND m2.timestamp > (
+              SELECT m0.timestamp FROM conversation_messages m0 WHERE m0.id = ?
+            )
+        )
+      GROUP BY cmm_b.conversationId
+    ''', [parentMessageId, parentMessageId]);
+
+    if (rows.isEmpty) return const [];
+    final childConvIds = rows.map((r) => r['child_conv_id'] as String).toSet();
+    final notesByConv = <String, List<String>>{};
+    for (final cid in childConvIds) {
+      notesByConv[cid] = await _databaseService.getConversationNoteIds(cid);
+    }
+    return rows.map((row) {
+      final childConvId = row['child_conv_id'] as String;
+      return ConversationBranchSummary(
+        conversationId: childConvId,
+        title: row['child_title'] as String,
+        forkPointMessageId: parentMessageId,
+        firstChildMessageId: parentMessageId,
+        noteIds: notesByConv[childConvId] ?? const [],
+      );
+    }).toList();
+  }
+
+  /// Batched fork-point query: one DB round-trip returning all child
+  /// branches for every fork-point in [conversationId]. Used by
+  /// ChatPanel to render inline branch strips without N+1 queries.
+  /// Cached by ChatPanel for the lifetime of the panel; invalidated by
+  /// ForkService.forkCreatedStream.
+  ///
+  /// Fork points are detected via shared messages in
+  /// conversation_message_mapping: for each other conversation C that shares
+  /// at least one message with [conversationId], the fork point is the last
+  /// shared message (by timestamp).
+  Future<Map<String, List<ConversationBranchSummary>>> getAllForkPointBranches(
+    String conversationId,
+  ) async {
+    final db = await _databaseService.database;
+    final rows = await db.rawQuery('''
+      SELECT
+        cmm_parent.messageId AS parent_id,
+        cmm_child.conversationId AS child_conv_id,
+        c.title AS child_title,
+        cmm_parent.messageId AS first_child_message_id
+      FROM conversation_message_mapping cmm_parent
+      JOIN conversation_messages m ON m.id = cmm_parent.messageId
+      JOIN conversation_message_mapping cmm_child
+        ON cmm_child.messageId = cmm_parent.messageId
+      JOIN conversations c ON c.id = cmm_child.conversationId
+      WHERE cmm_parent.conversationId = ?
+        AND cmm_child.conversationId != ?
+        -- This message is the LAST shared message between parent conv and child conv
+        AND m.timestamp = (
+          SELECT MAX(m2.timestamp)
+          FROM conversation_message_mapping p2
+          JOIN conversation_message_mapping c2 ON c2.messageId = p2.messageId
+          JOIN conversation_messages m2 ON m2.id = p2.messageId
+          WHERE p2.conversationId = ?
+            AND c2.conversationId = cmm_child.conversationId
+        )
+      GROUP BY cmm_child.conversationId
+    ''', [conversationId, conversationId, conversationId]);
+
+    return _materializeBranchSummaries(rows);
+  }
+
+  /// Internal: turn raw rows from the branch query into the public
+  /// ConversationBranchSummary map. Bulk-fetches noteIds for every
+  /// distinct child conversation appearing in the result.
+  Future<Map<String, List<ConversationBranchSummary>>>
+      _materializeBranchSummaries(List<Map<String, Object?>> rows) async {
+    if (rows.isEmpty) return const {};
+    final childConvIds = rows.map((r) => r['child_conv_id'] as String).toSet();
+    final notesByConv = <String, List<String>>{};
+    for (final cid in childConvIds) {
+      notesByConv[cid] = await _databaseService.getConversationNoteIds(cid);
+    }
+    final result = <String, List<ConversationBranchSummary>>{};
+    for (final row in rows) {
+      final parentId = row['parent_id'] as String;
+      final childConvId = row['child_conv_id'] as String;
+      final summary = ConversationBranchSummary(
+        conversationId: childConvId,
+        title: row['child_title'] as String,
+        forkPointMessageId: parentId,
+        firstChildMessageId: row['first_child_message_id'] as String,
+        noteIds: notesByConv[childConvId] ?? const [],
+      );
+      result.putIfAbsent(parentId, () => []).add(summary);
+    }
+    return result;
   }
 }
 
