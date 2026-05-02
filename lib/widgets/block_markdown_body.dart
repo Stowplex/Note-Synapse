@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:note_synapse/utils/markdown_block_tracker.dart';
 import 'package:note_synapse/widgets/interactive_checkbox_markdown.dart';
+import '../models/chip_action.dart';
+import '../services/chips_block_parser.dart';
 
 /// Callback for when a block edit is requested
 typedef BlockEditCallback = void Function(MarkdownBlock block);
@@ -23,6 +25,15 @@ class BlockMarkdownBody extends StatefulWidget {
   final Function(int index, MarkdownBlock block, Offset position)?
   onBlockDropped;
 
+  /// Fires after a chips block is detected and stripped from [content].
+  /// Called on first build for a given content value, and again only when
+  /// [content] changes and produces a different chip list. Use this to
+  /// render a chip footer below the message body (see ChipsFooter widget).
+  ///
+  /// Optional — omit for messages where chip rendering is not desired
+  /// (e.g. user messages, scratchpad notes).
+  final void Function(List<ChipAction>)? onChipsExtracted;
+
   const BlockMarkdownBody({
     super.key,
     required this.content,
@@ -35,6 +46,7 @@ class BlockMarkdownBody extends StatefulWidget {
     this.onBlocksParsed,
     this.onBlockDropped,
     this.onFetchImage,
+    this.onChipsExtracted,
   });
 
   final Function(String)? onFetchImage;
@@ -46,6 +58,40 @@ class BlockMarkdownBody extends StatefulWidget {
 class _BlockMarkdownBodyState extends State<BlockMarkdownBody> {
   final _tracker = MarkdownBlockTracker();
   late List<MarkdownBlock> _blocks;
+
+  // Chips caching: keyed on content to avoid re-parsing on unrelated rebuilds.
+  ChipsParseResult? _cachedChipsResult;
+  String? _cachedChipsFor;
+  List<ChipAction>? _lastNotifiedChips;
+
+  ChipsParseResult _ensureChipsParsed(String content) {
+    if (_cachedChipsFor == content && _cachedChipsResult != null) {
+      return _cachedChipsResult!;
+    }
+    _cachedChipsResult = ChipsBlockParser().parse(content);
+    _cachedChipsFor = content;
+    return _cachedChipsResult!;
+  }
+
+  void _maybeNotifyChips(List<ChipAction> chips) {
+    final cb = widget.onChipsExtracted;
+    if (cb == null) return;
+    if (_chipsListEquals(_lastNotifiedChips, chips)) return;
+    _lastNotifiedChips = List.of(chips);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) cb(chips);
+    });
+  }
+
+  bool _chipsListEquals(List<ChipAction>? a, List<ChipAction>? b) {
+    if (a == null) return b == null;
+    if (b == null) return false;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 
   @override
   void initState() {
@@ -62,7 +108,8 @@ class _BlockMarkdownBodyState extends State<BlockMarkdownBody> {
   }
 
   void _parseBlocks() {
-    _blocks = _tracker.parseBlocks(widget.content);
+    final parsed = _ensureChipsParsed(widget.content);
+    _blocks = _tracker.parseBlocks(parsed.strippedMarkdown);
     // Notify parent of parsed blocks (deferred to avoid build-phase callback issues if needed, but usually safe here if parent handles it well)
     // Using post-frame callback just in case parent calls setState.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -72,6 +119,9 @@ class _BlockMarkdownBodyState extends State<BlockMarkdownBody> {
 
   @override
   Widget build(BuildContext context) {
+    final parsed = _ensureChipsParsed(widget.content);
+    _maybeNotifyChips(parsed.chips);
+
     if (_blocks.isEmpty) {
       return const SliverToBoxAdapter(child: SizedBox.shrink());
     }
