@@ -110,10 +110,13 @@ class _ChatPanelState extends State<ChatPanel> {
   }
 
   void _onForkCreated(String parentMessageId) async {
-    // Refresh branches map; cheap because the query is batched.
+    // Capture the conversationId at dispatch time so a mid-flight branch
+    // switch (Task 18) doesn't apply this conversation's branches to a
+    // different one.
+    final cid = widget.conversationId;
     final branches = await getIt<ConversationService>()
-        .getAllForkPointBranches(widget.conversationId);
-    if (!mounted) return;
+        .getAllForkPointBranches(cid);
+    if (!mounted || cid != widget.conversationId) return;
     setState(() => _branchesByParent = branches);
   }
 
@@ -131,6 +134,11 @@ class _ChatPanelState extends State<ChatPanel> {
                     horizontal: 12,
                     vertical: 6,
                   ),
+                  // NOTE: noteId is reused as a cache-scope/key prefix for
+                  // BlockMarkdownBody. Checkbox toggles inside chat messages
+                  // are non-persistent here (no onContentChanged wired). If
+                  // a future flow ever lets users tick checkboxes inside an
+                  // AI reply, route the toggle through ConversationService.
                   sliver: BlockMarkdownBody(
                     key: ValueKey('chat_msg_${m.id}'),
                     noteId: m.conversationId,
