@@ -1,13 +1,16 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/in_note_marker.dart';
 import '../models/conversation.dart';
 import '../services/database_service.dart';
+import '../services/note_marker_service.dart';
 import '../services/service_locator.dart';
 import '../screens/conversation_chat_screen.dart';
 import '../utils/file_utils.dart';
 import 'interactive_checkbox_markdown.dart';
 import 'marker_chat_panel_host.dart';
+import 'marker_orphan_state.dart';
 
 class InNoteMarkerPreview extends StatefulWidget {
   final InNoteMarker marker;
@@ -120,6 +123,10 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
 
   /// AI marker preview path. Hosts ChatPanel inside the marker sheet
   /// so the user can continue the conversation in place.
+  ///
+  /// Runs the 4-tier fallback chain (anchor exists → lastViewed → original
+  /// → orphan) before deciding whether to render [MarkerChatPanelHost] or
+  /// the [MarkerOrphanState] empty state. See [_resolveLastViewed].
   Widget _buildAiMarkerChatPanelHost() {
     return DraggableScrollableSheet(
       key: const ValueKey('ai-marker-chat-panel-host'),
@@ -133,13 +140,26 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
             color: Theme.of(context).colorScheme.surface,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
           ),
-          child: MarkerChatPanelHost(
-            marker: widget.marker,
-            // resolveLastViewed implemented in Task 24 — for now use the
-            // marker's recorded conversationId verbatim.
-            resolvedConversationId: widget.marker.conversationId,
-            contextCard: _buildAiMarkerContextCard(context),
-            onActiveConversationChanged: _persistLastViewed,
+          child: FutureBuilder<_ResolvedTarget>(
+            future: _resolveLastViewed(widget.marker),
+            builder: (context, snap) {
+              if (!snap.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final target = snap.data!;
+              if (target.orphan != null) {
+                return MarkerOrphanState(
+                  reason: target.orphan!,
+                  onDeleteMarker: _deleteMarker,
+                );
+              }
+              return MarkerChatPanelHost(
+                marker: widget.marker,
+                resolvedConversationId: target.conversationId!,
+                contextCard: _buildAiMarkerContextCard(context),
+                onActiveConversationChanged: _persistLastViewed,
+              );
+            },
           ),
         );
       },
@@ -150,7 +170,7 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
   /// Reuses the legacy preview's image + user-message rendering so the
   /// reader still sees what they originally circled. Static — no deps
   /// on _loading/_userMessageContent so it can render before _loadData
-  /// completes (kept as a TODO for Task 24 to refine).
+  /// completes (kept as a TODO for Task 24+ to refine).
   Widget _buildAiMarkerContextCard(BuildContext context) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -164,9 +184,60 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
     );
   }
 
-  /// Stub — full persistence chain wired in Task 24.
+  /// 4-tier fallback chain run on each marker re-entry:
+  /// 1. Anchor message must still exist; otherwise the marker is orphaned
+  ///    (anchor-deleted) regardless of conversation state.
+  /// 2. If [InNoteMarker.lastViewedConversationId] is set and that
+  ///    conversation still exists → land there (Kindle resumption).
+  /// 3. Otherwise fall back to the marker's original [conversationId].
+  ///    If the lastViewed pointer was stale, fire-and-forget clear it so
+  ///    the next re-entry skips the dead lookup.
+  /// 4. If neither lastViewed nor original conversations resolve → orphan
+  ///    (conversation-deleted).
+  Future<_ResolvedTarget> _resolveLastViewed(InNoteMarker m) async {
+    final db = getIt<DatabaseService>();
+    // Tier 1: anchor message must still exist somewhere.
+    final anchor = await db.getConversationMessage(m.messageId);
+    if (anchor == null) {
+      return _ResolvedTarget(orphan: OrphanReason.anchorDeleted);
+    }
+    // Tier 2: lastViewed conversation if still alive.
+    if (m.lastViewedConversationId != null) {
+      final c = await db.getConversation(m.lastViewedConversationId!);
+      if (c != null) return _ResolvedTarget(conversationId: c.id);
+      // Stale — fall through and clear below.
+    }
+    // Tier 3: original conversation.
+    final original = await db.getConversation(m.conversationId);
+    if (original != null) {
+      if (m.lastViewedConversationId != null) {
+        // Fire-and-forget cleanup of the stale pointer. If this fails
+        // the next re-entry will try again.
+        unawaited(
+          getIt<NoteMarkerService>().updateMarkerLastViewed(m.id, null),
+        );
+      }
+      return _ResolvedTarget(conversationId: original.id);
+    }
+    // Tier 4: nothing usable left.
+    return _ResolvedTarget(orphan: OrphanReason.conversationDeleted);
+  }
+
+  /// Persists the active branch back onto the marker so the next re-entry
+  /// resumes here. Fire-and-forget; if the write fails the next re-entry
+  /// uses the original conversation as fallback.
   void _persistLastViewed(String newConversationId) {
-    // Intentionally empty for Task 22.
+    unawaited(
+      getIt<NoteMarkerService>()
+          .updateMarkerLastViewed(widget.marker.id, newConversationId),
+    );
+  }
+
+  /// Removes the marker from wherever it lives (note or attachment), then
+  /// pops the sheet with `true` so the host can refresh its marker list.
+  Future<void> _deleteMarker() async {
+    await getIt<NoteMarkerService>().deleteMarker(widget.marker.id);
+    if (mounted) Navigator.of(context).pop(true);
   }
 
   Widget _buildContent(
@@ -387,4 +458,12 @@ Future<bool?> showInNoteMarkerPreview(
     backgroundColor: Colors.transparent,
     builder: (_) => InNoteMarkerPreview(marker: marker),
   );
+}
+
+/// Result of [_InNoteMarkerPreviewState._resolveLastViewed]. Exactly one
+/// of [conversationId] or [orphan] is non-null.
+class _ResolvedTarget {
+  final String? conversationId;
+  final OrphanReason? orphan;
+  _ResolvedTarget({this.conversationId, this.orphan});
 }

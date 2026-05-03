@@ -8,10 +8,36 @@ import 'package:note_synapse/services/conversation_service.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/fork_service.dart';
 import 'package:note_synapse/services/model_storage_service.dart';
+import 'package:note_synapse/services/note_marker_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/widgets/in_note_marker_preview.dart';
+import 'package:note_synapse/widgets/marker_chat_panel_host.dart';
+import 'package:note_synapse/widgets/marker_orphan_state.dart';
 
 import 'in_note_marker_preview_test.mocks.dart';
+
+/// Test double for [NoteMarkerService] that records calls but never touches
+/// the database. The widget calls [updateMarkerLastViewed] fire-and-forget
+/// (e.g. to clear stale lastViewed pointers); we don't want those writes
+/// to throw or wedge the test loop.
+class _RecordingNoteMarkerService implements NoteMarkerService {
+  final List<({String markerId, String? newConvId})> updates = [];
+  final List<String> deletes = [];
+
+  @override
+  Future<void> updateMarkerLastViewed(
+      String markerId, String? newConvId) async {
+    updates.add((markerId: markerId, newConvId: newConvId));
+  }
+
+  @override
+  Future<void> deleteMarker(String markerId) async {
+    deletes.add(markerId);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 @GenerateMocks([
   DatabaseService,
@@ -24,6 +50,7 @@ void main() {
   late MockConversationService mockConv;
   late MockForkService mockFork;
   late MockModelStorageService mockModelStorage;
+  late _RecordingNoteMarkerService fakeMarkerService;
 
   setUp(() async {
     await resetForTesting();
@@ -31,11 +58,13 @@ void main() {
     mockConv = MockConversationService();
     mockFork = MockForkService();
     mockModelStorage = MockModelStorageService();
+    fakeMarkerService = _RecordingNoteMarkerService();
     // Annotation path's _loadData() still runs and reads the database.
     // Stub the calls it makes so the loading state resolves cleanly.
     when(mockDb.getConversationMessage(any)).thenAnswer((_) async => null);
     when(mockDb.getConversationMessages(any))
         .thenAnswer((_) async => const <ConversationMessage>[]);
+    when(mockDb.getConversation(any)).thenAnswer((_) async => null);
     // AI-marker path uses ChatPanel, which depends on ConversationService and
     // ForkService; the embedded ModelSelectorButton needs ModelStorageService.
     when(mockFork.forkCreatedStream).thenAnswer((_) => const Stream.empty());
@@ -62,11 +91,31 @@ void main() {
     getIt.registerSingleton<ConversationService>(mockConv);
     getIt.registerSingleton<ForkService>(mockFork);
     getIt.registerSingleton<ModelStorageService>(mockModelStorage);
+    getIt.registerSingleton<NoteMarkerService>(fakeMarkerService);
   });
 
   tearDown(() async {
     await resetForTesting();
   });
+
+  ConversationMessage stubAnchorMessage() => ConversationMessage(
+        id: 'm',
+        conversationId: 'c',
+        type: MessageType.user,
+        content: 'hi',
+        timestamp: DateTime.now(),
+      );
+
+  Conversation stubConversation(String id) {
+    final now = DateTime.now();
+    return Conversation(
+      id: id,
+      title: 'T',
+      noteIds: const [],
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
 
   testWidgets('annotation marker uses the legacy preview path', (tester) async {
     final m = InNoteMarker.forNote(
@@ -85,20 +134,92 @@ void main() {
     expect(find.byKey(const ValueKey('ai-marker-chat-panel-host')), findsNothing);
   });
 
-  testWidgets('AI marker uses the ChatPanel-hosted path', (tester) async {
+  testWidgets('AI marker with deleted anchor renders anchor-deleted orphan',
+      (tester) async {
+    // getConversationMessage already stubbed to null in setUp.
     final m = InNoteMarker.forNote(
       index: 0,
       charStart: 0,
       charEnd: 5,
       conversationId: 'c',
       messageId: 'm',
-      // type defaults to MarkerType.ai
     );
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(body: InNoteMarkerPreview(marker: m)),
     ));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('ai-marker-chat-panel-host')), findsOneWidget);
-    expect(find.byKey(const ValueKey('legacy-annotation-preview')), findsNothing);
+    expect(find.byType(MarkerOrphanState), findsOneWidget);
+    expect(find.textContaining('anchor message'), findsOneWidget);
+  });
+
+  testWidgets(
+      'AI marker with live anchor but missing conversation renders conversation-deleted orphan',
+      (tester) async {
+    when(mockDb.getConversationMessage(any))
+        .thenAnswer((_) async => stubAnchorMessage());
+    when(mockDb.getConversation(any)).thenAnswer((_) async => null);
+    final m = InNoteMarker.forNote(
+      index: 0,
+      charStart: 0,
+      charEnd: 5,
+      conversationId: 'c',
+      messageId: 'm',
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: InNoteMarkerPreview(marker: m)),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byType(MarkerOrphanState), findsOneWidget);
+    expect(find.textContaining('conversation no longer exists'), findsOneWidget);
+  });
+
+  testWidgets(
+      'AI marker happy path renders MarkerChatPanelHost on resolved conversation',
+      (tester) async {
+    when(mockDb.getConversationMessage(any))
+        .thenAnswer((_) async => stubAnchorMessage());
+    when(mockDb.getConversation('c'))
+        .thenAnswer((_) async => stubConversation('c'));
+    final m = InNoteMarker.forNote(
+      index: 0,
+      charStart: 0,
+      charEnd: 5,
+      conversationId: 'c',
+      messageId: 'm',
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: InNoteMarkerPreview(marker: m)),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byType(MarkerChatPanelHost), findsOneWidget);
+    expect(find.byType(MarkerOrphanState), findsNothing);
+  });
+
+  testWidgets(
+      'stale lastViewedConversationId falls back to original and clears the pointer',
+      (tester) async {
+    when(mockDb.getConversationMessage(any))
+        .thenAnswer((_) async => stubAnchorMessage());
+    when(mockDb.getConversation('stale')).thenAnswer((_) async => null);
+    when(mockDb.getConversation('c'))
+        .thenAnswer((_) async => stubConversation('c'));
+    final m = InNoteMarker.forNote(
+      id: 'marker-id',
+      index: 0,
+      charStart: 0,
+      charEnd: 5,
+      conversationId: 'c',
+      messageId: 'm',
+      lastViewedConversationId: 'stale',
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: InNoteMarkerPreview(marker: m)),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byType(MarkerChatPanelHost), findsOneWidget);
+    expect(fakeMarkerService.updates, isNotEmpty);
+    expect(fakeMarkerService.updates.first.markerId, 'marker-id');
+    expect(fakeMarkerService.updates.first.newConvId, isNull);
   });
 }
