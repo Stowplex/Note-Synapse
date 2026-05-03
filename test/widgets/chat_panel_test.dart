@@ -310,4 +310,114 @@ You are a tutor. Explain X.
     expect(find.text('New Child'), findsOneWidget);
     expect(find.text('Sibling'), findsOneWidget);
   });
+
+  testWidgets('shows streaming bubble at tail when streamingContent != null',
+      (tester) async {
+    final now = DateTime.now();
+    when(mockConv.getConversation('conv-1'))
+        .thenAnswer((_) async => stubConv('conv-1'));
+    when(mockConv.getConversationMessages('conv-1')).thenAnswer((_) async => [
+          ConversationMessage(
+            id: 'mAI', conversationId: 'conv-1',
+            type: MessageType.ai, content: 'Already-finalized AI reply.',
+            timestamp: now,
+          ),
+        ]);
+    when(mockConv.getAllForkPointBranches('conv-1'))
+        .thenAnswer((_) async => const {});
+    when(mockConv.skillsEnabled).thenReturn(false);
+    when(mockConv.skillIndex).thenReturn(const {});
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ChatPanel(
+          conversationId: 'conv-1',
+          isStreaming: true,
+          streamingContent: 'LIVE_PARTIAL_TEXT',
+          onActiveConversationChanged: (_) {},
+          onSendUserPrompt: (_, __) async {},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('LIVE_PARTIAL_TEXT'), findsOneWidget);
+    // Sanity: the prior finalized message also still renders.
+    expect(find.textContaining('Already-finalized AI reply.'), findsOneWidget);
+  });
+
+  testWidgets(
+      'shows tool-details icon when message has parts_history metadata',
+      (tester) async {
+    final now = DateTime.now();
+    when(mockConv.getConversation('conv-1'))
+        .thenAnswer((_) async => stubConv('conv-1'));
+    final aiMsg = ConversationMessage(
+      id: 'mAI', conversationId: 'conv-1',
+      type: MessageType.ai, content: 'Reply.',
+      timestamp: now,
+      metadata: const {'parts_history': [<String, dynamic>{}]},
+    );
+    when(mockConv.getConversationMessages('conv-1'))
+        .thenAnswer((_) async => [aiMsg]);
+    when(mockConv.getAllForkPointBranches('conv-1'))
+        .thenAnswer((_) async => const {});
+    when(mockConv.skillsEnabled).thenReturn(false);
+    when(mockConv.skillIndex).thenReturn(const {});
+
+    ConversationMessage? captured;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ChatPanel(
+          conversationId: 'conv-1',
+          isStreaming: false,
+          onActiveConversationChanged: (_) {},
+          onSendUserPrompt: (_, __) async {},
+          onShowToolDetails: (m) => captured = m,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    final iconFinder = find.byTooltip('View Tool Usage');
+    expect(iconFinder, findsOneWidget);
+    await tester.tap(iconFinder);
+    await tester.pumpAndSettle();
+    expect(captured?.id, 'mAI');
+  });
+
+  testWidgets('user message edit icon fires onUserMessageEdit when tapped',
+      (tester) async {
+    final now = DateTime.now();
+    when(mockConv.getConversation('conv-1'))
+        .thenAnswer((_) async => stubConv('conv-1'));
+    final userMsg = ConversationMessage(
+      id: 'mU', conversationId: 'conv-1',
+      type: MessageType.user, content: 'My question?',
+      timestamp: now,
+    );
+    when(mockConv.getConversationMessages('conv-1'))
+        .thenAnswer((_) async => [userMsg]);
+    when(mockConv.getAllForkPointBranches('conv-1'))
+        .thenAnswer((_) async => const {});
+    when(mockConv.skillsEnabled).thenReturn(false);
+    when(mockConv.skillIndex).thenReturn(const {});
+
+    ConversationMessage? captured;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ChatPanel(
+          conversationId: 'conv-1',
+          isStreaming: false,
+          onActiveConversationChanged: (_) {},
+          onSendUserPrompt: (_, __) async {},
+          onUserMessageEdit: (m) => captured = m,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    final editFinder = find.byTooltip('Use this message');
+    expect(editFinder, findsOneWidget);
+    await tester.tap(editFinder);
+    await tester.pumpAndSettle();
+    expect(captured?.id, 'mU');
+  });
 }

@@ -2,56 +2,78 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/chip_action.dart';
 import '../models/conversation.dart';
 import '../models/conversation_branch_summary.dart';
 import '../services/chip_tap_handler.dart';
+import '../services/chips_block_parser.dart';
 import '../services/conversation_service.dart';
 import '../services/fork_service.dart';
 import '../services/service_locator.dart';
-import 'block_markdown_body.dart';
+import 'chat_message_action_row.dart';
 import 'chip_preview_popover.dart';
 import 'chips_footer.dart';
+import 'interactive_checkbox_markdown.dart';
 import 'message_branch_strip.dart';
 
 /// Marker-anchored chat panel.
 ///
-/// Task 15 skeleton: loads conversation + messages + branch summaries on
-/// mount, subscribes to [ForkService.forkCreatedStream] to refresh the
-/// branch map when a fork happens, and renders an optional [contextCard]
-/// pinned at the top above a scrollable list of message bodies.
-///
-/// Subsequent tasks (16-19) will:
-/// - render [MessageBranchStrip] under fork-point messages,
-/// - render [ChipsFooter] under AI messages,
-/// - wire chip taps + chip preview popover,
-/// - honor [initialMessageId] for scroll-to behavior, and
-/// - notify via [onActiveConversationChanged] when the active branch changes.
+/// Renders a conversation as right-aligned user bubbles and left-aligned AI
+/// bubbles (mirroring the immersive note screen's chat look-and-feel) with:
+/// - synchronously-extracted chip actions (no `BlockMarkdownBody` dependency),
+/// - an optional [contextCard] pinned at the top,
+/// - an optional "streaming bubble" tail driven by [streamingContent],
+/// - per-message branch strips below messages with sibling branches,
+/// - per-AI-message chip footer + chip preview popover,
+/// - per-AI-message tool-usage indicator (when [onShowToolDetails] is wired),
+/// - per-AI-message Copy / Add-to-note action row (when both callbacks wired),
+/// - per-user-message edit affordance (when [onUserMessageEdit] is wired).
 class ChatPanel extends StatefulWidget {
   /// The conversation whose messages this panel renders.
   final String conversationId;
 
   /// If non-null, the panel scrolls to this message after first paint.
-  /// Honored in Task 18.
   final String? initialMessageId;
 
   /// Optional widget pinned at the top of the panel (e.g. an in-note
   /// marker preview card or a "this is a sub-conversation" banner).
   final Widget? contextCard;
 
-  /// Fired when the user switches branches via [MessageBranchStrip] in
-  /// Task 18. Signature widens in later tasks (Task 18/20).
+  /// Fired when the user switches branches via [MessageBranchStrip].
   final ValueChanged<String> onActiveConversationChanged;
 
   /// True while the parent message is generating; disables chip taps and
-  /// branch-strip taps to avoid race conditions. Wired in Tasks 16-17.
+  /// branch-strip taps to avoid race conditions.
   final bool isStreaming;
 
-  /// Sends a user prompt to the active conversation. Wired in Task 17 for
-  /// chip-tap follow-ups and (eventually) in Task 22 for the marker chat
-  /// composer.
+  /// Sends a user prompt to the active conversation.
   final Future<void> Function(String conversationId, String prompt)
       onSendUserPrompt;
+
+  /// Live partial text shown as a "streaming bubble" tail when non-null.
+  /// Parent updates this on each AI chunk; when null, no tail is rendered.
+  final String? streamingContent;
+
+  /// Fired when the user taps the edit icon on one of THEIR messages
+  /// (typical immersive UX: copy content back into the input field).
+  /// If null, no edit icon is shown.
+  final void Function(ConversationMessage)? onUserMessageEdit;
+
+  /// Fired when the user taps the tool-usage icon on an AI message that
+  /// has `parts_history` or `function_calls` metadata. If null, no icon
+  /// is shown even if the message has tool metadata.
+  final void Function(ConversationMessage)? onShowToolDetails;
+
+  /// Fired when the user taps the "Copy" affordance on an AI message
+  /// (under-bubble action row). If null AND [onAddAiMessageToNote] is also
+  /// null, the action row is hidden entirely.
+  final void Function(ConversationMessage)? onCopyAiMessage;
+
+  /// Fired when the user taps the "Add to note" affordance on an AI
+  /// message (under-bubble action row). If null AND [onCopyAiMessage] is
+  /// also null, the action row is hidden entirely.
+  final void Function(ConversationMessage)? onAddAiMessageToNote;
 
   const ChatPanel({
     super.key,
@@ -61,6 +83,11 @@ class ChatPanel extends StatefulWidget {
     required this.onSendUserPrompt,
     this.initialMessageId,
     this.contextCard,
+    this.streamingContent,
+    this.onUserMessageEdit,
+    this.onShowToolDetails,
+    this.onCopyAiMessage,
+    this.onAddAiMessageToNote,
   });
 
   @override
@@ -71,16 +98,32 @@ class _ChatPanelState extends State<ChatPanel> {
   Conversation? _conversation;
   List<ConversationMessage> _messages = const [];
   Map<String, List<ConversationBranchSummary>> _branchesByParent = const {};
+
+  /// Cache: messageId -> chip actions parsed out of the AI message body.
+  /// Populated synchronously during build via [ChipsBlockParser]; never
+  /// recomputed for the same (id + content) pair.
   final Map<String, List<ChipAction>> _chipsByMessage = {};
+
+  /// Cache: messageId -> markdown with all `chips` fenced blocks removed.
+  /// Sibling to [_chipsByMessage]; same key + invalidation policy.
+  final Map<String, String> _strippedByMessage = {};
+
+  /// Cache: messageId -> the raw content string used to populate the two
+  /// caches above. If a message body changes (e.g. live streaming updates
+  /// an in-place AI reply), we re-parse on the next build.
+  final Map<String, String> _contentSnapshotByMessage = {};
+
+  final ChipsBlockParser _chipsParser = ChipsBlockParser();
+
   StreamSubscription<String>? _forkSub;
   OverlayEntry? _activePreview;
 
-  // Scroll plumbing for [ChatPanel.initialMessageId]. We hand a
-  // [GlobalKey] to each per-message sliver so we can locate it after the
-  // first frame and call [Scrollable.ensureVisible] to land on the right
-  // message. Because [CustomScrollView] is lazy, the initial target may
-  // not be built yet — we coarse-jump first, then re-attempt up to a
-  // small retry cap to avoid a [pumpAndSettle] deadlock.
+  // Scroll plumbing for [ChatPanel.initialMessageId]. We hand a [GlobalKey]
+  // to each per-message bubble container so we can locate it after the first
+  // frame and call [Scrollable.ensureVisible] to land on the right message.
+  // Because [ListView.builder] is lazy, the initial target may not be built
+  // yet — we coarse-jump first, then re-attempt up to a small retry cap to
+  // avoid a [pumpAndSettle] deadlock.
   final ScrollController _scrollController = ScrollController();
   final Map<String, GlobalKey> _messageKeys = {};
 
@@ -100,6 +143,8 @@ class _ChatPanelState extends State<ChatPanel> {
     if (old.conversationId != widget.conversationId) {
       _branchesByParent = const {};
       _chipsByMessage.clear();
+      _strippedByMessage.clear();
+      _contentSnapshotByMessage.clear();
       _messageKeys.clear();
       _load();
     }
@@ -134,9 +179,9 @@ class _ChatPanelState extends State<ChatPanel> {
 
   /// Scrolls the viewport so the message with [id] is visible.
   ///
-  /// [CustomScrollView] is lazy: a key for an off-screen target may not
-  /// have a [BuildContext] yet. We do a coarse [jumpTo] estimate first to
-  /// force the slivers near the target to build, then call
+  /// [ListView.builder] is lazy: a key for an off-screen target may not have
+  /// a [BuildContext] yet. We do a coarse [jumpTo] estimate first to force
+  /// the items near the target to build, then call
   /// [Scrollable.ensureVisible] on the next frame for an exact landing.
   /// Capped at 3 attempts so [pumpAndSettle] never hangs.
   void _scrollToInitialMessage(String id, {required int attempt}) {
@@ -153,8 +198,7 @@ class _ChatPanelState extends State<ChatPanel> {
       return;
     }
     // Target hasn't been laid out yet. Coarse-jump toward its likely
-    // offset and retry next frame. We use the message index to bias the
-    // jump so even very long lists converge quickly.
+    // offset and retry next frame.
     if (_scrollController.hasClients && _messages.isNotEmpty) {
       final idx = _messages.indexWhere((m) => m.id == id);
       if (idx >= 0) {
@@ -172,8 +216,7 @@ class _ChatPanelState extends State<ChatPanel> {
 
   void _onForkCreated(String parentMessageId) async {
     // Capture the conversationId at dispatch time so a mid-flight branch
-    // switch (Task 18) doesn't apply this conversation's branches to a
-    // different one.
+    // switch doesn't apply this conversation's branches to a different one.
     final cid = widget.conversationId;
     final branches = await getIt<ConversationService>()
         .getAllForkPointBranches(cid);
@@ -213,74 +256,298 @@ class _ChatPanelState extends State<ChatPanel> {
     });
   }
 
+  /// Returns true if the AI action row should render. The row is hidden
+  /// unless at least one of the action callbacks is wired; when only one
+  /// is wired, the unwired button renders disabled (onPressed: null).
+  bool _shouldShowActionRow() {
+    return widget.onCopyAiMessage != null ||
+        widget.onAddAiMessageToNote != null;
+  }
+
+  /// Returns true when the message has the metadata keys that indicate the
+  /// AI used tools (parts_history / function_calls) AND the host wired a
+  /// tool-details callback. Both conditions must hold for the icon to show.
+  bool _hasToolMetadata(ConversationMessage m) {
+    if (widget.onShowToolDetails == null) return false;
+    final meta = m.metadata;
+    if (meta == null) return false;
+    return meta.containsKey('parts_history') ||
+        meta.containsKey('function_calls');
+  }
+
+  /// Returns the (chips, stripped) pair for an AI message, parsing on first
+  /// access and re-parsing only when the content changes. User messages get
+  /// a (const [], original content) result without invoking the parser.
+  ({List<ChipAction> chips, String stripped}) _chipsFor(ConversationMessage m) {
+    if (m.type != MessageType.ai) {
+      return (chips: const [], stripped: m.content);
+    }
+    final snapshot = _contentSnapshotByMessage[m.id];
+    if (snapshot != m.content) {
+      final parsed = _chipsParser.parse(m.content);
+      _chipsByMessage[m.id] = parsed.chips;
+      _strippedByMessage[m.id] = parsed.strippedMarkdown;
+      _contentSnapshotByMessage[m.id] = m.content;
+    }
+    return (
+      chips: _chipsByMessage[m.id] ?? const [],
+      stripped: _strippedByMessage[m.id] ?? m.content,
+    );
+  }
+
+  /// Localized "AI" header label. Falls back to the literal string "AI"
+  /// when the host doesn't provide [AppLocalizations] (e.g. unit tests that
+  /// build `MaterialApp` without `localizationsDelegates`).
+  String _aiLabel(BuildContext context) =>
+      AppLocalizations.of(context)?.ai ?? 'AI';
+
   @override
   Widget build(BuildContext context) {
+    final hasStreamingTail = widget.streamingContent != null;
+    final itemCount = _messages.length + (hasStreamingTail ? 1 : 0);
+
     return Column(
       children: [
         if (widget.contextCard != null) widget.contextCard!,
         Expanded(
-          child: CustomScrollView(
+          child: ListView.builder(
             controller: _scrollController,
-            slivers: [
-              for (final m in _messages) ...[
-                SliverPadding(
-                  key: _keyFor(m.id),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  // NOTE: noteId is reused as a cache-scope/key prefix for
-                  // BlockMarkdownBody. Checkbox toggles inside chat messages
-                  // are non-persistent here (no onContentChanged wired). If
-                  // a future flow ever lets users tick checkboxes inside an
-                  // AI reply, route the toggle through ConversationService.
-                  sliver: BlockMarkdownBody(
-                    key: ValueKey('chat_msg_${m.id}'),
-                    noteId: m.conversationId,
-                    content: m.content,
-                    onChipsExtracted: m.type == MessageType.ai
-                        ? (chips) {
-                            if (!mounted) return;
-                            setState(() => _chipsByMessage[m.id] = chips);
-                          }
-                        : null,
-                  ),
-                ),
-                // Chip footer (above branch strip per spec) — AI messages only.
-                if (m.type == MessageType.ai)
-                  SliverToBoxAdapter(
-                    child: ChipsFooter(
-                      chips: _chipsByMessage[m.id],
-                      isStreaming:
-                          widget.isStreaming && m.id == _messages.last.id,
-                      isExpected: _isChipsExpected(),
-                      onChipTap: widget.isStreaming
-                          ? null
-                          : (chip) => _handleChipTap(m.id, chip),
-                      onChipLongPress: widget.isStreaming
-                          ? null
-                          : (chip, anchorKey) =>
-                              _showChipPreview(chip, anchorKey),
-                    ),
-                  ),
-                // Branch strip — only when at least 2 sibling branches exist
-                // off this fork-point message. Gated at the call site for
-                // clarity even though MessageBranchStrip also short-circuits.
-                if ((_branchesByParent[m.id] ?? const []).length >= 2)
-                  SliverToBoxAdapter(
-                    child: MessageBranchStrip(
-                      branches: _branchesByParent[m.id]!,
-                      activeConversationId: widget.conversationId,
-                      activeNoteIds: _conversation?.noteIds ?? const [],
-                      disabled: widget.isStreaming,
-                      onSwitchBranch: (newId, _) =>
-                          widget.onActiveConversationChanged(newId),
-                    ),
-                  ),
-              ],
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: itemCount,
+            itemBuilder: (context, index) {
+              if (hasStreamingTail && index == _messages.length) {
+                return _buildStreamingBubble(context);
+              }
+              return _buildMessageItem(context, _messages[index]);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStreamingBubble(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return KeyedSubtree(
+      key: const ValueKey('chat_panel_streaming_message'),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.7,
+          ),
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildAiHeader(context, trailing: null),
+              const SizedBox(height: 8),
+              SelectableText(widget.streamingContent ?? ''),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildMessageItem(
+    BuildContext context,
+    ConversationMessage m,
+  ) {
+    final isUser = m.type == MessageType.user;
+    return Column(
+      key: ValueKey('chat_panel_msg_col_${m.id}'),
+      crossAxisAlignment: isUser
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      children: [
+        if (isUser)
+          _buildUserBubble(context, m)
+        else
+          _buildAiBubble(context, m),
+        // Chip footer (above branch strip per spec) — AI messages only.
+        if (m.type == MessageType.ai)
+          ChipsFooter(
+            chips: _chipsByMessage[m.id],
+            isStreaming:
+                widget.isStreaming && m.id == _messages.last.id,
+            isExpected: _isChipsExpected(),
+            onChipTap: widget.isStreaming
+                ? null
+                : (chip) => _handleChipTap(m.id, chip),
+            onChipLongPress: widget.isStreaming
+                ? null
+                : (chip, anchorKey) => _showChipPreview(chip, anchorKey),
+          ),
+        // Branch strip — only when at least 2 sibling branches exist off
+        // this fork-point message. Gated at the call site for clarity even
+        // though MessageBranchStrip also short-circuits.
+        if ((_branchesByParent[m.id] ?? const []).length >= 2)
+          MessageBranchStrip(
+            branches: _branchesByParent[m.id]!,
+            activeConversationId: widget.conversationId,
+            activeNoteIds: _conversation?.noteIds ?? const [],
+            disabled: widget.isStreaming,
+            onSwitchBranch: (newId, _) =>
+                widget.onActiveConversationChanged(newId),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildUserBubble(BuildContext context, ConversationMessage m) {
+    final scheme = Theme.of(context).colorScheme;
+    final showEdit = widget.onUserMessageEdit != null;
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Container(
+        key: _keyFor(m.id),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.7,
+        ),
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: scheme.primaryContainer,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Flexible(
+              child: SelectableText(
+                m.content,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: scheme.onSurface),
+              ),
+            ),
+            if (showEdit) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                icon: Icon(
+                  Icons.edit,
+                  size: 16,
+                  color: scheme.onSurface.withOpacity(0.5),
+                ),
+                tooltip: 'Use this message',
+                onPressed: () => widget.onUserMessageEdit!(m),
+                constraints: const BoxConstraints(
+                  minWidth: 32,
+                  minHeight: 32,
+                ),
+                padding: EdgeInsets.zero,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAiBubble(
+    BuildContext context,
+    ConversationMessage m,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    final parsed = _chipsFor(m);
+    final showActions = _shouldShowActionRow();
+    final hasTools = _hasToolMetadata(m);
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        key: _keyFor(m.id),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.7,
+        ),
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildAiHeader(
+              context,
+              trailing: hasTools
+                  ? IconButton(
+                      icon: const Icon(
+                        Icons.build_circle_outlined,
+                        size: 18,
+                      ),
+                      tooltip: 'View Tool Usage',
+                      onPressed: () => widget.onShowToolDetails!(m),
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
+                      padding: EdgeInsets.zero,
+                    )
+                  : null,
+            ),
+            const SizedBox(height: 8),
+            SelectionArea(
+              child: InteractiveCheckboxMarkdown(
+                originalContent: parsed.stripped,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: scheme.onSurface),
+                // Markdown link tap handling deferred to a follow-up task.
+                onLinkTap: null,
+              ),
+            ),
+            // TODO(task-22): render attachment chips here for messages with
+            // m.attachmentPaths.isNotEmpty (mirrors immersive screen's
+            // _buildMessageAttachmentChips).
+            if (showActions) ...[
+              const SizedBox(height: 12),
+              ChatMessageActionRow(
+                onCopy: widget.onCopyAiMessage == null
+                    ? () {}
+                    : () => widget.onCopyAiMessage!(m),
+                onAddNote: widget.onAddAiMessageToNote == null
+                    ? () {}
+                    : () => widget.onAddAiMessageToNote!(m),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAiHeader(
+    BuildContext context, {
+    required Widget? trailing,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Icon(Icons.smart_toy, size: 16, color: scheme.secondary),
+        const SizedBox(width: 8),
+        Text(
+          _aiLabel(context),
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: scheme.secondary,
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+        const Spacer(),
+        if (trailing != null) trailing,
       ],
     );
   }
