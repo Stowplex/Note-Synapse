@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import '../models/chip_action.dart';
 import '../models/conversation.dart';
 import '../models/conversation_branch_summary.dart';
+import '../services/chip_tap_handler.dart';
 import '../services/conversation_service.dart';
 import '../services/fork_service.dart';
 import '../services/service_locator.dart';
 import 'block_markdown_body.dart';
+import 'chip_preview_popover.dart';
 import 'chips_footer.dart';
 import 'message_branch_strip.dart';
 
@@ -71,6 +73,7 @@ class _ChatPanelState extends State<ChatPanel> {
   Map<String, List<ConversationBranchSummary>> _branchesByParent = const {};
   final Map<String, List<ChipAction>> _chipsByMessage = {};
   StreamSubscription<String>? _forkSub;
+  OverlayEntry? _activePreview;
 
   @override
   void initState() {
@@ -92,6 +95,8 @@ class _ChatPanelState extends State<ChatPanel> {
   @override
   void dispose() {
     _forkSub?.cancel();
+    _activePreview?.remove();
+    _activePreview = null;
     super.dispose();
   }
 
@@ -126,7 +131,29 @@ class _ChatPanelState extends State<ChatPanel> {
   }
 
   Future<void> _handleChipTap(String parentMessageId, ChipAction chip) async {
-    // Wired in Task 17.
+    await ChipTapHandler().handle(
+      parentMessageId: parentMessageId,
+      chip: chip,
+      sourceConversationId: widget.conversationId,
+      onSendUserPrompt: widget.onSendUserPrompt,
+    );
+  }
+
+  void _showChipPreview(ChipAction chip, GlobalKey anchorKey) {
+    _activePreview?.remove();
+    final box = anchorKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final pos = box.localToGlobal(Offset.zero);
+    final rect = pos & box.size;
+    _activePreview = ChipPreviewPopover.show(
+      context: context,
+      anchorRect: rect,
+      chip: chip,
+    );
+    Future.delayed(const Duration(seconds: 6), () {
+      _activePreview?.remove();
+      _activePreview = null;
+    });
   }
 
   @override
@@ -171,6 +198,10 @@ class _ChatPanelState extends State<ChatPanel> {
                       onChipTap: widget.isStreaming
                           ? null
                           : (chip) => _handleChipTap(m.id, chip),
+                      onChipLongPress: widget.isStreaming
+                          ? null
+                          : (chip, anchorKey) =>
+                              _showChipPreview(chip, anchorKey),
                     ),
                   ),
                 // Branch strip — only when at least 2 sibling branches exist
