@@ -95,10 +95,13 @@ class ChatPanel extends StatefulWidget {
   });
 
   @override
-  State<ChatPanel> createState() => _ChatPanelState();
+  State<ChatPanel> createState() => ChatPanelState();
 }
 
-class _ChatPanelState extends State<ChatPanel> {
+/// Public State so hosts (e.g. [MarkerChatPanelHost]) can hold a
+/// `GlobalKey<ChatPanelState>` and call [reload] after sending a prompt or
+/// reacting to an external mutation.
+class ChatPanelState extends State<ChatPanel> {
   Conversation? _conversation;
   List<ConversationMessage> _messages = const [];
   Map<String, List<ConversationBranchSummary>> _branchesByParent = const {};
@@ -162,6 +165,12 @@ class _ChatPanelState extends State<ChatPanel> {
     _scrollController.dispose();
     super.dispose();
   }
+
+  /// Re-fetches conversation, messages, and branches. Hosts (e.g.
+  /// [MarkerChatPanelHost]) call this after sending a prompt or after an
+  /// external mutation (such as a successful AI generation persisted by
+  /// `MarkerChatSendService`) to pull the new messages into view.
+  Future<void> reload() => _load();
 
   Future<void> _load() async {
     final conv = getIt<ConversationService>();

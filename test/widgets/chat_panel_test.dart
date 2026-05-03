@@ -384,6 +384,64 @@ You are a tutor. Explain X.
     expect(captured?.id, 'mAI');
   });
 
+  testWidgets('reload() refetches messages and updates the rendered list',
+      (tester) async {
+    final now = DateTime.now();
+    when(mockConv.getConversation('conv-1'))
+        .thenAnswer((_) async => stubConv('conv-1'));
+    when(mockConv.getAllForkPointBranches('conv-1'))
+        .thenAnswer((_) async => const {});
+    when(mockConv.skillsEnabled).thenReturn(false);
+    when(mockConv.skillIndex).thenReturn(const {});
+
+    var callCount = 0;
+    when(mockConv.getConversationMessages('conv-1')).thenAnswer((_) async {
+      callCount++;
+      if (callCount == 1) {
+        return [
+          ConversationMessage(
+            id: 'm1', conversationId: 'conv-1',
+            type: MessageType.user, content: 'first',
+            timestamp: now,
+          ),
+        ];
+      }
+      return [
+        ConversationMessage(
+          id: 'm1', conversationId: 'conv-1',
+          type: MessageType.user, content: 'first',
+          timestamp: now,
+        ),
+        ConversationMessage(
+          id: 'm2', conversationId: 'conv-1',
+          type: MessageType.ai, content: 'second',
+          timestamp: now,
+        ),
+      ];
+    });
+
+    final key = GlobalKey<ChatPanelState>();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ChatPanel(
+          key: key,
+          conversationId: 'conv-1',
+          isStreaming: false,
+          onActiveConversationChanged: (_, __) {},
+          onSendUserPrompt: (_, __) async {},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('first'), findsOneWidget);
+    expect(find.textContaining('second'), findsNothing);
+
+    await key.currentState!.reload();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('first'), findsOneWidget);
+    expect(find.textContaining('second'), findsOneWidget);
+  });
+
   testWidgets('user message edit icon fires onUserMessageEdit when tapped',
       (tester) async {
     final now = DateTime.now();

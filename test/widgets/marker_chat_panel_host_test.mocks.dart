@@ -3,25 +3,32 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i9;
+import 'dart:async' as _i10;
+import 'dart:ui' as _i25;
 
-import 'package:flutter/material.dart' as _i15;
+import 'package:file_picker/file_picker.dart' as _i23;
+import 'package:flutter/material.dart' as _i16;
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i10;
+import 'package:mockito/src/dummies.dart' as _i11;
+import 'package:note_synapse/models/agent_task.dart' as _i21;
 import 'package:note_synapse/models/conversation.dart' as _i3;
-import 'package:note_synapse/models/conversation_branch_summary.dart' as _i13;
+import 'package:note_synapse/models/conversation_branch_summary.dart' as _i14;
 import 'package:note_synapse/models/conversation_context.dart' as _i4;
-import 'package:note_synapse/models/mcp_endpoint.dart' as _i7;
-import 'package:note_synapse/models/model_config.dart' as _i17;
-import 'package:note_synapse/models/model_type.dart' as _i18;
-import 'package:note_synapse/models/note.dart' as _i12;
-import 'package:note_synapse/models/tag.dart' as _i11;
-import 'package:note_synapse/services/ai_tool_service.dart' as _i8;
-import 'package:note_synapse/services/conversation_service.dart' as _i5;
-import 'package:note_synapse/services/fork_service.dart' as _i14;
-import 'package:note_synapse/services/model_storage_service.dart' as _i16;
-import 'package:note_synapse/services/skill_service.dart' as _i6;
+import 'package:note_synapse/models/mcp_endpoint.dart' as _i8;
+import 'package:note_synapse/models/model_config.dart' as _i18;
+import 'package:note_synapse/models/model_type.dart' as _i19;
+import 'package:note_synapse/models/note.dart' as _i13;
+import 'package:note_synapse/models/tag.dart' as _i12;
+import 'package:note_synapse/services/agent_service.dart' as _i20;
+import 'package:note_synapse/services/ai_tool_service.dart' as _i9;
+import 'package:note_synapse/services/context_manager_service.dart' as _i5;
+import 'package:note_synapse/services/conversation_service.dart' as _i6;
+import 'package:note_synapse/services/fork_service.dart' as _i15;
+import 'package:note_synapse/services/model_storage_service.dart' as _i17;
+import 'package:note_synapse/services/skill_service.dart' as _i7;
+import 'package:note_synapse/services/tag_workflow_service.dart' as _i24;
 import 'package:note_synapse/services/tools/load_skill_tool.dart' as _i2;
+import 'package:note_synapse/services/tools/note_tools.dart' as _i22;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -60,11 +67,17 @@ class _FakeConversationMessage_3 extends _i1.SmartFake
     : super(parent, parentInvocation);
 }
 
+class _FakeContextManagerService_4 extends _i1.SmartFake
+    implements _i5.ContextManagerService {
+  _FakeContextManagerService_4(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
 /// A class which mocks [ConversationService].
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockConversationService extends _i1.Mock
-    implements _i5.ConversationService {
+    implements _i6.ConversationService {
   MockConversationService() {
     _i1.throwOnMissingStub(this);
   }
@@ -75,20 +88,20 @@ class MockConversationService extends _i1.Mock
           as bool);
 
   @override
-  Map<String, _i6.SkillMetadata> get skillIndex =>
+  Map<String, _i7.SkillMetadata> get skillIndex =>
       (super.noSuchMethod(
             Invocation.getter(#skillIndex),
-            returnValue: <String, _i6.SkillMetadata>{},
+            returnValue: <String, _i7.SkillMetadata>{},
           )
-          as Map<String, _i6.SkillMetadata>);
+          as Map<String, _i7.SkillMetadata>);
 
   @override
-  List<_i7.McpTool> get skillDiscoveredTools =>
+  List<_i8.McpTool> get skillDiscoveredTools =>
       (super.noSuchMethod(
             Invocation.getter(#skillDiscoveredTools),
-            returnValue: <_i7.McpTool>[],
+            returnValue: <_i8.McpTool>[],
           )
-          as List<_i7.McpTool>);
+          as List<_i8.McpTool>);
 
   @override
   Map<String, String> get skillToolEndpointNames =>
@@ -107,12 +120,12 @@ class MockConversationService extends _i1.Mock
           as Map<String, String>);
 
   @override
-  Map<String, _i8.AiToolAppBundle> get skillDiscoveredBundles =>
+  Map<String, _i9.AiToolAppBundle> get skillDiscoveredBundles =>
       (super.noSuchMethod(
             Invocation.getter(#skillDiscoveredBundles),
-            returnValue: <String, _i8.AiToolAppBundle>{},
+            returnValue: <String, _i9.AiToolAppBundle>{},
           )
-          as Map<String, _i8.AiToolAppBundle>);
+          as Map<String, _i9.AiToolAppBundle>);
 
   @override
   Set<String> get skillDiscoveredNativeToolNames =>
@@ -134,13 +147,13 @@ class MockConversationService extends _i1.Mock
           as _i2.LoadSkillTool);
 
   @override
-  _i9.Future<void> enableSkills() =>
+  _i10.Future<void> enableSkills() =>
       (super.noSuchMethod(
             Invocation.method(#enableSkills, []),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
   void disableSkills() => super.noSuchMethod(
@@ -149,16 +162,16 @@ class MockConversationService extends _i1.Mock
   );
 
   @override
-  _i9.Future<void> handleLoadSkillResult(String? noteId, String? result) =>
+  _i10.Future<void> handleLoadSkillResult(String? noteId, String? result) =>
       (super.noSuchMethod(
             Invocation.method(#handleLoadSkillResult, [noteId, result]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<_i3.Conversation> createConversation({
+  _i10.Future<_i3.Conversation> createConversation({
     required String? title,
     List<String>? noteIds = const [],
   }) =>
@@ -167,7 +180,7 @@ class MockConversationService extends _i1.Mock
               #title: title,
               #noteIds: noteIds,
             }),
-            returnValue: _i9.Future<_i3.Conversation>.value(
+            returnValue: _i10.Future<_i3.Conversation>.value(
               _FakeConversation_1(
                 this,
                 Invocation.method(#createConversation, [], {
@@ -177,10 +190,10 @@ class MockConversationService extends _i1.Mock
               ),
             ),
           )
-          as _i9.Future<_i3.Conversation>);
+          as _i10.Future<_i3.Conversation>);
 
   @override
-  _i9.Future<_i3.Conversation> forkConversation({
+  _i10.Future<_i3.Conversation> forkConversation({
     required String? originalConversationId,
     required String? forkFromMessageId,
     required String? newTitle,
@@ -191,7 +204,7 @@ class MockConversationService extends _i1.Mock
               #forkFromMessageId: forkFromMessageId,
               #newTitle: newTitle,
             }),
-            returnValue: _i9.Future<_i3.Conversation>.value(
+            returnValue: _i10.Future<_i3.Conversation>.value(
               _FakeConversation_1(
                 this,
                 Invocation.method(#forkConversation, [], {
@@ -202,17 +215,17 @@ class MockConversationService extends _i1.Mock
               ),
             ),
           )
-          as _i9.Future<_i3.Conversation>);
+          as _i10.Future<_i3.Conversation>);
 
   @override
-  _i9.Future<_i4.ForkContextSelection> prepareForkContextSelection(
+  _i10.Future<_i4.ForkContextSelection> prepareForkContextSelection(
     String? forkFromMessageId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#prepareForkContextSelection, [
               forkFromMessageId,
             ]),
-            returnValue: _i9.Future<_i4.ForkContextSelection>.value(
+            returnValue: _i10.Future<_i4.ForkContextSelection>.value(
               _FakeForkContextSelection_2(
                 this,
                 Invocation.method(#prepareForkContextSelection, [
@@ -221,10 +234,10 @@ class MockConversationService extends _i1.Mock
               ),
             ),
           )
-          as _i9.Future<_i4.ForkContextSelection>);
+          as _i10.Future<_i4.ForkContextSelection>);
 
   @override
-  _i9.Future<_i3.Conversation> forkConversationWithContext({
+  _i10.Future<_i3.Conversation> forkConversationWithContext({
     required String? forkFromMessageId,
     required _i4.ConversationContext? selectedContext,
     required String? newTitle,
@@ -235,7 +248,7 @@ class MockConversationService extends _i1.Mock
               #selectedContext: selectedContext,
               #newTitle: newTitle,
             }),
-            returnValue: _i9.Future<_i3.Conversation>.value(
+            returnValue: _i10.Future<_i3.Conversation>.value(
               _FakeConversation_1(
                 this,
                 Invocation.method(#forkConversationWithContext, [], {
@@ -246,10 +259,10 @@ class MockConversationService extends _i1.Mock
               ),
             ),
           )
-          as _i9.Future<_i3.Conversation>);
+          as _i10.Future<_i3.Conversation>);
 
   @override
-  _i9.Future<_i3.ConversationMessage> addUserMessage({
+  _i10.Future<_i3.ConversationMessage> addUserMessage({
     required String? conversationId,
     required String? content,
     List<String>? attachmentPaths = const [],
@@ -260,7 +273,7 @@ class MockConversationService extends _i1.Mock
               #content: content,
               #attachmentPaths: attachmentPaths,
             }),
-            returnValue: _i9.Future<_i3.ConversationMessage>.value(
+            returnValue: _i10.Future<_i3.ConversationMessage>.value(
               _FakeConversationMessage_3(
                 this,
                 Invocation.method(#addUserMessage, [], {
@@ -271,10 +284,10 @@ class MockConversationService extends _i1.Mock
               ),
             ),
           )
-          as _i9.Future<_i3.ConversationMessage>);
+          as _i10.Future<_i3.ConversationMessage>);
 
   @override
-  _i9.Future<_i3.ConversationMessage> addAIResponse({
+  _i10.Future<_i3.ConversationMessage> addAIResponse({
     required String? conversationId,
     required String? content,
     String? modelUsed,
@@ -287,7 +300,7 @@ class MockConversationService extends _i1.Mock
               #modelUsed: modelUsed,
               #metadata: metadata,
             }),
-            returnValue: _i9.Future<_i3.ConversationMessage>.value(
+            returnValue: _i10.Future<_i3.ConversationMessage>.value(
               _FakeConversationMessage_3(
                 this,
                 Invocation.method(#addAIResponse, [], {
@@ -299,21 +312,21 @@ class MockConversationService extends _i1.Mock
               ),
             ),
           )
-          as _i9.Future<_i3.ConversationMessage>);
+          as _i10.Future<_i3.ConversationMessage>);
 
   @override
-  _i9.Future<void> updateConversationMessage(
+  _i10.Future<void> updateConversationMessage(
     _i3.ConversationMessage? message,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#updateConversationMessage, [message]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<List<_i3.Conversation>> getAllConversations({
+  _i10.Future<List<_i3.Conversation>> getAllConversations({
     Duration? maxAge,
     List<String>? tagNames,
     List<String>? conversationIds,
@@ -326,87 +339,87 @@ class MockConversationService extends _i1.Mock
               #conversationIds: conversationIds,
               #includeEmpty: includeEmpty,
             }),
-            returnValue: _i9.Future<List<_i3.Conversation>>.value(
+            returnValue: _i10.Future<List<_i3.Conversation>>.value(
               <_i3.Conversation>[],
             ),
           )
-          as _i9.Future<List<_i3.Conversation>>);
+          as _i10.Future<List<_i3.Conversation>>);
 
   @override
-  _i9.Future<List<_i3.ConversationMessage>> getConversationPreviewMessages(
+  _i10.Future<List<_i3.ConversationMessage>> getConversationPreviewMessages(
     String? conversationId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationPreviewMessages, [
               conversationId,
             ]),
-            returnValue: _i9.Future<List<_i3.ConversationMessage>>.value(
+            returnValue: _i10.Future<List<_i3.ConversationMessage>>.value(
               <_i3.ConversationMessage>[],
             ),
           )
-          as _i9.Future<List<_i3.ConversationMessage>>);
+          as _i10.Future<List<_i3.ConversationMessage>>);
 
   @override
-  _i9.Future<_i3.Conversation?> getConversation(String? conversationId) =>
+  _i10.Future<_i3.Conversation?> getConversation(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#getConversation, [conversationId]),
-            returnValue: _i9.Future<_i3.Conversation?>.value(),
+            returnValue: _i10.Future<_i3.Conversation?>.value(),
           )
-          as _i9.Future<_i3.Conversation?>);
+          as _i10.Future<_i3.Conversation?>);
 
   @override
-  _i9.Future<List<_i3.ConversationMessage>> getConversationMessages(
+  _i10.Future<List<_i3.ConversationMessage>> getConversationMessages(
     String? conversationId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationMessages, [conversationId]),
-            returnValue: _i9.Future<List<_i3.ConversationMessage>>.value(
+            returnValue: _i10.Future<List<_i3.ConversationMessage>>.value(
               <_i3.ConversationMessage>[],
             ),
           )
-          as _i9.Future<List<_i3.ConversationMessage>>);
+          as _i10.Future<List<_i3.ConversationMessage>>);
 
   @override
-  _i9.Future<_i5.ConversationWithMessages?> getConversationWithMessages(
+  _i10.Future<_i6.ConversationWithMessages?> getConversationWithMessages(
     String? conversationId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationWithMessages, [conversationId]),
-            returnValue: _i9.Future<_i5.ConversationWithMessages?>.value(),
+            returnValue: _i10.Future<_i6.ConversationWithMessages?>.value(),
           )
-          as _i9.Future<_i5.ConversationWithMessages?>);
+          as _i10.Future<_i6.ConversationWithMessages?>);
 
   @override
-  _i9.Future<_i5.ConversationWithMessages?> getConversationWithFullHistory(
+  _i10.Future<_i6.ConversationWithMessages?> getConversationWithFullHistory(
     String? conversationId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationWithFullHistory, [
               conversationId,
             ]),
-            returnValue: _i9.Future<_i5.ConversationWithMessages?>.value(),
+            returnValue: _i10.Future<_i6.ConversationWithMessages?>.value(),
           )
-          as _i9.Future<_i5.ConversationWithMessages?>);
+          as _i10.Future<_i6.ConversationWithMessages?>);
 
   @override
-  _i9.Future<List<String>> validateConversationNotes(String? conversationId) =>
+  _i10.Future<List<String>> validateConversationNotes(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#validateConversationNotes, [conversationId]),
-            returnValue: _i9.Future<List<String>>.value(<String>[]),
+            returnValue: _i10.Future<List<String>>.value(<String>[]),
           )
-          as _i9.Future<List<String>>);
+          as _i10.Future<List<String>>);
 
   @override
-  _i9.Future<void> cleanupInvalidNoteReferences() =>
+  _i10.Future<void> cleanupInvalidNoteReferences() =>
       (super.noSuchMethod(
             Invocation.method(#cleanupInvalidNoteReferences, []),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<_i3.ConversationTree?> getConversationTree({
+  _i10.Future<_i3.ConversationTree?> getConversationTree({
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
@@ -417,12 +430,12 @@ class MockConversationService extends _i1.Mock
               #conversationIds: conversationIds,
               #tagNames: tagNames,
             }),
-            returnValue: _i9.Future<_i3.ConversationTree?>.value(),
+            returnValue: _i10.Future<_i3.ConversationTree?>.value(),
           )
-          as _i9.Future<_i3.ConversationTree?>);
+          as _i10.Future<_i3.ConversationTree?>);
 
   @override
-  _i9.Future<_i3.ConversationTree?> refreshConversationTree({
+  _i10.Future<_i3.ConversationTree?> refreshConversationTree({
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
@@ -433,57 +446,57 @@ class MockConversationService extends _i1.Mock
               #conversationIds: conversationIds,
               #tagNames: tagNames,
             }),
-            returnValue: _i9.Future<_i3.ConversationTree?>.value(),
+            returnValue: _i10.Future<_i3.ConversationTree?>.value(),
           )
-          as _i9.Future<_i3.ConversationTree?>);
+          as _i10.Future<_i3.ConversationTree?>);
 
   @override
-  _i9.Future<void> deleteConversation(String? conversationId) =>
+  _i10.Future<void> deleteConversation(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteConversation, [conversationId]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> deleteMessageWithSubtree(String? messageId) =>
+  _i10.Future<void> deleteMessageWithSubtree(String? messageId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteMessageWithSubtree, [messageId]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> deleteMessagesFromTreeNodes(List<String>? messageIds) =>
+  _i10.Future<void> deleteMessagesFromTreeNodes(List<String>? messageIds) =>
       (super.noSuchMethod(
             Invocation.method(#deleteMessagesFromTreeNodes, [messageIds]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<List<String>> getMessageIdsFromTreeNode(
+  _i10.Future<List<String>> getMessageIdsFromTreeNode(
     _i3.ConversationTreeNode? node,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getMessageIdsFromTreeNode, [node]),
-            returnValue: _i9.Future<List<String>>.value(<String>[]),
+            returnValue: _i10.Future<List<String>>.value(<String>[]),
           )
-          as _i9.Future<List<String>>);
+          as _i10.Future<List<String>>);
 
   @override
-  _i9.Future<List<String>> getAllMessageIdsInSubtree(String? messageId) =>
+  _i10.Future<List<String>> getAllMessageIdsInSubtree(String? messageId) =>
       (super.noSuchMethod(
             Invocation.method(#getAllMessageIdsInSubtree, [messageId]),
-            returnValue: _i9.Future<List<String>>.value(<String>[]),
+            returnValue: _i10.Future<List<String>>.value(<String>[]),
           )
-          as _i9.Future<List<String>>);
+          as _i10.Future<List<String>>);
 
   @override
-  _i9.Future<_i3.Conversation> createConversationFromSelectedNodes({
+  _i10.Future<_i3.Conversation> createConversationFromSelectedNodes({
     required List<String>? selectedNodeIds,
     required String? title,
   }) =>
@@ -492,7 +505,7 @@ class MockConversationService extends _i1.Mock
               #selectedNodeIds: selectedNodeIds,
               #title: title,
             }),
-            returnValue: _i9.Future<_i3.Conversation>.value(
+            returnValue: _i10.Future<_i3.Conversation>.value(
               _FakeConversation_1(
                 this,
                 Invocation.method(#createConversationFromSelectedNodes, [], {
@@ -502,10 +515,10 @@ class MockConversationService extends _i1.Mock
               ),
             ),
           )
-          as _i9.Future<_i3.Conversation>);
+          as _i10.Future<_i3.Conversation>);
 
   @override
-  _i9.Future<List<_i5.ConversationInteractionSnippet>>
+  _i10.Future<List<_i6.ConversationInteractionSnippet>>
   buildInteractionSnippets({
     _i3.ConversationTree? existingTree,
     required List<String>? nodeIds,
@@ -516,19 +529,19 @@ class MockConversationService extends _i1.Mock
               #nodeIds: nodeIds,
             }),
             returnValue:
-                _i9.Future<List<_i5.ConversationInteractionSnippet>>.value(
-                  <_i5.ConversationInteractionSnippet>[],
+                _i10.Future<List<_i6.ConversationInteractionSnippet>>.value(
+                  <_i6.ConversationInteractionSnippet>[],
                 ),
           )
-          as _i9.Future<List<_i5.ConversationInteractionSnippet>>);
+          as _i10.Future<List<_i6.ConversationInteractionSnippet>>);
 
   @override
   String formatInteractionSnippets(
-    List<_i5.ConversationInteractionSnippet>? snippets,
+    List<_i6.ConversationInteractionSnippet>? snippets,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#formatInteractionSnippets, [snippets]),
-            returnValue: _i10.dummyValue<String>(
+            returnValue: _i11.dummyValue<String>(
               this,
               Invocation.method(#formatInteractionSnippets, [snippets]),
             ),
@@ -536,23 +549,23 @@ class MockConversationService extends _i1.Mock
           as String);
 
   @override
-  _i9.Future<List<_i11.Tag>> getConversationTags(String? conversationId) =>
+  _i10.Future<List<_i12.Tag>> getConversationTags(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationTags, [conversationId]),
-            returnValue: _i9.Future<List<_i11.Tag>>.value(<_i11.Tag>[]),
+            returnValue: _i10.Future<List<_i12.Tag>>.value(<_i12.Tag>[]),
           )
-          as _i9.Future<List<_i11.Tag>>);
+          as _i10.Future<List<_i12.Tag>>);
 
   @override
-  _i9.Future<List<String>> getConversationTagNames(String? conversationId) =>
+  _i10.Future<List<String>> getConversationTagNames(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationTagNames, [conversationId]),
-            returnValue: _i9.Future<List<String>>.value(<String>[]),
+            returnValue: _i10.Future<List<String>>.value(<String>[]),
           )
-          as _i9.Future<List<String>>);
+          as _i10.Future<List<String>>);
 
   @override
-  _i9.Future<void> addTagsToConversation(
+  _i10.Future<void> addTagsToConversation(
     String? conversationId,
     List<String>? tagNames,
   ) =>
@@ -561,25 +574,25 @@ class MockConversationService extends _i1.Mock
               conversationId,
               tagNames,
             ]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> setConversationTags(
+  _i10.Future<void> setConversationTags(
     String? conversationId,
     List<String>? tagNames,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#setConversationTags, [conversationId, tagNames]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> removeTagFromConversation(
+  _i10.Future<void> removeTagFromConversation(
     String? conversationId,
     String? tagName,
   ) =>
@@ -588,29 +601,29 @@ class MockConversationService extends _i1.Mock
               conversationId,
               tagName,
             ]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<List<_i12.Note>> getConversationNotes(String? conversationId) =>
+  _i10.Future<List<_i13.Note>> getConversationNotes(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationNotes, [conversationId]),
-            returnValue: _i9.Future<List<_i12.Note>>.value(<_i12.Note>[]),
+            returnValue: _i10.Future<List<_i13.Note>>.value(<_i13.Note>[]),
           )
-          as _i9.Future<List<_i12.Note>>);
+          as _i10.Future<List<_i13.Note>>);
 
   @override
-  _i9.Future<List<_i12.Note>> getNotesByIds(List<String>? noteIds) =>
+  _i10.Future<List<_i13.Note>> getNotesByIds(List<String>? noteIds) =>
       (super.noSuchMethod(
             Invocation.method(#getNotesByIds, [noteIds]),
-            returnValue: _i9.Future<List<_i12.Note>>.value(<_i12.Note>[]),
+            returnValue: _i10.Future<List<_i13.Note>>.value(<_i13.Note>[]),
           )
-          as _i9.Future<List<_i12.Note>>);
+          as _i10.Future<List<_i13.Note>>);
 
   @override
-  _i9.Future<void> addNotesToConversation(
+  _i10.Future<void> addNotesToConversation(
     String? conversationId,
     List<String>? noteIds,
   ) =>
@@ -619,13 +632,13 @@ class MockConversationService extends _i1.Mock
               conversationId,
               noteIds,
             ]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> removeNotesFromConversation(
+  _i10.Future<void> removeNotesFromConversation(
     String? conversationId,
     List<String>? noteIds,
   ) =>
@@ -634,75 +647,76 @@ class MockConversationService extends _i1.Mock
               conversationId,
               noteIds,
             ]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> deleteEmptyConversations({required Duration? olderThan}) =>
+  _i10.Future<void> deleteEmptyConversations({required Duration? olderThan}) =>
       (super.noSuchMethod(
             Invocation.method(#deleteEmptyConversations, [], {
               #olderThan: olderThan,
             }),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<_i3.ConversationMessage?> getConversationMessage(
+  _i10.Future<_i3.ConversationMessage?> getConversationMessage(
     String? messageId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationMessage, [messageId]),
-            returnValue: _i9.Future<_i3.ConversationMessage?>.value(),
+            returnValue: _i10.Future<_i3.ConversationMessage?>.value(),
           )
-          as _i9.Future<_i3.ConversationMessage?>);
+          as _i10.Future<_i3.ConversationMessage?>);
 
   @override
-  _i9.Future<List<_i13.ConversationBranchSummary>> getChildBranches(
+  _i10.Future<List<_i14.ConversationBranchSummary>> getChildBranches(
     String? parentMessageId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getChildBranches, [parentMessageId]),
-            returnValue: _i9.Future<List<_i13.ConversationBranchSummary>>.value(
-              <_i13.ConversationBranchSummary>[],
-            ),
+            returnValue:
+                _i10.Future<List<_i14.ConversationBranchSummary>>.value(
+                  <_i14.ConversationBranchSummary>[],
+                ),
           )
-          as _i9.Future<List<_i13.ConversationBranchSummary>>);
+          as _i10.Future<List<_i14.ConversationBranchSummary>>);
 
   @override
-  _i9.Future<Map<String, List<_i13.ConversationBranchSummary>>>
+  _i10.Future<Map<String, List<_i14.ConversationBranchSummary>>>
   getAllForkPointBranches(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#getAllForkPointBranches, [conversationId]),
             returnValue:
-                _i9.Future<
-                  Map<String, List<_i13.ConversationBranchSummary>>
-                >.value(<String, List<_i13.ConversationBranchSummary>>{}),
+                _i10.Future<
+                  Map<String, List<_i14.ConversationBranchSummary>>
+                >.value(<String, List<_i14.ConversationBranchSummary>>{}),
           )
-          as _i9.Future<Map<String, List<_i13.ConversationBranchSummary>>>);
+          as _i10.Future<Map<String, List<_i14.ConversationBranchSummary>>>);
 }
 
 /// A class which mocks [ForkService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockForkService extends _i1.Mock implements _i14.ForkService {
+class MockForkService extends _i1.Mock implements _i15.ForkService {
   MockForkService() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i9.Stream<String> get forkCreatedStream =>
+  _i10.Stream<String> get forkCreatedStream =>
       (super.noSuchMethod(
             Invocation.getter(#forkCreatedStream),
-            returnValue: _i9.Stream<String>.empty(),
+            returnValue: _i10.Stream<String>.empty(),
           )
-          as _i9.Stream<String>);
+          as _i10.Stream<String>);
 
   @override
-  _i9.Future<_i3.Conversation?> forkFromMessageInContext({
+  _i10.Future<_i3.Conversation?> forkFromMessageInContext({
     required String? forkFromMessageId,
     required String? sourceConversationId,
     required String? suggestedTitle,
@@ -713,13 +727,13 @@ class MockForkService extends _i1.Mock implements _i14.ForkService {
               #sourceConversationId: sourceConversationId,
               #suggestedTitle: suggestedTitle,
             }),
-            returnValue: _i9.Future<_i3.Conversation?>.value(),
+            returnValue: _i10.Future<_i3.Conversation?>.value(),
           )
-          as _i9.Future<_i3.Conversation?>);
+          as _i10.Future<_i3.Conversation?>);
 
   @override
-  _i9.Future<_i3.Conversation?> forkFromMessage({
-    required _i15.BuildContext? context,
+  _i10.Future<_i3.Conversation?> forkFromMessage({
+    required _i16.BuildContext? context,
     required String? forkFromMessageId,
     String? suggestedTitle,
   }) =>
@@ -729,12 +743,12 @@ class MockForkService extends _i1.Mock implements _i14.ForkService {
               #forkFromMessageId: forkFromMessageId,
               #suggestedTitle: suggestedTitle,
             }),
-            returnValue: _i9.Future<_i3.Conversation?>.value(),
+            returnValue: _i10.Future<_i3.Conversation?>.value(),
           )
-          as _i9.Future<_i3.Conversation?>);
+          as _i10.Future<_i3.Conversation?>);
 
   @override
-  _i9.Future<_i3.Conversation?> quickFork({
+  _i10.Future<_i3.Conversation?> quickFork({
     required String? forkFromMessageId,
     required String? newTitle,
   }) =>
@@ -743,114 +757,486 @@ class MockForkService extends _i1.Mock implements _i14.ForkService {
               #forkFromMessageId: forkFromMessageId,
               #newTitle: newTitle,
             }),
-            returnValue: _i9.Future<_i3.Conversation?>.value(),
+            returnValue: _i10.Future<_i3.Conversation?>.value(),
           )
-          as _i9.Future<_i3.Conversation?>);
+          as _i10.Future<_i3.Conversation?>);
 }
 
 /// A class which mocks [ModelStorageService].
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockModelStorageService extends _i1.Mock
-    implements _i16.ModelStorageService {
+    implements _i17.ModelStorageService {
   MockModelStorageService() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i9.Future<_i17.ModelConfig?> getActiveModel() =>
+  _i10.Future<_i18.ModelConfig?> getActiveModel() =>
       (super.noSuchMethod(
             Invocation.method(#getActiveModel, []),
-            returnValue: _i9.Future<_i17.ModelConfig?>.value(),
+            returnValue: _i10.Future<_i18.ModelConfig?>.value(),
           )
-          as _i9.Future<_i17.ModelConfig?>);
+          as _i10.Future<_i18.ModelConfig?>);
 
   @override
-  _i9.Future<void> activateModel(String? modelId) =>
+  _i10.Future<void> activateModel(String? modelId) =>
       (super.noSuchMethod(
             Invocation.method(#activateModel, [modelId]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<List<_i17.ModelConfig>> getConfiguredModels() =>
+  _i10.Future<List<_i18.ModelConfig>> getConfiguredModels() =>
       (super.noSuchMethod(
             Invocation.method(#getConfiguredModels, []),
-            returnValue: _i9.Future<List<_i17.ModelConfig>>.value(
-              <_i17.ModelConfig>[],
+            returnValue: _i10.Future<List<_i18.ModelConfig>>.value(
+              <_i18.ModelConfig>[],
             ),
           )
-          as _i9.Future<List<_i17.ModelConfig>>);
+          as _i10.Future<List<_i18.ModelConfig>>);
 
   @override
-  _i9.Future<void> addModel(_i17.ModelConfig? config) =>
+  _i10.Future<void> addModel(_i18.ModelConfig? config) =>
       (super.noSuchMethod(
             Invocation.method(#addModel, [config]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> updateModel(_i17.ModelConfig? config) =>
+  _i10.Future<void> updateModel(_i18.ModelConfig? config) =>
       (super.noSuchMethod(
             Invocation.method(#updateModel, [config]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> deleteModel(String? modelId) =>
+  _i10.Future<void> deleteModel(String? modelId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteModel, [modelId]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> saveModelApiKey(String? modelId, String? apiKey) =>
+  _i10.Future<void> saveModelApiKey(String? modelId, String? apiKey) =>
       (super.noSuchMethod(
             Invocation.method(#saveModelApiKey, [modelId, apiKey]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<String?> getModelApiKey(String? modelId) =>
+  _i10.Future<String?> getModelApiKey(String? modelId) =>
       (super.noSuchMethod(
             Invocation.method(#getModelApiKey, [modelId]),
-            returnValue: _i9.Future<String?>.value(),
+            returnValue: _i10.Future<String?>.value(),
           )
-          as _i9.Future<String?>);
+          as _i10.Future<String?>);
 
   @override
-  _i9.Future<void> deleteModelApiKey(String? modelId) =>
+  _i10.Future<void> deleteModelApiKey(String? modelId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteModelApiKey, [modelId]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> clearAllConfigurations() =>
+  _i10.Future<void> clearAllConfigurations() =>
       (super.noSuchMethod(
             Invocation.method(#clearAllConfigurations, []),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<_i18.ModelType?> getSelectedModelType() =>
+  _i10.Future<_i19.ModelType?> getSelectedModelType() =>
       (super.noSuchMethod(
             Invocation.method(#getSelectedModelType, []),
-            returnValue: _i9.Future<_i18.ModelType?>.value(),
+            returnValue: _i10.Future<_i19.ModelType?>.value(),
           )
-          as _i9.Future<_i18.ModelType?>);
+          as _i10.Future<_i19.ModelType?>);
+}
+
+/// A class which mocks [AgentService].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockAgentService extends _i1.Mock implements _i20.AgentService {
+  MockAgentService() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  int get pendingWorkflowCount =>
+      (super.noSuchMethod(
+            Invocation.getter(#pendingWorkflowCount),
+            returnValue: 0,
+          )
+          as int);
+
+  @override
+  List<_i20.PendingWorkflowInfo> get pendingWorkflows =>
+      (super.noSuchMethod(
+            Invocation.getter(#pendingWorkflows),
+            returnValue: <_i20.PendingWorkflowInfo>[],
+          )
+          as List<_i20.PendingWorkflowInfo>);
+
+  @override
+  bool get isPaused =>
+      (super.noSuchMethod(Invocation.getter(#isPaused), returnValue: false)
+          as bool);
+
+  @override
+  _i5.ContextManagerService get contextManager =>
+      (super.noSuchMethod(
+            Invocation.getter(#contextManager),
+            returnValue: _FakeContextManagerService_4(
+              this,
+              Invocation.getter(#contextManager),
+            ),
+          )
+          as _i5.ContextManagerService);
+
+  @override
+  List<String> get globalContextNoteIds =>
+      (super.noSuchMethod(
+            Invocation.getter(#globalContextNoteIds),
+            returnValue: <String>[],
+          )
+          as List<String>);
+
+  @override
+  List<_i21.AgentTask> get tasks =>
+      (super.noSuchMethod(
+            Invocation.getter(#tasks),
+            returnValue: <_i21.AgentTask>[],
+          )
+          as List<_i21.AgentTask>);
+
+  @override
+  Map<String, List<_i8.McpTool>> get externalTools =>
+      (super.noSuchMethod(
+            Invocation.getter(#externalTools),
+            returnValue: <String, List<_i8.McpTool>>{},
+          )
+          as Map<String, List<_i8.McpTool>>);
+
+  @override
+  List<_i22.NativeTool> get enabledNativeTools =>
+      (super.noSuchMethod(
+            Invocation.getter(#enabledNativeTools),
+            returnValue: <_i22.NativeTool>[],
+          )
+          as List<_i22.NativeTool>);
+
+  @override
+  bool get isRunning =>
+      (super.noSuchMethod(Invocation.getter(#isRunning), returnValue: false)
+          as bool);
+
+  @override
+  List<_i22.NativeTool> get nativeTools =>
+      (super.noSuchMethod(
+            Invocation.getter(#nativeTools),
+            returnValue: <_i22.NativeTool>[],
+          )
+          as List<_i22.NativeTool>);
+
+  @override
+  set onProgressUpdate(void Function(String)? value) => super.noSuchMethod(
+    Invocation.setter(#onProgressUpdate, value),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set modelOverride(_i18.ModelConfig? value) => super.noSuchMethod(
+    Invocation.setter(#modelOverride, value),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set toolExecutor(_i20.ToolExecutor? executor) => super.noSuchMethod(
+    Invocation.setter(#toolExecutor, executor),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set externalToolsForTest(Map<String, List<_i8.McpTool>>? tools) =>
+      super.noSuchMethod(
+        Invocation.setter(#externalToolsForTest, tools),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  bool get hasListeners =>
+      (super.noSuchMethod(Invocation.getter(#hasListeners), returnValue: false)
+          as bool);
+
+  @override
+  void cancelPendingWorkflow(int? index) => super.noSuchMethod(
+    Invocation.method(#cancelPendingWorkflow, [index]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i20.WorkflowStatusSnapshot? workflowStatusForNote(String? noteId) =>
+      (super.noSuchMethod(Invocation.method(#workflowStatusForNote, [noteId]))
+          as _i20.WorkflowStatusSnapshot?);
+
+  @override
+  void addGlobalContextNote(String? noteId) => super.noSuchMethod(
+    Invocation.method(#addGlobalContextNote, [noteId]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void removeGlobalContextNote(String? noteId) => super.noSuchMethod(
+    Invocation.method(#removeGlobalContextNote, [noteId]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void clearGlobalContextNotes() => super.noSuchMethod(
+    Invocation.method(#clearGlobalContextNotes, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void setGlobalContextNotes(List<String>? noteIds) => super.noSuchMethod(
+    Invocation.method(#setGlobalContextNotes, [noteIds]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void clearState() => super.noSuchMethod(
+    Invocation.method(#clearState, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void pauseExecution() => super.noSuchMethod(
+    Invocation.method(#pauseExecution, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i10.Future<void> resumeExecution() =>
+      (super.noSuchMethod(
+            Invocation.method(#resumeExecution, []),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
+          )
+          as _i10.Future<void>);
+
+  @override
+  void stopExecution() => super.noSuchMethod(
+    Invocation.method(#stopExecution, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void bindToConversation(String? conversationId) => super.noSuchMethod(
+    Invocation.method(#bindToConversation, [conversationId]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  bool canStartNewAgent(String? conversationId) =>
+      (super.noSuchMethod(
+            Invocation.method(#canStartNewAgent, [conversationId]),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
+  void abortCurrentTask() => super.noSuchMethod(
+    Invocation.method(#abortCurrentTask, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i10.Future<void> performTaskForTest(
+    _i21.AgentTask? task,
+    String? globalContext,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#performTaskForTest, [task, globalContext]),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
+          )
+          as _i10.Future<void>);
+
+  @override
+  Map<String, String> getToolToServiceMap() =>
+      (super.noSuchMethod(
+            Invocation.method(#getToolToServiceMap, []),
+            returnValue: <String, String>{},
+          )
+          as Map<String, String>);
+
+  @override
+  List<String> getAllToolNames() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllToolNames, []),
+            returnValue: <String>[],
+          )
+          as List<String>);
+
+  @override
+  _i10.Future<List<_i21.AgentTask>> generatePlan(
+    String? objective, {
+    Map<String, List<_i8.McpTool>>? activeTools = const {},
+    _i20.ToolExecutor? executeTool,
+    String? context,
+    List<_i23.PlatformFile>? contextAttachments = const [],
+    bool? skillsEnabled = true,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #generatePlan,
+              [objective],
+              {
+                #activeTools: activeTools,
+                #executeTool: executeTool,
+                #context: context,
+                #contextAttachments: contextAttachments,
+                #skillsEnabled: skillsEnabled,
+              },
+            ),
+            returnValue: _i10.Future<List<_i21.AgentTask>>.value(
+              <_i21.AgentTask>[],
+            ),
+          )
+          as _i10.Future<List<_i21.AgentTask>>);
+
+  @override
+  _i10.Future<List<_i21.AgentTask>> revisePlan(String? feedback) =>
+      (super.noSuchMethod(
+            Invocation.method(#revisePlan, [feedback]),
+            returnValue: _i10.Future<List<_i21.AgentTask>>.value(
+              <_i21.AgentTask>[],
+            ),
+          )
+          as _i10.Future<List<_i21.AgentTask>>);
+
+  @override
+  _i10.Future<void> executePlan() =>
+      (super.noSuchMethod(
+            Invocation.method(#executePlan, []),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
+          )
+          as _i10.Future<void>);
+
+  @override
+  _i10.Future<void> startObjective(
+    String? objective, {
+    Map<String, List<_i8.McpTool>>? activeTools = const {},
+    _i20.ToolExecutor? executeTool,
+    String? context,
+    List<_i23.PlatformFile>? contextAttachments = const [],
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #startObjective,
+              [objective],
+              {
+                #activeTools: activeTools,
+                #executeTool: executeTool,
+                #context: context,
+                #contextAttachments: contextAttachments,
+              },
+            ),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
+          )
+          as _i10.Future<void>);
+
+  @override
+  void cancel() => super.noSuchMethod(
+    Invocation.method(#cancel, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i10.Future<void> runWorkflowTask({
+    required _i24.ResolvedBinding? binding,
+    required _i13.Note? note,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#runWorkflowTask, [], {
+              #binding: binding,
+              #note: note,
+            }),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
+          )
+          as _i10.Future<void>);
+
+  @override
+  _i10.Future<void> resumeTask(String? taskId, {bool? increaseLimit = false}) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #resumeTask,
+              [taskId],
+              {#increaseLimit: increaseLimit},
+            ),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
+          )
+          as _i10.Future<void>);
+
+  @override
+  void concludeTask(String? taskId) => super.noSuchMethod(
+    Invocation.method(#concludeTask, [taskId]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void abortTask(String? taskId) => super.noSuchMethod(
+    Invocation.method(#abortTask, [taskId]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void updateToolExecutor(_i20.ToolExecutor? executor) => super.noSuchMethod(
+    Invocation.method(#updateToolExecutor, [executor]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void addListener(_i25.VoidCallback? listener) => super.noSuchMethod(
+    Invocation.method(#addListener, [listener]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void removeListener(_i25.VoidCallback? listener) => super.noSuchMethod(
+    Invocation.method(#removeListener, [listener]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void dispose() => super.noSuchMethod(
+    Invocation.method(#dispose, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void notifyListeners() => super.noSuchMethod(
+    Invocation.method(#notifyListeners, []),
+    returnValueForMissingStub: null,
+  );
 }

@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/in_note_marker.dart';
 import '../models/model_config.dart';
+import '../services/agent_service.dart';
+import '../services/conversation_ai_engine.dart';
+import '../services/marker_chat_send_service.dart';
+import '../services/service_locator.dart';
 import 'chat_panel.dart';
 import 'model_selector_button.dart';
 
@@ -9,8 +14,10 @@ import 'model_selector_button.dart';
 /// row, model picker, and send button below the panel. Visible to the
 /// user when they tap an AI-type marker on a note.
 ///
-/// Send orchestration is wired in Task 23. For now [_runSendOrchestration]
-/// is a no-op stub that completes immediately.
+/// Send orchestration is delegated to [MarkerChatSendService] (Task 23):
+/// addUserMessage → ConversationAiEngine.generate → addAIResponse, with
+/// streamed partials surfaced through [_streamingContent] and a final
+/// [ChatPanel.reload] to bring the persisted messages into view.
 class MarkerChatPanelHost extends StatefulWidget {
   final InNoteMarker marker;
   final String resolvedConversationId;
@@ -35,9 +42,14 @@ class MarkerChatPanelHost extends StatefulWidget {
 
 class _MarkerChatPanelHostState extends State<MarkerChatPanelHost> {
   final TextEditingController _textController = TextEditingController();
+  final GlobalKey<ChatPanelState> _chatPanelKey = GlobalKey<ChatPanelState>();
   bool _isSending = false;
   ModelConfig? _selectedModel;
   String? _initialMessageId;
+
+  /// Live partial AI text fed to [ChatPanel.streamingContent] during
+  /// generation. Cleared when the request completes (success or failure).
+  String? _streamingContent;
 
   @override
   void initState() {
@@ -58,10 +70,12 @@ class _MarkerChatPanelHostState extends State<MarkerChatPanelHost> {
       children: [
         Expanded(
           child: ChatPanel(
+            key: _chatPanelKey,
             conversationId: widget.resolvedConversationId,
             initialMessageId: _initialMessageId,
             contextCard: widget.contextCard,
             isStreaming: _isSending,
+            streamingContent: _streamingContent,
             onActiveConversationChanged: (newId, forkPoint) {
               widget.onActiveConversationChanged(newId);
               setState(() => _initialMessageId = forkPoint);
@@ -123,11 +137,48 @@ class _MarkerChatPanelHostState extends State<MarkerChatPanelHost> {
     }
   }
 
-  /// Stub — wired to ConversationAiEngine in Task 23.
+  /// Delegates to [MarkerChatSendService.sendUserPrompt]. Streams partial
+  /// AI text into [_streamingContent], then on completion reloads the
+  /// embedded [ChatPanel] so the persisted user + AI messages appear.
   Future<void> _runSendOrchestration(
     String conversationId,
     String prompt,
   ) async {
-    // Intentionally empty for Task 22.
+    final agentService = context.read<AgentService>();
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _streamingContent = '');
+    try {
+      await getIt<MarkerChatSendService>().sendUserPrompt(
+        conversationId: conversationId,
+        prompt: prompt,
+        agentService: agentService,
+        modelOverride: _selectedModel,
+        onStreamChunk: (chunk) {
+          if (!mounted) return;
+          setState(() {
+            _streamingContent = (_streamingContent ?? '') + chunk;
+          });
+        },
+        onCompleted: () {
+          if (!mounted) return;
+          setState(() => _streamingContent = null);
+          _chatPanelKey.currentState?.reload();
+        },
+      );
+    } on ConversationCancelledException {
+      if (mounted) {
+        setState(() => _streamingContent = null);
+        messenger.showSnackBar(
+          const SnackBar(content: Text('AI request cancelled.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _streamingContent = null);
+        messenger.showSnackBar(
+          SnackBar(content: Text('Send failed: $e')),
+        );
+      }
+    }
   }
 }
