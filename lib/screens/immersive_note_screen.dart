@@ -57,6 +57,7 @@ import '../widgets/approval_dialog.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../mixins/note_action_mixin.dart';
 import '../widgets/chat_message_action_row.dart';
+import '../widgets/chat_panel.dart';
 import '../widgets/active_tool_count_badge.dart';
 import '../widgets/drawing_editor.dart';
 import 'conversation_tree_screen.dart';
@@ -163,6 +164,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   String _streamingContent = '';
   bool _isStreaming = false;
   bool _isAborting = false;
+  String? _initialMessageIdForBranchSwitch;
   String? _currentRequestId;
   final Set<String> _cancelledRequestIds = {};
   final ValueNotifier<bool> _hasWebViewNotifier = ValueNotifier(false);
@@ -2472,7 +2474,50 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: _isScratchpadMode
                   ? _buildScratchpadList(l10n)
-                  : _buildConversationList(l10n),
+                  // Use _isStreaming (live-text flag) rather than _isSending
+                  // so chip/strip taps re-enable as soon as the stream
+                  // finishes — _isSending stays true through tool calls.
+                  : (_conversation == null
+                      ? const SizedBox.shrink()
+                      : ChatPanel(
+                          conversationId: _conversation!.id,
+                          initialMessageId:
+                              _initialMessageIdForBranchSwitch,
+                          isStreaming: _isStreaming,
+                          streamingContent:
+                              _isStreaming ? _streamingContent : null,
+                          onActiveConversationChanged:
+                              (newConvId, forkPointMessageId) {
+                            setState(() {
+                              _initialMessageIdForBranchSwitch =
+                                  forkPointMessageId;
+                            });
+                            _switchConversation(newConvId);
+                          },
+                          onSendUserPrompt: (convId, prompt) async {
+                            await _sendMessageWithText(prompt);
+                          },
+                          onUserMessageEdit: (msg) {
+                            _messageController.text = msg.content;
+                            _scrollToBottom();
+                            Future.delayed(
+                              const Duration(milliseconds: 200),
+                              () {
+                                if (mounted) {
+                                  _messageFocusNode.requestFocus();
+                                }
+                              },
+                            );
+                          },
+                          onShowToolDetails: _showToolDetailsDialog,
+                          onCopyAiMessage: (msg) =>
+                              copyContentToClipboard(msg.content),
+                          onAddAiMessageToNote: (msg) =>
+                              handleAddContentToNote(
+                            content: msg.content,
+                            contextNotes: _conversationNotes,
+                          ),
+                        )),
             ),
           ),
         ],
@@ -3425,220 +3470,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       _aiHandleFraction = (newTop / handleTravel).clamp(0.0, 1.0).toDouble();
       _isAiPanelExpanded = false;
     });
-  }
-
-  Widget _buildConversationList(AppLocalizations l10n) {
-    if (_messages.isEmpty) {
-      return Align(
-        alignment: Alignment.topCenter,
-        child: Text(
-          l10n.startConversationHint,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      controller: _chatScrollController,
-      padding: const EdgeInsets.only(bottom: 12),
-      itemCount: _messages.length + (_isStreaming ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index == _messages.length && _isStreaming) {
-          return KeyedSubtree(
-            key: const ValueKey('immersive_streaming_message'),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Container(
-                constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.7,
-                ),
-                margin: const EdgeInsets.symmetric(vertical: 6),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.smart_toy,
-                          size: 16,
-                          color: Theme.of(context).colorScheme.secondary,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          l10n.ai,
-                          style: Theme.of(context).textTheme.labelMedium
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.secondary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    SelectableText(_streamingContent),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
-        final message = _messages[index];
-        final isUser = message.type == MessageType.user;
-        final hasTools =
-            message.metadata != null &&
-            (message.metadata!.containsKey('parts_history') ||
-                message.metadata!.containsKey('function_calls'));
-
-        return KeyedSubtree(
-          key: ValueKey(message.id),
-          child: Align(
-            alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.7,
-              ),
-              margin: const EdgeInsets.symmetric(vertical: 6),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isUser
-                    ? Theme.of(context).colorScheme.primaryContainer
-                    : Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: isUser
-                    ? CrossAxisAlignment.end
-                    : CrossAxisAlignment.start,
-                children: [
-                  if (!isUser) ...[
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.smart_toy,
-                          size: 16,
-                          color: Theme.of(context).colorScheme.secondary,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          l10n.ai,
-                          style: Theme.of(context).textTheme.labelMedium
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.secondary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                        const Spacer(),
-                        if (hasTools) ...[
-                          IconButton(
-                            icon: const Icon(
-                              Icons.build_circle_outlined,
-                              size: 18,
-                            ),
-                            tooltip: 'View Tool Usage',
-                            onPressed: () => _showToolDetailsDialog(message),
-                            constraints: const BoxConstraints(
-                              minWidth: 32,
-                              minHeight: 32,
-                            ),
-                            padding: EdgeInsets.zero,
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  if (isUser)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Flexible(
-                          child: SelectableText(
-                            message.content,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurface,
-                                ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          icon: Icon(
-                            Icons.edit,
-                            size: 16,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withOpacity(0.5),
-                          ),
-                          onPressed: () {
-                            _messageController.text = message.content;
-                            _scrollToBottom();
-                            Future.delayed(
-                              const Duration(milliseconds: 200),
-                              () {
-                                _messageFocusNode.requestFocus();
-                              },
-                            );
-                          },
-                          tooltip: 'Use this message',
-                          constraints: const BoxConstraints(
-                            minWidth: 32,
-                            minHeight: 32,
-                          ),
-                          padding: EdgeInsets.zero,
-                        ),
-                      ],
-                    )
-                  else
-                    SelectionArea(
-                      child: InteractiveCheckboxMarkdown(
-                        originalContent: message.content,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                        onLinkTap: (url, _) =>
-                            _handleMarkdownLinkTap(url, l10n),
-                      ),
-                    ),
-                  if (message.attachmentPaths.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: _buildMessageAttachmentChips(message, l10n),
-                    ),
-                  if (!isUser) ...[
-                    const SizedBox(height: 12),
-                    ChatMessageActionRow(
-                      onCopy: () => copyContentToClipboard(message.content),
-                      onAddNote: () => handleAddContentToNote(
-                        content: message.content,
-                        contextNotes: _conversationNotes,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
   }
 
   Future<void> _showToolDetailsDialog(ConversationMessage message) async {
@@ -5038,6 +4869,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     } catch (e) {
       LoggerService.error('Failed to save annotation marker: $e', error: e);
     }
+  }
+
+  /// Adapter so ChatPanel's onSendUserPrompt callback can drive the
+  /// immersive screen's existing send pipeline. Sets the controller
+  /// text then runs the standard _sendMessage chain.
+  Future<void> _sendMessageWithText(String prompt) async {
+    _messageController.text = prompt;
+    await _sendMessage();
   }
 
   Future<void> _sendMessage() async {

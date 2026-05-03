@@ -41,7 +41,11 @@ class ChatPanel extends StatefulWidget {
   final Widget? contextCard;
 
   /// Fired when the user switches branches via [MessageBranchStrip].
-  final ValueChanged<String> onActiveConversationChanged;
+  /// [forkPointMessageId] is the message at which the branches diverged —
+  /// hosts use this to re-render with `initialMessageId = forkPointMessageId`
+  /// so the new branch lands with the fork-point at viewport top.
+  final void Function(String newConversationId, String forkPointMessageId)
+      onActiveConversationChanged;
 
   /// True while the parent message is generating; disables chip taps and
   /// branch-strip taps to avoid race conditions.
@@ -395,7 +399,7 @@ class _ChatPanelState extends State<ChatPanel> {
             activeNoteIds: _conversation?.noteIds ?? const [],
             disabled: widget.isStreaming,
             onSwitchBranch: (newId, _) =>
-                widget.onActiveConversationChanged(newId),
+                widget.onActiveConversationChanged(newId, m.id),
           ),
       ],
     );

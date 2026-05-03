@@ -73,7 +73,7 @@ void main() {
         body: ChatPanel(
           conversationId: 'conv-1',
           isStreaming: false,
-          onActiveConversationChanged: (_) {},
+          onActiveConversationChanged: (_, __) {},
           onSendUserPrompt: (_, __) async {},
         ),
       ),
@@ -99,7 +99,7 @@ void main() {
         body: ChatPanel(
           conversationId: 'conv-1',
           isStreaming: false,
-          onActiveConversationChanged: (_) {},
+          onActiveConversationChanged: (_, __) {},
           onSendUserPrompt: (_, __) async {},
           contextCard: const Text('CONTEXT_CARD_MARKER'),
         ),
@@ -147,7 +147,7 @@ void main() {
         body: ChatPanel(
           conversationId: 'conv-1',
           isStreaming: false,
-          onActiveConversationChanged: (_) {},
+          onActiveConversationChanged: (_, __) {},
           onSendUserPrompt: (_, __) async {},
         ),
       ),
@@ -208,7 +208,7 @@ You are a tutor. Explain X.
         body: ChatPanel(
           conversationId: 'conv-1',
           isStreaming: false,
-          onActiveConversationChanged: (_) {},
+          onActiveConversationChanged: (_, __) {},
           onSendUserPrompt: (_, p) async => sentPrompt = p,
         ),
       ),
@@ -243,7 +243,7 @@ You are a tutor. Explain X.
           conversationId: 'conv-1',
           initialMessageId: 'm20',
           isStreaming: false,
-          onActiveConversationChanged: (_) {},
+          onActiveConversationChanged: (_, __) {},
           onSendUserPrompt: (_, __) async {},
         ),
       ),
@@ -298,7 +298,7 @@ You are a tutor. Explain X.
         body: ChatPanel(
           conversationId: 'conv-1',
           isStreaming: false,
-          onActiveConversationChanged: (_) {},
+          onActiveConversationChanged: (_, __) {},
           onSendUserPrompt: (_, __) async {},
         ),
       ),
@@ -334,7 +334,7 @@ You are a tutor. Explain X.
           conversationId: 'conv-1',
           isStreaming: true,
           streamingContent: 'LIVE_PARTIAL_TEXT',
-          onActiveConversationChanged: (_) {},
+          onActiveConversationChanged: (_, __) {},
           onSendUserPrompt: (_, __) async {},
         ),
       ),
@@ -370,7 +370,7 @@ You are a tutor. Explain X.
         body: ChatPanel(
           conversationId: 'conv-1',
           isStreaming: false,
-          onActiveConversationChanged: (_) {},
+          onActiveConversationChanged: (_, __) {},
           onSendUserPrompt: (_, __) async {},
           onShowToolDetails: (m) => captured = m,
         ),
@@ -407,7 +407,7 @@ You are a tutor. Explain X.
         body: ChatPanel(
           conversationId: 'conv-1',
           isStreaming: false,
-          onActiveConversationChanged: (_) {},
+          onActiveConversationChanged: (_, __) {},
           onSendUserPrompt: (_, __) async {},
           onUserMessageEdit: (m) => captured = m,
         ),
