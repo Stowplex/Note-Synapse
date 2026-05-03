@@ -4,24 +4,64 @@ import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:note_synapse/models/conversation.dart';
 import 'package:note_synapse/models/in_note_marker.dart';
+import 'package:note_synapse/services/conversation_service.dart';
 import 'package:note_synapse/services/database_service.dart';
+import 'package:note_synapse/services/fork_service.dart';
+import 'package:note_synapse/services/model_storage_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/widgets/in_note_marker_preview.dart';
 
 import 'in_note_marker_preview_test.mocks.dart';
 
-@GenerateMocks([DatabaseService])
+@GenerateMocks([
+  DatabaseService,
+  ConversationService,
+  ForkService,
+  ModelStorageService,
+])
 void main() {
   late MockDatabaseService mockDb;
+  late MockConversationService mockConv;
+  late MockForkService mockFork;
+  late MockModelStorageService mockModelStorage;
 
   setUp(() async {
     await resetForTesting();
     mockDb = MockDatabaseService();
+    mockConv = MockConversationService();
+    mockFork = MockForkService();
+    mockModelStorage = MockModelStorageService();
     // Annotation path's _loadData() still runs and reads the database.
     // Stub the calls it makes so the loading state resolves cleanly.
     when(mockDb.getConversationMessage(any)).thenAnswer((_) async => null);
-    when(mockDb.getConversationMessages(any)).thenAnswer((_) async => const <ConversationMessage>[]);
+    when(mockDb.getConversationMessages(any))
+        .thenAnswer((_) async => const <ConversationMessage>[]);
+    // AI-marker path uses ChatPanel, which depends on ConversationService and
+    // ForkService; the embedded ModelSelectorButton needs ModelStorageService.
+    when(mockFork.forkCreatedStream).thenAnswer((_) => const Stream.empty());
+    when(mockModelStorage.getConfiguredModels())
+        .thenAnswer((_) async => const []);
+    when(mockModelStorage.getActiveModel()).thenAnswer((_) async => null);
+    final now = DateTime.now();
+    when(mockConv.getConversation(any)).thenAnswer(
+      (_) async => Conversation(
+        id: 'c',
+        title: 'T',
+        noteIds: const [],
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    when(mockConv.getConversationMessages(any))
+        .thenAnswer((_) async => const []);
+    when(mockConv.getAllForkPointBranches(any))
+        .thenAnswer((_) async => const {});
+    when(mockConv.skillsEnabled).thenReturn(false);
+    when(mockConv.skillIndex).thenReturn(const {});
     getIt.registerSingleton<DatabaseService>(mockDb);
+    getIt.registerSingleton<ConversationService>(mockConv);
+    getIt.registerSingleton<ForkService>(mockFork);
+    getIt.registerSingleton<ModelStorageService>(mockModelStorage);
   });
 
   tearDown(() async {

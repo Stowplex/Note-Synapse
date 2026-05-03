@@ -7,6 +7,7 @@ import '../services/service_locator.dart';
 import '../screens/conversation_chat_screen.dart';
 import '../utils/file_utils.dart';
 import 'interactive_checkbox_markdown.dart';
+import 'marker_chat_panel_host.dart';
 
 class InNoteMarkerPreview extends StatefulWidget {
   final InNoteMarker marker;
@@ -118,8 +119,7 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
   }
 
   /// AI marker preview path. Hosts ChatPanel inside the marker sheet
-  /// so the user can continue the conversation in place. Implemented
-  /// in Task 22 (MarkerChatPanelHost). For now, a placeholder.
+  /// so the user can continue the conversation in place.
   Widget _buildAiMarkerChatPanelHost() {
     return DraggableScrollableSheet(
       key: const ValueKey('ai-marker-chat-panel-host'),
@@ -133,12 +133,40 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
             color: Theme.of(context).colorScheme.surface,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
           ),
-          child: const Center(
-            child: Text('TODO: ChatPanel host (Task 22)'),
+          child: MarkerChatPanelHost(
+            marker: widget.marker,
+            // resolveLastViewed implemented in Task 24 — for now use the
+            // marker's recorded conversationId verbatim.
+            resolvedConversationId: widget.marker.conversationId,
+            contextCard: _buildAiMarkerContextCard(context),
+            onActiveConversationChanged: _persistLastViewed,
           ),
         );
       },
     );
+  }
+
+  /// Tiny context card pinned at the top of the embedded ChatPanel.
+  /// Reuses the legacy preview's image + user-message rendering so the
+  /// reader still sees what they originally circled. Static — no deps
+  /// on _loading/_userMessageContent so it can render before _loadData
+  /// completes (kept as a TODO for Task 24 to refine).
+  Widget _buildAiMarkerContextCard(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Text(
+          'Marker ${widget.marker.index}',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+      ),
+    );
+  }
+
+  /// Stub — full persistence chain wired in Task 24.
+  void _persistLastViewed(String newConversationId) {
+    // Intentionally empty for Task 22.
   }
 
   Widget _buildContent(
