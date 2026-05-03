@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
@@ -249,5 +251,63 @@ You are a tutor. Explain X.
     await tester.pumpAndSettle();
     expect(find.text('Message 20'), findsOneWidget);
     expect(find.text('Message 0'), findsNothing);
+  });
+
+  testWidgets('refreshes branches when forkCreatedStream emits',
+      (tester) async {
+    final controller = StreamController<String>.broadcast();
+    addTearDown(controller.close);
+    when(mockFork.forkCreatedStream).thenAnswer((_) => controller.stream);
+    final now = DateTime.now();
+    when(mockConv.getConversation('conv-1'))
+        .thenAnswer((_) async => Conversation(
+              id: 'conv-1', title: 'T', noteIds: const [],
+              createdAt: now, updatedAt: now,
+            ));
+    when(mockConv.getConversationMessages('conv-1')).thenAnswer((_) async => [
+          ConversationMessage(
+            id: 'm1', conversationId: 'conv-1',
+            type: MessageType.user, content: 'Q?',
+            timestamp: now,
+          ),
+        ]);
+    int callCount = 0;
+    when(mockConv.getAllForkPointBranches('conv-1')).thenAnswer((_) async {
+      callCount++;
+      if (callCount == 1) return const {};
+      return {
+        'm1': [
+          const ConversationBranchSummary(
+            conversationId: 'new-child', title: 'New Child',
+            forkPointMessageId: 'm1', firstChildMessageId: 'cm',
+            noteIds: [],
+          ),
+          const ConversationBranchSummary(
+            conversationId: 'sibling', title: 'Sibling',
+            forkPointMessageId: 'm1', firstChildMessageId: 'cm2',
+            noteIds: [],
+          ),
+        ],
+      };
+    });
+    when(mockConv.skillsEnabled).thenReturn(false);
+    when(mockConv.skillIndex).thenReturn(const {});
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ChatPanel(
+          conversationId: 'conv-1',
+          isStreaming: false,
+          onActiveConversationChanged: (_) {},
+          onSendUserPrompt: (_, __) async {},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('New Child'), findsNothing);
+    controller.add('m1');
+    await tester.pumpAndSettle();
+    expect(find.text('New Child'), findsOneWidget);
+    expect(find.text('Sibling'), findsOneWidget);
   });
 }
