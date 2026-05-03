@@ -86,7 +86,19 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.marker.type == MarkerType.annotation) {
+      return _buildLegacyAnnotationPreview();
+    }
+    return _buildAiMarkerChatPanelHost();
+  }
+
+  /// Legacy preview path used for annotation markers. Renders the
+  /// captured image, the original user message, the AI reply, and a
+  /// "Open Conversation" button. Behavior preserved verbatim from the
+  /// pre-marker-anchored-subtree implementation.
+  Widget _buildLegacyAnnotationPreview() {
     return DraggableScrollableSheet(
+      key: const ValueKey('legacy-annotation-preview'),
       initialChildSize: 0.55,
       minChildSize: 0.35,
       maxChildSize: 0.92,
@@ -100,6 +112,30 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
           child: _loading
               ? const Center(child: CircularProgressIndicator())
               : _buildContent(context, scrollController),
+        );
+      },
+    );
+  }
+
+  /// AI marker preview path. Hosts ChatPanel inside the marker sheet
+  /// so the user can continue the conversation in place. Implemented
+  /// in Task 22 (MarkerChatPanelHost). For now, a placeholder.
+  Widget _buildAiMarkerChatPanelHost() {
+    return DraggableScrollableSheet(
+      key: const ValueKey('ai-marker-chat-panel-host'),
+      initialChildSize: 0.55,
+      minChildSize: 0.35,
+      maxChildSize: 0.92,
+      expand: false,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: const Center(
+            child: Text('TODO: ChatPanel host (Task 22)'),
+          ),
         );
       },
     );

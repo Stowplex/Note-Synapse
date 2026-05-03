@@ -56,7 +56,6 @@ import '../utils/synapse_temp_utils.dart';
 import '../widgets/approval_dialog.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../mixins/note_action_mixin.dart';
-import '../widgets/chat_message_action_row.dart';
 import '../widgets/chat_panel.dart';
 import '../widgets/active_tool_count_badge.dart';
 import '../widgets/drawing_editor.dart';
