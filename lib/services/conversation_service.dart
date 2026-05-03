@@ -591,6 +591,20 @@ class ConversationService {
     );
   }
 
+  /// Convenience accessor used by [ChatPanel] et al. to load a single
+  /// conversation header. Delegates to [DatabaseService.getConversation].
+  Future<Conversation?> getConversation(String conversationId) async {
+    return await _databaseService.getConversation(conversationId);
+  }
+
+  /// Convenience accessor used by [ChatPanel] to load the message list
+  /// for a conversation. Delegates to [DatabaseService.getConversationMessages].
+  Future<List<ConversationMessage>> getConversationMessages(
+    String conversationId,
+  ) async {
+    return await _databaseService.getConversationMessages(conversationId);
+  }
+
   // Get a specific conversation with its messages
   Future<ConversationWithMessages?> getConversationWithMessages(
     String conversationId,
