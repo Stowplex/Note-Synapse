@@ -216,4 +216,38 @@ You are a tutor. Explain X.
     await tester.pumpAndSettle();
     expect(sentPrompt, 'You are a tutor. Explain X.');
   });
+
+  testWidgets('scrolls to initialMessageId on mount', (tester) async {
+    final now = DateTime.now();
+    when(mockConv.getConversation('conv-1'))
+        .thenAnswer((_) async => Conversation(
+              id: 'conv-1', title: 'T', noteIds: const [],
+              createdAt: now, updatedAt: now,
+            ));
+    final messages = List.generate(40, (i) => ConversationMessage(
+      id: 'm$i', conversationId: 'conv-1',
+      type: i.isEven ? MessageType.user : MessageType.ai,
+      content: 'Message $i',
+      timestamp: now,
+    ));
+    when(mockConv.getConversationMessages('conv-1')).thenAnswer((_) async => messages);
+    when(mockConv.getAllForkPointBranches('conv-1')).thenAnswer((_) async => const {});
+    when(mockConv.skillsEnabled).thenReturn(false);
+    when(mockConv.skillIndex).thenReturn(const {});
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ChatPanel(
+          conversationId: 'conv-1',
+          initialMessageId: 'm20',
+          isStreaming: false,
+          onActiveConversationChanged: (_) {},
+          onSendUserPrompt: (_, __) async {},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Message 20'), findsOneWidget);
+    expect(find.text('Message 0'), findsNothing);
+  });
 }

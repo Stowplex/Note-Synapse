@@ -75,6 +75,18 @@ class _ChatPanelState extends State<ChatPanel> {
   StreamSubscription<String>? _forkSub;
   OverlayEntry? _activePreview;
 
+  // Scroll plumbing for [ChatPanel.initialMessageId]. We hand a
+  // [GlobalKey] to each per-message sliver so we can locate it after the
+  // first frame and call [Scrollable.ensureVisible] to land on the right
+  // message. Because [CustomScrollView] is lazy, the initial target may
+  // not be built yet — we coarse-jump first, then re-attempt up to a
+  // small retry cap to avoid a [pumpAndSettle] deadlock.
+  final ScrollController _scrollController = ScrollController();
+  final Map<String, GlobalKey> _messageKeys = {};
+
+  GlobalKey _keyFor(String id) =>
+      _messageKeys.putIfAbsent(id, () => GlobalKey());
+
   @override
   void initState() {
     super.initState();
@@ -88,6 +100,7 @@ class _ChatPanelState extends State<ChatPanel> {
     if (old.conversationId != widget.conversationId) {
       _branchesByParent = const {};
       _chipsByMessage.clear();
+      _messageKeys.clear();
       _load();
     }
   }
@@ -97,6 +110,7 @@ class _ChatPanelState extends State<ChatPanel> {
     _forkSub?.cancel();
     _activePreview?.remove();
     _activePreview = null;
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -110,6 +124,49 @@ class _ChatPanelState extends State<ChatPanel> {
       _conversation = loaded;
       _messages = msgs;
       _branchesByParent = branches;
+    });
+    if (widget.initialMessageId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToInitialMessage(widget.initialMessageId!, attempt: 0);
+      });
+    }
+  }
+
+  /// Scrolls the viewport so the message with [id] is visible.
+  ///
+  /// [CustomScrollView] is lazy: a key for an off-screen target may not
+  /// have a [BuildContext] yet. We do a coarse [jumpTo] estimate first to
+  /// force the slivers near the target to build, then call
+  /// [Scrollable.ensureVisible] on the next frame for an exact landing.
+  /// Capped at 3 attempts so [pumpAndSettle] never hangs.
+  void _scrollToInitialMessage(String id, {required int attempt}) {
+    if (!mounted) return;
+    if (attempt > 3) return;
+    final key = _messageKeys[id];
+    final ctx = key?.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        duration: Duration.zero,
+        alignment: 0.0,
+      );
+      return;
+    }
+    // Target hasn't been laid out yet. Coarse-jump toward its likely
+    // offset and retry next frame. We use the message index to bias the
+    // jump so even very long lists converge quickly.
+    if (_scrollController.hasClients && _messages.isNotEmpty) {
+      final idx = _messages.indexWhere((m) => m.id == id);
+      if (idx >= 0) {
+        final position = _scrollController.position;
+        final maxExtent = position.maxScrollExtent;
+        final fraction = idx / _messages.length;
+        final target = (fraction * maxExtent).clamp(0.0, maxExtent);
+        _scrollController.jumpTo(target);
+      }
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToInitialMessage(id, attempt: attempt + 1);
     });
   }
 
@@ -163,9 +220,11 @@ class _ChatPanelState extends State<ChatPanel> {
         if (widget.contextCard != null) widget.contextCard!,
         Expanded(
           child: CustomScrollView(
+            controller: _scrollController,
             slivers: [
               for (final m in _messages) ...[
                 SliverPadding(
+                  key: _keyFor(m.id),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 6,
