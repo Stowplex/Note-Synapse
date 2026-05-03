@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:note_synapse/models/conversation.dart';
+import 'package:note_synapse/models/conversation_branch_summary.dart';
 import 'package:note_synapse/services/conversation_service.dart';
 import 'package:note_synapse/services/fork_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
@@ -103,5 +104,53 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('CONTEXT_CARD_MARKER'), findsOneWidget);
+  });
+
+  testWidgets('renders MessageBranchStrip below messages with multiple children', (tester) async {
+    final now = DateTime.now();
+    when(mockConv.getConversation('conv-1'))
+        .thenAnswer((_) async => Conversation(
+              id: 'conv-1', title: 'T', noteIds: const ['note-X'],
+              createdAt: now, updatedAt: now,
+            ));
+    when(mockConv.getConversationMessages('conv-1'))
+        .thenAnswer((_) async => [
+              ConversationMessage(
+                id: 'm1', conversationId: 'conv-1',
+                type: MessageType.user, content: 'Q?',
+                timestamp: now,
+              ),
+            ]);
+    when(mockConv.getAllForkPointBranches('conv-1'))
+        .thenAnswer((_) async => {
+              'm1': [
+                ConversationBranchSummary(
+                  conversationId: 'child-a', title: 'Child A',
+                  forkPointMessageId: 'm1', firstChildMessageId: 'cm1',
+                  noteIds: const ['note-X'],
+                ),
+                ConversationBranchSummary(
+                  conversationId: 'child-b', title: 'Child B',
+                  forkPointMessageId: 'm1', firstChildMessageId: 'cm2',
+                  noteIds: const ['note-X'],
+                ),
+              ],
+            });
+    when(mockConv.skillsEnabled).thenReturn(false);
+    when(mockConv.skillIndex).thenReturn(const {});
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ChatPanel(
+          conversationId: 'conv-1',
+          isStreaming: false,
+          onActiveConversationChanged: (_) {},
+          onSendUserPrompt: (_, __) async {},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Child A'), findsOneWidget);
+    expect(find.text('Child B'), findsOneWidget);
   });
 }

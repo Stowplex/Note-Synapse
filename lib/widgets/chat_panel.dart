@@ -9,6 +9,8 @@ import '../services/conversation_service.dart';
 import '../services/fork_service.dart';
 import '../services/service_locator.dart';
 import 'block_markdown_body.dart';
+import 'chips_footer.dart';
+import 'message_branch_strip.dart';
 
 /// Marker-anchored chat panel.
 ///
@@ -64,12 +66,9 @@ class ChatPanel extends StatefulWidget {
 }
 
 class _ChatPanelState extends State<ChatPanel> {
-  // ignore: unused_field, wired in Task 18 for active-branch metadata.
   Conversation? _conversation;
   List<ConversationMessage> _messages = const [];
-  // ignore: unused_field, populated here for Task 16's branch strip.
   Map<String, List<ConversationBranchSummary>> _branchesByParent = const {};
-  // ignore: unused_field, populated here for Task 16's chip footer.
   final Map<String, List<ChipAction>> _chipsByMessage = {};
   StreamSubscription<String>? _forkSub;
 
@@ -120,6 +119,16 @@ class _ChatPanelState extends State<ChatPanel> {
     setState(() => _branchesByParent = branches);
   }
 
+  bool _isChipsExpected() {
+    final conv = getIt<ConversationService>();
+    return conv.skillsEnabled &&
+        conv.skillIndex.values.any((s) => s.defaultAction != null);
+  }
+
+  Future<void> _handleChipTap(String parentMessageId, ChipAction chip) async {
+    // Wired in Task 17.
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -151,6 +160,33 @@ class _ChatPanelState extends State<ChatPanel> {
                         : null,
                   ),
                 ),
+                // Chip footer (above branch strip per spec) — AI messages only.
+                if (m.type == MessageType.ai)
+                  SliverToBoxAdapter(
+                    child: ChipsFooter(
+                      chips: _chipsByMessage[m.id],
+                      isStreaming:
+                          widget.isStreaming && m.id == _messages.last.id,
+                      isExpected: _isChipsExpected(),
+                      onChipTap: widget.isStreaming
+                          ? null
+                          : (chip) => _handleChipTap(m.id, chip),
+                    ),
+                  ),
+                // Branch strip — only when at least 2 sibling branches exist
+                // off this fork-point message. Gated at the call site for
+                // clarity even though MessageBranchStrip also short-circuits.
+                if ((_branchesByParent[m.id] ?? const []).length >= 2)
+                  SliverToBoxAdapter(
+                    child: MessageBranchStrip(
+                      branches: _branchesByParent[m.id]!,
+                      activeConversationId: widget.conversationId,
+                      activeNoteIds: _conversation?.noteIds ?? const [],
+                      disabled: widget.isStreaming,
+                      onSwitchBranch: (newId, _) =>
+                          widget.onActiveConversationChanged(newId),
+                    ),
+                  ),
               ],
             ],
           ),
