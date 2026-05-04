@@ -8,6 +8,7 @@ import 'dart:async' as _i9;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i10;
 import 'package:note_synapse/models/conversation.dart' as _i3;
+import 'package:note_synapse/models/conversation_branch_summary.dart' as _i13;
 import 'package:note_synapse/models/conversation_context.dart' as _i4;
 import 'package:note_synapse/models/mcp_endpoint.dart' as _i7;
 import 'package:note_synapse/models/note.dart' as _i12;
@@ -341,6 +342,26 @@ class MockConversationService extends _i1.Mock
           as _i9.Future<List<_i3.ConversationMessage>>);
 
   @override
+  _i9.Future<_i3.Conversation?> getConversation(String? conversationId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getConversation, [conversationId]),
+            returnValue: _i9.Future<_i3.Conversation?>.value(),
+          )
+          as _i9.Future<_i3.Conversation?>);
+
+  @override
+  _i9.Future<List<_i3.ConversationMessage>> getConversationMessages(
+    String? conversationId,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getConversationMessages, [conversationId]),
+            returnValue: _i9.Future<List<_i3.ConversationMessage>>.value(
+              <_i3.ConversationMessage>[],
+            ),
+          )
+          as _i9.Future<List<_i3.ConversationMessage>>);
+
+  @override
   _i9.Future<_i5.ConversationWithMessages?> getConversationWithMessages(
     String? conversationId,
   ) =>
@@ -633,4 +654,28 @@ class MockConversationService extends _i1.Mock
             returnValue: _i9.Future<_i3.ConversationMessage?>.value(),
           )
           as _i9.Future<_i3.ConversationMessage?>);
+
+  @override
+  _i9.Future<List<_i13.ConversationBranchSummary>> getChildBranches(
+    String? parentMessageId,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getChildBranches, [parentMessageId]),
+            returnValue: _i9.Future<List<_i13.ConversationBranchSummary>>.value(
+              <_i13.ConversationBranchSummary>[],
+            ),
+          )
+          as _i9.Future<List<_i13.ConversationBranchSummary>>);
+
+  @override
+  _i9.Future<Map<String, List<_i13.ConversationBranchSummary>>>
+  getAllForkPointBranches(String? conversationId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllForkPointBranches, [conversationId]),
+            returnValue:
+                _i9.Future<
+                  Map<String, List<_i13.ConversationBranchSummary>>
+                >.value(<String, List<_i13.ConversationBranchSummary>>{}),
+          )
+          as _i9.Future<Map<String, List<_i13.ConversationBranchSummary>>>);
 }

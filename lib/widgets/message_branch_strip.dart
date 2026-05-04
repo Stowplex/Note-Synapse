@@ -21,11 +21,13 @@ class MessageBranchStrip extends StatefulWidget {
   /// [didConfirmDocumentSwap] is true if the user passed through the
   /// document-swap confirm dialog; false for same-document switches.
   final void Function(String conversationId, bool didConfirmDocumentSwap)
-      onSwitchBranch;
+  onSwitchBranch;
 
   /// Wired from ChatPanel.isStreaming — disables tap interactions while
   /// the parent message is generating to avoid race conditions.
   final bool disabled;
+  final Future<void> Function(String conversationId, String title)?
+  onRenameBranch;
 
   const MessageBranchStrip({
     super.key,
@@ -34,6 +36,7 @@ class MessageBranchStrip extends StatefulWidget {
     required this.activeNoteIds,
     required this.onSwitchBranch,
     this.disabled = false,
+    this.onRenameBranch,
   });
 
   @override
@@ -62,7 +65,9 @@ class _MessageBranchStripState extends State<MessageBranchStrip> {
           for (final b in visible) _buildRow(context, b),
           if (!showAll && hidden > 0)
             InkWell(
-              onTap: widget.disabled ? null : () => setState(() => _expanded = true),
+              onTap: widget.disabled
+                  ? null
+                  : () => setState(() => _expanded = true),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Text(
@@ -81,6 +86,9 @@ class _MessageBranchStripState extends State<MessageBranchStrip> {
     return InkWell(
       key: isActive ? ValueKey('branch-row-active-${b.conversationId}') : null,
       onTap: widget.disabled ? null : () => _handleTap(b),
+      onLongPress: widget.disabled || widget.onRenameBranch == null
+          ? null
+          : () => _handleRename(b),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
         child: Text(
@@ -88,19 +96,52 @@ class _MessageBranchStripState extends State<MessageBranchStrip> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                color: isActive ? Theme.of(context).colorScheme.primary : null,
-              ),
+            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+            color: isActive ? Theme.of(context).colorScheme.primary : null,
+          ),
         ),
       ),
     );
+  }
+
+  Future<void> _handleRename(ConversationBranchSummary b) async {
+    final controller = TextEditingController(text: b.title);
+    final newTitle = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rename branch'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Branch title'),
+          onSubmitted: (value) => Navigator.of(ctx).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(AppLocalizations.of(ctx)?.cancel ?? 'Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      controller.dispose();
+    });
+    final trimmed = newTitle?.trim();
+    if (trimmed == null || trimmed.isEmpty || trimmed == b.title) return;
+    await widget.onRenameBranch?.call(b.conversationId, trimmed);
   }
 
   Future<void> _handleTap(ConversationBranchSummary b) async {
     if (b.conversationId == widget.activeConversationId) return;
     final activeSet = widget.activeNoteIds.toSet();
     final candidateSet = b.noteIds.toSet();
-    final differs = activeSet.length != candidateSet.length ||
+    final differs =
+        activeSet.length != candidateSet.length ||
         !activeSet.every(candidateSet.contains);
     if (!differs) {
       widget.onSwitchBranch(b.conversationId, false);

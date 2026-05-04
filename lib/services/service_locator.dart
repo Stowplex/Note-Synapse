@@ -102,7 +102,7 @@ void setupServiceLocator() {
 
   if (!getIt.isRegistered<SkillService>()) {
     getIt.registerLazySingleton<SkillService>(
-      () => SkillService(getIt<DatabaseService>()),
+      () => SkillService(getIt<DatabaseService>(), includeBundledSkills: true),
     );
   }
 
@@ -128,9 +128,7 @@ void setupServiceLocator() {
   }
 
   if (!getIt.isRegistered<LocalModelService>()) {
-    getIt.registerLazySingleton<LocalModelService>(
-      () => LocalModelService(),
-    );
+    getIt.registerLazySingleton<LocalModelService>(() => LocalModelService());
   }
 
   if (!getIt.isRegistered<ModelSelector>()) {

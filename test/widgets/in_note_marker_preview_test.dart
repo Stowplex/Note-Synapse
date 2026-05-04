@@ -26,7 +26,9 @@ class _RecordingNoteMarkerService implements NoteMarkerService {
 
   @override
   Future<void> updateMarkerLastViewed(
-      String markerId, String? newConvId) async {
+    String markerId,
+    String? newConvId,
+  ) async {
     updates.add((markerId: markerId, newConvId: newConvId));
   }
 
@@ -62,14 +64,16 @@ void main() {
     // Annotation path's _loadData() still runs and reads the database.
     // Stub the calls it makes so the loading state resolves cleanly.
     when(mockDb.getConversationMessage(any)).thenAnswer((_) async => null);
-    when(mockDb.getConversationMessages(any))
-        .thenAnswer((_) async => const <ConversationMessage>[]);
+    when(
+      mockDb.getConversationMessages(any),
+    ).thenAnswer((_) async => const <ConversationMessage>[]);
     when(mockDb.getConversation(any)).thenAnswer((_) async => null);
     // AI-marker path uses ChatPanel, which depends on ConversationService and
     // ForkService; the embedded ModelSelectorButton needs ModelStorageService.
     when(mockFork.forkCreatedStream).thenAnswer((_) => const Stream.empty());
-    when(mockModelStorage.getConfiguredModels())
-        .thenAnswer((_) async => const []);
+    when(
+      mockModelStorage.getConfiguredModels(),
+    ).thenAnswer((_) async => const []);
     when(mockModelStorage.getActiveModel()).thenAnswer((_) async => null);
     final now = DateTime.now();
     when(mockConv.getConversation(any)).thenAnswer(
@@ -81,10 +85,12 @@ void main() {
         updatedAt: now,
       ),
     );
-    when(mockConv.getConversationMessages(any))
-        .thenAnswer((_) async => const []);
-    when(mockConv.getAllForkPointBranches(any))
-        .thenAnswer((_) async => const {});
+    when(
+      mockConv.getConversationMessages(any),
+    ).thenAnswer((_) async => const []);
+    when(
+      mockConv.getAllForkPointBranches(any),
+    ).thenAnswer((_) async => const {});
     when(mockConv.skillsEnabled).thenReturn(false);
     when(mockConv.skillIndex).thenReturn(const {});
     getIt.registerSingleton<DatabaseService>(mockDb);
@@ -98,13 +104,17 @@ void main() {
     await resetForTesting();
   });
 
-  ConversationMessage stubAnchorMessage() => ConversationMessage(
-        id: 'm',
-        conversationId: 'c',
-        type: MessageType.user,
-        content: 'hi',
-        timestamp: DateTime.now(),
-      );
+  ConversationMessage stubAnchorMessage({
+    String content = 'hi',
+    List<String> attachmentPaths = const [],
+  }) => ConversationMessage(
+    id: 'm',
+    conversationId: 'c',
+    type: MessageType.user,
+    content: content,
+    timestamp: DateTime.now(),
+    attachmentPaths: attachmentPaths,
+  );
 
   Conversation stubConversation(String id) {
     final now = DateTime.now();
@@ -126,16 +136,25 @@ void main() {
       messageId: 'm',
       type: MarkerType.annotation,
     );
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(body: InNoteMarkerPreview(marker: m)),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: InNoteMarkerPreview(marker: m)),
+      ),
+    );
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('legacy-annotation-preview')), findsOneWidget);
-    expect(find.byKey(const ValueKey('ai-marker-chat-panel-host')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('legacy-annotation-preview')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('ai-marker-chat-panel-host')),
+      findsNothing,
+    );
   });
 
-  testWidgets('AI marker with deleted anchor renders anchor-deleted orphan',
-      (tester) async {
+  testWidgets('AI marker with deleted anchor renders anchor-deleted orphan', (
+    tester,
+  ) async {
     // getConversationMessage already stubbed to null in setUp.
     final m = InNoteMarker.forNote(
       index: 0,
@@ -144,82 +163,233 @@ void main() {
       conversationId: 'c',
       messageId: 'm',
     );
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(body: InNoteMarkerPreview(marker: m)),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: InNoteMarkerPreview(marker: m)),
+      ),
+    );
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('ai-marker-chat-panel-host')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('ai-marker-chat-panel-host')),
+      findsOneWidget,
+    );
     expect(find.byType(MarkerOrphanState), findsOneWidget);
     expect(find.textContaining('anchor message'), findsOneWidget);
   });
 
   testWidgets(
-      'AI marker with live anchor but missing conversation renders conversation-deleted orphan',
-      (tester) async {
-    when(mockDb.getConversationMessage(any))
-        .thenAnswer((_) async => stubAnchorMessage());
-    when(mockDb.getConversation(any)).thenAnswer((_) async => null);
+    'AI marker with live anchor but missing conversation renders conversation-deleted orphan',
+    (tester) async {
+      when(
+        mockDb.getConversationMessage(any),
+      ).thenAnswer((_) async => stubAnchorMessage());
+      when(mockDb.getConversation(any)).thenAnswer((_) async => null);
+      final m = InNoteMarker.forNote(
+        index: 0,
+        charStart: 0,
+        charEnd: 5,
+        conversationId: 'c',
+        messageId: 'm',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: InNoteMarkerPreview(marker: m)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(MarkerOrphanState), findsOneWidget);
+      expect(
+        find.textContaining('conversation no longer exists'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'AI marker happy path renders MarkerChatPanelHost on resolved conversation',
+    (tester) async {
+      when(
+        mockDb.getConversationMessage(any),
+      ).thenAnswer((_) async => stubAnchorMessage());
+      when(
+        mockDb.getConversation('c'),
+      ).thenAnswer((_) async => stubConversation('c'));
+      final m = InNoteMarker.forNote(
+        index: 0,
+        charStart: 0,
+        charEnd: 5,
+        conversationId: 'c',
+        messageId: 'm',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: InNoteMarkerPreview(marker: m)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(MarkerChatPanelHost), findsOneWidget);
+      expect(find.byType(MarkerOrphanState), findsNothing);
+    },
+  );
+
+  testWidgets('AI marker context card renders original prompt and image slot', (
+    tester,
+  ) async {
+    when(mockDb.getConversationMessage(any)).thenAnswer(
+      (_) async => stubAnchorMessage(
+        content: 'Explain Fourier transforms using intuition.',
+        attachmentPaths: const ['/tmp/nonexistent-marker-context.png'],
+      ),
+    );
+    when(
+      mockDb.getConversation('c'),
+    ).thenAnswer((_) async => stubConversation('c'));
     final m = InNoteMarker.forNote(
-      index: 0,
+      index: 2,
       charStart: 0,
       charEnd: 5,
       conversationId: 'c',
       messageId: 'm',
     );
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(body: InNoteMarkerPreview(marker: m)),
-    ));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: InNoteMarkerPreview(marker: m)),
+      ),
+    );
     await tester.pumpAndSettle();
-    expect(find.byType(MarkerOrphanState), findsOneWidget);
-    expect(find.textContaining('conversation no longer exists'), findsOneWidget);
+
+    expect(find.byType(MarkerChatPanelHost), findsOneWidget);
+    expect(find.text('Marker 2'), findsOneWidget);
+    expect(find.text('Original prompt'), findsOneWidget);
+    expect(
+      find.text('Explain Fourier transforms using intuition.'),
+      findsOneWidget,
+    );
+    expect(find.byType(Image), findsOneWidget);
   });
 
   testWidgets(
-      'AI marker happy path renders MarkerChatPanelHost on resolved conversation',
-      (tester) async {
-    when(mockDb.getConversationMessage(any))
-        .thenAnswer((_) async => stubAnchorMessage());
-    when(mockDb.getConversation('c'))
-        .thenAnswer((_) async => stubConversation('c'));
-    final m = InNoteMarker.forNote(
-      index: 0,
-      charStart: 0,
-      charEnd: 5,
-      conversationId: 'c',
-      messageId: 'm',
-    );
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(body: InNoteMarkerPreview(marker: m)),
-    ));
-    await tester.pumpAndSettle();
-    expect(find.byType(MarkerChatPanelHost), findsOneWidget);
-    expect(find.byType(MarkerOrphanState), findsNothing);
-  });
+    'AI marker delete affordance confirms and returns true without service delete',
+    (tester) async {
+      when(
+        mockDb.getConversationMessage(any),
+      ).thenAnswer((_) async => stubAnchorMessage());
+      when(
+        mockDb.getConversation('c'),
+      ).thenAnswer((_) async => stubConversation('c'));
+      final m = InNoteMarker.forNote(
+        id: 'marker-id',
+        index: 3,
+        charStart: 0,
+        charEnd: 5,
+        conversationId: 'c',
+        messageId: 'm',
+      );
+      bool? result;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () async {
+                  result = await showInNoteMarkerPreview(context, m);
+                },
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Delete Marker'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Delete Marker'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete Marker?'), findsOneWidget);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(result, isTrue);
+      expect(fakeMarkerService.deletes, isEmpty);
+    },
+  );
 
   testWidgets(
-      'stale lastViewedConversationId falls back to original and clears the pointer',
-      (tester) async {
-    when(mockDb.getConversationMessage(any))
-        .thenAnswer((_) async => stubAnchorMessage());
-    when(mockDb.getConversation('stale')).thenAnswer((_) async => null);
-    when(mockDb.getConversation('c'))
-        .thenAnswer((_) async => stubConversation('c'));
-    final m = InNoteMarker.forNote(
-      id: 'marker-id',
-      index: 0,
-      charStart: 0,
-      charEnd: 5,
-      conversationId: 'c',
-      messageId: 'm',
-      lastViewedConversationId: 'stale',
-    );
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(body: InNoteMarkerPreview(marker: m)),
-    ));
-    await tester.pumpAndSettle();
-    expect(find.byType(MarkerChatPanelHost), findsOneWidget);
-    expect(fakeMarkerService.updates, isNotEmpty);
-    expect(fakeMarkerService.updates.first.markerId, 'marker-id');
-    expect(fakeMarkerService.updates.first.newConvId, isNull);
-  });
+    'orphan marker delete confirms and returns true without service delete',
+    (tester) async {
+      final m = InNoteMarker.forNote(
+        id: 'orphan-marker',
+        index: 0,
+        charStart: 0,
+        charEnd: 5,
+        conversationId: 'c',
+        messageId: 'm',
+      );
+      bool? result;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () async {
+                  result = await showInNoteMarkerPreview(context, m);
+                },
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MarkerOrphanState), findsOneWidget);
+
+      await tester.tap(find.text('Delete marker'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete Marker?'), findsOneWidget);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(result, isTrue);
+      expect(fakeMarkerService.deletes, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'stale lastViewedConversationId falls back to original and clears the pointer',
+    (tester) async {
+      when(
+        mockDb.getConversationMessage(any),
+      ).thenAnswer((_) async => stubAnchorMessage());
+      when(mockDb.getConversation('stale')).thenAnswer((_) async => null);
+      when(
+        mockDb.getConversation('c'),
+      ).thenAnswer((_) async => stubConversation('c'));
+      final m = InNoteMarker.forNote(
+        id: 'marker-id',
+        index: 0,
+        charStart: 0,
+        charEnd: 5,
+        conversationId: 'c',
+        messageId: 'm',
+        lastViewedConversationId: 'stale',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: InNoteMarkerPreview(marker: m)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(MarkerChatPanelHost), findsOneWidget);
+      expect(fakeMarkerService.updates, isNotEmpty);
+      expect(fakeMarkerService.updates.first.markerId, 'marker-id');
+      expect(fakeMarkerService.updates.first.newConvId, isNull);
+    },
+  );
 }

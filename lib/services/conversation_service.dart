@@ -7,6 +7,7 @@ import '../models/conversation_context.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/note.dart';
 import '../models/tag.dart';
+import '../utils/conversation_title_directive.dart';
 import 'agent_service.dart';
 import 'ai_tool_service.dart';
 import 'conversation_attachment_service.dart';
@@ -114,17 +115,15 @@ class ConversationService {
 
   /// The standard set of native tools available for `builtin` URI resolution.
   /// Derived from [AgentService] to avoid duplication.
-  List<NativeTool> get _standardNativeTools => getIt<AgentService>().nativeTools;
+  List<NativeTool> get _standardNativeTools =>
+      getIt<AgentService>().nativeTools;
 
   /// Handles the result from a `load_skill` tool call during chat mode.
   ///
   /// Parses tool URIs from the skill content, resolves them to [McpTool]
   /// instances (supporting `mcp`, `builtin`, and `user_defined` namespaces),
   /// and appends any newly-discovered tools to [skillDiscoveredTools].
-  Future<void> handleLoadSkillResult(
-    String noteId,
-    String result,
-  ) async {
+  Future<void> handleLoadSkillResult(String noteId, String result) async {
     if (!_skillsEnabled) return;
     if (noteId.isEmpty) return;
     final skillService = getIt<SkillService>();
@@ -135,15 +134,18 @@ class ConversationService {
       switch (parsed.namespace) {
         case 'builtin':
           // Find in standard native tools list, convert to McpTool and add.
-          final nativeTool =
-              _standardNativeTools.where((t) => t.name == parsed.id).firstOrNull;
+          final nativeTool = _standardNativeTools
+              .where((t) => t.name == parsed.id)
+              .firstOrNull;
           if (nativeTool != null &&
               !_skillDiscoveredTools.any((s) => s.name == nativeTool.name)) {
-            _skillDiscoveredTools.add(McpTool(
-              name: nativeTool.name,
-              description: nativeTool.description,
-              inputSchema: nativeTool.inputSchema,
-            ));
+            _skillDiscoveredTools.add(
+              McpTool(
+                name: nativeTool.name,
+                description: nativeTool.description,
+                inputSchema: nativeTool.inputSchema,
+              ),
+            );
             _skillDiscoveredNativeToolNames.add(nativeTool.name);
           }
 
@@ -175,8 +177,9 @@ class ConversationService {
         case 'mcp':
           final mcpService = getIt<McpService>();
           final endpoints = await mcpService.getEndpoints();
-          final endpoint =
-              endpoints.where((e) => e.name == parsed.id).firstOrNull;
+          final endpoint = endpoints
+              .where((e) => e.name == parsed.id)
+              .firstOrNull;
           if (endpoint != null) {
             final cache = await mcpService.getCachedTools(endpoint.id);
             final allTools =
@@ -516,11 +519,14 @@ class ConversationService {
     String? modelUsed,
     Map<String, dynamic>? metadata,
   }) async {
+    final titleDirective = ConversationTitleDirective.parseLeading(content);
+    final persistedContent = titleDirective.content;
+
     final message = ConversationMessage(
       id: _uuid.v4(),
       conversationId: conversationId,
       type: MessageType.ai,
-      content: content,
+      content: persistedContent,
       timestamp: DateTime.now(),
       modelUsed: modelUsed,
       metadata: metadata,
@@ -551,8 +557,15 @@ class ConversationService {
     // Update conversation timestamp
     final conversation = await _databaseService.getConversation(conversationId);
     if (conversation != null) {
+      final title =
+          conversation.title == ConversationTitleDirective.pendingTitle
+          ? titleDirective.title ??
+                ConversationTitleDirective.fallbackSlugFromResponse(
+                  persistedContent,
+                )
+          : conversation.title;
       await _databaseService.updateConversation(
-        conversation.copyWith(updatedAt: DateTime.now()),
+        conversation.copyWith(title: title, updatedAt: DateTime.now()),
       );
     }
 
@@ -595,6 +608,20 @@ class ConversationService {
   /// conversation header. Delegates to [DatabaseService.getConversation].
   Future<Conversation?> getConversation(String conversationId) async {
     return await _databaseService.getConversation(conversationId);
+  }
+
+  Future<void> renameConversation({
+    required String conversationId,
+    required String title,
+  }) async {
+    final trimmed = title.trim();
+    if (trimmed.isEmpty) return;
+    final conversation = await _databaseService.getConversation(conversationId);
+    if (conversation == null) return;
+    await _databaseService.updateConversation(
+      conversation.copyWith(title: trimmed, updatedAt: DateTime.now()),
+    );
+    LoggerService.info('Renamed conversation: $conversationId');
   }
 
   /// Convenience accessor used by [ChatPanel] to load the message list
@@ -1327,8 +1354,7 @@ class ConversationService {
   Future<List<ConversationBranchSummary>> getChildBranches(
     String parentMessageId,
   ) async {
-    final branches =
-        await _getForkPointBranchesForParents([parentMessageId]);
+    final branches = await _getForkPointBranchesForParents([parentMessageId]);
     return branches[parentMessageId] ?? const [];
   }
 
@@ -1357,7 +1383,8 @@ class ConversationService {
     //
     // Group by (parentMessageId, childConversationId) — at most one entry
     // per (fork-point, child) pair.
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT mp.parentMessageId AS parent_id,
              cmm.conversationId AS child_conv_id,
              c.title           AS child_title,
@@ -1388,7 +1415,9 @@ class ConversationService {
                  AND active_cmm.conversationId = ?
             )
        GROUP BY mp.parentMessageId, cmm.conversationId
-    ''', [conversationId, conversationId, conversationId]);
+    ''',
+      [conversationId, conversationId, conversationId],
+    );
 
     return _materializeBranchSummaries(rows);
   }
@@ -1399,11 +1428,10 @@ class ConversationService {
   /// Used by [getChildBranches]; consumers that need self-exclusion should
   /// use [getAllForkPointBranches] (which adds `cmm.conversationId != ?`).
   Future<Map<String, List<ConversationBranchSummary>>>
-      _getForkPointBranchesForParents(List<String> parentMessageIds) async {
+  _getForkPointBranchesForParents(List<String> parentMessageIds) async {
     if (parentMessageIds.isEmpty) return const {};
     final db = await _databaseService.database;
-    final placeholders =
-        List.filled(parentMessageIds.length, '?').join(',');
+    final placeholders = List.filled(parentMessageIds.length, '?').join(',');
     final rows = await db.rawQuery('''
       SELECT mp.parentMessageId AS parent_id,
              cmm.conversationId AS child_conv_id,
@@ -1433,7 +1461,7 @@ class ConversationService {
   /// conversation appearing in the result (one DB call per unique child;
   /// bounded by typical fan-out per spec, < 5).
   Future<Map<String, List<ConversationBranchSummary>>>
-      _materializeBranchSummaries(List<Map<String, Object?>> rows) async {
+  _materializeBranchSummaries(List<Map<String, Object?>> rows) async {
     if (rows.isEmpty) return const {};
     final childConvIds = rows.map((r) => r['child_conv_id'] as String).toSet();
     final notesByConv = <String, List<String>>{};

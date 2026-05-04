@@ -195,10 +195,8 @@ class _InteractiveCheckboxMarkdownState
       if (body.isValid) {
         final refId = 'b${idCounter++}';
         _appBlockBodies[refId] = body;
-        final w =
-            (body.width ?? widget.defaultWebViewSize.width).toInt();
-        final h =
-            (body.height ?? widget.defaultWebViewSize.height).toInt();
+        final w = (body.width ?? widget.defaultWebViewSize.width).toInt();
+        final h = (body.height ?? widget.defaultWebViewSize.height).toInt();
         buffer.write(
           '@[${w}x$h](${SynapseResourceUri.scheme}://app/${Uri.encodeComponent(body.appUuid)}'
           '?$synapseAppBlockRefKey=$refId)',
@@ -1248,7 +1246,9 @@ class _InteractiveCheckboxMarkdownState
 
     _refreshPreprocessedContent();
 
-    // Basic inline components
+    // GptMarkdown replaces the default inline component list when this
+    // parameter is supplied, so include the standard components explicitly
+    // after the local overrides.
     final inlineComponents = [
       CustomImageMd(
         onImage: (url, alt) {
@@ -1279,22 +1279,10 @@ class _InteractiveCheckboxMarkdownState
         hasWebViewNotifier: widget.hasWebViewNotifier,
         appBlockLookup: (id) => _appBlockBodies[id],
       ),
-      if (widget.onLinkTap != null || widget.noteId != null)
-        // Helper to ensure links are handled if needed, usually default ATag is fine
-        // but we used DragTargetATagMd before. Standard ATagMd should be enough.
-        // If we need custom link handling (like avoiding ! prefixes),
-        // GptMarkdown handles that.
-        // We'll use the standard ones implicitly by NOT passing them in 'inlineComponents'
-        // except for the custom one.
-        ...MarkdownComponent.inlineComponents.where((e) => e is! ATagMd),
+      ...MarkdownComponent.inlineComponents.where(
+        (e) => e is! ATagMd && e is! ImageMd,
+      ),
     ];
-
-    // Check if we need to add standard ATagMd back if we excluded it?
-    // Wait, GptMarkdown adds inlineComponents on top of defaults?
-    // No, 'inlineComponents' argument to GptMarkdown REPLACES the list or APPENDS?
-    // Docs say: "inlineComponents: A list of custom inline components"
-    // Usually it appends or overrides if types match.
-    // Let's assume we can just pass our custom ones.
 
     final components = [
       CodeBlockMd(),
@@ -1424,17 +1412,11 @@ class _InteractiveCheckboxMarkdownState
               content = Center(child: content);
               break;
             case TextAlign.right:
-              content = Align(
-                alignment: Alignment.centerRight,
-                child: content,
-              );
+              content = Align(alignment: Alignment.centerRight, child: content);
               break;
             case TextAlign.left:
             default:
-              content = Align(
-                alignment: Alignment.centerLeft,
-                child: content,
-              );
+              content = Align(alignment: Alignment.centerLeft, child: content);
               break;
           }
 
@@ -3579,8 +3561,8 @@ class _AppEmbedFromUriState extends State<_AppEmbedFromUri> {
       blockBody = widget.appBlockLookup!(blockRefId);
     }
 
-    final revisionRaw = blockBody?.revisionNumber?.toString() ??
-        query['revision'];
+    final revisionRaw =
+        blockBody?.revisionNumber?.toString() ?? query['revision'];
     final int? revisionNumber = revisionRaw == null
         ? null
         : int.tryParse(revisionRaw);
@@ -3714,13 +3696,12 @@ class _EmbedRequest {
     int? revisionNumber,
     required List<Note> selectedNotes,
     required Map<String, dynamic> params,
-  }) =>
-      _EmbedRequest._(
-        appUuid: appUuid,
-        revisionNumber: revisionNumber,
-        selectedNotes: selectedNotes,
-        params: params,
-      );
+  }) => _EmbedRequest._(
+    appUuid: appUuid,
+    revisionNumber: revisionNumber,
+    selectedNotes: selectedNotes,
+    params: params,
+  );
   factory _EmbedRequest.error(String message) =>
       _EmbedRequest._(error: message);
 

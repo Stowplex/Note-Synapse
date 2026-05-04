@@ -150,13 +150,14 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
               if (target.orphan != null) {
                 return MarkerOrphanState(
                   reason: target.orphan!,
-                  onDeleteMarker: _deleteMarker,
+                  onDeleteMarker: () => _confirmDelete(context),
                 );
               }
               return MarkerChatPanelHost(
                 marker: widget.marker,
                 resolvedConversationId: target.conversationId!,
                 contextCard: _buildAiMarkerContextCard(context),
+                scrollController: scrollController,
                 onActiveConversationChanged: _persistLastViewed,
               );
             },
@@ -166,20 +167,77 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
     );
   }
 
-  /// Tiny context card pinned at the top of the embedded ChatPanel.
-  /// Reuses the legacy preview's image + user-message rendering so the
-  /// reader still sees what they originally circled. Static — no deps
-  /// on _loading/_userMessageContent so it can render before _loadData
-  /// completes (kept as a TODO for Task 24+ to refine).
+  /// Context card pinned at the top of the embedded ChatPanel. Reuses the
+  /// legacy preview context so the reader still sees the original prompt and
+  /// captured region before continuing the marker conversation.
   Widget _buildAiMarkerContextCard(BuildContext context) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Padding(
         padding: const EdgeInsets.all(8),
-        child: Text(
-          'Marker ${widget.marker.index}',
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
+        child: _loading
+            ? const SizedBox(
+                height: 48,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Marker ${widget.marker.index}',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => _confirmDelete(context),
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        color: Theme.of(context).colorScheme.error,
+                        tooltip: 'Delete Marker',
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                        padding: EdgeInsets.zero,
+                      ),
+                    ],
+                  ),
+                  if (_imagePaths.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 96,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _imagePaths.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) => SizedBox(
+                          width: 112,
+                          child: _buildSingleImage(context, _imagePaths[index]),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (_userMessageContent != null &&
+                      _userMessageContent!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Original prompt',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _userMessageContent!,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
       ),
     );
   }
@@ -228,16 +286,11 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
   /// uses the original conversation as fallback.
   void _persistLastViewed(String newConversationId) {
     unawaited(
-      getIt<NoteMarkerService>()
-          .updateMarkerLastViewed(widget.marker.id, newConversationId),
+      getIt<NoteMarkerService>().updateMarkerLastViewed(
+        widget.marker.id,
+        newConversationId,
+      ),
     );
-  }
-
-  /// Removes the marker from wherever it lives (note or attachment), then
-  /// pops the sheet with `true` so the host can refresh its marker list.
-  Future<void> _deleteMarker() async {
-    await getIt<NoteMarkerService>().deleteMarker(widget.marker.id);
-    if (mounted) Navigator.of(context).pop(true);
   }
 
   Widget _buildContent(
@@ -456,7 +509,15 @@ Future<bool?> showInNoteMarkerPreview(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => InNoteMarkerPreview(marker: marker),
+    builder: (context) {
+      final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+      return AnimatedPadding(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: InNoteMarkerPreview(marker: marker),
+      );
+    },
   );
 }
 

@@ -45,7 +45,7 @@ class ChatPanel extends StatefulWidget {
   /// hosts use this to re-render with `initialMessageId = forkPointMessageId`
   /// so the new branch lands with the fork-point at viewport top.
   final void Function(String newConversationId, String forkPointMessageId)
-      onActiveConversationChanged;
+  onActiveConversationChanged;
 
   /// True while the parent message is generating; disables chip taps and
   /// branch-strip taps to avoid race conditions.
@@ -53,7 +53,7 @@ class ChatPanel extends StatefulWidget {
 
   /// Sends a user prompt to the active conversation.
   final Future<void> Function(String conversationId, String prompt)
-      onSendUserPrompt;
+  onSendUserPrompt;
 
   /// Live partial text shown as a "streaming bubble" tail when non-null.
   /// Parent updates this on each AI chunk; when null, no tail is rendered.
@@ -79,6 +79,14 @@ class ChatPanel extends StatefulWidget {
   /// also null, the action row is hidden entirely.
   final void Function(ConversationMessage)? onAddAiMessageToNote;
 
+  /// Shows a manual fork affordance on AI messages. Tapping it creates a
+  /// fork from that AI response and asks the host to switch into it.
+  final bool enableManualFork;
+
+  /// Optional scroll controller supplied by a parent draggable sheet. When
+  /// provided, dragging the chat list can resize that sheet.
+  final ScrollController? scrollController;
+
   const ChatPanel({
     super.key,
     required this.conversationId,
@@ -92,6 +100,8 @@ class ChatPanel extends StatefulWidget {
     this.onShowToolDetails,
     this.onCopyAiMessage,
     this.onAddAiMessageToNote,
+    this.enableManualFork = true,
+    this.scrollController,
   });
 
   @override
@@ -131,8 +141,11 @@ class ChatPanelState extends State<ChatPanel> {
   // Because [ListView.builder] is lazy, the initial target may not be built
   // yet — we coarse-jump first, then re-attempt up to a small retry cap to
   // avoid a [pumpAndSettle] deadlock.
-  final ScrollController _scrollController = ScrollController();
+  final ScrollController _fallbackScrollController = ScrollController();
   final Map<String, GlobalKey> _messageKeys = {};
+
+  ScrollController get _scrollController =>
+      widget.scrollController ?? _fallbackScrollController;
 
   GlobalKey _keyFor(String id) =>
       _messageKeys.putIfAbsent(id, () => GlobalKey());
@@ -162,7 +175,7 @@ class ChatPanelState extends State<ChatPanel> {
     _forkSub?.cancel();
     _activePreview?.remove();
     _activePreview = null;
-    _scrollController.dispose();
+    _fallbackScrollController.dispose();
     super.dispose();
   }
 
@@ -203,11 +216,7 @@ class ChatPanelState extends State<ChatPanel> {
     final key = _messageKeys[id];
     final ctx = key?.currentContext;
     if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        duration: Duration.zero,
-        alignment: 0.0,
-      );
+      Scrollable.ensureVisible(ctx, duration: Duration.zero, alignment: 0.0);
       return;
     }
     // Target hasn't been laid out yet. Coarse-jump toward its likely
@@ -231,8 +240,9 @@ class ChatPanelState extends State<ChatPanel> {
     // Capture the conversationId at dispatch time so a mid-flight branch
     // switch doesn't apply this conversation's branches to a different one.
     final cid = widget.conversationId;
-    final branches = await getIt<ConversationService>()
-        .getAllForkPointBranches(cid);
+    final branches = await getIt<ConversationService>().getAllForkPointBranches(
+      cid,
+    );
     if (!mounted || cid != widget.conversationId) return;
     setState(() => _branchesByParent = branches);
   }
@@ -273,7 +283,8 @@ class ChatPanelState extends State<ChatPanel> {
   /// unless at least one of the action callbacks is wired; when only one
   /// is wired, the unwired button renders disabled (onPressed: null).
   bool _shouldShowActionRow() {
-    return widget.onCopyAiMessage != null ||
+    return widget.enableManualFork ||
+        widget.onCopyAiMessage != null ||
         widget.onAddAiMessageToNote != null;
   }
 
@@ -314,9 +325,38 @@ class ChatPanelState extends State<ChatPanel> {
   String _aiLabel(BuildContext context) =>
       AppLocalizations.of(context)?.ai ?? 'AI';
 
+  List<ConversationBranchSummary> _branchesFor(String forkPointMessageId) {
+    final siblingBranches =
+        _branchesByParent[forkPointMessageId] ??
+        const <ConversationBranchSummary>[];
+    if (siblingBranches.isEmpty) return const [];
+    if (siblingBranches.any((b) => b.conversationId == widget.conversationId)) {
+      return siblingBranches;
+    }
+    final active = ConversationBranchSummary(
+      conversationId: widget.conversationId,
+      title: _conversation?.title ?? 'Current branch',
+      forkPointMessageId: forkPointMessageId,
+      firstChildMessageId: forkPointMessageId,
+      noteIds: _conversation?.noteIds ?? const [],
+    );
+    return [active, ...siblingBranches];
+  }
+
+  Future<void> _handleManualFork(ConversationMessage message) async {
+    if (widget.isStreaming) return;
+    final forked = await getIt<ForkService>().forkFromMessageInContext(
+      forkFromMessageId: message.id,
+      sourceConversationId: widget.conversationId,
+      suggestedTitle: 'Forked conversation',
+    );
+    if (!mounted || forked == null) return;
+    widget.onActiveConversationChanged(forked.id, message.id);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final hasStreamingTail = widget.streamingContent != null;
+    final hasStreamingTail = widget.streamingContent?.isNotEmpty == true;
     final itemCount = _messages.length + (hasStreamingTail ? 1 : 0);
 
     return Column(
@@ -369,10 +409,7 @@ class ChatPanelState extends State<ChatPanel> {
     );
   }
 
-  Widget _buildMessageItem(
-    BuildContext context,
-    ConversationMessage m,
-  ) {
+  Widget _buildMessageItem(BuildContext context, ConversationMessage m) {
     final isUser = m.type == MessageType.user;
     return Column(
       key: ValueKey('chat_panel_msg_col_${m.id}'),
@@ -388,8 +425,7 @@ class ChatPanelState extends State<ChatPanel> {
         if (m.type == MessageType.ai)
           ChipsFooter(
             chips: _chipsByMessage[m.id],
-            isStreaming:
-                widget.isStreaming && m.id == _messages.last.id,
+            isStreaming: widget.isStreaming && m.id == _messages.last.id,
             isExpected: _isChipsExpected(),
             onChipTap: widget.isStreaming
                 ? null
@@ -401,14 +437,21 @@ class ChatPanelState extends State<ChatPanel> {
         // Branch strip — only when at least 2 sibling branches exist off
         // this fork-point message. Gated at the call site for clarity even
         // though MessageBranchStrip also short-circuits.
-        if ((_branchesByParent[m.id] ?? const []).length >= 2)
+        if (_branchesFor(m.id).isNotEmpty)
           MessageBranchStrip(
-            branches: _branchesByParent[m.id]!,
+            branches: _branchesFor(m.id),
             activeConversationId: widget.conversationId,
             activeNoteIds: _conversation?.noteIds ?? const [],
             disabled: widget.isStreaming,
             onSwitchBranch: (newId, _) =>
                 widget.onActiveConversationChanged(newId, m.id),
+            onRenameBranch: (conversationId, title) async {
+              await getIt<ConversationService>().renameConversation(
+                conversationId: conversationId,
+                title: title,
+              );
+              await reload();
+            },
           ),
       ],
     );
@@ -438,10 +481,9 @@ class ChatPanelState extends State<ChatPanel> {
             Flexible(
               child: SelectableText(
                 m.content,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: scheme.onSurface),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
               ),
             ),
             if (showEdit) ...[
@@ -454,10 +496,7 @@ class ChatPanelState extends State<ChatPanel> {
                 ),
                 tooltip: 'Use this message',
                 onPressed: () => widget.onUserMessageEdit!(m),
-                constraints: const BoxConstraints(
-                  minWidth: 32,
-                  minHeight: 32,
-                ),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 padding: EdgeInsets.zero,
               ),
             ],
@@ -467,10 +506,7 @@ class ChatPanelState extends State<ChatPanel> {
     );
   }
 
-  Widget _buildAiBubble(
-    BuildContext context,
-    ConversationMessage m,
-  ) {
+  Widget _buildAiBubble(BuildContext context, ConversationMessage m) {
     final scheme = Theme.of(context).colorScheme;
     final parsed = _chipsFor(m);
     final showActions = _shouldShowActionRow();
@@ -497,10 +533,7 @@ class ChatPanelState extends State<ChatPanel> {
               context,
               trailing: hasTools
                   ? IconButton(
-                      icon: const Icon(
-                        Icons.build_circle_outlined,
-                        size: 18,
-                      ),
+                      icon: const Icon(Icons.build_circle_outlined, size: 18),
                       tooltip: 'View Tool Usage',
                       onPressed: () => widget.onShowToolDetails!(m),
                       constraints: const BoxConstraints(
@@ -515,10 +548,9 @@ class ChatPanelState extends State<ChatPanel> {
             SelectionArea(
               child: InteractiveCheckboxMarkdown(
                 originalContent: parsed.stripped,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: scheme.onSurface),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
                 // Markdown link tap handling deferred to a follow-up task.
                 onLinkTap: null,
               ),
@@ -529,11 +561,26 @@ class ChatPanelState extends State<ChatPanel> {
             if (showActions) ...[
               const SizedBox(height: 12),
               ChatMessageActionRow(
+                leading: widget.enableManualFork
+                    ? IconButton(
+                        key: ValueKey('chat_panel_manual_fork_${m.id}'),
+                        icon: const Icon(Icons.call_split, size: 18),
+                        tooltip: 'Fork from here',
+                        onPressed: widget.isStreaming
+                            ? null
+                            : () => _handleManualFork(m),
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                        padding: EdgeInsets.zero,
+                      )
+                    : null,
                 onCopy: widget.onCopyAiMessage == null
-                    ? () {}
+                    ? null
                     : () => widget.onCopyAiMessage!(m),
                 onAddNote: widget.onAddAiMessageToNote == null
-                    ? () {}
+                    ? null
                     : () => widget.onAddAiMessageToNote!(m),
               ),
             ],
@@ -543,10 +590,7 @@ class ChatPanelState extends State<ChatPanel> {
     );
   }
 
-  Widget _buildAiHeader(
-    BuildContext context, {
-    required Widget? trailing,
-  }) {
+  Widget _buildAiHeader(BuildContext context, {required Widget? trailing}) {
     final scheme = Theme.of(context).colorScheme;
     return Row(
       children: [
@@ -555,9 +599,9 @@ class ChatPanelState extends State<ChatPanel> {
         Text(
           _aiLabel(context),
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: scheme.secondary,
-                fontWeight: FontWeight.bold,
-              ),
+            color: scheme.secondary,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         const Spacer(),
         if (trailing != null) trailing,

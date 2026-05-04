@@ -33,8 +33,10 @@ import '../services/prompts/registrations/chat_prompt_configuration.dart';
 import '../services/prompts/note_prompt_builder.dart';
 import '../services/database_service.dart';
 import '../services/conversation_settings_service.dart';
+import '../services/conversation_prompt_builder.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../utils/file_utils.dart';
+import '../utils/conversation_title_directive.dart';
 import '../l10n/app_localizations.dart';
 import '../services/conversation_ai_engine.dart';
 import 'note_selection_dialog.dart';
@@ -136,7 +138,8 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   // Agent Skills
   bool _skillsEnabled = false;
   int _skillCount = 0;
-  bool? _lastOrchestrationSupport; // tracks model's capability to detect changes
+  bool?
+  _lastOrchestrationSupport; // tracks model's capability to detect changes
 
   bool _hasInitialized = false;
   bool _waitingForAgentResult = false;
@@ -150,7 +153,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     // Skills start disabled; _initSkillsWithModelCheck runs after first frame
     // when BuildContext is available to read the active model's capabilities.
     _skillsEnabled = false;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initSkillsWithModelCheck());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _initSkillsWithModelCheck(),
+    );
     _loadMcpEndpoints();
     _loadIterationPreference();
     _setupSqlWriteApprovalCallback();
@@ -185,9 +190,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   void _initSkillsWithModelCheck() {
     if (!mounted) return;
-    final modelConfig = _selectedModel ?? context.read<AppProvider>().modelConfig;
+    final modelConfig =
+        _selectedModel ?? context.read<AppProvider>().modelConfig;
     final supportsOrchestration =
-        modelConfig?.customCapabilitiesObject?.supportsToolOrchestration ?? true;
+        modelConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
+        true;
     _lastOrchestrationSupport = supportsOrchestration;
     final enable = widget.skillsEnabled && supportsOrchestration;
     if (enable) {
@@ -267,8 +274,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     // Re-evaluate skills if the active model's orchestration capability changed.
     final modelConfig = context.read<AppProvider>().modelConfig;
     final nowSupports =
-        modelConfig?.customCapabilitiesObject?.supportsToolOrchestration ?? true;
-    if (_lastOrchestrationSupport != null && _lastOrchestrationSupport != nowSupports) {
+        modelConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
+        true;
+    if (_lastOrchestrationSupport != null &&
+        _lastOrchestrationSupport != nowSupports) {
       _initSkillsWithModelCheck();
     }
     _lastOrchestrationSupport = nowSupports;
@@ -1136,14 +1145,17 @@ $historyBuffer
         return;
       }
 
+      final titleStreamFilter = ConversationTitleStreamFilter();
       final aiResponse = await _generateAIResponse(
         content,
         attachments,
         generationContext,
         onStreamChunk: (chunk) {
+          final visibleChunk = titleStreamFilter.addChunk(chunk);
+          if (visibleChunk.isEmpty) return;
           if (mounted) {
             setState(() {
-              _streamingContent += chunk;
+              _streamingContent += visibleChunk;
               _isStreaming = true;
             });
             _scrollToBottom();
@@ -1420,23 +1432,19 @@ $historyBuffer
   Future<PromptRequest> _buildConversationPrompt(
     List<PlatformFile> latestUserAttachments,
   ) async {
-    final noteBuilder = NotePromptBuilder(DatabaseService());
-    final contextMessage = await noteBuilder.buildContextMessage(_notes);
+    final promptBuilder = ConversationPromptBuilder(DatabaseService());
+    final contextMessage = await promptBuilder.buildNoteContextMessage(_notes);
 
     final currentModelId =
         _selectedModel?.id ?? getIt<ModelSelector>().currentModelConfig?.id;
 
-    final conversationMessages =
-        await ConversationAiEngine.buildConversationMessages(
-          messages: _messages,
-          currentModelId: currentModelId,
-          loadAttachments: (message) =>
-              _loadConversationAttachments(message, latestUserAttachments),
-        );
+    final conversationMessages = await promptBuilder.buildConversationMessages(
+      messages: _messages,
+      currentModelId: currentModelId,
+      latestUserAttachments: latestUserAttachments,
+    );
 
-    final contextMessages =
-        (contextMessage.content.trim().isEmpty &&
-            contextMessage.attachments.isEmpty)
+    final contextMessages = contextMessage == null
         ? <PromptMessage>[]
         : [contextMessage];
     final systemMessage = await _buildConversationSystemMessage(
@@ -1461,6 +1469,9 @@ $historyBuffer
       'Use your own knowledge to clarify or extend when the notes are insufficient.',
       'You should format your response as markdown for best reading experience.',
     ];
+    if (ConversationTitleDirective.shouldRequestTitle(_conversation)) {
+      lines.add(ConversationTitleDirective.promptInstruction);
+    }
 
     if (_hasAnyTools) {
       lines.add(
@@ -1562,97 +1573,17 @@ $historyBuffer
     ConversationMessage message,
     List<PlatformFile> latestUserAttachments,
   ) async {
-    if (message.type != MessageType.user) {
-      return const [];
-    }
-
-    final isLatestUserMessage =
-        _messages.isNotEmpty && identical(message, _messages.last);
-
-    if (isLatestUserMessage && latestUserAttachments.isNotEmpty) {
-      return Future.wait(latestUserAttachments.map(_normalizePlatformFile));
-    }
-
-    if (message.attachmentPaths.isEmpty) {
-      return const [];
-    }
-
-    final files = <PlatformFile>[];
-    for (final path in message.attachmentPaths) {
-      try {
-        // Check if it's a URI
-        final isUri =
-            path.startsWith('http://') ||
-            path.startsWith('https://') ||
-            path.startsWith('gs://');
-
-        if (isUri) {
-          files.add(
-            PlatformFile(
-              name: path.split('/').last,
-              path: path,
-              size: 0,
-              bytes: null,
-            ),
-          );
-          continue;
-        }
-
-        final file = File(path);
-        if (!file.existsSync()) {
-          continue;
-        }
-        final bytes = await file.readAsBytes();
-        files.add(
-          PlatformFile(
-            name: path.split('/').last,
-            path: path,
-            size: bytes.length,
-            bytes: bytes,
-          ),
-        );
-      } catch (e) {
-        LoggerService.warning(
-          'Failed to load conversation attachment $path: $e',
-        );
-      }
-    }
-
-    return files;
+    return ConversationPromptBuilder(DatabaseService()).loadMessageAttachments(
+      message: message,
+      messageHistory: _messages,
+      latestUserAttachments: latestUserAttachments,
+    );
   }
 
   Future<PlatformFile> _normalizePlatformFile(PlatformFile file) async {
-    if (file.bytes != null) {
-      return file;
-    }
-
-    if (file.path != null) {
-      // Check if it's a URI
-      final isUri =
-          file.path!.startsWith('http://') ||
-          file.path!.startsWith('https://') ||
-          file.path!.startsWith('gs://');
-
-      if (isUri) {
-        return file;
-      }
-
-      try {
-        final bytes = await File(file.path!).readAsBytes();
-        return PlatformFile(
-          name: file.name,
-          path: file.path,
-          size: bytes.length,
-          bytes: bytes,
-        );
-      } catch (e) {
-        LoggerService.warning(
-          'Failed to normalize attachment ${file.name}: $e',
-        );
-      }
-    }
-
-    return file;
+    return ConversationPromptBuilder(
+      DatabaseService(),
+    ).normalizePlatformFile(file);
   }
 
   Future<void> _attachFiles() async {
@@ -2448,12 +2379,15 @@ $historyBuffer
                                 onSelected: (selected) {
                                   setState(() => _skillsEnabled = selected);
                                   if (selected) {
-                                    _conversationService.enableSkills().then((_) {
+                                    _conversationService.enableSkills().then((
+                                      _,
+                                    ) {
                                       if (mounted) {
                                         setState(
-                                          () => _skillCount = _conversationService
-                                              .skillIndex
-                                              .length,
+                                          () =>
+                                              _skillCount = _conversationService
+                                                  .skillIndex
+                                                  .length,
                                         );
                                       }
                                     });
@@ -2466,9 +2400,8 @@ $historyBuffer
                                   size: 16,
                                   color: _skillsEnabled
                                       ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(
-                                          context,
-                                        ).colorScheme.onSurface.withOpacity(0.6),
+                                      : Theme.of(context).colorScheme.onSurface
+                                            .withOpacity(0.6),
                                 ),
                               ),
                               if (!supportsToolOrchestration)

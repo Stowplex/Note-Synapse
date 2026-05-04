@@ -1,4 +1,5 @@
 import '../models/chip_action.dart';
+import '../utils/conversation_title_directive.dart';
 import 'conversation_service.dart';
 import 'fork_service.dart';
 import 'logger_service.dart';
@@ -6,7 +7,7 @@ import 'service_locator.dart';
 
 /// Orchestrates the 3-step chip-tap flow:
 /// 1. Fork the active conversation from the AI message that owns the chip,
-///    using `chip.label` as the new conversation's title.
+///    using the pending fork title so the first AI reply can name the branch.
 /// 2. Add `chip.prompt` (NOT `chip.label`) as the new conversation's first
 ///    user message — the prompt is the substantive instruction; the label
 ///    was display-only.
@@ -23,12 +24,12 @@ class ChipTapHandler {
     required ChipAction chip,
     required String sourceConversationId,
     required Future<void> Function(String conversationId, String prompt)
-        onSendUserPrompt,
+    onSendUserPrompt,
   }) async {
     final forked = await getIt<ForkService>().forkFromMessageInContext(
       forkFromMessageId: parentMessageId,
       sourceConversationId: sourceConversationId,
-      suggestedTitle: chip.label,
+      suggestedTitle: ConversationTitleDirective.pendingTitle,
     );
     if (forked == null) {
       LoggerService.warning(

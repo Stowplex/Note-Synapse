@@ -344,6 +344,26 @@ class MockConversationService extends _i1.Mock
           as _i9.Future<List<_i3.ConversationMessage>>);
 
   @override
+  _i9.Future<_i3.Conversation?> getConversation(String? conversationId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getConversation, [conversationId]),
+            returnValue: _i9.Future<_i3.Conversation?>.value(),
+          )
+          as _i9.Future<_i3.Conversation?>);
+
+  @override
+  _i9.Future<List<_i3.ConversationMessage>> getConversationMessages(
+    String? conversationId,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#getConversationMessages, [conversationId]),
+            returnValue: _i9.Future<List<_i3.ConversationMessage>>.value(
+              <_i3.ConversationMessage>[],
+            ),
+          )
+          as _i9.Future<List<_i3.ConversationMessage>>);
+
+  @override
   _i9.Future<_i5.ConversationWithMessages?> getConversationWithMessages(
     String? conversationId,
   ) =>

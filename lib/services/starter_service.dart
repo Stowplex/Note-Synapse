@@ -7,6 +7,7 @@ import '../models/note.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
 import 'service_locator.dart';
+import 'skill_service.dart';
 
 /// Service for managing starter content (User Manual and starter apps)
 class StarterService {
@@ -14,6 +15,7 @@ class StarterService {
   static const String userManualYamlPath = 'assets/starter/USER_MANUAL.yaml';
   static const String userManualPdfPath = 'assets/starter/USER_MANUAL.pdf';
   static const String starterAppsPath = 'assets/starter/apps';
+  static const String starterSkillsPath = 'assets/starter/skills';
 
   /// Check if User Manual note exists
   static Future<Note?> getUserManualNote() async {
@@ -36,10 +38,7 @@ class StarterService {
       final version = yamlData['version']?.toString() ?? '1.0.0';
       final updateDate = yamlData['update_date']?.toString() ?? 'Unknown';
 
-      return {
-        'version': version,
-        'updateDate': updateDate,
-      };
+      return {'version': version, 'updateDate': updateDate};
     } catch (e) {
       LoggerService.error('Error parsing USER_MANUAL.yaml: $e');
       rethrow;
@@ -56,8 +55,16 @@ class StarterService {
   /// Compare versions (simple string comparison for semantic versioning)
   static bool isNewerVersion(String newVersion, String oldVersion) {
     try {
-      final newParts = newVersion.split('+')[0].split('.').map(int.parse).toList();
-      final oldParts = oldVersion.split('+')[0].split('.').map(int.parse).toList();
+      final newParts = newVersion
+          .split('+')[0]
+          .split('.')
+          .map(int.parse)
+          .toList();
+      final oldParts = oldVersion
+          .split('+')[0]
+          .split('.')
+          .map(int.parse)
+          .toList();
 
       // Pad shorter version with zeros
       while (newParts.length < 3) newParts.add(0);
@@ -78,7 +85,7 @@ class StarterService {
   /// Install or update User Manual
   static Future<void> installUserManual() async {
     final databaseService = getIt<DatabaseService>();
-    
+
     // Parse YAML for version and update date
     final yamlData = await parseUserManualYaml();
     final version = yamlData['version']!;
@@ -88,9 +95,10 @@ class StarterService {
     final attachmentPath = await _copyPdfToAttachments();
 
     final now = DateTime.now();
-    
+
     // Create note content
-    final content = '''version: $version
+    final content =
+        '''version: $version
 last updated: $updateDate
 
 Please refer to the attached PDF for detailed user manual.''';
@@ -111,7 +119,7 @@ Please refer to the attached PDF for detailed user manual.''';
 
     // Check if note already exists
     final existingNote = await getUserManualNote();
-    
+
     if (existingNote != null) {
       // Update existing note
       await databaseService.updateNote(note);
@@ -128,19 +136,20 @@ Please refer to the attached PDF for detailed user manual.''';
     try {
       // Load PDF from assets
       final byteData = await rootBundle.load(userManualPdfPath);
-      
+
       // Get attachments directory
       final appDir = await getApplicationDocumentsDirectory();
       final attachmentsDir = Directory('${appDir.path}/attachments');
-      
+
       if (!await attachmentsDir.exists()) {
         await attachmentsDir.create(recursive: true);
       }
 
       // Create unique filename
-      final fileName = 'USER_MANUAL_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final fileName =
+          'USER_MANUAL_${DateTime.now().millisecondsSinceEpoch}.pdf';
       final filePath = '${attachmentsDir.path}/$fileName';
-      
+
       // Write PDF to file
       final file = File(filePath);
       await file.writeAsBytes(byteData.buffer.asUint8List());
@@ -162,7 +171,8 @@ Please refer to the attached PDF for detailed user manual.''';
       final starterApps = <Map<String, dynamic>>[];
 
       for (final assetKey in manifestMap.keys) {
-        if (assetKey.startsWith(starterAppsPath) && assetKey.endsWith('.yaml')) {
+        if (assetKey.startsWith(starterAppsPath) &&
+            assetKey.endsWith('.yaml')) {
           try {
             final yamlString = await rootBundle.loadString(assetKey);
             final yamlData = loadYaml(yamlString);
@@ -211,5 +221,84 @@ Please refer to the attached PDF for detailed user manual.''';
         return 'Unknown type';
     }
   }
-}
 
+  /// Get bundled starter skill notes from assets.
+  static Future<List<Map<String, dynamic>>> getStarterSkills() async {
+    try {
+      final manifestContent = await rootBundle.loadString('AssetManifest.json');
+      final manifestMap = jsonDecode(manifestContent) as Map<String, dynamic>;
+      final skillService = SkillService(getIt<DatabaseService>());
+      final skills = <Map<String, dynamic>>[];
+      for (final assetKey in manifestMap.keys) {
+        if (!assetKey.startsWith(starterSkillsPath) ||
+            !assetKey.endsWith('.md')) {
+          continue;
+        }
+        final content = await rootBundle.loadString(assetKey);
+        final meta = skillService.parseSkillMetadata(assetKey, content);
+        if (meta == null) continue;
+        final existing = await getIt<DatabaseService>().getNotesByTag(
+          SkillService.agentSkillTag,
+        );
+        final installed = existing.any((note) {
+          final existingMeta = skillService.parseSkillMetadata(
+            note.id,
+            note.content,
+          );
+          return existingMeta?.skillRef == meta.skillRef;
+        });
+        skills.add({
+          'name': meta.name,
+          'skillRef': meta.skillRef,
+          'description': meta.description,
+          'isInstalled': installed,
+          'filePath': assetKey,
+        });
+      }
+      return skills;
+    } catch (e) {
+      LoggerService.error('Error getting starter skills: $e');
+      rethrow;
+    }
+  }
+
+  /// Installs bundled starter skills as ordinary notes tagged `agent-skill`.
+  static Future<int> installStarterSkills() async {
+    final databaseService = getIt<DatabaseService>();
+    final skillService = SkillService(databaseService);
+    final existing = await databaseService.getNotesByTag(
+      SkillService.agentSkillTag,
+    );
+    final existingRefs = existing
+        .map((note) => skillService.parseSkillMetadata(note.id, note.content))
+        .whereType<SkillMetadata>()
+        .map((meta) => meta.skillRef)
+        .toSet();
+    var installed = 0;
+    for (final skill in await getStarterSkills()) {
+      final skillRef = skill['skillRef'] as String;
+      if (existingRefs.contains(skillRef)) continue;
+      final assetKey = skill['filePath'] as String;
+      final content = await rootBundle.loadString(assetKey);
+      final now = DateTime.now();
+      await databaseService.insertNote(
+        Note(
+          id: 'starter-skill-$skillRef',
+          title: skill['name'] as String,
+          content: content,
+          type: NoteType.note,
+          createdAt: now,
+          updatedAt: now,
+          pinned: false,
+          isArchived: false,
+          tags: const [SkillService.agentSkillTag],
+          attachmentPaths: const [],
+          subNotes: const [],
+        ),
+      );
+      existingRefs.add(skillRef);
+      installed++;
+    }
+    return installed;
+  }
+}

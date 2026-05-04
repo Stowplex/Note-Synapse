@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:note_synapse/models/note.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/prompts/prompt_template_service.dart';
@@ -30,13 +31,16 @@ class SkillMetadata {
 
 class SkillService {
   static const String agentSkillTag = 'agent-skill';
+  static const String bundledKnowledgeExplorationSkillPath =
+      'assets/starter/skills/Knowledge_Exploration.md';
   static const int _compactBudgetThreshold = 15000;
   static const int _fullBudgetThreshold = 50000;
 
   final DatabaseService _db;
+  final bool includeBundledSkills;
   final Set<String> _loadedSkillNoteIds = {};
 
-  SkillService(this._db);
+  SkillService(this._db, {this.includeBundledSkills = false});
 
   // --- Parsing ---
 
@@ -112,7 +116,8 @@ class SkillService {
     // Treat a value that is solely a YAML comment ("# ...") as no value.
     // The hand-rolled parser doesn't strip inline trailing comments, but a
     // value that *starts* with `#` is unambiguously commentary, not content.
-    final defaultAction = (rawDefaultAction == null ||
+    final defaultAction =
+        (rawDefaultAction == null ||
             rawDefaultAction.isEmpty ||
             rawDefaultAction.startsWith('#'))
         ? null
@@ -157,7 +162,53 @@ class SkillService {
         );
       }
     }
+    if (includeBundledSkills) {
+      await _addBundledSkillIfNeeded(
+        index,
+        usedRefs,
+        bundledKnowledgeExplorationSkillPath,
+      );
+    }
     return index;
+  }
+
+  Future<String?> loadBundledSkillContent(String noteId) async {
+    if (!noteId.startsWith('assets/starter/skills/') ||
+        !noteId.endsWith('.md')) {
+      return null;
+    }
+    try {
+      return await rootBundle.loadString(noteId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _addBundledSkillIfNeeded(
+    Map<String, SkillMetadata> index,
+    Set<String> usedRefs,
+    String assetPath,
+  ) async {
+    try {
+      final content = await rootBundle.loadString(assetPath);
+      final meta = parseSkillMetadata(assetPath, content);
+      if (meta == null || !meta.enabled) return;
+      final stableRef = _dedupeSkillRef(meta.skillRef, usedRefs);
+      if (stableRef != meta.skillRef) return;
+      usedRefs.add(stableRef);
+      index[assetPath] = SkillMetadata(
+        noteId: assetPath,
+        skillRef: stableRef,
+        name: meta.name,
+        description: meta.description,
+        enabled: meta.enabled,
+        minContext: meta.minContext,
+        defaultAction: meta.defaultAction,
+      );
+    } catch (_) {
+      // Bundled starter skills are optional at runtime; missing assets should
+      // not break user-authored skill discovery.
+    }
   }
 
   String buildSkillIndexPrompt(
@@ -194,10 +245,9 @@ class SkillService {
       };
     }).toList();
 
-    return getIt<PromptTemplateService>().renderSync(
-      templatePath,
-      {'skills': skills},
-    );
+    return getIt<PromptTemplateService>().renderSync(templatePath, {
+      'skills': skills,
+    });
   }
 
   String _formatSkillEntry(
@@ -225,13 +275,16 @@ class SkillService {
   /// callers should append the result unconditionally; an empty append
   /// is a no-op.
   String buildDefaultActionPromptSection(Map<String, SkillMetadata> index) {
-    final withAction = index.values
-        .where((m) =>
-            m.enabled &&
-            m.defaultAction != null &&
-            m.defaultAction!.trim().isNotEmpty)
-        .toList()
-      ..sort((a, b) => a.skillRef.compareTo(b.skillRef));
+    final withAction =
+        index.values
+            .where(
+              (m) =>
+                  m.enabled &&
+                  m.defaultAction != null &&
+                  m.defaultAction!.trim().isNotEmpty,
+            )
+            .toList()
+          ..sort((a, b) => a.skillRef.compareTo(b.skillRef));
     if (withAction.isEmpty) return '';
     final buf = StringBuffer();
     buf.writeln('## Skill Default Actions');

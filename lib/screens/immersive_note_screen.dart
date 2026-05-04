@@ -39,6 +39,7 @@ import '../services/service_locator.dart';
 import '../services/attachment_preprocessor.dart';
 import '../services/local_model_attachment_constraint_service.dart';
 import '../services/conversation_attachment_service.dart';
+import '../services/conversation_prompt_builder.dart';
 import '../services/marker_cluster_service.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/prompts/note_prompt_builder.dart';
@@ -51,6 +52,7 @@ import '../services/user_app_service.dart';
 import '../services/agent_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
+import '../utils/conversation_title_directive.dart';
 import '../utils/native_capture_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 import '../widgets/approval_dialog.dart';
@@ -129,6 +131,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final FocusNode _messageFocusNode = FocusNode();
   final GlobalKey _noteBoundaryKey = GlobalKey();
   final GlobalKey _noteContentKey = GlobalKey();
+  final GlobalKey<ChatPanelState> _chatPanelKey = GlobalKey<ChatPanelState>();
 
   static const double _strokeCaptureMargin = 16;
 
@@ -2477,46 +2480,47 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   // so chip/strip taps re-enable as soon as the stream
                   // finishes — _isSending stays true through tool calls.
                   : (_conversation == null
-                      ? const SizedBox.shrink()
-                      : ChatPanel(
-                          conversationId: _conversation!.id,
-                          initialMessageId:
-                              _initialMessageIdForBranchSwitch,
-                          isStreaming: _isStreaming,
-                          streamingContent:
-                              _isStreaming ? _streamingContent : null,
-                          onActiveConversationChanged:
-                              (newConvId, forkPointMessageId) {
-                            setState(() {
-                              _initialMessageIdForBranchSwitch =
-                                  forkPointMessageId;
-                            });
-                            _switchConversation(newConvId);
-                          },
-                          onSendUserPrompt: (convId, prompt) async {
-                            await _sendMessageWithText(prompt);
-                          },
-                          onUserMessageEdit: (msg) {
-                            _messageController.text = msg.content;
-                            _scrollToBottom();
-                            Future.delayed(
-                              const Duration(milliseconds: 200),
-                              () {
-                                if (mounted) {
-                                  _messageFocusNode.requestFocus();
-                                }
-                              },
-                            );
-                          },
-                          onShowToolDetails: _showToolDetailsDialog,
-                          onCopyAiMessage: (msg) =>
-                              copyContentToClipboard(msg.content),
-                          onAddAiMessageToNote: (msg) =>
-                              handleAddContentToNote(
-                            content: msg.content,
-                            contextNotes: _conversationNotes,
-                          ),
-                        )),
+                        ? const SizedBox.shrink()
+                        : ChatPanel(
+                            key: _chatPanelKey,
+                            conversationId: _conversation!.id,
+                            initialMessageId: _initialMessageIdForBranchSwitch,
+                            isStreaming: _isStreaming,
+                            streamingContent: _isStreaming
+                                ? _streamingContent
+                                : null,
+                            onActiveConversationChanged:
+                                (newConvId, forkPointMessageId) {
+                                  setState(() {
+                                    _initialMessageIdForBranchSwitch =
+                                        forkPointMessageId;
+                                  });
+                                  _switchConversation(newConvId);
+                                },
+                            onSendUserPrompt: (convId, prompt) async {
+                              await _continueAfterExistingUserPrompt(convId);
+                            },
+                            onUserMessageEdit: (msg) {
+                              _messageController.text = msg.content;
+                              _scrollToBottom();
+                              Future.delayed(
+                                const Duration(milliseconds: 200),
+                                () {
+                                  if (mounted) {
+                                    _messageFocusNode.requestFocus();
+                                  }
+                                },
+                              );
+                            },
+                            onShowToolDetails: _showToolDetailsDialog,
+                            onCopyAiMessage: (msg) =>
+                                copyContentToClipboard(msg.content),
+                            onAddAiMessageToNote: (msg) =>
+                                handleAddContentToNote(
+                                  content: msg.content,
+                                  contextNotes: _conversationNotes,
+                                ),
+                          )),
             ),
           ),
         ],
@@ -4878,6 +4882,120 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     await _sendMessage();
   }
 
+  Future<void> _continueAfterExistingUserPrompt(String conversationId) async {
+    final activeConfig =
+        _selectedModel ?? context.read<AppProvider>().modelConfig;
+    final generationContext = GenerationContext();
+    if (_selectedModel != null) {
+      generationContext.modelOverride = _selectedModel;
+    }
+    final requestId = generationContext.ensureRequestId();
+    _currentRequestId = requestId;
+    final isVisibleConversation = _conversation?.id == conversationId;
+    setState(() {
+      _isSending = true;
+      _isAborting = false;
+      if (isVisibleConversation) {
+        _streamingContent = '';
+        _isStreaming = true;
+      }
+    });
+
+    try {
+      final conversation = await _conversationService.getConversation(
+        conversationId,
+      );
+      final noteIds = conversation?.noteIds ?? const <String>[];
+      final notes = <Note>[];
+      for (final id in noteIds) {
+        final note = await _databaseService.getNote(id);
+        if (note != null) notes.add(note);
+      }
+      final messages = await _conversationService.getConversationMessages(
+        conversationId,
+      );
+      final latestUser = messages.lastWhere(
+        (m) => m.type == MessageType.user,
+        orElse: () => throw StateError(
+          'No persisted user prompt found for $conversationId',
+        ),
+      );
+      final response = await _generateAiResponse(
+        latestUser.content,
+        const <PlatformFile>[],
+        generationContext,
+        messageHistory: messages,
+        contextNotes: notes,
+        requestForkTitle: ConversationTitleDirective.shouldRequestTitle(
+          conversation,
+        ),
+        onStreamChunk: (() {
+          final titleStreamFilter = ConversationTitleStreamFilter();
+          return (String chunk) {
+            final visibleChunk = titleStreamFilter.addChunk(chunk);
+            if (visibleChunk.isEmpty) return;
+            if (!mounted || !isVisibleConversation) return;
+            setState(() {
+              _streamingContent += visibleChunk;
+              _isStreaming = true;
+            });
+            _scrollToBottom();
+          };
+        })(),
+      );
+      await _conversationService.addAIResponse(
+        conversationId: conversationId,
+        content: response.content,
+        metadata: response.metadata,
+        modelUsed:
+            response.metadata?['modelUsed'] as String? ?? activeConfig?.id,
+      );
+      if (!mounted) return;
+      if (isVisibleConversation) {
+        setState(() {
+          _streamingContent = '';
+          _isStreaming = false;
+        });
+        _chatPanelKey.currentState?.reload();
+        _scrollToBottom();
+      }
+    } on ConversationCancelledException {
+      _cancelledRequestIds.remove(requestId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI request cancelled.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Error continuing immersive conversation: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error sending message: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+          _isAborting = false;
+          _currentRequestId = null;
+          if (isVisibleConversation) {
+            _streamingContent = '';
+            _isStreaming = false;
+          }
+        });
+      }
+      _cancelledRequestIds.remove(requestId);
+    }
+  }
+
   Future<void> _sendMessage() async {
     final trimmed = _messageController.text.trim();
     if (trimmed.isEmpty &&
@@ -5035,6 +5153,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       setState(() {
         _messages.add(userMessage);
       });
+      _chatPanelKey.currentState?.reload();
       _scrollToBottom();
 
       // Save in-note marker if a drawing was confirmed before this send
@@ -5044,14 +5163,20 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         await _saveInNoteMarker(userMessage.id, _conversation!.id, pendingPos);
       }
 
+      final titleStreamFilter = ConversationTitleStreamFilter();
       final response = await _generateAiResponse(
         content,
         attachments,
         generationContext,
+        requestForkTitle: ConversationTitleDirective.shouldRequestTitle(
+          _conversation,
+        ),
         onStreamChunk: (chunk) {
+          final visibleChunk = titleStreamFilter.addChunk(chunk);
+          if (visibleChunk.isEmpty) return;
           if (mounted) {
             setState(() {
-              _streamingContent += chunk;
+              _streamingContent += visibleChunk;
               _isStreaming = true;
             });
             _scrollToBottom();
@@ -5071,6 +5196,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         _isStreaming = false;
         _messages.add(aiMessage);
       });
+      _chatPanelKey.currentState?.reload();
       _scrollToBottom();
     } on ConversationCancelledException {
       _cancelledRequestIds.remove(requestId);
@@ -5145,18 +5271,25 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     List<PlatformFile> latestAttachments,
     GenerationContext generationContext, {
     void Function(String chunk)? onStreamChunk,
+    List<ConversationMessage>? messageHistory,
+    List<Note>? contextNotes,
+    bool requestForkTitle = false,
   }) async {
     final requestId = generationContext.ensureRequestId();
-    final noteBuilder = NotePromptBuilder(_databaseService);
-    final systemMessage = await _buildSystemPrompt();
+    final notesForContext = contextNotes ?? _conversationNotes;
+    final promptBuilder = ConversationPromptBuilder(_databaseService);
+    final systemMessage = await _buildSystemPrompt(
+      contextNotes: notesForContext,
+      requestForkTitle: requestForkTitle,
+    );
 
     // Get current PDF page for window mode context filtering
     final currentPdfPage = _activeAttachmentPath != null
         ? _pdfCurrentPages[_activeAttachmentPath]
         : null;
 
-    final contextMessage = await noteBuilder.buildContextMessage(
-      _conversationNotes,
+    final contextMessage = await promptBuilder.buildNoteContextMessage(
+      notesForContext,
       currentPdfPage: currentPdfPage,
     );
 
@@ -5191,22 +5324,16 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     final currentModelId = getIt<ModelSelector>().currentModelConfig?.id;
 
-    final conversationMessages =
-        await ConversationAiEngine.buildConversationMessages(
-          messages: _messages,
-          currentModelId: currentModelId,
-          loadAttachments: (message) =>
-              _loadConversationAttachments(message, latestAttachments),
-        );
+    final conversationMessages = await promptBuilder.buildConversationMessages(
+      messages: messageHistory ?? _messages,
+      currentModelId: currentModelId,
+      latestUserAttachments: latestAttachments,
+    );
     messages.addAll(conversationMessages);
 
     final request = PromptRequest(
       systemMessage: systemMessage,
-      contextMessages:
-          contextMessage.content.trim().isEmpty &&
-              contextMessage.attachments.isEmpty
-          ? const []
-          : [contextMessage],
+      contextMessages: contextMessage == null ? const [] : [contextMessage],
       conversationMessages: messages,
     );
 
@@ -5274,12 +5401,19 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return response;
   }
 
-  Future<PromptMessage> _buildSystemPrompt() async {
+  Future<PromptMessage> _buildSystemPrompt({
+    List<Note>? contextNotes,
+    bool requestForkTitle = false,
+  }) async {
+    final notesForContext = contextNotes ?? _conversationNotes;
     final lines = <String>[
       'Engage in a focused conversation grounded in the selected notes and attachments.',
       'Reference the note titles when citing content and prefer concise, direct answers.',
       'Format your responses using markdown.',
     ];
+    if (requestForkTitle) {
+      lines.add(ConversationTitleDirective.promptInstruction);
+    }
 
     if (_hasAnyTools) {
       lines.add(
@@ -5287,7 +5421,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       );
     }
 
-    if (_conversationNotes.isEmpty) {
+    if (notesForContext.isEmpty) {
       lines.add(
         'No note text is attached inline. Use enabled tools when they can retrieve the needed note or workflow context.',
       );
@@ -5322,8 +5456,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       taskContext: contextBuffer.toString(),
       guidelines: [
         'Highlight referenced note sections explicitly when possible.',
-        if (_conversationNotes.isNotEmpty) AIPrompts.relationshipGuidelines,
-        if (_conversationNotes.isNotEmpty)
+        if (notesForContext.isNotEmpty) AIPrompts.relationshipGuidelines,
+        if (notesForContext.isNotEmpty)
           AIPrompts.promptInjectionProtectionGuidelines,
       ],
       now: _sessionStart,
@@ -5345,42 +5479,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     ConversationMessage message,
     List<PlatformFile> latestUserAttachments,
   ) async {
-    if (message.type != MessageType.user) {
-      return const [];
-    }
-
-    final isMostRecent =
-        _messages.isNotEmpty && identical(message, _messages.last);
-    if (isMostRecent && latestUserAttachments.isNotEmpty) {
-      return latestUserAttachments;
-    }
-
-    if (message.attachmentPaths.isEmpty) {
-      return const [];
-    }
-
-    final files = <PlatformFile>[];
-    for (final path in message.attachmentPaths) {
-      try {
-        final resolvedPath = await FileUtils.resolvePortableAttachmentPath(
-          path,
-        );
-        final file = File(resolvedPath);
-        if (!await file.exists()) continue;
-        final bytes = await file.readAsBytes();
-        files.add(
-          PlatformFile(
-            name: path.split('/').last,
-            path: resolvedPath,
-            size: bytes.length,
-            bytes: bytes,
-          ),
-        );
-      } catch (e) {
-        LoggerService.warning('Failed to load attachment $path: $e');
-      }
-    }
-    return files;
+    return ConversationPromptBuilder(_databaseService).loadMessageAttachments(
+      message: message,
+      messageHistory: _messages,
+      latestUserAttachments: latestUserAttachments,
+    );
   }
 
   void _scrollToBottom() {
