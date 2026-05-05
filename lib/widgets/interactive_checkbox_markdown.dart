@@ -35,6 +35,7 @@ import '../screens/conversation_chat_screen.dart';
 import '../utils/remote_image_storage.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
+import 'heading_anchor_registry.dart';
 import 'interactive_checkbox_component.dart';
 import '../widgets/drawing_editor.dart';
 
@@ -170,10 +171,18 @@ class InteractiveCheckboxMarkdown extends StatefulWidget {
     this.defaultWebViewSize = const Size(640, 400),
     this.hasWebViewNotifier,
     this.onFetchImage,
+    this.headingAnchorRegistry,
   });
 
   final ValueNotifier<bool>? hasWebViewNotifier;
   final Function(String)? onFetchImage;
+
+  /// When provided, the rendered markdown participates in GitHub-style
+  /// `[text](#section)` anchor links: heading widgets register themselves into
+  /// this registry and `#`-prefixed link taps scroll the matching heading
+  /// into view. Owners (the screen) must `clear()` the registry on note
+  /// changes; this widget never clears it.
+  final HeadingAnchorRegistry? headingAnchorRegistry;
 
   @override
   State<InteractiveCheckboxMarkdown> createState() =>
@@ -1281,6 +1290,14 @@ class _InteractiveCheckboxMarkdownState
     // Reset occurrence counters so they match the order of rendered checkboxes.
     _checkboxOccurrenceCounters.clear();
 
+    // When this widget owns the heading-anchor registry (immersive path),
+    // clear it before rebuild so DragTargetSafeHTag re-registers each heading
+    // in document order with deterministic duplicate suffixes. The registry
+    // is only passed in when the caller hosts a single InteractiveCheckboxMarkdown
+    // for the entire document (BlockMarkdownBody does not pass one — it owns
+    // registration at parse time).
+    widget.headingAnchorRegistry?.clear();
+
     _refreshPreprocessedContent();
 
     // GptMarkdown replaces the default inline component list when this
@@ -1342,53 +1359,72 @@ class _InteractiveCheckboxMarkdownState
       LatexBracketBlockMd(),
     ];
 
+    final markdown = GptMarkdown(
+      _renderedContent,
+      style: widget.style,
+      textDirection: widget.textDirection,
+      onLinkTap: (url, text) {
+        // GitHub-style intra-document anchor: `[text](#section)`.
+        if (url.startsWith('#') && widget.headingAnchorRegistry != null) {
+          // Fire-and-forget; gpt_markdown's onLinkTap is sync.
+          widget.headingAnchorRegistry!.scrollToSection(url.substring(1));
+          return;
+        }
+        // Handle synapseresource:// URIs internally
+        if (SynapseResourceUri.isSynapseResourceUri(url)) {
+          _handleSynapseResourceLink(url);
+          return;
+        }
+        // Fall back to parent callback
+        widget.onLinkTap?.call(url, text);
+      },
+      maxLines: widget.maxLines,
+      overflow: widget.overflow,
+      latexBuilder: _customLatexBuilder,
+      imageBuilder: (context, url, {alt, height, title, width}) {
+        return _customImageBuilder(
+          context,
+          url,
+          width: width,
+          height: height,
+          title: title,
+          alt: alt,
+          onFetch: (url) async {
+            await widget.onFetchImage?.call(url);
+            if (mounted) {
+              // Invalidate caches so the image source type is re-evaluated
+              _imageSourceTypeFutures.remove(url);
+              _localImageFutures.remove(url);
+              setState(() {
+                // Force rebuild of specific image key if needed, or just setState
+                // Update version to force new key for image widget
+                _imageVersions[url] = (_imageVersions[url] ?? 0) + 1;
+              });
+            }
+          },
+        );
+      },
+      codeBuilder: _buildCodeBlock,
+      tableBuilder: _buildConstrainedTable,
+      components: components,
+      inlineComponents: inlineComponents,
+      useDollarSignsForLatex: true,
+    );
+
+    // When a registry is supplied, expose it to descendants so heading
+    // components can register themselves. We avoid installing the scope
+    // otherwise — block-level callers (BlockMarkdownBody) own registration
+    // at parse time and don't want headings to self-register.
+    final Widget child = widget.headingAnchorRegistry != null
+        ? HeadingAnchorScope(
+            registry: widget.headingAnchorRegistry!,
+            child: markdown,
+          )
+        : markdown;
+
     return KeyedSubtree(
       key: ValueKey('md_${_imageVersions.values.join()}'),
-      child: GptMarkdown(
-        _renderedContent,
-        style: widget.style,
-        textDirection: widget.textDirection,
-        onLinkTap: (url, text) {
-          // Handle synapseresource:// URIs internally
-          if (SynapseResourceUri.isSynapseResourceUri(url)) {
-            _handleSynapseResourceLink(url);
-            return;
-          }
-          // Fall back to parent callback
-          widget.onLinkTap?.call(url, text);
-        },
-        maxLines: widget.maxLines,
-        overflow: widget.overflow,
-        latexBuilder: _customLatexBuilder,
-        imageBuilder: (context, url, {alt, height, title, width}) {
-          return _customImageBuilder(
-            context,
-            url,
-            width: width,
-            height: height,
-            title: title,
-            alt: alt,
-            onFetch: (url) async {
-              await widget.onFetchImage?.call(url);
-              if (mounted) {
-                // Invalidate caches so the image source type is re-evaluated
-                _imageSourceTypeFutures.remove(url);
-                _localImageFutures.remove(url);
-                setState(() {
-                  // Force rebuild of specific image key if needed, or just setState
-                  // Update version to force new key for image widget
-                  _imageVersions[url] = (_imageVersions[url] ?? 0) + 1;
-                });
-              }
-            },
-          );
-        },
-        codeBuilder: _buildCodeBlock,
-        tableBuilder: _buildConstrainedTable,
-        components: components,
-        inlineComponents: inlineComponents,
-        useDollarSignsForLatex: true,
-      ),
+      child: child,
     );
   }
 

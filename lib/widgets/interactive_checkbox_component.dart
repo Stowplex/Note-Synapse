@@ -3,6 +3,8 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:gpt_markdown/custom_widgets/markdown_config.dart';
 import 'package:gpt_markdown/custom_widgets/custom_divider.dart';
 
+import 'heading_anchor_registry.dart';
+
 // Constants
 const String kBlockEditDragData = 'block_edit_drag';
 
@@ -160,17 +162,35 @@ class DragTargetSafeHTag extends BlockMd {
       }
     }
 
+    Widget result;
     if (onBlockEditRequested != null && getOccurrence != null) {
       final occurrence = getOccurrence!(text);
-      return DragTargetBlockWrapper(
+      result = DragTargetBlockWrapper(
         blockContent: text,
         occurrenceIndex: occurrence,
         onBlockEditRequested: onBlockEditRequested,
         child: contentWidget,
       );
+    } else {
+      result = contentWidget;
     }
 
-    return contentWidget;
+    // If an ancestor exposes a HeadingAnchorRegistry, register this heading
+    // and attach the registered key to the outermost returned widget so
+    // Scrollable.ensureVisible aligns to the heading's full bounds.
+    final registry = HeadingAnchorScope.maybeOf(context);
+    if (registry != null && match != null) {
+      final dataGroup = match.namedGroup('data');
+      if (dataGroup != null && dataGroup.isNotEmpty) {
+        final slug = registry.registerHeading(dataGroup);
+        final key = registry.keyForSlug(slug);
+        if (key != null) {
+          result = KeyedSubtree(key: key, child: result);
+        }
+      }
+    }
+
+    return result;
   }
 }
 
@@ -193,7 +213,8 @@ class InteractiveCheckboxMd extends BlockMd {
     String checkboxText,
     bool newValue,
     int occurrenceIndex,
-  ) onToggle;
+  )
+  onToggle;
 
   /// Returns the 0-based occurrence index for a given block text.
   /// Must be provided so duplicate checkboxes can be told apart.

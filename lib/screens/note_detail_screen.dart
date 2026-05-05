@@ -117,6 +117,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   List<MarkdownBlock> _parsedBlocks = [];
   Offset? _selectionMenuPosition;
 
+  // Markdown anchor support (GitHub-style `[text](#section)` links).
+  final GlobalKey<BlockMarkdownBodyState> _blockBodyKey =
+      GlobalKey<BlockMarkdownBodyState>();
+  final ScrollController _viewingScrollController = ScrollController();
+
   Future<void> _loadAttachments() async {
     if (widget.isNewNote) return;
     final attachments = await _databaseService.getAttachmentsForNote(
@@ -234,6 +239,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
     _codeController.dispose();
     _codeFocusNode.dispose();
+    _viewingScrollController.dispose();
     // Reset audio state but don't dispose the service (it's a singleton)
     _audioService?.resetState();
     if (ApprovalService.onApprovalRequest == _approvalCallback) {
@@ -983,6 +989,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         children: [
           SelectionArea(
             child: CustomScrollView(
+              controller: _viewingScrollController,
               slivers: [
                 SliverToBoxAdapter(
                   child: Padding(
@@ -1011,10 +1018,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   sliver: BlockMarkdownBody(
-                    key: ValueKey('note_${currentNote.id}'),
+                    key: _blockBodyKey,
                     noteId: currentNote.id,
                     content: currentNote.content,
                     onContentChanged: _updateNoteContent,
+                    scrollController: _viewingScrollController,
                     style: Theme.of(context).textTheme.bodyLarge,
                     onLinkTap: _handleLinkTap,
                     onBlockEditRequested: _handleBlockEditRequest,
@@ -1530,10 +1538,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Future<void> _showUserAppPicker(BuildContext context) async {
     final result = await AppEmbedPickerSheet.show(context);
     if (result != null && mounted) {
-      _insertText(
-        result.markdown,
-        selectionOffset: result.selectionOffset,
-      );
+      _insertText(result.markdown, selectionOffset: result.selectionOffset);
     }
   }
 
@@ -4083,6 +4088,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   void _handleLinkTap(String url, String? text) {
     // Note: gpt_markdown passes parameters in reverse order
     // First parameter is the actual URL, second is the display text
+    if (url.startsWith('#')) {
+      // GitHub-style intra-document anchor link.
+      _blockBodyKey.currentState?.scrollToSlug(url.substring(1));
+      return;
+    }
     if (url.startsWith('notesynapse://tool/')) {
       _handleToolLinkTap(url);
       return;
