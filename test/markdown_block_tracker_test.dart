@@ -29,6 +29,28 @@ More text
         expect(codeBlocks[0].content, contains('void main()'));
       });
 
+      test('parses chips fenced blocks as code blocks', () {
+        const content = '''
+Before
+
+```chips
+## Explain
+Explain this note.
+```
+
+After
+''';
+        final blocks = tracker.parseBlocks(content);
+        final codeBlocks = blocks
+            .where((b) => b.type == MarkdownBlockType.codeBlock)
+            .toList();
+
+        expect(codeBlocks.length, 1);
+        expect(codeBlocks[0].content, contains('```chips'));
+        expect(codeBlocks[0].content, contains('Explain this note.'));
+        expect(blocks.where((b) => b.type == MarkdownBlockType.link), isEmpty);
+      });
+
       test('parses headings', () {
         const content = '''
 # Heading 1
@@ -44,6 +66,78 @@ More text
         expect(headings[0].content, '# Heading 1');
         expect(headings[1].content, '## Heading 2');
         expect(headings[2].content, '### Heading 3');
+      });
+
+      test('parses a cross-line link as a single link block', () {
+        const content = '''
+Intro paragraph.
+
+[
+
+### Leaders vs Managers: Is There a Real Difference?
+
+](https://davidburkus.com/2024/11/leaders-vs-managers/)
+
+Trailing paragraph.
+''';
+        final blocks = tracker.parseBlocks(content);
+        final links = blocks
+            .where((b) => b.type == MarkdownBlockType.link)
+            .toList();
+
+        expect(links.length, 1);
+        expect(links[0].content, contains('### Leaders vs Managers'));
+        expect(
+          links[0].content,
+          contains('](https://davidburkus.com/2024/11/leaders-vs-managers/)'),
+        );
+        // Offsets must bracket the original substring exactly.
+        final span = content.substring(
+          links[0].startOffset,
+          links[0].endOffset,
+        );
+        expect(span, links[0].content);
+      });
+
+      test('does not promote single-line links to a link block', () {
+        const content = 'See [the docs](https://example.com) for details.';
+        final blocks = tracker.parseBlocks(content);
+        // Should still be parsed as a single paragraph, no `link` block.
+        expect(blocks.where((b) => b.type == MarkdownBlockType.link), isEmpty);
+      });
+
+      test('does not promote image links spanning lines', () {
+        const content = '''
+![alt
+text](https://example.com/img.png)
+''';
+        final blocks = tracker.parseBlocks(content);
+        expect(blocks.where((b) => b.type == MarkdownBlockType.link), isEmpty);
+      });
+
+      test('bare `[` line with no closer falls through to paragraph', () {
+        const content = '''
+[
+
+Some unrelated text with no closing link.
+
+More text.
+''';
+        final blocks = tracker.parseBlocks(content);
+        expect(blocks.where((b) => b.type == MarkdownBlockType.link), isEmpty);
+      });
+
+      test('replaceBlock round-trips on a cross-line link block', () {
+        const content =
+            'Header\n\n[\n### Title\n](https://example.com)\n\nFooter';
+        final blocks = tracker.parseBlocks(content);
+        final link = blocks.firstWhere((b) => b.type == MarkdownBlockType.link);
+        final updated = tracker.replaceBlock(
+          content,
+          link,
+          '[Renamed](https://example.com)',
+        );
+        expect(updated, 'Header\n\n[Renamed](https://example.com)\n\nFooter');
       });
 
       test('parses lists', () {

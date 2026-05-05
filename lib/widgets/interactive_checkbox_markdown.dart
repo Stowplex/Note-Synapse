@@ -41,6 +41,42 @@ import '../widgets/drawing_editor.dart';
 /// Enum to represent image source type
 enum _ImageSourceType { local, remote }
 
+/// Matches a markdown link `[text](url)` allowing the text and url to span
+/// multiple lines. Mirrors the inline pattern used by [CustomATagMd] but with
+/// captures for [text] and [url].
+final RegExp _crossLineLinkPattern = RegExp(
+  r"(?<!\!)\[((?:[^\[\]]|\[[^\[\]]*\])*)\]\(((?:[^()]*)(?:\((?:[^()]*)(?:\([^()]*\)[^()]*)*\)[^()]*)*)\)",
+);
+
+/// Strips a leading ATX heading marker like `### `.
+final RegExp _leadingHeadingMarker = RegExp(r'^#{1,6}\s+');
+
+/// Collapses any run of whitespace (including newlines) to a single space.
+final RegExp _whitespaceRun = RegExp(r'\s+');
+
+/// Rewrites markdown links whose text spans multiple lines into single-line
+/// `[text](url)` form so the inline link parser in `gpt_markdown` (which
+/// breaks paragraphs at blank lines before its inline pass) can render them.
+///
+/// - Single-line links are returned unchanged.
+/// - Image links (`![..](..)`) are skipped.
+/// - The link text is whitespace-collapsed and trimmed; a leading ATX heading
+///   marker (`#{1,6} `) is stripped so the title isn't rendered as `### Foo`
+///   inline.
+/// - Idempotent: applying twice yields the same result as applying once.
+String flattenCrossLineLinks(String src) {
+  if (!src.contains('\n')) return src;
+  return src.replaceAllMapped(_crossLineLinkPattern, (match) {
+    final raw = match[0]!;
+    if (!raw.contains('\n')) return raw;
+    final text = match[1] ?? '';
+    final url = (match[2] ?? '').trim();
+    var flat = text.replaceAll(_whitespaceRun, ' ').trim();
+    flat = flat.replaceFirst(_leadingHeadingMarker, '');
+    return '[$flat]($url)';
+  });
+}
+
 /// Applies a checkbox toggle to [content] and returns the updated string.
 ///
 /// [checkboxLine] is the trimmed line as seen by the markdown component (may
@@ -181,36 +217,37 @@ class _InteractiveCheckboxMarkdownState
     _appBlockBodies.clear();
 
     final matches = findSynapseAppBlocks(_currentContent).toList();
+    String afterSynapse;
     if (matches.isEmpty) {
-      _renderedContent = _currentContent;
-      return;
-    }
-
-    final buffer = StringBuffer();
-    int cursor = 0;
-    int idCounter = 0;
-    for (final match in matches) {
-      buffer.write(_currentContent.substring(cursor, match.startOffset));
-      final body = match.body;
-      if (body.isValid) {
-        final refId = 'b${idCounter++}';
-        _appBlockBodies[refId] = body;
-        final w = (body.width ?? widget.defaultWebViewSize.width).toInt();
-        final h = (body.height ?? widget.defaultWebViewSize.height).toInt();
-        buffer.write(
-          '@[${w}x$h](${SynapseResourceUri.scheme}://app/${Uri.encodeComponent(body.appUuid)}'
-          '?$synapseAppBlockRefKey=$refId)',
-        );
-      } else {
-        buffer.write(
-          '> **Embedded app error**: '
-          '${body.error ?? 'invalid synapse-app block'}',
-        );
+      afterSynapse = _currentContent;
+    } else {
+      final buffer = StringBuffer();
+      int cursor = 0;
+      int idCounter = 0;
+      for (final match in matches) {
+        buffer.write(_currentContent.substring(cursor, match.startOffset));
+        final body = match.body;
+        if (body.isValid) {
+          final refId = 'b${idCounter++}';
+          _appBlockBodies[refId] = body;
+          final w = (body.width ?? widget.defaultWebViewSize.width).toInt();
+          final h = (body.height ?? widget.defaultWebViewSize.height).toInt();
+          buffer.write(
+            '@[${w}x$h](${SynapseResourceUri.scheme}://app/${Uri.encodeComponent(body.appUuid)}'
+            '?$synapseAppBlockRefKey=$refId)',
+          );
+        } else {
+          buffer.write(
+            '> **Embedded app error**: '
+            '${body.error ?? 'invalid synapse-app block'}',
+          );
+        }
+        cursor = match.endOffset;
       }
-      cursor = match.endOffset;
+      buffer.write(_currentContent.substring(cursor));
+      afterSynapse = buffer.toString();
     }
-    buffer.write(_currentContent.substring(cursor));
-    _renderedContent = buffer.toString();
+    _renderedContent = flattenCrossLineLinks(afterSynapse);
   }
 
   @override
