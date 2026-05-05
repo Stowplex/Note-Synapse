@@ -83,7 +83,13 @@ class MarkdownBlockTracker {
     final document = md.Document(
       // We enable common extensions to ensure we catch lists, tables, etc.
       extensionSet: md.ExtensionSet.gitHubFlavored,
-      blockSyntaxes: const [LatexBlockSyntax(), SynapseAppBlockSyntax()],
+      blockSyntaxes: const [
+        // Run before the standard paragraph syntax so a multi-line `[..](..)`
+        // span isn't shredded into separate paragraph blocks at blank lines.
+        CrossLineLinkBlockSyntax(),
+        LatexBlockSyntax(),
+        SynapseAppBlockSyntax(),
+      ],
       encodeHtml: false,
     );
 
@@ -306,6 +312,8 @@ class MarkdownBlockTracker {
           return MarkdownBlockType.latexBlock;
         case 'synapse-app-embed':
           return MarkdownBlockType.other;
+        case 'a':
+          return MarkdownBlockType.link;
         default:
           return MarkdownBlockType.other;
       }
@@ -488,5 +496,66 @@ class LatexBlockSyntax extends md.BlockSyntax {
     // The actual content logic is handled by _mapNodeType and source extraction.
     final el = md.Element('latex', [md.Text(childLines.join('\n'))]);
     return el;
+  }
+}
+
+/// Recognises a markdown link `[..](..)` whose text spans multiple source
+/// lines (often produced when content is pasted from web reader views, e.g.
+/// `[\n\n### Title\n\n](https://example.com)`). Without this syntax the
+/// CommonMark block parser would split the span into separate paragraphs at
+/// the blank lines, leaving the bracket characters orphaned in the rendered
+/// output.
+///
+/// To avoid stepping on unrelated paragraphs that happen to contain an
+/// unbalanced `[`, this only fires when the opening line, after trimming
+/// whitespace, is exactly `[` and a subsequent line within a small window
+/// contains a closing `](url)`.
+class CrossLineLinkBlockSyntax extends md.BlockSyntax {
+  const CrossLineLinkBlockSyntax();
+
+  /// Permissive line pattern; the real decision happens in [canParse].
+  @override
+  RegExp get pattern => RegExp(r'^\s*\[\s*$');
+
+  /// Match `](url)` allowing one level of nested parentheses in the URL
+  /// (covers links like Wikipedia's `..._(disambiguation)`).
+  static final RegExp _closerPattern =
+      RegExp(r'\]\((?:[^()\n]|\([^()\n]*\))*\)');
+
+  static const int _maxLookahead = 50;
+
+  @override
+  bool canParse(md.BlockParser parser) {
+    if (parser.current.content.trim() != '[') return false;
+    return _findCloserOffset(parser) != null;
+  }
+
+  /// Looks ahead for the line containing `](url)` that closes the bracket.
+  /// Returns the line offset (>= 1) of the closing line, or `null` if no
+  /// closer is found within [_maxLookahead] lines.
+  int? _findCloserOffset(md.BlockParser parser) {
+    for (var i = 1; i <= _maxLookahead; i++) {
+      final content = parser.peek(i).content;
+      // Bail out if we hit a fenced code block — don't span across it.
+      if (RegExp(r'^\s*```').hasMatch(content)) return null;
+      if (_closerPattern.hasMatch(content)) return i;
+    }
+    return null;
+  }
+
+  @override
+  md.Node parse(md.BlockParser parser) {
+    final lines = <String>[];
+    lines.add(parser.current.content);
+    parser.advance();
+    while (!parser.isDone) {
+      final content = parser.current.content;
+      lines.add(content);
+      parser.advance();
+      if (_closerPattern.hasMatch(content)) break;
+    }
+    // Tag is just used for type mapping in [MarkdownBlockTracker._mapNodeType];
+    // rendering of the captured span is handled by the widget layer.
+    return md.Element('a', [md.Text(lines.join('\n'))]);
   }
 }
