@@ -54,6 +54,7 @@ import '../utils/file_utils.dart';
 import '../utils/native_capture_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 import '../widgets/approval_dialog.dart';
+import '../widgets/heading_anchor_registry.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../mixins/note_action_mixin.dart';
 import '../widgets/chat_message_action_row.dart';
@@ -166,6 +167,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   String? _currentRequestId;
   final Set<String> _cancelledRequestIds = {};
   final ValueNotifier<bool> _hasWebViewNotifier = ValueNotifier(false);
+
+  /// Registry that powers GitHub-style `[text](#section)` anchor links inside
+  /// the main note's rendered markdown. Owned by this state and reused across
+  /// builds; `InteractiveCheckboxMarkdown` clears it on each render pass so
+  /// duplicate-slug counters stay deterministic.
+  final HeadingAnchorRegistry _noteAnchorRegistry = HeadingAnchorRegistry();
 
   // Scratchpad State
   bool _isScratchpadMode = false;
@@ -3895,6 +3902,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                           newContent,
                         );
                       },
+                      onLinkTap: (url, _) =>
+                          _handleMarkdownLinkTap(url, l10n),
+                      headingAnchorRegistry: _noteAnchorRegistry,
                       style: Theme.of(context).textTheme.bodyLarge,
                     ),
                   ),
@@ -4821,6 +4831,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   Future<void> _handleMarkdownLinkTap(String url, AppLocalizations l10n) async {
+    // Intra-document anchor links are handled by InteractiveCheckboxMarkdown
+    // when a HeadingAnchorRegistry is wired up. Anything still reaching here
+    // either points at no matching heading or at a markdown widget without a
+    // registry (chat/scratchpad). Either way, don't try to launch externally.
+    if (url.startsWith('#')) return;
     final uri = Uri.tryParse(url);
     if (uri == null) {
       if (!mounted) return;
