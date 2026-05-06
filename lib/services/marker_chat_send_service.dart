@@ -1,8 +1,10 @@
-import '../models/conversation.dart';
+import 'package:flutter/material.dart';
+
 import '../models/generation_context.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/model_config.dart';
 import 'agent_service.dart';
+import 'chat_tool_session.dart';
 import 'conversation_ai_engine.dart';
 import 'conversation_prompt_builder.dart';
 import 'conversation_service.dart';
@@ -26,15 +28,13 @@ import '../utils/conversation_title_directive.dart';
 /// `parts_history` metadata.
 ///
 /// Marker-sheet defaults:
-/// - No tools unless a future marker UI explicitly enables them
+/// - Tools are driven by the shared [ChatToolSession] used by other chat
+///   surfaces.
 /// - Stored conversation attachments are rehydrated for user messages
 /// - No scratchpad inclusion
 /// - No drawing actions
 /// - `maxToolIterations` = 8
 ///
-/// NOT supported in marker sheet (deferred to v1.1):
-/// - MCP / native / built-in / AI tool toggles (no UI surface in the sheet)
-/// - User-defined AI tool bundles (require [AppProvider] for runtime construction)
 class MarkerChatSendService {
   MarkerChatSendService({ConversationAiEngine? aiEngine})
     : _aiEngine = aiEngine ?? const ConversationAiEngine();
@@ -54,6 +54,8 @@ class MarkerChatSendService {
     required String conversationId,
     required String prompt,
     required AgentService agentService,
+    ChatToolSession? toolSession,
+    BuildContext? toolContext,
     ModelConfig? modelOverride,
     int? currentPdfPage,
     required void Function(String chunk) onStreamChunk,
@@ -67,6 +69,8 @@ class MarkerChatSendService {
     await continueAfterExistingUserPrompt(
       conversationId: conversationId,
       agentService: agentService,
+      toolSession: toolSession,
+      toolContext: toolContext,
       modelOverride: modelOverride,
       currentPdfPage: currentPdfPage,
       onStreamChunk: onStreamChunk,
@@ -81,6 +85,8 @@ class MarkerChatSendService {
     required String conversationId,
     required String prompt,
     required AgentService agentService,
+    ChatToolSession? toolSession,
+    BuildContext? toolContext,
     ModelConfig? modelOverride,
     int? currentPdfPage,
     required void Function(String chunk) onStreamChunk,
@@ -90,6 +96,8 @@ class MarkerChatSendService {
       conversationId: conversationId,
       prompt: prompt,
       agentService: agentService,
+      toolSession: toolSession,
+      toolContext: toolContext,
       modelOverride: modelOverride,
       currentPdfPage: currentPdfPage,
       onStreamChunk: onStreamChunk,
@@ -103,6 +111,8 @@ class MarkerChatSendService {
   Future<void> continueAfterExistingUserPrompt({
     required String conversationId,
     required AgentService agentService,
+    ChatToolSession? toolSession,
+    BuildContext? toolContext,
     ModelConfig? modelOverride,
     int? currentPdfPage,
     required void Function(String chunk) onStreamChunk,
@@ -122,8 +132,10 @@ class MarkerChatSendService {
       final conversation = await conversations.getConversation(conversationId);
       final notes = await conversations.getConversationNotes(conversationId);
 
-      // 2. Marker sheets have no tool picker; keep tools disabled by default.
-      const activeTools = <String, List<McpTool>>{};
+      // 2. Tools come from the shared chat tool session when the host wires it.
+      final activeTools = toolSession != null && toolContext != null
+          ? toolSession.buildActiveToolsMap(toolContext)
+          : const <String, List<McpTool>>{};
 
       // 3. Build prompt request.
       final promptBuilder = ConversationPromptBuilder(db);
@@ -137,6 +149,7 @@ class MarkerChatSendService {
         requestForkTitle: ConversationTitleDirective.shouldRequestTitle(
           conversation,
         ),
+        includeImplicitSkillIndex: toolSession == null,
       );
 
       final messages = await db.getConversationMessages(conversationId);
@@ -152,26 +165,39 @@ class MarkerChatSendService {
         conversationMessages: convMessages,
       );
 
-      // 4. Tools are intentionally disabled for marker sheets until the UI has
-      // an explicit tool-selection surface.
       Future<String> executeTool(
         String serviceName,
         String toolName,
         Map<String, dynamic> params,
         GenerationContext context,
       ) async {
-        return 'Error: tools are disabled for marker conversations.';
+        if (toolSession == null || toolContext == null) {
+          return 'Error: tools are disabled for this marker conversation.';
+        }
+        return toolSession.executeTool(
+          toolContext,
+          serviceName,
+          toolName,
+          params,
+          context,
+        );
       }
 
       // 5. Generate.
       final response = await _aiEngine.generate(
         request: request,
         activeTools: activeTools,
-        enableTools: false,
+        activeToolsProvider: toolSession != null && toolContext != null
+            ? () => toolSession.buildActiveToolsMap(toolContext)
+            : null,
+        enableTools:
+            activeTools.isNotEmpty ||
+            (toolSession?.selectedModelFeatures.isNotEmpty ?? false),
         executeTool: executeTool,
         isCancelled: () => _cancelledRequestIds.contains(requestId),
         generationContext: genCtx,
-        maxToolIterations: 8,
+        maxToolIterations: toolSession?.maxToolIterations ?? 8,
+        onIterationsExhausted: toolSession?.handleIterationsExhausted,
         onStreamChunk: onStreamChunk,
       );
 
@@ -214,6 +240,7 @@ class MarkerChatSendService {
     required bool hasNotes,
     required Map<String, List<McpTool>> activeTools,
     required bool requestForkTitle,
+    required bool includeImplicitSkillIndex,
   }) async {
     final hasTools = activeTools.isNotEmpty;
     final lines = <String>[
@@ -246,7 +273,9 @@ class MarkerChatSendService {
         ..writeln('User-defined conversation guidance:')
         ..writeln(systemAddOn.trim());
     }
-    final skillPrompt = await _buildSkillPromptSection();
+    final skillPrompt = await _buildSkillPromptSection(
+      includeImplicitIndex: includeImplicitSkillIndex,
+    );
     if (skillPrompt.trim().isNotEmpty) {
       contextBuffer
         ..writeln()
@@ -265,10 +294,15 @@ class MarkerChatSendService {
     );
   }
 
-  Future<String> _buildSkillPromptSection() async {
+  Future<String> _buildSkillPromptSection({
+    required bool includeImplicitIndex,
+  }) async {
     try {
       final skillService = getIt<SkillService>();
       final conversationService = getIt<ConversationService>();
+      if (!conversationService.skillsEnabled && !includeImplicitIndex) {
+        return '';
+      }
       final index = conversationService.skillsEnabled
           ? conversationService.skillIndex
           : await skillService.buildSkillIndex();

@@ -3970,7 +3970,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gettingStarted => 'Getting Started';
 
   @override
-  String get gettingStartedSubtitle => 'Install user manual and starter apps';
+  String get gettingStartedSubtitle =>
+      'Install user manual, starter apps, and starter skills';
 
   @override
   String get installUserManual => 'Install User Manual';
@@ -4103,6 +4104,53 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String errorInstallingStarterApps(String error) {
     return 'Error installing starter apps: $error';
+  }
+
+  @override
+  String get installStarterSkills => 'Install Starter Skills';
+
+  @override
+  String get installStarterSkillsSubtitle =>
+      'Browse bundled skills and install them as transparent skill notes';
+
+  @override
+  String get noStarterSkillsAvailable => 'No starter skills available';
+
+  @override
+  String get noStarterSkillsSelected => 'No starter skills selected';
+
+  @override
+  String get installSelectedSkills => 'Install Selected Skills';
+
+  @override
+  String starterSkillsInstalledSuccessfully(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'skills',
+      one: 'skill',
+    );
+    return '$count $_temp0 installed successfully!';
+  }
+
+  @override
+  String errorLoadingStarterSkills(String error) {
+    return 'Error loading starter skills: $error';
+  }
+
+  @override
+  String errorInstallingStarterSkills(String error) {
+    return 'Error installing starter skills: $error';
+  }
+
+  @override
+  String skillRefLabel(String ref) {
+    return 'skillRef: $ref';
+  }
+
+  @override
+  String sourceLabel(String source) {
+    return 'Source: $source';
   }
 
   @override

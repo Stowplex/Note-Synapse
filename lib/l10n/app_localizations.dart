@@ -6995,7 +6995,7 @@ abstract class AppLocalizations {
   /// No description provided for @gettingStartedSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Install user manual and starter apps'**
+  /// **'Install user manual, starter apps, and starter skills'**
   String get gettingStartedSubtitle;
 
   /// No description provided for @installUserManual.
@@ -7165,6 +7165,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error installing starter apps: {error}'**
   String errorInstallingStarterApps(String error);
+
+  /// No description provided for @installStarterSkills.
+  ///
+  /// In en, this message translates to:
+  /// **'Install Starter Skills'**
+  String get installStarterSkills;
+
+  /// No description provided for @installStarterSkillsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse bundled skills and install them as transparent skill notes'**
+  String get installStarterSkillsSubtitle;
+
+  /// No description provided for @noStarterSkillsAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No starter skills available'**
+  String get noStarterSkillsAvailable;
+
+  /// No description provided for @noStarterSkillsSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'No starter skills selected'**
+  String get noStarterSkillsSelected;
+
+  /// No description provided for @installSelectedSkills.
+  ///
+  /// In en, this message translates to:
+  /// **'Install Selected Skills'**
+  String get installSelectedSkills;
+
+  /// No description provided for @starterSkillsInstalledSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, one {skill} other {skills}} installed successfully!'**
+  String starterSkillsInstalledSuccessfully(int count);
+
+  /// No description provided for @errorLoadingStarterSkills.
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading starter skills: {error}'**
+  String errorLoadingStarterSkills(String error);
+
+  /// No description provided for @errorInstallingStarterSkills.
+  ///
+  /// In en, this message translates to:
+  /// **'Error installing starter skills: {error}'**
+  String errorInstallingStarterSkills(String error);
+
+  /// No description provided for @skillRefLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'skillRef: {ref}'**
+  String skillRefLabel(String ref);
+
+  /// No description provided for @sourceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Source: {source}'**
+  String sourceLabel(String source);
 
   /// No description provided for @rawDataManagerTitle.
   ///

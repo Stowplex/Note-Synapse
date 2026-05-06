@@ -59,8 +59,7 @@ class LoadSkillTool extends NativeTool {
 
     final db = getIt<DatabaseService>();
     final note = await db.getNote(noteId);
-    final content =
-        note?.content ?? await skillService.loadBundledSkillContent(noteId);
+    final content = note?.content;
     if (content == null) return {'error': 'Skill note $noteId not found'};
 
     final meta = skillService.parseSkillMetadata(noteId, content);

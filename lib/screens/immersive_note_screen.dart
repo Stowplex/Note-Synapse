@@ -50,6 +50,7 @@ import '../services/prompts/system_prompt_builder.dart';
 import '../services/sql_query_service.dart';
 import '../services/user_app_service.dart';
 import '../services/agent_service.dart';
+import '../services/chat_tool_session.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
 import '../utils/conversation_title_directive.dart';
@@ -641,6 +642,22 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
     }
 
+    if (_conversationService.skillsEnabled) {
+      final skillTools = <McpTool>[
+        McpTool(
+          name: _conversationService.loadSkillTool.name,
+          description: _conversationService.loadSkillTool.description,
+          inputSchema: _conversationService.loadSkillTool.inputSchema,
+        ),
+      ];
+      for (final tool in _conversationService.skillDiscoveredTools) {
+        if (!skillTools.any((existing) => existing.name == tool.name)) {
+          skillTools.add(tool);
+        }
+      }
+      combined[ChatToolSession.skillToolsServiceKey] = skillTools;
+    }
+
     return combined;
   }
 
@@ -865,6 +882,22 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       throw Exception('AI tool not available: $serviceName');
     }
 
+    final runtime = AiToolRuntime(
+      bundle: bundle,
+      appProvider: context.read<AppProvider>(),
+      onModificationRequest: _handleModificationRequest,
+      onSqlWriteApprovalRequest: _handleSqlWriteApprovalRequest,
+    );
+    _aiToolRuntimes[serviceName] = runtime;
+    return runtime;
+  }
+
+  Future<AiToolRuntime> _getSkillAiToolRuntime(
+    String serviceName,
+    AiToolAppBundle bundle,
+  ) async {
+    final existing = _aiToolRuntimes[serviceName];
+    if (existing != null) return existing;
     final runtime = AiToolRuntime(
       bundle: bundle,
       appProvider: context.read<AppProvider>(),
@@ -5377,6 +5410,65 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             return 'Error: System tool "$toolName" not found';
           }
 
+          if (serviceName == ChatToolSession.skillToolsServiceKey) {
+            if (toolName == 'load_skill') {
+              final result = await _conversationService.loadSkillTool.execute(
+                params,
+              );
+              final resultStr = result is String ? result : result.toString();
+              final skillKey =
+                  (params['noteId'] as String? ?? '').trim().isNotEmpty
+                  ? (params['noteId'] as String).trim()
+                  : (params['skillRef'] as String? ?? '').trim();
+              if (skillKey.isNotEmpty && result is String) {
+                await _conversationService.handleLoadSkillResult(
+                  skillKey,
+                  resultStr,
+                );
+              }
+              return resultStr;
+            }
+            if (_conversationService.skillDiscoveredNativeToolNames.contains(
+              toolName,
+            )) {
+              final agentService = this.context.read<AgentService>();
+              final nativeTool = agentService.nativeTools
+                  .where((t) => t.name == toolName)
+                  .firstOrNull;
+              if (nativeTool != null) {
+                final result = await nativeTool.execute(params);
+                return result is String ? result : result.toString();
+              }
+              return 'Error: Native tool "$toolName" not found';
+            }
+            for (final entry
+                in _conversationService.skillDiscoveredBundles.entries) {
+              if (entry.value.toolDefinitions.any(
+                (definition) => definition.toolName == toolName,
+              )) {
+                final runtime = await _getSkillAiToolRuntime(
+                  entry.key,
+                  entry.value,
+                );
+                return runtime.invoke(toolName, params, context);
+              }
+            }
+            final endpointName =
+                _conversationService.skillToolEndpointNames[toolName];
+            final endpointId =
+                _conversationService.skillToolEndpointIds[toolName];
+            if (endpointName != null && endpointId != null) {
+              return McpToolIntegrationService.executeToolCall(
+                serviceName: endpointName,
+                toolName: toolName,
+                parameters: params,
+                enabledEndpointIds: [..._selectedMcpEndpointIds, endpointId],
+                generationContext: context,
+              );
+            }
+            return 'Error: Skill tool "$toolName" not found';
+          }
+
           // Handle MCP Tools
           return McpToolIntegrationService.executeToolCall(
             serviceName: serviceName,
@@ -5450,6 +5542,30 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       contextBuffer
         ..writeln()
         ..writeln(mcpToolsPrompt.trim());
+    }
+    if (_conversationService.skillsEnabled &&
+        _conversationService.skillIndex.isNotEmpty) {
+      final isLocalModel =
+          getIt<ModelSelector>().currentModel?.usesNativeToolDeclarations ??
+          false;
+      final skillIndexPrompt = getIt<SkillService>().buildSkillIndexPrompt(
+        _conversationService.skillIndex,
+        maxBudgetTokens: budget,
+        forLocalModel: isLocalModel,
+      );
+      if (skillIndexPrompt.trim().isNotEmpty) {
+        contextBuffer
+          ..writeln()
+          ..write(skillIndexPrompt.trim());
+      }
+      final defaultActions = getIt<SkillService>()
+          .buildDefaultActionPromptSection(_conversationService.skillIndex);
+      if (defaultActions.isNotEmpty) {
+        contextBuffer
+          ..writeln()
+          ..writeln()
+          ..write(defaultActions);
+      }
     }
 
     return SystemPromptBuilder.build(

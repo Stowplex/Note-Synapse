@@ -1480,7 +1480,7 @@
       },
       "fetchRemoteImages": "Fetch remote images",
       "gettingStarted": "Getting Started",
-      "gettingStartedSubtitle": "Install user manual and starter apps",
+      "gettingStartedSubtitle": "Install user manual, starter apps, and starter skills",
       "installUserManual": "Install User Manual",
       "installUserManualSubtitle": "Install or update the user manual note",
       "installStarterApps": "Install Starter Apps",
@@ -1562,6 +1562,51 @@
       "@errorInstallingStarterApps": {
         "placeholders": {
           "error": {
+            "type": "String"
+          }
+        }
+      },
+      "installStarterSkills": "Install Starter Skills",
+      "installStarterSkillsSubtitle": "Browse bundled skills and install them as transparent skill notes",
+      "noStarterSkillsAvailable": "No starter skills available",
+      "noStarterSkillsSelected": "No starter skills selected",
+      "installSelectedSkills": "Install Selected Skills",
+      "starterSkillsInstalledSuccessfully": "{count} {count, plural, one {skill} other {skills}} installed successfully!",
+      "@starterSkillsInstalledSuccessfully": {
+        "placeholders": {
+          "count": {
+            "type": "int"
+          }
+        }
+      },
+      "errorLoadingStarterSkills": "Error loading starter skills: {error}",
+      "@errorLoadingStarterSkills": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+      "errorInstallingStarterSkills": "Error installing starter skills: {error}",
+      "@errorInstallingStarterSkills": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+      "skillRefLabel": "skillRef: {ref}",
+      "@skillRefLabel": {
+        "placeholders": {
+          "ref": {
+            "type": "String"
+          }
+        }
+      },
+      "sourceLabel": "Source: {source}",
+      "@sourceLabel": {
+        "placeholders": {
+          "source": {
             "type": "String"
           }
         }

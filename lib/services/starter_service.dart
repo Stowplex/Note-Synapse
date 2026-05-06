@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:yaml/yaml.dart';
@@ -67,8 +66,12 @@ class StarterService {
           .toList();
 
       // Pad shorter version with zeros
-      while (newParts.length < 3) newParts.add(0);
-      while (oldParts.length < 3) oldParts.add(0);
+      while (newParts.length < 3) {
+        newParts.add(0);
+      }
+      while (oldParts.length < 3) {
+        oldParts.add(0);
+      }
 
       for (int i = 0; i < 3; i++) {
         if (newParts[i] > oldParts[i]) return true;
@@ -165,12 +168,9 @@ Please refer to the attached PDF for detailed user manual.''';
   /// Get list of starter apps from assets
   static Future<List<Map<String, dynamic>>> getStarterApps() async {
     try {
-      final manifestContent = await rootBundle.loadString('AssetManifest.json');
-      final manifestMap = jsonDecode(manifestContent) as Map<String, dynamic>;
-
       final starterApps = <Map<String, dynamic>>[];
 
-      for (final assetKey in manifestMap.keys) {
+      for (final assetKey in await _listBundledAssets()) {
         if (assetKey.startsWith(starterAppsPath) &&
             assetKey.endsWith('.yaml')) {
           try {
@@ -225,11 +225,12 @@ Please refer to the attached PDF for detailed user manual.''';
   /// Get bundled starter skill notes from assets.
   static Future<List<Map<String, dynamic>>> getStarterSkills() async {
     try {
-      final manifestContent = await rootBundle.loadString('AssetManifest.json');
-      final manifestMap = jsonDecode(manifestContent) as Map<String, dynamic>;
       final skillService = SkillService(getIt<DatabaseService>());
       final skills = <Map<String, dynamic>>[];
-      for (final assetKey in manifestMap.keys) {
+      final existing = await getIt<DatabaseService>().getNotesByTag(
+        SkillService.agentSkillTag,
+      );
+      for (final assetKey in await _listBundledAssets()) {
         if (!assetKey.startsWith(starterSkillsPath) ||
             !assetKey.endsWith('.md')) {
           continue;
@@ -237,9 +238,6 @@ Please refer to the attached PDF for detailed user manual.''';
         final content = await rootBundle.loadString(assetKey);
         final meta = skillService.parseSkillMetadata(assetKey, content);
         if (meta == null) continue;
-        final existing = await getIt<DatabaseService>().getNotesByTag(
-          SkillService.agentSkillTag,
-        );
         final installed = existing.any((note) {
           final existingMeta = skillService.parseSkillMetadata(
             note.id,
@@ -262,8 +260,13 @@ Please refer to the attached PDF for detailed user manual.''';
     }
   }
 
+  static Future<List<String>> _listBundledAssets() async {
+    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+    return manifest.listAssets();
+  }
+
   /// Installs bundled starter skills as ordinary notes tagged `agent-skill`.
-  static Future<int> installStarterSkills() async {
+  static Future<int> installStarterSkills({Set<String>? skillRefs}) async {
     final databaseService = getIt<DatabaseService>();
     final skillService = SkillService(databaseService);
     final existing = await databaseService.getNotesByTag(
@@ -277,6 +280,7 @@ Please refer to the attached PDF for detailed user manual.''';
     var installed = 0;
     for (final skill in await getStarterSkills()) {
       final skillRef = skill['skillRef'] as String;
+      if (skillRefs != null && !skillRefs.contains(skillRef)) continue;
       if (existingRefs.contains(skillRef)) continue;
       final assetKey = skill['filePath'] as String;
       final content = await rootBundle.loadString(assetKey);
@@ -291,7 +295,7 @@ Please refer to the attached PDF for detailed user manual.''';
           updatedAt: now,
           pinned: false,
           isArchived: false,
-          tags: const [SkillService.agentSkillTag],
+          tags: const [SkillService.agentSkillTag, 'starter-skill'],
           attachmentPaths: const [],
           subNotes: const [],
         ),

@@ -102,7 +102,7 @@ void setupServiceLocator() {
 
   if (!getIt.isRegistered<SkillService>()) {
     getIt.registerLazySingleton<SkillService>(
-      () => SkillService(getIt<DatabaseService>(), includeBundledSkills: true),
+      () => SkillService(getIt<DatabaseService>()),
     );
   }
 

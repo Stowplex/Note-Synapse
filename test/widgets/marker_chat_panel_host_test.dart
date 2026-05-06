@@ -9,6 +9,7 @@ import 'package:note_synapse/models/conversation_branch_summary.dart';
 import 'package:note_synapse/models/in_note_marker.dart';
 import 'package:note_synapse/models/model_config.dart';
 import 'package:note_synapse/services/agent_service.dart';
+import 'package:note_synapse/services/chat_tool_session.dart';
 import 'package:note_synapse/services/conversation_service.dart';
 import 'package:note_synapse/services/fork_service.dart';
 import 'package:note_synapse/services/marker_chat_send_service.dart';
@@ -34,6 +35,8 @@ class _RecordingMarkerSendService implements MarkerChatSendService {
     required String conversationId,
     required String prompt,
     required AgentService agentService,
+    ChatToolSession? toolSession,
+    BuildContext? toolContext,
     ModelConfig? modelOverride,
     int? currentPdfPage,
     required void Function(String chunk) onStreamChunk,
@@ -48,6 +51,8 @@ class _RecordingMarkerSendService implements MarkerChatSendService {
     required String conversationId,
     required String prompt,
     required AgentService agentService,
+    ChatToolSession? toolSession,
+    BuildContext? toolContext,
     ModelConfig? modelOverride,
     int? currentPdfPage,
     required void Function(String chunk) onStreamChunk,
@@ -57,6 +62,8 @@ class _RecordingMarkerSendService implements MarkerChatSendService {
       conversationId: conversationId,
       prompt: prompt,
       agentService: agentService,
+      toolSession: toolSession,
+      toolContext: toolContext,
       modelOverride: modelOverride,
       currentPdfPage: currentPdfPage,
       onStreamChunk: onStreamChunk,
@@ -68,6 +75,8 @@ class _RecordingMarkerSendService implements MarkerChatSendService {
   Future<void> continueAfterExistingUserPrompt({
     required String conversationId,
     required AgentService agentService,
+    ChatToolSession? toolSession,
+    BuildContext? toolContext,
     ModelConfig? modelOverride,
     int? currentPdfPage,
     required void Function(String chunk) onStreamChunk,

@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/in_note_marker.dart';
-import '../models/model_config.dart';
 import '../mixins/note_action_mixin.dart';
 import '../services/agent_service.dart';
+import '../services/chat_tool_session.dart';
 import '../services/conversation_service.dart';
 import '../services/conversation_ai_engine.dart';
 import '../services/marker_chat_send_service.dart';
 import '../services/service_locator.dart';
 import '../utils/conversation_title_directive.dart';
 import 'chat_panel.dart';
+import 'chat_tool_selection_panel.dart';
 import 'model_selector_button.dart';
 
 /// Hosts [ChatPanel] inside the marker bottom sheet, adding a text input
@@ -49,10 +50,14 @@ class _MarkerChatPanelHostState extends State<MarkerChatPanelHost>
     with NoteActionMixin<MarkerChatPanelHost> {
   final TextEditingController _textController = TextEditingController();
   final GlobalKey<ChatPanelState> _chatPanelKey = GlobalKey<ChatPanelState>();
+  late final ChatToolSession _toolSession = ChatToolSession(
+    initialSkillsEnabled: true,
+    statusLabelBuilder: (serviceName, toolName) => '$serviceName -> $toolName',
+  );
   bool _isSending = false;
-  ModelConfig? _selectedModel;
   late String _activeConversationId;
   String? _initialMessageId;
+  bool _didInitTools = false;
 
   /// Live partial AI text fed to [ChatPanel.streamingContent] during
   /// generation. Cleared when the request completes (success or failure).
@@ -63,6 +68,20 @@ class _MarkerChatPanelHostState extends State<MarkerChatPanelHost>
     super.initState();
     _activeConversationId = widget.resolvedConversationId;
     _initialMessageId = widget.marker.messageId;
+    _toolSession.addListener(_onToolSessionChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInitTools) {
+      _didInitTools = true;
+      _toolSession.initialize(context);
+    }
+  }
+
+  void _onToolSessionChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -79,6 +98,8 @@ class _MarkerChatPanelHostState extends State<MarkerChatPanelHost>
 
   @override
   void dispose() {
+    _toolSession.removeListener(_onToolSessionChanged);
+    _toolSession.dispose();
     _textController.dispose();
     super.dispose();
   }
@@ -118,39 +139,53 @@ class _MarkerChatPanelHostState extends State<MarkerChatPanelHost>
             },
           ),
         ),
+        if (!_isSending && _toolSession.hasAvailableTools)
+          ChatToolSelectionPanel(
+            session: _toolSession,
+            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            maxHeight: MediaQuery.of(context).size.height * 0.3,
+          ),
         SafeArea(
           top: false,
           child: Padding(
             padding: const EdgeInsets.all(8),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _textController,
-                    enabled: !_isSending,
-                    decoration: const InputDecoration(
-                      hintText: 'Continue this exploration...',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    onSubmitted: _isSending ? null : _onSubmit,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
+                _buildToolExecutionIndicator(),
+                Row(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.send),
-                      onPressed: _isSending
-                          ? null
-                          : () => _onSubmit(_textController.text),
+                    Expanded(
+                      child: TextField(
+                        controller: _textController,
+                        enabled: !_isSending,
+                        decoration: const InputDecoration(
+                          hintText: 'Continue this exploration...',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onSubmitted: _isSending ? null : _onSubmit,
+                      ),
                     ),
-                    ModelSelectorButton(
-                      selectedModel: _selectedModel,
-                      onModelSelected: (m) =>
-                          setState(() => _selectedModel = m),
-                      isSendButton: true,
+                    const SizedBox(width: 8),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.send),
+                          onPressed: _isSending
+                              ? null
+                              : () => _onSubmit(_textController.text),
+                        ),
+                        ModelSelectorButton(
+                          selectedModel: _toolSession.selectedModel,
+                          onModelSelected: (m) {
+                            _toolSession.setSelectedModel(m);
+                            _toolSession.refreshForModel(context);
+                          },
+                          isSendButton: true,
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -159,6 +194,54 @@ class _MarkerChatPanelHostState extends State<MarkerChatPanelHost>
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildToolExecutionIndicator() {
+    final prompt = _toolSession.iterationPrompt;
+    if (prompt != null) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            const Icon(Icons.loop, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Tool iteration limit reached (${prompt.exhaustedIterations}).',
+              ),
+            ),
+            TextButton(
+              onPressed: () => _toolSession.resolveIterationPrompt(
+                prompt.exhaustedIterations + 5,
+              ),
+              child: const Text('Continue'),
+            ),
+            TextButton(
+              onPressed: () => _toolSession.resolveIterationPrompt(null),
+              child: const Text('Abort'),
+            ),
+          ],
+        ),
+      );
+    }
+    final status = _toolSession.toolExecutionStatus;
+    if (status == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(status, maxLines: 2, overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
     );
   }
 
@@ -234,7 +317,9 @@ class _MarkerChatPanelHostState extends State<MarkerChatPanelHost>
         await sendService.continueAfterExistingUserPrompt(
           conversationId: conversationId,
           agentService: agentService,
-          modelOverride: _selectedModel,
+          toolSession: _toolSession,
+          toolContext: context,
+          modelOverride: _toolSession.selectedModel,
           currentPdfPage: widget.marker.page,
           onStreamChunk: onStreamChunk,
           onCompleted: onCompleted,
@@ -244,7 +329,9 @@ class _MarkerChatPanelHostState extends State<MarkerChatPanelHost>
           conversationId: conversationId,
           prompt: prompt,
           agentService: agentService,
-          modelOverride: _selectedModel,
+          toolSession: _toolSession,
+          toolContext: context,
+          modelOverride: _toolSession.selectedModel,
           currentPdfPage: widget.marker.page,
           onStreamChunk: onStreamChunk,
           onCompleted: onCompleted,

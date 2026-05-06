@@ -3813,7 +3813,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gettingStarted => '入门指南';
 
   @override
-  String get gettingStartedSubtitle => '安装用户手册和入门应用';
+  String get gettingStartedSubtitle => '安装用户手册、入门应用和入门技能';
 
   @override
   String get installUserManual => '安装用户手册';
@@ -3912,6 +3912,46 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String errorInstallingStarterApps(String error) {
     return '安装入门应用时出错：$error';
+  }
+
+  @override
+  String get installStarterSkills => '安装入门技能';
+
+  @override
+  String get installStarterSkillsSubtitle => '浏览内置技能并将其安装为透明的技能笔记';
+
+  @override
+  String get noStarterSkillsAvailable => '没有可用的入门技能';
+
+  @override
+  String get noStarterSkillsSelected => '未选择任何入门技能';
+
+  @override
+  String get installSelectedSkills => '安装选中的技能';
+
+  @override
+  String starterSkillsInstalledSuccessfully(int count) {
+    return '$count个技能安装成功！';
+  }
+
+  @override
+  String errorLoadingStarterSkills(String error) {
+    return '加载入门技能时出错：$error';
+  }
+
+  @override
+  String errorInstallingStarterSkills(String error) {
+    return '安装入门技能时出错：$error';
+  }
+
+  @override
+  String skillRefLabel(String ref) {
+    return 'skillRef：$ref';
+  }
+
+  @override
+  String sourceLabel(String source) {
+    return '来源：$source';
   }
 
   @override
