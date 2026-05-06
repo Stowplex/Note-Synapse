@@ -3547,6 +3547,14 @@ class CustomImageMd extends InlineMd {
     var alt = match.group(1);
     var url = match.group(2) ?? "";
 
+    // Strip optional CommonMark title attribute: `![alt](url "title")`,
+    // `![alt](url 'title')`, or `![alt](url (title))`. Without this the
+    // captured group still contains ` "title"` and the resource 404s.
+    final titleStart = RegExp(r'''\s+["'(]''').firstMatch(url);
+    if (titleStart != null) {
+      url = url.substring(0, titleStart.start);
+    }
+
     // Clean up the URL if it looks like a data URI
     // Use loose check for data: because sometimes it might have spaces before it
     if (url.trim().contains('data:')) {
