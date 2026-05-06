@@ -21,6 +21,7 @@ class MarkdownCleaner {
       r'\[', r'\]', // Brackets
       r'\(', r'\)', // Parentheses (less common but possible)
       r'\_', // Underscores
+      r'\.', // Periods (e.g. "2\." inside headings)
       r'\*', // Asterisks
       r'\!', // Exclamation marks
       r'\>', // Blockquotes
