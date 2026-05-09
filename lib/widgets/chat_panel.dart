@@ -44,7 +44,10 @@ class ChatPanel extends StatefulWidget {
   /// [forkPointMessageId] is the message at which the branches diverged —
   /// hosts use this to re-render with `initialMessageId = forkPointMessageId`
   /// so the new branch lands with the fork-point at viewport top.
-  final void Function(String newConversationId, String forkPointMessageId)
+  final FutureOr<void> Function(
+    String newConversationId,
+    String forkPointMessageId,
+  )
   onActiveConversationChanged;
 
   /// True while the parent message is generating; disables chip taps and
@@ -158,9 +161,9 @@ class ChatPanelState extends State<ChatPanel> {
   }
 
   @override
-  void didUpdateWidget(covariant ChatPanel old) {
-    super.didUpdateWidget(old);
-    if (old.conversationId != widget.conversationId) {
+  void didUpdateWidget(covariant ChatPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.conversationId != widget.conversationId) {
       _branchesByParent = const {};
       _chipsByMessage.clear();
       _strippedByMessage.clear();
@@ -254,12 +257,15 @@ class ChatPanelState extends State<ChatPanel> {
   }
 
   Future<void> _handleChipTap(String parentMessageId, ChipAction chip) async {
-    await ChipTapHandler().handle(
+    final forked = await ChipTapHandler().handle(
       parentMessageId: parentMessageId,
       chip: chip,
       sourceConversationId: widget.conversationId,
-      onSendUserPrompt: widget.onSendUserPrompt,
     );
+    if (!mounted || forked == null) return;
+    await widget.onActiveConversationChanged(forked.id, parentMessageId);
+    if (!mounted) return;
+    await widget.onSendUserPrompt(forked.id, chip.prompt);
   }
 
   void _showChipPreview(ChipAction chip, GlobalKey anchorKey) {
@@ -351,7 +357,7 @@ class ChatPanelState extends State<ChatPanel> {
       suggestedTitle: 'Forked conversation',
     );
     if (!mounted || forked == null) return;
-    widget.onActiveConversationChanged(forked.id, message.id);
+    await widget.onActiveConversationChanged(forked.id, message.id);
   }
 
   @override
@@ -411,6 +417,8 @@ class ChatPanelState extends State<ChatPanel> {
 
   Widget _buildMessageItem(BuildContext context, ConversationMessage m) {
     final isUser = m.type == MessageType.user;
+    final parsed = m.type == MessageType.ai ? _chipsFor(m) : null;
+    final hasPersistedChips = parsed?.chips.isNotEmpty == true;
     return Column(
       key: ValueKey('chat_panel_msg_col_${m.id}'),
       crossAxisAlignment: isUser
@@ -424,9 +432,9 @@ class ChatPanelState extends State<ChatPanel> {
         // Chip footer (above branch strip per spec) — AI messages only.
         if (m.type == MessageType.ai)
           ChipsFooter(
-            chips: _chipsByMessage[m.id],
+            chips: parsed?.chips,
             isStreaming: widget.isStreaming && m.id == _messages.last.id,
-            isExpected: _isChipsExpected(),
+            isExpected: hasPersistedChips || _isChipsExpected(),
             onChipTap: widget.isStreaming
                 ? null
                 : (chip) => _handleChipTap(m.id, chip),
@@ -443,7 +451,7 @@ class ChatPanelState extends State<ChatPanel> {
             activeConversationId: widget.conversationId,
             activeNoteIds: _conversation?.noteIds ?? const [],
             disabled: widget.isStreaming,
-            onSwitchBranch: (newId, _) =>
+            onSwitchBranch: (newId, _) async =>
                 widget.onActiveConversationChanged(newId, m.id),
             onRenameBranch: (conversationId, title) async {
               await getIt<ConversationService>().renameConversation(

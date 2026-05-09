@@ -2530,12 +2530,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                                 ? _streamingContent
                                 : null,
                             onActiveConversationChanged:
-                                (newConvId, forkPointMessageId) {
+                                (newConvId, forkPointMessageId) async {
                                   setState(() {
                                     _initialMessageIdForBranchSwitch =
                                         forkPointMessageId;
                                   });
-                                  _switchConversation(newConvId);
+                                  await _switchConversation(
+                                    newConvId,
+                                    preserveDocumentState: true,
+                                  );
                                 },
                             onSendUserPrompt: (convId, prompt) async {
                               await _continueAfterExistingUserPrompt(convId);
@@ -5724,7 +5727,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return _imageTransforms.putIfAbsent(path, () => TransformationController());
   }
 
-  Future<bool> _switchConversation(String conversationId) async {
+  Future<bool> _switchConversation(
+    String conversationId, {
+    bool preserveDocumentState = false,
+  }) async {
+    final previousNoteId = _noteOrder.isNotEmpty
+        ? _noteOrder[_activeNoteIndex.clamp(0, _noteOrder.length - 1)]
+        : null;
+    final previousAttachmentPath = _activeAttachmentPath;
+
     setState(() => _isLoadingConversation = true);
 
     try {
@@ -5747,9 +5758,35 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
       if (!mounted) return false;
 
+      String? nextActiveAttachmentPath;
+      int nextActiveNoteIndex = 0;
+      final nextNoteOrder = conversationNotes.isNotEmpty
+          ? conversationNotes.map((note) => note.id).toList()
+          : (_noteOrder.isNotEmpty
+                ? List<String>.from(_noteOrder)
+                : _initialNotesById.keys.toList());
+
+      if (preserveDocumentState &&
+          previousNoteId != null &&
+          nextNoteOrder.contains(previousNoteId)) {
+        nextActiveNoteIndex = nextNoteOrder.indexOf(previousNoteId);
+        final activeNote = conversationNotes.firstWhere(
+          (note) => note.id == previousNoteId,
+          orElse: () => _initialNotesById[previousNoteId]!,
+        );
+        if (previousAttachmentPath != null &&
+            activeNote.attachmentPaths.contains(previousAttachmentPath)) {
+          nextActiveAttachmentPath = previousAttachmentPath;
+        }
+      } else if (nextNoteOrder.isNotEmpty) {
+        nextActiveNoteIndex = min(_activeNoteIndex, nextNoteOrder.length - 1);
+      }
+
       setState(() {
-        _resetPdfState();
-        _disposeImageResources();
+        if (!preserveDocumentState) {
+          _resetPdfState();
+          _disposeImageResources();
+        }
         _conversation = result.conversation;
         _hasAssociatedConversations = true;
         _messages
@@ -5759,30 +5796,18 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         for (final note in conversationNotes) {
           _initialNotesById[note.id] = note;
         }
-        if (conversationNotes.isNotEmpty) {
-          _noteOrder = conversationNotes.map((note) => note.id).toList();
-          _activeNoteIndex = min(
-            _activeNoteIndex,
-            conversationNotes.length - 1,
-          );
-        } else if (_noteOrder.isNotEmpty) {
-          _activeNoteIndex = min(_activeNoteIndex, _noteOrder.length - 1);
-        } else if (_initialNotesById.isNotEmpty) {
-          _noteOrder = _initialNotesById.keys.toList();
-          _activeNoteIndex = 0;
-        } else {
-          _activeNoteIndex = 0;
-        }
-        _activeAttachmentPath = null;
+        _noteOrder = nextNoteOrder;
+        _activeNoteIndex = nextActiveNoteIndex;
+        _activeAttachmentPath = preserveDocumentState
+            ? nextActiveAttachmentPath
+            : null;
       });
 
-      // Load markers for the now-active note.
-      final notes = widget.notes;
-      if (notes.isNotEmpty) {
-        final noteId = _noteOrder.isNotEmpty
-            ? _noteOrder[_activeNoteIndex]
-            : notes[_activeNoteIndex].id;
-        _loadMarkersForNote(noteId);
+      // Load markers for the now-active document.
+      if (_activeAttachmentPath != null) {
+        _loadMarkersForAttachment(_activeAttachmentPath!);
+      } else if (_noteOrder.isNotEmpty) {
+        _loadMarkersForNote(_noteOrder[_activeNoteIndex]);
       }
 
       _scrollToBottom();

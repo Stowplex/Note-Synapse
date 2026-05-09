@@ -1,4 +1,5 @@
 import '../models/chip_action.dart';
+import '../models/conversation.dart';
 import '../utils/conversation_title_directive.dart';
 import 'conversation_service.dart';
 import 'fork_service.dart';
@@ -11,20 +12,17 @@ import 'service_locator.dart';
 /// 2. Add `chip.prompt` (NOT `chip.label`) as the new conversation's first
 ///    user message — the prompt is the substantive instruction; the label
 ///    was display-only.
-/// 3. Invoke the host-provided [onSendUserPrompt] callback to trigger the
-///    AI reply. The host runs its own send orchestration (model warnings,
-///    agent-conflict guards, etc.) so no guard is bypassed.
+/// 3. Return the forked conversation so the caller can switch the visible UI
+///    before asking its host to continue generation.
 ///
 /// Short-circuits silently with a warning log if the fork returns null
 /// (programming-error path: source conversation not in available contexts).
 /// Rethrows on unexpected error so callers can surface failures to the user.
 class ChipTapHandler {
-  Future<void> handle({
+  Future<Conversation?> handle({
     required String parentMessageId,
     required ChipAction chip,
     required String sourceConversationId,
-    required Future<void> Function(String conversationId, String prompt)
-    onSendUserPrompt,
   }) async {
     final forked = await getIt<ForkService>().forkFromMessageInContext(
       forkFromMessageId: parentMessageId,
@@ -36,12 +34,12 @@ class ChipTapHandler {
         'ChipTapHandler: forkFromMessageInContext returned null for '
         'parent=$parentMessageId source=$sourceConversationId; aborting',
       );
-      return;
+      return null;
     }
     await getIt<ConversationService>().addUserMessage(
       conversationId: forked.id,
       content: chip.prompt,
     );
-    await onSendUserPrompt(forked.id, chip.prompt);
+    return forked;
   }
 }

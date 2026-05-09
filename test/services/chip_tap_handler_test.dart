@@ -48,7 +48,7 @@ void main() {
   }
 
   test(
-    'handle() forks with pending title, then addUserMessage with chip.prompt, then onSendUserPrompt',
+    'handle() forks with pending title, adds user message with chip.prompt, and returns fork',
     () async {
       const chip = ChipAction(
         label: 'explain X',
@@ -70,21 +70,14 @@ void main() {
         (_) async => stubMsg('msg-1', 'You are a tutor. Explain X.'),
       );
 
-      String? sentConv;
-      String? sentPrompt;
-      Future<void> sender(String c, String p) async {
-        sentConv = c;
-        sentPrompt = p;
-      }
-
       final handler = ChipTapHandler();
-      await handler.handle(
+      final forked = await handler.handle(
         parentMessageId: 'parent-msg',
         chip: chip,
         sourceConversationId: 'src-conv',
-        onSendUserPrompt: sender,
       );
 
+      expect(forked?.id, 'forked-id');
       verify(
         mockFork.forkFromMessageInContext(
           forkFromMessageId: 'parent-msg',
@@ -98,13 +91,11 @@ void main() {
           content: 'You are a tutor. Explain X.',
         ),
       ).called(1);
-      expect(sentConv, 'forked-id');
-      expect(sentPrompt, 'You are a tutor. Explain X.');
     },
   );
 
   test(
-    'handle() short-circuits if fork returns null — no addUserMessage, no send',
+    'handle() short-circuits if fork returns null — no addUserMessage',
     () async {
       const chip = ChipAction(label: 'l', prompt: 'p');
       when(
@@ -115,13 +106,11 @@ void main() {
         ),
       ).thenAnswer((_) async => null);
 
-      bool senderCalled = false;
       final handler = ChipTapHandler();
-      await handler.handle(
+      final forked = await handler.handle(
         parentMessageId: 'parent',
         chip: chip,
         sourceConversationId: 'src',
-        onSendUserPrompt: (_, __) async => senderCalled = true,
       );
 
       verifyNever(
@@ -130,7 +119,7 @@ void main() {
           content: anyNamed('content'),
         ),
       );
-      expect(senderCalled, isFalse);
+      expect(forked, isNull);
     },
   );
 
@@ -155,7 +144,6 @@ void main() {
           parentMessageId: 'parent',
           chip: chip,
           sourceConversationId: 'src',
-          onSendUserPrompt: (_, __) async {},
         ),
         throwsA(isA<Exception>()),
       );
