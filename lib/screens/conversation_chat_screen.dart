@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import '../widgets/drawing_editor.dart';
 import '../widgets/approval_dialog.dart';
 import '../models/conversation.dart';
+import '../models/conversation_branch_summary.dart';
 import '../models/chip_action.dart';
 import '../models/tool_iteration_prompt.dart';
 import '../models/note.dart';
@@ -53,6 +54,7 @@ import '../services/user_app_service.dart';
 import '../models/user_app.dart';
 import '../mixins/note_action_mixin.dart';
 import '../widgets/chat_message_action_row.dart';
+import '../widgets/message_branch_strip.dart';
 import '../widgets/active_tool_count_badge.dart';
 import '../widgets/model_selector_button.dart';
 import '../services/agent_service.dart';
@@ -101,6 +103,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   Conversation? _conversation;
   List<ConversationMessage> _messages = [];
   List<Note> _notes = [];
+  Map<String, List<ConversationBranchSummary>> _branchesByParent = const {};
   bool _isLoading = false;
   bool _isSending = false;
   bool _isAborting = false;
@@ -146,6 +149,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   bool _hasInitialized = false;
   bool _waitingForAgentResult = false;
   AgentService? _agentService;
+  StreamSubscription<String>? _forkSub;
 
   @override
   void initState() {
@@ -161,6 +165,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     _loadMcpEndpoints();
     _loadIterationPreference();
     _setupSqlWriteApprovalCallback();
+    _forkSub = _forkService.forkCreatedStream.listen(_onForkCreated);
     // Listener managed in didChangeDependencies
   }
 
@@ -299,6 +304,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
           _notes = await _conversationService.getConversationNotes(
             widget.conversationId!,
           );
+          _branchesByParent = await _loadBranchSummaries(
+            widget.conversationId!,
+          );
           await _refreshConversationTags();
 
           // Validate note references and show alert if any are missing
@@ -317,6 +325,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
             widget.initialNoteIds!,
           );
         }
+        _branchesByParent = const {};
       }
     } catch (e) {
       if (mounted) {
@@ -398,6 +407,65 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     }
   }
 
+  Future<Map<String, List<ConversationBranchSummary>>> _loadBranchSummaries(
+    String conversationId,
+  ) async {
+    try {
+      return await _conversationService.getAllForkPointBranches(conversationId);
+    } catch (e) {
+      LoggerService.error('Error loading conversation branches: $e', error: e);
+      return const {};
+    }
+  }
+
+  Future<void> _refreshBranchSummaries() async {
+    final conversationId = _conversation?.id;
+    if (conversationId == null) {
+      if (mounted && _branchesByParent.isNotEmpty) {
+        setState(() {
+          _branchesByParent = const {};
+        });
+      }
+      return;
+    }
+
+    final branches = await _loadBranchSummaries(conversationId);
+    if (!mounted || _conversation?.id != conversationId) return;
+    setState(() {
+      _branchesByParent = branches;
+    });
+  }
+
+  Future<void> _onForkCreated(String parentMessageId) async {
+    final conversationId = _conversation?.id;
+    if (conversationId == null) return;
+    final branches = await _loadBranchSummaries(conversationId);
+    if (!mounted || _conversation?.id != conversationId) return;
+    setState(() {
+      _branchesByParent = branches;
+    });
+  }
+
+  List<ConversationBranchSummary> _branchesFor(String forkPointMessageId) {
+    final siblingBranches =
+        _branchesByParent[forkPointMessageId] ??
+        const <ConversationBranchSummary>[];
+    if (siblingBranches.isEmpty) return const [];
+    final conversation = _conversation;
+    if (conversation == null) return siblingBranches;
+    if (siblingBranches.any((b) => b.conversationId == conversation.id)) {
+      return siblingBranches;
+    }
+    final active = ConversationBranchSummary(
+      conversationId: conversation.id,
+      title: conversation.title,
+      forkPointMessageId: forkPointMessageId,
+      firstChildMessageId: forkPointMessageId,
+      noteIds: conversation.noteIds,
+    );
+    return [active, ...siblingBranches];
+  }
+
   bool _areChipsExpected() {
     return _conversationService.skillsEnabled &&
         _conversationService.skillIndex.values.any(
@@ -405,7 +473,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         );
   }
 
-  Future<bool> _switchConversationInPlace(String conversationId) async {
+  Future<bool> _switchConversationInPlace(
+    String conversationId, {
+    String? scrollToMessageId,
+  }) async {
     try {
       final loaded = await _conversationService.getConversationWithFullHistory(
         conversationId,
@@ -424,12 +495,14 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       );
       final missingNoteIds = await _conversationService
           .validateConversationNotes(conversationId);
+      final branches = await _loadBranchSummaries(conversationId);
 
       if (!mounted) return false;
       setState(() {
         _conversation = loaded.conversation;
         _messages = loaded.messages;
         _notes = notes;
+        _branchesByParent = branches;
         _streamingContent = '';
         _isStreaming = false;
       });
@@ -439,7 +512,13 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       }
       if (mounted) {
         _onAgentStateChange();
-        _scrollToBottom();
+        if (scrollToMessageId == null) {
+          _scrollToBottom();
+        } else {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToMessage(scrollToMessageId);
+          });
+        }
       }
       return mounted;
     } catch (e) {
@@ -3574,6 +3653,8 @@ $historyBuffer
         message.metadata != null &&
         (message.metadata!.containsKey('parts_history') ||
             message.metadata!.containsKey('function_calls'));
+    final branches = _branchesFor(message.id);
+    final activeConversationId = _conversation?.id;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8.0),
@@ -3671,6 +3752,26 @@ $historyBuffer
                     ? null
                     : (chip) => _handleChipTap(message, chip),
                 onLinkTap: _handleMarkdownLinkTap,
+              ),
+            if (branches.isNotEmpty && activeConversationId != null)
+              MessageBranchStrip(
+                branches: branches,
+                activeConversationId: activeConversationId,
+                activeNoteIds: _conversation?.noteIds ?? const [],
+                disabled: _isSending || _isStreaming,
+                onSwitchBranch: (conversationId, _) async {
+                  await _switchConversationInPlace(
+                    conversationId,
+                    scrollToMessageId: message.id,
+                  );
+                },
+                onRenameBranch: (conversationId, title) async {
+                  await _conversationService.renameConversation(
+                    conversationId: conversationId,
+                    title: title,
+                  );
+                  await _refreshBranchSummaries();
+                },
               ),
             if (message.attachmentPaths.isNotEmpty)
               Padding(
@@ -3914,6 +4015,7 @@ $historyBuffer
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _agentService?.removeListener(_onAgentStateChange);
+    _forkSub?.cancel();
 
     // Clean up SQL approval callback and session state
     RunSqlTool.onWriteApprovalRequest = null;
