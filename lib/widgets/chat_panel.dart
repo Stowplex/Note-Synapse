@@ -7,14 +7,11 @@ import '../models/chip_action.dart';
 import '../models/conversation.dart';
 import '../models/conversation_branch_summary.dart';
 import '../services/chip_tap_handler.dart';
-import '../services/chips_block_parser.dart';
 import '../services/conversation_service.dart';
 import '../services/fork_service.dart';
 import '../services/service_locator.dart';
 import 'chat_message_action_row.dart';
-import 'chip_preview_popover.dart';
-import 'chips_footer.dart';
-import 'interactive_checkbox_markdown.dart';
+import 'chip_aware_ai_message_content.dart';
 import 'message_branch_strip.dart';
 
 /// Marker-anchored chat panel.
@@ -119,24 +116,7 @@ class ChatPanelState extends State<ChatPanel> {
   List<ConversationMessage> _messages = const [];
   Map<String, List<ConversationBranchSummary>> _branchesByParent = const {};
 
-  /// Cache: messageId -> chip actions parsed out of the AI message body.
-  /// Populated synchronously during build via [ChipsBlockParser]; never
-  /// recomputed for the same (id + content) pair.
-  final Map<String, List<ChipAction>> _chipsByMessage = {};
-
-  /// Cache: messageId -> markdown with all `chips` fenced blocks removed.
-  /// Sibling to [_chipsByMessage]; same key + invalidation policy.
-  final Map<String, String> _strippedByMessage = {};
-
-  /// Cache: messageId -> the raw content string used to populate the two
-  /// caches above. If a message body changes (e.g. live streaming updates
-  /// an in-place AI reply), we re-parse on the next build.
-  final Map<String, String> _contentSnapshotByMessage = {};
-
-  final ChipsBlockParser _chipsParser = ChipsBlockParser();
-
   StreamSubscription<String>? _forkSub;
-  OverlayEntry? _activePreview;
 
   // Scroll plumbing for [ChatPanel.initialMessageId]. We hand a [GlobalKey]
   // to each per-message bubble container so we can locate it after the first
@@ -165,9 +145,6 @@ class ChatPanelState extends State<ChatPanel> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.conversationId != widget.conversationId) {
       _branchesByParent = const {};
-      _chipsByMessage.clear();
-      _strippedByMessage.clear();
-      _contentSnapshotByMessage.clear();
       _messageKeys.clear();
       _load();
     }
@@ -176,8 +153,6 @@ class ChatPanelState extends State<ChatPanel> {
   @override
   void dispose() {
     _forkSub?.cancel();
-    _activePreview?.remove();
-    _activePreview = null;
     _fallbackScrollController.dispose();
     super.dispose();
   }
@@ -268,23 +243,6 @@ class ChatPanelState extends State<ChatPanel> {
     await widget.onSendUserPrompt(forked.id, chip.prompt);
   }
 
-  void _showChipPreview(ChipAction chip, GlobalKey anchorKey) {
-    _activePreview?.remove();
-    final box = anchorKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null) return;
-    final pos = box.localToGlobal(Offset.zero);
-    final rect = pos & box.size;
-    _activePreview = ChipPreviewPopover.show(
-      context: context,
-      anchorRect: rect,
-      chip: chip,
-    );
-    Future.delayed(const Duration(seconds: 6), () {
-      _activePreview?.remove();
-      _activePreview = null;
-    });
-  }
-
   /// Returns true if the AI action row should render. The row is hidden
   /// unless at least one of the action callbacks is wired; when only one
   /// is wired, the unwired button renders disabled (onPressed: null).
@@ -303,26 +261,6 @@ class ChatPanelState extends State<ChatPanel> {
     if (meta == null) return false;
     return meta.containsKey('parts_history') ||
         meta.containsKey('function_calls');
-  }
-
-  /// Returns the (chips, stripped) pair for an AI message, parsing on first
-  /// access and re-parsing only when the content changes. User messages get
-  /// a (const [], original content) result without invoking the parser.
-  ({List<ChipAction> chips, String stripped}) _chipsFor(ConversationMessage m) {
-    if (m.type != MessageType.ai) {
-      return (chips: const [], stripped: m.content);
-    }
-    final snapshot = _contentSnapshotByMessage[m.id];
-    if (snapshot != m.content) {
-      final parsed = _chipsParser.parse(m.content);
-      _chipsByMessage[m.id] = parsed.chips;
-      _strippedByMessage[m.id] = parsed.strippedMarkdown;
-      _contentSnapshotByMessage[m.id] = m.content;
-    }
-    return (
-      chips: _chipsByMessage[m.id] ?? const [],
-      stripped: _strippedByMessage[m.id] ?? m.content,
-    );
   }
 
   /// Localized "AI" header label. Falls back to the literal string "AI"
@@ -417,8 +355,6 @@ class ChatPanelState extends State<ChatPanel> {
 
   Widget _buildMessageItem(BuildContext context, ConversationMessage m) {
     final isUser = m.type == MessageType.user;
-    final parsed = m.type == MessageType.ai ? _chipsFor(m) : null;
-    final hasPersistedChips = parsed?.chips.isNotEmpty == true;
     return Column(
       key: ValueKey('chat_panel_msg_col_${m.id}'),
       crossAxisAlignment: isUser
@@ -429,19 +365,6 @@ class ChatPanelState extends State<ChatPanel> {
           _buildUserBubble(context, m)
         else
           _buildAiBubble(context, m),
-        // Chip footer (above branch strip per spec) — AI messages only.
-        if (m.type == MessageType.ai)
-          ChipsFooter(
-            chips: parsed?.chips,
-            isStreaming: widget.isStreaming && m.id == _messages.last.id,
-            isExpected: hasPersistedChips || _isChipsExpected(),
-            onChipTap: widget.isStreaming
-                ? null
-                : (chip) => _handleChipTap(m.id, chip),
-            onChipLongPress: widget.isStreaming
-                ? null
-                : (chip, anchorKey) => _showChipPreview(chip, anchorKey),
-          ),
         // Branch strip — only when at least 2 sibling branches exist off
         // this fork-point message. Gated at the call site for clarity even
         // though MessageBranchStrip also short-circuits.
@@ -516,7 +439,6 @@ class ChatPanelState extends State<ChatPanel> {
 
   Widget _buildAiBubble(BuildContext context, ConversationMessage m) {
     final scheme = Theme.of(context).colorScheme;
-    final parsed = _chipsFor(m);
     final showActions = _shouldShowActionRow();
     final hasTools = _hasToolMetadata(m);
 
@@ -553,15 +475,16 @@ class ChatPanelState extends State<ChatPanel> {
                   : null,
             ),
             const SizedBox(height: 8),
-            SelectionArea(
-              child: InteractiveCheckboxMarkdown(
-                originalContent: parsed.stripped,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
-                // Markdown link tap handling deferred to a follow-up task.
-                onLinkTap: null,
-              ),
+            ChipAwareAiMessageContent(
+              message: m,
+              isStreaming: widget.isStreaming && m.id == _messages.last.id,
+              chipsExpected: _isChipsExpected(),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
+              onChipTap: widget.isStreaming
+                  ? null
+                  : (chip) => _handleChipTap(m.id, chip),
             ),
             // TODO(task-22): render attachment chips here for messages with
             // m.attachmentPaths.isNotEmpty (mirrors immersive screen's

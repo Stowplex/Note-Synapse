@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import '../widgets/drawing_editor.dart';
 import '../widgets/approval_dialog.dart';
 import '../models/conversation.dart';
+import '../models/chip_action.dart';
 import '../models/tool_iteration_prompt.dart';
 import '../models/note.dart';
 import '../models/agent_task.dart';
@@ -16,6 +17,7 @@ import '../models/mcp_endpoint.dart';
 import '../models/generation_context.dart';
 import '../models/model_config.dart';
 import '../services/conversation_service.dart';
+import '../services/chip_tap_handler.dart';
 import '../services/model_selector.dart';
 import '../services/service_locator.dart';
 import '../services/attachment_preprocessor.dart';
@@ -34,7 +36,7 @@ import '../services/prompts/note_prompt_builder.dart';
 import '../services/database_service.dart';
 import '../services/conversation_settings_service.dart';
 import '../services/conversation_prompt_builder.dart';
-import '../widgets/interactive_checkbox_markdown.dart';
+import '../widgets/chip_aware_ai_message_content.dart';
 import '../utils/file_utils.dart';
 import '../utils/conversation_title_directive.dart';
 import '../l10n/app_localizations.dart';
@@ -393,6 +395,61 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       });
     } catch (e) {
       LoggerService.error('Error loading conversation tags: $e', error: e);
+    }
+  }
+
+  bool _areChipsExpected() {
+    return _conversationService.skillsEnabled &&
+        _conversationService.skillIndex.values.any(
+          (skill) => skill.defaultAction != null,
+        );
+  }
+
+  Future<bool> _switchConversationInPlace(String conversationId) async {
+    try {
+      final loaded = await _conversationService.getConversationWithFullHistory(
+        conversationId,
+      );
+      if (loaded == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not load forked conversation')),
+          );
+        }
+        return false;
+      }
+
+      final notes = await _conversationService.getConversationNotes(
+        conversationId,
+      );
+      final missingNoteIds = await _conversationService
+          .validateConversationNotes(conversationId);
+
+      if (!mounted) return false;
+      setState(() {
+        _conversation = loaded.conversation;
+        _messages = loaded.messages;
+        _notes = notes;
+        _streamingContent = '';
+        _isStreaming = false;
+      });
+      await _refreshConversationTags();
+      if (missingNoteIds.isNotEmpty && mounted) {
+        _showMissingNotesAlert(missingNoteIds);
+      }
+      if (mounted) {
+        _onAgentStateChange();
+        _scrollToBottom();
+      }
+      return mounted;
+    } catch (e) {
+      LoggerService.error('Error loading forked conversation: $e', error: e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading forked conversation: $e')),
+        );
+      }
+      return false;
     }
   }
 
@@ -1145,38 +1202,12 @@ $historyBuffer
         return;
       }
 
-      final titleStreamFilter = ConversationTitleStreamFilter();
-      final aiResponse = await _generateAIResponse(
-        content,
-        attachments,
-        generationContext,
-        onStreamChunk: (chunk) {
-          final visibleChunk = titleStreamFilter.addChunk(chunk);
-          if (visibleChunk.isEmpty) return;
-          if (mounted) {
-            setState(() {
-              _streamingContent += visibleChunk;
-              _isStreaming = true;
-            });
-            _scrollToBottom();
-          }
-        },
-      );
-
-      final aiMessage = await _conversationService.addAIResponse(
+      await _generateAndPersistAiResponse(
         conversationId: _conversation!.id,
-        content: aiResponse.content,
-        metadata: aiResponse.metadata,
-        modelUsed: aiResponse.metadata?['modelUsed'] as String?,
+        prompt: content,
+        attachments: attachments,
+        generationContext: generationContext,
       );
-      if (!mounted) return;
-
-      setState(() {
-        _streamingContent = '';
-        _isStreaming = false;
-        _messages.add(aiMessage);
-      });
-      _scrollToBottom();
     } on ConversationCancelledException {
       if (requestId != null) {
         _cancelledRequestIds.remove(requestId);
@@ -1193,6 +1224,117 @@ $historyBuffer
       if (mounted) {
         messenger.showSnackBar(
           SnackBar(content: Text('Error sending message: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+          _currentRequestId = null;
+          if (requestId != null) {
+            _cancelledRequestIds.remove(requestId);
+          }
+        });
+      }
+    }
+  }
+
+  Future<void> _generateAndPersistAiResponse({
+    required String conversationId,
+    required String prompt,
+    required List<PlatformFile> attachments,
+    required GenerationContext generationContext,
+  }) async {
+    final titleStreamFilter = ConversationTitleStreamFilter();
+    final aiResponse = await _generateAIResponse(
+      prompt,
+      attachments,
+      generationContext,
+      onStreamChunk: (chunk) {
+        final visibleChunk = titleStreamFilter.addChunk(chunk);
+        if (visibleChunk.isEmpty) return;
+        if (mounted) {
+          setState(() {
+            _streamingContent += visibleChunk;
+            _isStreaming = true;
+          });
+          _scrollToBottom();
+        }
+      },
+    );
+
+    final aiMessage = await _conversationService.addAIResponse(
+      conversationId: conversationId,
+      content: aiResponse.content,
+      metadata: aiResponse.metadata,
+      modelUsed: aiResponse.metadata?['modelUsed'] as String?,
+    );
+    if (!mounted) return;
+
+    setState(() {
+      _streamingContent = '';
+      _isStreaming = false;
+      _messages.add(aiMessage);
+    });
+    _scrollToBottom();
+  }
+
+  Future<void> _handleChipTap(
+    ConversationMessage parentMessage,
+    ChipAction chip,
+  ) async {
+    if (_conversation == null || _isSending || _isStreaming) return;
+    if (!mounted) return;
+
+    final sourceConversationId = _conversation!.id;
+    final messenger = ScaffoldMessenger.of(context);
+    String? requestId;
+
+    setState(() {
+      _isSending = true;
+    });
+
+    try {
+      final forked = await ChipTapHandler().handle(
+        parentMessageId: parentMessage.id,
+        chip: chip,
+        sourceConversationId: sourceConversationId,
+      );
+      if (!mounted || forked == null) return;
+
+      final switched = await _switchConversationInPlace(forked.id);
+      if (!mounted || !switched) return;
+
+      final generationContext = GenerationContext();
+      if (_selectedModel != null) {
+        generationContext.modelOverride = _selectedModel;
+      }
+      requestId = generationContext.ensureRequestId();
+      _currentRequestId = requestId;
+
+      await _generateAndPersistAiResponse(
+        conversationId: forked.id,
+        prompt: chip.prompt,
+        attachments: const <PlatformFile>[],
+        generationContext: generationContext,
+      );
+    } on ConversationCancelledException {
+      if (requestId != null) {
+        _cancelledRequestIds.remove(requestId);
+      }
+      if (mounted) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('AI request cancelled.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      LoggerService.error('Error handling chip tap: $e', error: e);
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Error handling chip: $e')),
         );
       }
     } finally {
@@ -2545,6 +2687,25 @@ $historyBuffer
     );
   }
 
+  void _handleMarkdownLinkTap(String url, String _) {
+    final uri = Uri.tryParse(url);
+    if (uri != null) {
+      canLaunchUrl(uri).then((canLaunch) {
+        if (canLaunch) {
+          launchUrl(uri, mode: LaunchMode.externalApplication);
+        } else if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Could not open link: $url')));
+        }
+      });
+    } else if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Invalid URL: $url')));
+    }
+  }
+
   Future<void> _forkConversation(String messageId) async {
     final result = await showDialog<bool>(
       context: context,
@@ -3502,34 +3663,14 @@ $historyBuffer
                 style: Theme.of(context).textTheme.bodyMedium,
               )
             else
-              SelectionArea(
-                child: InteractiveCheckboxMarkdown(
-                  originalContent: message.content,
-                  onLinkTap: (url, _) {
-                    final uri = Uri.tryParse(url);
-                    if (uri != null) {
-                      canLaunchUrl(uri).then((canLaunch) {
-                        if (canLaunch) {
-                          launchUrl(uri, mode: LaunchMode.externalApplication);
-                        } else {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Could not open link: $url'),
-                              ),
-                            );
-                          }
-                        }
-                      });
-                    } else {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Invalid URL: $url')),
-                        );
-                      }
-                    }
-                  },
-                ),
+              ChipAwareAiMessageContent(
+                message: message,
+                isStreaming: _isStreaming && message.id == _messages.last.id,
+                chipsExpected: _areChipsExpected(),
+                onChipTap: _isSending || _isStreaming
+                    ? null
+                    : (chip) => _handleChipTap(message, chip),
+                onLinkTap: _handleMarkdownLinkTap,
               ),
             if (message.attachmentPaths.isNotEmpty)
               Padding(
