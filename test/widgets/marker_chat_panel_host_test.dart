@@ -182,7 +182,7 @@ void main() {
         body: MarkerChatPanelHost(
           marker: stubMarker(),
           resolvedConversationId: 'c',
-          contextCard: const SizedBox.shrink(),
+          contextCardBuilder: (_, __, ___) => const SizedBox.shrink(),
           onActiveConversationChanged: (_) {},
         ),
       ),
@@ -194,6 +194,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsOneWidget);
     expect(find.byIcon(Icons.send), findsOneWidget);
+  });
+
+  testWidgets('context card builder receives the active conversation id', (
+    tester,
+  ) async {
+    final seenConversationIds = <String>[];
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AgentService>.value(
+        value: mockAgent,
+        child: MaterialApp(
+          home: Scaffold(
+            body: MarkerChatPanelHost(
+              marker: stubMarker(),
+              resolvedConversationId: 'c',
+              contextCardBuilder: (_, activeConversationId, __) {
+                seenConversationIds.add(activeConversationId);
+                return const SizedBox.shrink();
+              },
+              onActiveConversationChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(seenConversationIds, contains('c'));
   });
 
   testWidgets(
@@ -356,6 +384,7 @@ void main() {
       ).thenAnswer((_) async => const {});
 
       String? persisted;
+      String? focused;
       await tester.pumpWidget(
         ChangeNotifierProvider<AgentService>.value(
           value: mockAgent,
@@ -364,7 +393,13 @@ void main() {
               body: MarkerChatPanelHost(
                 marker: stubMarker(),
                 resolvedConversationId: 'c',
-                contextCard: const SizedBox.shrink(),
+                contextCardBuilder: (_, activeConversationId, __) => IconButton(
+                  key: const ValueKey('focus-marker-conversation-button'),
+                  onPressed: () {
+                    focused = activeConversationId;
+                  },
+                  icon: const Icon(Icons.center_focus_strong),
+                ),
                 onActiveConversationChanged: (id) => persisted = id,
               ),
             ),
@@ -379,6 +414,12 @@ void main() {
       verify(
         mockConv.getConversation('branch'),
       ).called(greaterThanOrEqualTo(1));
+
+      await tester.tap(
+        find.byKey(const ValueKey('focus-marker-conversation-button')),
+      );
+      await tester.pumpAndSettle();
+      expect(focused, 'branch');
     },
   );
 }

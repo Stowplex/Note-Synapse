@@ -4658,11 +4658,28 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         await _deleteAnnotationMarker(marker);
       }
     } else {
-      final deleted = await showInNoteMarkerPreview(context, marker);
+      final deleted = await showInNoteMarkerPreview(
+        context,
+        marker,
+        onFocusConversation: _focusMarkerConversation,
+      );
       if (deleted == true) {
         _deleteMarker(marker);
       }
     }
+  }
+
+  Future<void> _focusMarkerConversation(
+    String conversationId,
+    String markerMessageId,
+  ) async {
+    if (!mounted) return;
+    setState(() {
+      _isScratchpadMode = false;
+      _isAiPanelExpanded = true;
+      _initialMessageIdForBranchSwitch = markerMessageId;
+    });
+    await _switchConversation(conversationId, preserveDocumentState: true);
   }
 
   Future<void> _deleteAnnotationMarker(InNoteMarker marker) async {

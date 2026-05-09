@@ -25,7 +25,12 @@ import 'model_selector_button.dart';
 class MarkerChatPanelHost extends StatefulWidget {
   final InNoteMarker marker;
   final String resolvedConversationId;
-  final Widget contextCard;
+  final Widget Function(
+    BuildContext context,
+    String activeConversationId,
+    bool isSending,
+  )
+  contextCardBuilder;
   final ScrollController? scrollController;
 
   /// Fired when the user switches branches via the embedded [ChatPanel].
@@ -37,7 +42,7 @@ class MarkerChatPanelHost extends StatefulWidget {
     super.key,
     required this.marker,
     required this.resolvedConversationId,
-    required this.contextCard,
+    required this.contextCardBuilder,
     required this.onActiveConversationChanged,
     this.scrollController,
   });
@@ -114,7 +119,11 @@ class _MarkerChatPanelHostState extends State<MarkerChatPanelHost>
             key: _chatPanelKey,
             conversationId: _activeConversationId,
             initialMessageId: _initialMessageId,
-            contextCard: widget.contextCard,
+            contextCard: widget.contextCardBuilder(
+              context,
+              _activeConversationId,
+              _isSending,
+            ),
             scrollController: widget.scrollController,
             isStreaming: _isSending,
             streamingContent: _streamingContent,
@@ -298,21 +307,25 @@ class _MarkerChatPanelHostState extends State<MarkerChatPanelHost>
     final messenger = ScaffoldMessenger.of(context);
     try {
       await _chatPanelKey.currentState?.reload();
+      if (!mounted) return;
       final sendService = getIt<MarkerChatSendService>();
       final titleStreamFilter = ConversationTitleStreamFilter();
-      final onStreamChunk = (String chunk) {
+
+      void onStreamChunk(String chunk) {
         final visibleChunk = titleStreamFilter.addChunk(chunk);
         if (visibleChunk.isEmpty) return;
         if (!mounted) return;
         setState(() {
           _streamingContent = (_streamingContent ?? '') + visibleChunk;
         });
-      };
-      final onCompleted = () {
+      }
+
+      void onCompleted() {
         if (!mounted) return;
         setState(() => _streamingContent = null);
         _chatPanelKey.currentState?.reload();
-      };
+      }
+
       if (promptAlreadyPersisted) {
         await sendService.continueAfterExistingUserPrompt(
           conversationId: conversationId,

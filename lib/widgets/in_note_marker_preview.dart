@@ -14,8 +14,14 @@ import 'marker_orphan_state.dart';
 
 class InNoteMarkerPreview extends StatefulWidget {
   final InNoteMarker marker;
+  final FutureOr<void> Function(String conversationId, String markerMessageId)?
+  onFocusConversation;
 
-  const InNoteMarkerPreview({super.key, required this.marker});
+  const InNoteMarkerPreview({
+    super.key,
+    required this.marker,
+    this.onFocusConversation,
+  });
 
   @override
   State<InNoteMarkerPreview> createState() => _InNoteMarkerPreviewState();
@@ -130,7 +136,7 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
   Widget _buildAiMarkerChatPanelHost() {
     return DraggableScrollableSheet(
       key: const ValueKey('ai-marker-chat-panel-host'),
-      initialChildSize: 0.55,
+      initialChildSize: 0.65,
       minChildSize: 0.35,
       maxChildSize: 0.92,
       expand: false,
@@ -156,7 +162,13 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
               return MarkerChatPanelHost(
                 marker: widget.marker,
                 resolvedConversationId: target.conversationId!,
-                contextCard: _buildAiMarkerContextCard(context),
+                contextCardBuilder:
+                    (context, activeConversationId, isSending) =>
+                        _buildAiMarkerContextCard(
+                          context,
+                          activeConversationId: activeConversationId,
+                          isSending: isSending,
+                        ),
                 scrollController: scrollController,
                 onActiveConversationChanged: _persistLastViewed,
               );
@@ -170,7 +182,11 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
   /// Context card pinned at the top of the embedded ChatPanel. Reuses the
   /// legacy preview context so the reader still sees the original prompt and
   /// captured region before continuing the marker conversation.
-  Widget _buildAiMarkerContextCard(BuildContext context) {
+  Widget _buildAiMarkerContextCard(
+    BuildContext context, {
+    required String activeConversationId,
+    required bool isSending,
+  }) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Padding(
@@ -191,6 +207,22 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
                       ),
+                      if (widget.onFocusConversation != null)
+                        IconButton(
+                          key: const ValueKey(
+                            'focus-marker-conversation-button',
+                          ),
+                          onPressed: isSending
+                              ? null
+                              : () => _focusConversation(activeConversationId),
+                          icon: const Icon(Icons.center_focus_strong, size: 18),
+                          tooltip: 'Focus this conversation',
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                          padding: EdgeInsets.zero,
+                        ),
                       IconButton(
                         onPressed: () => _confirmDelete(context),
                         icon: const Icon(Icons.delete_outline, size: 18),
@@ -291,6 +323,17 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
         newConversationId,
       ),
     );
+  }
+
+  Future<void> _focusConversation(String conversationId) async {
+    await getIt<NoteMarkerService>().updateMarkerLastViewed(
+      widget.marker.id,
+      conversationId,
+    );
+    if (!mounted) return;
+    final onFocusConversation = widget.onFocusConversation;
+    Navigator.of(context).pop(false);
+    await onFocusConversation?.call(conversationId, widget.marker.messageId);
   }
 
   Widget _buildContent(
@@ -503,8 +546,10 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
 
 Future<bool?> showInNoteMarkerPreview(
   BuildContext context,
-  InNoteMarker marker,
-) {
+  InNoteMarker marker, {
+  FutureOr<void> Function(String conversationId, String markerMessageId)?
+  onFocusConversation,
+}) {
   return showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
@@ -515,7 +560,10 @@ Future<bool?> showInNoteMarkerPreview(
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeOut,
         padding: EdgeInsets.only(bottom: bottomInset),
-        child: InNoteMarkerPreview(marker: marker),
+        child: InNoteMarkerPreview(
+          marker: marker,
+          onFocusConversation: onFocusConversation,
+        ),
       );
     },
   );

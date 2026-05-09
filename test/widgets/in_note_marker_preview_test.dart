@@ -232,6 +232,71 @@ void main() {
     },
   );
 
+  testWidgets(
+    'focus action persists last viewed, dismisses sheet, and reports target',
+    (tester) async {
+      when(
+        mockDb.getConversationMessage(any),
+      ).thenAnswer((_) async => stubAnchorMessage());
+      when(
+        mockDb.getConversation('c'),
+      ).thenAnswer((_) async => stubConversation('c'));
+      final m = InNoteMarker.forNote(
+        id: 'marker-id',
+        index: 0,
+        charStart: 0,
+        charEnd: 5,
+        conversationId: 'c',
+        messageId: 'm',
+      );
+      bool? result;
+      String? focusedConversationId;
+      String? focusedMessageId;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () async {
+                  result = await showInNoteMarkerPreview(
+                    context,
+                    m,
+                    onFocusConversation: (conversationId, markerMessageId) {
+                      focusedConversationId = conversationId;
+                      focusedMessageId = markerMessageId;
+                    },
+                  );
+                },
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('focus-marker-conversation-button')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('focus-marker-conversation-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(result, isFalse);
+      expect(focusedConversationId, 'c');
+      expect(focusedMessageId, 'm');
+      expect(fakeMarkerService.updates, isNotEmpty);
+      expect(fakeMarkerService.updates.last.markerId, 'marker-id');
+      expect(fakeMarkerService.updates.last.newConvId, 'c');
+      expect(find.byType(MarkerChatPanelHost), findsNothing);
+    },
+  );
+
   testWidgets('AI marker context card renders original prompt and image slot', (
     tester,
   ) async {
