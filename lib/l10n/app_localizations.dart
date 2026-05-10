@@ -8035,6 +8035,186 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Switch'**
   String get branchStripDocumentSwapConfirm;
+
+  /// No description provided for @modelPreferences.
+  ///
+  /// In en, this message translates to:
+  /// **'Model Preferences'**
+  String get modelPreferences;
+
+  /// No description provided for @modelPreferencesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Set capability-based model priority'**
+  String get modelPreferencesSubtitle;
+
+  /// No description provided for @viewFeatureMatrix.
+  ///
+  /// In en, this message translates to:
+  /// **'View Feature Matrix'**
+  String get viewFeatureMatrix;
+
+  /// No description provided for @modelPreferenceDragDropHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Drag and drop to reorder models. The first model that matches the required capabilities will be used. If the list is empty or no match is found, the system default model is used.'**
+  String get modelPreferenceDragDropHint;
+
+  /// No description provided for @priorityList.
+  ///
+  /// In en, this message translates to:
+  /// **'Priority List'**
+  String get priorityList;
+
+  /// No description provided for @noPreferencesSetMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No preferences set.\nSystem default model will be used.'**
+  String get noPreferencesSetMessage;
+
+  /// No description provided for @unknownModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown Model'**
+  String get unknownModel;
+
+  /// No description provided for @imageInputCapability.
+  ///
+  /// In en, this message translates to:
+  /// **'Image Input'**
+  String get imageInputCapability;
+
+  /// No description provided for @videoInputCapability.
+  ///
+  /// In en, this message translates to:
+  /// **'Video Input'**
+  String get videoInputCapability;
+
+  /// No description provided for @audioInputCapability.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Input'**
+  String get audioInputCapability;
+
+  /// No description provided for @docsCapability.
+  ///
+  /// In en, this message translates to:
+  /// **'Docs'**
+  String get docsCapability;
+
+  /// No description provided for @imageGenCapability.
+  ///
+  /// In en, this message translates to:
+  /// **'Image Gen'**
+  String get imageGenCapability;
+
+  /// No description provided for @codeGenCapability.
+  ///
+  /// In en, this message translates to:
+  /// **'Code Gen'**
+  String get codeGenCapability;
+
+  /// No description provided for @modelFeatureMatrix.
+  ///
+  /// In en, this message translates to:
+  /// **'Model Feature Matrix'**
+  String get modelFeatureMatrix;
+
+  /// No description provided for @modelNameColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Model Name'**
+  String get modelNameColumn;
+
+  /// No description provided for @imageInColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Image In'**
+  String get imageInColumn;
+
+  /// No description provided for @videoInColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Video In'**
+  String get videoInColumn;
+
+  /// No description provided for @audioColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get audioColumn;
+
+  /// No description provided for @imgGenColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Img Gen'**
+  String get imgGenColumn;
+
+  /// No description provided for @codeGenColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Code Gen'**
+  String get codeGenColumn;
+
+  /// No description provided for @docsColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Docs'**
+  String get docsColumn;
+
+  /// No description provided for @errorLoadingModelPreferences.
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading model preferences: {error}'**
+  String errorLoadingModelPreferences(String error);
+
+  /// No description provided for @errorSavingModelPreferences.
+  ///
+  /// In en, this message translates to:
+  /// **'Error saving preferences: {error}'**
+  String errorSavingModelPreferences(String error);
+
+  /// No description provided for @scratchpad.
+  ///
+  /// In en, this message translates to:
+  /// **'Scratchpad'**
+  String get scratchpad;
+
+  /// No description provided for @sendToScratchpad.
+  ///
+  /// In en, this message translates to:
+  /// **'Send to scratchpad'**
+  String get sendToScratchpad;
+
+  /// No description provided for @scratchpadEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Scratchpad is empty'**
+  String get scratchpadEmpty;
+
+  /// No description provided for @clear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get clear;
+
+  /// No description provided for @recallAnnotations.
+  ///
+  /// In en, this message translates to:
+  /// **'Recall annotations'**
+  String get recallAnnotations;
+
+  /// No description provided for @includeScratchpadInChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Include scratchpad in chat context'**
+  String get includeScratchpadInChat;
+
+  /// No description provided for @selectTagsForNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Tags for {count} {count, plural, =1{Note} other{Notes}}'**
+  String selectTagsForNotes(int count);
 }
 
 class _AppLocalizationsDelegate

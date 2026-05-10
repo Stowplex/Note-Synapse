@@ -1845,5 +1845,50 @@
   "insertUserAppBackButton": "返回",
   "insertUserAppNoAppsMessage": "尚未安装任何应用。",
   "branchStripDocumentSwapMessage": "此分支关联到另一个文档。是否切换文档？",
-  "branchStripDocumentSwapConfirm": "切换"
+  "branchStripDocumentSwapConfirm": "切换",
+  "modelPreferences": "模型偏好",
+  "modelPreferencesSubtitle": "按能力设置模型优先级",
+  "viewFeatureMatrix": "查看功能矩阵",
+  "modelPreferenceDragDropHint": "拖动以重新排序模型。第一个匹配所需能力的模型将被使用。如果列表为空或没有匹配项，将使用系统默认模型。",
+  "priorityList": "优先级列表",
+  "noPreferencesSetMessage": "未设置偏好。\n将使用系统默认模型。",
+  "unknownModel": "未知模型",
+  "imageInputCapability": "图像输入",
+  "videoInputCapability": "视频输入",
+  "audioInputCapability": "音频输入",
+  "docsCapability": "文档",
+  "imageGenCapability": "图像生成",
+  "codeGenCapability": "代码生成",
+  "modelFeatureMatrix": "模型功能矩阵",
+  "modelNameColumn": "模型名称",
+  "imageInColumn": "图像输入",
+  "videoInColumn": "视频输入",
+  "audioColumn": "音频",
+  "imgGenColumn": "图像生成",
+  "codeGenColumn": "代码生成",
+  "docsColumn": "文档",
+  "errorLoadingModelPreferences": "加载模型偏好时出错：{error}",
+  "@errorLoadingModelPreferences": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "errorSavingModelPreferences": "保存偏好时出错：{error}",
+  "@errorSavingModelPreferences": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "scratchpad": "便笺",
+  "sendToScratchpad": "发送到便笺",
+  "scratchpadEmpty": "便笺为空",
+  "clear": "清除",
+  "recallAnnotations": "调出注释",
+  "includeScratchpadInChat": "在聊天上下文中包含便笺",
+  "selectTagsForNotes": "为 {count} 条笔记选择标签",
+  "@selectTagsForNotes": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  }
 }

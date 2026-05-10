@@ -1891,5 +1891,50 @@
   "insertUserAppBackButton": "Back",
   "insertUserAppNoAppsMessage": "You haven't installed any apps yet.",
   "branchStripDocumentSwapMessage": "This branch is associated with a different document. Switch document?",
-  "branchStripDocumentSwapConfirm": "Switch"
+  "branchStripDocumentSwapConfirm": "Switch",
+  "modelPreferences": "Model Preferences",
+  "modelPreferencesSubtitle": "Set capability-based model priority",
+  "viewFeatureMatrix": "View Feature Matrix",
+  "modelPreferenceDragDropHint": "Drag and drop to reorder models. The first model that matches the required capabilities will be used. If the list is empty or no match is found, the system default model is used.",
+  "priorityList": "Priority List",
+  "noPreferencesSetMessage": "No preferences set.\nSystem default model will be used.",
+  "unknownModel": "Unknown Model",
+  "imageInputCapability": "Image Input",
+  "videoInputCapability": "Video Input",
+  "audioInputCapability": "Audio Input",
+  "docsCapability": "Docs",
+  "imageGenCapability": "Image Gen",
+  "codeGenCapability": "Code Gen",
+  "modelFeatureMatrix": "Model Feature Matrix",
+  "modelNameColumn": "Model Name",
+  "imageInColumn": "Image In",
+  "videoInColumn": "Video In",
+  "audioColumn": "Audio",
+  "imgGenColumn": "Img Gen",
+  "codeGenColumn": "Code Gen",
+  "docsColumn": "Docs",
+  "errorLoadingModelPreferences": "Error loading model preferences: {error}",
+  "@errorLoadingModelPreferences": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "errorSavingModelPreferences": "Error saving preferences: {error}",
+  "@errorSavingModelPreferences": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "scratchpad": "Scratchpad",
+  "sendToScratchpad": "Send to scratchpad",
+  "scratchpadEmpty": "Scratchpad is empty",
+  "clear": "Clear",
+  "recallAnnotations": "Recall annotations",
+  "includeScratchpadInChat": "Include scratchpad in chat context",
+  "selectTagsForNotes": "Select Tags for {count} {count, plural, =1{Note} other{Notes}}",
+  "@selectTagsForNotes": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  }
 }

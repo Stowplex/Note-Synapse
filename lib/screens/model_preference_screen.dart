@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../models/model_config.dart';
 import '../services/model_preference_service.dart';
 import '../services/model_storage_service.dart';
@@ -44,7 +45,11 @@ class _ModelPreferenceScreenState extends State<ModelPreferenceScreen> {
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading model preferences: $e'),
+            content: Text(
+              AppLocalizations.of(
+                context,
+              )!.errorLoadingModelPreferences(e.toString()),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -65,7 +70,11 @@ class _ModelPreferenceScreenState extends State<ModelPreferenceScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error saving preferences: $e'),
+            content: Text(
+              AppLocalizations.of(
+                context,
+              )!.errorSavingModelPreferences(e.toString()),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -108,6 +117,7 @@ class _ModelPreferenceScreenState extends State<ModelPreferenceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     // Determine available models not yet in the list
     final availableModels = _allModels
         .where((m) => !_preferenceListIds.contains(m.id))
@@ -115,7 +125,7 @@ class _ModelPreferenceScreenState extends State<ModelPreferenceScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Model Preferences'),
+        title: Text(l10n.modelPreferences),
         actions: [
           if (_isSaving)
             const Padding(
@@ -134,7 +144,7 @@ class _ModelPreferenceScreenState extends State<ModelPreferenceScreen> {
                 builder: (context) => _FeatureMatrixSheet(models: _allModels),
               );
             },
-            tooltip: 'View Feature Matrix',
+            tooltip: l10n.viewFeatureMatrix,
           ),
         ],
       ),
@@ -145,7 +155,7 @@ class _ModelPreferenceScreenState extends State<ModelPreferenceScreen> {
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Text(
-                    'Drag and drop to reorder models. The first model that matches the required capabilities will be used. If the list is empty or no match is found, the system default model is used.',
+                    l10n.modelPreferenceDragDropHint,
                     style: Theme.of(
                       context,
                     ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
@@ -195,6 +205,7 @@ class SplitView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Column(
       children: [
         // Active Preference List
@@ -209,7 +220,7 @@ class SplitView extends StatelessWidget {
                   vertical: 8.0,
                 ),
                 child: Text(
-                  'Priority List',
+                  l10n.priorityList,
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
               ),
@@ -217,7 +228,7 @@ class SplitView extends StatelessWidget {
                 child: activeListIds.isEmpty
                     ? Center(
                         child: Text(
-                          'No preferences set.\nSystem default model will be used.',
+                          l10n.noPreferencesSetMessage,
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.grey[500]),
                         ),
@@ -236,14 +247,14 @@ class SplitView extends StatelessWidget {
                             title: Text(
                               model.displayName ??
                                   model.modelName ??
-                                  'Unknown Model',
+                                  l10n.unknownModel,
                             ),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(model.type.displayName),
                                 const SizedBox(height: 4),
-                                _buildCapabilityIcons(model),
+                                _buildCapabilityIcons(context, model),
                               ],
                             ),
                             trailing: IconButton(
@@ -271,7 +282,7 @@ class SplitView extends StatelessWidget {
                   vertical: 8.0,
                 ),
                 child: Text(
-                  'Available Models',
+                  l10n.availableModels,
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
               ),
@@ -282,14 +293,16 @@ class SplitView extends StatelessWidget {
                     final model = availableModels[index];
                     return ListTile(
                       title: Text(
-                        model.displayName ?? model.modelName ?? 'Unknown Model',
+                        model.displayName ??
+                            model.modelName ??
+                            l10n.unknownModel,
                       ),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(model.type.displayName),
                           const SizedBox(height: 4),
-                          _buildCapabilityIcons(model),
+                          _buildCapabilityIcons(context, model),
                         ],
                       ),
                       trailing: IconButton(
@@ -308,29 +321,34 @@ class SplitView extends StatelessWidget {
     );
   }
 
-  Widget _buildCapabilityIcons(ModelConfig model) {
+  Widget _buildCapabilityIcons(BuildContext context, ModelConfig model) {
     final caps = model.customCapabilitiesObject;
     if (caps == null) return const SizedBox.shrink();
 
+    final l10n = AppLocalizations.of(context)!;
     final icons = <Widget>[];
 
     if (caps.supportsImages) {
-      icons.add(_buildIcon(Icons.image, 'Image Input', Colors.blue));
+      icons.add(_buildIcon(Icons.image, l10n.imageInputCapability, Colors.blue));
     }
     if (caps.supportsVideo) {
-      icons.add(_buildIcon(Icons.videocam, 'Video Input', Colors.purple));
+      icons.add(
+        _buildIcon(Icons.videocam, l10n.videoInputCapability, Colors.purple),
+      );
     }
     if (caps.supportsAudio) {
-      icons.add(_buildIcon(Icons.mic, 'Audio Input', Colors.orange));
+      icons.add(_buildIcon(Icons.mic, l10n.audioInputCapability, Colors.orange));
     }
     if (caps.supportsDocuments) {
-      icons.add(_buildIcon(Icons.description, 'Docs', Colors.brown));
+      icons.add(
+        _buildIcon(Icons.description, l10n.docsCapability, Colors.brown),
+      );
     }
     if (caps.supportsImageGeneration) {
-      icons.add(_buildIcon(Icons.brush, 'Image Gen', Colors.pink));
+      icons.add(_buildIcon(Icons.brush, l10n.imageGenCapability, Colors.pink));
     }
     if (caps.supportsCodeGeneration) {
-      icons.add(_buildIcon(Icons.code, 'Code Gen', Colors.teal));
+      icons.add(_buildIcon(Icons.code, l10n.codeGenCapability, Colors.teal));
     }
 
     if (icons.isEmpty) return const SizedBox.shrink();
@@ -353,6 +371,7 @@ class _FeatureMatrixSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.8,
@@ -366,7 +385,7 @@ class _FeatureMatrixSheet extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Model Feature Matrix',
+                l10n.modelFeatureMatrix,
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               IconButton(
@@ -382,14 +401,14 @@ class _FeatureMatrixSheet extends StatelessWidget {
               child: SingleChildScrollView(
                 child: DataTable(
                   columnSpacing: 20,
-                  columns: const [
-                    DataColumn(label: Text('Model Name')),
-                    DataColumn(label: Text('Image In')),
-                    DataColumn(label: Text('Video In')),
-                    DataColumn(label: Text('Audio')),
-                    DataColumn(label: Text('Img Gen')),
-                    DataColumn(label: Text('Code Gen')),
-                    DataColumn(label: Text('Docs')),
+                  columns: [
+                    DataColumn(label: Text(l10n.modelNameColumn)),
+                    DataColumn(label: Text(l10n.imageInColumn)),
+                    DataColumn(label: Text(l10n.videoInColumn)),
+                    DataColumn(label: Text(l10n.audioColumn)),
+                    DataColumn(label: Text(l10n.imgGenColumn)),
+                    DataColumn(label: Text(l10n.codeGenColumn)),
+                    DataColumn(label: Text(l10n.docsColumn)),
                   ],
                   rows: models.map((model) {
                     final caps = model.customCapabilitiesObject;
@@ -403,7 +422,7 @@ class _FeatureMatrixSheet extends StatelessWidget {
                               Text(
                                 model.displayName ??
                                     model.modelName ??
-                                    'Unknown',
+                                    l10n.unknown,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                 ),

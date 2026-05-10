@@ -4618,4 +4618,108 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get branchStripDocumentSwapConfirm => 'Switch';
+
+  @override
+  String get modelPreferences => 'Model Preferences';
+
+  @override
+  String get modelPreferencesSubtitle => 'Set capability-based model priority';
+
+  @override
+  String get viewFeatureMatrix => 'View Feature Matrix';
+
+  @override
+  String get modelPreferenceDragDropHint =>
+      'Drag and drop to reorder models. The first model that matches the required capabilities will be used. If the list is empty or no match is found, the system default model is used.';
+
+  @override
+  String get priorityList => 'Priority List';
+
+  @override
+  String get noPreferencesSetMessage =>
+      'No preferences set.\nSystem default model will be used.';
+
+  @override
+  String get unknownModel => 'Unknown Model';
+
+  @override
+  String get imageInputCapability => 'Image Input';
+
+  @override
+  String get videoInputCapability => 'Video Input';
+
+  @override
+  String get audioInputCapability => 'Audio Input';
+
+  @override
+  String get docsCapability => 'Docs';
+
+  @override
+  String get imageGenCapability => 'Image Gen';
+
+  @override
+  String get codeGenCapability => 'Code Gen';
+
+  @override
+  String get modelFeatureMatrix => 'Model Feature Matrix';
+
+  @override
+  String get modelNameColumn => 'Model Name';
+
+  @override
+  String get imageInColumn => 'Image In';
+
+  @override
+  String get videoInColumn => 'Video In';
+
+  @override
+  String get audioColumn => 'Audio';
+
+  @override
+  String get imgGenColumn => 'Img Gen';
+
+  @override
+  String get codeGenColumn => 'Code Gen';
+
+  @override
+  String get docsColumn => 'Docs';
+
+  @override
+  String errorLoadingModelPreferences(String error) {
+    return 'Error loading model preferences: $error';
+  }
+
+  @override
+  String errorSavingModelPreferences(String error) {
+    return 'Error saving preferences: $error';
+  }
+
+  @override
+  String get scratchpad => 'Scratchpad';
+
+  @override
+  String get sendToScratchpad => 'Send to scratchpad';
+
+  @override
+  String get scratchpadEmpty => 'Scratchpad is empty';
+
+  @override
+  String get clear => 'Clear';
+
+  @override
+  String get recallAnnotations => 'Recall annotations';
+
+  @override
+  String get includeScratchpadInChat => 'Include scratchpad in chat context';
+
+  @override
+  String selectTagsForNotes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Notes',
+      one: 'Note',
+    );
+    return 'Select Tags for $count $_temp0';
+  }
 }

@@ -482,8 +482,8 @@ class _AIModelSettingsScreenState extends State<AIModelSettingsScreen> {
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.sort_rounded),
-                    title: const Text('Model Preferences'),
-                    subtitle: const Text('Set capability-based model priority'),
+                    title: Text(l10n.modelPreferences),
+                    subtitle: Text(l10n.modelPreferencesSubtitle),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.push(
                       context,
