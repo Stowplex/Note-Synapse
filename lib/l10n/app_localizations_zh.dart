@@ -4360,4 +4360,101 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get insertUserAppNoAppsMessage => '尚未安装任何应用。';
+
+  @override
+  String get modelPreferences => '模型偏好';
+
+  @override
+  String get modelPreferencesSubtitle => '按能力设置模型优先级';
+
+  @override
+  String get viewFeatureMatrix => '查看功能矩阵';
+
+  @override
+  String get modelPreferenceDragDropHint =>
+      '拖动以重新排序模型。第一个匹配所需能力的模型将被使用。如果列表为空或没有匹配项，将使用系统默认模型。';
+
+  @override
+  String get priorityList => '优先级列表';
+
+  @override
+  String get noPreferencesSetMessage => '未设置偏好。\n将使用系统默认模型。';
+
+  @override
+  String get unknownModel => '未知模型';
+
+  @override
+  String get imageInputCapability => '图像输入';
+
+  @override
+  String get videoInputCapability => '视频输入';
+
+  @override
+  String get audioInputCapability => '音频输入';
+
+  @override
+  String get docsCapability => '文档';
+
+  @override
+  String get imageGenCapability => '图像生成';
+
+  @override
+  String get codeGenCapability => '代码生成';
+
+  @override
+  String get modelFeatureMatrix => '模型功能矩阵';
+
+  @override
+  String get modelNameColumn => '模型名称';
+
+  @override
+  String get imageInColumn => '图像输入';
+
+  @override
+  String get videoInColumn => '视频输入';
+
+  @override
+  String get audioColumn => '音频';
+
+  @override
+  String get imgGenColumn => '图像生成';
+
+  @override
+  String get codeGenColumn => '代码生成';
+
+  @override
+  String get docsColumn => '文档';
+
+  @override
+  String errorLoadingModelPreferences(String error) {
+    return '加载模型偏好时出错：$error';
+  }
+
+  @override
+  String errorSavingModelPreferences(String error) {
+    return '保存偏好时出错：$error';
+  }
+
+  @override
+  String get scratchpad => '便笺';
+
+  @override
+  String get sendToScratchpad => '发送到便笺';
+
+  @override
+  String get scratchpadEmpty => '便笺为空';
+
+  @override
+  String get clear => '清除';
+
+  @override
+  String get recallAnnotations => '调出注释';
+
+  @override
+  String get includeScratchpadInChat => '在聊天上下文中包含便笺';
+
+  @override
+  String selectTagsForNotes(int count) {
+    return '为 $count 条笔记选择标签';
+  }
 }

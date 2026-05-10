@@ -1927,7 +1927,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                                   : null,
                             ),
                           ),
-                          tooltip: 'Scratchpad', // TODO: l10n
+                          tooltip: l10n.scratchpad,
                           iconSize: 20,
                           padding: const EdgeInsets.all(4),
                           constraints: const BoxConstraints(),
@@ -1952,7 +1952,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                         minLines: 3,
                         decoration: InputDecoration.collapsed(
                           hintText: _isScratchpadMode
-                              ? 'Send to scratchpad' // TODO: l10n
+                              ? l10n.sendToScratchpad
                               : l10n.askAiAboutNoteHint,
                         ),
                         onSubmitted: (_) {
@@ -3033,7 +3033,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           Expanded(
             child: Center(
               child: Text(
-                'Scratchpad is empty', // TODO: l10n
+                l10n.scratchpadEmpty,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -3217,7 +3217,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           child: OutlinedButton.icon(
             onPressed: _scratchpadItems.isEmpty ? null : _addScratchpadToNote,
             icon: const Icon(Icons.note_add, size: 18),
-            label: const Text('Add to Note'), // TODO: l10n
+            label: Text(l10n.addToNote),
           ),
         ),
         const SizedBox(width: 8),
@@ -3225,14 +3225,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           child: OutlinedButton.icon(
             onPressed: _scratchpadItems.isEmpty ? null : _clearScratchpad,
             icon: const Icon(Icons.clear_all, size: 18),
-            label: const Text('Clear'), // TODO: l10n
+            label: Text(l10n.clear),
           ),
         ),
         const SizedBox(width: 8),
         IconButton(
           onPressed: _showRecallDialog,
           icon: const Icon(Icons.history, size: 20),
-          tooltip: 'Recall annotations',
+          tooltip: l10n.recallAnnotations,
           padding: const EdgeInsets.all(4),
           constraints: const BoxConstraints(),
           style: IconButton.styleFrom(
@@ -3242,7 +3242,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         const SizedBox(width: 4),
         // Include in chat toggle
         Tooltip(
-          message: 'Include scratchpad in chat context', // TODO: l10n
+          message: l10n.includeScratchpadInChat,
           child: Switch(
             value: _includeScratchpadInChat,
             onChanged: (value) {
