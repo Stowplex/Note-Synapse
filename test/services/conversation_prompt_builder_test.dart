@@ -200,6 +200,96 @@ void main() {
       },
     );
 
+    test(
+      'same concrete Gemini config id preserves assistant parts history',
+      () async {
+        final partsHistory = [
+          {
+            'type': 'tool_call',
+            'function_call': {
+              'name': 'call_tool',
+              'args': {
+                'service_name': 'SkillTools',
+                'tool_name': 'load_skill',
+                'params': {'skillRef': 'knowledge-exploration'},
+              },
+            },
+            'thought_signature': 'sig-1',
+            'is_included': true,
+          },
+          {'type': 'text', 'text': 'Tool-based answer', 'is_included': true},
+        ];
+        final messages = [
+          makeMessage(
+            id: 'ai-1',
+            type: MessageType.ai,
+            content: 'Tool-based answer',
+            modelUsed: 'gemini-3-1-flash-lite-config',
+            metadata: {'parts_history': partsHistory},
+          ),
+        ];
+
+        final result = await ConversationAiEngine.buildConversationMessages(
+          messages: messages,
+          currentModelId: 'gemini-3-1-flash-lite-config',
+          loadAttachments: noAttachments,
+        );
+
+        final assistantMessages = result
+            .where((m) => m.role == PromptRole.assistant)
+            .toList();
+        expect(assistantMessages, hasLength(1));
+        expect(
+          assistantMessages.first.metadata?['modelUsed'],
+          'gemini-3-1-flash-lite-config',
+        );
+        expect(
+          assistantMessages.first.metadata?['parts_history'],
+          partsHistory,
+        );
+        expect(
+          result.any((m) => m.content.contains('[Response from gemini]')),
+          isFalse,
+        );
+      },
+    );
+
+    test(
+      'legacy Gemini provider id is not treated as current concrete config',
+      () async {
+        final messages = [
+          makeMessage(
+            id: 'ai-1',
+            type: MessageType.ai,
+            content: 'Legacy Gemini response',
+            modelUsed: 'gemini',
+            metadata: {
+              'modelUsed': 'gemini',
+              'parts_history': [
+                {
+                  'type': 'text',
+                  'text': 'Legacy Gemini response',
+                  'is_included': true,
+                },
+              ],
+            },
+          ),
+        ];
+
+        final result = await ConversationAiEngine.buildConversationMessages(
+          messages: messages,
+          currentModelId: 'gemini-3-1-flash-lite-config',
+          loadAttachments: noAttachments,
+        );
+
+        expect(result.where((m) => m.role == PromptRole.assistant), isEmpty);
+        expect(
+          result.any((m) => m.content.contains('[Response from gemini]')),
+          isTrue,
+        );
+      },
+    );
+
     test('synthesized error messages are filtered out', () async {
       final messages = [
         makeMessage(

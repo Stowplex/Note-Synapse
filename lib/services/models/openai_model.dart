@@ -21,7 +21,7 @@ class OpenAIModel implements AIModel {
   ModelConfig? _config;
 
   @override
-  String get id => _config?.type.id ?? ModelType.openaiCompatible.id;
+  String get id => _config?.id ?? ModelType.openaiCompatible.id;
 
   @override
   String get name =>
@@ -90,7 +90,9 @@ class OpenAIModel implements AIModel {
 
     if (_config?.apiKey == null || _config!.apiKey!.isEmpty) {
       // Try to fetch from storage using ID
-      final storedKey = await getIt<ModelStorageService>().getModelApiKey(_config!.id);
+      final storedKey = await getIt<ModelStorageService>().getModelApiKey(
+        _config!.id,
+      );
       if (storedKey != null && storedKey.isNotEmpty) {
         _config = _config!.copyWith(apiKey: storedKey);
       } else {

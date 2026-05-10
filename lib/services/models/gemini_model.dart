@@ -23,7 +23,7 @@ class GeminiModel implements AIModel {
   ModelConfig? _config;
 
   @override
-  String get id => _config?.type.id ?? ModelType.gemini.id;
+  String get id => _config?.id ?? ModelType.gemini.id;
 
   @override
   String get name => _config?.displayName ?? ModelType.gemini.displayName;
