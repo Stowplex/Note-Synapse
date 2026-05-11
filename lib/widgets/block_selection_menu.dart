@@ -16,6 +16,15 @@ class BlockSelectionMenu extends StatelessWidget {
   final bool canExpandBelow;
   final bool canContractBelow;
 
+  final GlobalKey? expandAboveKey;
+  final GlobalKey? contractAboveKey;
+  final GlobalKey? contractBelowKey;
+  final GlobalKey? expandBelowKey;
+  final VoidCallback? onLongPressExpandAbove;
+  final VoidCallback? onLongPressContractAbove;
+  final VoidCallback? onLongPressContractBelow;
+  final VoidCallback? onLongPressExpandBelow;
+
   const BlockSelectionMenu({
     super.key,
     required this.onExpandAbove,
@@ -30,6 +39,14 @@ class BlockSelectionMenu extends StatelessWidget {
     this.canContractAbove = true,
     this.canExpandBelow = true,
     this.canContractBelow = true,
+    this.expandAboveKey,
+    this.contractAboveKey,
+    this.contractBelowKey,
+    this.expandBelowKey,
+    this.onLongPressExpandAbove,
+    this.onLongPressContractAbove,
+    this.onLongPressContractBelow,
+    this.onLongPressExpandBelow,
   });
 
   @override
@@ -45,36 +62,56 @@ class BlockSelectionMenu extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Expand Above
-            IconButton(
-              icon: const Icon(Icons.expand_less), // Or keyboard_arrow_up
-              tooltip: l10n.expandSelectionAbove,
-              onPressed: canExpandAbove ? onExpandAbove : null,
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onLongPress: onLongPressExpandAbove,
+              child: IconButton(
+                key: expandAboveKey,
+                icon: const Icon(Icons.expand_less), // Or keyboard_arrow_up
+                tooltip: l10n.expandSelectionAbove,
+                onPressed: canExpandAbove ? onExpandAbove : null,
+              ),
             ),
             // Contract Above (Maybe arrow_downward if above?)
             // Icons for expand/contract relative to selection:
             // Expand Above: Up arrow
             // Contract Above: Down arrow (shrinks top boundary down)
-            IconButton(
-              icon: const Icon(
-                Icons.vertical_align_bottom,
-              ), // Or something depicting shrinking top
-              tooltip: l10n.contractSelectionAbove,
-              onPressed: canContractAbove ? onContractAbove : null,
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onLongPress: onLongPressContractAbove,
+              child: IconButton(
+                key: contractAboveKey,
+                icon: const Icon(
+                  Icons.vertical_align_bottom,
+                ), // Or something depicting shrinking top
+                tooltip: l10n.contractSelectionAbove,
+                onPressed: canContractAbove ? onContractAbove : null,
+              ),
             ),
             // Divider
             const SizedBox(width: 4, height: 24, child: VerticalDivider()),
 
             // Contract Below: Up arrow (shrinks bottom boundary up)
-            IconButton(
-              icon: const Icon(Icons.vertical_align_top),
-              tooltip: l10n.contractSelectionBelow,
-              onPressed: canContractBelow ? onContractBelow : null,
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onLongPress: onLongPressContractBelow,
+              child: IconButton(
+                key: contractBelowKey,
+                icon: const Icon(Icons.vertical_align_top),
+                tooltip: l10n.contractSelectionBelow,
+                onPressed: canContractBelow ? onContractBelow : null,
+              ),
             ),
             // Expand Below: Down arrow
-            IconButton(
-              icon: const Icon(Icons.expand_more),
-              tooltip: l10n.expandSelectionBelow,
-              onPressed: canExpandBelow ? onExpandBelow : null,
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onLongPress: onLongPressExpandBelow,
+              child: IconButton(
+                key: expandBelowKey,
+                icon: const Icon(Icons.expand_more),
+                tooltip: l10n.expandSelectionBelow,
+                onPressed: canExpandBelow ? onExpandBelow : null,
+              ),
             ),
 
             const SizedBox(width: 4, height: 24, child: VerticalDivider()),

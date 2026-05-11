@@ -4241,6 +4241,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get contractSelectionBelow => '向下收缩';
 
   @override
+  String get expandToTop => '到顶部';
+
+  @override
+  String get expandToBottom => '到底部';
+
+  @override
+  String get contractToStart => '重置';
+
+  @override
   String get editSelection => '编辑';
 
   @override
