@@ -4396,6 +4396,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get contractSelectionBelow => 'Contract Below';
 
   @override
+  String get expandToTop => 'To top';
+
+  @override
+  String get expandToBottom => 'To bottom';
+
+  @override
+  String get contractToStart => 'Reset';
+
+  @override
   String get editSelection => 'Edit';
 
   @override

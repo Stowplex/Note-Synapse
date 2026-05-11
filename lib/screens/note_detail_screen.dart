@@ -30,6 +30,7 @@ import '../widgets/block_diff_preview_dialog.dart';
 import '../utils/markdown_block_tracker.dart';
 import '../widgets/block_markdown_body.dart';
 import '../widgets/block_selection_menu.dart';
+import '../widgets/block_selection_count_popup.dart';
 
 import '../utils/date_utils.dart';
 import '../utils/file_utils.dart';
@@ -116,6 +117,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Set<int> _selectedBlockIndices = {};
   List<MarkdownBlock> _parsedBlocks = [];
   Offset? _selectionMenuPosition;
+  int? _selectionAnchorIndex;
+  OverlayEntry? _activeCountPopup;
+  final GlobalKey _expandAboveKey = GlobalKey();
+  final GlobalKey _contractAboveKey = GlobalKey();
+  final GlobalKey _contractBelowKey = GlobalKey();
+  final GlobalKey _expandBelowKey = GlobalKey();
 
   Future<void> _loadAttachments() async {
     if (widget.isNewNote) return;
@@ -234,6 +241,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
     _codeController.dispose();
     _codeFocusNode.dispose();
+    _dismissCountPopup();
     // Reset audio state but don't dispose the service (it's a singleton)
     _audioService?.resetState();
     if (ApprovalService.onApprovalRequest == _approvalCallback) {
@@ -365,52 +373,164 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       _isSelectionMode = true;
       _selectedBlockIndices = {index};
       _selectionMenuPosition = localPosition;
+      _selectionAnchorIndex = index;
     });
   }
 
   void _clearSelection() {
     if (!mounted) return;
+    _dismissCountPopup();
     setState(() {
       _isSelectionMode = false;
       _selectedBlockIndices = {};
       _selectionMenuPosition = null;
+      _selectionAnchorIndex = null;
     });
   }
 
-  void _expandSelectionAbove() {
+  void _expandSelectionAbove() => _expandSelectionAboveBy(1);
+  void _contractSelectionAbove() => _contractSelectionAboveBy(1);
+  void _expandSelectionBelow() => _expandSelectionBelowBy(1);
+  void _contractSelectionBelow() => _contractSelectionBelowBy(1);
+
+  void _expandSelectionAboveBy(int count) {
     if (_selectedBlockIndices.isEmpty) return;
-    final minIndex = _selectedBlockIndices.reduce((a, b) => a < b ? a : b);
-    if (minIndex > 0) {
-      setState(() {
+    setState(() {
+      for (int i = 0; i < count; i++) {
+        final minIndex = _selectedBlockIndices.reduce((a, b) => a < b ? a : b);
+        if (minIndex <= 0) break;
         _selectedBlockIndices.add(minIndex - 1);
-      });
-    }
-  }
-
-  void _contractSelectionAbove() {
-    if (_selectedBlockIndices.length <= 1) return;
-    final minIndex = _selectedBlockIndices.reduce((a, b) => a < b ? a : b);
-    setState(() {
-      _selectedBlockIndices.remove(minIndex);
+      }
     });
   }
 
-  void _expandSelectionBelow() {
+  void _expandSelectionBelowBy(int count) {
+    if (_selectedBlockIndices.isEmpty || _parsedBlocks.isEmpty) return;
+    setState(() {
+      for (int i = 0; i < count; i++) {
+        final maxIndex = _selectedBlockIndices.reduce((a, b) => a > b ? a : b);
+        if (maxIndex >= _parsedBlocks.length - 1) break;
+        _selectedBlockIndices.add(maxIndex + 1);
+      }
+    });
+  }
+
+  void _contractSelectionAboveBy(int count) {
+    setState(() {
+      for (int i = 0; i < count; i++) {
+        if (_selectedBlockIndices.length <= 1) break;
+        final minIndex = _selectedBlockIndices.reduce((a, b) => a < b ? a : b);
+        _selectedBlockIndices.remove(minIndex);
+      }
+    });
+  }
+
+  void _contractSelectionBelowBy(int count) {
+    setState(() {
+      for (int i = 0; i < count; i++) {
+        if (_selectedBlockIndices.length <= 1) break;
+        final maxIndex = _selectedBlockIndices.reduce((a, b) => a > b ? a : b);
+        _selectedBlockIndices.remove(maxIndex);
+      }
+    });
+  }
+
+  void _expandSelectionToTop() {
     if (_selectedBlockIndices.isEmpty) return;
     final maxIndex = _selectedBlockIndices.reduce((a, b) => a > b ? a : b);
-    if (_parsedBlocks.isNotEmpty && maxIndex < _parsedBlocks.length - 1) {
-      setState(() {
-        _selectedBlockIndices.add(maxIndex + 1);
-      });
+    setState(() {
+      _selectedBlockIndices = {for (var i = 0; i <= maxIndex; i++) i};
+    });
+  }
+
+  void _expandSelectionToBottom() {
+    if (_selectedBlockIndices.isEmpty || _parsedBlocks.isEmpty) return;
+    final minIndex = _selectedBlockIndices.reduce((a, b) => a < b ? a : b);
+    setState(() {
+      _selectedBlockIndices = {
+        for (var i = minIndex; i < _parsedBlocks.length; i++) i,
+      };
+    });
+  }
+
+  void _contractSelectionToOriginal() {
+    if (_selectionAnchorIndex == null) return;
+    setState(() {
+      _selectedBlockIndices = {_selectionAnchorIndex!};
+    });
+  }
+
+  void _showCountPopup(GlobalKey buttonKey, BlockSelectionPopupMode mode) {
+    _dismissCountPopup();
+    final box = buttonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !mounted) return;
+    final origin = box.localToGlobal(Offset.zero);
+    final size = box.size;
+    final screen = MediaQuery.of(context).size;
+    const popupWidth = 240.0;
+    const popupHeight = 56.0;
+
+    _activeCountPopup = OverlayEntry(
+      builder: (_) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _dismissCountPopup,
+            ),
+          ),
+          Positioned(
+            left: (origin.dx + size.width / 2 - popupWidth / 2).clamp(
+              8.0,
+              (screen.width - popupWidth - 8).clamp(8.0, double.infinity),
+            ),
+            top: (origin.dy - popupHeight - 4).clamp(8.0, double.infinity),
+            child: BlockSelectionCountPopup(
+              mode: mode,
+              onApplyCount: (count) {
+                _dismissCountPopup();
+                _applyCountForMode(mode, count);
+              },
+              onApplyDirectional: () {
+                _dismissCountPopup();
+                _applyDirectionalForMode(mode);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+    Overlay.of(context).insert(_activeCountPopup!);
+  }
+
+  void _dismissCountPopup() {
+    _activeCountPopup?.remove();
+    _activeCountPopup = null;
+  }
+
+  void _applyCountForMode(BlockSelectionPopupMode mode, int count) {
+    switch (mode) {
+      case BlockSelectionPopupMode.expandAbove:
+        _expandSelectionAboveBy(count);
+      case BlockSelectionPopupMode.contractAbove:
+        _contractSelectionAboveBy(count);
+      case BlockSelectionPopupMode.expandBelow:
+        _expandSelectionBelowBy(count);
+      case BlockSelectionPopupMode.contractBelow:
+        _contractSelectionBelowBy(count);
     }
   }
 
-  void _contractSelectionBelow() {
-    if (_selectedBlockIndices.length <= 1) return;
-    final maxIndex = _selectedBlockIndices.reduce((a, b) => a > b ? a : b);
-    setState(() {
-      _selectedBlockIndices.remove(maxIndex);
-    });
+  void _applyDirectionalForMode(BlockSelectionPopupMode mode) {
+    switch (mode) {
+      case BlockSelectionPopupMode.expandAbove:
+        _expandSelectionToTop();
+      case BlockSelectionPopupMode.expandBelow:
+        _expandSelectionToBottom();
+      case BlockSelectionPopupMode.contractAbove:
+      case BlockSelectionPopupMode.contractBelow:
+        _contractSelectionToOriginal();
+    }
   }
 
   Future<void> _handleEditSelection() async {
@@ -1437,6 +1557,26 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     _selectedBlockIndices.reduce((a, b) => a > b ? a : b) <
                         _parsedBlocks.length - 1,
                 canContractBelow: _selectedBlockIndices.length > 1,
+                expandAboveKey: _expandAboveKey,
+                contractAboveKey: _contractAboveKey,
+                contractBelowKey: _contractBelowKey,
+                expandBelowKey: _expandBelowKey,
+                onLongPressExpandAbove: () => _showCountPopup(
+                  _expandAboveKey,
+                  BlockSelectionPopupMode.expandAbove,
+                ),
+                onLongPressContractAbove: () => _showCountPopup(
+                  _contractAboveKey,
+                  BlockSelectionPopupMode.contractAbove,
+                ),
+                onLongPressContractBelow: () => _showCountPopup(
+                  _contractBelowKey,
+                  BlockSelectionPopupMode.contractBelow,
+                ),
+                onLongPressExpandBelow: () => _showCountPopup(
+                  _expandBelowKey,
+                  BlockSelectionPopupMode.expandBelow,
+                ),
               ),
             ),
         ],

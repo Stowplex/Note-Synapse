@@ -7658,6 +7658,24 @@ abstract class AppLocalizations {
   /// **'Contract Below'**
   String get contractSelectionBelow;
 
+  /// No description provided for @expandToTop.
+  ///
+  /// In en, this message translates to:
+  /// **'To top'**
+  String get expandToTop;
+
+  /// No description provided for @expandToBottom.
+  ///
+  /// In en, this message translates to:
+  /// **'To bottom'**
+  String get expandToBottom;
+
+  /// No description provided for @contractToStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get contractToStart;
+
   /// No description provided for @editSelection.
   ///
   /// In en, this message translates to:
