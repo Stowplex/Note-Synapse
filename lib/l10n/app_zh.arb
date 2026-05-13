@@ -505,6 +505,7 @@
     }
   },
   "searchTags": "搜索标签",
+  "searchTagsToFilter": "搜索要筛选的标签",
   "searchTagsCapitalized": "搜索标签",
   "addNewTagOrSearch": "添加新标签或搜索",
   "tagManagement": "标签管理",
@@ -1809,6 +1810,10 @@
   "noBookmarksYet": "暂无书签",
   "aiContextBookmarks": "AI 上下文：书签",
   "configureAiContext": "配置 AI 上下文",
+  "configureAiContextDescription": "选择 AI 处理此 PDF 时要包含的页面：",
+  "includeInAiContext": "包含在 AI 上下文中",
+  "configureAiContextRange": "配置 AI 上下文范围",
+  "editAiContextRange": "编辑 AI 上下文范围",
   "aiContext": "AI 上下文：{mode}",
   "@aiContext": {
     "placeholders": {
@@ -1820,6 +1825,55 @@
   "aiContextFullPdf": "完整 PDF",
   "aiContextWindow": "窗口",
   "aiContextChapters": "章节",
+  "aiContextAllDocument": "整个文档",
+  "aiContextPagesCount": "{count} 页",
+  "@aiContextPagesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextWindowAroundCurrentPage": "当前页附近窗口",
+  "aiContextPagesCenteredOnReading": "以当前阅读位置为中心的 {count} 页",
+  "@aiContextPagesCenteredOnReading": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextBookmarksAvailable": "有 {count} 个书签可用",
+  "@aiContextBookmarksAvailable": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextPageNumber": "第 {pageNumber} 页",
+  "@aiContextPageNumber": {
+    "placeholders": {
+      "pageNumber": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextSelectedChapters": "已选章节",
+  "aiContextChooseSpecificSections": "选择特定章节",
+  "aiContextChaptersSelected": "已选择 {count} 个章节",
+  "@aiContextChaptersSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextPdfNoOutline": "此 PDF 没有目录",
+  "aiContextConfigurationSaved": "AI 上下文配置已保存",
+  "windowSize": "窗口大小",
+  "pages": "页数",
+  "pagesBeforeAfter": "前后页数",
   "nightMode": "夜间模式",
   "dayMode": "日间模式",
   "userAppSettingsTitle": "用户应用",

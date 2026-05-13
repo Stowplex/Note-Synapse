@@ -143,9 +143,9 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
       return builder(_selectedTags.length);
     }
 
-    // For filter scenarios (allowEmptySelection), always use "Apply"
+    // For filter scenarios (allowEmptySelection), always use "Apply Filters"
     if (widget.allowEmptySelection) {
-      return l10n.apply;
+      return l10n.applyFilters;
     }
 
     if (_selectedTags.isEmpty) {
@@ -163,25 +163,28 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
 
     ImageProvider imageProvider;
     if (TagImageService.isBuiltin(imagePath)) {
-      imageProvider = AssetImage(TagImageService.builtinAssetPath(
-          TagImageService.builtinName(imagePath)));
+      imageProvider = AssetImage(
+        TagImageService.builtinAssetPath(
+          TagImageService.builtinName(imagePath),
+        ),
+      );
     } else if (_appDocsPath != null) {
       imageProvider = FileImage(File('$_appDocsPath/$imagePath'));
     } else {
       return null;
     }
 
-    return CircleAvatar(
-      radius: 8,
-      backgroundImage: imageProvider,
-    );
+    return CircleAvatar(radius: 8, backgroundImage: imageProvider);
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final isFilterDialog = widget.allowEmptySelection && !widget.allowCreateNew;
     final searchLabel = widget.allowCreateNew
         ? l10n.addNewTagOrSearch
+        : isFilterDialog
+        ? l10n.searchTagsToFilter
         : l10n.searchTags;
     final dialogTitle = widget.title ?? l10n.selectTags;
 
@@ -190,10 +193,8 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
         final tagImageService = getIt<TagImageService>();
         final allTags = appProvider.tags.map((tag) => tag.name).toList()
           ..sort((a, b) {
-            final aHasImage =
-                tagImageService.getImagePathForTag(a) != null;
-            final bHasImage =
-                tagImageService.getImagePathForTag(b) != null;
+            final aHasImage = tagImageService.getImagePathForTag(a) != null;
+            final bHasImage = tagImageService.getImagePathForTag(b) != null;
             if (aHasImage != bHasImage) return aHasImage ? -1 : 1;
             return a.toLowerCase().compareTo(b.toLowerCase());
           });

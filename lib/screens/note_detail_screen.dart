@@ -3019,13 +3019,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
                           return [
                             if (fileExists && !isAudioFile)
-                              const PopupMenuItem<String>(
+                              PopupMenuItem<String>(
                                 value: 'open',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.open_in_new),
-                                    SizedBox(width: 12),
-                                    Text('Open'),
+                                    const Icon(Icons.open_in_new),
+                                    const SizedBox(width: 12),
+                                    Text(l10n.open),
                                   ],
                                 ),
                               ),
@@ -3061,7 +3061,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                                         : null,
                                   ),
                                   const SizedBox(width: 12),
-                                  const Text('Include in AI Context'),
+                                  Text(l10n.includeInAiContext),
                                 ],
                               ),
                             ),
@@ -3081,8 +3081,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                                     const SizedBox(width: 12),
                                     Text(
                                       hasCustomAiRange
-                                          ? 'Edit AI Context Range'
-                                          : 'Configure AI Context Range',
+                                          ? l10n.editAiContextRange
+                                          : l10n.configureAiContextRange,
                                     ),
                                   ],
                                 ),

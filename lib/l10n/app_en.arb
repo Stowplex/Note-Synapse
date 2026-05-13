@@ -510,6 +510,7 @@
     }
   },
   "searchTags": "Search tags",
+  "searchTagsToFilter": "Search tags to filter",
   "searchTagsCapitalized": "Search Tags",
   "addNewTagOrSearch": "Add new tag or search",
   "tagManagement": "Tag Management",
@@ -899,6 +900,10 @@
   "noBookmarksYet": "No bookmarks yet",
   "aiContextBookmarks": "AI Context: Bookmarks",
   "configureAiContext": "Configure AI Context",
+  "configureAiContextDescription": "Select which pages to include when AI processes this PDF:",
+  "includeInAiContext": "Include in AI Context",
+  "configureAiContextRange": "Configure AI Context Range",
+  "editAiContextRange": "Edit AI Context Range",
   "aiContext": "AI Context: {mode}",
   "@aiContext": {
     "placeholders": {
@@ -910,7 +915,54 @@
   "aiContextFullPdf": "Full PDF",
   "aiContextWindow": "Window",
   "aiContextChapters": "Chapters",
+  "aiContextAllDocument": "All Document",
+  "aiContextPagesCount": "{count} {count, plural, =1{page} other{pages}}",
+  "@aiContextPagesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextWindowAroundCurrentPage": "Window Around Current Page",
+  "aiContextPagesCenteredOnReading": "{count} {count, plural, =1{page} other{pages}} centered on where you are reading",
+  "@aiContextPagesCenteredOnReading": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextBookmarksAvailable": "{count} {count, plural, =1{bookmark} other{bookmarks}} available",
+  "@aiContextBookmarksAvailable": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextPageNumber": "Page {pageNumber}",
+  "@aiContextPageNumber": {
+    "placeholders": {
+      "pageNumber": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextSelectedChapters": "Selected Chapters",
+  "aiContextChooseSpecificSections": "Choose specific sections",
+  "aiContextChaptersSelected": "{count} {count, plural, =1{chapter} other{chapters}} selected",
+  "@aiContextChaptersSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextPdfNoOutline": "This PDF has no outline",
+  "aiContextConfigurationSaved": "AI context configuration saved",
   "windowSize": "Window Size",
+  "pages": "Pages",
   "pagesBeforeAfter": "Pages before/after",
   "errorRefreshingTools": "Error refreshing tools: {error}",
   "tools": "Tools",

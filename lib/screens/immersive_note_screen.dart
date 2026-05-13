@@ -4341,9 +4341,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           );
 
           if (mounted) {
-            ScaffoldMessenger.of(this.context).showSnackBar(
-              const SnackBar(
-                content: Text('AI context configuration saved'),
+            final l10n = AppLocalizations.of(context)!;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(l10n.aiContextConfigurationSaved),
                 backgroundColor: Colors.green,
               ),
             );

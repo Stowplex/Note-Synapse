@@ -2672,6 +2672,12 @@ abstract class AppLocalizations {
   /// **'Search tags'**
   String get searchTags;
 
+  /// No description provided for @searchTagsToFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Search tags to filter'**
+  String get searchTagsToFilter;
+
   /// No description provided for @searchTagsCapitalized.
   ///
   /// In en, this message translates to:
@@ -4844,6 +4850,30 @@ abstract class AppLocalizations {
   /// **'Configure AI Context'**
   String get configureAiContext;
 
+  /// No description provided for @configureAiContextDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Select which pages to include when AI processes this PDF:'**
+  String get configureAiContextDescription;
+
+  /// No description provided for @includeInAiContext.
+  ///
+  /// In en, this message translates to:
+  /// **'Include in AI Context'**
+  String get includeInAiContext;
+
+  /// No description provided for @configureAiContextRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure AI Context Range'**
+  String get configureAiContextRange;
+
+  /// No description provided for @editAiContextRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit AI Context Range'**
+  String get editAiContextRange;
+
   /// No description provided for @aiContext.
   ///
   /// In en, this message translates to:
@@ -4868,11 +4898,83 @@ abstract class AppLocalizations {
   /// **'Chapters'**
   String get aiContextChapters;
 
+  /// No description provided for @aiContextAllDocument.
+  ///
+  /// In en, this message translates to:
+  /// **'All Document'**
+  String get aiContextAllDocument;
+
+  /// No description provided for @aiContextPagesCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, =1{page} other{pages}}'**
+  String aiContextPagesCount(int count);
+
+  /// No description provided for @aiContextWindowAroundCurrentPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Window Around Current Page'**
+  String get aiContextWindowAroundCurrentPage;
+
+  /// No description provided for @aiContextPagesCenteredOnReading.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, =1{page} other{pages}} centered on where you are reading'**
+  String aiContextPagesCenteredOnReading(int count);
+
+  /// No description provided for @aiContextBookmarksAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, =1{bookmark} other{bookmarks}} available'**
+  String aiContextBookmarksAvailable(int count);
+
+  /// No description provided for @aiContextPageNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Page {pageNumber}'**
+  String aiContextPageNumber(int pageNumber);
+
+  /// No description provided for @aiContextSelectedChapters.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected Chapters'**
+  String get aiContextSelectedChapters;
+
+  /// No description provided for @aiContextChooseSpecificSections.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose specific sections'**
+  String get aiContextChooseSpecificSections;
+
+  /// No description provided for @aiContextChaptersSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, =1{chapter} other{chapters}} selected'**
+  String aiContextChaptersSelected(int count);
+
+  /// No description provided for @aiContextPdfNoOutline.
+  ///
+  /// In en, this message translates to:
+  /// **'This PDF has no outline'**
+  String get aiContextPdfNoOutline;
+
+  /// No description provided for @aiContextConfigurationSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'AI context configuration saved'**
+  String get aiContextConfigurationSaved;
+
   /// No description provided for @windowSize.
   ///
   /// In en, this message translates to:
   /// **'Window Size'**
   String get windowSize;
+
+  /// No description provided for @pages.
+  ///
+  /// In en, this message translates to:
+  /// **'Pages'**
+  String get pages;
 
   /// No description provided for @pagesBeforeAfter.
   ///

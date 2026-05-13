@@ -1410,6 +1410,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchTags => '搜索标签';
 
   @override
+  String get searchTagsToFilter => '搜索要筛选的标签';
+
+  @override
   String get searchTagsCapitalized => '搜索标签';
 
   @override
@@ -2615,6 +2618,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get configureAiContext => '配置 AI 上下文';
 
   @override
+  String get configureAiContextDescription => '选择 AI 处理此 PDF 时要包含的页面：';
+
+  @override
+  String get includeInAiContext => '包含在 AI 上下文中';
+
+  @override
+  String get configureAiContextRange => '配置 AI 上下文范围';
+
+  @override
+  String get editAiContextRange => '编辑 AI 上下文范围';
+
+  @override
   String aiContext(String mode) {
     return 'AI 上下文：$mode';
   }
@@ -2629,10 +2644,56 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiContextChapters => '章节';
 
   @override
-  String get windowSize => 'Window Size';
+  String get aiContextAllDocument => '整个文档';
 
   @override
-  String get pagesBeforeAfter => 'Pages before/after';
+  String aiContextPagesCount(int count) {
+    return '$count 页';
+  }
+
+  @override
+  String get aiContextWindowAroundCurrentPage => '当前页附近窗口';
+
+  @override
+  String aiContextPagesCenteredOnReading(int count) {
+    return '以当前阅读位置为中心的 $count 页';
+  }
+
+  @override
+  String aiContextBookmarksAvailable(int count) {
+    return '有 $count 个书签可用';
+  }
+
+  @override
+  String aiContextPageNumber(int pageNumber) {
+    return '第 $pageNumber 页';
+  }
+
+  @override
+  String get aiContextSelectedChapters => '已选章节';
+
+  @override
+  String get aiContextChooseSpecificSections => '选择特定章节';
+
+  @override
+  String aiContextChaptersSelected(int count) {
+    return '已选择 $count 个章节';
+  }
+
+  @override
+  String get aiContextPdfNoOutline => '此 PDF 没有目录';
+
+  @override
+  String get aiContextConfigurationSaved => 'AI 上下文配置已保存';
+
+  @override
+  String get windowSize => '窗口大小';
+
+  @override
+  String get pages => '页数';
+
+  @override
+  String get pagesBeforeAfter => '前后页数';
 
   @override
   String errorRefreshingTools(Object error) {

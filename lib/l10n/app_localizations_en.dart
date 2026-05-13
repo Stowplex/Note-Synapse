@@ -1457,6 +1457,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchTags => 'Search tags';
 
   @override
+  String get searchTagsToFilter => 'Search tags to filter';
+
+  @override
   String get searchTagsCapitalized => 'Search Tags';
 
   @override
@@ -2696,6 +2699,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get configureAiContext => 'Configure AI Context';
 
   @override
+  String get configureAiContextDescription =>
+      'Select which pages to include when AI processes this PDF:';
+
+  @override
+  String get includeInAiContext => 'Include in AI Context';
+
+  @override
+  String get configureAiContextRange => 'Configure AI Context Range';
+
+  @override
+  String get editAiContextRange => 'Edit AI Context Range';
+
+  @override
   String aiContext(String mode) {
     return 'AI Context: $mode';
   }
@@ -2710,7 +2726,77 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiContextChapters => 'Chapters';
 
   @override
+  String get aiContextAllDocument => 'All Document';
+
+  @override
+  String aiContextPagesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'pages',
+      one: 'page',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get aiContextWindowAroundCurrentPage => 'Window Around Current Page';
+
+  @override
+  String aiContextPagesCenteredOnReading(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'pages',
+      one: 'page',
+    );
+    return '$count $_temp0 centered on where you are reading';
+  }
+
+  @override
+  String aiContextBookmarksAvailable(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'bookmarks',
+      one: 'bookmark',
+    );
+    return '$count $_temp0 available';
+  }
+
+  @override
+  String aiContextPageNumber(int pageNumber) {
+    return 'Page $pageNumber';
+  }
+
+  @override
+  String get aiContextSelectedChapters => 'Selected Chapters';
+
+  @override
+  String get aiContextChooseSpecificSections => 'Choose specific sections';
+
+  @override
+  String aiContextChaptersSelected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'chapters',
+      one: 'chapter',
+    );
+    return '$count $_temp0 selected';
+  }
+
+  @override
+  String get aiContextPdfNoOutline => 'This PDF has no outline';
+
+  @override
+  String get aiContextConfigurationSaved => 'AI context configuration saved';
+
+  @override
   String get windowSize => 'Window Size';
+
+  @override
+  String get pages => 'Pages';
 
   @override
   String get pagesBeforeAfter => 'Pages before/after';
