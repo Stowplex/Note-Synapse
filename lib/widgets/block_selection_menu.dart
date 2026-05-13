@@ -62,56 +62,46 @@ class BlockSelectionMenu extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Expand Above
-            GestureDetector(
-              behavior: HitTestBehavior.translucent,
+            _buildBoundaryButton(
+              key: expandAboveKey,
+              icon: Icons.expand_less,
+              tooltip: l10n.expandSelectionAbove,
+              canUse: canExpandAbove,
+              onPressed: onExpandAbove,
               onLongPress: onLongPressExpandAbove,
-              child: IconButton(
-                key: expandAboveKey,
-                icon: const Icon(Icons.expand_less), // Or keyboard_arrow_up
-                tooltip: l10n.expandSelectionAbove,
-                onPressed: canExpandAbove ? onExpandAbove : null,
-              ),
             ),
             // Contract Above (Maybe arrow_downward if above?)
             // Icons for expand/contract relative to selection:
             // Expand Above: Up arrow
             // Contract Above: Down arrow (shrinks top boundary down)
-            GestureDetector(
-              behavior: HitTestBehavior.translucent,
+            _buildBoundaryButton(
+              key: contractAboveKey,
+              icon: Icons.vertical_align_bottom,
+              tooltip: l10n.contractSelectionAbove,
+              canUse: canContractAbove,
+              onPressed: onContractAbove,
               onLongPress: onLongPressContractAbove,
-              child: IconButton(
-                key: contractAboveKey,
-                icon: const Icon(
-                  Icons.vertical_align_bottom,
-                ), // Or something depicting shrinking top
-                tooltip: l10n.contractSelectionAbove,
-                onPressed: canContractAbove ? onContractAbove : null,
-              ),
             ),
             // Divider
             const SizedBox(width: 4, height: 24, child: VerticalDivider()),
 
             // Contract Below: Up arrow (shrinks bottom boundary up)
-            GestureDetector(
-              behavior: HitTestBehavior.translucent,
+            _buildBoundaryButton(
+              key: contractBelowKey,
+              icon: Icons.vertical_align_top,
+              tooltip: l10n.contractSelectionBelow,
+              canUse: canContractBelow,
+              onPressed: onContractBelow,
               onLongPress: onLongPressContractBelow,
-              child: IconButton(
-                key: contractBelowKey,
-                icon: const Icon(Icons.vertical_align_top),
-                tooltip: l10n.contractSelectionBelow,
-                onPressed: canContractBelow ? onContractBelow : null,
-              ),
             ),
             // Expand Below: Down arrow
-            GestureDetector(
-              behavior: HitTestBehavior.translucent,
+            _buildBoundaryButton(
+              key: expandBelowKey,
+              icon: Icons.expand_more,
+              tooltip: l10n.expandSelectionBelow,
+              canUse: canExpandBelow,
+              onPressed: onExpandBelow,
               onLongPress: onLongPressExpandBelow,
-              child: IconButton(
-                key: expandBelowKey,
-                icon: const Icon(Icons.expand_more),
-                tooltip: l10n.expandSelectionBelow,
-                onPressed: canExpandBelow ? onExpandBelow : null,
-              ),
             ),
 
             const SizedBox(width: 4, height: 24, child: VerticalDivider()),
@@ -143,6 +133,26 @@ class BlockSelectionMenu extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBoundaryButton({
+    required GlobalKey? key,
+    required IconData icon,
+    required String tooltip,
+    required bool canUse,
+    required VoidCallback? onPressed,
+    required VoidCallback? onLongPress,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      triggerMode: TooltipTriggerMode.manual,
+      child: IconButton(
+        key: key,
+        icon: Icon(icon),
+        onPressed: canUse ? onPressed : null,
+        onLongPress: canUse ? onLongPress : null,
       ),
     );
   }
