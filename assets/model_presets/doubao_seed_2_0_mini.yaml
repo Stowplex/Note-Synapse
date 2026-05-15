@@ -1,0 +1,29 @@
+model_type: openai_compatible
+model_endpoint: https://ark.cn-beijing.volces.com/api/v3/chat/completions
+model_name: doubao-seed-2-0-mini-260428
+model_display_name: Doubao Seed 2.0 Mini
+api_key_url: https://www.volcengine.com/docs/82379/1399008
+model_capabilities:
+  - support_audio
+  - support_video
+  - support_document_understanding
+  - support_image
+  - support_code_generation
+max_input_token: 256000
+max_output_token: 128000
+supported_attachment_mime_types:
+  - image/png
+  - image/jpeg
+  - image/webp
+  - application/pdf
+  - application/msword
+  - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  - text/plain
+  - audio/mpeg
+  - audio/wav
+  - audio/mp4
+  - audio/aac
+  - audio/ogg
+  - video/mp4
+  - video/webm
+warn_premium: false
