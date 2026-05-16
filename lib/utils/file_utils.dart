@@ -152,6 +152,47 @@ class FileUtils {
     return relativePath;
   }
 
+  /// Copies a file into private attachment storage without loading it into Dart
+  /// memory.
+  static Future<String> saveFilePathToPrivateStorage(
+    String sourcePath,
+    String originalFileName,
+  ) async {
+    final source = File(sourcePath);
+    if (!await source.exists()) {
+      throw FileSystemException('Source file not found', sourcePath);
+    }
+
+    final attachmentsDir = await getPrivateStorageDirectory();
+    final uniqueFileName = generateUniqueFileName(originalFileName);
+    final target = File('${attachmentsDir.path}/$uniqueFileName');
+
+    await source.openRead().pipe(target.openWrite());
+
+    return 'attachments/$uniqueFileName';
+  }
+
+  /// Saves a [PlatformFile] using its file path when available, falling back to
+  /// in-memory bytes only for platforms that do not expose a path.
+  static Future<String> savePlatformFileToPrivateStorage(
+    PlatformFile file,
+  ) async {
+    final sourcePath = file.path;
+    if (sourcePath != null && sourcePath.isNotEmpty) {
+      final source = File(sourcePath);
+      if (await source.exists()) {
+        return saveFilePathToPrivateStorage(source.path, file.name);
+      }
+    }
+
+    final bytes = file.bytes;
+    if (bytes != null) {
+      return saveFileToPrivateStorage(bytes, file.name);
+    }
+
+    throw FileSystemException('File data unavailable', file.name);
+  }
+
   /// Constructs the full file path from a relative path stored in the database
   /// [relativePath] - The relative path stored in the database
   /// [isRelativePath] - Whether the path is relative to app's private storage

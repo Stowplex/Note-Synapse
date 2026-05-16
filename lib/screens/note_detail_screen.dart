@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -3374,7 +3375,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
         type: FileType.any,
-        withData: true, // Load file data into memory
+        withData: kIsWeb,
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -3391,12 +3392,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         // Process and add new attachment paths
         for (final file in result.files) {
           try {
-            // Read file bytes and save to private storage
-            final bytes = file.bytes ?? await File(file.path!).readAsBytes();
-            final relativePath = await FileUtils.saveFileToPrivateStorage(
-              bytes,
-              file.name,
-            );
+            final relativePath =
+                await FileUtils.savePlatformFileToPrivateStorage(file);
             updatedAttachmentPaths.add(relativePath);
           } catch (e) {
             LoggerService.error(
