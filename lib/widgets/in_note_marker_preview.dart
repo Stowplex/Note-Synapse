@@ -8,6 +8,7 @@ import '../services/note_marker_service.dart';
 import '../services/service_locator.dart';
 import '../screens/conversation_chat_screen.dart';
 import '../utils/file_utils.dart';
+import 'fullscreen_image_preview.dart';
 import 'interactive_checkbox_markdown.dart';
 import 'marker_chat_panel_host.dart';
 import 'marker_orphan_state.dart';
@@ -518,27 +519,63 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
   }
 
   Widget _buildSingleImage(BuildContext context, String path) {
+    final file = File(path);
+    final fallback = _buildImageFallback(context);
+    if (!file.existsSync()) {
+      return fallback;
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
-      child: Image.file(
-        File(path),
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stack) {
-          return Container(
-            height: 120,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Center(
-              child: Icon(
-                Icons.broken_image_outlined,
-                size: 40,
-                color: Theme.of(context).disabledColor,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => FullscreenImagePreview.show(
+            context,
+            image: Image.file(file, fit: BoxFit.contain),
+            title: 'Marker ${widget.marker.index}',
+          ),
+          child: Tooltip(
+            message: 'Open image preview',
+            child: Semantics(
+              button: true,
+              label: 'Open marker image preview',
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final image = Image.file(
+                    file,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stack) => fallback,
+                  );
+                  if (constraints.hasBoundedHeight) {
+                    return SizedBox.expand(child: image);
+                  }
+                  return ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 120),
+                    child: image,
+                  );
+                },
               ),
             ),
-          );
-        },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageFallback(BuildContext context) {
+    return Container(
+      height: 120,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.broken_image_outlined,
+          size: 40,
+          color: Theme.of(context).disabledColor,
+        ),
       ),
     );
   }

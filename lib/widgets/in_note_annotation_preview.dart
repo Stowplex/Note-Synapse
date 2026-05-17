@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/note_annotation.dart';
 import '../utils/file_utils.dart';
+import 'fullscreen_image_preview.dart';
 
 enum AnnotationPreviewResult { none, addToScratchpad, removed }
 
@@ -183,41 +184,63 @@ class _InNoteAnnotationPreviewState extends State<InNoteAnnotationPreview> {
 
   Widget _buildSingleImage(BuildContext context, String imagePath) {
     final file = File(imagePath);
+    final fallback = _buildImageFallback(context);
+    if (!file.existsSync()) {
+      return fallback;
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
-      child: file.existsSync()
-          ? Image.file(
-              file,
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => Container(
-                height: 100,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Center(
-                  child: Icon(
-                    Icons.broken_image_outlined,
-                    size: 36,
-                    color: Theme.of(context).disabledColor,
-                  ),
-                ),
-              ),
-            )
-          : Container(
-              height: 100,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Center(
-                child: Icon(
-                  Icons.broken_image_outlined,
-                  size: 36,
-                  color: Theme.of(context).disabledColor,
-                ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => FullscreenImagePreview.show(
+            context,
+            image: Image.file(file, fit: BoxFit.contain),
+            title: 'Annotation',
+          ),
+          child: Tooltip(
+            message: 'Open image preview',
+            child: Semantics(
+              button: true,
+              label: 'Open annotation image preview',
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final image = Image.file(
+                    file,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => fallback,
+                  );
+                  if (constraints.hasBoundedHeight) {
+                    return SizedBox.expand(child: image);
+                  }
+                  return ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 100),
+                    child: image,
+                  );
+                },
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageFallback(BuildContext context) {
+    return Container(
+      height: 100,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.broken_image_outlined,
+          size: 36,
+          color: Theme.of(context).disabledColor,
+        ),
+      ),
     );
   }
 

@@ -1,15 +1,21 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:note_synapse/models/conversation.dart';
 import 'package:note_synapse/models/in_note_marker.dart';
+import 'package:note_synapse/models/note_annotation.dart';
 import 'package:note_synapse/services/conversation_service.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/fork_service.dart';
 import 'package:note_synapse/services/model_storage_service.dart';
 import 'package:note_synapse/services/note_marker_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
+import 'package:note_synapse/widgets/fullscreen_image_preview.dart';
+import 'package:note_synapse/widgets/in_note_annotation_preview.dart';
 import 'package:note_synapse/widgets/in_note_marker_preview.dart';
 import 'package:note_synapse/widgets/marker_chat_panel_host.dart';
 import 'package:note_synapse/widgets/marker_orphan_state.dart';
@@ -125,6 +131,18 @@ void main() {
       createdAt: now,
       updatedAt: now,
     );
+  }
+
+  File writeTempPng(String name) {
+    final file = File(
+      '${Directory.systemTemp.path}/note_synapse_${DateTime.now().microsecondsSinceEpoch}_$name.png',
+    );
+    file.writeAsBytesSync(
+      base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+      ),
+    );
+    return file;
   }
 
   testWidgets('annotation marker uses the legacy preview path', (tester) async {
@@ -297,13 +315,14 @@ void main() {
     },
   );
 
-  testWidgets('AI marker context card renders original prompt and image slot', (
+  testWidgets('AI marker context card image opens fullscreen preview', (
     tester,
   ) async {
+    final imageFile = writeTempPng('ai_marker');
     when(mockDb.getConversationMessage(any)).thenAnswer(
       (_) async => stubAnchorMessage(
         content: 'Explain Fourier transforms using intuition.',
-        attachmentPaths: const ['/tmp/nonexistent-marker-context.png'],
+        attachmentPaths: [imageFile.path],
       ),
     );
     when(
@@ -332,6 +351,77 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(Image), findsOneWidget);
+
+    await tester.tap(find.byType(Image));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(FullscreenImagePreview), findsOneWidget);
+    expect(find.text('Marker 2'), findsWidgets);
+  });
+
+  testWidgets('AI marker missing context image is not clickable', (
+    tester,
+  ) async {
+    when(mockDb.getConversationMessage(any)).thenAnswer(
+      (_) async => stubAnchorMessage(
+        content: 'Explain Fourier transforms using intuition.',
+        attachmentPaths: const ['/tmp/nonexistent-marker-context.png'],
+      ),
+    );
+    when(
+      mockDb.getConversation('c'),
+    ).thenAnswer((_) async => stubConversation('c'));
+    final m = InNoteMarker.forNote(
+      index: 2,
+      charStart: 0,
+      charEnd: 5,
+      conversationId: 'c',
+      messageId: 'm',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: InNoteMarkerPreview(marker: m)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Open image preview'), findsNothing);
+    expect(find.byType(FullscreenImagePreview), findsNothing);
+  });
+
+  testWidgets('annotation marker image opens fullscreen preview', (
+    tester,
+  ) async {
+    final imageFile = writeTempPng('annotation_marker');
+    final annotation = NoteAnnotation(
+      id: 'annotation-id',
+      noteId: 'note-id',
+      content: 'Remember this region',
+      attachmentPaths: [imageFile.path],
+      createdAt: DateTime.now(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: InNoteAnnotationPreview(
+            annotation: annotation,
+            isInScratchpad: false,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Annotation'), findsOneWidget);
+    expect(find.byTooltip('Open image preview'), findsOneWidget);
+
+    await tester.tap(find.byType(Image));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(FullscreenImagePreview), findsOneWidget);
+    expect(find.text('Annotation'), findsWidgets);
   });
 
   testWidgets(
