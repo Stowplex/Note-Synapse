@@ -64,12 +64,12 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Configure AI Context',
+                l10n.configureAiContext,
                 style: theme.textTheme.headlineSmall,
               ),
               const SizedBox(height: 16),
               Text(
-                'Select which pages to include when AI processes this PDF:',
+                l10n.configureAiContextDescription,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -83,8 +83,10 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
                     children: [
                       // All Document option
                       RadioListTile<String>(
-                        title: const Text('All Document'),
-                        subtitle: Text('${widget.totalPages} pages'),
+                        title: Text(l10n.aiContextAllDocument),
+                        subtitle: Text(
+                          l10n.aiContextPagesCount(widget.totalPages),
+                        ),
                         value: 'all',
                         groupValue: _mode,
                         onChanged: (value) => setState(() => _mode = value!),
@@ -93,9 +95,9 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
 
                       // Window option
                       RadioListTile<String>(
-                        title: const Text('Window Around Current Page'),
+                        title: Text(l10n.aiContextWindowAroundCurrentPage),
                         subtitle: Text(
-                          '$_windowSize pages centered on where you are reading',
+                          l10n.aiContextPagesCenteredOnReading(_windowSize),
                         ),
                         value: 'window',
                         groupValue: _mode,
@@ -106,7 +108,7 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
                       if (_mode == 'window')
                         _buildSlider(
                           value: _windowSize,
-                          label: 'Pages',
+                          label: l10n.pages,
                           min: 2,
                           max: 20,
                           onChanged: (val) => setState(() => _windowSize = val),
@@ -117,7 +119,9 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
                         title: Text(l10n.bookmarks),
                         subtitle: Text(
                           hasBookmarks
-                              ? '${bookmarks.length} bookmark(s) available'
+                              ? l10n.aiContextBookmarksAvailable(
+                                  bookmarks.length,
+                                )
                               : l10n.noBookmarksYet,
                         ),
                         value: 'bookmarks',
@@ -138,7 +142,7 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
                         ),
                         _buildSlider(
                           value: _bookmarkWindowSize,
-                          label: 'Pages', // Or localized "Pages"
+                          label: l10n.pages,
                           min: 0,
                           max: 5,
                           divisions: 5,
@@ -155,7 +159,7 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
                             children: [
                               // "Select All" check (optional but good UX)
                               CheckboxListTile(
-                                title: const Text('Select All'),
+                                title: Text(l10n.selectAll),
                                 value:
                                     _selectedBookmarks.length ==
                                     bookmarks.length,
@@ -176,7 +180,9 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
                               ...bookmarks.map((bookmark) {
                                 return CheckboxListTile(
                                   title: Text(
-                                    'Page ${bookmark.pageNumber + 1}',
+                                    l10n.aiContextPageNumber(
+                                      bookmark.pageNumber + 1,
+                                    ),
                                   ),
                                   subtitle:
                                       bookmark.annotation != null &&
@@ -210,11 +216,13 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
                       // Chapters option
                       if (hasOutline) ...[
                         RadioListTile<String>(
-                          title: const Text('Selected Chapters'),
+                          title: Text(l10n.aiContextSelectedChapters),
                           subtitle: Text(
                             _selectedChapters.isEmpty
-                                ? 'Choose specific sections'
-                                : '${_selectedChapters.length} chapter(s) selected',
+                                ? l10n.aiContextChooseSpecificSections
+                                : l10n.aiContextChaptersSelected(
+                                    _selectedChapters.length,
+                                  ),
                           ),
                           value: 'chapters',
                           groupValue: _mode,
@@ -240,7 +248,7 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
                         ],
                       ],
                       if (!hasOutline && _mode == 'chapters')
-                        _buildWarning(theme, 'This PDF has no outline'),
+                        _buildWarning(theme, l10n.aiContextPdfNoOutline),
                     ],
                   ),
                 ),
@@ -255,7 +263,7 @@ class _PdfAiContextDialogState extends State<PdfAiContextDialog> {
                         widget.onSave(null);
                         Navigator.pop(context);
                       },
-                      child: const Text('Reset'),
+                      child: Text(l10n.reset),
                     ),
                   TextButton(
                     onPressed: () => Navigator.pop(context),

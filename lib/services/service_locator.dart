@@ -19,6 +19,8 @@ import 'note_marker_service.dart';
 import 'note_annotation_service.dart';
 import 'skill_service.dart';
 import 'tag_workflow_service.dart';
+import 'fork_service.dart';
+import 'marker_chat_send_service.dart';
 import 'prompts/prompt_template_service.dart';
 
 /// Global GetIt instance for service location.
@@ -126,9 +128,7 @@ void setupServiceLocator() {
   }
 
   if (!getIt.isRegistered<LocalModelService>()) {
-    getIt.registerLazySingleton<LocalModelService>(
-      () => LocalModelService(),
-    );
+    getIt.registerLazySingleton<LocalModelService>(() => LocalModelService());
   }
 
   if (!getIt.isRegistered<ModelSelector>()) {
@@ -174,6 +174,21 @@ void setupServiceLocator() {
         getIt<AIService>(),
         getIt<DatabaseService>(),
       ),
+    );
+  }
+
+  // ============================================================
+  // WAVE 6: Composite orchestrators
+  // ============================================================
+  if (!getIt.isRegistered<ForkService>()) {
+    // ForkService is itself a singleton via factory; registration here is
+    // so getIt<ForkService>() works (e.g. ChatPanel reaches for it via
+    // getIt to subscribe to forkCreatedStream).
+    getIt.registerLazySingleton<ForkService>(() => ForkService());
+  }
+  if (!getIt.isRegistered<MarkerChatSendService>()) {
+    getIt.registerLazySingleton<MarkerChatSendService>(
+      () => MarkerChatSendService(),
     );
   }
 }

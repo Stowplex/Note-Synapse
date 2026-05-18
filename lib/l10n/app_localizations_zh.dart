@@ -1410,6 +1410,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchTags => '搜索标签';
 
   @override
+  String get searchTagsToFilter => '搜索要筛选的标签';
+
+  @override
   String get searchTagsCapitalized => '搜索标签';
 
   @override
@@ -2615,6 +2618,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get configureAiContext => '配置 AI 上下文';
 
   @override
+  String get configureAiContextDescription => '选择 AI 处理此 PDF 时要包含的页面：';
+
+  @override
+  String get includeInAiContext => '包含在 AI 上下文中';
+
+  @override
+  String get configureAiContextRange => '配置 AI 上下文范围';
+
+  @override
+  String get editAiContextRange => '编辑 AI 上下文范围';
+
+  @override
   String aiContext(String mode) {
     return 'AI 上下文：$mode';
   }
@@ -2629,10 +2644,56 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiContextChapters => '章节';
 
   @override
-  String get windowSize => 'Window Size';
+  String get aiContextAllDocument => '整个文档';
 
   @override
-  String get pagesBeforeAfter => 'Pages before/after';
+  String aiContextPagesCount(int count) {
+    return '$count 页';
+  }
+
+  @override
+  String get aiContextWindowAroundCurrentPage => '当前页附近窗口';
+
+  @override
+  String aiContextPagesCenteredOnReading(int count) {
+    return '以当前阅读位置为中心的 $count 页';
+  }
+
+  @override
+  String aiContextBookmarksAvailable(int count) {
+    return '有 $count 个书签可用';
+  }
+
+  @override
+  String aiContextPageNumber(int pageNumber) {
+    return '第 $pageNumber 页';
+  }
+
+  @override
+  String get aiContextSelectedChapters => '已选章节';
+
+  @override
+  String get aiContextChooseSpecificSections => '选择特定章节';
+
+  @override
+  String aiContextChaptersSelected(int count) {
+    return '已选择 $count 个章节';
+  }
+
+  @override
+  String get aiContextPdfNoOutline => '此 PDF 没有目录';
+
+  @override
+  String get aiContextConfigurationSaved => 'AI 上下文配置已保存';
+
+  @override
+  String get windowSize => '窗口大小';
+
+  @override
+  String get pages => '页数';
+
+  @override
+  String get pagesBeforeAfter => '前后页数';
 
   @override
   String errorRefreshingTools(Object error) {
@@ -3813,7 +3874,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gettingStarted => '入门指南';
 
   @override
-  String get gettingStartedSubtitle => '安装用户手册和入门应用';
+  String get gettingStartedSubtitle => '安装用户手册、入门应用和入门技能';
 
   @override
   String get installUserManual => '安装用户手册';
@@ -3912,6 +3973,46 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String errorInstallingStarterApps(String error) {
     return '安装入门应用时出错：$error';
+  }
+
+  @override
+  String get installStarterSkills => '安装入门技能';
+
+  @override
+  String get installStarterSkillsSubtitle => '浏览内置技能并将其安装为透明的技能笔记';
+
+  @override
+  String get noStarterSkillsAvailable => '没有可用的入门技能';
+
+  @override
+  String get noStarterSkillsSelected => '未选择任何入门技能';
+
+  @override
+  String get installSelectedSkills => '安装选中的技能';
+
+  @override
+  String starterSkillsInstalledSuccessfully(int count) {
+    return '$count个技能安装成功！';
+  }
+
+  @override
+  String errorLoadingStarterSkills(String error) {
+    return '加载入门技能时出错：$error';
+  }
+
+  @override
+  String errorInstallingStarterSkills(String error) {
+    return '安装入门技能时出错：$error';
+  }
+
+  @override
+  String skillRefLabel(String ref) {
+    return 'skillRef：$ref';
+  }
+
+  @override
+  String sourceLabel(String source) {
+    return '来源：$source';
   }
 
   @override
@@ -4201,6 +4302,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get contractSelectionBelow => '向下收缩';
 
   @override
+  String get expandToTop => '到顶部';
+
+  @override
+  String get expandToBottom => '到底部';
+
+  @override
+  String get contractToStart => '重置';
+
+  @override
   String get editSelection => '编辑';
 
   @override
@@ -4360,4 +4470,107 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get insertUserAppNoAppsMessage => '尚未安装任何应用。';
+
+  @override
+  String get branchStripDocumentSwapMessage => '此分支关联到另一个文档。是否切换文档？';
+
+  @override
+  String get branchStripDocumentSwapConfirm => '切换';
+
+  @override
+  String get modelPreferences => '模型偏好';
+
+  @override
+  String get modelPreferencesSubtitle => '按能力设置模型优先级';
+
+  @override
+  String get viewFeatureMatrix => '查看功能矩阵';
+
+  @override
+  String get modelPreferenceDragDropHint =>
+      '拖动以重新排序模型。第一个匹配所需能力的模型将被使用。如果列表为空或没有匹配项，将使用系统默认模型。';
+
+  @override
+  String get priorityList => '优先级列表';
+
+  @override
+  String get noPreferencesSetMessage => '未设置偏好。\n将使用系统默认模型。';
+
+  @override
+  String get unknownModel => '未知模型';
+
+  @override
+  String get imageInputCapability => '图像输入';
+
+  @override
+  String get videoInputCapability => '视频输入';
+
+  @override
+  String get audioInputCapability => '音频输入';
+
+  @override
+  String get docsCapability => '文档';
+
+  @override
+  String get imageGenCapability => '图像生成';
+
+  @override
+  String get codeGenCapability => '代码生成';
+
+  @override
+  String get modelFeatureMatrix => '模型功能矩阵';
+
+  @override
+  String get modelNameColumn => '模型名称';
+
+  @override
+  String get imageInColumn => '图像输入';
+
+  @override
+  String get videoInColumn => '视频输入';
+
+  @override
+  String get audioColumn => '音频';
+
+  @override
+  String get imgGenColumn => '图像生成';
+
+  @override
+  String get codeGenColumn => '代码生成';
+
+  @override
+  String get docsColumn => '文档';
+
+  @override
+  String errorLoadingModelPreferences(String error) {
+    return '加载模型偏好时出错：$error';
+  }
+
+  @override
+  String errorSavingModelPreferences(String error) {
+    return '保存偏好时出错：$error';
+  }
+
+  @override
+  String get scratchpad => '便笺';
+
+  @override
+  String get sendToScratchpad => '发送到便笺';
+
+  @override
+  String get scratchpadEmpty => '便笺为空';
+
+  @override
+  String get clear => '清除';
+
+  @override
+  String get recallAnnotations => '调出注释';
+
+  @override
+  String get includeScratchpadInChat => '在聊天上下文中包含便笺';
+
+  @override
+  String selectTagsForNotes(int count) {
+    return '为 $count 条笔记选择标签';
+  }
 }

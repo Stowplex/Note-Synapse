@@ -505,6 +505,7 @@
     }
   },
   "searchTags": "搜索标签",
+  "searchTagsToFilter": "搜索要筛选的标签",
   "searchTagsCapitalized": "搜索标签",
   "addNewTagOrSearch": "添加新标签或搜索",
   "tagManagement": "标签管理",
@@ -1448,7 +1449,7 @@
       },
       "fetchRemoteImages": "抓取网络图片",
       "gettingStarted": "入门指南",
-      "gettingStartedSubtitle": "安装用户手册和入门应用",
+      "gettingStartedSubtitle": "安装用户手册、入门应用和入门技能",
       "installUserManual": "安装用户手册",
       "installUserManualSubtitle": "安装或更新用户手册笔记",
       "installStarterApps": "安装入门应用",
@@ -1530,6 +1531,51 @@
       "@errorInstallingStarterApps": {
         "placeholders": {
           "error": {
+            "type": "String"
+          }
+        }
+      },
+      "installStarterSkills": "安装入门技能",
+      "installStarterSkillsSubtitle": "浏览内置技能并将其安装为透明的技能笔记",
+      "noStarterSkillsAvailable": "没有可用的入门技能",
+      "noStarterSkillsSelected": "未选择任何入门技能",
+      "installSelectedSkills": "安装选中的技能",
+      "starterSkillsInstalledSuccessfully": "{count}个技能安装成功！",
+      "@starterSkillsInstalledSuccessfully": {
+        "placeholders": {
+          "count": {
+            "type": "int"
+          }
+        }
+      },
+      "errorLoadingStarterSkills": "加载入门技能时出错：{error}",
+      "@errorLoadingStarterSkills": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+      "errorInstallingStarterSkills": "安装入门技能时出错：{error}",
+      "@errorInstallingStarterSkills": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+      "skillRefLabel": "skillRef：{ref}",
+      "@skillRefLabel": {
+        "placeholders": {
+          "ref": {
+            "type": "String"
+          }
+        }
+      },
+      "sourceLabel": "来源：{source}",
+      "@sourceLabel": {
+        "placeholders": {
+          "source": {
             "type": "String"
           }
         }
@@ -1708,6 +1754,9 @@
   "contractSelectionAbove": "向上收缩",
   "expandSelectionBelow": "向下扩展",
   "contractSelectionBelow": "向下收缩",
+  "expandToTop": "到顶部",
+  "expandToBottom": "到底部",
+  "contractToStart": "重置",
   "editSelection": "编辑",
   "deleteSelection": "删除区块",
   "confirmDeleteBlocks": "确定要删除 {count} 个区块吗？",
@@ -1761,6 +1810,10 @@
   "noBookmarksYet": "暂无书签",
   "aiContextBookmarks": "AI 上下文：书签",
   "configureAiContext": "配置 AI 上下文",
+  "configureAiContextDescription": "选择 AI 处理此 PDF 时要包含的页面：",
+  "includeInAiContext": "包含在 AI 上下文中",
+  "configureAiContextRange": "配置 AI 上下文范围",
+  "editAiContextRange": "编辑 AI 上下文范围",
   "aiContext": "AI 上下文：{mode}",
   "@aiContext": {
     "placeholders": {
@@ -1772,6 +1825,55 @@
   "aiContextFullPdf": "完整 PDF",
   "aiContextWindow": "窗口",
   "aiContextChapters": "章节",
+  "aiContextAllDocument": "整个文档",
+  "aiContextPagesCount": "{count} 页",
+  "@aiContextPagesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextWindowAroundCurrentPage": "当前页附近窗口",
+  "aiContextPagesCenteredOnReading": "以当前阅读位置为中心的 {count} 页",
+  "@aiContextPagesCenteredOnReading": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextBookmarksAvailable": "有 {count} 个书签可用",
+  "@aiContextBookmarksAvailable": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextPageNumber": "第 {pageNumber} 页",
+  "@aiContextPageNumber": {
+    "placeholders": {
+      "pageNumber": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextSelectedChapters": "已选章节",
+  "aiContextChooseSpecificSections": "选择特定章节",
+  "aiContextChaptersSelected": "已选择 {count} 个章节",
+  "@aiContextChaptersSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextPdfNoOutline": "此 PDF 没有目录",
+  "aiContextConfigurationSaved": "AI 上下文配置已保存",
+  "windowSize": "窗口大小",
+  "pages": "页数",
+  "pagesBeforeAfter": "前后页数",
   "nightMode": "夜间模式",
   "dayMode": "日间模式",
   "userAppSettingsTitle": "用户应用",
@@ -1798,5 +1900,52 @@
   "insertUserAppAdvanced": "高级：生成围栏代码块",
   "insertUserAppInsertButton": "插入",
   "insertUserAppBackButton": "返回",
-  "insertUserAppNoAppsMessage": "尚未安装任何应用。"
+  "insertUserAppNoAppsMessage": "尚未安装任何应用。",
+  "branchStripDocumentSwapMessage": "此分支关联到另一个文档。是否切换文档？",
+  "branchStripDocumentSwapConfirm": "切换",
+  "modelPreferences": "模型偏好",
+  "modelPreferencesSubtitle": "按能力设置模型优先级",
+  "viewFeatureMatrix": "查看功能矩阵",
+  "modelPreferenceDragDropHint": "拖动以重新排序模型。第一个匹配所需能力的模型将被使用。如果列表为空或没有匹配项，将使用系统默认模型。",
+  "priorityList": "优先级列表",
+  "noPreferencesSetMessage": "未设置偏好。\n将使用系统默认模型。",
+  "unknownModel": "未知模型",
+  "imageInputCapability": "图像输入",
+  "videoInputCapability": "视频输入",
+  "audioInputCapability": "音频输入",
+  "docsCapability": "文档",
+  "imageGenCapability": "图像生成",
+  "codeGenCapability": "代码生成",
+  "modelFeatureMatrix": "模型功能矩阵",
+  "modelNameColumn": "模型名称",
+  "imageInColumn": "图像输入",
+  "videoInColumn": "视频输入",
+  "audioColumn": "音频",
+  "imgGenColumn": "图像生成",
+  "codeGenColumn": "代码生成",
+  "docsColumn": "文档",
+  "errorLoadingModelPreferences": "加载模型偏好时出错：{error}",
+  "@errorLoadingModelPreferences": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "errorSavingModelPreferences": "保存偏好时出错：{error}",
+  "@errorSavingModelPreferences": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "scratchpad": "便笺",
+  "sendToScratchpad": "发送到便笺",
+  "scratchpadEmpty": "便笺为空",
+  "clear": "清除",
+  "recallAnnotations": "调出注释",
+  "includeScratchpadInChat": "在聊天上下文中包含便笺",
+  "selectTagsForNotes": "为 {count} 条笔记选择标签",
+  "@selectTagsForNotes": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  }
 }

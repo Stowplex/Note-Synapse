@@ -35,11 +35,48 @@ import '../screens/conversation_chat_screen.dart';
 import '../utils/remote_image_storage.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
+import 'heading_anchor_registry.dart';
 import 'interactive_checkbox_component.dart';
 import '../widgets/drawing_editor.dart';
 
 /// Enum to represent image source type
 enum _ImageSourceType { local, remote }
+
+/// Matches a markdown link `[text](url)` allowing the text and url to span
+/// multiple lines. Mirrors the inline pattern used by [CustomATagMd] but with
+/// captures for [text] and [url].
+final RegExp _crossLineLinkPattern = RegExp(
+  r"(?<!\!)\[((?:[^\[\]]|\[[^\[\]]*\])*)\]\(((?:[^()]*)(?:\((?:[^()]*)(?:\([^()]*\)[^()]*)*\)[^()]*)*)\)",
+);
+
+/// Strips a leading ATX heading marker like `### `.
+final RegExp _leadingHeadingMarker = RegExp(r'^#{1,6}\s+');
+
+/// Collapses any run of whitespace (including newlines) to a single space.
+final RegExp _whitespaceRun = RegExp(r'\s+');
+
+/// Rewrites markdown links whose text spans multiple lines into single-line
+/// `[text](url)` form so the inline link parser in `gpt_markdown` (which
+/// breaks paragraphs at blank lines before its inline pass) can render them.
+///
+/// - Single-line links are returned unchanged.
+/// - Image links (`![..](..)`) are skipped.
+/// - The link text is whitespace-collapsed and trimmed; a leading ATX heading
+///   marker (`#{1,6} `) is stripped so the title isn't rendered as `### Foo`
+///   inline.
+/// - Idempotent: applying twice yields the same result as applying once.
+String flattenCrossLineLinks(String src) {
+  if (!src.contains('\n')) return src;
+  return src.replaceAllMapped(_crossLineLinkPattern, (match) {
+    final raw = match[0]!;
+    if (!raw.contains('\n')) return raw;
+    final text = match[1] ?? '';
+    final url = (match[2] ?? '').trim();
+    var flat = text.replaceAll(_whitespaceRun, ' ').trim();
+    flat = flat.replaceFirst(_leadingHeadingMarker, '');
+    return '[$flat]($url)';
+  });
+}
 
 /// Applies a checkbox toggle to [content] and returns the updated string.
 ///
@@ -134,10 +171,18 @@ class InteractiveCheckboxMarkdown extends StatefulWidget {
     this.defaultWebViewSize = const Size(640, 400),
     this.hasWebViewNotifier,
     this.onFetchImage,
+    this.headingAnchorRegistry,
   });
 
   final ValueNotifier<bool>? hasWebViewNotifier;
   final Function(String)? onFetchImage;
+
+  /// When provided, the rendered markdown participates in GitHub-style
+  /// `[text](#section)` anchor links: heading widgets register themselves into
+  /// this registry and `#`-prefixed link taps scroll the matching heading
+  /// into view. Owners (the screen) must `clear()` the registry on note
+  /// changes; this widget never clears it.
+  final HeadingAnchorRegistry? headingAnchorRegistry;
 
   @override
   State<InteractiveCheckboxMarkdown> createState() =>
@@ -181,38 +226,37 @@ class _InteractiveCheckboxMarkdownState
     _appBlockBodies.clear();
 
     final matches = findSynapseAppBlocks(_currentContent).toList();
+    String afterSynapse;
     if (matches.isEmpty) {
-      _renderedContent = _currentContent;
-      return;
-    }
-
-    final buffer = StringBuffer();
-    int cursor = 0;
-    int idCounter = 0;
-    for (final match in matches) {
-      buffer.write(_currentContent.substring(cursor, match.startOffset));
-      final body = match.body;
-      if (body.isValid) {
-        final refId = 'b${idCounter++}';
-        _appBlockBodies[refId] = body;
-        final w =
-            (body.width ?? widget.defaultWebViewSize.width).toInt();
-        final h =
-            (body.height ?? widget.defaultWebViewSize.height).toInt();
-        buffer.write(
-          '@[${w}x$h](${SynapseResourceUri.scheme}://app/${Uri.encodeComponent(body.appUuid)}'
-          '?$synapseAppBlockRefKey=$refId)',
-        );
-      } else {
-        buffer.write(
-          '> **Embedded app error**: '
-          '${body.error ?? 'invalid synapse-app block'}',
-        );
+      afterSynapse = _currentContent;
+    } else {
+      final buffer = StringBuffer();
+      int cursor = 0;
+      int idCounter = 0;
+      for (final match in matches) {
+        buffer.write(_currentContent.substring(cursor, match.startOffset));
+        final body = match.body;
+        if (body.isValid) {
+          final refId = 'b${idCounter++}';
+          _appBlockBodies[refId] = body;
+          final w = (body.width ?? widget.defaultWebViewSize.width).toInt();
+          final h = (body.height ?? widget.defaultWebViewSize.height).toInt();
+          buffer.write(
+            '@[${w}x$h](${SynapseResourceUri.scheme}://app/${Uri.encodeComponent(body.appUuid)}'
+            '?$synapseAppBlockRefKey=$refId)',
+          );
+        } else {
+          buffer.write(
+            '> **Embedded app error**: '
+            '${body.error ?? 'invalid synapse-app block'}',
+          );
+        }
+        cursor = match.endOffset;
       }
-      cursor = match.endOffset;
+      buffer.write(_currentContent.substring(cursor));
+      afterSynapse = buffer.toString();
     }
-    buffer.write(_currentContent.substring(cursor));
-    _renderedContent = buffer.toString();
+    _renderedContent = flattenCrossLineLinks(afterSynapse);
   }
 
   @override
@@ -1246,9 +1290,19 @@ class _InteractiveCheckboxMarkdownState
     // Reset occurrence counters so they match the order of rendered checkboxes.
     _checkboxOccurrenceCounters.clear();
 
+    // When this widget owns the heading-anchor registry (immersive path),
+    // clear it before rebuild so DragTargetSafeHTag re-registers each heading
+    // in document order with deterministic duplicate suffixes. The registry
+    // is only passed in when the caller hosts a single InteractiveCheckboxMarkdown
+    // for the entire document (BlockMarkdownBody does not pass one — it owns
+    // registration at parse time).
+    widget.headingAnchorRegistry?.clear();
+
     _refreshPreprocessedContent();
 
-    // Basic inline components
+    // GptMarkdown replaces the default inline component list when this
+    // parameter is supplied, so include the standard components explicitly
+    // after the local overrides.
     final inlineComponents = [
       CustomImageMd(
         onImage: (url, alt) {
@@ -1279,22 +1333,10 @@ class _InteractiveCheckboxMarkdownState
         hasWebViewNotifier: widget.hasWebViewNotifier,
         appBlockLookup: (id) => _appBlockBodies[id],
       ),
-      if (widget.onLinkTap != null || widget.noteId != null)
-        // Helper to ensure links are handled if needed, usually default ATag is fine
-        // but we used DragTargetATagMd before. Standard ATagMd should be enough.
-        // If we need custom link handling (like avoiding ! prefixes),
-        // GptMarkdown handles that.
-        // We'll use the standard ones implicitly by NOT passing them in 'inlineComponents'
-        // except for the custom one.
-        ...MarkdownComponent.inlineComponents.where((e) => e is! ATagMd),
+      ...MarkdownComponent.inlineComponents.where(
+        (e) => e is! ATagMd && e is! ImageMd,
+      ),
     ];
-
-    // Check if we need to add standard ATagMd back if we excluded it?
-    // Wait, GptMarkdown adds inlineComponents on top of defaults?
-    // No, 'inlineComponents' argument to GptMarkdown REPLACES the list or APPENDS?
-    // Docs say: "inlineComponents: A list of custom inline components"
-    // Usually it appends or overrides if types match.
-    // Let's assume we can just pass our custom ones.
 
     final components = [
       CodeBlockMd(),
@@ -1317,53 +1359,72 @@ class _InteractiveCheckboxMarkdownState
       LatexBracketBlockMd(),
     ];
 
+    final markdown = GptMarkdown(
+      _renderedContent,
+      style: widget.style,
+      textDirection: widget.textDirection,
+      onLinkTap: (url, text) {
+        // GitHub-style intra-document anchor: `[text](#section)`.
+        if (url.startsWith('#') && widget.headingAnchorRegistry != null) {
+          // Fire-and-forget; gpt_markdown's onLinkTap is sync.
+          widget.headingAnchorRegistry!.scrollToSection(url.substring(1));
+          return;
+        }
+        // Handle synapseresource:// URIs internally
+        if (SynapseResourceUri.isSynapseResourceUri(url)) {
+          _handleSynapseResourceLink(url);
+          return;
+        }
+        // Fall back to parent callback
+        widget.onLinkTap?.call(url, text);
+      },
+      maxLines: widget.maxLines,
+      overflow: widget.overflow,
+      latexBuilder: _customLatexBuilder,
+      imageBuilder: (context, url, {alt, height, title, width}) {
+        return _customImageBuilder(
+          context,
+          url,
+          width: width,
+          height: height,
+          title: title,
+          alt: alt,
+          onFetch: (url) async {
+            await widget.onFetchImage?.call(url);
+            if (mounted) {
+              // Invalidate caches so the image source type is re-evaluated
+              _imageSourceTypeFutures.remove(url);
+              _localImageFutures.remove(url);
+              setState(() {
+                // Force rebuild of specific image key if needed, or just setState
+                // Update version to force new key for image widget
+                _imageVersions[url] = (_imageVersions[url] ?? 0) + 1;
+              });
+            }
+          },
+        );
+      },
+      codeBuilder: _buildCodeBlock,
+      tableBuilder: _buildConstrainedTable,
+      components: components,
+      inlineComponents: inlineComponents,
+      useDollarSignsForLatex: true,
+    );
+
+    // When a registry is supplied, expose it to descendants so heading
+    // components can register themselves. We avoid installing the scope
+    // otherwise — block-level callers (BlockMarkdownBody) own registration
+    // at parse time and don't want headings to self-register.
+    final Widget child = widget.headingAnchorRegistry != null
+        ? HeadingAnchorScope(
+            registry: widget.headingAnchorRegistry!,
+            child: markdown,
+          )
+        : markdown;
+
     return KeyedSubtree(
       key: ValueKey('md_${_imageVersions.values.join()}'),
-      child: GptMarkdown(
-        _renderedContent,
-        style: widget.style,
-        textDirection: widget.textDirection,
-        onLinkTap: (url, text) {
-          // Handle synapseresource:// URIs internally
-          if (SynapseResourceUri.isSynapseResourceUri(url)) {
-            _handleSynapseResourceLink(url);
-            return;
-          }
-          // Fall back to parent callback
-          widget.onLinkTap?.call(url, text);
-        },
-        maxLines: widget.maxLines,
-        overflow: widget.overflow,
-        latexBuilder: _customLatexBuilder,
-        imageBuilder: (context, url, {alt, height, title, width}) {
-          return _customImageBuilder(
-            context,
-            url,
-            width: width,
-            height: height,
-            title: title,
-            alt: alt,
-            onFetch: (url) async {
-              await widget.onFetchImage?.call(url);
-              if (mounted) {
-                // Invalidate caches so the image source type is re-evaluated
-                _imageSourceTypeFutures.remove(url);
-                _localImageFutures.remove(url);
-                setState(() {
-                  // Force rebuild of specific image key if needed, or just setState
-                  // Update version to force new key for image widget
-                  _imageVersions[url] = (_imageVersions[url] ?? 0) + 1;
-                });
-              }
-            },
-          );
-        },
-        codeBuilder: _buildCodeBlock,
-        tableBuilder: _buildConstrainedTable,
-        components: components,
-        inlineComponents: inlineComponents,
-        useDollarSignsForLatex: true,
-      ),
+      child: child,
     );
   }
 
@@ -1424,17 +1485,11 @@ class _InteractiveCheckboxMarkdownState
               content = Center(child: content);
               break;
             case TextAlign.right:
-              content = Align(
-                alignment: Alignment.centerRight,
-                child: content,
-              );
+              content = Align(alignment: Alignment.centerRight, child: content);
               break;
             case TextAlign.left:
             default:
-              content = Align(
-                alignment: Alignment.centerLeft,
-                child: content,
-              );
+              content = Align(alignment: Alignment.centerLeft, child: content);
               break;
           }
 
@@ -3492,6 +3547,14 @@ class CustomImageMd extends InlineMd {
     var alt = match.group(1);
     var url = match.group(2) ?? "";
 
+    // Strip optional CommonMark title attribute: `![alt](url "title")`,
+    // `![alt](url 'title')`, or `![alt](url (title))`. Without this the
+    // captured group still contains ` "title"` and the resource 404s.
+    final titleStart = RegExp(r'''\s+["'(]''').firstMatch(url);
+    if (titleStart != null) {
+      url = url.substring(0, titleStart.start);
+    }
+
     // Clean up the URL if it looks like a data URI
     // Use loose check for data: because sometimes it might have spaces before it
     if (url.trim().contains('data:')) {
@@ -3579,8 +3642,8 @@ class _AppEmbedFromUriState extends State<_AppEmbedFromUri> {
       blockBody = widget.appBlockLookup!(blockRefId);
     }
 
-    final revisionRaw = blockBody?.revisionNumber?.toString() ??
-        query['revision'];
+    final revisionRaw =
+        blockBody?.revisionNumber?.toString() ?? query['revision'];
     final int? revisionNumber = revisionRaw == null
         ? null
         : int.tryParse(revisionRaw);
@@ -3714,13 +3777,12 @@ class _EmbedRequest {
     int? revisionNumber,
     required List<Note> selectedNotes,
     required Map<String, dynamic> params,
-  }) =>
-      _EmbedRequest._(
-        appUuid: appUuid,
-        revisionNumber: revisionNumber,
-        selectedNotes: selectedNotes,
-        params: params,
-      );
+  }) => _EmbedRequest._(
+    appUuid: appUuid,
+    revisionNumber: revisionNumber,
+    selectedNotes: selectedNotes,
+    params: params,
+  );
   factory _EmbedRequest.error(String message) =>
       _EmbedRequest._(error: message);
 

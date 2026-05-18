@@ -16,6 +16,15 @@ class BlockSelectionMenu extends StatelessWidget {
   final bool canExpandBelow;
   final bool canContractBelow;
 
+  final GlobalKey? expandAboveKey;
+  final GlobalKey? contractAboveKey;
+  final GlobalKey? contractBelowKey;
+  final GlobalKey? expandBelowKey;
+  final VoidCallback? onLongPressExpandAbove;
+  final VoidCallback? onLongPressContractAbove;
+  final VoidCallback? onLongPressContractBelow;
+  final VoidCallback? onLongPressExpandBelow;
+
   const BlockSelectionMenu({
     super.key,
     required this.onExpandAbove,
@@ -30,6 +39,14 @@ class BlockSelectionMenu extends StatelessWidget {
     this.canContractAbove = true,
     this.canExpandBelow = true,
     this.canContractBelow = true,
+    this.expandAboveKey,
+    this.contractAboveKey,
+    this.contractBelowKey,
+    this.expandBelowKey,
+    this.onLongPressExpandAbove,
+    this.onLongPressContractAbove,
+    this.onLongPressContractBelow,
+    this.onLongPressExpandBelow,
   });
 
   @override
@@ -45,36 +62,46 @@ class BlockSelectionMenu extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Expand Above
-            IconButton(
-              icon: const Icon(Icons.expand_less), // Or keyboard_arrow_up
+            _buildBoundaryButton(
+              key: expandAboveKey,
+              icon: Icons.expand_less,
               tooltip: l10n.expandSelectionAbove,
-              onPressed: canExpandAbove ? onExpandAbove : null,
+              canUse: canExpandAbove,
+              onPressed: onExpandAbove,
+              onLongPress: onLongPressExpandAbove,
             ),
             // Contract Above (Maybe arrow_downward if above?)
             // Icons for expand/contract relative to selection:
             // Expand Above: Up arrow
             // Contract Above: Down arrow (shrinks top boundary down)
-            IconButton(
-              icon: const Icon(
-                Icons.vertical_align_bottom,
-              ), // Or something depicting shrinking top
+            _buildBoundaryButton(
+              key: contractAboveKey,
+              icon: Icons.vertical_align_bottom,
               tooltip: l10n.contractSelectionAbove,
-              onPressed: canContractAbove ? onContractAbove : null,
+              canUse: canContractAbove,
+              onPressed: onContractAbove,
+              onLongPress: onLongPressContractAbove,
             ),
             // Divider
             const SizedBox(width: 4, height: 24, child: VerticalDivider()),
 
             // Contract Below: Up arrow (shrinks bottom boundary up)
-            IconButton(
-              icon: const Icon(Icons.vertical_align_top),
+            _buildBoundaryButton(
+              key: contractBelowKey,
+              icon: Icons.vertical_align_top,
               tooltip: l10n.contractSelectionBelow,
-              onPressed: canContractBelow ? onContractBelow : null,
+              canUse: canContractBelow,
+              onPressed: onContractBelow,
+              onLongPress: onLongPressContractBelow,
             ),
             // Expand Below: Down arrow
-            IconButton(
-              icon: const Icon(Icons.expand_more),
+            _buildBoundaryButton(
+              key: expandBelowKey,
+              icon: Icons.expand_more,
               tooltip: l10n.expandSelectionBelow,
-              onPressed: canExpandBelow ? onExpandBelow : null,
+              canUse: canExpandBelow,
+              onPressed: onExpandBelow,
+              onLongPress: onLongPressExpandBelow,
             ),
 
             const SizedBox(width: 4, height: 24, child: VerticalDivider()),
@@ -106,6 +133,26 @@ class BlockSelectionMenu extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBoundaryButton({
+    required GlobalKey? key,
+    required IconData icon,
+    required String tooltip,
+    required bool canUse,
+    required VoidCallback? onPressed,
+    required VoidCallback? onLongPress,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      triggerMode: TooltipTriggerMode.manual,
+      child: IconButton(
+        key: key,
+        icon: Icon(icon),
+        onPressed: canUse ? onPressed : null,
+        onLongPress: canUse ? onLongPress : null,
       ),
     );
   }

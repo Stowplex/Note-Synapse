@@ -50,15 +50,15 @@ void main() {
       expect(meta.description, 'Use for: deep analysis of: things');
     });
 
-    test('documents multi-line description limitation', () {
+    test('description supports YAML block-scalar value', () {
+      // Previously documented as a parser limitation; the parser now
+      // handles `|` block scalars, so description preserves multi-line
+      // content with line structure intact.
       const content =
           '---\nname: Skill\ndescription: |\n  Line one\n  Line two\nenabled: true\n---\n\nbody';
       final meta = service.parseSkillMetadata('note-1', content);
-      // The simple line-by-line parser treats '|' as the description value.
-      // This documents the known limitation with YAML block scalars.
-      if (meta != null) {
-        expect(meta.description, '|');
-      }
+      expect(meta, isNotNull);
+      expect(meta!.description, 'Line one\nLine two');
     });
 
     test('handles extra whitespace in frontmatter values', () {

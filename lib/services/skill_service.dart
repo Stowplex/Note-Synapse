@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:note_synapse/models/note.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/prompts/prompt_template_service.dart';
@@ -11,6 +12,12 @@ class SkillMetadata {
   final bool enabled;
   final int? minContext;
 
+  /// Optional prompt-injection instruction telling the AI how to emit
+  /// follow-up action chips (a fenced ```chips block) for this skill's
+  /// mode. Null if the skill doesn't declare one. Concatenated with
+  /// other loaded skills' defaultAction strings into the system prompt.
+  final String? defaultAction;
+
   const SkillMetadata({
     required this.noteId,
     required this.skillRef,
@@ -18,18 +25,22 @@ class SkillMetadata {
     required this.description,
     required this.enabled,
     this.minContext,
+    this.defaultAction,
   });
 }
 
 class SkillService {
   static const String agentSkillTag = 'agent-skill';
+  static const String bundledKnowledgeExplorationSkillPath =
+      'assets/starter/skills/Knowledge_Exploration.md';
   static const int _compactBudgetThreshold = 15000;
   static const int _fullBudgetThreshold = 50000;
 
   final DatabaseService _db;
+  final bool includeBundledSkills;
   final Set<String> _loadedSkillNoteIds = {};
 
-  SkillService(this._db);
+  SkillService(this._db, {this.includeBundledSkills = false});
 
   // --- Parsing ---
 
@@ -39,12 +50,53 @@ class SkillService {
     if (endIdx == -1) return null;
     final frontmatter = content.substring(4, endIdx);
     final fields = <String, String>{};
-    for (final line in frontmatter.split('\n')) {
+    final lines = frontmatter.split('\n');
+    int i = 0;
+    while (i < lines.length) {
+      final line = lines[i];
       final colonIdx = line.indexOf(':');
-      if (colonIdx == -1) continue;
+      if (colonIdx == -1) {
+        i++;
+        continue;
+      }
       final key = line.substring(0, colonIdx).trim();
-      final value = line.substring(colonIdx + 1).trim();
-      if (key.isNotEmpty) fields[key] = value;
+      final rawValue = line.substring(colonIdx + 1).trim();
+      if (key.isEmpty) {
+        i++;
+        continue;
+      }
+      // Block scalar (`key: |` or `key: >`) — consume indented continuation.
+      // Note: `>` is treated as `|` here (no folding-into-spaces). Real YAML
+      // folds single newlines into spaces for `>`, but the use case (skill
+      // default_action with multi-line prompt text) wants line structure
+      // preserved either way. Tabs in continuation lines count as one column;
+      // mix tabs and spaces at your own risk.
+      if (rawValue == '|' || rawValue == '>') {
+        final buffer = StringBuffer();
+        i++;
+        int? indent;
+        bool hasContent = false;
+        while (i < lines.length) {
+          final next = lines[i];
+          if (next.trim().isEmpty) {
+            if (hasContent) buffer.writeln();
+            i++;
+            continue;
+          }
+          final leadingSpaces = next.length - next.trimLeft().length;
+          if (leadingSpaces == 0) break;
+          indent ??= leadingSpaces;
+          if (leadingSpaces < indent) break;
+          if (hasContent) buffer.writeln();
+          buffer.write(next.substring(indent));
+          hasContent = true;
+          i++;
+        }
+        fields[key] = buffer.toString();
+      } else {
+        fields[key] = rawValue;
+        i++;
+      }
     }
     final name = fields['name'];
     final description = fields['description'];
@@ -60,6 +112,16 @@ class SkillService {
     final minContext = minContextStr != null
         ? int.tryParse(minContextStr)
         : null;
+    final rawDefaultAction = fields['default_action']?.trim();
+    // Treat a value that is solely a YAML comment ("# ...") as no value.
+    // The hand-rolled parser doesn't strip inline trailing comments, but a
+    // value that *starts* with `#` is unambiguously commentary, not content.
+    final defaultAction =
+        (rawDefaultAction == null ||
+            rawDefaultAction.isEmpty ||
+            rawDefaultAction.startsWith('#'))
+        ? null
+        : rawDefaultAction;
     return SkillMetadata(
       noteId: noteId,
       skillRef: skillRef,
@@ -67,6 +129,7 @@ class SkillService {
       description: description,
       enabled: enabled,
       minContext: minContext,
+      defaultAction: defaultAction,
     );
   }
 
@@ -95,10 +158,57 @@ class SkillService {
           description: meta.description,
           enabled: meta.enabled,
           minContext: meta.minContext,
+          defaultAction: meta.defaultAction,
         );
       }
     }
+    if (includeBundledSkills) {
+      await _addBundledSkillIfNeeded(
+        index,
+        usedRefs,
+        bundledKnowledgeExplorationSkillPath,
+      );
+    }
     return index;
+  }
+
+  Future<String?> loadBundledSkillContent(String noteId) async {
+    if (!noteId.startsWith('assets/starter/skills/') ||
+        !noteId.endsWith('.md')) {
+      return null;
+    }
+    try {
+      return await rootBundle.loadString(noteId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _addBundledSkillIfNeeded(
+    Map<String, SkillMetadata> index,
+    Set<String> usedRefs,
+    String assetPath,
+  ) async {
+    try {
+      final content = await rootBundle.loadString(assetPath);
+      final meta = parseSkillMetadata(assetPath, content);
+      if (meta == null || !meta.enabled) return;
+      final stableRef = _dedupeSkillRef(meta.skillRef, usedRefs);
+      if (stableRef != meta.skillRef) return;
+      usedRefs.add(stableRef);
+      index[assetPath] = SkillMetadata(
+        noteId: assetPath,
+        skillRef: stableRef,
+        name: meta.name,
+        description: meta.description,
+        enabled: meta.enabled,
+        minContext: meta.minContext,
+        defaultAction: meta.defaultAction,
+      );
+    } catch (_) {
+      // Bundled starter skills are optional at runtime; missing assets should
+      // not break user-authored skill discovery.
+    }
   }
 
   String buildSkillIndexPrompt(
@@ -135,10 +245,9 @@ class SkillService {
       };
     }).toList();
 
-    return getIt<PromptTemplateService>().renderSync(
-      templatePath,
-      {'skills': skills},
-    );
+    return getIt<PromptTemplateService>().renderSync(templatePath, {
+      'skills': skills,
+    });
   }
 
   String _formatSkillEntry(
@@ -155,6 +264,40 @@ class SkillService {
       if (limited) 'mode=limited',
     ];
     return '- ${parts.join(' | ')}';
+  }
+
+  /// Returns a system-prompt section containing the concatenated
+  /// default_action instruction text from every skill in [index] whose
+  /// `defaultAction` is non-null. Skills are sorted by `skillRef`
+  /// (alphabetical) so the output is reproducible across runs.
+  ///
+  /// Returns an empty string if no skill declares a defaultAction —
+  /// callers should append the result unconditionally; an empty append
+  /// is a no-op.
+  String buildDefaultActionPromptSection(Map<String, SkillMetadata> index) {
+    final withAction =
+        index.values
+            .where(
+              (m) =>
+                  m.enabled &&
+                  m.defaultAction != null &&
+                  m.defaultAction!.trim().isNotEmpty,
+            )
+            .toList()
+          ..sort((a, b) => a.skillRef.compareTo(b.skillRef));
+    if (withAction.isEmpty) return '';
+    final buf = StringBuffer();
+    buf.writeln('## Skill Default Actions');
+    buf.writeln(
+      'The following skill-driven instructions modify how you should '
+      'present follow-up actions to the reader. Apply all that are relevant.',
+    );
+    for (final m in withAction) {
+      buf.writeln();
+      buf.writeln('### From skill `${m.skillRef}` (${m.name})');
+      buf.writeln(m.defaultAction);
+    }
+    return buf.toString().trimRight();
   }
 
   String? resolveNoteIdForSkillRef(

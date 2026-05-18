@@ -704,6 +704,14 @@ class MockDatabaseService extends _i1.Mock implements _i5.DatabaseService {
           as _i6.Future<_i14.UserApp?>);
 
   @override
+  _i6.Future<_i14.UserApp?> getUserAppByUuid(String? uuid) =>
+      (super.noSuchMethod(
+            Invocation.method(#getUserAppByUuid, [uuid]),
+            returnValue: _i6.Future<_i14.UserApp?>.value(),
+          )
+          as _i6.Future<_i14.UserApp?>);
+
+  @override
   _i6.Future<void> updateUserApp(_i14.UserApp? app) =>
       (super.noSuchMethod(
             Invocation.method(#updateUserApp, [app]),
@@ -2010,6 +2018,19 @@ class MockSkillService extends _i1.Mock implements _i26.SkillService {
                   #forLocalModel: forLocalModel,
                 },
               ),
+            ),
+          )
+          as String);
+
+  @override
+  String buildDefaultActionPromptSection(
+    Map<String, _i26.SkillMetadata>? index,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#buildDefaultActionPromptSection, [index]),
+            returnValue: _i8.dummyValue<String>(
+              this,
+              Invocation.method(#buildDefaultActionPromptSection, [index]),
             ),
           )
           as String);

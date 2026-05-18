@@ -1,17 +1,28 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/in_note_marker.dart';
 import '../models/conversation.dart';
 import '../services/database_service.dart';
+import '../services/note_marker_service.dart';
 import '../services/service_locator.dart';
 import '../screens/conversation_chat_screen.dart';
 import '../utils/file_utils.dart';
+import 'fullscreen_image_preview.dart';
 import 'interactive_checkbox_markdown.dart';
+import 'marker_chat_panel_host.dart';
+import 'marker_orphan_state.dart';
 
 class InNoteMarkerPreview extends StatefulWidget {
   final InNoteMarker marker;
+  final FutureOr<void> Function(String conversationId, String markerMessageId)?
+  onFocusConversation;
 
-  const InNoteMarkerPreview({super.key, required this.marker});
+  const InNoteMarkerPreview({
+    super.key,
+    required this.marker,
+    this.onFocusConversation,
+  });
 
   @override
   State<InNoteMarkerPreview> createState() => _InNoteMarkerPreviewState();
@@ -86,7 +97,19 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.marker.type == MarkerType.annotation) {
+      return _buildLegacyAnnotationPreview();
+    }
+    return _buildAiMarkerChatPanelHost();
+  }
+
+  /// Legacy preview path used for annotation markers. Renders the
+  /// captured image, the original user message, the AI reply, and a
+  /// "Open Conversation" button. Behavior preserved verbatim from the
+  /// pre-marker-anchored-subtree implementation.
+  Widget _buildLegacyAnnotationPreview() {
     return DraggableScrollableSheet(
+      key: const ValueKey('legacy-annotation-preview'),
       initialChildSize: 0.55,
       minChildSize: 0.35,
       maxChildSize: 0.92,
@@ -103,6 +126,215 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
         );
       },
     );
+  }
+
+  /// AI marker preview path. Hosts ChatPanel inside the marker sheet
+  /// so the user can continue the conversation in place.
+  ///
+  /// Runs the 4-tier fallback chain (anchor exists → lastViewed → original
+  /// → orphan) before deciding whether to render [MarkerChatPanelHost] or
+  /// the [MarkerOrphanState] empty state. See [_resolveLastViewed].
+  Widget _buildAiMarkerChatPanelHost() {
+    return DraggableScrollableSheet(
+      key: const ValueKey('ai-marker-chat-panel-host'),
+      initialChildSize: 0.65,
+      minChildSize: 0.35,
+      maxChildSize: 0.92,
+      expand: false,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: FutureBuilder<_ResolvedTarget>(
+            future: _resolveLastViewed(widget.marker),
+            builder: (context, snap) {
+              if (!snap.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final target = snap.data!;
+              if (target.orphan != null) {
+                return MarkerOrphanState(
+                  reason: target.orphan!,
+                  onDeleteMarker: () => _confirmDelete(context),
+                );
+              }
+              return MarkerChatPanelHost(
+                marker: widget.marker,
+                resolvedConversationId: target.conversationId!,
+                contextCardBuilder:
+                    (context, activeConversationId, isSending) =>
+                        _buildAiMarkerContextCard(
+                          context,
+                          activeConversationId: activeConversationId,
+                          isSending: isSending,
+                        ),
+                scrollController: scrollController,
+                onActiveConversationChanged: _persistLastViewed,
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  /// Context card pinned at the top of the embedded ChatPanel. Reuses the
+  /// legacy preview context so the reader still sees the original prompt and
+  /// captured region before continuing the marker conversation.
+  Widget _buildAiMarkerContextCard(
+    BuildContext context, {
+    required String activeConversationId,
+    required bool isSending,
+  }) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: _loading
+            ? const SizedBox(
+                height: 48,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Marker ${widget.marker.index}',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                      if (widget.onFocusConversation != null)
+                        IconButton(
+                          key: const ValueKey(
+                            'focus-marker-conversation-button',
+                          ),
+                          onPressed: isSending
+                              ? null
+                              : () => _focusConversation(activeConversationId),
+                          icon: const Icon(Icons.center_focus_strong, size: 18),
+                          tooltip: 'Focus this conversation',
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                          padding: EdgeInsets.zero,
+                        ),
+                      IconButton(
+                        onPressed: () => _confirmDelete(context),
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        color: Theme.of(context).colorScheme.error,
+                        tooltip: 'Delete Marker',
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                        padding: EdgeInsets.zero,
+                      ),
+                    ],
+                  ),
+                  if (_imagePaths.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 96,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _imagePaths.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) => SizedBox(
+                          width: 112,
+                          child: _buildSingleImage(context, _imagePaths[index]),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (_userMessageContent != null &&
+                      _userMessageContent!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Original prompt',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _userMessageContent!,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+      ),
+    );
+  }
+
+  /// 4-tier fallback chain run on each marker re-entry:
+  /// 1. Anchor message must still exist; otherwise the marker is orphaned
+  ///    (anchor-deleted) regardless of conversation state.
+  /// 2. If [InNoteMarker.lastViewedConversationId] is set and that
+  ///    conversation still exists → land there (Kindle resumption).
+  /// 3. Otherwise fall back to the marker's original [conversationId].
+  ///    If the lastViewed pointer was stale, fire-and-forget clear it so
+  ///    the next re-entry skips the dead lookup.
+  /// 4. If neither lastViewed nor original conversations resolve → orphan
+  ///    (conversation-deleted).
+  Future<_ResolvedTarget> _resolveLastViewed(InNoteMarker m) async {
+    final db = getIt<DatabaseService>();
+    // Tier 1: anchor message must still exist somewhere.
+    final anchor = await db.getConversationMessage(m.messageId);
+    if (anchor == null) {
+      return _ResolvedTarget(orphan: OrphanReason.anchorDeleted);
+    }
+    // Tier 2: lastViewed conversation if still alive.
+    if (m.lastViewedConversationId != null) {
+      final c = await db.getConversation(m.lastViewedConversationId!);
+      if (c != null) return _ResolvedTarget(conversationId: c.id);
+      // Stale — fall through and clear below.
+    }
+    // Tier 3: original conversation.
+    final original = await db.getConversation(m.conversationId);
+    if (original != null) {
+      if (m.lastViewedConversationId != null) {
+        // Fire-and-forget cleanup of the stale pointer. If this fails
+        // the next re-entry will try again.
+        unawaited(
+          getIt<NoteMarkerService>().updateMarkerLastViewed(m.id, null),
+        );
+      }
+      return _ResolvedTarget(conversationId: original.id);
+    }
+    // Tier 4: nothing usable left.
+    return _ResolvedTarget(orphan: OrphanReason.conversationDeleted);
+  }
+
+  /// Persists the active branch back onto the marker so the next re-entry
+  /// resumes here. Fire-and-forget; if the write fails the next re-entry
+  /// uses the original conversation as fallback.
+  void _persistLastViewed(String newConversationId) {
+    unawaited(
+      getIt<NoteMarkerService>().updateMarkerLastViewed(
+        widget.marker.id,
+        newConversationId,
+      ),
+    );
+  }
+
+  Future<void> _focusConversation(String conversationId) async {
+    await getIt<NoteMarkerService>().updateMarkerLastViewed(
+      widget.marker.id,
+      conversationId,
+    );
+    if (!mounted) return;
+    final onFocusConversation = widget.onFocusConversation;
+    Navigator.of(context).pop(false);
+    await onFocusConversation?.call(conversationId, widget.marker.messageId);
   }
 
   Widget _buildContent(
@@ -287,27 +519,63 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
   }
 
   Widget _buildSingleImage(BuildContext context, String path) {
+    final file = File(path);
+    final fallback = _buildImageFallback(context);
+    if (!file.existsSync()) {
+      return fallback;
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
-      child: Image.file(
-        File(path),
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stack) {
-          return Container(
-            height: 120,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Center(
-              child: Icon(
-                Icons.broken_image_outlined,
-                size: 40,
-                color: Theme.of(context).disabledColor,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => FullscreenImagePreview.show(
+            context,
+            image: Image.file(file, fit: BoxFit.contain),
+            title: 'Marker ${widget.marker.index}',
+          ),
+          child: Tooltip(
+            message: 'Open image preview',
+            child: Semantics(
+              button: true,
+              label: 'Open marker image preview',
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final image = Image.file(
+                    file,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stack) => fallback,
+                  );
+                  if (constraints.hasBoundedHeight) {
+                    return SizedBox.expand(child: image);
+                  }
+                  return ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 120),
+                    child: image,
+                  );
+                },
               ),
             ),
-          );
-        },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageFallback(BuildContext context) {
+    return Container(
+      height: 120,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.broken_image_outlined,
+          size: 40,
+          color: Theme.of(context).disabledColor,
+        ),
       ),
     );
   }
@@ -315,12 +583,33 @@ class _InNoteMarkerPreviewState extends State<InNoteMarkerPreview> {
 
 Future<bool?> showInNoteMarkerPreview(
   BuildContext context,
-  InNoteMarker marker,
-) {
+  InNoteMarker marker, {
+  FutureOr<void> Function(String conversationId, String markerMessageId)?
+  onFocusConversation,
+}) {
   return showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => InNoteMarkerPreview(marker: marker),
+    builder: (context) {
+      final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+      return AnimatedPadding(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: InNoteMarkerPreview(
+          marker: marker,
+          onFocusConversation: onFocusConversation,
+        ),
+      );
+    },
   );
+}
+
+/// Result of [_InNoteMarkerPreviewState._resolveLastViewed]. Exactly one
+/// of [conversationId] or [orphan] is non-null.
+class _ResolvedTarget {
+  final String? conversationId;
+  final OrphanReason? orphan;
+  _ResolvedTarget({this.conversationId, this.orphan});
 }

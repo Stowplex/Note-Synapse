@@ -238,6 +238,7 @@ flutter:
     - assets/model_presets/
     - assets/starter/
     - assets/starter/apps/
+    - assets/starter/skills/
     - assets/tag_images/
     - assets/prompts/guidelines/
     - assets/prompts/ai_prompts/

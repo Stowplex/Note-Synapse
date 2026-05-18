@@ -657,7 +657,7 @@ class _MainScreenState extends State<MainScreen> {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.any,
         allowMultiple: false,
-        withData: true, // This ensures we get the file data
+        withData: kIsWeb,
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -693,11 +693,8 @@ class _MainScreenState extends State<MainScreen> {
     AppProvider appProvider,
   ) async {
     try {
-      // Read file bytes and save to private storage
-      final bytes = await File(file.path!).readAsBytes();
-      final relativePath = await FileUtils.saveFileToPrivateStorage(
-        bytes,
-        file.name,
+      final relativePath = await FileUtils.savePlatformFileToPrivateStorage(
+        file,
       );
 
       // Create a note with the file attachment

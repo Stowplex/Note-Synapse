@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
@@ -419,7 +420,7 @@ class _AINoteCreatorDialogState extends State<AINoteCreatorDialog> {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
         type: FileType.any,
-        withData: true,
+        withData: kIsWeb,
       );
 
       if (result != null) {

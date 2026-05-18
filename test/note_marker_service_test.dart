@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:note_synapse/models/attachment.dart';
 import 'package:note_synapse/models/in_note_marker.dart';
+import 'package:note_synapse/models/note.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/note_marker_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
@@ -232,6 +235,168 @@ void main() {
       final markers = captured['markers'] as List;
       expect(markers.length, 1);
       expect((markers.first as Map<String, dynamic>)['id'], 'nm-b');
+    });
+  });
+
+  // ── Marker-by-id (parent-agnostic) operations (Task 24) ─────────────────
+
+  Note makeNote(String id) => Note(
+        id: id,
+        title: 'note $id',
+        content: '',
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+  InNoteMarker makeNoteMarker({String id = 'mk1', String? lastViewed}) =>
+      InNoteMarker.forNote(
+        id: id,
+        index: 0,
+        charStart: 0,
+        charEnd: 5,
+        conversationId: 'c-original',
+        messageId: 'm',
+        lastViewedConversationId: lastViewed,
+      );
+
+  Map<String, dynamic> makeAttachmentRow({
+    required String id,
+    required InNoteMarker marker,
+  }) => {
+        'id': id,
+        'noteId': 'n1',
+        'fileName': 'pdf.pdf',
+        'fileType': 'pdf',
+        'filePath': 'attachments/pdf.pdf',
+        'isRelativePath': 1,
+        'includeInAIContext': 1,
+        'createdAt': DateTime.now().millisecondsSinceEpoch,
+        'metadata': jsonEncode({'markers': [marker.toJson()]}),
+      };
+
+  group('updateMarkerLastViewed', () {
+    test('sets lastViewedConversationId on a note marker', () async {
+      final marker = makeNoteMarker();
+      when(mockDb.getAllNotes()).thenAnswer((_) async => [makeNote('n1')]);
+      when(mockDb.getNoteMetadata('n1')).thenAnswer((_) async => {
+            'markers': [marker.toJson()],
+          });
+      when(mockDb.updateNoteMetadata(any, any)).thenAnswer((_) async {});
+      when(mockDb.getAllAttachments()).thenAnswer((_) async => const []);
+
+      await service.updateMarkerLastViewed('mk1', 'c-new');
+
+      final captured = verify(
+        mockDb.updateNoteMetadata('n1', captureAny),
+      ).captured.single as Map<String, dynamic>;
+      final markers = captured['markers'] as List;
+      expect(markers, hasLength(1));
+      expect(
+        (markers.first as Map<String, dynamic>)['lastViewedConversationId'],
+        'c-new',
+      );
+    });
+
+    test('clears lastViewedConversationId when newConvId is null', () async {
+      final marker = makeNoteMarker(lastViewed: 'stale');
+      when(mockDb.getAllNotes()).thenAnswer((_) async => [makeNote('n1')]);
+      when(mockDb.getNoteMetadata('n1')).thenAnswer((_) async => {
+            'markers': [marker.toJson()],
+          });
+      when(mockDb.updateNoteMetadata(any, any)).thenAnswer((_) async {});
+      when(mockDb.getAllAttachments()).thenAnswer((_) async => const []);
+
+      await service.updateMarkerLastViewed('mk1', null);
+
+      final captured = verify(
+        mockDb.updateNoteMetadata('n1', captureAny),
+      ).captured.single as Map<String, dynamic>;
+      final markers = captured['markers'] as List;
+      expect(
+        (markers.first as Map<String, dynamic>)
+            .containsKey('lastViewedConversationId'),
+        isFalse,
+      );
+    });
+
+    test('falls through to attachments when not found in any note', () async {
+      final marker = makeNoteMarker(id: 'attMk');
+      when(mockDb.getAllNotes()).thenAnswer((_) async => const []);
+      when(mockDb.getAllAttachments()).thenAnswer(
+        (_) async => [makeAttachmentRow(id: 'a1', marker: marker)],
+      );
+      when(mockDb.updateAttachmentMetadata(any, any))
+          .thenAnswer((_) async {});
+
+      await service.updateMarkerLastViewed('attMk', 'c-new');
+
+      final captured = verify(
+        mockDb.updateAttachmentMetadata('a1', captureAny),
+      ).captured.single as Map<String, dynamic>;
+      final markers = captured['markers'] as List;
+      expect(
+        (markers.first as Map<String, dynamic>)['lastViewedConversationId'],
+        'c-new',
+      );
+    });
+
+    test('no-ops when marker is not found anywhere', () async {
+      when(mockDb.getAllNotes()).thenAnswer((_) async => const []);
+      when(mockDb.getAllAttachments()).thenAnswer((_) async => const []);
+
+      await service.updateMarkerLastViewed('missing', 'c-new');
+
+      verifyNever(mockDb.updateNoteMetadata(any, any));
+      verifyNever(mockDb.updateAttachmentMetadata(any, any));
+    });
+  });
+
+  group('deleteMarker (by id)', () {
+    test('removes marker from a note when found there', () async {
+      final marker = makeNoteMarker(id: 'mk1');
+      when(mockDb.getAllNotes()).thenAnswer((_) async => [makeNote('n1')]);
+      when(mockDb.getNoteMetadata('n1')).thenAnswer((_) async => {
+            'markers': [marker.toJson()],
+          });
+      when(mockDb.updateNoteMetadata(any, any)).thenAnswer((_) async {});
+      when(mockDb.getAllAttachments()).thenAnswer((_) async => const []);
+
+      await service.deleteMarker('mk1');
+
+      // deleteMarkerForNote re-fetches metadata then writes back without
+      // the marker. Capture the *last* write so we get the final state.
+      final captures = verify(
+        mockDb.updateNoteMetadata('n1', captureAny),
+      ).captured;
+      final last = captures.last as Map<String, dynamic>;
+      expect(last['markers'] as List, isEmpty);
+    });
+
+    test('dispatches to the attachment helper when found there', () async {
+      final marker = makeNoteMarker(id: 'attMk');
+      when(mockDb.getAllNotes()).thenAnswer((_) async => const []);
+      when(mockDb.getAllAttachments()).thenAnswer(
+        (_) async => [makeAttachmentRow(id: 'a1', marker: marker)],
+      );
+      // deleteMarkerForAttachment re-fetches via getAttachmentById; null is
+      // tolerated (the inner method just early-returns), letting us assert
+      // dispatch without re-stubbing the full attachment fetch path.
+      when(mockDb.getAttachmentById('a1')).thenAnswer((_) async => null);
+
+      await service.deleteMarker('attMk');
+
+      verify(mockDb.getAttachmentById('a1')).called(1);
+    });
+
+    test('no-ops when marker is not found anywhere', () async {
+      when(mockDb.getAllNotes()).thenAnswer((_) async => const []);
+      when(mockDb.getAllAttachments()).thenAnswer((_) async => const []);
+
+      await service.deleteMarker('missing');
+
+      verifyNever(mockDb.updateNoteMetadata(any, any));
+      verifyNever(mockDb.updateAttachmentMetadata(any, any));
     });
   });
 }

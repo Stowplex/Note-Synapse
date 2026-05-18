@@ -2,10 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/conversation.dart';
 import '../models/conversation_attachment.dart';
+import '../models/conversation_branch_summary.dart';
 import '../models/conversation_context.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/note.dart';
 import '../models/tag.dart';
+import '../utils/conversation_title_directive.dart';
 import 'agent_service.dart';
 import 'ai_tool_service.dart';
 import 'conversation_attachment_service.dart';
@@ -113,17 +115,15 @@ class ConversationService {
 
   /// The standard set of native tools available for `builtin` URI resolution.
   /// Derived from [AgentService] to avoid duplication.
-  List<NativeTool> get _standardNativeTools => getIt<AgentService>().nativeTools;
+  List<NativeTool> get _standardNativeTools =>
+      getIt<AgentService>().nativeTools;
 
   /// Handles the result from a `load_skill` tool call during chat mode.
   ///
   /// Parses tool URIs from the skill content, resolves them to [McpTool]
   /// instances (supporting `mcp`, `builtin`, and `user_defined` namespaces),
   /// and appends any newly-discovered tools to [skillDiscoveredTools].
-  Future<void> handleLoadSkillResult(
-    String noteId,
-    String result,
-  ) async {
+  Future<void> handleLoadSkillResult(String noteId, String result) async {
     if (!_skillsEnabled) return;
     if (noteId.isEmpty) return;
     final skillService = getIt<SkillService>();
@@ -134,15 +134,18 @@ class ConversationService {
       switch (parsed.namespace) {
         case 'builtin':
           // Find in standard native tools list, convert to McpTool and add.
-          final nativeTool =
-              _standardNativeTools.where((t) => t.name == parsed.id).firstOrNull;
+          final nativeTool = _standardNativeTools
+              .where((t) => t.name == parsed.id)
+              .firstOrNull;
           if (nativeTool != null &&
               !_skillDiscoveredTools.any((s) => s.name == nativeTool.name)) {
-            _skillDiscoveredTools.add(McpTool(
-              name: nativeTool.name,
-              description: nativeTool.description,
-              inputSchema: nativeTool.inputSchema,
-            ));
+            _skillDiscoveredTools.add(
+              McpTool(
+                name: nativeTool.name,
+                description: nativeTool.description,
+                inputSchema: nativeTool.inputSchema,
+              ),
+            );
             _skillDiscoveredNativeToolNames.add(nativeTool.name);
           }
 
@@ -174,8 +177,9 @@ class ConversationService {
         case 'mcp':
           final mcpService = getIt<McpService>();
           final endpoints = await mcpService.getEndpoints();
-          final endpoint =
-              endpoints.where((e) => e.name == parsed.id).firstOrNull;
+          final endpoint = endpoints
+              .where((e) => e.name == parsed.id)
+              .firstOrNull;
           if (endpoint != null) {
             final cache = await mcpService.getCachedTools(endpoint.id);
             final allTools =
@@ -515,11 +519,14 @@ class ConversationService {
     String? modelUsed,
     Map<String, dynamic>? metadata,
   }) async {
+    final titleDirective = ConversationTitleDirective.parseLeading(content);
+    final persistedContent = titleDirective.content;
+
     final message = ConversationMessage(
       id: _uuid.v4(),
       conversationId: conversationId,
       type: MessageType.ai,
-      content: content,
+      content: persistedContent,
       timestamp: DateTime.now(),
       modelUsed: modelUsed,
       metadata: metadata,
@@ -550,8 +557,15 @@ class ConversationService {
     // Update conversation timestamp
     final conversation = await _databaseService.getConversation(conversationId);
     if (conversation != null) {
+      final title =
+          conversation.title == ConversationTitleDirective.pendingTitle
+          ? titleDirective.title ??
+                ConversationTitleDirective.fallbackSlugFromResponse(
+                  persistedContent,
+                )
+          : conversation.title;
       await _databaseService.updateConversation(
-        conversation.copyWith(updatedAt: DateTime.now()),
+        conversation.copyWith(title: title, updatedAt: DateTime.now()),
       );
     }
 
@@ -588,6 +602,34 @@ class ConversationService {
     return await _databaseService.getConversationPreviewMessages(
       conversationId,
     );
+  }
+
+  /// Convenience accessor used by [ChatPanel] et al. to load a single
+  /// conversation header. Delegates to [DatabaseService.getConversation].
+  Future<Conversation?> getConversation(String conversationId) async {
+    return await _databaseService.getConversation(conversationId);
+  }
+
+  Future<void> renameConversation({
+    required String conversationId,
+    required String title,
+  }) async {
+    final trimmed = title.trim();
+    if (trimmed.isEmpty) return;
+    final conversation = await _databaseService.getConversation(conversationId);
+    if (conversation == null) return;
+    await _databaseService.updateConversation(
+      conversation.copyWith(title: trimmed, updatedAt: DateTime.now()),
+    );
+    LoggerService.info('Renamed conversation: $conversationId');
+  }
+
+  /// Convenience accessor used by [ChatPanel] to load the message list
+  /// for a conversation. Delegates to [DatabaseService.getConversationMessages].
+  Future<List<ConversationMessage>> getConversationMessages(
+    String conversationId,
+  ) async {
+    return await _databaseService.getConversationMessages(conversationId);
   }
 
   // Get a specific conversation with its messages
@@ -1294,6 +1336,155 @@ class ConversationService {
   // Get a specific conversation message
   Future<ConversationMessage?> getConversationMessage(String messageId) async {
     return await _databaseService.getConversationMessage(messageId);
+  }
+
+  /// Returns child branches forking off [parentMessageId]. One entry per
+  /// child conversation that diverges at this message. Empty list if the
+  /// message has no children in other conversations yet.
+  ///
+  /// Uses the [message_parents] adjacency table: a child conversation appears
+  /// in the result only when a post-fork message in that conversation has
+  /// [parentMessageId] as its parent in [message_parents]. This guarantees the
+  /// strip renders only when 2+ real children of the fork point exist.
+  ///
+  /// Note: this method does NOT exclude any particular conversation from the
+  /// result. Callers that need to suppress the active conversation (typically
+  /// ChatPanel) should either use [getAllForkPointBranches] (which excludes
+  /// the queried conversation) or filter by `conversationId` themselves.
+  Future<List<ConversationBranchSummary>> getChildBranches(
+    String parentMessageId,
+  ) async {
+    final branches = await _getForkPointBranchesForParents([parentMessageId]);
+    return branches[parentMessageId] ?? const [];
+  }
+
+  /// Batched fork-point query: one DB round-trip returning all child
+  /// branches for every fork-point in [conversationId]. Used by
+  /// ChatPanel to render inline branch strips without N+1 queries.
+  /// Cached by ChatPanel for the lifetime of the panel; invalidated by
+  /// ForkService.forkCreatedStream.
+  ///
+  /// Uses [message_parents]: for every message in [conversationId] that is a
+  /// parent in [message_parents], find child messages living in OTHER
+  /// conversations. The strip renders only once post-fork messages exist.
+  Future<Map<String, List<ConversationBranchSummary>>> getAllForkPointBranches(
+    String conversationId,
+  ) async {
+    final db = await _databaseService.database;
+    // For every message in [conversationId] that is a parent in message_parents,
+    // find its child messages that ONLY live in OTHER conversations (i.e., the
+    // child message is post-divergence content of a sibling branch, not a copy
+    // of an active-conversation message).
+    //
+    // The "child not in active" filter is what guarantees the strip renders
+    // at the *actual* fork point, not at every ancestor of it. Without it,
+    // a copied shared message (e.g. Q2 forked into both branches) would make
+    // the sibling appear at every preceding parent in message_parents.
+    //
+    // Group by (parentMessageId, childConversationId) — at most one entry
+    // per (fork-point, child) pair.
+    final rows = await db.rawQuery(
+      '''
+      SELECT mp.parentMessageId AS parent_id,
+             cmm.conversationId AS child_conv_id,
+             c.title           AS child_title,
+             (SELECT m2.id
+                FROM conversation_messages m2
+                JOIN message_parents mp2 ON mp2.messageId = m2.id
+                JOIN conversation_message_mapping cmm2
+                  ON cmm2.messageId = m2.id
+               WHERE mp2.parentMessageId = mp.parentMessageId
+                 AND cmm2.conversationId = cmm.conversationId
+               ORDER BY m2.timestamp ASC
+               LIMIT 1) AS first_child_message_id
+        FROM message_parents mp
+        JOIN conversation_message_mapping cmm
+          ON cmm.messageId = mp.messageId
+        JOIN conversations c
+          ON c.id = cmm.conversationId
+       WHERE mp.parentMessageId IN (
+              SELECT m.id FROM conversation_messages m
+               JOIN conversation_message_mapping mm
+                 ON mm.messageId = m.id
+              WHERE mm.conversationId = ?
+            )
+         AND cmm.conversationId != ?
+         AND NOT EXISTS (
+              SELECT 1 FROM conversation_message_mapping active_cmm
+               WHERE active_cmm.messageId = mp.messageId
+                 AND active_cmm.conversationId = ?
+            )
+       GROUP BY mp.parentMessageId, cmm.conversationId
+    ''',
+      [conversationId, conversationId, conversationId],
+    );
+
+    return _materializeBranchSummaries(rows);
+  }
+
+  /// IN-list variant of the fork-point query: accepts an explicit list of
+  /// [parentMessageIds] (one or more). Returns all child conversations,
+  /// **including the calling conversation** if it has a qualifying row.
+  /// Used by [getChildBranches]; consumers that need self-exclusion should
+  /// use [getAllForkPointBranches] (which adds `cmm.conversationId != ?`).
+  Future<Map<String, List<ConversationBranchSummary>>>
+  _getForkPointBranchesForParents(List<String> parentMessageIds) async {
+    if (parentMessageIds.isEmpty) return const {};
+    final db = await _databaseService.database;
+    final placeholders = List.filled(parentMessageIds.length, '?').join(',');
+    final rows = await db.rawQuery('''
+      SELECT mp.parentMessageId AS parent_id,
+             cmm.conversationId AS child_conv_id,
+             c.title           AS child_title,
+             (SELECT m2.id
+                FROM conversation_messages m2
+                JOIN message_parents mp2 ON mp2.messageId = m2.id
+                JOIN conversation_message_mapping cmm2
+                  ON cmm2.messageId = m2.id
+               WHERE mp2.parentMessageId = mp.parentMessageId
+                 AND cmm2.conversationId = cmm.conversationId
+               ORDER BY m2.timestamp ASC
+               LIMIT 1) AS first_child_message_id
+        FROM message_parents mp
+        JOIN conversation_message_mapping cmm
+          ON cmm.messageId = mp.messageId
+        JOIN conversations c
+          ON c.id = cmm.conversationId
+       WHERE mp.parentMessageId IN ($placeholders)
+       GROUP BY mp.parentMessageId, cmm.conversationId
+    ''', parentMessageIds);
+    return _materializeBranchSummaries(rows);
+  }
+
+  /// Internal: turn raw rows from the branch query into the public
+  /// ConversationBranchSummary map. Fetches noteIds per distinct child
+  /// conversation appearing in the result (one DB call per unique child;
+  /// bounded by typical fan-out per spec, < 5).
+  Future<Map<String, List<ConversationBranchSummary>>>
+  _materializeBranchSummaries(List<Map<String, Object?>> rows) async {
+    if (rows.isEmpty) return const {};
+    final childConvIds = rows.map((r) => r['child_conv_id'] as String).toSet();
+    final notesByConv = <String, List<String>>{};
+    for (final cid in childConvIds) {
+      notesByConv[cid] = await _databaseService.getConversationNoteIds(cid);
+    }
+    final result = <String, List<ConversationBranchSummary>>{};
+    for (final row in rows) {
+      final parentId = row['parent_id'] as String;
+      final childConvId = row['child_conv_id'] as String;
+      final summary = ConversationBranchSummary(
+        conversationId: childConvId,
+        title: row['child_title'] as String,
+        forkPointMessageId: parentId,
+        // Subquery is guaranteed non-null: the outer mp.messageId itself
+        // satisfies the subquery's WHERE clause (same parentMessageId, same
+        // conversationId), so it always returns at least one row.
+        firstChildMessageId: row['first_child_message_id'] as String,
+        noteIds: notesByConv[childConvId] ?? const [],
+      );
+      result.putIfAbsent(parentId, () => []).add(summary);
+    }
+    return result;
   }
 }
 

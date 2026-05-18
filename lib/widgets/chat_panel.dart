@@ -1,0 +1,542 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+import '../models/chip_action.dart';
+import '../models/conversation.dart';
+import '../models/conversation_branch_summary.dart';
+import '../services/chip_tap_handler.dart';
+import '../services/conversation_service.dart';
+import '../services/fork_service.dart';
+import '../services/service_locator.dart';
+import 'chat_message_action_row.dart';
+import 'chip_aware_ai_message_content.dart';
+import 'message_branch_strip.dart';
+
+/// Marker-anchored chat panel.
+///
+/// Renders a conversation as right-aligned user bubbles and left-aligned AI
+/// bubbles (mirroring the immersive note screen's chat look-and-feel) with:
+/// - synchronously-extracted chip actions (no `BlockMarkdownBody` dependency),
+/// - an optional [contextCard] pinned at the top,
+/// - an optional "streaming bubble" tail driven by [streamingContent],
+/// - per-message branch strips below messages with sibling branches,
+/// - per-AI-message chip footer + chip preview popover,
+/// - per-AI-message tool-usage indicator (when [onShowToolDetails] is wired),
+/// - per-AI-message Copy / Add-to-note action row (when both callbacks wired),
+/// - per-user-message edit affordance (when [onUserMessageEdit] is wired).
+class ChatPanel extends StatefulWidget {
+  /// The conversation whose messages this panel renders.
+  final String conversationId;
+
+  /// If non-null, the panel scrolls to this message after first paint.
+  final String? initialMessageId;
+
+  /// Optional widget pinned at the top of the panel (e.g. an in-note
+  /// marker preview card or a "this is a sub-conversation" banner).
+  final Widget? contextCard;
+
+  /// Fired when the user switches branches via [MessageBranchStrip].
+  /// [forkPointMessageId] is the message at which the branches diverged —
+  /// hosts use this to re-render with `initialMessageId = forkPointMessageId`
+  /// so the new branch lands with the fork-point at viewport top.
+  final FutureOr<void> Function(
+    String newConversationId,
+    String forkPointMessageId,
+  )
+  onActiveConversationChanged;
+
+  /// True while the parent message is generating; disables chip taps and
+  /// branch-strip taps to avoid race conditions.
+  final bool isStreaming;
+
+  /// Sends a user prompt to the active conversation.
+  final Future<void> Function(String conversationId, String prompt)
+  onSendUserPrompt;
+
+  /// Live partial text shown as a "streaming bubble" tail when non-null.
+  /// Parent updates this on each AI chunk; when null, no tail is rendered.
+  final String? streamingContent;
+
+  /// Fired when the user taps the edit icon on one of THEIR messages
+  /// (typical immersive UX: copy content back into the input field).
+  /// If null, no edit icon is shown.
+  final void Function(ConversationMessage)? onUserMessageEdit;
+
+  /// Fired when the user taps the tool-usage icon on an AI message that
+  /// has `parts_history` or `function_calls` metadata. If null, no icon
+  /// is shown even if the message has tool metadata.
+  final void Function(ConversationMessage)? onShowToolDetails;
+
+  /// Fired when the user taps the "Copy" affordance on an AI message
+  /// (under-bubble action row). If null AND [onAddAiMessageToNote] is also
+  /// null, the action row is hidden entirely.
+  final void Function(ConversationMessage)? onCopyAiMessage;
+
+  /// Fired when the user taps the "Add to note" affordance on an AI
+  /// message (under-bubble action row). If null AND [onCopyAiMessage] is
+  /// also null, the action row is hidden entirely.
+  final void Function(ConversationMessage)? onAddAiMessageToNote;
+
+  /// Shows a manual fork affordance on AI messages. Tapping it creates a
+  /// fork from that AI response and asks the host to switch into it.
+  final bool enableManualFork;
+
+  /// Optional scroll controller supplied by a parent draggable sheet. When
+  /// provided, dragging the chat list can resize that sheet.
+  final ScrollController? scrollController;
+
+  const ChatPanel({
+    super.key,
+    required this.conversationId,
+    required this.isStreaming,
+    required this.onActiveConversationChanged,
+    required this.onSendUserPrompt,
+    this.initialMessageId,
+    this.contextCard,
+    this.streamingContent,
+    this.onUserMessageEdit,
+    this.onShowToolDetails,
+    this.onCopyAiMessage,
+    this.onAddAiMessageToNote,
+    this.enableManualFork = true,
+    this.scrollController,
+  });
+
+  @override
+  State<ChatPanel> createState() => ChatPanelState();
+}
+
+/// Public State so hosts (e.g. [MarkerChatPanelHost]) can hold a
+/// `GlobalKey<ChatPanelState>` and call [reload] after sending a prompt or
+/// reacting to an external mutation.
+class ChatPanelState extends State<ChatPanel> {
+  Conversation? _conversation;
+  List<ConversationMessage> _messages = const [];
+  Map<String, List<ConversationBranchSummary>> _branchesByParent = const {};
+
+  StreamSubscription<String>? _forkSub;
+
+  // Scroll plumbing for [ChatPanel.initialMessageId]. We hand a [GlobalKey]
+  // to each per-message bubble container so we can locate it after the first
+  // frame and call [Scrollable.ensureVisible] to land on the right message.
+  // Because [ListView.builder] is lazy, the initial target may not be built
+  // yet — we coarse-jump first, then re-attempt up to a small retry cap to
+  // avoid a [pumpAndSettle] deadlock.
+  final ScrollController _fallbackScrollController = ScrollController();
+  final Map<String, GlobalKey> _messageKeys = {};
+
+  ScrollController get _scrollController =>
+      widget.scrollController ?? _fallbackScrollController;
+
+  GlobalKey _keyFor(String id) =>
+      _messageKeys.putIfAbsent(id, () => GlobalKey());
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _forkSub = getIt<ForkService>().forkCreatedStream.listen(_onForkCreated);
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.conversationId != widget.conversationId) {
+      _branchesByParent = const {};
+      _messageKeys.clear();
+      _load();
+    }
+  }
+
+  @override
+  void dispose() {
+    _forkSub?.cancel();
+    _fallbackScrollController.dispose();
+    super.dispose();
+  }
+
+  /// Re-fetches conversation, messages, and branches. Hosts (e.g.
+  /// [MarkerChatPanelHost]) call this after sending a prompt or after an
+  /// external mutation (such as a successful AI generation persisted by
+  /// `MarkerChatSendService`) to pull the new messages into view.
+  Future<void> reload() => _load();
+
+  Future<void> _load() async {
+    final conv = getIt<ConversationService>();
+    final loaded = await conv.getConversation(widget.conversationId);
+    final msgs = await conv.getConversationMessages(widget.conversationId);
+    final branches = await conv.getAllForkPointBranches(widget.conversationId);
+    if (!mounted) return;
+    setState(() {
+      _conversation = loaded;
+      _messages = msgs;
+      _branchesByParent = branches;
+    });
+    if (widget.initialMessageId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToInitialMessage(widget.initialMessageId!, attempt: 0);
+      });
+    }
+  }
+
+  /// Scrolls the viewport so the message with [id] is visible.
+  ///
+  /// [ListView.builder] is lazy: a key for an off-screen target may not have
+  /// a [BuildContext] yet. We do a coarse [jumpTo] estimate first to force
+  /// the items near the target to build, then call
+  /// [Scrollable.ensureVisible] on the next frame for an exact landing.
+  /// Capped at 3 attempts so [pumpAndSettle] never hangs.
+  void _scrollToInitialMessage(String id, {required int attempt}) {
+    if (!mounted) return;
+    if (attempt > 3) return;
+    final key = _messageKeys[id];
+    final ctx = key?.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(ctx, duration: Duration.zero, alignment: 0.0);
+      return;
+    }
+    // Target hasn't been laid out yet. Coarse-jump toward its likely
+    // offset and retry next frame.
+    if (_scrollController.hasClients && _messages.isNotEmpty) {
+      final idx = _messages.indexWhere((m) => m.id == id);
+      if (idx >= 0) {
+        final position = _scrollController.position;
+        final maxExtent = position.maxScrollExtent;
+        final fraction = idx / _messages.length;
+        final target = (fraction * maxExtent).clamp(0.0, maxExtent);
+        _scrollController.jumpTo(target);
+      }
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToInitialMessage(id, attempt: attempt + 1);
+    });
+  }
+
+  void _onForkCreated(String parentMessageId) async {
+    // Capture the conversationId at dispatch time so a mid-flight branch
+    // switch doesn't apply this conversation's branches to a different one.
+    final cid = widget.conversationId;
+    final branches = await getIt<ConversationService>().getAllForkPointBranches(
+      cid,
+    );
+    if (!mounted || cid != widget.conversationId) return;
+    setState(() => _branchesByParent = branches);
+  }
+
+  bool _isChipsExpected() {
+    final conv = getIt<ConversationService>();
+    return conv.skillsEnabled &&
+        conv.skillIndex.values.any((s) => s.defaultAction != null);
+  }
+
+  Future<void> _handleChipTap(String parentMessageId, ChipAction chip) async {
+    final forked = await ChipTapHandler().handle(
+      parentMessageId: parentMessageId,
+      chip: chip,
+      sourceConversationId: widget.conversationId,
+    );
+    if (!mounted || forked == null) return;
+    await widget.onActiveConversationChanged(forked.id, parentMessageId);
+    if (!mounted) return;
+    await widget.onSendUserPrompt(forked.id, chip.prompt);
+  }
+
+  /// Returns true if the AI action row should render. The row is hidden
+  /// unless at least one of the action callbacks is wired; when only one
+  /// is wired, the unwired button renders disabled (onPressed: null).
+  bool _shouldShowActionRow() {
+    return widget.enableManualFork ||
+        widget.onCopyAiMessage != null ||
+        widget.onAddAiMessageToNote != null;
+  }
+
+  /// Returns true when the message has the metadata keys that indicate the
+  /// AI used tools (parts_history / function_calls) AND the host wired a
+  /// tool-details callback. Both conditions must hold for the icon to show.
+  bool _hasToolMetadata(ConversationMessage m) {
+    if (widget.onShowToolDetails == null) return false;
+    final meta = m.metadata;
+    if (meta == null) return false;
+    return meta.containsKey('parts_history') ||
+        meta.containsKey('function_calls');
+  }
+
+  /// Localized "AI" header label. Falls back to the literal string "AI"
+  /// when the host doesn't provide [AppLocalizations] (e.g. unit tests that
+  /// build `MaterialApp` without `localizationsDelegates`).
+  String _aiLabel(BuildContext context) =>
+      AppLocalizations.of(context)?.ai ?? 'AI';
+
+  List<ConversationBranchSummary> _branchesFor(String forkPointMessageId) {
+    final siblingBranches =
+        _branchesByParent[forkPointMessageId] ??
+        const <ConversationBranchSummary>[];
+    if (siblingBranches.isEmpty) return const [];
+    if (siblingBranches.any((b) => b.conversationId == widget.conversationId)) {
+      return siblingBranches;
+    }
+    final active = ConversationBranchSummary(
+      conversationId: widget.conversationId,
+      title: _conversation?.title ?? 'Current branch',
+      forkPointMessageId: forkPointMessageId,
+      firstChildMessageId: forkPointMessageId,
+      noteIds: _conversation?.noteIds ?? const [],
+    );
+    return [active, ...siblingBranches];
+  }
+
+  Future<void> _handleManualFork(ConversationMessage message) async {
+    if (widget.isStreaming) return;
+    final forked = await getIt<ForkService>().forkFromMessageInContext(
+      forkFromMessageId: message.id,
+      sourceConversationId: widget.conversationId,
+      suggestedTitle: 'Forked conversation',
+    );
+    if (!mounted || forked == null) return;
+    await widget.onActiveConversationChanged(forked.id, message.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasStreamingTail = widget.streamingContent?.isNotEmpty == true;
+    final itemCount = _messages.length + (hasStreamingTail ? 1 : 0);
+
+    return Column(
+      children: [
+        if (widget.contextCard != null) widget.contextCard!,
+        Expanded(
+          child: ListView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: itemCount,
+            itemBuilder: (context, index) {
+              if (hasStreamingTail && index == _messages.length) {
+                return _buildStreamingBubble(context);
+              }
+              return _buildMessageItem(context, _messages[index]);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStreamingBubble(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return KeyedSubtree(
+      key: const ValueKey('chat_panel_streaming_message'),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.7,
+          ),
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildAiHeader(context, trailing: null),
+              const SizedBox(height: 8),
+              SelectableText(widget.streamingContent ?? ''),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMessageItem(BuildContext context, ConversationMessage m) {
+    final isUser = m.type == MessageType.user;
+    return Column(
+      key: ValueKey('chat_panel_msg_col_${m.id}'),
+      crossAxisAlignment: isUser
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      children: [
+        if (isUser)
+          _buildUserBubble(context, m)
+        else
+          _buildAiBubble(context, m),
+        // Branch strip — only when at least 2 sibling branches exist off
+        // this fork-point message. Gated at the call site for clarity even
+        // though MessageBranchStrip also short-circuits.
+        if (_branchesFor(m.id).isNotEmpty)
+          MessageBranchStrip(
+            branches: _branchesFor(m.id),
+            activeConversationId: widget.conversationId,
+            activeNoteIds: _conversation?.noteIds ?? const [],
+            disabled: widget.isStreaming,
+            onSwitchBranch: (newId, _) async =>
+                widget.onActiveConversationChanged(newId, m.id),
+            onRenameBranch: (conversationId, title) async {
+              await getIt<ConversationService>().renameConversation(
+                conversationId: conversationId,
+                title: title,
+              );
+              await reload();
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildUserBubble(BuildContext context, ConversationMessage m) {
+    final scheme = Theme.of(context).colorScheme;
+    final showEdit = widget.onUserMessageEdit != null;
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Container(
+        key: _keyFor(m.id),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.7,
+        ),
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: scheme.primaryContainer,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Flexible(
+              child: SelectableText(
+                m.content,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
+              ),
+            ),
+            if (showEdit) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                icon: Icon(
+                  Icons.edit,
+                  size: 16,
+                  color: scheme.onSurface.withOpacity(0.5),
+                ),
+                tooltip: 'Use this message',
+                onPressed: () => widget.onUserMessageEdit!(m),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAiBubble(BuildContext context, ConversationMessage m) {
+    final scheme = Theme.of(context).colorScheme;
+    final showActions = _shouldShowActionRow();
+    final hasTools = _hasToolMetadata(m);
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        key: _keyFor(m.id),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.7,
+        ),
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildAiHeader(
+              context,
+              trailing: hasTools
+                  ? IconButton(
+                      icon: const Icon(Icons.build_circle_outlined, size: 18),
+                      tooltip: 'View Tool Usage',
+                      onPressed: () => widget.onShowToolDetails!(m),
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
+                      padding: EdgeInsets.zero,
+                    )
+                  : null,
+            ),
+            const SizedBox(height: 8),
+            ChipAwareAiMessageContent(
+              message: m,
+              isStreaming: widget.isStreaming && m.id == _messages.last.id,
+              chipsExpected: _isChipsExpected(),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
+              onChipTap: widget.isStreaming
+                  ? null
+                  : (chip) => _handleChipTap(m.id, chip),
+            ),
+            // TODO(task-22): render attachment chips here for messages with
+            // m.attachmentPaths.isNotEmpty (mirrors immersive screen's
+            // _buildMessageAttachmentChips).
+            if (showActions) ...[
+              const SizedBox(height: 12),
+              ChatMessageActionRow(
+                leading: widget.enableManualFork
+                    ? IconButton(
+                        key: ValueKey('chat_panel_manual_fork_${m.id}'),
+                        icon: const Icon(Icons.call_split, size: 18),
+                        tooltip: 'Fork from here',
+                        onPressed: widget.isStreaming
+                            ? null
+                            : () => _handleManualFork(m),
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                        padding: EdgeInsets.zero,
+                      )
+                    : null,
+                onCopy: widget.onCopyAiMessage == null
+                    ? null
+                    : () => widget.onCopyAiMessage!(m),
+                onAddNote: widget.onAddAiMessageToNote == null
+                    ? null
+                    : () => widget.onAddAiMessageToNote!(m),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAiHeader(BuildContext context, {required Widget? trailing}) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Icon(Icons.smart_toy, size: 16, color: scheme.secondary),
+        const SizedBox(width: 8),
+        Text(
+          _aiLabel(context),
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            color: scheme.secondary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const Spacer(),
+        if (trailing != null) trailing,
+      ],
+    );
+  }
+}

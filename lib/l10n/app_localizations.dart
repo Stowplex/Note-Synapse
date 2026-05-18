@@ -2672,6 +2672,12 @@ abstract class AppLocalizations {
   /// **'Search tags'**
   String get searchTags;
 
+  /// No description provided for @searchTagsToFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Search tags to filter'**
+  String get searchTagsToFilter;
+
   /// No description provided for @searchTagsCapitalized.
   ///
   /// In en, this message translates to:
@@ -4844,6 +4850,30 @@ abstract class AppLocalizations {
   /// **'Configure AI Context'**
   String get configureAiContext;
 
+  /// No description provided for @configureAiContextDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Select which pages to include when AI processes this PDF:'**
+  String get configureAiContextDescription;
+
+  /// No description provided for @includeInAiContext.
+  ///
+  /// In en, this message translates to:
+  /// **'Include in AI Context'**
+  String get includeInAiContext;
+
+  /// No description provided for @configureAiContextRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure AI Context Range'**
+  String get configureAiContextRange;
+
+  /// No description provided for @editAiContextRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit AI Context Range'**
+  String get editAiContextRange;
+
   /// No description provided for @aiContext.
   ///
   /// In en, this message translates to:
@@ -4868,11 +4898,83 @@ abstract class AppLocalizations {
   /// **'Chapters'**
   String get aiContextChapters;
 
+  /// No description provided for @aiContextAllDocument.
+  ///
+  /// In en, this message translates to:
+  /// **'All Document'**
+  String get aiContextAllDocument;
+
+  /// No description provided for @aiContextPagesCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, =1{page} other{pages}}'**
+  String aiContextPagesCount(int count);
+
+  /// No description provided for @aiContextWindowAroundCurrentPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Window Around Current Page'**
+  String get aiContextWindowAroundCurrentPage;
+
+  /// No description provided for @aiContextPagesCenteredOnReading.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, =1{page} other{pages}} centered on where you are reading'**
+  String aiContextPagesCenteredOnReading(int count);
+
+  /// No description provided for @aiContextBookmarksAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, =1{bookmark} other{bookmarks}} available'**
+  String aiContextBookmarksAvailable(int count);
+
+  /// No description provided for @aiContextPageNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Page {pageNumber}'**
+  String aiContextPageNumber(int pageNumber);
+
+  /// No description provided for @aiContextSelectedChapters.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected Chapters'**
+  String get aiContextSelectedChapters;
+
+  /// No description provided for @aiContextChooseSpecificSections.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose specific sections'**
+  String get aiContextChooseSpecificSections;
+
+  /// No description provided for @aiContextChaptersSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, =1{chapter} other{chapters}} selected'**
+  String aiContextChaptersSelected(int count);
+
+  /// No description provided for @aiContextPdfNoOutline.
+  ///
+  /// In en, this message translates to:
+  /// **'This PDF has no outline'**
+  String get aiContextPdfNoOutline;
+
+  /// No description provided for @aiContextConfigurationSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'AI context configuration saved'**
+  String get aiContextConfigurationSaved;
+
   /// No description provided for @windowSize.
   ///
   /// In en, this message translates to:
   /// **'Window Size'**
   String get windowSize;
+
+  /// No description provided for @pages.
+  ///
+  /// In en, this message translates to:
+  /// **'Pages'**
+  String get pages;
 
   /// No description provided for @pagesBeforeAfter.
   ///
@@ -6995,7 +7097,7 @@ abstract class AppLocalizations {
   /// No description provided for @gettingStartedSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Install user manual and starter apps'**
+  /// **'Install user manual, starter apps, and starter skills'**
   String get gettingStartedSubtitle;
 
   /// No description provided for @installUserManual.
@@ -7165,6 +7267,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error installing starter apps: {error}'**
   String errorInstallingStarterApps(String error);
+
+  /// No description provided for @installStarterSkills.
+  ///
+  /// In en, this message translates to:
+  /// **'Install Starter Skills'**
+  String get installStarterSkills;
+
+  /// No description provided for @installStarterSkillsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse bundled skills and install them as transparent skill notes'**
+  String get installStarterSkillsSubtitle;
+
+  /// No description provided for @noStarterSkillsAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No starter skills available'**
+  String get noStarterSkillsAvailable;
+
+  /// No description provided for @noStarterSkillsSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'No starter skills selected'**
+  String get noStarterSkillsSelected;
+
+  /// No description provided for @installSelectedSkills.
+  ///
+  /// In en, this message translates to:
+  /// **'Install Selected Skills'**
+  String get installSelectedSkills;
+
+  /// No description provided for @starterSkillsInstalledSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} {count, plural, one {skill} other {skills}} installed successfully!'**
+  String starterSkillsInstalledSuccessfully(int count);
+
+  /// No description provided for @errorLoadingStarterSkills.
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading starter skills: {error}'**
+  String errorLoadingStarterSkills(String error);
+
+  /// No description provided for @errorInstallingStarterSkills.
+  ///
+  /// In en, this message translates to:
+  /// **'Error installing starter skills: {error}'**
+  String errorInstallingStarterSkills(String error);
+
+  /// No description provided for @skillRefLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'skillRef: {ref}'**
+  String skillRefLabel(String ref);
+
+  /// No description provided for @sourceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Source: {source}'**
+  String sourceLabel(String source);
 
   /// No description provided for @rawDataManagerTitle.
   ///
@@ -7658,6 +7820,24 @@ abstract class AppLocalizations {
   /// **'Contract Below'**
   String get contractSelectionBelow;
 
+  /// No description provided for @expandToTop.
+  ///
+  /// In en, this message translates to:
+  /// **'To top'**
+  String get expandToTop;
+
+  /// No description provided for @expandToBottom.
+  ///
+  /// In en, this message translates to:
+  /// **'To bottom'**
+  String get expandToBottom;
+
+  /// No description provided for @contractToStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get contractToStart;
+
   /// No description provided for @editSelection.
   ///
   /// In en, this message translates to:
@@ -7963,6 +8143,198 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You haven\'t installed any apps yet.'**
   String get insertUserAppNoAppsMessage;
+
+  /// No description provided for @branchStripDocumentSwapMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This branch is associated with a different document. Switch document?'**
+  String get branchStripDocumentSwapMessage;
+
+  /// No description provided for @branchStripDocumentSwapConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch'**
+  String get branchStripDocumentSwapConfirm;
+
+  /// No description provided for @modelPreferences.
+  ///
+  /// In en, this message translates to:
+  /// **'Model Preferences'**
+  String get modelPreferences;
+
+  /// No description provided for @modelPreferencesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Set capability-based model priority'**
+  String get modelPreferencesSubtitle;
+
+  /// No description provided for @viewFeatureMatrix.
+  ///
+  /// In en, this message translates to:
+  /// **'View Feature Matrix'**
+  String get viewFeatureMatrix;
+
+  /// No description provided for @modelPreferenceDragDropHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Drag and drop to reorder models. The first model that matches the required capabilities will be used. If the list is empty or no match is found, the system default model is used.'**
+  String get modelPreferenceDragDropHint;
+
+  /// No description provided for @priorityList.
+  ///
+  /// In en, this message translates to:
+  /// **'Priority List'**
+  String get priorityList;
+
+  /// No description provided for @noPreferencesSetMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No preferences set.\nSystem default model will be used.'**
+  String get noPreferencesSetMessage;
+
+  /// No description provided for @unknownModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown Model'**
+  String get unknownModel;
+
+  /// No description provided for @imageInputCapability.
+  ///
+  /// In en, this message translates to:
+  /// **'Image Input'**
+  String get imageInputCapability;
+
+  /// No description provided for @videoInputCapability.
+  ///
+  /// In en, this message translates to:
+  /// **'Video Input'**
+  String get videoInputCapability;
+
+  /// No description provided for @audioInputCapability.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Input'**
+  String get audioInputCapability;
+
+  /// No description provided for @docsCapability.
+  ///
+  /// In en, this message translates to:
+  /// **'Docs'**
+  String get docsCapability;
+
+  /// No description provided for @imageGenCapability.
+  ///
+  /// In en, this message translates to:
+  /// **'Image Gen'**
+  String get imageGenCapability;
+
+  /// No description provided for @codeGenCapability.
+  ///
+  /// In en, this message translates to:
+  /// **'Code Gen'**
+  String get codeGenCapability;
+
+  /// No description provided for @modelFeatureMatrix.
+  ///
+  /// In en, this message translates to:
+  /// **'Model Feature Matrix'**
+  String get modelFeatureMatrix;
+
+  /// No description provided for @modelNameColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Model Name'**
+  String get modelNameColumn;
+
+  /// No description provided for @imageInColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Image In'**
+  String get imageInColumn;
+
+  /// No description provided for @videoInColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Video In'**
+  String get videoInColumn;
+
+  /// No description provided for @audioColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get audioColumn;
+
+  /// No description provided for @imgGenColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Img Gen'**
+  String get imgGenColumn;
+
+  /// No description provided for @codeGenColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Code Gen'**
+  String get codeGenColumn;
+
+  /// No description provided for @docsColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Docs'**
+  String get docsColumn;
+
+  /// No description provided for @errorLoadingModelPreferences.
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading model preferences: {error}'**
+  String errorLoadingModelPreferences(String error);
+
+  /// No description provided for @errorSavingModelPreferences.
+  ///
+  /// In en, this message translates to:
+  /// **'Error saving preferences: {error}'**
+  String errorSavingModelPreferences(String error);
+
+  /// No description provided for @scratchpad.
+  ///
+  /// In en, this message translates to:
+  /// **'Scratchpad'**
+  String get scratchpad;
+
+  /// No description provided for @sendToScratchpad.
+  ///
+  /// In en, this message translates to:
+  /// **'Send to scratchpad'**
+  String get sendToScratchpad;
+
+  /// No description provided for @scratchpadEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Scratchpad is empty'**
+  String get scratchpadEmpty;
+
+  /// No description provided for @clear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get clear;
+
+  /// No description provided for @recallAnnotations.
+  ///
+  /// In en, this message translates to:
+  /// **'Recall annotations'**
+  String get recallAnnotations;
+
+  /// No description provided for @includeScratchpadInChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Include scratchpad in chat context'**
+  String get includeScratchpadInChat;
+
+  /// No description provided for @selectTagsForNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Tags for {count} {count, plural, =1{Note} other{Notes}}'**
+  String selectTagsForNotes(int count);
 }
 
 class _AppLocalizationsDelegate

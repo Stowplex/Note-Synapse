@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -30,6 +31,7 @@ import '../widgets/block_diff_preview_dialog.dart';
 import '../utils/markdown_block_tracker.dart';
 import '../widgets/block_markdown_body.dart';
 import '../widgets/block_selection_menu.dart';
+import '../widgets/block_selection_count_popup.dart';
 
 import '../utils/date_utils.dart';
 import '../utils/file_utils.dart';
@@ -116,6 +118,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Set<int> _selectedBlockIndices = {};
   List<MarkdownBlock> _parsedBlocks = [];
   Offset? _selectionMenuPosition;
+  int? _selectionAnchorIndex;
+  OverlayEntry? _activeCountPopup;
+  final GlobalKey _expandAboveKey = GlobalKey();
+  final GlobalKey _contractAboveKey = GlobalKey();
+  final GlobalKey _contractBelowKey = GlobalKey();
+  final GlobalKey _expandBelowKey = GlobalKey();
+
+  // Markdown anchor support (GitHub-style `[text](#section)` links).
+  final GlobalKey<BlockMarkdownBodyState> _blockBodyKey =
+      GlobalKey<BlockMarkdownBodyState>();
+  final ScrollController _viewingScrollController = ScrollController();
 
   Future<void> _loadAttachments() async {
     if (widget.isNewNote) return;
@@ -234,6 +247,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
     _codeController.dispose();
     _codeFocusNode.dispose();
+    _dismissCountPopup();
+    _viewingScrollController.dispose();
     // Reset audio state but don't dispose the service (it's a singleton)
     _audioService?.resetState();
     if (ApprovalService.onApprovalRequest == _approvalCallback) {
@@ -365,52 +380,164 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       _isSelectionMode = true;
       _selectedBlockIndices = {index};
       _selectionMenuPosition = localPosition;
+      _selectionAnchorIndex = index;
     });
   }
 
   void _clearSelection() {
     if (!mounted) return;
+    _dismissCountPopup();
     setState(() {
       _isSelectionMode = false;
       _selectedBlockIndices = {};
       _selectionMenuPosition = null;
+      _selectionAnchorIndex = null;
     });
   }
 
-  void _expandSelectionAbove() {
+  void _expandSelectionAbove() => _expandSelectionAboveBy(1);
+  void _contractSelectionAbove() => _contractSelectionAboveBy(1);
+  void _expandSelectionBelow() => _expandSelectionBelowBy(1);
+  void _contractSelectionBelow() => _contractSelectionBelowBy(1);
+
+  void _expandSelectionAboveBy(int count) {
     if (_selectedBlockIndices.isEmpty) return;
-    final minIndex = _selectedBlockIndices.reduce((a, b) => a < b ? a : b);
-    if (minIndex > 0) {
-      setState(() {
+    setState(() {
+      for (int i = 0; i < count; i++) {
+        final minIndex = _selectedBlockIndices.reduce((a, b) => a < b ? a : b);
+        if (minIndex <= 0) break;
         _selectedBlockIndices.add(minIndex - 1);
-      });
-    }
-  }
-
-  void _contractSelectionAbove() {
-    if (_selectedBlockIndices.length <= 1) return;
-    final minIndex = _selectedBlockIndices.reduce((a, b) => a < b ? a : b);
-    setState(() {
-      _selectedBlockIndices.remove(minIndex);
+      }
     });
   }
 
-  void _expandSelectionBelow() {
+  void _expandSelectionBelowBy(int count) {
+    if (_selectedBlockIndices.isEmpty || _parsedBlocks.isEmpty) return;
+    setState(() {
+      for (int i = 0; i < count; i++) {
+        final maxIndex = _selectedBlockIndices.reduce((a, b) => a > b ? a : b);
+        if (maxIndex >= _parsedBlocks.length - 1) break;
+        _selectedBlockIndices.add(maxIndex + 1);
+      }
+    });
+  }
+
+  void _contractSelectionAboveBy(int count) {
+    setState(() {
+      for (int i = 0; i < count; i++) {
+        if (_selectedBlockIndices.length <= 1) break;
+        final minIndex = _selectedBlockIndices.reduce((a, b) => a < b ? a : b);
+        _selectedBlockIndices.remove(minIndex);
+      }
+    });
+  }
+
+  void _contractSelectionBelowBy(int count) {
+    setState(() {
+      for (int i = 0; i < count; i++) {
+        if (_selectedBlockIndices.length <= 1) break;
+        final maxIndex = _selectedBlockIndices.reduce((a, b) => a > b ? a : b);
+        _selectedBlockIndices.remove(maxIndex);
+      }
+    });
+  }
+
+  void _expandSelectionToTop() {
     if (_selectedBlockIndices.isEmpty) return;
     final maxIndex = _selectedBlockIndices.reduce((a, b) => a > b ? a : b);
-    if (_parsedBlocks.isNotEmpty && maxIndex < _parsedBlocks.length - 1) {
-      setState(() {
-        _selectedBlockIndices.add(maxIndex + 1);
-      });
+    setState(() {
+      _selectedBlockIndices = {for (var i = 0; i <= maxIndex; i++) i};
+    });
+  }
+
+  void _expandSelectionToBottom() {
+    if (_selectedBlockIndices.isEmpty || _parsedBlocks.isEmpty) return;
+    final minIndex = _selectedBlockIndices.reduce((a, b) => a < b ? a : b);
+    setState(() {
+      _selectedBlockIndices = {
+        for (var i = minIndex; i < _parsedBlocks.length; i++) i,
+      };
+    });
+  }
+
+  void _contractSelectionToOriginal() {
+    if (_selectionAnchorIndex == null) return;
+    setState(() {
+      _selectedBlockIndices = {_selectionAnchorIndex!};
+    });
+  }
+
+  void _showCountPopup(GlobalKey buttonKey, BlockSelectionPopupMode mode) {
+    _dismissCountPopup();
+    final box = buttonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !mounted) return;
+    final origin = box.localToGlobal(Offset.zero);
+    final size = box.size;
+    final screen = MediaQuery.of(context).size;
+    const popupWidth = 240.0;
+    const popupHeight = 56.0;
+
+    _activeCountPopup = OverlayEntry(
+      builder: (_) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _dismissCountPopup,
+            ),
+          ),
+          Positioned(
+            left: (origin.dx + size.width / 2 - popupWidth / 2).clamp(
+              8.0,
+              (screen.width - popupWidth - 8).clamp(8.0, double.infinity),
+            ),
+            top: (origin.dy - popupHeight - 4).clamp(8.0, double.infinity),
+            child: BlockSelectionCountPopup(
+              mode: mode,
+              onApplyCount: (count) {
+                _dismissCountPopup();
+                _applyCountForMode(mode, count);
+              },
+              onApplyDirectional: () {
+                _dismissCountPopup();
+                _applyDirectionalForMode(mode);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+    Overlay.of(context).insert(_activeCountPopup!);
+  }
+
+  void _dismissCountPopup() {
+    _activeCountPopup?.remove();
+    _activeCountPopup = null;
+  }
+
+  void _applyCountForMode(BlockSelectionPopupMode mode, int count) {
+    switch (mode) {
+      case BlockSelectionPopupMode.expandAbove:
+        _expandSelectionAboveBy(count);
+      case BlockSelectionPopupMode.contractAbove:
+        _contractSelectionAboveBy(count);
+      case BlockSelectionPopupMode.expandBelow:
+        _expandSelectionBelowBy(count);
+      case BlockSelectionPopupMode.contractBelow:
+        _contractSelectionBelowBy(count);
     }
   }
 
-  void _contractSelectionBelow() {
-    if (_selectedBlockIndices.length <= 1) return;
-    final maxIndex = _selectedBlockIndices.reduce((a, b) => a > b ? a : b);
-    setState(() {
-      _selectedBlockIndices.remove(maxIndex);
-    });
+  void _applyDirectionalForMode(BlockSelectionPopupMode mode) {
+    switch (mode) {
+      case BlockSelectionPopupMode.expandAbove:
+        _expandSelectionToTop();
+      case BlockSelectionPopupMode.expandBelow:
+        _expandSelectionToBottom();
+      case BlockSelectionPopupMode.contractAbove:
+      case BlockSelectionPopupMode.contractBelow:
+        _contractSelectionToOriginal();
+    }
   }
 
   Future<void> _handleEditSelection() async {
@@ -983,6 +1110,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         children: [
           SelectionArea(
             child: CustomScrollView(
+              controller: _viewingScrollController,
               slivers: [
                 SliverToBoxAdapter(
                   child: Padding(
@@ -1011,10 +1139,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   sliver: BlockMarkdownBody(
-                    key: ValueKey('note_${currentNote.id}'),
+                    key: _blockBodyKey,
                     noteId: currentNote.id,
                     content: currentNote.content,
                     onContentChanged: _updateNoteContent,
+                    scrollController: _viewingScrollController,
                     style: Theme.of(context).textTheme.bodyLarge,
                     onLinkTap: _handleLinkTap,
                     onBlockEditRequested: _handleBlockEditRequest,
@@ -1437,6 +1566,26 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     _selectedBlockIndices.reduce((a, b) => a > b ? a : b) <
                         _parsedBlocks.length - 1,
                 canContractBelow: _selectedBlockIndices.length > 1,
+                expandAboveKey: _expandAboveKey,
+                contractAboveKey: _contractAboveKey,
+                contractBelowKey: _contractBelowKey,
+                expandBelowKey: _expandBelowKey,
+                onLongPressExpandAbove: () => _showCountPopup(
+                  _expandAboveKey,
+                  BlockSelectionPopupMode.expandAbove,
+                ),
+                onLongPressContractAbove: () => _showCountPopup(
+                  _contractAboveKey,
+                  BlockSelectionPopupMode.contractAbove,
+                ),
+                onLongPressContractBelow: () => _showCountPopup(
+                  _contractBelowKey,
+                  BlockSelectionPopupMode.contractBelow,
+                ),
+                onLongPressExpandBelow: () => _showCountPopup(
+                  _expandBelowKey,
+                  BlockSelectionPopupMode.expandBelow,
+                ),
               ),
             ),
         ],
@@ -1530,10 +1679,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Future<void> _showUserAppPicker(BuildContext context) async {
     final result = await AppEmbedPickerSheet.show(context);
     if (result != null && mounted) {
-      _insertText(
-        result.markdown,
-        selectionOffset: result.selectionOffset,
-      );
+      _insertText(result.markdown, selectionOffset: result.selectionOffset);
     }
   }
 
@@ -2874,13 +3020,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
                           return [
                             if (fileExists && !isAudioFile)
-                              const PopupMenuItem<String>(
+                              PopupMenuItem<String>(
                                 value: 'open',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.open_in_new),
-                                    SizedBox(width: 12),
-                                    Text('Open'),
+                                    const Icon(Icons.open_in_new),
+                                    const SizedBox(width: 12),
+                                    Text(l10n.open),
                                   ],
                                 ),
                               ),
@@ -2916,7 +3062,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                                         : null,
                                   ),
                                   const SizedBox(width: 12),
-                                  const Text('Include in AI Context'),
+                                  Text(l10n.includeInAiContext),
                                 ],
                               ),
                             ),
@@ -2936,8 +3082,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                                     const SizedBox(width: 12),
                                     Text(
                                       hasCustomAiRange
-                                          ? 'Edit AI Context Range'
-                                          : 'Configure AI Context Range',
+                                          ? l10n.editAiContextRange
+                                          : l10n.configureAiContextRange,
                                     ),
                                   ],
                                 ),
@@ -3229,7 +3375,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
         type: FileType.any,
-        withData: true, // Load file data into memory
+        withData: kIsWeb,
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -3246,12 +3392,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         // Process and add new attachment paths
         for (final file in result.files) {
           try {
-            // Read file bytes and save to private storage
-            final bytes = file.bytes ?? await File(file.path!).readAsBytes();
-            final relativePath = await FileUtils.saveFileToPrivateStorage(
-              bytes,
-              file.name,
-            );
+            final relativePath =
+                await FileUtils.savePlatformFileToPrivateStorage(file);
             updatedAttachmentPaths.add(relativePath);
           } catch (e) {
             LoggerService.error(
@@ -4083,6 +4225,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   void _handleLinkTap(String url, String? text) {
     // Note: gpt_markdown passes parameters in reverse order
     // First parameter is the actual URL, second is the display text
+    if (url.startsWith('#')) {
+      // GitHub-style intra-document anchor link.
+      _blockBodyKey.currentState?.scrollToSlug(url.substring(1));
+      return;
+    }
     if (url.startsWith('notesynapse://tool/')) {
       _handleToolLinkTap(url);
       return;

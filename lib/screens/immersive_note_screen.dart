@@ -39,6 +39,7 @@ import '../services/service_locator.dart';
 import '../services/attachment_preprocessor.dart';
 import '../services/local_model_attachment_constraint_service.dart';
 import '../services/conversation_attachment_service.dart';
+import '../services/conversation_prompt_builder.dart';
 import '../services/marker_cluster_service.dart';
 import '../services/prompts/ai_prompts.dart';
 import '../services/prompts/note_prompt_builder.dart';
@@ -49,14 +50,17 @@ import '../services/prompts/system_prompt_builder.dart';
 import '../services/sql_query_service.dart';
 import '../services/user_app_service.dart';
 import '../services/agent_service.dart';
+import '../services/chat_tool_session.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
+import '../utils/conversation_title_directive.dart';
 import '../utils/native_capture_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 import '../widgets/approval_dialog.dart';
+import '../widgets/heading_anchor_registry.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
 import '../mixins/note_action_mixin.dart';
-import '../widgets/chat_message_action_row.dart';
+import '../widgets/chat_panel.dart';
 import '../widgets/active_tool_count_badge.dart';
 import '../widgets/drawing_editor.dart';
 import 'conversation_tree_screen.dart';
@@ -129,6 +133,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final FocusNode _messageFocusNode = FocusNode();
   final GlobalKey _noteBoundaryKey = GlobalKey();
   final GlobalKey _noteContentKey = GlobalKey();
+  final GlobalKey<ChatPanelState> _chatPanelKey = GlobalKey<ChatPanelState>();
 
   static const double _strokeCaptureMargin = 16;
 
@@ -163,9 +168,16 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   String _streamingContent = '';
   bool _isStreaming = false;
   bool _isAborting = false;
+  String? _initialMessageIdForBranchSwitch;
   String? _currentRequestId;
   final Set<String> _cancelledRequestIds = {};
   final ValueNotifier<bool> _hasWebViewNotifier = ValueNotifier(false);
+
+  /// Registry that powers GitHub-style `[text](#section)` anchor links inside
+  /// the main note's rendered markdown. Owned by this state and reused across
+  /// builds; `InteractiveCheckboxMarkdown` clears it on each render pass so
+  /// duplicate-slug counters stay deterministic.
+  final HeadingAnchorRegistry _noteAnchorRegistry = HeadingAnchorRegistry();
 
   // Scratchpad State
   bool _isScratchpadMode = false;
@@ -637,6 +649,22 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       }
     }
 
+    if (_conversationService.skillsEnabled) {
+      final skillTools = <McpTool>[
+        McpTool(
+          name: _conversationService.loadSkillTool.name,
+          description: _conversationService.loadSkillTool.description,
+          inputSchema: _conversationService.loadSkillTool.inputSchema,
+        ),
+      ];
+      for (final tool in _conversationService.skillDiscoveredTools) {
+        if (!skillTools.any((existing) => existing.name == tool.name)) {
+          skillTools.add(tool);
+        }
+      }
+      combined[ChatToolSession.skillToolsServiceKey] = skillTools;
+    }
+
     return combined;
   }
 
@@ -861,6 +889,22 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       throw Exception('AI tool not available: $serviceName');
     }
 
+    final runtime = AiToolRuntime(
+      bundle: bundle,
+      appProvider: context.read<AppProvider>(),
+      onModificationRequest: _handleModificationRequest,
+      onSqlWriteApprovalRequest: _handleSqlWriteApprovalRequest,
+    );
+    _aiToolRuntimes[serviceName] = runtime;
+    return runtime;
+  }
+
+  Future<AiToolRuntime> _getSkillAiToolRuntime(
+    String serviceName,
+    AiToolAppBundle bundle,
+  ) async {
+    final existing = _aiToolRuntimes[serviceName];
+    if (existing != null) return existing;
     final runtime = AiToolRuntime(
       bundle: bundle,
       appProvider: context.read<AppProvider>(),
@@ -1927,7 +1971,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                                   : null,
                             ),
                           ),
-                          tooltip: 'Scratchpad', // TODO: l10n
+                          tooltip: l10n.scratchpad,
                           iconSize: 20,
                           padding: const EdgeInsets.all(4),
                           constraints: const BoxConstraints(),
@@ -1952,7 +1996,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                         minLines: 3,
                         decoration: InputDecoration.collapsed(
                           hintText: _isScratchpadMode
-                              ? 'Send to scratchpad' // TODO: l10n
+                              ? l10n.sendToScratchpad
                               : l10n.askAiAboutNoteHint,
                         ),
                         onSubmitted: (_) {
@@ -2472,7 +2516,54 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: _isScratchpadMode
                   ? _buildScratchpadList(l10n)
-                  : _buildConversationList(l10n),
+                  // Use _isStreaming (live-text flag) rather than _isSending
+                  // so chip/strip taps re-enable as soon as the stream
+                  // finishes — _isSending stays true through tool calls.
+                  : (_conversation == null
+                        ? const SizedBox.shrink()
+                        : ChatPanel(
+                            key: _chatPanelKey,
+                            conversationId: _conversation!.id,
+                            initialMessageId: _initialMessageIdForBranchSwitch,
+                            isStreaming: _isStreaming,
+                            streamingContent: _isStreaming
+                                ? _streamingContent
+                                : null,
+                            onActiveConversationChanged:
+                                (newConvId, forkPointMessageId) async {
+                                  setState(() {
+                                    _initialMessageIdForBranchSwitch =
+                                        forkPointMessageId;
+                                  });
+                                  await _switchConversation(
+                                    newConvId,
+                                    preserveDocumentState: true,
+                                  );
+                                },
+                            onSendUserPrompt: (convId, prompt) async {
+                              await _continueAfterExistingUserPrompt(convId);
+                            },
+                            onUserMessageEdit: (msg) {
+                              _messageController.text = msg.content;
+                              _scrollToBottom();
+                              Future.delayed(
+                                const Duration(milliseconds: 200),
+                                () {
+                                  if (mounted) {
+                                    _messageFocusNode.requestFocus();
+                                  }
+                                },
+                              );
+                            },
+                            onShowToolDetails: _showToolDetailsDialog,
+                            onCopyAiMessage: (msg) =>
+                                copyContentToClipboard(msg.content),
+                            onAddAiMessageToNote: (msg) =>
+                                handleAddContentToNote(
+                                  content: msg.content,
+                                  contextNotes: _conversationNotes,
+                                ),
+                          )),
             ),
           ),
         ],
@@ -3033,7 +3124,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           Expanded(
             child: Center(
               child: Text(
-                'Scratchpad is empty', // TODO: l10n
+                l10n.scratchpadEmpty,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -3217,7 +3308,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           child: OutlinedButton.icon(
             onPressed: _scratchpadItems.isEmpty ? null : _addScratchpadToNote,
             icon: const Icon(Icons.note_add, size: 18),
-            label: const Text('Add to Note'), // TODO: l10n
+            label: Text(l10n.addToNote),
           ),
         ),
         const SizedBox(width: 8),
@@ -3225,14 +3316,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           child: OutlinedButton.icon(
             onPressed: _scratchpadItems.isEmpty ? null : _clearScratchpad,
             icon: const Icon(Icons.clear_all, size: 18),
-            label: const Text('Clear'), // TODO: l10n
+            label: Text(l10n.clear),
           ),
         ),
         const SizedBox(width: 8),
         IconButton(
           onPressed: _showRecallDialog,
           icon: const Icon(Icons.history, size: 20),
-          tooltip: 'Recall annotations',
+          tooltip: l10n.recallAnnotations,
           padding: const EdgeInsets.all(4),
           constraints: const BoxConstraints(),
           style: IconButton.styleFrom(
@@ -3242,7 +3333,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         const SizedBox(width: 4),
         // Include in chat toggle
         Tooltip(
-          message: 'Include scratchpad in chat context', // TODO: l10n
+          message: l10n.includeScratchpadInChat,
           child: Switch(
             value: _includeScratchpadInChat,
             onChanged: (value) {
@@ -3425,220 +3516,6 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       _aiHandleFraction = (newTop / handleTravel).clamp(0.0, 1.0).toDouble();
       _isAiPanelExpanded = false;
     });
-  }
-
-  Widget _buildConversationList(AppLocalizations l10n) {
-    if (_messages.isEmpty) {
-      return Align(
-        alignment: Alignment.topCenter,
-        child: Text(
-          l10n.startConversationHint,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      controller: _chatScrollController,
-      padding: const EdgeInsets.only(bottom: 12),
-      itemCount: _messages.length + (_isStreaming ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index == _messages.length && _isStreaming) {
-          return KeyedSubtree(
-            key: const ValueKey('immersive_streaming_message'),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Container(
-                constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.7,
-                ),
-                margin: const EdgeInsets.symmetric(vertical: 6),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.smart_toy,
-                          size: 16,
-                          color: Theme.of(context).colorScheme.secondary,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          l10n.ai,
-                          style: Theme.of(context).textTheme.labelMedium
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.secondary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    SelectableText(_streamingContent),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
-        final message = _messages[index];
-        final isUser = message.type == MessageType.user;
-        final hasTools =
-            message.metadata != null &&
-            (message.metadata!.containsKey('parts_history') ||
-                message.metadata!.containsKey('function_calls'));
-
-        return KeyedSubtree(
-          key: ValueKey(message.id),
-          child: Align(
-            alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.7,
-              ),
-              margin: const EdgeInsets.symmetric(vertical: 6),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isUser
-                    ? Theme.of(context).colorScheme.primaryContainer
-                    : Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: isUser
-                    ? CrossAxisAlignment.end
-                    : CrossAxisAlignment.start,
-                children: [
-                  if (!isUser) ...[
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.smart_toy,
-                          size: 16,
-                          color: Theme.of(context).colorScheme.secondary,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          l10n.ai,
-                          style: Theme.of(context).textTheme.labelMedium
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.secondary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                        const Spacer(),
-                        if (hasTools) ...[
-                          IconButton(
-                            icon: const Icon(
-                              Icons.build_circle_outlined,
-                              size: 18,
-                            ),
-                            tooltip: 'View Tool Usage',
-                            onPressed: () => _showToolDetailsDialog(message),
-                            constraints: const BoxConstraints(
-                              minWidth: 32,
-                              minHeight: 32,
-                            ),
-                            padding: EdgeInsets.zero,
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  if (isUser)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Flexible(
-                          child: SelectableText(
-                            message.content,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurface,
-                                ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          icon: Icon(
-                            Icons.edit,
-                            size: 16,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withOpacity(0.5),
-                          ),
-                          onPressed: () {
-                            _messageController.text = message.content;
-                            _scrollToBottom();
-                            Future.delayed(
-                              const Duration(milliseconds: 200),
-                              () {
-                                _messageFocusNode.requestFocus();
-                              },
-                            );
-                          },
-                          tooltip: 'Use this message',
-                          constraints: const BoxConstraints(
-                            minWidth: 32,
-                            minHeight: 32,
-                          ),
-                          padding: EdgeInsets.zero,
-                        ),
-                      ],
-                    )
-                  else
-                    SelectionArea(
-                      child: InteractiveCheckboxMarkdown(
-                        originalContent: message.content,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                        onLinkTap: (url, _) =>
-                            _handleMarkdownLinkTap(url, l10n),
-                      ),
-                    ),
-                  if (message.attachmentPaths.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: _buildMessageAttachmentChips(message, l10n),
-                    ),
-                  if (!isUser) ...[
-                    const SizedBox(height: 12),
-                    ChatMessageActionRow(
-                      onCopy: () => copyContentToClipboard(message.content),
-                      onAddNote: () => handleAddContentToNote(
-                        content: message.content,
-                        contextNotes: _conversationNotes,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
   }
 
   Future<void> _showToolDetailsDialog(ConversationMessage message) async {
@@ -3895,6 +3772,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                           newContent,
                         );
                       },
+                      onLinkTap: (url, _) => _handleMarkdownLinkTap(url, l10n),
+                      headingAnchorRegistry: _noteAnchorRegistry,
                       style: Theme.of(context).textTheme.bodyLarge,
                     ),
                   ),
@@ -4462,9 +4341,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           );
 
           if (mounted) {
-            ScaffoldMessenger.of(this.context).showSnackBar(
-              const SnackBar(
-                content: Text('AI context configuration saved'),
+            final l10n = AppLocalizations.of(context)!;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(l10n.aiContextConfigurationSaved),
                 backgroundColor: Colors.green,
               ),
             );
@@ -4779,11 +4659,28 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         await _deleteAnnotationMarker(marker);
       }
     } else {
-      final deleted = await showInNoteMarkerPreview(context, marker);
+      final deleted = await showInNoteMarkerPreview(
+        context,
+        marker,
+        onFocusConversation: _focusMarkerConversation,
+      );
       if (deleted == true) {
         _deleteMarker(marker);
       }
     }
+  }
+
+  Future<void> _focusMarkerConversation(
+    String conversationId,
+    String markerMessageId,
+  ) async {
+    if (!mounted) return;
+    setState(() {
+      _isScratchpadMode = false;
+      _isAiPanelExpanded = true;
+      _initialMessageIdForBranchSwitch = markerMessageId;
+    });
+    await _switchConversation(conversationId, preserveDocumentState: true);
   }
 
   Future<void> _deleteAnnotationMarker(InNoteMarker marker) async {
@@ -4821,6 +4718,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   }
 
   Future<void> _handleMarkdownLinkTap(String url, AppLocalizations l10n) async {
+    // Intra-document anchor links are handled by InteractiveCheckboxMarkdown
+    // when a HeadingAnchorRegistry is wired up. Anything still reaching here
+    // either points at no matching heading or at a markdown widget without a
+    // registry (chat/scratchpad). Either way, don't try to launch externally.
+    if (url.startsWith('#')) return;
     final uri = Uri.tryParse(url);
     if (uri == null) {
       if (!mounted) return;
@@ -5040,6 +4942,128 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
+  /// Adapter so ChatPanel's onSendUserPrompt callback can drive the
+  /// immersive screen's existing send pipeline. Sets the controller
+  /// text then runs the standard _sendMessage chain.
+  Future<void> _sendMessageWithText(String prompt) async {
+    _messageController.text = prompt;
+    await _sendMessage();
+  }
+
+  Future<void> _continueAfterExistingUserPrompt(String conversationId) async {
+    final activeConfig =
+        _selectedModel ?? context.read<AppProvider>().modelConfig;
+    final generationContext = GenerationContext();
+    if (_selectedModel != null) {
+      generationContext.modelOverride = _selectedModel;
+    }
+    final requestId = generationContext.ensureRequestId();
+    _currentRequestId = requestId;
+    final isVisibleConversation = _conversation?.id == conversationId;
+    setState(() {
+      _isSending = true;
+      _isAborting = false;
+      if (isVisibleConversation) {
+        _streamingContent = '';
+        _isStreaming = true;
+      }
+    });
+
+    try {
+      final conversation = await _conversationService.getConversation(
+        conversationId,
+      );
+      final noteIds = conversation?.noteIds ?? const <String>[];
+      final notes = <Note>[];
+      for (final id in noteIds) {
+        final note = await _databaseService.getNote(id);
+        if (note != null) notes.add(note);
+      }
+      final messages = await _conversationService.getConversationMessages(
+        conversationId,
+      );
+      final latestUser = messages.lastWhere(
+        (m) => m.type == MessageType.user,
+        orElse: () => throw StateError(
+          'No persisted user prompt found for $conversationId',
+        ),
+      );
+      final response = await _generateAiResponse(
+        latestUser.content,
+        const <PlatformFile>[],
+        generationContext,
+        messageHistory: messages,
+        contextNotes: notes,
+        requestForkTitle: ConversationTitleDirective.shouldRequestTitle(
+          conversation,
+        ),
+        onStreamChunk: (() {
+          final titleStreamFilter = ConversationTitleStreamFilter();
+          return (String chunk) {
+            final visibleChunk = titleStreamFilter.addChunk(chunk);
+            if (visibleChunk.isEmpty) return;
+            if (!mounted || !isVisibleConversation) return;
+            setState(() {
+              _streamingContent += visibleChunk;
+              _isStreaming = true;
+            });
+            _scrollToBottom();
+          };
+        })(),
+      );
+      await _conversationService.addAIResponse(
+        conversationId: conversationId,
+        content: response.content,
+        metadata: response.metadata,
+        modelUsed:
+            response.metadata?['modelUsed'] as String? ?? activeConfig?.id,
+      );
+      if (!mounted) return;
+      if (isVisibleConversation) {
+        setState(() {
+          _streamingContent = '';
+          _isStreaming = false;
+        });
+        _chatPanelKey.currentState?.reload();
+        _scrollToBottom();
+      }
+    } on ConversationCancelledException {
+      _cancelledRequestIds.remove(requestId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI request cancelled.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Error continuing immersive conversation: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error sending message: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+          _isAborting = false;
+          _currentRequestId = null;
+          if (isVisibleConversation) {
+            _streamingContent = '';
+            _isStreaming = false;
+          }
+        });
+      }
+      _cancelledRequestIds.remove(requestId);
+    }
+  }
+
   Future<void> _sendMessage() async {
     final trimmed = _messageController.text.trim();
     if (trimmed.isEmpty &&
@@ -5197,6 +5221,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       setState(() {
         _messages.add(userMessage);
       });
+      _chatPanelKey.currentState?.reload();
       _scrollToBottom();
 
       // Save in-note marker if a drawing was confirmed before this send
@@ -5206,14 +5231,20 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         await _saveInNoteMarker(userMessage.id, _conversation!.id, pendingPos);
       }
 
+      final titleStreamFilter = ConversationTitleStreamFilter();
       final response = await _generateAiResponse(
         content,
         attachments,
         generationContext,
+        requestForkTitle: ConversationTitleDirective.shouldRequestTitle(
+          _conversation,
+        ),
         onStreamChunk: (chunk) {
+          final visibleChunk = titleStreamFilter.addChunk(chunk);
+          if (visibleChunk.isEmpty) return;
           if (mounted) {
             setState(() {
-              _streamingContent += chunk;
+              _streamingContent += visibleChunk;
               _isStreaming = true;
             });
             _scrollToBottom();
@@ -5233,6 +5264,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         _isStreaming = false;
         _messages.add(aiMessage);
       });
+      _chatPanelKey.currentState?.reload();
       _scrollToBottom();
     } on ConversationCancelledException {
       _cancelledRequestIds.remove(requestId);
@@ -5307,18 +5339,25 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     List<PlatformFile> latestAttachments,
     GenerationContext generationContext, {
     void Function(String chunk)? onStreamChunk,
+    List<ConversationMessage>? messageHistory,
+    List<Note>? contextNotes,
+    bool requestForkTitle = false,
   }) async {
     final requestId = generationContext.ensureRequestId();
-    final noteBuilder = NotePromptBuilder(_databaseService);
-    final systemMessage = await _buildSystemPrompt();
+    final notesForContext = contextNotes ?? _conversationNotes;
+    final promptBuilder = ConversationPromptBuilder(_databaseService);
+    final systemMessage = await _buildSystemPrompt(
+      contextNotes: notesForContext,
+      requestForkTitle: requestForkTitle,
+    );
 
     // Get current PDF page for window mode context filtering
     final currentPdfPage = _activeAttachmentPath != null
         ? _pdfCurrentPages[_activeAttachmentPath]
         : null;
 
-    final contextMessage = await noteBuilder.buildContextMessage(
-      _conversationNotes,
+    final contextMessage = await promptBuilder.buildNoteContextMessage(
+      notesForContext,
       currentPdfPage: currentPdfPage,
     );
 
@@ -5353,22 +5392,16 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     final currentModelId = getIt<ModelSelector>().currentModelConfig?.id;
 
-    final conversationMessages =
-        await ConversationAiEngine.buildConversationMessages(
-          messages: _messages,
-          currentModelId: currentModelId,
-          loadAttachments: (message) =>
-              _loadConversationAttachments(message, latestAttachments),
-        );
+    final conversationMessages = await promptBuilder.buildConversationMessages(
+      messages: messageHistory ?? _messages,
+      currentModelId: currentModelId,
+      latestUserAttachments: latestAttachments,
+    );
     messages.addAll(conversationMessages);
 
     final request = PromptRequest(
       systemMessage: systemMessage,
-      contextMessages:
-          contextMessage.content.trim().isEmpty &&
-              contextMessage.attachments.isEmpty
-          ? const []
-          : [contextMessage],
+      contextMessages: contextMessage == null ? const [] : [contextMessage],
       conversationMessages: messages,
     );
 
@@ -5412,6 +5445,65 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             return 'Error: System tool "$toolName" not found';
           }
 
+          if (serviceName == ChatToolSession.skillToolsServiceKey) {
+            if (toolName == 'load_skill') {
+              final result = await _conversationService.loadSkillTool.execute(
+                params,
+              );
+              final resultStr = result is String ? result : result.toString();
+              final skillKey =
+                  (params['noteId'] as String? ?? '').trim().isNotEmpty
+                  ? (params['noteId'] as String).trim()
+                  : (params['skillRef'] as String? ?? '').trim();
+              if (skillKey.isNotEmpty && result is String) {
+                await _conversationService.handleLoadSkillResult(
+                  skillKey,
+                  resultStr,
+                );
+              }
+              return resultStr;
+            }
+            if (_conversationService.skillDiscoveredNativeToolNames.contains(
+              toolName,
+            )) {
+              final agentService = this.context.read<AgentService>();
+              final nativeTool = agentService.nativeTools
+                  .where((t) => t.name == toolName)
+                  .firstOrNull;
+              if (nativeTool != null) {
+                final result = await nativeTool.execute(params);
+                return result is String ? result : result.toString();
+              }
+              return 'Error: Native tool "$toolName" not found';
+            }
+            for (final entry
+                in _conversationService.skillDiscoveredBundles.entries) {
+              if (entry.value.toolDefinitions.any(
+                (definition) => definition.toolName == toolName,
+              )) {
+                final runtime = await _getSkillAiToolRuntime(
+                  entry.key,
+                  entry.value,
+                );
+                return runtime.invoke(toolName, params, context);
+              }
+            }
+            final endpointName =
+                _conversationService.skillToolEndpointNames[toolName];
+            final endpointId =
+                _conversationService.skillToolEndpointIds[toolName];
+            if (endpointName != null && endpointId != null) {
+              return McpToolIntegrationService.executeToolCall(
+                serviceName: endpointName,
+                toolName: toolName,
+                parameters: params,
+                enabledEndpointIds: [..._selectedMcpEndpointIds, endpointId],
+                generationContext: context,
+              );
+            }
+            return 'Error: Skill tool "$toolName" not found';
+          }
+
           // Handle MCP Tools
           return McpToolIntegrationService.executeToolCall(
             serviceName: serviceName,
@@ -5436,12 +5528,19 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return response;
   }
 
-  Future<PromptMessage> _buildSystemPrompt() async {
+  Future<PromptMessage> _buildSystemPrompt({
+    List<Note>? contextNotes,
+    bool requestForkTitle = false,
+  }) async {
+    final notesForContext = contextNotes ?? _conversationNotes;
     final lines = <String>[
       'Engage in a focused conversation grounded in the selected notes and attachments.',
       'Reference the note titles when citing content and prefer concise, direct answers.',
       'Format your responses using markdown.',
     ];
+    if (requestForkTitle) {
+      lines.add(ConversationTitleDirective.promptInstruction);
+    }
 
     if (_hasAnyTools) {
       lines.add(
@@ -5449,7 +5548,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       );
     }
 
-    if (_conversationNotes.isEmpty) {
+    if (notesForContext.isEmpty) {
       lines.add(
         'No note text is attached inline. Use enabled tools when they can retrieve the needed note or workflow context.',
       );
@@ -5479,13 +5578,37 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         ..writeln()
         ..writeln(mcpToolsPrompt.trim());
     }
+    if (_conversationService.skillsEnabled &&
+        _conversationService.skillIndex.isNotEmpty) {
+      final isLocalModel =
+          getIt<ModelSelector>().currentModel?.usesNativeToolDeclarations ??
+          false;
+      final skillIndexPrompt = getIt<SkillService>().buildSkillIndexPrompt(
+        _conversationService.skillIndex,
+        maxBudgetTokens: budget,
+        forLocalModel: isLocalModel,
+      );
+      if (skillIndexPrompt.trim().isNotEmpty) {
+        contextBuffer
+          ..writeln()
+          ..write(skillIndexPrompt.trim());
+      }
+      final defaultActions = getIt<SkillService>()
+          .buildDefaultActionPromptSection(_conversationService.skillIndex);
+      if (defaultActions.isNotEmpty) {
+        contextBuffer
+          ..writeln()
+          ..writeln()
+          ..write(defaultActions);
+      }
+    }
 
     return SystemPromptBuilder.build(
       taskContext: contextBuffer.toString(),
       guidelines: [
         'Highlight referenced note sections explicitly when possible.',
-        if (_conversationNotes.isNotEmpty) AIPrompts.relationshipGuidelines,
-        if (_conversationNotes.isNotEmpty)
+        if (notesForContext.isNotEmpty) AIPrompts.relationshipGuidelines,
+        if (notesForContext.isNotEmpty)
           AIPrompts.promptInjectionProtectionGuidelines,
       ],
       now: _sessionStart,
@@ -5507,42 +5630,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     ConversationMessage message,
     List<PlatformFile> latestUserAttachments,
   ) async {
-    if (message.type != MessageType.user) {
-      return const [];
-    }
-
-    final isMostRecent =
-        _messages.isNotEmpty && identical(message, _messages.last);
-    if (isMostRecent && latestUserAttachments.isNotEmpty) {
-      return latestUserAttachments;
-    }
-
-    if (message.attachmentPaths.isEmpty) {
-      return const [];
-    }
-
-    final files = <PlatformFile>[];
-    for (final path in message.attachmentPaths) {
-      try {
-        final resolvedPath = await FileUtils.resolvePortableAttachmentPath(
-          path,
-        );
-        final file = File(resolvedPath);
-        if (!await file.exists()) continue;
-        final bytes = await file.readAsBytes();
-        files.add(
-          PlatformFile(
-            name: path.split('/').last,
-            path: resolvedPath,
-            size: bytes.length,
-            bytes: bytes,
-          ),
-        );
-      } catch (e) {
-        LoggerService.warning('Failed to load attachment $path: $e');
-      }
-    }
-    return files;
+    return ConversationPromptBuilder(_databaseService).loadMessageAttachments(
+      message: message,
+      messageHistory: _messages,
+      latestUserAttachments: latestUserAttachments,
+    );
   }
 
   void _scrollToBottom() {
@@ -5653,7 +5745,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return _imageTransforms.putIfAbsent(path, () => TransformationController());
   }
 
-  Future<bool> _switchConversation(String conversationId) async {
+  Future<bool> _switchConversation(
+    String conversationId, {
+    bool preserveDocumentState = false,
+  }) async {
+    final previousNoteId = _noteOrder.isNotEmpty
+        ? _noteOrder[_activeNoteIndex.clamp(0, _noteOrder.length - 1)]
+        : null;
+    final previousAttachmentPath = _activeAttachmentPath;
+
     setState(() => _isLoadingConversation = true);
 
     try {
@@ -5676,9 +5776,35 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
       if (!mounted) return false;
 
+      String? nextActiveAttachmentPath;
+      int nextActiveNoteIndex = 0;
+      final nextNoteOrder = conversationNotes.isNotEmpty
+          ? conversationNotes.map((note) => note.id).toList()
+          : (_noteOrder.isNotEmpty
+                ? List<String>.from(_noteOrder)
+                : _initialNotesById.keys.toList());
+
+      if (preserveDocumentState &&
+          previousNoteId != null &&
+          nextNoteOrder.contains(previousNoteId)) {
+        nextActiveNoteIndex = nextNoteOrder.indexOf(previousNoteId);
+        final activeNote = conversationNotes.firstWhere(
+          (note) => note.id == previousNoteId,
+          orElse: () => _initialNotesById[previousNoteId]!,
+        );
+        if (previousAttachmentPath != null &&
+            activeNote.attachmentPaths.contains(previousAttachmentPath)) {
+          nextActiveAttachmentPath = previousAttachmentPath;
+        }
+      } else if (nextNoteOrder.isNotEmpty) {
+        nextActiveNoteIndex = min(_activeNoteIndex, nextNoteOrder.length - 1);
+      }
+
       setState(() {
-        _resetPdfState();
-        _disposeImageResources();
+        if (!preserveDocumentState) {
+          _resetPdfState();
+          _disposeImageResources();
+        }
         _conversation = result.conversation;
         _hasAssociatedConversations = true;
         _messages
@@ -5688,30 +5814,18 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         for (final note in conversationNotes) {
           _initialNotesById[note.id] = note;
         }
-        if (conversationNotes.isNotEmpty) {
-          _noteOrder = conversationNotes.map((note) => note.id).toList();
-          _activeNoteIndex = min(
-            _activeNoteIndex,
-            conversationNotes.length - 1,
-          );
-        } else if (_noteOrder.isNotEmpty) {
-          _activeNoteIndex = min(_activeNoteIndex, _noteOrder.length - 1);
-        } else if (_initialNotesById.isNotEmpty) {
-          _noteOrder = _initialNotesById.keys.toList();
-          _activeNoteIndex = 0;
-        } else {
-          _activeNoteIndex = 0;
-        }
-        _activeAttachmentPath = null;
+        _noteOrder = nextNoteOrder;
+        _activeNoteIndex = nextActiveNoteIndex;
+        _activeAttachmentPath = preserveDocumentState
+            ? nextActiveAttachmentPath
+            : null;
       });
 
-      // Load markers for the now-active note.
-      final notes = widget.notes;
-      if (notes.isNotEmpty) {
-        final noteId = _noteOrder.isNotEmpty
-            ? _noteOrder[_activeNoteIndex]
-            : notes[_activeNoteIndex].id;
-        _loadMarkersForNote(noteId);
+      // Load markers for the now-active document.
+      if (_activeAttachmentPath != null) {
+        _loadMarkersForAttachment(_activeAttachmentPath!);
+      } else if (_noteOrder.isNotEmpty) {
+        _loadMarkersForNote(_noteOrder[_activeNoteIndex]);
       }
 
       _scrollToBottom();

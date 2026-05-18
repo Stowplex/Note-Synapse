@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../models/conversation.dart';
 import '../models/conversation_context.dart';
@@ -10,6 +12,61 @@ class ForkService {
   static final ForkService _instance = ForkService._internal();
   factory ForkService() => _instance;
   ForkService._internal();
+
+  final _forkCreatedController = StreamController<String>.broadcast();
+
+  /// Emits the parent message ID of every fork created via this service.
+  /// Subscribers (typically ChatPanel widgets) use this to invalidate
+  /// their branch-summary caches when a sibling appears.
+  Stream<String> get forkCreatedStream => _forkCreatedController.stream;
+
+  /// Forks from a message when the source conversation is already known
+  /// (chip taps, chat-screen direct fork, programmatic callers). Skips
+  /// the context-selection dialog. Does NOT require BuildContext.
+  ///
+  /// Returns null **only** when [sourceConversationId] is not present in
+  /// the message's available conversation contexts. This is a defensive
+  /// check against programming errors (every caller is expected to pass
+  /// a sourceConversationId that the message belongs to). Callers should
+  /// log + abort gracefully on null rather than ignore it; surfacing a
+  /// silent no-op to the user is a UX bug.
+  ///
+  /// Rethrows on unexpected failure (database, IO, etc.).
+  Future<Conversation?> forkFromMessageInContext({
+    required String forkFromMessageId,
+    required String sourceConversationId,
+    required String suggestedTitle,
+  }) async {
+    try {
+      final selection = await _conversationService
+          .prepareForkContextSelection(forkFromMessageId);
+      ConversationContext? matched;
+      for (final ctx in selection.availableContexts) {
+        if (ctx.conversationId == sourceConversationId) {
+          matched = ctx;
+          break;
+        }
+      }
+      if (matched == null) {
+        LoggerService.warning(
+          'forkFromMessageInContext: source $sourceConversationId does not contain message $forkFromMessageId',
+        );
+        return null;
+      }
+
+      final result = await _conversationService.forkConversationWithContext(
+        forkFromMessageId: forkFromMessageId,
+        selectedContext: matched,
+        newTitle: suggestedTitle,
+      );
+
+      _forkCreatedController.add(forkFromMessageId);
+      return result;
+    } catch (e) {
+      LoggerService.error('forkFromMessageInContext failed: $e', error: e);
+      rethrow;
+    }
+  }
 
   ConversationService get _conversationService => getIt<ConversationService>();
 
@@ -31,18 +88,18 @@ class ForkService {
 
       // If no conflicts, use the first (and only) context
       if (!selection.requiresUserSelection) {
-        final context =
+        final ctx =
             selection.selectedContext ??
             (selection.availableContexts.isNotEmpty
                 ? selection.availableContexts.first
                 : null);
-        if (context == null) {
+        if (ctx == null) {
           return null;
         }
-        return await _conversationService.forkConversationWithContext(
+        return await forkFromMessageInContext(
           forkFromMessageId: forkFromMessageId,
-          selectedContext: context,
-          newTitle: suggestedTitle ?? 'Fork from ${context.title}',
+          sourceConversationId: ctx.conversationId,
+          suggestedTitle: suggestedTitle ?? 'Fork from ${ctx.title}',
         );
       }
 
@@ -81,10 +138,10 @@ class ForkService {
     );
 
     if (result == true && selectedContext != null && customTitle != null) {
-      return await _conversationService.forkConversationWithContext(
+      return await forkFromMessageInContext(
         forkFromMessageId: selection.forkMessageId,
-        selectedContext: selectedContext!,
-        newTitle: customTitle!,
+        sourceConversationId: selectedContext!.conversationId,
+        suggestedTitle: customTitle!,
       );
     }
 
@@ -114,9 +171,14 @@ class ForkService {
     required String newTitle,
   }) async {
     try {
-      final selection = await _conversationService.prepareForkContextSelection(
-        forkFromMessageId,
-      );
+      // TODO(perf): forkFromMessageInContext re-runs prepareForkContextSelection
+      // internally. Acceptable for v1 (user-driven path, not hot loop). Optimize
+      // later if needed by adding an overload that accepts a ConversationContext.
+      // Note: between this call and the inner one, if contexts change (race),
+      // forkFromMessageInContext returns null without throwing — caller observes
+      // null but LoggerService.warning fires inside the inner method.
+      final selection = await _conversationService
+          .prepareForkContextSelection(forkFromMessageId);
 
       if (selection.availableContexts.isEmpty) {
         throw Exception('No conversations found containing this message');
@@ -128,11 +190,10 @@ class ForkService {
         );
       }
 
-      final context = selection.availableContexts.first;
-      return await _conversationService.forkConversationWithContext(
+      return await forkFromMessageInContext(
         forkFromMessageId: forkFromMessageId,
-        selectedContext: context,
-        newTitle: newTitle,
+        sourceConversationId: selection.availableContexts.first.conversationId,
+        suggestedTitle: newTitle,
       );
     } catch (e) {
       LoggerService.error('Error during quick fork: $e', error: e);

@@ -59,9 +59,10 @@ class LoadSkillTool extends NativeTool {
 
     final db = getIt<DatabaseService>();
     final note = await db.getNote(noteId);
-    if (note == null) return {'error': 'Skill note $noteId not found'};
+    final content = note?.content;
+    if (content == null) return {'error': 'Skill note $noteId not found'};
 
-    final meta = skillService.parseSkillMetadata(noteId, note.content);
+    final meta = skillService.parseSkillMetadata(noteId, content);
     if (meta == null) {
       return {
         'error':
@@ -70,7 +71,7 @@ class LoadSkillTool extends NativeTool {
     }
     if (!meta.enabled) return {'error': "Skill '${meta.name}' is disabled"};
 
-    final body = skillService.stripFrontmatter(note.content);
+    final body = skillService.stripFrontmatter(content);
     final formatted = '# Skill: ${meta.name}\n\n$body';
 
     _cache[noteId] = formatted;

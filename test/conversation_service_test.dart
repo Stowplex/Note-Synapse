@@ -104,6 +104,82 @@ void main() {
             .getConversationWithMessages(conversation.id);
         expect(deletedConversation, isNull);
       });
+
+      test('first AI response auto-slugs placeholder fork title', () async {
+        final conversation = await conversationService.createConversation(
+          title: 'Forked conversation',
+        );
+        await conversationService.addUserMessage(
+          conversationId: conversation.id,
+          content: 'Go deeper',
+        );
+        await conversationService.addAIResponse(
+          conversationId: conversation.id,
+          content: 'Entropy tradeoffs in distributed systems are subtle.',
+        );
+
+        final updated = await conversationService.getConversation(
+          conversation.id,
+        );
+        expect(updated!.title, 'entropy-tradeoffs-in-distributed-systems-are');
+      });
+
+      test(
+        'first AI response uses and strips conversation title directive',
+        () async {
+          final conversation = await conversationService.createConversation(
+            title: 'Forked conversation',
+          );
+          await conversationService.addUserMessage(
+            conversationId: conversation.id,
+            content: 'Go deeper',
+          );
+          final ai = await conversationService.addAIResponse(
+            conversationId: conversation.id,
+            content: '''```conversation-title
+forge-mes-cnc
+```
+
+In the context of the **FORGE** benchmark.''',
+          );
+
+          final updated = await conversationService.getConversation(
+            conversation.id,
+          );
+          final messages = await conversationService.getConversationMessages(
+            conversation.id,
+          );
+          expect(updated!.title, 'forge-mes-cnc');
+          expect(ai.content, 'In the context of the **FORGE** benchmark.');
+          expect(
+            messages.last.content,
+            'In the context of the **FORGE** benchmark.',
+          );
+        },
+      );
+
+      test('user rename prevents later auto-title replacement', () async {
+        final conversation = await conversationService.createConversation(
+          title: 'Forked conversation',
+        );
+        await conversationService.renameConversation(
+          conversationId: conversation.id,
+          title: 'My branch',
+        );
+        await conversationService.addUserMessage(
+          conversationId: conversation.id,
+          content: 'Go deeper',
+        );
+        await conversationService.addAIResponse(
+          conversationId: conversation.id,
+          content: 'This response would otherwise become a slug.',
+        );
+
+        final updated = await conversationService.getConversation(
+          conversation.id,
+        );
+        expect(updated!.title, 'My branch');
+      });
     });
 
     group('Forking Operations', () {
@@ -807,62 +883,70 @@ void main() {
       await svc.enableSkills();
     });
 
-    test('builtin namespace adds McpTool and native tool name; dedup on second call', () async {
-      const uri = 'notesynapse://tool/builtin/search_notes';
-      when(mockSkillService.extractToolUris(any)).thenReturn([uri]);
-      when(mockSkillService.parseToolUri(uri)).thenReturn(
-        (namespace: 'builtin', id: 'search_notes', function: null),
-      );
-      when(mockAgentService.nativeTools).thenReturn([NoteSearchTool()]);
+    test(
+      'builtin namespace adds McpTool and native tool name; dedup on second call',
+      () async {
+        const uri = 'notesynapse://tool/builtin/search_notes';
+        when(mockSkillService.extractToolUris(any)).thenReturn([uri]);
+        when(mockSkillService.parseToolUri(uri)).thenReturn((
+          namespace: 'builtin',
+          id: 'search_notes',
+          function: null,
+        ));
+        when(mockAgentService.nativeTools).thenReturn([NoteSearchTool()]);
 
-      await svc.handleLoadSkillResult('note-1', 'some skill content');
+        await svc.handleLoadSkillResult('note-1', 'some skill content');
 
-      expect(svc.skillDiscoveredTools.length, equals(1));
-      expect(svc.skillDiscoveredTools.first.name, equals('search_notes'));
-      expect(svc.skillDiscoveredNativeToolNames, contains('search_notes'));
+        expect(svc.skillDiscoveredTools.length, equals(1));
+        expect(svc.skillDiscoveredTools.first.name, equals('search_notes'));
+        expect(svc.skillDiscoveredNativeToolNames, contains('search_notes'));
 
-      // Second call should not duplicate.
-      await svc.handleLoadSkillResult('note-1', 'some skill content');
-      expect(svc.skillDiscoveredTools.length, equals(1));
-    });
+        // Second call should not duplicate.
+        await svc.handleLoadSkillResult('note-1', 'some skill content');
+        expect(svc.skillDiscoveredTools.length, equals(1));
+      },
+    );
 
-    test('mcp namespace adds tools and populates skillToolEndpointNames', () async {
-      const uri = 'notesynapse://tool/mcp/my_service';
-      when(mockSkillService.extractToolUris(any)).thenReturn([uri]);
-      when(mockSkillService.parseToolUri(uri)).thenReturn(
-        (namespace: 'mcp', id: 'my_service', function: null),
-      );
+    test(
+      'mcp namespace adds tools and populates skillToolEndpointNames',
+      () async {
+        const uri = 'notesynapse://tool/mcp/my_service';
+        when(mockSkillService.extractToolUris(any)).thenReturn([uri]);
+        when(
+          mockSkillService.parseToolUri(uri),
+        ).thenReturn((namespace: 'mcp', id: 'my_service', function: null));
 
-      final endpoint = McpEndpoint(
-        id: 'ep-1',
-        name: 'my_service',
-        baseUrl: 'http://localhost:3000',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-      final toolA = McpTool(name: 'tool_a', description: 'Tool A');
-      when(mockMcpService.getEndpoints()).thenAnswer((_) async => [endpoint]);
-      when(mockMcpService.getCachedTools('ep-1')).thenAnswer(
-        (_) async => McpToolsCache(
-          endpointId: 'ep-1',
-          tools: [toolA],
-          fetchedAt: DateTime.now(),
-        ),
-      );
+        final endpoint = McpEndpoint(
+          id: 'ep-1',
+          name: 'my_service',
+          baseUrl: 'http://localhost:3000',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+        final toolA = McpTool(name: 'tool_a', description: 'Tool A');
+        when(mockMcpService.getEndpoints()).thenAnswer((_) async => [endpoint]);
+        when(mockMcpService.getCachedTools('ep-1')).thenAnswer(
+          (_) async => McpToolsCache(
+            endpointId: 'ep-1',
+            tools: [toolA],
+            fetchedAt: DateTime.now(),
+          ),
+        );
 
-      await svc.handleLoadSkillResult('note-1', 'some skill content');
+        await svc.handleLoadSkillResult('note-1', 'some skill content');
 
-      expect(svc.skillDiscoveredTools.length, equals(1));
-      expect(svc.skillDiscoveredTools.first.name, equals('tool_a'));
-      expect(svc.skillToolEndpointNames['tool_a'], equals('my_service'));
-    });
+        expect(svc.skillDiscoveredTools.length, equals(1));
+        expect(svc.skillDiscoveredTools.first.name, equals('tool_a'));
+        expect(svc.skillToolEndpointNames['tool_a'], equals('my_service'));
+      },
+    );
 
     test('unknown namespace does not crash and adds nothing', () async {
       const uri = 'notesynapse://tool/unknown/foo';
       when(mockSkillService.extractToolUris(any)).thenReturn([uri]);
-      when(mockSkillService.parseToolUri(uri)).thenReturn(
-        (namespace: 'unknown', id: 'foo', function: null),
-      );
+      when(
+        mockSkillService.parseToolUri(uri),
+      ).thenReturn((namespace: 'unknown', id: 'foo', function: null));
 
       await svc.handleLoadSkillResult('note-1', 'some skill content');
 

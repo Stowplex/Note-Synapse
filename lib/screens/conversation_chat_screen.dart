@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
@@ -9,6 +10,8 @@ import 'package:flutter/services.dart';
 import '../widgets/drawing_editor.dart';
 import '../widgets/approval_dialog.dart';
 import '../models/conversation.dart';
+import '../models/conversation_branch_summary.dart';
+import '../models/chip_action.dart';
 import '../models/tool_iteration_prompt.dart';
 import '../models/note.dart';
 import '../models/agent_task.dart';
@@ -16,6 +19,7 @@ import '../models/mcp_endpoint.dart';
 import '../models/generation_context.dart';
 import '../models/model_config.dart';
 import '../services/conversation_service.dart';
+import '../services/chip_tap_handler.dart';
 import '../services/model_selector.dart';
 import '../services/service_locator.dart';
 import '../services/attachment_preprocessor.dart';
@@ -33,8 +37,10 @@ import '../services/prompts/registrations/chat_prompt_configuration.dart';
 import '../services/prompts/note_prompt_builder.dart';
 import '../services/database_service.dart';
 import '../services/conversation_settings_service.dart';
-import '../widgets/interactive_checkbox_markdown.dart';
+import '../services/conversation_prompt_builder.dart';
+import '../widgets/chip_aware_ai_message_content.dart';
 import '../utils/file_utils.dart';
+import '../utils/conversation_title_directive.dart';
 import '../l10n/app_localizations.dart';
 import '../services/conversation_ai_engine.dart';
 import 'note_selection_dialog.dart';
@@ -49,6 +55,7 @@ import '../services/user_app_service.dart';
 import '../models/user_app.dart';
 import '../mixins/note_action_mixin.dart';
 import '../widgets/chat_message_action_row.dart';
+import '../widgets/message_branch_strip.dart';
 import '../widgets/active_tool_count_badge.dart';
 import '../widgets/model_selector_button.dart';
 import '../services/agent_service.dart';
@@ -63,6 +70,7 @@ import '../widgets/agent_task_tree_widget.dart';
 import '../widgets/attachment_preview_tile.dart';
 import '../widgets/local_model_attachment_warning_dialog.dart';
 import '../widgets/tool_orchestration_warning_dialog.dart';
+import '../services/fork_service.dart';
 
 class ConversationChatScreen extends StatefulWidget {
   final String? conversationId;
@@ -87,6 +95,7 @@ class ConversationChatScreen extends StatefulWidget {
 class _ConversationChatScreenState extends State<ConversationChatScreen>
     with NoteActionMixin<ConversationChatScreen>, WidgetsBindingObserver {
   ConversationService get _conversationService => getIt<ConversationService>();
+  final ForkService _forkService = ForkService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _messageFocusNode = FocusNode();
@@ -95,6 +104,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   Conversation? _conversation;
   List<ConversationMessage> _messages = [];
   List<Note> _notes = [];
+  Map<String, List<ConversationBranchSummary>> _branchesByParent = const {};
   bool _isLoading = false;
   bool _isSending = false;
   bool _isAborting = false;
@@ -134,11 +144,13 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   // Agent Skills
   bool _skillsEnabled = false;
   int _skillCount = 0;
-  bool? _lastOrchestrationSupport; // tracks model's capability to detect changes
+  bool?
+  _lastOrchestrationSupport; // tracks model's capability to detect changes
 
   bool _hasInitialized = false;
   bool _waitingForAgentResult = false;
   AgentService? _agentService;
+  StreamSubscription<String>? _forkSub;
 
   @override
   void initState() {
@@ -148,10 +160,13 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     // Skills start disabled; _initSkillsWithModelCheck runs after first frame
     // when BuildContext is available to read the active model's capabilities.
     _skillsEnabled = false;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initSkillsWithModelCheck());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _initSkillsWithModelCheck(),
+    );
     _loadMcpEndpoints();
     _loadIterationPreference();
     _setupSqlWriteApprovalCallback();
+    _forkSub = _forkService.forkCreatedStream.listen(_onForkCreated);
     // Listener managed in didChangeDependencies
   }
 
@@ -183,9 +198,11 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
 
   void _initSkillsWithModelCheck() {
     if (!mounted) return;
-    final modelConfig = _selectedModel ?? context.read<AppProvider>().modelConfig;
+    final modelConfig =
+        _selectedModel ?? context.read<AppProvider>().modelConfig;
     final supportsOrchestration =
-        modelConfig?.customCapabilitiesObject?.supportsToolOrchestration ?? true;
+        modelConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
+        true;
     _lastOrchestrationSupport = supportsOrchestration;
     final enable = widget.skillsEnabled && supportsOrchestration;
     if (enable) {
@@ -265,8 +282,10 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
     // Re-evaluate skills if the active model's orchestration capability changed.
     final modelConfig = context.read<AppProvider>().modelConfig;
     final nowSupports =
-        modelConfig?.customCapabilitiesObject?.supportsToolOrchestration ?? true;
-    if (_lastOrchestrationSupport != null && _lastOrchestrationSupport != nowSupports) {
+        modelConfig?.customCapabilitiesObject?.supportsToolOrchestration ??
+        true;
+    if (_lastOrchestrationSupport != null &&
+        _lastOrchestrationSupport != nowSupports) {
       _initSkillsWithModelCheck();
     }
     _lastOrchestrationSupport = nowSupports;
@@ -284,6 +303,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
           _conversation = conversationWithMessages.conversation;
           _messages = conversationWithMessages.messages;
           _notes = await _conversationService.getConversationNotes(
+            widget.conversationId!,
+          );
+          _branchesByParent = await _loadBranchSummaries(
             widget.conversationId!,
           );
           await _refreshConversationTags();
@@ -304,6 +326,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
             widget.initialNoteIds!,
           );
         }
+        _branchesByParent = const {};
       }
     } catch (e) {
       if (mounted) {
@@ -382,6 +405,131 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       });
     } catch (e) {
       LoggerService.error('Error loading conversation tags: $e', error: e);
+    }
+  }
+
+  Future<Map<String, List<ConversationBranchSummary>>> _loadBranchSummaries(
+    String conversationId,
+  ) async {
+    try {
+      return await _conversationService.getAllForkPointBranches(conversationId);
+    } catch (e) {
+      LoggerService.error('Error loading conversation branches: $e', error: e);
+      return const {};
+    }
+  }
+
+  Future<void> _refreshBranchSummaries() async {
+    final conversationId = _conversation?.id;
+    if (conversationId == null) {
+      if (mounted && _branchesByParent.isNotEmpty) {
+        setState(() {
+          _branchesByParent = const {};
+        });
+      }
+      return;
+    }
+
+    final branches = await _loadBranchSummaries(conversationId);
+    if (!mounted || _conversation?.id != conversationId) return;
+    setState(() {
+      _branchesByParent = branches;
+    });
+  }
+
+  Future<void> _onForkCreated(String parentMessageId) async {
+    final conversationId = _conversation?.id;
+    if (conversationId == null) return;
+    final branches = await _loadBranchSummaries(conversationId);
+    if (!mounted || _conversation?.id != conversationId) return;
+    setState(() {
+      _branchesByParent = branches;
+    });
+  }
+
+  List<ConversationBranchSummary> _branchesFor(String forkPointMessageId) {
+    final siblingBranches =
+        _branchesByParent[forkPointMessageId] ??
+        const <ConversationBranchSummary>[];
+    if (siblingBranches.isEmpty) return const [];
+    final conversation = _conversation;
+    if (conversation == null) return siblingBranches;
+    if (siblingBranches.any((b) => b.conversationId == conversation.id)) {
+      return siblingBranches;
+    }
+    final active = ConversationBranchSummary(
+      conversationId: conversation.id,
+      title: conversation.title,
+      forkPointMessageId: forkPointMessageId,
+      firstChildMessageId: forkPointMessageId,
+      noteIds: conversation.noteIds,
+    );
+    return [active, ...siblingBranches];
+  }
+
+  bool _areChipsExpected() {
+    return _conversationService.skillsEnabled &&
+        _conversationService.skillIndex.values.any(
+          (skill) => skill.defaultAction != null,
+        );
+  }
+
+  Future<bool> _switchConversationInPlace(
+    String conversationId, {
+    String? scrollToMessageId,
+  }) async {
+    try {
+      final loaded = await _conversationService.getConversationWithFullHistory(
+        conversationId,
+      );
+      if (loaded == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not load forked conversation')),
+          );
+        }
+        return false;
+      }
+
+      final notes = await _conversationService.getConversationNotes(
+        conversationId,
+      );
+      final missingNoteIds = await _conversationService
+          .validateConversationNotes(conversationId);
+      final branches = await _loadBranchSummaries(conversationId);
+
+      if (!mounted) return false;
+      setState(() {
+        _conversation = loaded.conversation;
+        _messages = loaded.messages;
+        _notes = notes;
+        _branchesByParent = branches;
+        _streamingContent = '';
+        _isStreaming = false;
+      });
+      await _refreshConversationTags();
+      if (missingNoteIds.isNotEmpty && mounted) {
+        _showMissingNotesAlert(missingNoteIds);
+      }
+      if (mounted) {
+        _onAgentStateChange();
+        if (scrollToMessageId == null) {
+          _scrollToBottom();
+        } else {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToMessage(scrollToMessageId);
+          });
+        }
+      }
+      return mounted;
+    } catch (e) {
+      LoggerService.error('Error loading forked conversation: $e', error: e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading forked conversation: $e')),
+        );
+      }
+      return false;
     }
   }
 
@@ -1134,35 +1282,12 @@ $historyBuffer
         return;
       }
 
-      final aiResponse = await _generateAIResponse(
-        content,
-        attachments,
-        generationContext,
-        onStreamChunk: (chunk) {
-          if (mounted) {
-            setState(() {
-              _streamingContent += chunk;
-              _isStreaming = true;
-            });
-            _scrollToBottom();
-          }
-        },
-      );
-
-      final aiMessage = await _conversationService.addAIResponse(
+      await _generateAndPersistAiResponse(
         conversationId: _conversation!.id,
-        content: aiResponse.content,
-        metadata: aiResponse.metadata,
-        modelUsed: aiResponse.metadata?['modelUsed'] as String?,
+        prompt: content,
+        attachments: attachments,
+        generationContext: generationContext,
       );
-      if (!mounted) return;
-
-      setState(() {
-        _streamingContent = '';
-        _isStreaming = false;
-        _messages.add(aiMessage);
-      });
-      _scrollToBottom();
     } on ConversationCancelledException {
       if (requestId != null) {
         _cancelledRequestIds.remove(requestId);
@@ -1179,6 +1304,117 @@ $historyBuffer
       if (mounted) {
         messenger.showSnackBar(
           SnackBar(content: Text('Error sending message: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+          _currentRequestId = null;
+          if (requestId != null) {
+            _cancelledRequestIds.remove(requestId);
+          }
+        });
+      }
+    }
+  }
+
+  Future<void> _generateAndPersistAiResponse({
+    required String conversationId,
+    required String prompt,
+    required List<PlatformFile> attachments,
+    required GenerationContext generationContext,
+  }) async {
+    final titleStreamFilter = ConversationTitleStreamFilter();
+    final aiResponse = await _generateAIResponse(
+      prompt,
+      attachments,
+      generationContext,
+      onStreamChunk: (chunk) {
+        final visibleChunk = titleStreamFilter.addChunk(chunk);
+        if (visibleChunk.isEmpty) return;
+        if (mounted) {
+          setState(() {
+            _streamingContent += visibleChunk;
+            _isStreaming = true;
+          });
+          _scrollToBottom();
+        }
+      },
+    );
+
+    final aiMessage = await _conversationService.addAIResponse(
+      conversationId: conversationId,
+      content: aiResponse.content,
+      metadata: aiResponse.metadata,
+      modelUsed: aiResponse.metadata?['modelUsed'] as String?,
+    );
+    if (!mounted) return;
+
+    setState(() {
+      _streamingContent = '';
+      _isStreaming = false;
+      _messages.add(aiMessage);
+    });
+    _scrollToBottom();
+  }
+
+  Future<void> _handleChipTap(
+    ConversationMessage parentMessage,
+    ChipAction chip,
+  ) async {
+    if (_conversation == null || _isSending || _isStreaming) return;
+    if (!mounted) return;
+
+    final sourceConversationId = _conversation!.id;
+    final messenger = ScaffoldMessenger.of(context);
+    String? requestId;
+
+    setState(() {
+      _isSending = true;
+    });
+
+    try {
+      final forked = await ChipTapHandler().handle(
+        parentMessageId: parentMessage.id,
+        chip: chip,
+        sourceConversationId: sourceConversationId,
+      );
+      if (!mounted || forked == null) return;
+
+      final switched = await _switchConversationInPlace(forked.id);
+      if (!mounted || !switched) return;
+
+      final generationContext = GenerationContext();
+      if (_selectedModel != null) {
+        generationContext.modelOverride = _selectedModel;
+      }
+      requestId = generationContext.ensureRequestId();
+      _currentRequestId = requestId;
+
+      await _generateAndPersistAiResponse(
+        conversationId: forked.id,
+        prompt: chip.prompt,
+        attachments: const <PlatformFile>[],
+        generationContext: generationContext,
+      );
+    } on ConversationCancelledException {
+      if (requestId != null) {
+        _cancelledRequestIds.remove(requestId);
+      }
+      if (mounted) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('AI request cancelled.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      LoggerService.error('Error handling chip tap: $e', error: e);
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Error handling chip: $e')),
         );
       }
     } finally {
@@ -1418,23 +1654,19 @@ $historyBuffer
   Future<PromptRequest> _buildConversationPrompt(
     List<PlatformFile> latestUserAttachments,
   ) async {
-    final noteBuilder = NotePromptBuilder(DatabaseService());
-    final contextMessage = await noteBuilder.buildContextMessage(_notes);
+    final promptBuilder = ConversationPromptBuilder(DatabaseService());
+    final contextMessage = await promptBuilder.buildNoteContextMessage(_notes);
 
     final currentModelId =
         _selectedModel?.id ?? getIt<ModelSelector>().currentModelConfig?.id;
 
-    final conversationMessages =
-        await ConversationAiEngine.buildConversationMessages(
-          messages: _messages,
-          currentModelId: currentModelId,
-          loadAttachments: (message) =>
-              _loadConversationAttachments(message, latestUserAttachments),
-        );
+    final conversationMessages = await promptBuilder.buildConversationMessages(
+      messages: _messages,
+      currentModelId: currentModelId,
+      latestUserAttachments: latestUserAttachments,
+    );
 
-    final contextMessages =
-        (contextMessage.content.trim().isEmpty &&
-            contextMessage.attachments.isEmpty)
+    final contextMessages = contextMessage == null
         ? <PromptMessage>[]
         : [contextMessage];
     final systemMessage = await _buildConversationSystemMessage(
@@ -1459,6 +1691,9 @@ $historyBuffer
       'Use your own knowledge to clarify or extend when the notes are insufficient.',
       'You should format your response as markdown for best reading experience.',
     ];
+    if (ConversationTitleDirective.shouldRequestTitle(_conversation)) {
+      lines.add(ConversationTitleDirective.promptInstruction);
+    }
 
     if (_hasAnyTools) {
       lines.add(
@@ -1523,6 +1758,14 @@ $historyBuffer
           ..writeln()
           ..write(skillIndexPrompt.trim());
       }
+      final defaultActionSection = getIt<SkillService>()
+          .buildDefaultActionPromptSection(_conversationService.skillIndex);
+      if (defaultActionSection.isNotEmpty) {
+        contextBuffer
+          ..writeln()
+          ..writeln()
+          ..write(defaultActionSection);
+      }
     }
 
     return SystemPromptBuilder.build(
@@ -1552,97 +1795,17 @@ $historyBuffer
     ConversationMessage message,
     List<PlatformFile> latestUserAttachments,
   ) async {
-    if (message.type != MessageType.user) {
-      return const [];
-    }
-
-    final isLatestUserMessage =
-        _messages.isNotEmpty && identical(message, _messages.last);
-
-    if (isLatestUserMessage && latestUserAttachments.isNotEmpty) {
-      return Future.wait(latestUserAttachments.map(_normalizePlatformFile));
-    }
-
-    if (message.attachmentPaths.isEmpty) {
-      return const [];
-    }
-
-    final files = <PlatformFile>[];
-    for (final path in message.attachmentPaths) {
-      try {
-        // Check if it's a URI
-        final isUri =
-            path.startsWith('http://') ||
-            path.startsWith('https://') ||
-            path.startsWith('gs://');
-
-        if (isUri) {
-          files.add(
-            PlatformFile(
-              name: path.split('/').last,
-              path: path,
-              size: 0,
-              bytes: null,
-            ),
-          );
-          continue;
-        }
-
-        final file = File(path);
-        if (!file.existsSync()) {
-          continue;
-        }
-        final bytes = await file.readAsBytes();
-        files.add(
-          PlatformFile(
-            name: path.split('/').last,
-            path: path,
-            size: bytes.length,
-            bytes: bytes,
-          ),
-        );
-      } catch (e) {
-        LoggerService.warning(
-          'Failed to load conversation attachment $path: $e',
-        );
-      }
-    }
-
-    return files;
+    return ConversationPromptBuilder(DatabaseService()).loadMessageAttachments(
+      message: message,
+      messageHistory: _messages,
+      latestUserAttachments: latestUserAttachments,
+    );
   }
 
   Future<PlatformFile> _normalizePlatformFile(PlatformFile file) async {
-    if (file.bytes != null) {
-      return file;
-    }
-
-    if (file.path != null) {
-      // Check if it's a URI
-      final isUri =
-          file.path!.startsWith('http://') ||
-          file.path!.startsWith('https://') ||
-          file.path!.startsWith('gs://');
-
-      if (isUri) {
-        return file;
-      }
-
-      try {
-        final bytes = await File(file.path!).readAsBytes();
-        return PlatformFile(
-          name: file.name,
-          path: file.path,
-          size: bytes.length,
-          bytes: bytes,
-        );
-      } catch (e) {
-        LoggerService.warning(
-          'Failed to normalize attachment ${file.name}: $e',
-        );
-      }
-    }
-
-    return file;
+    return ConversationPromptBuilder(
+      DatabaseService(),
+    ).normalizePlatformFile(file);
   }
 
   Future<void> _attachFiles() async {
@@ -1763,7 +1926,7 @@ $historyBuffer
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
         type: FileType.any,
-        withData: true, // Load file data into memory
+        withData: kIsWeb,
       );
 
       if (result != null) {
@@ -2438,12 +2601,15 @@ $historyBuffer
                                 onSelected: (selected) {
                                   setState(() => _skillsEnabled = selected);
                                   if (selected) {
-                                    _conversationService.enableSkills().then((_) {
+                                    _conversationService.enableSkills().then((
+                                      _,
+                                    ) {
                                       if (mounted) {
                                         setState(
-                                          () => _skillCount = _conversationService
-                                              .skillIndex
-                                              .length,
+                                          () =>
+                                              _skillCount = _conversationService
+                                                  .skillIndex
+                                                  .length,
                                         );
                                       }
                                     });
@@ -2456,9 +2622,8 @@ $historyBuffer
                                   size: 16,
                                   color: _skillsEnabled
                                       ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(
-                                          context,
-                                        ).colorScheme.onSurface.withOpacity(0.6),
+                                      : Theme.of(context).colorScheme.onSurface
+                                            .withOpacity(0.6),
                                 ),
                               ),
                               if (!supportsToolOrchestration)
@@ -2602,6 +2767,25 @@ $historyBuffer
     );
   }
 
+  void _handleMarkdownLinkTap(String url, String _) {
+    final uri = Uri.tryParse(url);
+    if (uri != null) {
+      canLaunchUrl(uri).then((canLaunch) {
+        if (canLaunch) {
+          launchUrl(uri, mode: LaunchMode.externalApplication);
+        } else if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Could not open link: $url')));
+        }
+      });
+    } else if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Invalid URL: $url')));
+    }
+  }
+
   Future<void> _forkConversation(String messageId) async {
     final result = await showDialog<bool>(
       context: context,
@@ -2628,11 +2812,19 @@ $historyBuffer
       final navigator = Navigator.of(context);
 
       try {
-        final forkedConversation = await _conversationService.forkConversation(
-          originalConversationId: _conversation!.id,
+        final forkedConversation = await _forkService.forkFromMessageInContext(
           forkFromMessageId: messageId,
-          newTitle: 'Forked conversation',
+          sourceConversationId: _conversation!.id,
+          suggestedTitle: 'Forked conversation',
         );
+        if (forkedConversation == null) {
+          if (mounted) {
+            messenger.showSnackBar(
+              const SnackBar(content: Text('Could not fork conversation')),
+            );
+          }
+          return;
+        }
 
         // Navigate to the forked conversation
         if (mounted) {
@@ -3462,6 +3654,8 @@ $historyBuffer
         message.metadata != null &&
         (message.metadata!.containsKey('parts_history') ||
             message.metadata!.containsKey('function_calls'));
+    final branches = _branchesFor(message.id);
+    final activeConversationId = _conversation?.id;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8.0),
@@ -3551,34 +3745,34 @@ $historyBuffer
                 style: Theme.of(context).textTheme.bodyMedium,
               )
             else
-              SelectionArea(
-                child: InteractiveCheckboxMarkdown(
-                  originalContent: message.content,
-                  onLinkTap: (url, _) {
-                    final uri = Uri.tryParse(url);
-                    if (uri != null) {
-                      canLaunchUrl(uri).then((canLaunch) {
-                        if (canLaunch) {
-                          launchUrl(uri, mode: LaunchMode.externalApplication);
-                        } else {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Could not open link: $url'),
-                              ),
-                            );
-                          }
-                        }
-                      });
-                    } else {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Invalid URL: $url')),
-                        );
-                      }
-                    }
-                  },
-                ),
+              ChipAwareAiMessageContent(
+                message: message,
+                isStreaming: _isStreaming && message.id == _messages.last.id,
+                chipsExpected: _areChipsExpected(),
+                onChipTap: _isSending || _isStreaming
+                    ? null
+                    : (chip) => _handleChipTap(message, chip),
+                onLinkTap: _handleMarkdownLinkTap,
+              ),
+            if (branches.isNotEmpty && activeConversationId != null)
+              MessageBranchStrip(
+                branches: branches,
+                activeConversationId: activeConversationId,
+                activeNoteIds: _conversation?.noteIds ?? const [],
+                disabled: _isSending || _isStreaming,
+                onSwitchBranch: (conversationId, _) async {
+                  await _switchConversationInPlace(
+                    conversationId,
+                    scrollToMessageId: message.id,
+                  );
+                },
+                onRenameBranch: (conversationId, title) async {
+                  await _conversationService.renameConversation(
+                    conversationId: conversationId,
+                    title: title,
+                  );
+                  await _refreshBranchSummaries();
+                },
               ),
             if (message.attachmentPaths.isNotEmpty)
               Padding(
@@ -3822,6 +4016,7 @@ $historyBuffer
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _agentService?.removeListener(_onAgentStateChange);
+    _forkSub?.cancel();
 
     // Clean up SQL approval callback and session state
     RunSqlTool.onWriteApprovalRequest = null;

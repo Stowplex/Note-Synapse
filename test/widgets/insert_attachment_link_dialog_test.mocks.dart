@@ -697,6 +697,14 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i7.Future<_i5.UserApp?>);
 
   @override
+  _i7.Future<_i5.UserApp?> getUserAppByUuid(String? uuid) =>
+      (super.noSuchMethod(
+            Invocation.method(#getUserAppByUuid, [uuid]),
+            returnValue: _i7.Future<_i5.UserApp?>.value(),
+          )
+          as _i7.Future<_i5.UserApp?>);
+
+  @override
   _i7.Future<void> updateUserApp(_i5.UserApp? app) =>
       (super.noSuchMethod(
             Invocation.method(#updateUserApp, [app]),

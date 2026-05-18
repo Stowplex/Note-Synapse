@@ -845,6 +845,7 @@ class _NotesScreenState extends State<NotesScreen> {
         {};
 
     final appProvider = context.read<AppProvider>();
+    final l10n = AppLocalizations.of(context)!;
 
     // Show tag selection dialog
     final finalTags = await showDialog<List<String>>(
@@ -852,7 +853,7 @@ class _NotesScreenState extends State<NotesScreen> {
       builder: (context) => TagSelectionDialog(
         initialSelectedTags: commonTags.toList(),
 
-        title: 'Select Tags for ${_selectedNotes.length} Notes',
+        title: l10n.selectTagsForNotes(_selectedNotes.length),
       ),
     );
 

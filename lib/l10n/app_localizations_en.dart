@@ -1457,6 +1457,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchTags => 'Search tags';
 
   @override
+  String get searchTagsToFilter => 'Search tags to filter';
+
+  @override
   String get searchTagsCapitalized => 'Search Tags';
 
   @override
@@ -2696,6 +2699,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get configureAiContext => 'Configure AI Context';
 
   @override
+  String get configureAiContextDescription =>
+      'Select which pages to include when AI processes this PDF:';
+
+  @override
+  String get includeInAiContext => 'Include in AI Context';
+
+  @override
+  String get configureAiContextRange => 'Configure AI Context Range';
+
+  @override
+  String get editAiContextRange => 'Edit AI Context Range';
+
+  @override
   String aiContext(String mode) {
     return 'AI Context: $mode';
   }
@@ -2710,7 +2726,77 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiContextChapters => 'Chapters';
 
   @override
+  String get aiContextAllDocument => 'All Document';
+
+  @override
+  String aiContextPagesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'pages',
+      one: 'page',
+    );
+    return '$count $_temp0';
+  }
+
+  @override
+  String get aiContextWindowAroundCurrentPage => 'Window Around Current Page';
+
+  @override
+  String aiContextPagesCenteredOnReading(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'pages',
+      one: 'page',
+    );
+    return '$count $_temp0 centered on where you are reading';
+  }
+
+  @override
+  String aiContextBookmarksAvailable(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'bookmarks',
+      one: 'bookmark',
+    );
+    return '$count $_temp0 available';
+  }
+
+  @override
+  String aiContextPageNumber(int pageNumber) {
+    return 'Page $pageNumber';
+  }
+
+  @override
+  String get aiContextSelectedChapters => 'Selected Chapters';
+
+  @override
+  String get aiContextChooseSpecificSections => 'Choose specific sections';
+
+  @override
+  String aiContextChaptersSelected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'chapters',
+      one: 'chapter',
+    );
+    return '$count $_temp0 selected';
+  }
+
+  @override
+  String get aiContextPdfNoOutline => 'This PDF has no outline';
+
+  @override
+  String get aiContextConfigurationSaved => 'AI context configuration saved';
+
+  @override
   String get windowSize => 'Window Size';
+
+  @override
+  String get pages => 'Pages';
 
   @override
   String get pagesBeforeAfter => 'Pages before/after';
@@ -3970,7 +4056,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get gettingStarted => 'Getting Started';
 
   @override
-  String get gettingStartedSubtitle => 'Install user manual and starter apps';
+  String get gettingStartedSubtitle =>
+      'Install user manual, starter apps, and starter skills';
 
   @override
   String get installUserManual => 'Install User Manual';
@@ -4103,6 +4190,53 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String errorInstallingStarterApps(String error) {
     return 'Error installing starter apps: $error';
+  }
+
+  @override
+  String get installStarterSkills => 'Install Starter Skills';
+
+  @override
+  String get installStarterSkillsSubtitle =>
+      'Browse bundled skills and install them as transparent skill notes';
+
+  @override
+  String get noStarterSkillsAvailable => 'No starter skills available';
+
+  @override
+  String get noStarterSkillsSelected => 'No starter skills selected';
+
+  @override
+  String get installSelectedSkills => 'Install Selected Skills';
+
+  @override
+  String starterSkillsInstalledSuccessfully(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'skills',
+      one: 'skill',
+    );
+    return '$count $_temp0 installed successfully!';
+  }
+
+  @override
+  String errorLoadingStarterSkills(String error) {
+    return 'Error loading starter skills: $error';
+  }
+
+  @override
+  String errorInstallingStarterSkills(String error) {
+    return 'Error installing starter skills: $error';
+  }
+
+  @override
+  String skillRefLabel(String ref) {
+    return 'skillRef: $ref';
+  }
+
+  @override
+  String sourceLabel(String source) {
+    return 'Source: $source';
   }
 
   @override
@@ -4396,6 +4530,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get contractSelectionBelow => 'Contract Below';
 
   @override
+  String get expandToTop => 'To top';
+
+  @override
+  String get expandToBottom => 'To bottom';
+
+  @override
+  String get contractToStart => 'Reset';
+
+  @override
   String get editSelection => 'Edit';
 
   @override
@@ -4563,4 +4706,115 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get insertUserAppNoAppsMessage =>
       'You haven\'t installed any apps yet.';
+
+  @override
+  String get branchStripDocumentSwapMessage =>
+      'This branch is associated with a different document. Switch document?';
+
+  @override
+  String get branchStripDocumentSwapConfirm => 'Switch';
+
+  @override
+  String get modelPreferences => 'Model Preferences';
+
+  @override
+  String get modelPreferencesSubtitle => 'Set capability-based model priority';
+
+  @override
+  String get viewFeatureMatrix => 'View Feature Matrix';
+
+  @override
+  String get modelPreferenceDragDropHint =>
+      'Drag and drop to reorder models. The first model that matches the required capabilities will be used. If the list is empty or no match is found, the system default model is used.';
+
+  @override
+  String get priorityList => 'Priority List';
+
+  @override
+  String get noPreferencesSetMessage =>
+      'No preferences set.\nSystem default model will be used.';
+
+  @override
+  String get unknownModel => 'Unknown Model';
+
+  @override
+  String get imageInputCapability => 'Image Input';
+
+  @override
+  String get videoInputCapability => 'Video Input';
+
+  @override
+  String get audioInputCapability => 'Audio Input';
+
+  @override
+  String get docsCapability => 'Docs';
+
+  @override
+  String get imageGenCapability => 'Image Gen';
+
+  @override
+  String get codeGenCapability => 'Code Gen';
+
+  @override
+  String get modelFeatureMatrix => 'Model Feature Matrix';
+
+  @override
+  String get modelNameColumn => 'Model Name';
+
+  @override
+  String get imageInColumn => 'Image In';
+
+  @override
+  String get videoInColumn => 'Video In';
+
+  @override
+  String get audioColumn => 'Audio';
+
+  @override
+  String get imgGenColumn => 'Img Gen';
+
+  @override
+  String get codeGenColumn => 'Code Gen';
+
+  @override
+  String get docsColumn => 'Docs';
+
+  @override
+  String errorLoadingModelPreferences(String error) {
+    return 'Error loading model preferences: $error';
+  }
+
+  @override
+  String errorSavingModelPreferences(String error) {
+    return 'Error saving preferences: $error';
+  }
+
+  @override
+  String get scratchpad => 'Scratchpad';
+
+  @override
+  String get sendToScratchpad => 'Send to scratchpad';
+
+  @override
+  String get scratchpadEmpty => 'Scratchpad is empty';
+
+  @override
+  String get clear => 'Clear';
+
+  @override
+  String get recallAnnotations => 'Recall annotations';
+
+  @override
+  String get includeScratchpadInChat => 'Include scratchpad in chat context';
+
+  @override
+  String selectTagsForNotes(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Notes',
+      one: 'Note',
+    );
+    return 'Select Tags for $count $_temp0';
+  }
 }

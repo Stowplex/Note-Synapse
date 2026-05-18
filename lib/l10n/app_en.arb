@@ -510,6 +510,7 @@
     }
   },
   "searchTags": "Search tags",
+  "searchTagsToFilter": "Search tags to filter",
   "searchTagsCapitalized": "Search Tags",
   "addNewTagOrSearch": "Add new tag or search",
   "tagManagement": "Tag Management",
@@ -899,6 +900,10 @@
   "noBookmarksYet": "No bookmarks yet",
   "aiContextBookmarks": "AI Context: Bookmarks",
   "configureAiContext": "Configure AI Context",
+  "configureAiContextDescription": "Select which pages to include when AI processes this PDF:",
+  "includeInAiContext": "Include in AI Context",
+  "configureAiContextRange": "Configure AI Context Range",
+  "editAiContextRange": "Edit AI Context Range",
   "aiContext": "AI Context: {mode}",
   "@aiContext": {
     "placeholders": {
@@ -910,7 +915,54 @@
   "aiContextFullPdf": "Full PDF",
   "aiContextWindow": "Window",
   "aiContextChapters": "Chapters",
+  "aiContextAllDocument": "All Document",
+  "aiContextPagesCount": "{count} {count, plural, =1{page} other{pages}}",
+  "@aiContextPagesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextWindowAroundCurrentPage": "Window Around Current Page",
+  "aiContextPagesCenteredOnReading": "{count} {count, plural, =1{page} other{pages}} centered on where you are reading",
+  "@aiContextPagesCenteredOnReading": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextBookmarksAvailable": "{count} {count, plural, =1{bookmark} other{bookmarks}} available",
+  "@aiContextBookmarksAvailable": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextPageNumber": "Page {pageNumber}",
+  "@aiContextPageNumber": {
+    "placeholders": {
+      "pageNumber": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextSelectedChapters": "Selected Chapters",
+  "aiContextChooseSpecificSections": "Choose specific sections",
+  "aiContextChaptersSelected": "{count} {count, plural, =1{chapter} other{chapters}} selected",
+  "@aiContextChaptersSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiContextPdfNoOutline": "This PDF has no outline",
+  "aiContextConfigurationSaved": "AI context configuration saved",
   "windowSize": "Window Size",
+  "pages": "Pages",
   "pagesBeforeAfter": "Pages before/after",
   "errorRefreshingTools": "Error refreshing tools: {error}",
   "tools": "Tools",
@@ -1480,7 +1532,7 @@
       },
       "fetchRemoteImages": "Fetch remote images",
       "gettingStarted": "Getting Started",
-      "gettingStartedSubtitle": "Install user manual and starter apps",
+      "gettingStartedSubtitle": "Install user manual, starter apps, and starter skills",
       "installUserManual": "Install User Manual",
       "installUserManualSubtitle": "Install or update the user manual note",
       "installStarterApps": "Install Starter Apps",
@@ -1562,6 +1614,51 @@
       "@errorInstallingStarterApps": {
         "placeholders": {
           "error": {
+            "type": "String"
+          }
+        }
+      },
+      "installStarterSkills": "Install Starter Skills",
+      "installStarterSkillsSubtitle": "Browse bundled skills and install them as transparent skill notes",
+      "noStarterSkillsAvailable": "No starter skills available",
+      "noStarterSkillsSelected": "No starter skills selected",
+      "installSelectedSkills": "Install Selected Skills",
+      "starterSkillsInstalledSuccessfully": "{count} {count, plural, one {skill} other {skills}} installed successfully!",
+      "@starterSkillsInstalledSuccessfully": {
+        "placeholders": {
+          "count": {
+            "type": "int"
+          }
+        }
+      },
+      "errorLoadingStarterSkills": "Error loading starter skills: {error}",
+      "@errorLoadingStarterSkills": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+      "errorInstallingStarterSkills": "Error installing starter skills: {error}",
+      "@errorInstallingStarterSkills": {
+        "placeholders": {
+          "error": {
+            "type": "String"
+          }
+        }
+      },
+      "skillRefLabel": "skillRef: {ref}",
+      "@skillRefLabel": {
+        "placeholders": {
+          "ref": {
+            "type": "String"
+          }
+        }
+      },
+      "sourceLabel": "Source: {source}",
+      "@sourceLabel": {
+        "placeholders": {
+          "source": {
             "type": "String"
           }
         }
@@ -1768,6 +1865,9 @@
   "contractSelectionAbove": "Contract Above",
   "expandSelectionBelow": "Expand Below",
   "contractSelectionBelow": "Contract Below",
+  "expandToTop": "To top",
+  "expandToBottom": "To bottom",
+  "contractToStart": "Reset",
   "editSelection": "Edit",
   "deleteSelection": "Delete Blocks",
   "confirmDeleteBlocks": "Are you sure you want to delete {count} blocks?",
@@ -1844,5 +1944,52 @@
   "insertUserAppAdvanced": "Advanced: generate fenced block",
   "insertUserAppInsertButton": "Insert",
   "insertUserAppBackButton": "Back",
-  "insertUserAppNoAppsMessage": "You haven't installed any apps yet."
+  "insertUserAppNoAppsMessage": "You haven't installed any apps yet.",
+  "branchStripDocumentSwapMessage": "This branch is associated with a different document. Switch document?",
+  "branchStripDocumentSwapConfirm": "Switch",
+  "modelPreferences": "Model Preferences",
+  "modelPreferencesSubtitle": "Set capability-based model priority",
+  "viewFeatureMatrix": "View Feature Matrix",
+  "modelPreferenceDragDropHint": "Drag and drop to reorder models. The first model that matches the required capabilities will be used. If the list is empty or no match is found, the system default model is used.",
+  "priorityList": "Priority List",
+  "noPreferencesSetMessage": "No preferences set.\nSystem default model will be used.",
+  "unknownModel": "Unknown Model",
+  "imageInputCapability": "Image Input",
+  "videoInputCapability": "Video Input",
+  "audioInputCapability": "Audio Input",
+  "docsCapability": "Docs",
+  "imageGenCapability": "Image Gen",
+  "codeGenCapability": "Code Gen",
+  "modelFeatureMatrix": "Model Feature Matrix",
+  "modelNameColumn": "Model Name",
+  "imageInColumn": "Image In",
+  "videoInColumn": "Video In",
+  "audioColumn": "Audio",
+  "imgGenColumn": "Img Gen",
+  "codeGenColumn": "Code Gen",
+  "docsColumn": "Docs",
+  "errorLoadingModelPreferences": "Error loading model preferences: {error}",
+  "@errorLoadingModelPreferences": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "errorSavingModelPreferences": "Error saving preferences: {error}",
+  "@errorSavingModelPreferences": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "scratchpad": "Scratchpad",
+  "sendToScratchpad": "Send to scratchpad",
+  "scratchpadEmpty": "Scratchpad is empty",
+  "clear": "Clear",
+  "recallAnnotations": "Recall annotations",
+  "includeScratchpadInChat": "Include scratchpad in chat context",
+  "selectTagsForNotes": "Select Tags for {count} {count, plural, =1{Note} other{Notes}}",
+  "@selectTagsForNotes": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  }
 }
