@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+17
+version: 1.0.0+18
 
 environment:
   sdk: ^3.9.2
@@ -50,9 +50,8 @@ dependencies:
     path: third_party/rhttp/rhttp
   crypto: ^3.0.3
 
-  # Local AI inference (forked — multi-image + CPU vision backend fix)
-  flutter_gemma:
-    path: third_party/flutter_gemma
+  # Local AI inference (upstream supports multi-image natively as of 0.15.1)
+  flutter_gemma: ^0.16.1
 
   # Image handling
   image: ^4.2.0

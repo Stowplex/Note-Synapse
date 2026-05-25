@@ -83,6 +83,7 @@ class LocalMnnModel extends AIModel {
       supportImage: preset.supportsVision,
       supportAudio: false,
       maxNumImages: _resolvedMaxNumImages,
+      enableSpeculativeDecoding: true,
     );
     return _model!;
   }
@@ -274,21 +275,13 @@ class LocalMnnModel extends AIModel {
       return [gemma.Message.text(text: content, isUser: true)];
     }
 
-    final result = <gemma.Message>[
-      gemma.Message.withImage(
+    return [
+      gemma.Message.withImages(
         text: content,
-        imageBytes: images.first,
+        imageBytes: images,
         isUser: true,
       ),
     ];
-
-    // TODO: On Android LiteRT-LM, follow-up imageOnly chunks appear to be
-    // ignored or collapsed in practice for PDF-page context. Keep this path
-    // raw for now so we can observe runtime behavior without workarounds.
-    for (final image in images.skip(1)) {
-      result.add(gemma.Message.imageOnly(imageBytes: image, isUser: true));
-    }
-    return result;
   }
 
   List<gemma.Message> _buildAssistantMessages(PromptMessage message) {

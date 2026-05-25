@@ -58,7 +58,7 @@ class LocalModelPresets {
     downloadUrl:
         'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm',
     filename: 'gemma-4-E2B-it.litertlm',
-    modelType: gemma.ModelType.gemmaIt,
+    modelType: gemma.ModelType.gemma4,
     fileType: gemma.ModelFileType.litertlm,
     defaultBackend: {'android': 'gpu', 'ios': 'gpu'},
     supportedBackends: {
