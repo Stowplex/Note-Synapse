@@ -1947,5 +1947,26 @@
     "placeholders": {
       "count": {"type": "int"}
     }
-  }
+  },
+  "webLogins": "网页登录",
+  "webLoginsSubtitle": "保存登录信息，以便剪藏需要登录的页面",
+  "webLoginsEmpty": "尚无已保存的登录。添加一个以剪藏需要登录的页面。",
+  "addWebLogin": "添加登录",
+  "webLoginBrowserHint": "输入网址并登录，然后点按“保存登录”",
+  "saveLogin": "保存登录",
+  "loginSaved": "已保存 {domain} 的登录",
+  "@loginSaved": {
+    "placeholders": {
+      "domain": {"type": "String"}
+    }
+  },
+  "deleteLogin": "删除登录",
+  "deleteLoginConfirm": "删除已保存的 {domain} 登录？此站点的页面剪藏将不再使用登录状态。",
+  "@deleteLoginConfirm": {
+    "placeholders": {
+      "domain": {"type": "String"}
+    }
+  },
+  "webLoginSecurityNote": "在此平台上，已保存的登录未经操作系统级加密存储。请仅在受信任的设备上保存登录。",
+  "webLoginCaptureFailed": "无法捕获登录会话。请确保在保存前已登录。此功能在网页版中不可用。"
 }

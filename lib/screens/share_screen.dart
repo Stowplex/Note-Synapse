@@ -18,6 +18,7 @@ import '../services/content_ingestion_service.dart';
 import '../services/service_locator.dart';
 import '../services/logger_service.dart';
 import '../services/web_content_extraction_service.dart';
+import '../services/web_session_service.dart';
 import '../services/media_attachment_service.dart';
 import '../services/network_provider.dart';
 import '../utils/file_utils.dart';
@@ -2177,6 +2178,11 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       });
     }
 
+    // Restore any saved login session for this URL's domain into the cookie
+    // store BEFORE the WebView is created, so the initial navigation is
+    // authenticated. setCookie is async, so gate WebView creation on it.
+    await _restoreSessionCookies();
+
     if (!mounted) {
       return;
     }
@@ -2185,6 +2191,19 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       _isLoading = true;
       _status = AppLocalizations.of(context)!.loadingWebPage;
     });
+  }
+
+  Future<void> _restoreSessionCookies() async {
+    try {
+      final service = getIt<WebSessionService>();
+      if (service.isSupported) {
+        await service.restoreCookies(widget.url);
+      }
+    } catch (e) {
+      LoggerService.warning(
+        '[ShareScreen] Failed to restore session cookies: $e',
+      );
+    }
   }
 
   Future<void> _handleCancel() async {
