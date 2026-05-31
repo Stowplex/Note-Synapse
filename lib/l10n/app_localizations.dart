@@ -8401,6 +8401,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not capture a login session. Make sure you are signed in before saving. This feature is unavailable on the web build.'**
   String get webLoginCaptureFailed;
+
+  /// No description provided for @requestDesktopSite.
+  ///
+  /// In en, this message translates to:
+  /// **'Request desktop site'**
+  String get requestDesktopSite;
+
+  /// No description provided for @requestMobileSite.
+  ///
+  /// In en, this message translates to:
+  /// **'Request mobile site'**
+  String get requestMobileSite;
 }
 
 class _AppLocalizationsDelegate

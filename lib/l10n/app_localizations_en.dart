@@ -4859,4 +4859,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get webLoginCaptureFailed =>
       'Could not capture a login session. Make sure you are signed in before saving. This feature is unavailable on the web build.';
+
+  @override
+  String get requestDesktopSite => 'Request desktop site';
+
+  @override
+  String get requestMobileSite => 'Request mobile site';
 }

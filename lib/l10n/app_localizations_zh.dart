@@ -4610,4 +4610,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get webLoginCaptureFailed => '无法捕获登录会话。请确保在保存前已登录。此功能在网页版中不可用。';
+
+  @override
+  String get requestDesktopSite => '请求桌面版网站';
+
+  @override
+  String get requestMobileSite => '请求移动版网站';
 }

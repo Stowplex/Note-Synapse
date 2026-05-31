@@ -1968,5 +1968,7 @@
     }
   },
   "webLoginSecurityNote": "在此平台上，已保存的登录未经操作系统级加密存储。请仅在受信任的设备上保存登录。",
-  "webLoginCaptureFailed": "无法捕获登录会话。请确保在保存前已登录。此功能在网页版中不可用。"
+  "webLoginCaptureFailed": "无法捕获登录会话。请确保在保存前已登录。此功能在网页版中不可用。",
+  "requestDesktopSite": "请求桌面版网站",
+  "requestMobileSite": "请求移动版网站"
 }

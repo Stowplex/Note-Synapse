@@ -2012,5 +2012,7 @@
     }
   },
   "webLoginSecurityNote": "On this platform, saved logins are stored without OS-level encryption. Only save logins on a device you trust.",
-  "webLoginCaptureFailed": "Could not capture a login session. Make sure you are signed in before saving. This feature is unavailable on the web build."
+  "webLoginCaptureFailed": "Could not capture a login session. Make sure you are signed in before saving. This feature is unavailable on the web build.",
+  "requestDesktopSite": "Request desktop site",
+  "requestMobileSite": "Request mobile site"
 }

@@ -31,6 +31,15 @@ class _WebLoginBrowserScreenState extends State<WebLoginBrowserScreen> {
     'javascript',
   };
 
+  /// Desktop Chrome UA used when "Request Desktop Site" is on. Some sites gate
+  /// mobile user-agents into a native app and only expose a login form on the
+  /// desktop page; overriding the UA (in addition to the content mode) is the
+  /// reliable trigger for the desktop layout on Android.
+  static const String _desktopUserAgent =
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+      'AppleWebKit/537.36 (KHTML, like Gecko) '
+      'Chrome/124.0.0.0 Safari/537.36';
+
   final TextEditingController _urlController = TextEditingController();
   InAppWebViewController? _controller;
   WebUri? _currentUrl;
@@ -43,10 +52,40 @@ class _WebLoginBrowserScreenState extends State<WebLoginBrowserScreen> {
   bool _isSaving = false;
   bool _hasLoadedOnce = false;
 
+  /// When true, request the desktop version of pages (per-session only).
+  bool _desktopMode = false;
+
   @override
   void dispose() {
     _urlController.dispose();
     super.dispose();
+  }
+
+  /// Builds the WebView settings for the current [_desktopMode]. Used both at
+  /// creation (`initialSettings`) and on runtime toggle (`setSettings`) so the
+  /// two stay in sync.
+  InAppWebViewSettings _buildSettings() {
+    return InAppWebViewSettings(
+      allowFileAccess: false,
+      allowContentAccess: false,
+      allowFileAccessFromFileURLs: false,
+      preferredContentMode: _desktopMode
+          ? UserPreferredContentMode.DESKTOP
+          : UserPreferredContentMode.RECOMMENDED,
+      // Android-only knobs that widen the layout for desktop pages.
+      useWideViewPort: _desktopMode,
+      loadWithOverviewMode: _desktopMode,
+      userAgent: _desktopMode ? _desktopUserAgent : '',
+    );
+  }
+
+  Future<void> _toggleDesktopMode() async {
+    setState(() => _desktopMode = !_desktopMode);
+    final controller = _controller;
+    if (controller != null) {
+      await controller.setSettings(settings: _buildSettings());
+      await controller.reload();
+    }
   }
 
   String _normalizeUrl(String input) {
@@ -144,6 +183,15 @@ class _WebLoginBrowserScreenState extends State<WebLoginBrowserScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            icon: Icon(
+              _desktopMode ? Icons.desktop_windows : Icons.phone_android,
+            ),
+            tooltip: _desktopMode
+                ? l10n.requestMobileSite
+                : l10n.requestDesktopSite,
+            onPressed: _toggleDesktopMode,
+          ),
           if (_isLoading)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
@@ -208,11 +256,7 @@ class _WebLoginBrowserScreenState extends State<WebLoginBrowserScreen> {
                         }
                       });
                     },
-                    initialSettings: InAppWebViewSettings(
-                      allowFileAccess: false,
-                      allowContentAccess: false,
-                      allowFileAccessFromFileURLs: false,
-                    ),
+                    initialSettings: _buildSettings(),
                   )
                 : _buildPrompt(l10n),
           ),
