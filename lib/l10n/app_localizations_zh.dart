@@ -4573,4 +4573,47 @@ class AppLocalizationsZh extends AppLocalizations {
   String selectTagsForNotes(int count) {
     return '为 $count 条笔记选择标签';
   }
+
+  @override
+  String get webLogins => '网页登录';
+
+  @override
+  String get webLoginsSubtitle => '保存登录信息，以便剪藏需要登录的页面';
+
+  @override
+  String get webLoginsEmpty => '尚无已保存的登录。添加一个以剪藏需要登录的页面。';
+
+  @override
+  String get addWebLogin => '添加登录';
+
+  @override
+  String get webLoginBrowserHint => '输入网址并登录，然后点按“保存登录”';
+
+  @override
+  String get saveLogin => '保存登录';
+
+  @override
+  String loginSaved(String domain) {
+    return '已保存 $domain 的登录';
+  }
+
+  @override
+  String get deleteLogin => '删除登录';
+
+  @override
+  String deleteLoginConfirm(String domain) {
+    return '删除已保存的 $domain 登录？此站点的页面剪藏将不再使用登录状态。';
+  }
+
+  @override
+  String get webLoginSecurityNote => '在此平台上，已保存的登录未经操作系统级加密存储。请仅在受信任的设备上保存登录。';
+
+  @override
+  String get webLoginCaptureFailed => '无法捕获登录会话。请确保在保存前已登录。此功能在网页版中不可用。';
+
+  @override
+  String get requestDesktopSite => '请求桌面版网站';
+
+  @override
+  String get requestMobileSite => '请求移动版网站';
 }

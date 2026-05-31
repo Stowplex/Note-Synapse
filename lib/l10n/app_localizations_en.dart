@@ -4817,4 +4817,52 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return 'Select Tags for $count $_temp0';
   }
+
+  @override
+  String get webLogins => 'Web Logins';
+
+  @override
+  String get webLoginsSubtitle =>
+      'Save logins so you can clip pages that require signing in';
+
+  @override
+  String get webLoginsEmpty =>
+      'No saved logins yet. Add one to clip pages that require signing in.';
+
+  @override
+  String get addWebLogin => 'Add login';
+
+  @override
+  String get webLoginBrowserHint =>
+      'Enter a URL and sign in, then tap Save login';
+
+  @override
+  String get saveLogin => 'Save login';
+
+  @override
+  String loginSaved(String domain) {
+    return 'Login saved for $domain';
+  }
+
+  @override
+  String get deleteLogin => 'Delete login';
+
+  @override
+  String deleteLoginConfirm(String domain) {
+    return 'Delete the saved login for $domain? Clipping pages on this site will no longer be authenticated.';
+  }
+
+  @override
+  String get webLoginSecurityNote =>
+      'On this platform, saved logins are stored without OS-level encryption. Only save logins on a device you trust.';
+
+  @override
+  String get webLoginCaptureFailed =>
+      'Could not capture a login session. Make sure you are signed in before saving. This feature is unavailable on the web build.';
+
+  @override
+  String get requestDesktopSite => 'Request desktop site';
+
+  @override
+  String get requestMobileSite => 'Request mobile site';
 }
