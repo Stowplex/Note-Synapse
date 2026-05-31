@@ -22,6 +22,7 @@ import 'tag_workflow_service.dart';
 import 'fork_service.dart';
 import 'marker_chat_send_service.dart';
 import 'prompts/prompt_template_service.dart';
+import 'web_session_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -59,6 +60,10 @@ void setupServiceLocator() {
 
   if (!getIt.isRegistered<McpService>()) {
     getIt.registerLazySingleton<McpService>(() => McpService());
+  }
+
+  if (!getIt.isRegistered<WebSessionService>()) {
+    getIt.registerLazySingleton<WebSessionService>(() => WebSessionService());
   }
 
   // ============================================================
