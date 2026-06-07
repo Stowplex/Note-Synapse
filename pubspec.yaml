@@ -50,8 +50,8 @@ dependencies:
     path: third_party/rhttp/rhttp
   crypto: ^3.0.3
 
-  # Local AI inference (upstream supports multi-image natively as of 0.15.1)
-  flutter_gemma: ^0.16.1
+  # Local AI inference
+  flutter_gemma: ^0.16.4
 
   # Image handling
   image: ^4.2.0
