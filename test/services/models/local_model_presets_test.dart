@@ -23,8 +23,8 @@ void main() {
       expect(preset.defaultTokenWindow, 16384);
       expect(preset.minTokenWindow, 2048);
       expect(preset.maxTokenWindow, 32768);
-      expect(preset.defaultBackend['android'], 'gpu');
-      expect(preset.defaultBackend['ios'], 'gpu');
+      expect(preset.supportedBackends['android'], ['npu', 'gpu', 'cpu']);
+      expect(preset.supportedBackends['ios'], ['gpu', 'cpu']);
     });
 
     test('all presets returns the Gemma preset', () {

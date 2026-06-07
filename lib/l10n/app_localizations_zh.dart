@@ -4358,7 +4358,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get localModelEnableThinking => '启用思考';
 
   @override
-  String get localModelBackend => '后端';
+  String get localModelBackend => '首选后端';
+
+  @override
+  String get localModelBackendNpu => 'NPU';
+
+  @override
+  String get localModelBackendGpu => 'GPU';
+
+  @override
+  String get localModelBackendCpu => 'CPU';
+
+  @override
+  String get localModelBackendRequired => '请至少选择一个后端';
 
   @override
   String get localModelSettings => '模型设置';

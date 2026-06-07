@@ -4586,7 +4586,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get localModelEnableThinking => 'Enable Thinking';
 
   @override
-  String get localModelBackend => 'Backend';
+  String get localModelBackend => 'Preferred Backend';
+
+  @override
+  String get localModelBackendNpu => 'NPU';
+
+  @override
+  String get localModelBackendGpu => 'GPU';
+
+  @override
+  String get localModelBackendCpu => 'CPU';
+
+  @override
+  String get localModelBackendRequired => 'Select at least one backend';
 
   @override
   String get localModelSettings => 'Model Settings';

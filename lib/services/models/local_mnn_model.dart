@@ -98,7 +98,11 @@ class LocalMnnModel extends AIModel {
   }
 
   gemma.PreferredBackend? get _preferredBackend {
-    switch (_config?.backendType) {
+    // The engine itself falls back NPU -> GPU -> CPU, so handing it the
+    // highest-priority enabled backend reproduces the user's checkbox order.
+    switch (_config?.effectiveBackendType) {
+      case 'npu':
+        return gemma.PreferredBackend.npu;
       case 'cpu':
         return gemma.PreferredBackend.cpu;
       case 'gpu':
@@ -535,7 +539,7 @@ class LocalMnnModel extends AIModel {
       'tools': tools,
       'gemmaConfig': {
         'preset': _preset?.id,
-        'backend': _config?.backendType ?? 'gpu',
+        'backend': _config?.effectiveBackendType ?? 'gpu',
         'tokenWindow': _resolvedTokenWindow,
       },
     };
@@ -560,7 +564,7 @@ class LocalMnnModel extends AIModel {
       final sanitizedMessages = await _sanitizeMessages(messages, requestId);
       LoggerService.logAiRequest(
         endpoint: endpoint,
-        headers: {'backend': _config?.backendType ?? 'gpu'},
+        headers: {'backend': _config?.effectiveBackendType ?? 'gpu'},
         requestBody: _buildLogBody(sanitizedMessages, tools: const []),
         requestId: requestId,
       );
@@ -640,7 +644,7 @@ class LocalMnnModel extends AIModel {
       final sanitizedMessages = await _sanitizeMessages(messages, requestId);
       LoggerService.logAiRequest(
         endpoint: endpoint,
-        headers: {'backend': _config?.backendType ?? 'gpu'},
+        headers: {'backend': _config?.effectiveBackendType ?? 'gpu'},
         requestBody: _buildLogBody(sanitizedMessages, tools: tools),
         requestId: requestId,
       );
@@ -695,7 +699,7 @@ class LocalMnnModel extends AIModel {
     try {
       LoggerService.logAiRequest(
         endpoint: endpoint,
-        headers: {'backend': _config?.backendType ?? 'gpu'},
+        headers: {'backend': _config?.effectiveBackendType ?? 'gpu'},
         requestBody: _buildLogBody(messages, tools: tools),
         requestId: requestId,
       );
@@ -775,7 +779,7 @@ class LocalMnnModel extends AIModel {
       final sanitizedMessages = await _sanitizeMessages(messages, reqId);
       LoggerService.logAiRequest(
         endpoint: endpoint,
-        headers: {'backend': _config?.backendType ?? 'gpu'},
+        headers: {'backend': _config?.effectiveBackendType ?? 'gpu'},
         requestBody: _buildLogBody(sanitizedMessages, tools: const []),
         requestId: reqId,
       );

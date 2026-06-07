@@ -30,7 +30,7 @@ class LocalModelSettingsScreen extends StatefulWidget {
 }
 
 class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
-  late String _backendType;
+  late Set<String> _selectedBackends;
   bool _enableThinking = false;
   int _tokenWindow = 16384;
 
@@ -47,22 +47,25 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
   void initState() {
     super.initState();
     final existing = widget.existingConfig;
+    final available = _availableBackends.toSet();
     if (existing != null) {
-      _backendType =
-          existing.backendType ??
-          widget.preset.defaultBackend[_platformKey] ??
-          'gpu';
+      // Keep previously enabled backends that are still offered; fall back to
+      // all-enabled when the saved config predates this setting.
+      final saved = existing.backendTypes
+          ?.where(available.contains)
+          .toSet();
+      _selectedBackends = (saved != null && saved.isNotEmpty)
+          ? saved
+          : available;
       _enableThinking =
           widget.preset.supportsThinking && (existing.enableThinking ?? false);
       _tokenWindow = (existing.tokenWindow ?? widget.preset.defaultTokenWindow)
           .clamp(widget.preset.minTokenWindow, widget.preset.maxTokenWindow);
     } else {
-      _backendType = widget.preset.defaultBackend[_platformKey] ?? 'gpu';
+      _selectedBackends = available;
       _tokenWindow = widget.preset.defaultTokenWindow;
     }
   }
-
-  String get _platformKey => Platform.isAndroid ? 'android' : 'ios';
 
   Future<void> _saveAndActivate() async {
     final configId = 'local_${widget.preset.id}';
@@ -74,7 +77,9 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
       endpoint: widget.configPath,
       tokenWindow: _tokenWindow,
       enableThinking: widget.preset.supportsThinking ? _enableThinking : false,
-      backendType: _backendType,
+      backendTypes: ModelConfig.backendPriority
+          .where(_selectedBackends.contains)
+          .toList(),
       isConfigured: true,
       customCapabilitiesObject: ModelCapabilities(
         maxInputTokens: _tokenWindow,
@@ -148,16 +153,31 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
             style: Theme.of(context).textTheme.titleSmall,
           ),
           const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            initialValue: _backendType,
-            items: _availableBackends
-                .map(
-                  (b) =>
-                      DropdownMenuItem(value: b, child: Text(_backendLabel(b))),
-                )
-                .toList(),
-            onChanged: (v) => setState(() => _backendType = v!),
-          ),
+          for (final backend in _availableBackends)
+            CheckboxListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(_backendLabel(l10n, backend)),
+              value: _selectedBackends.contains(backend),
+              onChanged: (checked) => setState(() {
+                if (checked ?? false) {
+                  _selectedBackends.add(backend);
+                } else {
+                  _selectedBackends.remove(backend);
+                }
+              }),
+            ),
+          if (_selectedBackends.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                l10n.localModelBackendRequired,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+            ),
           const SizedBox(height: 24),
           if (widget.preset.supportsThinking) ...[
             SwitchListTile(
@@ -201,7 +221,7 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
           ),
           const SizedBox(height: 32),
           FilledButton(
-            onPressed: _saveAndActivate,
+            onPressed: _selectedBackends.isEmpty ? null : _saveAndActivate,
             child: const Text('Save & Activate'),
           ),
           const SizedBox(height: 16),
@@ -217,16 +237,18 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
     );
   }
 
-  String _backendLabel(String backend) {
+  String _backendLabel(AppLocalizations l10n, String backend) {
     switch (backend) {
+      case 'npu':
+        return l10n.localModelBackendNpu;
       case 'opencl':
         return 'OpenCL (GPU)';
       case 'metal':
         return 'Metal (GPU)';
       case 'gpu':
-        return 'GPU';
+        return l10n.localModelBackendGpu;
       case 'cpu':
-        return 'CPU';
+        return l10n.localModelBackendCpu;
       default:
         return backend;
     }

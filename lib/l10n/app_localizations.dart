@@ -7931,8 +7931,32 @@ abstract class AppLocalizations {
   /// No description provided for @localModelBackend.
   ///
   /// In en, this message translates to:
-  /// **'Backend'**
+  /// **'Preferred Backend'**
   String get localModelBackend;
+
+  /// No description provided for @localModelBackendNpu.
+  ///
+  /// In en, this message translates to:
+  /// **'NPU'**
+  String get localModelBackendNpu;
+
+  /// No description provided for @localModelBackendGpu.
+  ///
+  /// In en, this message translates to:
+  /// **'GPU'**
+  String get localModelBackendGpu;
+
+  /// No description provided for @localModelBackendCpu.
+  ///
+  /// In en, this message translates to:
+  /// **'CPU'**
+  String get localModelBackendCpu;
+
+  /// No description provided for @localModelBackendRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Select at least one backend'**
+  String get localModelBackendRequired;
 
   /// No description provided for @localModelSettings.
   ///
