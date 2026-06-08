@@ -1,7 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter_gemma/flutter_gemma.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:edge_gen/edge_gen.dart';
 
 import 'package:note_synapse/services/models/local_model_presets.dart';
 
@@ -14,6 +13,8 @@ class LocalModelDownloadProgress {
 class LocalModelStatus {
   final LocalModelPreset preset;
   final bool isDownloaded;
+
+  /// Path to the model's `config.json` when downloaded; null otherwise.
   final String? modelPath;
 
   const LocalModelStatus({
@@ -23,56 +24,33 @@ class LocalModelStatus {
   });
 }
 
+/// Download / status / deletion for on-device models, backed by the MNN model
+/// downloader in edge_gen. The source of truth is the files on disk — there is
+/// no separate bookkeeping to drift out of sync.
 class LocalModelService {
-  static const _keyPrefix = 'local_model_source_';
+  LocalModelService({QwenModelDownloader? downloader})
+    : _downloader = downloader ?? QwenModelDownloader();
+
+  final QwenModelDownloader _downloader;
 
   Future<bool> isModelDownloaded(String modelId) async {
-    final prefs = await SharedPreferences.getInstance();
     final preset = LocalModelPresets.findById(modelId);
-    if (preset != null) {
-      try {
-        final installed = await FlutterGemma.isModelInstalled(preset.filename);
-        if (installed) {
-          await prefs.setString('$_keyPrefix$modelId', preset.downloadUrl);
-          return true;
-        }
-      } catch (_) {
-        // FlutterGemma is not initialized in some unit tests.
-      }
-    }
-    return prefs.containsKey('$_keyPrefix$modelId');
+    if (preset == null) return false;
+    return _downloader.isDownloaded(preset.mnnSpec);
   }
 
+  /// Path to the downloaded model's `config.json`, or null if not downloaded.
   Future<String?> getModelPath(String modelId) async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('$_keyPrefix$modelId');
-  }
-
-  Future<void> markModelDownloaded(String modelId, String source) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('$_keyPrefix$modelId', source);
-  }
-
-  Future<void> removeModel(String modelId) async {
-    final prefs = await SharedPreferences.getInstance();
     final preset = LocalModelPresets.findById(modelId);
-    if (preset != null) {
-      try {
-        final installed = await FlutterGemma.isModelInstalled(preset.filename);
-        if (installed) {
-          await FlutterGemma.uninstallModel(preset.filename);
-        }
-      } catch (_) {
-        // Ignore plugin initialization failures in tests.
-      }
-    }
-    await prefs.remove('$_keyPrefix$modelId');
+    if (preset == null) return null;
+    if (!await _downloader.isDownloaded(preset.mnnSpec)) return null;
+    return _downloader.resolveConfigPath(preset.mnnSpec);
   }
 
   Future<List<String>> getDownloadedModels() async {
     final downloaded = <String>[];
     for (final preset in LocalModelPresets.available) {
-      if (await isModelDownloaded(preset.id)) {
+      if (await _downloader.isDownloaded(preset.mnnSpec)) {
         downloaded.add(preset.id);
       }
     }
@@ -82,17 +60,26 @@ class LocalModelService {
   Future<List<LocalModelStatus>> getAvailableModels() async {
     final statuses = <LocalModelStatus>[];
     for (final preset in LocalModelPresets.available) {
-      final source = await getModelPath(preset.id);
-      final isDownloaded = await isModelDownloaded(preset.id);
+      final isDownloaded = await _downloader.isDownloaded(preset.mnnSpec);
       statuses.add(
         LocalModelStatus(
           preset: preset,
           isDownloaded: isDownloaded,
-          modelPath: source,
+          modelPath: isDownloaded
+              ? await _downloader.resolveConfigPath(preset.mnnSpec)
+              : null,
         ),
       );
     }
     return statuses;
+  }
+
+  /// Delete a downloaded model's files to reclaim disk space. No-op if the
+  /// model id is unknown or nothing is on disk.
+  Future<void> removeModel(String modelId) async {
+    final preset = LocalModelPresets.findById(modelId);
+    if (preset == null) return;
+    await _downloader.deleteDownloadedModel(preset.mnnSpec);
   }
 
   Stream<LocalModelDownloadProgress> downloadModel(
@@ -112,21 +99,19 @@ class LocalModelService {
     void Function(String error) onError,
   ) async {
     try {
-      await FlutterGemma.installModel(
-        modelType: preset.modelType,
-        fileType: preset.fileType,
-      ).fromNetwork(
-        preset.downloadUrl,
-        foreground: preset.foregroundDownload,
-      ).withProgress((progress) {
-        if (!controller.isClosed) {
-          controller.add(
-            LocalModelDownloadProgress(progressPercent: progress),
-          );
-        }
-      }).install();
-      await markModelDownloaded(preset.id, preset.downloadUrl);
-      onComplete(preset.downloadUrl);
+      final model = await _downloader.ensureDownloaded(
+        preset.mnnSpec,
+        onProgress: (progress) {
+          if (!controller.isClosed) {
+            controller.add(
+              LocalModelDownloadProgress(
+                progressPercent: (progress.fraction * 100).round().clamp(0, 100),
+              ),
+            );
+          }
+        },
+      );
+      onComplete(model.configPath);
     } catch (e) {
       onError(e.toString());
     } finally {

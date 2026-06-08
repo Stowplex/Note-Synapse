@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:rhttp/rhttp.dart';
@@ -34,8 +33,6 @@ void main() async {
 
   // Initialize network provider
   await NetworkProvider.init();
-
-  await FlutterGemma.initialize();
 
   // Initialize secure storage
   await SecureStorageService.initialize();

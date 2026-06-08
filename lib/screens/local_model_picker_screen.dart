@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:note_synapse/services/local_model_service.dart';
+import 'package:note_synapse/services/model_storage_service.dart';
 import 'package:note_synapse/services/models/local_model_presets.dart';
 import 'package:note_synapse/screens/local_model_settings_screen.dart';
 import '../l10n/app_localizations.dart';
@@ -81,6 +82,42 @@ class _LocalModelPickerScreenState extends State<LocalModelPickerScreen> {
     }
   }
 
+  Future<void> _deleteModel(LocalModelStatus status) async {
+    final preset = status.preset;
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.localModelDelete),
+        content: Text('Delete ${preset.displayName} and free up disk space?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(MaterialLocalizations.of(ctx).cancelButtonLabel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(l10n.localModelDelete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await _service.removeModel(preset.id);
+    // Drop the configured model entry so it no longer appears as set up.
+    await GetIt.instance<ModelStorageService>().deleteModel(
+      'local_${preset.id}',
+    );
+
+    if (!mounted) return;
+    await _loadModels();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('${preset.displayName} deleted')));
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -128,10 +165,23 @@ class _LocalModelPickerScreenState extends State<LocalModelPickerScreen> {
                   ),
                 ),
                 if (status.isDownloaded && !isDownloading)
-                  FilledButton(
-                    onPressed: () =>
-                        _openModelSettings(preset, status.modelPath!),
-                    child: Text(l10n.localModelReady),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FilledButton(
+                        onPressed: () =>
+                            _openModelSettings(preset, status.modelPath!),
+                        child: Text(l10n.localModelReady),
+                      ),
+                      IconButton(
+                        tooltip: l10n.localModelDelete,
+                        icon: Icon(
+                          Icons.delete_outline,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        onPressed: () => _deleteModel(status),
+                      ),
+                    ],
                   )
                 else if (isDownloading)
                   const SizedBox.shrink()

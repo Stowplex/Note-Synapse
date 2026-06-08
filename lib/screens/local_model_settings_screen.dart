@@ -51,13 +51,13 @@ class _LocalModelSettingsScreenState extends State<LocalModelSettingsScreen> {
       _backendType =
           existing.backendType ??
           widget.preset.defaultBackend[_platformKey] ??
-          'gpu';
+          'cpu';
       _enableThinking =
           widget.preset.supportsThinking && (existing.enableThinking ?? false);
       _tokenWindow = (existing.tokenWindow ?? widget.preset.defaultTokenWindow)
           .clamp(widget.preset.minTokenWindow, widget.preset.maxTokenWindow);
     } else {
-      _backendType = widget.preset.defaultBackend[_platformKey] ?? 'gpu';
+      _backendType = widget.preset.defaultBackend[_platformKey] ?? 'cpu';
       _tokenWindow = widget.preset.defaultTokenWindow;
     }
   }

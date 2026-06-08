@@ -27,7 +27,7 @@ void main() {
       expect(await model.isReady(), isTrue);
       expect(model.id, isNotEmpty);
       expect(model.name, 'Gemma 4 E2B');
-      expect(model.description, contains('Flutter Gemma'));
+      expect(model.description, contains('MNN'));
       expect(model.supportsStreaming, isTrue);
     });
 

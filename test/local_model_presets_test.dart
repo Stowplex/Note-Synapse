@@ -1,6 +1,7 @@
-import 'package:flutter_gemma/flutter_gemma.dart' as gemma;
+import 'package:edge_gen/edge_gen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/services/models/local_model_presets.dart';
+import 'package:note_synapse/services/models/local_model_tool_templates/local_model_type.dart';
 
 void main() {
   group('LocalModelPresets.gemma4E2b', () {
@@ -18,10 +19,8 @@ void main() {
       const preset = LocalModelPreset(
         id: 'test',
         displayName: 'Test',
-        downloadUrl: '',
-        filename: '',
-        modelType: gemma.ModelType.gemmaIt,
-        fileType: gemma.ModelFileType.litertlm,
+        mnnSpec: QwenModelSpec.qwen35_08bMnn,
+        family: LocalModelFamily.qwen,
         defaultBackend: {},
         supportedBackends: {},
         supportsVision: false,
@@ -32,6 +31,7 @@ void main() {
         maxTokenWindow: 16384,
       );
       expect(preset.supportsToolOrchestration, isFalse);
+      expect(preset.supportsAudio, isFalse);
     });
   });
 }

@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
+
+import 'package:edge_gen/edge_gen.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_gemma/flutter_gemma.dart' as gemma;
-import 'package:image/image.dart' as img;
-import 'package:json_repair_flutter/json_repair_flutter.dart';
 
 import 'package:note_synapse/models/generation_context.dart';
 import 'package:note_synapse/models/mcp_endpoint.dart';
@@ -14,10 +12,31 @@ import 'package:note_synapse/services/attachment_preprocessor.dart';
 import 'package:note_synapse/services/logger_service.dart';
 import 'package:note_synapse/services/models/ai_model.dart';
 import 'package:note_synapse/services/models/local_model_presets.dart';
+import 'package:note_synapse/services/models/local_model_tool_templates/function_call_parser.dart';
+import 'package:note_synapse/services/models/local_model_tool_templates/local_model_type.dart';
+import 'package:note_synapse/services/models/local_model_tool_templates/model_response.dart';
 import 'package:note_synapse/services/prompts/prompt_models.dart';
 
+/// On-device model runtime backed by MNN via the edge_gen bridge.
+///
+/// Text generation uses the chat-message path (model chat template applied
+/// natively); tool calls are requested via the structured path and parsed out
+/// of the model's text stream with the family-specific [FunctionCallParser]
+/// (edge_gen emits plain text, not typed tool-call objects).
 class LocalMnnModel extends AIModel {
-  gemma.InferenceModel? _model;
+  LocalMnnModel({QwenModelDownloader? downloader, EdgeGenController? controller})
+    : _downloader = downloader ?? QwenModelDownloader(),
+      _controllerOverride = controller;
+
+  final QwenModelDownloader _downloader;
+  final EdgeGenController? _controllerOverride;
+
+  // Resolved lazily so constructing the model (e.g. for buildToolDeclarations
+  // in unit tests) doesn't touch the platform-channel-backed singleton.
+  EdgeGenController get _controller =>
+      _controllerOverride ?? EdgeGenController.instance;
+
+  EdgeGenSession? _session;
   ModelConfig? _config;
   LocalModelPreset? _preset;
   bool _isInitialized = false;
@@ -36,7 +55,7 @@ class LocalMnnModel extends AIModel {
       _config?.displayName ?? _preset?.displayName ?? 'Local Model';
 
   @override
-  String get description => 'On-device AI model via Flutter Gemma';
+  String get description => 'On-device AI model via MNN';
 
   @override
   Future<bool> isReady() async => _isInitialized;
@@ -50,41 +69,60 @@ class LocalMnnModel extends AIModel {
     _isInitialized = _preset != null;
   }
 
-  Future<gemma.InferenceModel> _ensureModel() async {
-    if (_model != null) {
-      return _model!;
-    }
+  // ---------------------------------------------------------------------------
+  // Session lifecycle
+  // ---------------------------------------------------------------------------
+
+  Future<EdgeGenSession> _ensureSession() async {
+    final existing = _session;
+    if (existing != null) return existing;
 
     final preset = _preset;
     if (preset == null) {
       throw Exception('Unsupported local model preset');
     }
 
-    final installed = await gemma.FlutterGemma.isModelInstalled(
-      preset.filename,
-    );
-    if (!installed) {
+    final downloaded = await _downloader.isDownloaded(preset.mnnSpec);
+    if (!downloaded) {
       throw Exception('Local model is not downloaded yet.');
     }
 
-    await gemma.FlutterGemma.installModel(
-          modelType: preset.modelType,
-          fileType: preset.fileType,
-        )
-        .fromNetwork(
-          _config?.endpoint ?? preset.downloadUrl,
-          foreground: preset.foregroundDownload,
-        )
-        .install();
+    final configPath = _config?.endpoint?.isNotEmpty == true
+        ? _config!.endpoint!
+        : await _downloader.resolveConfigPath(preset.mnnSpec);
 
-    _model = await gemma.FlutterGemma.getActiveModel(
-      maxTokens: _resolvedTokenWindow,
-      preferredBackend: _preferredBackend,
-      supportImage: preset.supportsVision,
-      supportAudio: false,
-      maxNumImages: _resolvedMaxNumImages,
+    final session = await _controller.openSession(
+      configPath: configPath,
+      configJson: _buildConfig().toJson(),
     );
-    return _model!;
+    _session = session;
+    return session;
+  }
+
+  EdgeGenConfig _buildConfig() {
+    final preset = _preset;
+    return EdgeGenConfig(
+      backendType: _resolvedBackend,
+      precision: 'low',
+      memory: 'low',
+      useMmap: true,
+      reuseKv: true,
+      maxNewTokens: _resolvedTokenWindow,
+      temperature: preset?.temperature ?? 0.7,
+      topK: preset?.topK ?? 40,
+      topP: preset?.topP ?? 0.9,
+      enableThinking:
+          (preset?.supportsThinking ?? false) && (_config?.enableThinking ?? false),
+    );
+  }
+
+  String get _resolvedBackend {
+    final configured = _config?.backendType;
+    if (configured != null && configured.isNotEmpty) {
+      return configured;
+    }
+    final platformKey = Platform.isIOS ? 'ios' : 'android';
+    return _preset?.defaultBackend[platformKey] ?? 'cpu';
   }
 
   int get _resolvedTokenWindow {
@@ -96,109 +134,406 @@ class LocalMnnModel extends AIModel {
     return requested.clamp(preset.minTokenWindow, preset.maxTokenWindow);
   }
 
-  gemma.PreferredBackend? get _preferredBackend {
-    switch (_config?.backendType) {
-      case 'cpu':
-        return gemma.PreferredBackend.cpu;
-      case 'gpu':
-        return gemma.PreferredBackend.gpu;
-      default:
-        return null;
+  LocalModelFamily get _family => _preset?.family ?? LocalModelFamily.qwen;
+
+  @override
+  Future<void> dispose() async {
+    final session = _session;
+    _session = null;
+    if (session != null) {
+      await session.dispose();
     }
   }
 
-  int? get _resolvedMaxNumImages {
-    final preset = _preset;
-    if (preset == null || !preset.supportsVision) {
-      return null;
+  // ---------------------------------------------------------------------------
+  // Message + tool + image conversion
+  // ---------------------------------------------------------------------------
+
+  /// Convert prompt messages into edge_gen's structured message maps. System,
+  /// user, assistant (with any prior tool calls) and tool-result roles are all
+  /// rendered by the model chat template on the native side.
+  List<Map<String, dynamic>> _toEdgeGenMessages(List<PromptMessage> messages) {
+    final result = <Map<String, dynamic>>[];
+    for (final message in messages) {
+      switch (message.role) {
+        case PromptRole.system:
+          if (message.content.trim().isNotEmpty) {
+            result.add({'role': 'system', 'content': message.content});
+          }
+          break;
+        case PromptRole.user:
+          result.add({'role': 'user', 'content': message.content});
+          break;
+        case PromptRole.assistant:
+          final map = <String, dynamic>{
+            'role': 'assistant',
+            'content': message.content,
+          };
+          final functionCalls = message.metadata?['function_calls'];
+          if (functionCalls is List && functionCalls.isNotEmpty) {
+            map['tool_calls'] = _toToolCallList(functionCalls);
+          }
+          result.add(map);
+          break;
+        case PromptRole.tool:
+          result.add({
+            'role': 'tool',
+            'name': message.metadata?['function_name']?.toString() ?? 'call_tool',
+            'content': message.content,
+          });
+          break;
+      }
     }
-    return preset.maxNumImages;
+    return result;
   }
 
-  Future<gemma.InferenceChat> _createChat({
-    required List<PromptMessage> messages,
-    required List<Map<String, dynamic>> tools,
+  List<Map<String, dynamic>> _toToolCallList(List<dynamic> rawCalls) {
+    return rawCalls.whereType<Map>().map((rawCall) {
+      final call = rawCall.map((key, value) => MapEntry(key.toString(), value));
+      return {
+        'type': 'function',
+        'function': {
+          'name': call['name'],
+          'arguments': call['args'] ?? const <String, dynamic>{},
+        },
+      };
+    }).toList(growable: false);
+  }
+
+  /// Wrap MCP tool declarations in the OpenAI-style function schema the chat
+  /// templates expect.
+  List<Map<String, dynamic>> _toEdgeGenTools(List<Map<String, dynamic>> tools) {
+    return tools.map((tool) {
+      final function = tool['function'] is Map<String, dynamic>
+          ? tool['function'] as Map<String, dynamic>
+          : tool;
+      return {
+        'type': 'function',
+        'function': {
+          'name': function['name']?.toString() ?? 'call_tool',
+          'description': function['description']?.toString() ?? '',
+          'parameters': function['parameters'] is Map<String, dynamic>
+              ? function['parameters'] as Map<String, dynamic>
+              : const <String, dynamic>{'type': 'object', 'properties': <String, dynamic>{}},
+        },
+      };
+    }).toList(growable: false);
+  }
+
+  Future<List<Uint8List>> _collectImages(List<PromptMessage> messages) async {
+    if (!(_preset?.supportsVision ?? false)) return const [];
+    final images = <Uint8List>[];
+    for (final message in messages) {
+      if (message.role != PromptRole.user) continue;
+      images.addAll(await _readSupportedImageAttachments(message.attachments));
+    }
+    return images;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Generation
+  // ---------------------------------------------------------------------------
+
+  @override
+  Future<String> generateWithMessages(
+    List<PromptMessage> messages, {
     double? temperature,
     int? topK,
     double? topP,
+    int? maxOutputTokens,
+    GenerationContext? generationContext,
   }) async {
-    final preset = _preset;
-    if (preset == null) {
-      throw Exception('Unsupported local model preset');
+    final requestId =
+        generationContext?.ensureRequestId() ??
+        DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+    final endpoint = 'local-mnn://$name';
+
+    try {
+      final sanitized = await _sanitizeMessages(messages, requestId);
+      final coalesced = _coalesceUserMessages(sanitized);
+      LoggerService.logAiRequest(
+        endpoint: endpoint,
+        headers: {'backend': _resolvedBackend},
+        requestBody: _buildLogBody(coalesced, tools: const []),
+        requestId: requestId,
+      );
+
+      final session = await _ensureSession();
+      final images = await _collectImages(coalesced);
+      final buffer = StringBuffer();
+      await for (final chunk in session.generateWithMessages(
+        messages: _toRoleContent(coalesced),
+        images: images.isEmpty ? null : images,
+        maxNewTokens: maxOutputTokens,
+      )) {
+        buffer.write(chunk);
+      }
+      final text = buffer.toString();
+
+      LoggerService.logAiResponse(
+        statusCode: 200,
+        headers: {'model': name},
+        responseBody: {'text': text},
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+      return text;
+    } catch (e) {
+      LoggerService.logAiError(
+        error: e.toString(),
+        endpoint: endpoint,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+      rethrow;
     }
-
-    final model = await _ensureModel();
-    final chat = await model.createChat(
-      temperature: temperature ?? preset.temperature,
-      randomSeed: 1,
-      topK: topK ?? preset.topK,
-      topP: topP ?? preset.topP,
-      tokenBuffer: 256,
-      supportImage: preset.supportsVision,
-      supportAudio: false,
-      supportsFunctionCalls: tools.isNotEmpty && preset.supportsToolCalls,
-      tools: _toToolDeclarations(tools),
-      toolChoice: tools.isEmpty ? gemma.ToolChoice.none : gemma.ToolChoice.auto,
-      modelType: preset.modelType,
-      systemInstruction: _extractSystemInstruction(messages),
-    );
-
-    await _appendConversation(chat, messages);
-    return chat;
   }
 
-  String? _extractSystemInstruction(List<PromptMessage> messages) {
-    final parts = messages
-        .where((message) => message.role == PromptRole.system)
-        .map((message) => message.content.trim())
-        .where((content) => content.isNotEmpty)
-        .toList();
-    if (parts.isEmpty) {
-      return null;
-    }
-    return parts.join('\n\n');
+  /// edge_gen's plain message path takes role/content strings.
+  List<Map<String, String>> _toRoleContent(List<PromptMessage> messages) {
+    return _toEdgeGenMessages(messages)
+        .map(
+          (m) => <String, String>{
+            'role': m['role'].toString(),
+            'content': m['content']?.toString() ?? '',
+          },
+        )
+        .toList(growable: false);
   }
 
-  Future<void> _appendConversation(
-    gemma.InferenceChat chat,
+  @override
+  List<Map<String, dynamic>> buildToolDeclarations(
+    Map<String, List<McpTool>> toolsByEndpoint,
+  ) {
+    if (toolsByEndpoint.isEmpty) return [];
+    final declarations = <Map<String, dynamic>>[];
+    for (final entry in toolsByEndpoint.entries) {
+      for (final tool in entry.value) {
+        declarations.add({
+          'name': tool.name,
+          'description': tool.description ?? tool.name,
+          'parameters':
+              tool.inputSchema ??
+              {'type': 'object', 'properties': <String, dynamic>{}},
+        });
+      }
+    }
+    return declarations;
+  }
+
+  @override
+  Future<Map<String, dynamic>> generateWithToolsAndMessages(
     List<PromptMessage> messages,
-  ) async {
-    final coalescedMessages = _coalesceMessagesForGemma(messages);
-    LoggerService.info(
-      'Local Gemma coalesced messages',
-      error: {
-        'count': coalescedMessages.length,
-        'messages': coalescedMessages
-            .map(
-              (message) => {
-                'role': message.role.name,
-                'contentLength': message.content.length,
-                'attachmentCount': message.attachments.length,
-                'attachmentNames': message.attachments
-                    .map((attachment) => attachment.name)
-                    .toList(growable: false),
-              },
-            )
-            .toList(growable: false),
-      },
-    );
-    for (final message in coalescedMessages) {
-      if (message.role == PromptRole.system) {
-        continue;
-      }
-      final converted = await _toGemmaMessages(message);
-      for (final gemmaMessage in converted) {
-        await chat.addQueryChunk(gemmaMessage, message.role == PromptRole.tool);
-      }
+    List<Map<String, dynamic>> tools, {
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    GenerationContext? generationContext,
+  }) async {
+    final requestId =
+        generationContext?.ensureRequestId() ??
+        DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+    final endpoint = 'local-mnn://$name/tools';
+
+    try {
+      final sanitized = await _sanitizeMessages(messages, requestId);
+      final coalesced = _coalesceUserMessages(sanitized);
+      LoggerService.logAiRequest(
+        endpoint: endpoint,
+        headers: {'backend': _resolvedBackend},
+        requestBody: _buildLogBody(coalesced, tools: tools),
+        requestId: requestId,
+      );
+
+      final fullText = await _runStructured(
+        coalesced,
+        tools,
+        maxOutputTokens,
+        onChunk: null,
+      );
+      final result = _parseToolResult(fullText);
+
+      LoggerService.logAiResponse(
+        statusCode: 200,
+        headers: {'model': name},
+        responseBody: result,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+      return result;
+    } catch (e) {
+      LoggerService.logAiError(
+        error: e.toString(),
+        endpoint: endpoint,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+      rethrow;
     }
   }
+
+  /// Streaming generation with tool awareness. Streams plain-text chunks via
+  /// [onChunk] (suppressing any tool-call markup) and returns the full result
+  /// including parsed function calls.
+  Future<Map<String, dynamic>> generateStreamingWithTools(
+    List<PromptMessage> messages,
+    List<Map<String, dynamic>> tools, {
+    required void Function(String chunk) onChunk,
+    GenerationContext? generationContext,
+  }) async {
+    final requestId =
+        generationContext?.ensureRequestId() ??
+        DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+    final endpoint = 'local-mnn://$name/stream-tools';
+
+    try {
+      LoggerService.logAiRequest(
+        endpoint: endpoint,
+        headers: {'backend': _resolvedBackend},
+        requestBody: _buildLogBody(messages, tools: tools),
+        requestId: requestId,
+      );
+
+      final fullText = await _runStructured(
+        messages,
+        tools,
+        null,
+        onChunk: onChunk,
+      );
+      final result = _parseToolResult(fullText);
+
+      LoggerService.logAiResponse(
+        statusCode: 200,
+        headers: {'model': name},
+        responseBody: result,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+      return result;
+    } catch (e) {
+      LoggerService.logAiError(
+        error: e.toString(),
+        endpoint: endpoint,
+        requestId: requestId,
+        duration: DateTime.now().difference(startTime),
+      );
+      rethrow;
+    }
+  }
+
+  /// Run the structured (tool-aware) generation path, optionally forwarding
+  /// confirmed plain-text chunks to [onChunk] while holding back tool-call
+  /// markup. Returns the full accumulated text for parsing.
+  Future<String> _runStructured(
+    List<PromptMessage> messages,
+    List<Map<String, dynamic>> tools,
+    int? maxOutputTokens, {
+    required void Function(String chunk)? onChunk,
+  }) async {
+    final session = await _ensureSession();
+    final images = await _collectImages(messages);
+    final format = FunctionCallParser.formatFor(_family);
+    final buffer = StringBuffer();
+    var holding = false;
+
+    await for (final chunk in session.generateStructured(
+      messages: _toEdgeGenMessages(messages),
+      tools: tools.isEmpty ? null : _toEdgeGenTools(tools),
+      images: images.isEmpty ? null : images,
+      maxNewTokens: maxOutputTokens,
+    )) {
+      buffer.write(chunk);
+      if (onChunk != null) {
+        if (!holding && format.isFunctionCallStart(buffer.toString())) {
+          holding = true; // tool-call markup begins — stop forwarding text.
+        }
+        if (!holding) {
+          onChunk(chunk);
+        }
+      }
+    }
+    return buffer.toString();
+  }
+
+  Map<String, dynamic> _parseToolResult(String fullText) {
+    final calls = FunctionCallParser.parseAll(fullText, family: _family);
+    if (calls.isNotEmpty) {
+      return {
+        'text': '',
+        'function_calls': calls
+            .map((c) => {'name': c.name, 'args': c.args})
+            .toList(growable: false),
+        'modelUsed': name,
+      };
+    }
+    return {'text': fullText, 'function_calls': null, 'modelUsed': name};
+  }
+
+  Stream<String> generateStreaming(
+    List<PromptMessage> messages, {
+    int? maxNewTokens,
+    String? requestId,
+  }) async* {
+    final reqId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final startTime = DateTime.now();
+    final endpoint = 'local-mnn://$name/stream';
+
+    try {
+      final sanitized = await _sanitizeMessages(messages, reqId);
+      final coalesced = _coalesceUserMessages(sanitized);
+      LoggerService.logAiRequest(
+        endpoint: endpoint,
+        headers: {'backend': _resolvedBackend},
+        requestBody: _buildLogBody(coalesced, tools: const []),
+        requestId: reqId,
+      );
+
+      final session = await _ensureSession();
+      final images = await _collectImages(coalesced);
+      final buffer = StringBuffer();
+      await for (final chunk in session.generateWithMessages(
+        messages: _toRoleContent(coalesced),
+        images: images.isEmpty ? null : images,
+        maxNewTokens: maxNewTokens,
+      )) {
+        buffer.write(chunk);
+        yield chunk;
+      }
+
+      LoggerService.logAiResponse(
+        statusCode: 200,
+        headers: {'model': name},
+        responseBody: {'text': buffer.toString()},
+        requestId: reqId,
+        duration: DateTime.now().difference(startTime),
+      );
+    } catch (e) {
+      LoggerService.logAiError(
+        error: e.toString(),
+        endpoint: endpoint,
+        requestId: reqId,
+        duration: DateTime.now().difference(startTime),
+      );
+      rethrow;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reusable helpers (preserved from the previous runtime)
+  // ---------------------------------------------------------------------------
 
   @visibleForTesting
   List<PromptMessage> coalesceMessagesForGemma(List<PromptMessage> messages) {
-    return _coalesceMessagesForGemma(messages);
+    return _coalesceUserMessages(messages);
   }
 
-  List<PromptMessage> _coalesceMessagesForGemma(List<PromptMessage> messages) {
+  /// Merge consecutive user messages into a single turn (some chat templates
+  /// reject two user turns in a row).
+  List<PromptMessage> _coalesceUserMessages(List<PromptMessage> messages) {
     if (messages.isEmpty) {
       return const [];
     }
@@ -252,117 +587,6 @@ class LocalMnnModel extends AIModel {
     return coalesced;
   }
 
-  Future<List<gemma.Message>> _toGemmaMessages(PromptMessage message) async {
-    switch (message.role) {
-      case PromptRole.system:
-        return const [];
-      case PromptRole.user:
-        return _buildUserMessages(message);
-      case PromptRole.assistant:
-        return _buildAssistantMessages(message);
-      case PromptRole.tool:
-        return [_buildToolResponseMessage(message)];
-    }
-  }
-
-  Future<List<gemma.Message>> _buildUserMessages(PromptMessage message) async {
-    _logAttachmentDiagnostics(message);
-    final images = await _readSupportedImageAttachments(message.attachments);
-    var content = message.content.trim();
-
-    if (images.isEmpty) {
-      return [gemma.Message.text(text: content, isUser: true)];
-    }
-
-    final result = <gemma.Message>[
-      gemma.Message.withImage(
-        text: content,
-        imageBytes: images.first,
-        isUser: true,
-      ),
-    ];
-
-    // TODO: On Android LiteRT-LM, follow-up imageOnly chunks appear to be
-    // ignored or collapsed in practice for PDF-page context. Keep this path
-    // raw for now so we can observe runtime behavior without workarounds.
-    for (final image in images.skip(1)) {
-      result.add(gemma.Message.imageOnly(imageBytes: image, isUser: true));
-    }
-    return result;
-  }
-
-  List<gemma.Message> _buildAssistantMessages(PromptMessage message) {
-    final result = <gemma.Message>[];
-    final functionCalls = message.metadata?['function_calls'];
-    if (functionCalls is List && functionCalls.isNotEmpty) {
-      result.add(
-        gemma.Message.toolCall(
-          text: jsonEncode(_toolCallEnvelope(functionCalls)),
-        ),
-      );
-    }
-    final content = message.content.trim();
-    if (content.isNotEmpty) {
-      result.add(gemma.Message.text(text: content, isUser: false));
-    }
-    return result;
-  }
-
-  gemma.Message _buildToolResponseMessage(PromptMessage message) {
-    final toolName =
-        message.metadata?['function_name']?.toString() ?? 'call_tool';
-    final decoded = _decodeToolResponse(message.content);
-    return gemma.Message.toolResponse(toolName: toolName, response: decoded);
-  }
-
-  Map<String, dynamic> _toolCallEnvelope(List<dynamic> rawCalls) {
-    final calls = rawCalls.whereType<Map>().map((rawCall) {
-      final call = rawCall.map((key, value) => MapEntry(key.toString(), value));
-      return {
-        'name': call['name'],
-        'arguments': call['args'] ?? const <String, dynamic>{},
-        if (call['id'] != null) 'id': call['id'],
-      };
-    }).toList();
-
-    if (calls.length == 1) {
-      return Map<String, dynamic>.from(calls.first);
-    }
-    return {'tool_calls': calls};
-  }
-
-  Map<String, dynamic> _decodeToolResponse(String content) {
-    try {
-      final decoded = jsonDecode(content);
-      if (decoded is Map<String, dynamic>) {
-        return decoded;
-      }
-      if (decoded is Map) {
-        return decoded.map((key, value) => MapEntry(key.toString(), value));
-      }
-      return {'result': decoded};
-    } catch (_) {
-      return {'result': content};
-    }
-  }
-
-  List<gemma.Tool> _toToolDeclarations(List<Map<String, dynamic>> tools) {
-    return tools
-        .map((tool) {
-          final function = tool['function'] is Map<String, dynamic>
-              ? tool['function'] as Map<String, dynamic>
-              : tool;
-          return gemma.Tool(
-            name: function['name']?.toString() ?? 'call_tool',
-            description: function['description']?.toString() ?? '',
-            parameters: function['parameters'] is Map<String, dynamic>
-                ? function['parameters'] as Map<String, dynamic>
-                : const <String, dynamic>{},
-          );
-        })
-        .toList(growable: false);
-  }
-
   Future<List<Uint8List>> _readSupportedImageAttachments(
     List<PlatformFile> attachments,
   ) async {
@@ -391,129 +615,6 @@ class LocalMnnModel extends AIModel {
         name.endsWith('.webp');
   }
 
-  void _logAttachmentDiagnostics(PromptMessage message) {
-    if (message.attachments.isEmpty) {
-      return;
-    }
-
-    final diagnostics = message.attachments
-        .map((attachment) {
-          final bytes = attachment.bytes;
-          final resolvedBytesLength = bytes?.length;
-          final decoded = bytes != null && bytes.isNotEmpty
-              ? img.decodeImage(bytes)
-              : null;
-          final signature = bytes == null || bytes.isEmpty
-              ? null
-              : bytes
-                    .take(8)
-                    .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
-                    .join(' ');
-          return {
-            'name': attachment.name,
-            'path': attachment.path,
-            'declaredSize': attachment.size,
-            'hasBytes': bytes != null,
-            'resolvedBytesLength': resolvedBytesLength,
-            'isSupportedImage': _isSupportedImageFile(attachment),
-            'decoded': decoded != null,
-            if (decoded != null) 'decodedWidth': decoded.width,
-            if (decoded != null) 'decodedHeight': decoded.height,
-            if (signature != null) 'signature': signature,
-          };
-        })
-        .toList(growable: false);
-
-    LoggerService.info(
-      'Local Gemma attachment diagnostics',
-      error: {
-        'contentLength': message.content.length,
-        'attachmentCount': message.attachments.length,
-        'attachments': diagnostics,
-      },
-    );
-  }
-
-  Map<String, dynamic> _responseToToolResult(gemma.ModelResponse response) {
-    if (response is gemma.FunctionCallResponse) {
-      return {
-        'text': '',
-        'function_calls': [
-          {'name': response.name, 'args': response.args},
-        ],
-        'modelUsed': name,
-      };
-    }
-
-    if (response is gemma.ParallelFunctionCallResponse) {
-      return {
-        'text': '',
-        'function_calls': response.calls
-            .map((call) => {'name': call.name, 'args': call.args})
-            .toList(growable: false),
-        'modelUsed': name,
-      };
-    }
-
-    if (response is gemma.ThinkingResponse) {
-      return {
-        'text': response.content,
-        'function_calls': null,
-        'modelUsed': name,
-      };
-    }
-
-    final text = response is gemma.TextResponse ? response.token : '';
-
-    // Primary Fallback: Try to parse as the JSON format injected by flutter_gemma/litert-lm
-    // format: {"name": function_name, "parameters": {argument: value}}
-    final jsonToolCall = _tryParseInjectedJsonToolCall(text);
-    if (jsonToolCall != null) {
-      return {
-        'text': '',
-        'function_calls': [jsonToolCall],
-        'modelUsed': name,
-      };
-    }
-
-    return {'text': text, 'function_calls': null, 'modelUsed': name};
-  }
-
-  Map<String, dynamic>? _tryParseInjectedJsonToolCall(String text) {
-    final trimmed = text.trim();
-    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
-      return null;
-    }
-
-    try {
-      final data = jsonDecode(trimmed);
-      if (data is Map<String, dynamic> &&
-          data.containsKey('name') &&
-          (data.containsKey('parameters') || data.containsKey('args') || data.containsKey('params'))) {
-        return {
-          'name': data['name'],
-          'args': data['parameters'] ?? data['args'] ?? data['params'],
-        };
-      }
-    } catch (_) {
-      // Not valid JSON or doesn't match format
-    }
-    return null;
-  }
-
-  @override
-  Future<void> dispose() async {
-    await _disposeModel();
-  }
-
-  Future<void> _disposeModel() async {
-    final model = _model;
-    _model = null;
-    if (model != null) {
-      await model.close();
-    }
-  }
-
   Map<String, dynamic> _buildLogBody(
     List<PromptMessage> messages, {
     required List<Map<String, dynamic>> tools,
@@ -526,301 +627,20 @@ class LocalMnnModel extends AIModel {
               'content': message.content,
               if (message.attachments.isNotEmpty)
                 'attachments': message.attachments
-                    .map(
-                      (file) => {
-                        'name': file.name,
-                        'path': file.path,
-                        'size': file.size,
-                        'hasBytes': file.bytes != null,
-                      },
-                    )
+                    .map((file) => {'name': file.name, 'size': file.size})
                     .toList(),
               if (message.metadata != null) 'metadata': message.metadata,
             },
           )
           .toList(),
       'tools': tools,
-      'gemmaConfig': {
+      'mnnConfig': {
         'preset': _preset?.id,
-        'backend': _config?.backendType ?? 'gpu',
+        'family': _family.name,
+        'backend': _resolvedBackend,
         'tokenWindow': _resolvedTokenWindow,
       },
     };
-  }
-
-  @override
-  Future<String> generateWithMessages(
-    List<PromptMessage> messages, {
-    double? temperature,
-    int? topK,
-    double? topP,
-    int? maxOutputTokens,
-    GenerationContext? generationContext,
-  }) async {
-    final requestId =
-        generationContext?.ensureRequestId() ??
-        DateTime.now().millisecondsSinceEpoch.toString();
-    final startTime = DateTime.now();
-    final endpoint = 'local-gemma://$name';
-
-    try {
-      final sanitizedMessages = await _sanitizeMessages(messages, requestId);
-      LoggerService.logAiRequest(
-        endpoint: endpoint,
-        headers: {'backend': _config?.backendType ?? 'gpu'},
-        requestBody: _buildLogBody(sanitizedMessages, tools: const []),
-        requestId: requestId,
-      );
-
-      final chat = await _createChat(
-        messages: sanitizedMessages,
-        tools: const [],
-        temperature: temperature,
-        topK: topK,
-        topP: topP,
-      );
-
-      final response = await chat.generateChatResponse();
-      final result = _responseToToolResult(response);
-      final text = result['text']?.toString() ?? '';
-
-      LoggerService.logAiResponse(
-        statusCode: 200,
-        headers: {'model': name},
-        responseBody: result,
-        requestId: requestId,
-        duration: DateTime.now().difference(startTime),
-      );
-
-      return text;
-    } catch (e) {
-      LoggerService.logAiError(
-        error: e.toString(),
-        endpoint: endpoint,
-        requestId: requestId,
-        duration: DateTime.now().difference(startTime),
-      );
-      rethrow;
-    }
-  }
-
-  @override
-  List<Map<String, dynamic>> buildToolDeclarations(
-    Map<String, List<McpTool>> toolsByEndpoint,
-  ) {
-    if (toolsByEndpoint.isEmpty) return [];
-    // Individual declarations — one per tool, matching Google Gallery pattern.
-    // Constrained decoding forces Gemma to output only valid tool names.
-    final declarations = <Map<String, dynamic>>[];
-    for (final entry in toolsByEndpoint.entries) {
-      for (final tool in entry.value) {
-        declarations.add({
-          'name': tool.name,
-          'description': tool.description ?? tool.name,
-          'parameters': tool.inputSchema ?? {
-            'type': 'object',
-            'properties': <String, dynamic>{},
-          },
-        });
-      }
-    }
-    return declarations;
-  }
-
-  @override
-  Future<Map<String, dynamic>> generateWithToolsAndMessages(
-    List<PromptMessage> messages,
-    List<Map<String, dynamic>> tools, {
-    double? temperature,
-    int? topK,
-    double? topP,
-    int? maxOutputTokens,
-    GenerationContext? generationContext,
-  }) async {
-    final requestId =
-        generationContext?.ensureRequestId() ??
-        DateTime.now().millisecondsSinceEpoch.toString();
-    final startTime = DateTime.now();
-    final endpoint = 'local-gemma://$name/tools';
-
-    try {
-      final sanitizedMessages = await _sanitizeMessages(messages, requestId);
-      LoggerService.logAiRequest(
-        endpoint: endpoint,
-        headers: {'backend': _config?.backendType ?? 'gpu'},
-        requestBody: _buildLogBody(sanitizedMessages, tools: tools),
-        requestId: requestId,
-      );
-
-      final chat = await _createChat(
-        messages: sanitizedMessages,
-        tools: tools,
-        temperature: temperature,
-        topK: topK,
-        topP: topP,
-      );
-
-      final response = await chat.generateChatResponse();
-      final result = _responseToToolResult(response);
-
-      LoggerService.logAiResponse(
-        statusCode: 200,
-        headers: {'model': name},
-        responseBody: result,
-        requestId: requestId,
-        duration: DateTime.now().difference(startTime),
-      );
-
-      return result;
-    } catch (e) {
-      LoggerService.logAiError(
-        error: e.toString(),
-        endpoint: endpoint,
-        requestId: requestId,
-        duration: DateTime.now().difference(startTime),
-      );
-      rethrow;
-    }
-  }
-
-  /// Streaming generation with tool awareness. Streams text chunks via
-  /// [onChunk] and returns the full result including any function calls.
-  /// Combines the speed of streaming with the tool-calling path so Gemma
-  /// can answer simple questions fast while still detecting tool calls.
-  Future<Map<String, dynamic>> generateStreamingWithTools(
-    List<PromptMessage> messages,
-    List<Map<String, dynamic>> tools, {
-    required void Function(String chunk) onChunk,
-    GenerationContext? generationContext,
-  }) async {
-    final requestId =
-        generationContext?.ensureRequestId() ??
-        DateTime.now().millisecondsSinceEpoch.toString();
-    final startTime = DateTime.now();
-    final endpoint = 'local-gemma://$name/stream-tools';
-
-    try {
-      LoggerService.logAiRequest(
-        endpoint: endpoint,
-        headers: {'backend': _config?.backendType ?? 'gpu'},
-        requestBody: _buildLogBody(messages, tools: tools),
-        requestId: requestId,
-      );
-
-      final chat = await _createChat(messages: messages, tools: tools);
-      final buffer = StringBuffer();
-      final functionCalls = <Map<String, dynamic>>[];
-
-      await for (final response in chat.generateChatResponseAsync()) {
-        if (response is gemma.TextResponse) {
-          buffer.write(response.token);
-          onChunk(response.token);
-        } else if (response is gemma.FunctionCallResponse) {
-          functionCalls.add({'name': response.name, 'args': response.args});
-        } else if (response is gemma.ParallelFunctionCallResponse) {
-          for (final call in response.calls) {
-            functionCalls.add({'name': call.name, 'args': call.args});
-          }
-        }
-      }
-
-      final text = buffer.toString();
-      // Check streamed text for injected JSON tool calls as fallback
-      if (functionCalls.isEmpty) {
-        final jsonToolCall = _tryParseInjectedJsonToolCall(text);
-        if (jsonToolCall != null) {
-          final result = <String, dynamic>{
-            'text': '',
-            'function_calls': [jsonToolCall],
-            'modelUsed': name,
-          };
-          LoggerService.logAiResponse(
-            statusCode: 200,
-            headers: {'model': name},
-            responseBody: result,
-            requestId: requestId,
-            duration: DateTime.now().difference(startTime),
-          );
-          return result;
-        }
-      }
-
-      final result = <String, dynamic>{
-        'text': text,
-        'function_calls': functionCalls.isNotEmpty ? functionCalls : null,
-        'modelUsed': name,
-      };
-      LoggerService.logAiResponse(
-        statusCode: 200,
-        headers: {'model': name},
-        responseBody: result,
-        requestId: requestId,
-        duration: DateTime.now().difference(startTime),
-      );
-      return result;
-    } catch (e) {
-      LoggerService.logAiError(
-        error: e.toString(),
-        endpoint: endpoint,
-        requestId: requestId,
-        duration: DateTime.now().difference(startTime),
-      );
-      rethrow;
-    }
-  }
-
-  Stream<String> generateStreaming(
-    List<PromptMessage> messages, {
-    int? maxNewTokens,
-    String? requestId,
-  }) async* {
-    final reqId = requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
-    final startTime = DateTime.now();
-    final endpoint = 'local-gemma://$name/stream';
-
-    try {
-      final sanitizedMessages = await _sanitizeMessages(messages, reqId);
-      LoggerService.logAiRequest(
-        endpoint: endpoint,
-        headers: {'backend': _config?.backendType ?? 'gpu'},
-        requestBody: _buildLogBody(sanitizedMessages, tools: const []),
-        requestId: reqId,
-      );
-
-      final chat = await _createChat(
-        messages: sanitizedMessages,
-        tools: const [],
-      );
-      final buffer = StringBuffer();
-
-      await for (final response in chat.generateChatResponseAsync()) {
-        if (response is gemma.TextResponse) {
-          buffer.write(response.token);
-          yield response.token;
-        }
-      }
-
-      LoggerService.logAiResponse(
-        statusCode: 200,
-        headers: {'model': name},
-        responseBody: {'text': buffer.toString()},
-        requestId: reqId,
-        duration: DateTime.now().difference(startTime),
-      );
-    } catch (e) {
-      LoggerService.logAiError(
-        error: e.toString(),
-        endpoint: endpoint,
-        requestId: reqId,
-        duration: DateTime.now().difference(startTime),
-      );
-      rethrow;
-    }
-  }
-
-  @visibleForTesting
-  Map<String, dynamic>? parseInjectedJsonToolCallForTest(String text) {
-    return _tryParseInjectedJsonToolCall(text);
   }
 
   Future<List<PromptMessage>> _sanitizeMessages(
@@ -838,11 +658,27 @@ class LocalMnnModel extends AIModel {
 
     AttachmentPreprocessor.logIgnoredAttachments(
       outcome.ignored,
-      endpoint: '${name} attachment_filter',
+      endpoint: '$name attachment_filter',
       requestId: requestId,
     );
 
     return outcome.messages;
   }
-}
 
+  @visibleForTesting
+  List<FunctionCallResponse> parseToolCallsForTest(String text) {
+    return FunctionCallParser.parseAll(text, family: _family);
+  }
+
+  // Retained so existing JSON-tool-call tests keep a stable entry point; now
+  // delegates to the family-aware parser.
+  @visibleForTesting
+  Map<String, dynamic>? parseInjectedJsonToolCallForTest(String text) {
+    final calls = FunctionCallParser.parseAll(
+      text,
+      family: LocalModelFamily.gemma,
+    );
+    if (calls.isEmpty) return null;
+    return {'name': calls.first.name, 'args': calls.first.args};
+  }
+}

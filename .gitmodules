@@ -4,9 +4,6 @@
 [submodule "third_party/flutter_json_view"]
 	path = third_party/flutter_json_view
 	url = git@github.com:Stowplex/flutter_json_view.git
-[submodule "third_party/flutter_gemma"]
-	path = third_party/flutter_gemma
-	url = git@github.com:kkspeed/flutter_gemma.git
 [submodule "third_party/edge_gen"]
 	path = third_party/edge_gen
 	url = git@github.com:Stowplex/edge_gen.git
