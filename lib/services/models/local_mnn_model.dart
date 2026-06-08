@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:edge_gen/edge_gen.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
 
 import 'package:note_synapse/models/generation_context.dart';
 import 'package:note_synapse/models/mcp_endpoint.dart';
@@ -111,6 +112,7 @@ class LocalMnnModel extends AIModel {
       temperature: preset?.temperature ?? 0.7,
       topK: preset?.topK ?? 40,
       topP: preset?.topP ?? 0.9,
+      attentionMode: _resolvedAttentionMode,
       enableThinking:
           (preset?.supportsThinking ?? false) && (_config?.enableThinking ?? false),
     );
@@ -124,6 +126,12 @@ class LocalMnnModel extends AIModel {
     final platformKey = Platform.isIOS ? 'ios' : 'android';
     return _preset?.defaultBackend[platformKey] ?? 'cpu';
   }
+
+  /// KV-cache quantization + flash attention bitmask. 12 = TQ4 K+V + flash
+  /// attention, which slashes KV/attention memory for long (multimodal)
+  /// prefills — but flash attention is CPU-only on MNN, so only enable it on the
+  /// CPU backend. GPU backends keep the unquantized default (0).
+  int get _resolvedAttentionMode => _resolvedBackend == 'cpu' ? 12 : 0;
 
   int get _resolvedTokenWindow {
     final preset = _preset;
@@ -226,6 +234,16 @@ class LocalMnnModel extends AIModel {
     for (final message in messages) {
       if (message.role != PromptRole.user) continue;
       images.addAll(await _readSupportedImageAttachments(message.attachments));
+    }
+    // Cap the number of images — each one adds a block of vision tokens, so an
+    // unbounded count can exhaust memory during prefill.
+    final maxImages = _preset?.maxNumImages;
+    if (maxImages != null && images.length > maxImages) {
+      LoggerService.info(
+        'Local MNN truncating images to maxNumImages',
+        error: {'count': images.length, 'maxNumImages': maxImages},
+      );
+      return images.sublist(0, maxImages);
     }
     return images;
   }
@@ -587,6 +605,10 @@ class LocalMnnModel extends AIModel {
     return coalesced;
   }
 
+  // Longest-edge budget for images sent to the vision encoder. Vision-token
+  // count (and prefill memory) scales with pixel area, so cap aggressively.
+  static const int _maxImageEdgePx = 800;
+
   Future<List<Uint8List>> _readSupportedImageAttachments(
     List<PlatformFile> attachments,
   ) async {
@@ -595,14 +617,24 @@ class LocalMnnModel extends AIModel {
       if (!_isSupportedImageFile(attachment)) {
         continue;
       }
+      Uint8List? bytes;
       if (attachment.bytes != null && attachment.bytes!.isNotEmpty) {
-        images.add(attachment.bytes!);
-        continue;
+        bytes = attachment.bytes!;
+      } else {
+        final path = attachment.path;
+        if (path != null && path.isNotEmpty) {
+          bytes = await File(path).readAsBytes();
+        }
       }
-      final path = attachment.path;
-      if (path != null && path.isNotEmpty) {
-        images.add(await File(path).readAsBytes());
-      }
+      if (bytes == null) continue;
+      // Decode/resize off the UI isolate — full-res photos are slow to decode
+      // and would otherwise jank the app.
+      images.add(
+        await compute(
+          _capImageLongEdge,
+          _ImageCapRequest(bytes, _maxImageEdgePx),
+        ),
+      );
     }
     return images;
   }
@@ -681,4 +713,25 @@ class LocalMnnModel extends AIModel {
     if (calls.isEmpty) return null;
     return {'name': calls.first.name, 'args': calls.first.args};
   }
+}
+
+class _ImageCapRequest {
+  const _ImageCapRequest(this.bytes, this.maxEdge);
+  final Uint8List bytes;
+  final int maxEdge;
+}
+
+/// Downscale [req.bytes] so its longest edge is <= [_ImageCapRequest.maxEdge]
+/// pixels. Returns the original bytes if already within budget or undecodable.
+/// Top-level so it can run in a background isolate via `compute`.
+Uint8List _capImageLongEdge(_ImageCapRequest req) {
+  final decoded = img.decodeImage(req.bytes);
+  if (decoded == null) return req.bytes;
+  final longest =
+      decoded.width >= decoded.height ? decoded.width : decoded.height;
+  if (longest <= req.maxEdge) return req.bytes;
+  final resized = decoded.width >= decoded.height
+      ? img.copyResize(decoded, width: req.maxEdge)
+      : img.copyResize(decoded, height: req.maxEdge);
+  return Uint8List.fromList(img.encodeJpg(resized, quality: 90));
 }
