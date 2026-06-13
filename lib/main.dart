@@ -17,6 +17,7 @@ import 'services/share_service.dart';
 import 'services/prompts/prompt_configuration_bootstrapper.dart';
 import 'services/prompts/prompt_template_service.dart';
 import 'services/global_library_service.dart';
+import 'services/logger_service.dart';
 import 'services/agent_service.dart';
 import 'services/background_agent_service.dart';
 import 'services/service_locator.dart';
@@ -28,33 +29,125 @@ import 'widgets/workflow_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await _bootstrap();
+}
 
-  // Initialize rhttp Rust bindings (must be first)
-  await Rhttp.init();
+/// Runs the startup initialization chain. Any failure here would otherwise be
+/// an unrecoverable white-screen crash on launch, so we catch it and show a
+/// dedicated error screen with a retry option. Database migration failures are
+/// handled separately inside [DatabaseService] (it routes to RecoveryScreen via
+/// the global navigator key), so this guard covers the remaining native/service
+/// inits (rhttp, gemma, secure storage, prompt/template/tag preloads, etc.).
+///
+/// Retry is safe: [setupServiceLocator] is idempotent (guarded by isRegistered)
+/// and the native inits are no-ops once they have already succeeded.
+Future<void> _bootstrap() async {
+  try {
+    // Initialize rhttp Rust bindings (must be first)
+    await Rhttp.init();
 
-  // Initialize network provider
-  await NetworkProvider.init();
+    // Initialize network provider
+    await NetworkProvider.init();
 
-  await FlutterGemma.initialize();
+    await FlutterGemma.initialize();
 
-  // Initialize secure storage
-  await SecureStorageService.initialize();
-  await PromptConfigurationBootstrapper.initialize();
-  await GlobalLibraryService().init();
+    // Initialize secure storage
+    await SecureStorageService.initialize();
+    await PromptConfigurationBootstrapper.initialize();
+    await GlobalLibraryService().init();
 
-  // Initialize service locator for dependency injection
-  setupServiceLocator();
+    // Initialize service locator for dependency injection
+    setupServiceLocator();
 
-  // Pre-load prompt templates so later services can render synchronously
-  await getIt<PromptTemplateService>().preloadAll();
+    // Pre-load prompt templates so later services can render synchronously
+    await getIt<PromptTemplateService>().preloadAll();
 
-  // Load tag image mappings into memory
-  await getIt<TagImageService>().loadAll();
+    // Load tag image mappings into memory
+    await getIt<TagImageService>().loadAll();
 
-  // Initialize background agent service for Android foreground service
-  await BackgroundAgentService.init();
+    // Initialize background agent service for Android foreground service
+    await BackgroundAgentService.init();
 
-  runApp(const NoteSynapseApp());
+    runApp(const NoteSynapseApp());
+  } catch (e, stack) {
+    LoggerService.error(
+      'Startup initialization failed',
+      error: e,
+      stackTrace: stack,
+    );
+    runApp(_StartupErrorApp(error: '$e'));
+  }
+}
+
+/// Minimal, self-contained app shown when [_bootstrap] fails. It deliberately
+/// avoids depending on any service/provider that may have failed to initialize.
+class _StartupErrorApp extends StatelessWidget {
+  const _StartupErrorApp({required this.error});
+
+  final String error;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    color: Colors.redAccent,
+                    size: 48,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Note Synapse failed to start',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Something went wrong while initializing the app. '
+                    'You can retry, or restart the app if the problem persists.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black12,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: SelectableText(
+                      error,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: _bootstrap,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class NoteSynapseApp extends StatelessWidget {
