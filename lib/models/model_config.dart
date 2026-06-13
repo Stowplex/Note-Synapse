@@ -19,7 +19,16 @@ class ModelConfig {
   final bool isConfigured;
   final int? tokenWindow;
   final bool? enableThinking;
-  final String? backendType;
+
+  /// Enabled local-inference backends, in no particular order (e.g.
+  /// `['npu', 'gpu', 'cpu']`). The effective backend handed to the engine is
+  /// the highest-priority enabled one — see [backendPriority] and
+  /// [effectiveBackendType].
+  final List<String>? backendTypes;
+
+  /// Backend selection priority, highest first. The underlying engine falls
+  /// back along this same chain when a backend is unavailable.
+  static const List<String> backendPriority = ['npu', 'gpu', 'cpu'];
 
   ModelConfig({
     String? id,
@@ -36,7 +45,7 @@ class ModelConfig {
     this.isConfigured = false,
     this.tokenWindow,
     this.enableThinking,
-    this.backendType,
+    this.backendTypes,
   }) : id = id ?? const Uuid().v4(),
        customCapabilitiesObject =
            customCapabilitiesObject ??
@@ -57,6 +66,18 @@ class ModelConfig {
            ? null
            : List.unmodifiable(modelFeatures.map((f) => f.trim()).toList());
 
+  /// The single backend handed to the inference engine: the highest-priority
+  /// enabled backend per [backendPriority]. Returns null when no backends are
+  /// configured (engine picks its own default).
+  String? get effectiveBackendType {
+    final types = backendTypes;
+    if (types == null || types.isEmpty) return null;
+    for (final backend in backendPriority) {
+      if (types.contains(backend)) return backend;
+    }
+    return types.first;
+  }
+
   /// Create a copy with updated values
   ModelConfig copyWith({
     String? id,
@@ -73,7 +94,7 @@ class ModelConfig {
     bool? isConfigured,
     int? tokenWindow,
     bool? enableThinking,
-    String? backendType,
+    List<String>? backendTypes,
   }) {
     return ModelConfig(
       id: id ?? this.id,
@@ -92,7 +113,7 @@ class ModelConfig {
       isConfigured: isConfigured ?? this.isConfigured,
       tokenWindow: tokenWindow ?? this.tokenWindow,
       enableThinking: enableThinking ?? this.enableThinking,
-      backendType: backendType ?? this.backendType,
+      backendTypes: backendTypes ?? this.backendTypes,
     );
   }
 
@@ -113,7 +134,7 @@ class ModelConfig {
       'isConfigured': isConfigured,
       if (tokenWindow != null) 'token_window': tokenWindow,
       if (enableThinking != null) 'enable_thinking': enableThinking,
-      if (backendType != null) 'backend_type': backendType,
+      if (backendTypes != null) 'backend_types': backendTypes,
     };
   }
 
@@ -147,8 +168,19 @@ class ModelConfig {
       isConfigured: json['isConfigured'] as bool? ?? false,
       tokenWindow: json['token_window'] as int?,
       enableThinking: json['enable_thinking'] as bool?,
-      backendType: json['backend_type'] as String?,
+      backendTypes: _backendTypesFromJson(json),
     );
+  }
+
+  /// Reads the enabled backends, migrating the legacy single `backend_type`
+  /// string into a one-element list when the new `backend_types` is absent.
+  static List<String>? _backendTypesFromJson(Map<String, dynamic> json) {
+    final list = (json['backend_types'] as List?)
+        ?.whereType<String>()
+        .toList();
+    if (list != null) return list;
+    final legacy = json['backend_type'] as String?;
+    return legacy == null ? null : [legacy];
   }
 
   @override

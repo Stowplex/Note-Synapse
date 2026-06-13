@@ -7931,8 +7931,32 @@ abstract class AppLocalizations {
   /// No description provided for @localModelBackend.
   ///
   /// In en, this message translates to:
-  /// **'Backend'**
+  /// **'Preferred Backend'**
   String get localModelBackend;
+
+  /// No description provided for @localModelBackendNpu.
+  ///
+  /// In en, this message translates to:
+  /// **'NPU'**
+  String get localModelBackendNpu;
+
+  /// No description provided for @localModelBackendGpu.
+  ///
+  /// In en, this message translates to:
+  /// **'GPU'**
+  String get localModelBackendGpu;
+
+  /// No description provided for @localModelBackendCpu.
+  ///
+  /// In en, this message translates to:
+  /// **'CPU'**
+  String get localModelBackendCpu;
+
+  /// No description provided for @localModelBackendRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Select at least one backend'**
+  String get localModelBackendRequired;
 
   /// No description provided for @localModelSettings.
   ///
@@ -8335,6 +8359,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Select Tags for {count} {count, plural, =1{Note} other{Notes}}'**
   String selectTagsForNotes(int count);
+
+  /// No description provided for @webLogins.
+  ///
+  /// In en, this message translates to:
+  /// **'Web Logins'**
+  String get webLogins;
+
+  /// No description provided for @webLoginsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Save logins so you can clip pages that require signing in'**
+  String get webLoginsSubtitle;
+
+  /// No description provided for @webLoginsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No saved logins yet. Add one to clip pages that require signing in.'**
+  String get webLoginsEmpty;
+
+  /// No description provided for @addWebLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Add login'**
+  String get addWebLogin;
+
+  /// No description provided for @webLoginBrowserHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a URL and sign in, then tap Save login'**
+  String get webLoginBrowserHint;
+
+  /// No description provided for @saveLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Save login'**
+  String get saveLogin;
+
+  /// No description provided for @loginSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Login saved for {domain}'**
+  String loginSaved(String domain);
+
+  /// No description provided for @deleteLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete login'**
+  String get deleteLogin;
+
+  /// No description provided for @deleteLoginConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the saved login for {domain}? Clipping pages on this site will no longer be authenticated.'**
+  String deleteLoginConfirm(String domain);
+
+  /// No description provided for @webLoginSecurityNote.
+  ///
+  /// In en, this message translates to:
+  /// **'On this platform, saved logins are stored without OS-level encryption. Only save logins on a device you trust.'**
+  String get webLoginSecurityNote;
+
+  /// No description provided for @webLoginCaptureFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not capture a login session. Make sure you are signed in before saving. This feature is unavailable on the web build.'**
+  String get webLoginCaptureFailed;
+
+  /// No description provided for @requestDesktopSite.
+  ///
+  /// In en, this message translates to:
+  /// **'Request desktop site'**
+  String get requestDesktopSite;
+
+  /// No description provided for @requestMobileSite.
+  ///
+  /// In en, this message translates to:
+  /// **'Request mobile site'**
+  String get requestMobileSite;
 }
 
 class _AppLocalizationsDelegate

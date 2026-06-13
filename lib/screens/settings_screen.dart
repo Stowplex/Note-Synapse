@@ -30,6 +30,7 @@ import '../services/network_provider.dart';
 import 'settings/about_screen.dart';
 import 'package:flutter/foundation.dart';
 import 'settings/debug_menu_screen.dart';
+import 'settings/web_logins_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -107,6 +108,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
+          if (!kIsWeb) ...[
+            const SizedBox(height: 8),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.cookie_outlined),
+                title: Text(l10n.webLogins),
+                subtitle: Text(l10n.webLoginsSubtitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const WebLoginsScreen(),
+                  ),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Card(
             child: ListTile(

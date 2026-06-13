@@ -83,6 +83,7 @@ class LocalMnnModel extends AIModel {
       supportImage: preset.supportsVision,
       supportAudio: false,
       maxNumImages: _resolvedMaxNumImages,
+      enableSpeculativeDecoding: true,
     );
     return _model!;
   }
@@ -97,7 +98,11 @@ class LocalMnnModel extends AIModel {
   }
 
   gemma.PreferredBackend? get _preferredBackend {
-    switch (_config?.backendType) {
+    // The engine itself falls back NPU -> GPU -> CPU, so handing it the
+    // highest-priority enabled backend reproduces the user's checkbox order.
+    switch (_config?.effectiveBackendType) {
+      case 'npu':
+        return gemma.PreferredBackend.npu;
       case 'cpu':
         return gemma.PreferredBackend.cpu;
       case 'gpu':
@@ -274,21 +279,13 @@ class LocalMnnModel extends AIModel {
       return [gemma.Message.text(text: content, isUser: true)];
     }
 
-    final result = <gemma.Message>[
-      gemma.Message.withImage(
+    return [
+      gemma.Message.withImages(
         text: content,
-        imageBytes: images.first,
+        imageBytes: images,
         isUser: true,
       ),
     ];
-
-    // TODO: On Android LiteRT-LM, follow-up imageOnly chunks appear to be
-    // ignored or collapsed in practice for PDF-page context. Keep this path
-    // raw for now so we can observe runtime behavior without workarounds.
-    for (final image in images.skip(1)) {
-      result.add(gemma.Message.imageOnly(imageBytes: image, isUser: true));
-    }
-    return result;
   }
 
   List<gemma.Message> _buildAssistantMessages(PromptMessage message) {
@@ -542,7 +539,7 @@ class LocalMnnModel extends AIModel {
       'tools': tools,
       'gemmaConfig': {
         'preset': _preset?.id,
-        'backend': _config?.backendType ?? 'gpu',
+        'backend': _config?.effectiveBackendType ?? 'gpu',
         'tokenWindow': _resolvedTokenWindow,
       },
     };
@@ -567,7 +564,7 @@ class LocalMnnModel extends AIModel {
       final sanitizedMessages = await _sanitizeMessages(messages, requestId);
       LoggerService.logAiRequest(
         endpoint: endpoint,
-        headers: {'backend': _config?.backendType ?? 'gpu'},
+        headers: {'backend': _config?.effectiveBackendType ?? 'gpu'},
         requestBody: _buildLogBody(sanitizedMessages, tools: const []),
         requestId: requestId,
       );
@@ -647,7 +644,7 @@ class LocalMnnModel extends AIModel {
       final sanitizedMessages = await _sanitizeMessages(messages, requestId);
       LoggerService.logAiRequest(
         endpoint: endpoint,
-        headers: {'backend': _config?.backendType ?? 'gpu'},
+        headers: {'backend': _config?.effectiveBackendType ?? 'gpu'},
         requestBody: _buildLogBody(sanitizedMessages, tools: tools),
         requestId: requestId,
       );
@@ -702,7 +699,7 @@ class LocalMnnModel extends AIModel {
     try {
       LoggerService.logAiRequest(
         endpoint: endpoint,
-        headers: {'backend': _config?.backendType ?? 'gpu'},
+        headers: {'backend': _config?.effectiveBackendType ?? 'gpu'},
         requestBody: _buildLogBody(messages, tools: tools),
         requestId: requestId,
       );
@@ -782,7 +779,7 @@ class LocalMnnModel extends AIModel {
       final sanitizedMessages = await _sanitizeMessages(messages, reqId);
       LoggerService.logAiRequest(
         endpoint: endpoint,
-        headers: {'backend': _config?.backendType ?? 'gpu'},
+        headers: {'backend': _config?.effectiveBackendType ?? 'gpu'},
         requestBody: _buildLogBody(sanitizedMessages, tools: const []),
         requestId: reqId,
       );

@@ -14,7 +14,7 @@ void main() {
         contains('gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm'),
       );
       expect(preset.filename, 'gemma-4-E2B-it.litertlm');
-      expect(preset.modelType, gemma.ModelType.gemmaIt);
+      expect(preset.modelType, gemma.ModelType.gemma4);
       expect(preset.fileType, gemma.ModelFileType.litertlm);
       expect(preset.supportsVision, isTrue);
       expect(preset.supportsThinking, isFalse);
@@ -23,8 +23,8 @@ void main() {
       expect(preset.defaultTokenWindow, 16384);
       expect(preset.minTokenWindow, 2048);
       expect(preset.maxTokenWindow, 32768);
-      expect(preset.defaultBackend['android'], 'gpu');
-      expect(preset.defaultBackend['ios'], 'gpu');
+      expect(preset.supportedBackends['android'], ['npu', 'gpu', 'cpu']);
+      expect(preset.supportedBackends['ios'], ['gpu', 'cpu']);
     });
 
     test('all presets returns the Gemma preset', () {

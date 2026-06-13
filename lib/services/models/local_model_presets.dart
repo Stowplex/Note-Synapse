@@ -8,7 +8,10 @@ class LocalModelPreset {
   final String filename;
   final gemma.ModelType modelType;
   final gemma.ModelFileType fileType;
-  final Map<String, String> defaultBackend;
+
+  /// Backends offered per platform, e.g. `{'android': ['npu', 'gpu', 'cpu']}`.
+  /// The settings screen renders one checkbox per entry and defaults them all
+  /// to enabled.
   final Map<String, List<String>> supportedBackends;
   final bool supportsVision;
   final bool supportsThinking;
@@ -31,7 +34,6 @@ class LocalModelPreset {
     required this.filename,
     required this.modelType,
     required this.fileType,
-    required this.defaultBackend,
     required this.supportedBackends,
     required this.supportsVision,
     required this.supportsThinking,
@@ -58,11 +60,12 @@ class LocalModelPresets {
     downloadUrl:
         'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm',
     filename: 'gemma-4-E2B-it.litertlm',
-    modelType: gemma.ModelType.gemmaIt,
+    modelType: gemma.ModelType.gemma4,
     fileType: gemma.ModelFileType.litertlm,
-    defaultBackend: {'android': 'gpu', 'ios': 'gpu'},
     supportedBackends: {
-      'android': ['gpu', 'cpu'],
+      // NPU is only honored on Android with .litertlm models; iOS has no NPU
+      // path in flutter_gemma, so it isn't offered there.
+      'android': ['npu', 'gpu', 'cpu'],
       'ios': ['gpu', 'cpu'],
     },
     supportsVision: true,
