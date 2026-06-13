@@ -406,6 +406,20 @@ class UserAppRuntimeBridge {
       },
     );
 
+    // SECURITY / TRUST BOUNDARY:
+    // proxyFetch intentionally allows user apps to make arbitrary network
+    // requests (including to localhost / private IPs). This is safe under the
+    // current "VS Code extension" trust model: user apps are authored by the
+    // user or generated from the user's own prompts, and there is no
+    // third-party app marketplace or untrusted distribution channel.
+    //
+    // Revisit this assumption (e.g. add an allowlist / private-IP block and
+    // per-app capability grants) BEFORE either:
+    //   1. shipping a third-party / community app marketplace, or
+    //   2. allowing apps to be generated from untrusted ingested content
+    //      (clipped web pages, shared notes) where prompt injection could
+    //      author an exfiltrating app.
+    // At that point proxyFetch + chatAI become a data-exfiltration path.
     controller.addJavaScriptHandler(
       handlerName: 'proxyFetch',
       callback: (args) async {

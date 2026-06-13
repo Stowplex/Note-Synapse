@@ -24,7 +24,7 @@
         android:label="Note Synapse"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
-        android:usesCleartextTraffic="true">
+        android:allowBackup="false">
         <!-- GPU compute libraries for flutter_gemma local model inference -->
 
         <!-- required=false: app still installs on devices without these libs -->

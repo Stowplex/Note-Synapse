@@ -122,9 +122,9 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
           .where((app) => app.uuid == appData['uuid'])
           .firstOrNull;
 
-      print('DEBUG: Found ${existingApps.length} existing apps');
-      print('DEBUG: Looking for UUID: ${appData['uuid']}');
-      print('DEBUG: Existing app found: ${existingApp != null}');
+      LoggerService.debug('Found ${existingApps.length} existing apps');
+      LoggerService.debug('Looking for UUID: ${appData['uuid']}');
+      LoggerService.debug('Existing app found: ${existingApp != null}');
 
       if (existingApp != null) {
         setState(() {
@@ -148,8 +148,8 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
         await _createNewApp(appData, databaseService);
       }
 
-      print(
-        'DEBUG: After app creation, _importedApp is: ${_importedApp != null}',
+      LoggerService.debug(
+        'After app creation, _importedApp is: ${_importedApp != null}',
       );
 
       if (_importedApp != null) {
@@ -324,13 +324,13 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
     Map<String, dynamic> appData,
     DatabaseService databaseService,
   ) async {
-    print('DEBUG: _createNewApp called');
+    LoggerService.debug('_createNewApp called');
     final appId = DateTime.now().millisecondsSinceEpoch.toString();
     final now = DateTime.now();
 
     // Decode base64 code
     final decodedCode = utf8.decode(base64Decode(appData['code']));
-    print('DEBUG: Decoded code length: ${decodedCode.length}');
+    LoggerService.debug('Decoded code length: ${decodedCode.length}');
 
     final userApp = UserApp(
       id: appId,
@@ -368,8 +368,8 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
     setState(() {
       _importedApp = updatedApp;
     });
-    print(
-      'DEBUG: _createNewApp completed, _importedApp set to: ${_importedApp?.name}',
+    LoggerService.debug(
+      '_createNewApp completed, _importedApp set to: ${_importedApp?.name}',
     );
   }
 
@@ -378,13 +378,15 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
     Map<String, dynamic> appData,
     DatabaseService databaseService,
   ) async {
-    print('DEBUG: _createNewRevision called for app: ${existingApp.name}');
+    LoggerService.debug(
+      '_createNewRevision called for app: ${existingApp.name}',
+    );
     // Get next revision number
     final nextRevisionNumber = await databaseService.getNextRevisionNumber(
       existingApp.id,
     );
     final now = DateTime.now();
-    print('DEBUG: Next revision number: $nextRevisionNumber');
+    LoggerService.debug('Next revision number: $nextRevisionNumber');
 
     // Decode base64 code
     final decodedCode = utf8.decode(base64Decode(appData['code']));
@@ -414,8 +416,8 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
     setState(() {
       _importedApp = updatedApp;
     });
-    print(
-      'DEBUG: _createNewRevision completed, _importedApp set to: ${_importedApp?.name}',
+    LoggerService.debug(
+      '_createNewRevision completed, _importedApp set to: ${_importedApp?.name}',
     );
   }
 

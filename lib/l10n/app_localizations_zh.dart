@@ -122,22 +122,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get findingMaxWordsDescription => '每个发现的要点详情的最大字数。';
 
   @override
-  String get maxTurns => 'Max Turns';
+  String get maxTurns => '最大轮次';
 
   @override
-  String get maxTurnsDescription =>
-      'Maximum number of iterations allowed per task.';
+  String get maxTurnsDescription => '每个任务允许的最大迭代次数。';
 
   @override
-  String get turnIncrement => 'Turn Increment';
+  String get turnIncrement => '轮次增量';
 
   @override
-  String get turnIncrementDescription =>
-      'Number of turns to add when resuming a paused task.';
+  String get turnIncrementDescription => '恢复暂停的任务时增加的轮次数。';
 
   @override
   String turnsValue(Object count) {
-    return '$count turns';
+    return '$count 轮';
   }
 
   @override
@@ -2450,7 +2448,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get baseUrlHelperText => '如需要，请包含认证查询参数（例如：Smithery）';
 
   @override
-  String get builtInTools => 'Built-in Tools';
+  String get builtInTools => '内置工具';
 
   @override
   String get transportType => '传输类型';
@@ -2591,22 +2589,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bookmarkPage => '书签此页';
 
   @override
-  String get page => 'Page';
+  String get page => '页';
 
   @override
-  String get removeBookmark => 'Remove Bookmark';
+  String get removeBookmark => '移除书签';
 
   @override
   String get bookmarks => '书签';
 
   @override
-  String get addBookmark => 'Add Bookmark';
+  String get addBookmark => '添加书签';
 
   @override
-  String get editBookmark => 'Edit Bookmark';
+  String get editBookmark => '编辑书签';
 
   @override
-  String get bookmarkAnnotationHint => 'Enter annotation (max 200 chars)';
+  String get bookmarkAnnotationHint => '输入注释（最多 200 个字符）';
 
   @override
   String get noBookmarksYet => '暂无书签';
@@ -2719,16 +2717,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deselectAll => '取消全选';
 
   @override
-  String get noteType => 'Note Type';
+  String get noteType => '笔记类型';
 
   @override
-  String get excludeTags => 'Exclude Tags';
+  String get excludeTags => '排除标签';
 
   @override
-  String get excludeTagsHint => 'Select tags to exclude';
+  String get excludeTagsHint => '选择要排除的标签';
 
   @override
-  String get selectTagsToExclude => 'Select Tags to Exclude';
+  String get selectTagsToExclude => '选择要排除的标签';
 
   @override
   String toolsFor(Object name) {
@@ -4168,41 +4166,41 @@ class AppLocalizationsZh extends AppLocalizations {
   String get taskRescheduled => '任务已重新安排';
 
   @override
-  String get recoveryManager => 'Recovery Manager';
+  String get recoveryManager => '恢复管理器';
 
   @override
-  String get backupAndRestore => 'Backup & Restore';
+  String get backupAndRestore => '备份与恢复';
 
   @override
-  String get databaseNotConnected => 'Database not connected';
+  String get databaseNotConnected => '数据库未连接';
 
   @override
-  String get fileUsageUnavailable => 'File usage status unavailable';
+  String get fileUsageUnavailable => '文件使用状态不可用';
 
   @override
-  String get fileUsageDetails => 'File Usage Details';
+  String get fileUsageDetails => '文件使用详情';
 
   @override
-  String get noReferencesFound => 'No references found in database';
+  String get noReferencesFound => '数据库中未找到引用';
 
   @override
   String usedByNotes(int count) {
-    return 'Used by $count note(s)';
+    return '被 $count 条笔记使用';
   }
 
   @override
   String usedByConversations(int count) {
-    return 'Used in $count conversation message(s)';
+    return '用于 $count 条对话消息';
   }
 
   @override
-  String get noteNoLongerExists => 'Note no longer exists';
+  String get noteNoLongerExists => '笔记已不存在';
 
   @override
-  String get messageNoLongerExists => 'Message no longer exists';
+  String get messageNoLongerExists => '消息已不存在';
 
   @override
-  String get showDetails => 'Show Details';
+  String get showDetails => '显示详情';
 
   @override
   String get saveFindings => '保存发现';
@@ -4322,10 +4320,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get forceRefetchImages => 'Force Refetch Images';
+  String get forceRefetchImages => '强制重新获取图片';
 
   @override
-  String get fetchingImage => 'Fetching image...';
+  String get fetchingImage => '正在获取图片...';
 
   @override
   String get localModelDescription => '本地AI模型，无需API密钥';

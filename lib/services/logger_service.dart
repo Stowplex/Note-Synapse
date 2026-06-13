@@ -133,6 +133,41 @@ class LoggerService {
     }
   }
 
+  /// Header names whose values must never appear in logs or exports. Matched
+  /// case-insensitively. Covers the common ways AI providers carry credentials
+  /// (bearer tokens, provider-specific API-key headers) plus session cookies.
+  static const Set<String> _sensitiveHeaderNames = {
+    'authorization',
+    'x-api-key',
+    'api-key',
+    'x-goog-api-key',
+    'x-go-api-key',
+    'openai-api-key',
+    'anthropic-api-key',
+    'cookie',
+    'set-cookie',
+    'proxy-authorization',
+  };
+
+  /// Returns a copy of [headers] with sensitive values replaced by `***`.
+  static Map<String, String> _redactHeaders(Map<String, String> headers) {
+    return headers.map((key, value) {
+      if (_sensitiveHeaderNames.contains(key.toLowerCase())) {
+        return MapEntry(key, '***REDACTED***');
+      }
+      return MapEntry(key, value);
+    });
+  }
+
+  /// Strips query parameters from an endpoint URL, since some providers (e.g.
+  /// Gemini) pass the API key as `?key=...`. Non-URL strings are returned as-is.
+  static String _redactEndpoint(String endpoint) {
+    if (endpoint.isEmpty) return endpoint;
+    final uri = Uri.tryParse(endpoint);
+    if (uri == null || uri.query.isEmpty) return endpoint;
+    return uri.replace(query: '').toString();
+  }
+
   // Specialized logging for AI requests and responses
   static void logAiRequest({
     required String endpoint,
@@ -143,13 +178,15 @@ class LoggerService {
     final requestIdStr =
         requestId ?? DateTime.now().millisecondsSinceEpoch.toString();
     final timestamp = DateTime.now();
+    final safeEndpoint = _redactEndpoint(endpoint);
+    final safeHeaders = _redactHeaders(headers);
 
     if (kDebugMode) {
       _logger.d(
         '🤖 AI REQUEST [$requestIdStr]',
         error: {
-          'endpoint': endpoint,
-          'headers': headers,
+          'endpoint': safeEndpoint,
+          'headers': safeHeaders,
           'body': requestBody,
           'timestamp': timestamp.toIso8601String(),
         },
@@ -161,8 +198,8 @@ class LoggerService {
       AiLogEntry(
         id: requestIdStr,
         type: 'request',
-        endpoint: endpoint,
-        data: {'headers': headers, 'body': requestBody},
+        endpoint: safeEndpoint,
+        data: {'headers': safeHeaders, 'body': requestBody},
         timestamp: timestamp,
       ),
     );
@@ -181,13 +218,14 @@ class LoggerService {
         ? ' (${duration.inMilliseconds}ms)'
         : '';
     final timestamp = DateTime.now();
+    final safeHeaders = _redactHeaders(headers);
 
     if (kDebugMode) {
       _logger.d(
         '🤖 AI RESPONSE [$requestIdStr]$durationStr',
         error: {
           'statusCode': statusCode,
-          'headers': headers,
+          'headers': safeHeaders,
           'body': responseBody,
           'timestamp': timestamp.toIso8601String(),
         },
@@ -202,7 +240,7 @@ class LoggerService {
         endpoint: '', // Will be filled by matching request if available
         data: {
           'statusCode': statusCode,
-          'headers': headers,
+          'headers': safeHeaders,
           'body': responseBody,
           'duration': duration?.inMilliseconds,
         },
@@ -223,11 +261,12 @@ class LoggerService {
         ? ' (${duration.inMilliseconds}ms)'
         : '';
     final timestamp = DateTime.now();
+    final safeEndpoint = _redactEndpoint(endpoint);
 
     _logger.e(
       '🤖 AI ERROR [$requestIdStr]$durationStr',
       error: {
-        'endpoint': endpoint,
+        'endpoint': safeEndpoint,
         'error': error,
         'timestamp': timestamp.toIso8601String(),
       },
@@ -238,7 +277,7 @@ class LoggerService {
       AiLogEntry(
         id: requestIdStr,
         type: 'error',
-        endpoint: endpoint,
+        endpoint: safeEndpoint,
         data: {'error': error, 'duration': duration?.inMilliseconds},
         timestamp: timestamp,
       ),
@@ -260,7 +299,7 @@ class LoggerService {
       AiLogEntry(
         id: requestIdStr,
         type: 'console',
-        endpoint: endpoint,
+        endpoint: _redactEndpoint(endpoint),
         data: {
           'consoleOutput': consoleOutput,
           'duration': duration?.inMilliseconds,

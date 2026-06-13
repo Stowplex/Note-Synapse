@@ -22,7 +22,6 @@ void main() {
         filename: '',
         modelType: gemma.ModelType.gemmaIt,
         fileType: gemma.ModelFileType.litertlm,
-        defaultBackend: {},
         supportedBackends: {},
         supportsVision: false,
         supportsThinking: false,

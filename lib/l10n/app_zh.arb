@@ -69,7 +69,7 @@
   "geminiApiKey": "Gemini API密钥",
   "continueButton": "继续",
   "apiKeySecurityNote": "您的API密钥安全存储在您的设备上，从不共享。",
-  "pleaseEnterApiKey": "请输入您的API密钥",
+  "pleaseEnterApiKey": "请输入API密钥",
   "failedToSaveApiKey": "保存API密钥失败：{error}",
   "notes": "笔记",
   "calendar": "日历",
@@ -113,8 +113,8 @@
   "recordingTapStop": "录音中... 完成后点击停止",
   "recordingWillContinue": "录音将持续到您点击\"停止录音\"为止",
   "startRecordingVoiceNote": "开始录制您的语音笔记",
-  "startRecording": "开始录音",
-  "stopRecording": "停止录音",
+  "startRecording": "开始录制",
+  "stopRecording": "停止录制",
   "language": "语言",
   "languageSubtitle": "选择您的首选语言",
   "english": "English",
@@ -138,9 +138,15 @@
   "retryPattern": "重试间隔：{base}秒 → {second}秒 → {third}秒",
   "@retryPattern": {
     "placeholders": {
-      "base": {"type": "String"},
-      "second": {"type": "String"},
-      "third": {"type": "String"}
+      "base": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      },
+      "third": {
+        "type": "String"
+      }
     }
   },
   "networkSettingsUpdated": "网络设置已更新",
@@ -151,7 +157,7 @@
   "openAIAction": "打开AI操作",
   "exitMultiSelectMode": "退出多选模式",
   "searchNotes": "搜索笔记...",
-  "allNotes": "所有",
+  "allNotes": "所有笔记",
   "defaultNotes": "默认",
   "pinnedNotes": "置顶",
   "archivedNotes": "归档",
@@ -232,7 +238,7 @@
   "tags": "标签",
   "addNewTag": "添加新标签",
   "extractContent": "提取内容",
-  "extractingContent": "正在提取内容...",
+  "extractingContent": "提取内容中...",
   "contentExtracted": "内容提取成功！",
   "errorExtractingContent": "提取内容时出错：{error}",
   "noApiKeyForExtraction": "内容提取需要API密钥",
@@ -246,7 +252,7 @@
   "unknown": "未知",
   "noNotesAvailable": "没有可用的笔记",
   "errorLoadingNotes": "加载笔记时出错：{error}",
-  "noteCreatedSuccessfully": "笔记创建成功！",
+  "noteCreatedSuccessfully": "笔记\"{title}\"创建成功",
   "errorCreatingNote": "创建笔记时出错：{error}",
   "noteUpdatedSuccessfully": "笔记更新成功！",
   "errorUpdatingNote": "更新笔记时出错：{error}",
@@ -291,8 +297,6 @@
   "errorAddingRelationship": "添加关系时出错：{error}",
   "errorRemovingRelationship": "移除关系时出错：{error}",
   "audioRecording": "音频录制",
-  "startRecording": "开始录制",
-  "stopRecording": "停止录制",
   "playAudio": "播放音频",
   "pauseAudio": "暂停音频",
   "recordingInProgress": "正在录制...",
@@ -301,7 +305,7 @@
   "errorPlayingAudio": "播放音频时出错：{error}",
   "noAudioAttachments": "没有音频附件",
   "audioAttachment": "音频附件",
-  "duration": "时长",
+  "duration": "持续时间",
   "position": "位置",
   "autoSave": "自动保存",
   "saved": "已保存",
@@ -318,8 +322,6 @@
   "subNote": "子笔记",
   "addTag": "添加标签",
   "noTagsYet": "暂无标签。点击\"添加标签\"来添加一些。",
-  "tags": "标签",
-  "linkedNotes": "关联笔记",
   "addLink": "添加链接",
   "insertAttachmentLink": "插入附件链接",
   "insertToolLink": "插入工具链接",
@@ -336,31 +338,24 @@
     }
   },
   "noSpecificPage": "不指定页面",
-  "aiActions": "AI操作",
   "attach": "附加",
   "recordAudio": "录制音频",
   "status": "状态",
   "toDo": "待办",
-  "inProgress": "进行中",
-  "completed": "已完成",
   "cancelled": "已取消",
   "scheduled": "计划",
   "content": "内容",
   "checkbox": "复选框",
-  "title": "标题",
   "bold": "粗体",
   "created": "创建",
   "updated": "更新",
   "markComplete": "标记完成",
   "markIncomplete": "标记未完成",
   "noLinkedNotesYet": "暂无关联笔记",
-  "allNotes": "所有笔记",
   "tasks": "任务",
-  "notes": "笔记",
   "month": "月",
   "week": "周",
   "twoWeeks": "2周",
-  "today": "今天",
   "january": "1月",
   "february": "2月",
   "march": "3月",
@@ -444,7 +439,7 @@
       }
     }
   },
-  "attachmentMissing": "附件缺失",
+  "attachmentMissing": "找不到附件。",
   "attachmentUnavailable": "附件不可用",
   "pdfPreviewUnavailable": "暂不支持预览 PDF，请通过已保存的附件查看。",
   "selectFileLocation": "选择文件位置",
@@ -464,7 +459,6 @@
   "includeTags": "包含标签",
   "includeTagsHint": "选择要筛选的标签",
   "includeArchivedNotes": "包含已归档笔记",
-  "update": "更新",
   "create": "创建",
   "selectTags": "选择标签",
   "apply": "应用",
@@ -560,7 +554,7 @@
   "stepHint": "输入步骤描述",
   "createApp": "创建应用",
   "creatingApp": "正在创建应用...",
-  "appCreatedSuccessfully": "应用创建成功！",
+  "appCreatedSuccessfully": "应用创建成功",
   "appCreationFailed": "应用创建失败",
   "appCreated": "已创建",
   "appCantCreate": "无法创建",
@@ -568,7 +562,6 @@
   "toApp": "到应用",
   "console": "控制台",
   "edit": "编辑",
-  "delete": "删除",
   "confirmDeleteApp": "您确定要删除此应用吗？",
   "appDeletedSuccessfully": "应用删除成功！",
   "errorDeletingApp": "删除应用时出错：{error}",
@@ -587,7 +580,6 @@
   "consoleOutput": "控制台输出",
   "noConsoleOutput": "暂无控制台输出",
   "clearConsole": "清除控制台",
-  "copyToClipboard": "复制到剪贴板",
   "consoleOutputCopied": "控制台输出已复制到剪贴板",
   "appState": "应用状态",
   "saveState": "保存状态",
@@ -601,7 +593,6 @@
   "stateCleared": "状态清除成功！",
   "noState": "无状态",
   "appGenerationPrompt": "根据以下要求创建单页自包含HTML应用程序：\n\n应用名称：{name}\n描述：{description}\n步骤：{steps}\n\n要求：\n1. HTML必须完全自包含，嵌入CSS和JavaScript\n2. 不要引用任何外部资源\n3. 在注释中记录目的、要求和方法\n4. 使用以下API与Flutter应用交互：\n   - Synapse.runQuery(sql: string) - 查询应用数据库\n   - Synapse.storeAppState(state) - 存储JSON序列化状态\n   - Synapse.loadAppState() - 加载保存的状态\n   - Synapse.chatAI(prompt) - 发送提示到AI并获取响应\n\n现在生成完整的HTML应用程序。",
-  "editApp": "编辑应用",
   "deleteApp": "删除应用",
   "aiDebugOverlay": "AI调试覆盖层",
   "aiDebugOverlaySubtitle": "查看AI请求/响应日志",
@@ -615,7 +606,6 @@
   "body": "请求体",
   "statusCode": "状态码",
   "error": "错误",
-  "duration": "持续时间",
   "importApp": "导入应用",
   "viewApp": "查看应用",
   "exportApp": "导出应用",
@@ -649,7 +639,6 @@
   "yamlFileReadSuccessfully": "YAML 文件读取成功",
   "yamlStructureValidated": "YAML 结构验证通过",
   "appDataExtracted": "应用数据已提取",
-  "appCreatedSuccessfully": "应用创建成功",
   "processingLibrary": "处理库：{libraryName}",
   "downloadingLibrary": "下载库：{libraryName}...",
   "downloadingDependency": "下载中：{fileName}...",
@@ -676,7 +665,6 @@
   "libraryUsageHint": "描述如何使用此库",
   "libraryLink": "库链接",
   "libraryLinkHint": "输入JavaScript库URL",
-  "addLink": "添加链接",
   "removeLibrary": "删除库",
   "removeLink": "删除链接",
   "configureModel": "配置模型",
@@ -726,9 +714,6 @@
   "audioProcessingDescription": "可以转录和分析音频",
   "videoProcessing": "视频处理",
   "videoProcessingDescription": "可以分析视频内容",
-  "continueButton": "继续",
-  "getApiKey": "获取API密钥",
-  "pleaseEnterApiKey": "请输入API密钥",
   "geminiModelDescription": "Google最先进的模型，具有完整的多模态功能",
   "openaiCompatibleModelDescription": "兼容OpenAI API端点，具有可配置功能",
   "geminiModelDescriptionDetailed": "Google最先进的模型，具有完整的多模态功能，包括文档理解。",
@@ -764,7 +749,6 @@
   "exportLogs": "导出日志",
   "previousExports": "之前的导出",
   "saveAgain": "再次保存",
-  "delete": "删除",
   "backupAllNotes": "备份所有笔记",
   "backupAllNotesDescription": "创建所有笔记和附件的完整备份。备份将保存为可下载的zip文件。",
   "creatingBackup": "正在创建备份...",
@@ -790,7 +774,6 @@
   "errorDeletingBackup": "删除备份时出错：{error}",
   "backupFileNotFound": "未找到备份文件：{name}",
   "errorSavingBackupAgain": "再次保存备份时出错：{error}",
-
   "cloneApp": "复制应用",
   "appClonedSuccessfully": "复制成功!",
   "errorCloningApp": "复制出错: {error}",
@@ -799,7 +782,6 @@
   "errorLoadingEndpoints": "加载端点时出错：{error}",
   "addMcpEndpoint": "添加MCP端点",
   "addMcpEndpointTitle": "添加MCP端点",
-  "name": "名称",
   "nameHint": "我的MCP服务器",
   "baseUrl": "基础URL",
   "baseUrlHint": "https://api.example.com 或 https://server.smithery.ai/@user/server/mcp?api_key=xxx",
@@ -842,7 +824,6 @@
   "resetOnboardingTitle": "重置引导标志",
   "resetOnboardingSuccess": "引导页标志已重置",
   "dependencyLicenses": "依赖库许可证",
-
   "deletedEndpoint": "已删除端点：{name}",
   "errorDeletingEndpoint": "删除端点时出错：{error}",
   "refreshedToolsFor": "已刷新{name}的工具",
@@ -868,7 +849,7 @@
   "selectView": "选择视图",
   "switchToCalendar": "切换到日历",
   "rawDataManager": "原始数据管理",
-  "rawDataManagerSubtitle": "管理原始数据库和文件系统",
+  "rawDataManagerSubtitle": "用于文件和数据库管理的高级工具",
   "files": "文件",
   "database": "数据库",
   "tables": "表",
@@ -926,7 +907,6 @@
   "viewTools": "查看工具",
   "noMcpEndpointsConfigured": "未配置MCP端点",
   "clickAddMcpEndpointToGetStarted": "点击\"添加MCP端点\"开始",
-  "updated": "更新",
   "noteActionApp": "笔记操作应用",
   "noteActionApps": "笔记操作应用",
   "noteActionAppSubtitle": "此类应用将专门对预选笔记进行操作",
@@ -972,7 +952,6 @@
   "importLogs": "导入日志",
   "selectBackupFile": "选择备份文件",
   "selectBackupFileDescription": "选择要恢复的备份zip文件",
-  "importCompletedSuccessfully": "导入成功完成！",
   "importFailed": "导入失败：{error}",
   "invalidBackupFile": "无效的备份文件格式",
   "backupVersionTooNew": "备份来自较新版本的应用。请先更新应用。",
@@ -998,7 +977,7 @@
   "backupRestored": "备份恢复成功！",
   "errorRestoringBackup": "恢复备份时出错：{error}",
   "conversation": "对话",
-    "aiConversation": "AI对话",
+  "aiConversation": "AI对话",
   "aiConversationDescription": "与AI就您的笔记开始对话",
   "startConversation": "开始对话",
   "conversationTree": "对话树",
@@ -1021,10 +1000,8 @@
   "expand": "展开",
   "collapse": "收起",
   "annotate": "标注",
-  "askAiHint": "向 AI 询问这条笔记...",
-  "send": "发送",
+  "askAiHint": "向 AI 询问有关数据库架构或错误的信息...",
   "startConversationHint": "先向 AI 询问关于你的笔记。",
-  "attachmentMissing": "找不到附件。",
   "unsupportedAttachment": "不支持的附件类型（{type}）。",
   "@unsupportedAttachment": {
     "placeholders": {
@@ -1044,7 +1021,6 @@
     }
   },
   "cancellingRequest": "正在取消请求...",
-  "attachFiles": "附加文件",
   "takePhotoAttachment": "拍照",
   "mcpTools": "MCP工具",
   "mcpAndLocalTools": "MCP和本地工具",
@@ -1103,7 +1079,6 @@
   "selectInteractionToViewDetails": "选择交互以查看详细信息",
   "deleteInteraction": "删除交互",
   "deleteInteractionConfirm": "您确定要删除此交互及其所有后代吗？此操作无法撤消。",
-  "delete": "删除",
   "interactionDeletedSuccessfully": "交互删除成功",
   "errorDeletingInteraction": "删除交互时出错：{error}",
   "forkFromHere": "从这里分叉",
@@ -1130,24 +1105,20 @@
   "noteTitle": "笔记标题",
   "enterNoteTitlePrompt": "输入新笔记的标题：",
   "noteTitleHint": "笔记标题",
-  "createNote": "创建笔记",
-  "noteCreatedSuccessfully": "笔记\"{title}\"创建成功",
   "multipleNotesCreatedSuccessfully": "{count}个笔记创建成功",
-  "errorCreatingNote": "创建笔记时出错：{error}",
   "aiNoteCreator": "AI笔记创建器",
   "aiNoteCreatorInstructions": "AI将使用对话内容以及您在下面提供的任何额外上下文，根据您的提示创建笔记。",
   "prompt": "提示",
   "promptHint": "描述您希望AI执行的操作...",
-      "promptTip": "提示：默认的\"总结\"将创建简明摘要。您可以将其更改为任何指令，如\"提取行动项\"、\"创建详细大纲\"等。",
-      "additionalContextNotes": "额外上下文笔记（{count}）",
-      "@additionalContextNotes": {
-        "placeholders": {
-          "count": {
-            "type": "num"
-          }
-        }
-      },
-      "addNotes": "添加笔记",
+  "promptTip": "提示：默认的\"总结\"将创建简明摘要。您可以将其更改为任何指令，如\"提取行动项\"、\"创建详细大纲\"等。",
+  "additionalContextNotes": "额外上下文笔记（{count}）",
+  "@additionalContextNotes": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
   "noAdditionalNotesSelected": "未选择额外笔记。AI将仅使用对话内容。",
   "proceed": "继续",
   "pleaseEnterPrompt": "请输入提示",
@@ -1163,7 +1134,6 @@
   "whatWouldYouLikeToDo": "您想要做什么？",
   "createNewNoteWithThisContent": "创建包含此内容的新笔记",
   "addThisContentToExistingNote": "将此内容添加到现有笔记",
-  "searchNotes": "搜索笔记...",
   "selectNote": "选择笔记...",
   "showingNotes": "显示 {filteredCount} / {totalCount} 条笔记",
   "@showingNotes": {
@@ -1178,11 +1148,8 @@
   },
   "noteDetails": "笔记详情",
   "contentPreview": "内容预览",
-  "createNote": "创建笔记",
-  "appendToNote": "追加到笔记",
   "selectedTags": "已选标签：",
   "availableTags": "可用标签：",
-  "urlDetected": "检测到URL",
   "webContentExtractionNotSupportedLinux": "Linux不支持网页内容提取。",
   "pleaseUseOtherPlatformsForWebExtraction": "请使用Android、iOS或Web版本来提取网页内容。",
   "shareUrlChoiceTitle": "选择如何处理此链接。",
@@ -1215,7 +1182,6 @@
   "extractingWithAi": "AI提取中...",
   "asIs": "原样",
   "loadingWebPage": "加载网页中...",
-  "extractingContent": "提取内容中...",
   "imageDetected": "检测到图片",
   "extractImageContent": "提取图片内容",
   "extractingImageContent": "提取中...",
@@ -1223,10 +1189,6 @@
   "extractPdfContent": "提取PDF内容",
   "extractingPdfContent": "提取中...",
   "sharedImage": "共享图片",
-  "title": "标题",
-  "content": "内容",
-  "attachments": "附件",
-  "tags": "标签",
   "pleaseSelectNoteToAppend": "请选择要追加的笔记",
   "contentAppendedSuccessfully": "内容追加成功！",
   "extractingWebContent": "提取网页内容",
@@ -1286,309 +1248,303 @@
     }
   },
   "unknownImage": "未知图片",
-      "unknownPdf": "未知PDF",
-    "newConversation": "新对话",
-      "conversations": "对话",
-      "oneHourAgo": "1小时前",
-      "twelveHoursAgo": "12小时前",
-      "oneDayAgo": "1天前",
-      "threeDaysAgo": "3天前",
-      "sevenDaysAgo": "7天前",
-      "fifteenDaysAgo": "15天前",
-      "oneMonthAgo": "1个月前",
-      "sixMonthsAgo": "6个月前",
-      "allTime": "所有时间",
-      "custom": "自定义",
-      "first": "第一条",
-      "last": "最后一条",
-      "deleteInteractionWhatToDelete": "您想要删除什么？",
-      "deleteOnlyNodesInFilter": "仅删除此筛选器中的节点",
-      "deleteNodeAndDescendants": "删除此节点及其所有后代",
-      "tokenTab": "令牌",
-      "oauthTab": "OAuth",
-      "autoConfigure": "自动配置",
-      "login": "登录",
-      "authorizationEndpoint": "授权端点",
-      "tokenEndpoint": "令牌端点",
-      "clientId": "客户端ID",
-      "clientSecretOptionalForPkce": "客户端密钥（PKCE可选）",
-      "scope": "作用域",
-      "usePkceNoClientSecret": "使用PKCE（无需客户端密钥）",
-      "oauthDiscoveryMetadataUrlOptional": "OAuth发现页面：元数据URL（可选）",
-      "discover": "发现",
-      "registerClient": "注册客户端",
-      "register": "注册",
-      "editMcpEndpoint": "编辑MCP端点",
-      "metadataUrlOptional": "元数据URL（可选）",
-      "metadataUrlOptionalHint": "留空以使用RFC 9728自动检测",
-      "oauthDiscovery": "OAuth发现",
-      "openInTree": "在树状图中打开",
-      "addConversationDialogTitle": "添加对话",
-      "addConversationDialogMessage": "您想如何创建此对话？",
-      "addDirectly": "直接添加",
-      "addDirectlyDescription": "直接创建对话，将所选节点作为上下文",
-      "addWithAIProcessing": "使用AI处理后添加",
-      "addWithAIProcessingDescription": "首先使用AI处理内容（例如总结），然后创建对话",
-      "conversationTitle": "对话标题",
-      "enterConversationTitlePrompt": "输入新对话的标题：",
-      "conversationTitleHint": "对话标题",
-      "createConversation": "创建对话",
-      "conversationCreatedSuccessfully": "对话\"{title}\"创建成功",
-      "@conversationCreatedSuccessfully": {
-        "placeholders": {
-          "title": {
-            "type": "String"
-          }
-        }
+  "unknownPdf": "未知PDF",
+  "newConversation": "新对话",
+  "oneHourAgo": "1小时前",
+  "twelveHoursAgo": "12小时前",
+  "oneDayAgo": "1天前",
+  "threeDaysAgo": "3天前",
+  "sevenDaysAgo": "7天前",
+  "fifteenDaysAgo": "15天前",
+  "oneMonthAgo": "1个月前",
+  "sixMonthsAgo": "6个月前",
+  "allTime": "所有时间",
+  "custom": "自定义",
+  "first": "第一条",
+  "last": "最后一条",
+  "deleteInteractionWhatToDelete": "您想要删除什么？",
+  "deleteOnlyNodesInFilter": "仅删除此筛选器中的节点",
+  "deleteNodeAndDescendants": "删除此节点及其所有后代",
+  "tokenTab": "令牌",
+  "oauthTab": "OAuth",
+  "autoConfigure": "自动配置",
+  "login": "登录",
+  "authorizationEndpoint": "授权端点",
+  "tokenEndpoint": "令牌端点",
+  "clientId": "客户端ID",
+  "clientSecretOptionalForPkce": "客户端密钥（PKCE可选）",
+  "scope": "作用域",
+  "usePkceNoClientSecret": "使用PKCE（无需客户端密钥）",
+  "oauthDiscoveryMetadataUrlOptional": "OAuth发现页面：元数据URL（可选）",
+  "discover": "发现",
+  "registerClient": "注册客户端",
+  "register": "注册",
+  "editMcpEndpoint": "编辑MCP端点",
+  "metadataUrlOptional": "元数据URL（可选）",
+  "metadataUrlOptionalHint": "留空以使用RFC 9728自动检测",
+  "oauthDiscovery": "OAuth发现",
+  "openInTree": "在树状图中打开",
+  "addConversationDialogTitle": "添加对话",
+  "addConversationDialogMessage": "您想如何创建此对话？",
+  "addDirectly": "直接添加",
+  "addDirectlyDescription": "直接创建对话，将所选节点作为上下文",
+  "addWithAIProcessing": "使用AI处理后添加",
+  "addWithAIProcessingDescription": "首先使用AI处理内容（例如总结），然后创建对话",
+  "conversationTitle": "对话标题",
+  "enterConversationTitlePrompt": "输入新对话的标题：",
+  "conversationTitleHint": "对话标题",
+  "createConversation": "创建对话",
+  "conversationCreatedSuccessfully": "对话\"{title}\"创建成功",
+  "@conversationCreatedSuccessfully": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "errorCreatingConversation": "创建对话时出错：{error}",
+  "@errorCreatingConversation": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "aiConversationCreator": "AI对话创建器",
+  "aiConversationCreatorInstructions": "AI将根据您的提示处理对话内容，以及您在下文提供的任何其他上下文，以创建对话。",
+  "selectRelationshipType": "选择关系类型",
+  "selectRelationshipTypeForNotes": "为{noteCount}条笔记选择关系类型：",
+  "@selectRelationshipTypeForNotes": {
+    "placeholders": {
+      "noteCount": {
+        "type": "int"
+      }
+    }
+  },
+  "relationshipType": "关系类型",
+  "linkNotes": "链接{noteCount}条笔记",
+  "@linkNotes": {
+    "placeholders": {
+      "noteCount": {
+        "type": "int"
+      }
+    }
+  },
+  "customRelationshipType": "自定义关系类型",
+  "enterCustomRelationshipType": "输入自定义关系类型",
+  "customEllipsis": "自定义...",
+  "confirmRemoveLink": "您确定要移除此链接吗？",
+  "remove": "移除",
+  "linkNotesDialogTitle": "链接笔记",
+  "link": "链接",
+  "linkNoteTo": "将 \"{noteTitle}\" 链接到：",
+  "@linkNoteTo": {
+    "placeholders": {
+      "noteTitle": {
+        "type": "String"
+      }
+    }
+  },
+  "audioTranscription": "音频转录",
+  "transcribingAudio": "正在转录音频...",
+  "transcriptionAddedToNote": "转录已添加到笔记",
+  "errorTranscribingAudio": "转录音频时出错：{error}",
+  "@errorTranscribingAudio": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorAddingTranscription": "添加转录时出错：{error}",
+  "@errorAddingTranscription": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "newNoteFromShareCreated": "分享的笔记创建成功！",
+  "mediaDownloadsHeader": "媒体附件",
+  "mediaDownloadsDescription": "选择要下载到本地的图片，以便离线使用。",
+  "clearAll": "全不选",
+  "noRemoteImagesDetected": "此内容中没有检测到网络图片。",
+  "mediaPreviewLabel": "预览",
+  "imageUrlLabel": "图片地址",
+  "downloadToLocalLabel": "下载到本地？",
+  "mediaDownloadFailed": "未能下载{count, plural, one {# 张图片} other {# 张图片}}。",
+  "@mediaDownloadFailed": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "mediaDownloadNoneAvailable": "此笔记中没有网络图片。",
+  "mediaDownloadAlreadyCached": "所有网络图片已缓存到本地。",
+  "mediaDownloadSuccess": "已将{count, plural, one {# 张图片} other {# 张图片}}下载为附件。",
+  "@mediaDownloadSuccess": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "mediaDownloadPartial": "已下载{successCount, plural, one {# 张} other {# 张}}，失败{failureCount, plural, one {# 张} other {# 张}}。",
+  "@mediaDownloadPartial": {
+    "placeholders": {
+      "successCount": {
+        "type": "num"
       },
-      "errorCreatingConversation": "创建对话时出错：{error}",
-      "@errorCreatingConversation": {
-        "placeholders": {
-          "error": {
-            "type": "String"
-          }
-        }
+      "failureCount": {
+        "type": "num"
+      }
+    }
+  },
+  "mediaDownloadFailedGeneric": "下载图片失败：{error}",
+  "@mediaDownloadFailedGeneric": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "fetchRemoteImages": "抓取网络图片",
+  "gettingStarted": "入门指南",
+  "gettingStartedSubtitle": "安装用户手册、入门应用和入门技能",
+  "installUserManual": "安装用户手册",
+  "installUserManualSubtitle": "安装或更新用户手册笔记",
+  "installStarterApps": "安装入门应用",
+  "installStarterAppsSubtitle": "浏览并安装预配置的应用",
+  "userManualInfo": "用户手册信息",
+  "installed": "已安装",
+  "notInstalled": "未安装",
+  "currentVersion": "当前版本",
+  "latestVersion": "最新版本",
+  "lastUpdated": "最后更新",
+  "newVersionAvailable": "新版本可用！",
+  "updateUserManual": "更新用户手册",
+  "reinstallUserManual": "重新安装用户手册",
+  "installing": "安装中...",
+  "updateUserManualConfirm": "用户手册有新版本（{newVersion}）可用。您当前的版本是{oldVersion}。您想要更新吗？",
+  "@updateUserManualConfirm": {
+    "placeholders": {
+      "oldVersion": {
+        "type": "String"
       },
-      "aiConversationCreator": "AI对话创建器",
-      "aiConversationCreatorInstructions": "AI将根据您的提示处理对话内容，以及您在下文提供的任何其他上下文，以创建对话。",
-      "selectRelationshipType": "选择关系类型",
-      "selectRelationshipTypeForNotes": "为{noteCount}条笔记选择关系类型：",
-      "@selectRelationshipTypeForNotes": {
-        "placeholders": {
-          "noteCount": {
-            "type": "int"
-          }
-        }
+      "newVersion": {
+        "type": "String"
+      }
+    }
+  },
+  "userManualInstalledSuccessfully": "用户手册安装成功！",
+  "userManualUpdatedSuccessfully": "用户手册更新成功！",
+  "errorInstallingUserManual": "安装用户手册时出错：{error}",
+  "@errorInstallingUserManual": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "whatIsUserManual": "什么是用户手册？",
+  "userManualDescription": "用户手册是Note Synapse的综合指南。它包含详细的说明、提示和有效使用应用的最佳实践。",
+  "noStarterAppsAvailable": "没有可用的入门应用",
+  "noAppsSelected": "未选择任何应用",
+  "appsSelected": "已选择{count}个应用",
+  "@appsSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "proceedWithInstallation": "安装选中的应用",
+  "starterAppsInstalledSuccessfully": "{count}个应用安装成功！",
+  "@starterAppsInstalledSuccessfully": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "starterAppsInstallFailed": "{count}个应用安装失败",
+  "@starterAppsInstallFailed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "starterAppsPartialInstall": "成功安装{successCount}个应用，失败{failureCount}个应用",
+  "@starterAppsPartialInstall": {
+    "placeholders": {
+      "successCount": {
+        "type": "int"
       },
-      "relationshipType": "关系类型",
-      "linkNotes": "链接{noteCount}条笔记",
-      "@linkNotes": {
-        "placeholders": {
-          "noteCount": {
-            "type": "int"
-          }
-        }
-      },
-      "customRelationshipType": "自定义关系类型",
-      "enterCustomRelationshipType": "输入自定义关系类型",
-      "customEllipsis": "自定义...",
-      "confirmRemoveLink": "您确定要移除此链接吗？",
-      "remove": "移除",
-      "linkNotesDialogTitle": "链接笔记",
-      "link": "链接",
-      "linkNoteTo": "将 \"{noteTitle}\" 链接到：",
-      "@linkNoteTo": {
-        "placeholders": {
-          "noteTitle": {
-            "type": "String"
-          }
-        }
-      },
-      "audioTranscription": "音频转录",
-      "transcribingAudio": "正在转录音频...",
-      "transcriptionAddedToNote": "转录已添加到笔记",
-      "errorTranscribingAudio": "转录音频时出错：{error}",
-      "@errorTranscribingAudio": {
-        "placeholders": {
-          "error": {
-            "type": "String"
-          }
-        }
-      },
-      "errorAddingTranscription": "添加转录时出错：{error}",
-      "@errorAddingTranscription": {
-        "placeholders": {
-          "error": {
-            "type": "String"
-          }
-        }
-      },
-      "newNoteFromShareCreated": "分享的笔记创建成功！",
-      "mediaDownloadsHeader": "媒体附件",
-      "mediaDownloadsDescription": "选择要下载到本地的图片，以便离线使用。",
-      "selectAll": "全选",
-      "clearAll": "全不选",
-      "noRemoteImagesDetected": "此内容中没有检测到网络图片。",
-      "mediaPreviewLabel": "预览",
-      "imageUrlLabel": "图片地址",
-      "downloadToLocalLabel": "下载到本地？",
-      "mediaDownloadFailed": "未能下载{count, plural, one {# 张图片} other {# 张图片}}。",
-      "@mediaDownloadFailed": {
-        "placeholders": {
-          "count": {
-            "type": "num"
-          }
-        }
-      },
-      "mediaDownloadNoneAvailable": "此笔记中没有网络图片。",
-      "mediaDownloadAlreadyCached": "所有网络图片已缓存到本地。",
-      "mediaDownloadSuccess": "已将{count, plural, one {# 张图片} other {# 张图片}}下载为附件。",
-      "@mediaDownloadSuccess": {
-        "placeholders": {
-          "count": {
-            "type": "num"
-          }
-        }
-      },
-      "mediaDownloadPartial": "已下载{successCount, plural, one {# 张} other {# 张}}，失败{failureCount, plural, one {# 张} other {# 张}}。",
-      "@mediaDownloadPartial": {
-        "placeholders": {
-          "successCount": {
-            "type": "num"
-          },
-          "failureCount": {
-            "type": "num"
-          }
-        }
-      },
-      "mediaDownloadFailedGeneric": "下载图片失败：{error}",
-      "@mediaDownloadFailedGeneric": {
-        "placeholders": {
-          "error": {}
-        }
-      },
-      "fetchRemoteImages": "抓取网络图片",
-      "gettingStarted": "入门指南",
-      "gettingStartedSubtitle": "安装用户手册、入门应用和入门技能",
-      "installUserManual": "安装用户手册",
-      "installUserManualSubtitle": "安装或更新用户手册笔记",
-      "installStarterApps": "安装入门应用",
-      "installStarterAppsSubtitle": "浏览并安装预配置的应用",
-      "userManualInfo": "用户手册信息",
-      "status": "状态",
-      "installed": "已安装",
-      "notInstalled": "未安装",
-      "currentVersion": "当前版本",
-      "latestVersion": "最新版本",
-      "lastUpdated": "最后更新",
-      "newVersionAvailable": "新版本可用！",
-      "updateUserManual": "更新用户手册",
-      "reinstallUserManual": "重新安装用户手册",
-      "installing": "安装中...",
-      "updateUserManualConfirm": "用户手册有新版本（{newVersion}）可用。您当前的版本是{oldVersion}。您想要更新吗？",
-      "@updateUserManualConfirm": {
-        "placeholders": {
-          "oldVersion": {
-            "type": "String"
-          },
-          "newVersion": {
-            "type": "String"
-          }
-        }
-      },
-      "userManualInstalledSuccessfully": "用户手册安装成功！",
-      "userManualUpdatedSuccessfully": "用户手册更新成功！",
-      "errorInstallingUserManual": "安装用户手册时出错：{error}",
-      "@errorInstallingUserManual": {
-        "placeholders": {
-          "error": {
-            "type": "String"
-          }
-        }
-      },
-      "whatIsUserManual": "什么是用户手册？",
-      "userManualDescription": "用户手册是Note Synapse的综合指南。它包含详细的说明、提示和有效使用应用的最佳实践。",
-      "noStarterAppsAvailable": "没有可用的入门应用",
-      "noAppsSelected": "未选择任何应用",
-      "appsSelected": "已选择{count}个应用",
-      "@appsSelected": {
-        "placeholders": {
-          "count": {
-            "type": "int"
-          }
-        }
-      },
-      "deselectAll": "取消全选",
-      "proceedWithInstallation": "安装选中的应用",
-      "starterAppsInstalledSuccessfully": "{count}个应用安装成功！",
-      "@starterAppsInstalledSuccessfully": {
-        "placeholders": {
-          "count": {
-            "type": "int"
-          }
-        }
-      },
-      "starterAppsInstallFailed": "{count}个应用安装失败",
-      "@starterAppsInstallFailed": {
-        "placeholders": {
-          "count": {
-            "type": "int"
-          }
-        }
-      },
-      "starterAppsPartialInstall": "成功安装{successCount}个应用，失败{failureCount}个应用",
-      "@starterAppsPartialInstall": {
-        "placeholders": {
-          "successCount": {
-            "type": "int"
-          },
-          "failureCount": {
-            "type": "int"
-          }
-        }
-      },
-      "errorInstallingStarterApps": "安装入门应用时出错：{error}",
-      "@errorInstallingStarterApps": {
-        "placeholders": {
-          "error": {
-            "type": "String"
-          }
-        }
-      },
-      "installStarterSkills": "安装入门技能",
-      "installStarterSkillsSubtitle": "浏览内置技能并将其安装为透明的技能笔记",
-      "noStarterSkillsAvailable": "没有可用的入门技能",
-      "noStarterSkillsSelected": "未选择任何入门技能",
-      "installSelectedSkills": "安装选中的技能",
-      "starterSkillsInstalledSuccessfully": "{count}个技能安装成功！",
-      "@starterSkillsInstalledSuccessfully": {
-        "placeholders": {
-          "count": {
-            "type": "int"
-          }
-        }
-      },
-      "errorLoadingStarterSkills": "加载入门技能时出错：{error}",
-      "@errorLoadingStarterSkills": {
-        "placeholders": {
-          "error": {
-            "type": "String"
-          }
-        }
-      },
-      "errorInstallingStarterSkills": "安装入门技能时出错：{error}",
-      "@errorInstallingStarterSkills": {
-        "placeholders": {
-          "error": {
-            "type": "String"
-          }
-        }
-      },
-      "skillRefLabel": "skillRef：{ref}",
-      "@skillRefLabel": {
-        "placeholders": {
-          "ref": {
-            "type": "String"
-          }
-        }
-      },
-      "sourceLabel": "来源：{source}",
-      "@sourceLabel": {
-        "placeholders": {
-          "source": {
-            "type": "String"
-          }
-        }
-      },
+      "failureCount": {
+        "type": "int"
+      }
+    }
+  },
+  "errorInstallingStarterApps": "安装入门应用时出错：{error}",
+  "@errorInstallingStarterApps": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "installStarterSkills": "安装入门技能",
+  "installStarterSkillsSubtitle": "浏览内置技能并将其安装为透明的技能笔记",
+  "noStarterSkillsAvailable": "没有可用的入门技能",
+  "noStarterSkillsSelected": "未选择任何入门技能",
+  "installSelectedSkills": "安装选中的技能",
+  "starterSkillsInstalledSuccessfully": "{count}个技能安装成功！",
+  "@starterSkillsInstalledSuccessfully": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "errorLoadingStarterSkills": "加载入门技能时出错：{error}",
+  "@errorLoadingStarterSkills": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingStarterSkills": "安装入门技能时出错：{error}",
+  "@errorInstallingStarterSkills": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "skillRefLabel": "skillRef：{ref}",
+  "@skillRefLabel": {
+    "placeholders": {
+      "ref": {
+        "type": "String"
+      }
+    }
+  },
+  "sourceLabel": "来源：{source}",
+  "@sourceLabel": {
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
   "rawDataManagerTitle": "原始数据管理器",
-  "rawDataManagerSubtitle": "用于文件和数据库管理的高级工具",
   "advancedToolTitle": "高级工具",
   "advancedToolWarning": "此工具提供对应用程序数据和数据库的原始访问权限。使用不当可能导致永久性数据丢失或损坏。\n\n除非您知道自己在做什么或在支持人员的指导下，否则请勿使用此工具。",
   "iUnderstand": "我明白",
   "fileManagerTab": "文件管理器",
   "databaseManagerTab": "数据库管理器",
   "warningDataInstability": "警告：直接修改数据可能会导致应用程序不稳定。",
-  "attachments": "附件",
   "cache": "缓存",
   "root": "根目录",
   "itemsCount": "{count} 个项目",
@@ -1599,7 +1555,6 @@
       }
     }
   },
-  "deselectAll": "取消全选",
   "selectUnused": "选择未使用",
   "noFilesFound": "未找到文件",
   "used": "已使用",
@@ -1697,14 +1652,12 @@
       }
     }
   },
-  "askAiHint": "向 AI 询问有关数据库架构或错误的信息...",
   "askAiAboutNoteHint": "向 AI 询问这条笔记...",
   "openDbFileTooltip": "打开数据库文件",
   "resetToDefaultDbTooltip": "重置为默认数据库",
   "exportDbTooltip": "导出数据库",
   "undo": "撤销",
   "taskRescheduled": "任务已重新安排",
-
   "saveFindings": "保存发现",
   "saveFindingsToNote": "将发现保存到笔记",
   "attachNotesToPlan": "添加笔记到计划",
@@ -1890,7 +1843,9 @@
   "insertUserAppConfigureTitle": "嵌入 {appName}",
   "@insertUserAppConfigureTitle": {
     "placeholders": {
-      "appName": { "type": "String" }
+      "appName": {
+        "type": "String"
+      }
     }
   },
   "insertUserAppSize": "尺寸",
@@ -1931,13 +1886,17 @@
   "errorLoadingModelPreferences": "加载模型偏好时出错：{error}",
   "@errorLoadingModelPreferences": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
   "errorSavingModelPreferences": "保存偏好时出错：{error}",
   "@errorSavingModelPreferences": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
   "scratchpad": "便笺",
@@ -1949,7 +1908,9 @@
   "selectTagsForNotes": "为 {count} 条笔记选择标签",
   "@selectTagsForNotes": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "webLogins": "网页登录",
@@ -1961,18 +1922,50 @@
   "loginSaved": "已保存 {domain} 的登录",
   "@loginSaved": {
     "placeholders": {
-      "domain": {"type": "String"}
+      "domain": {
+        "type": "String"
+      }
     }
   },
   "deleteLogin": "删除登录",
   "deleteLoginConfirm": "删除已保存的 {domain} 登录？此站点的页面剪藏将不再使用登录状态。",
   "@deleteLoginConfirm": {
     "placeholders": {
-      "domain": {"type": "String"}
+      "domain": {
+        "type": "String"
+      }
     }
   },
   "webLoginSecurityNote": "在此平台上，已保存的登录未经操作系统级加密存储。请仅在受信任的设备上保存登录。",
   "webLoginCaptureFailed": "无法捕获登录会话。请确保在保存前已登录。此功能在网页版中不可用。",
   "requestDesktopSite": "请求桌面版网站",
-  "requestMobileSite": "请求移动版网站"
+  "requestMobileSite": "请求移动版网站",
+  "maxTurns": "最大轮次",
+  "maxTurnsDescription": "每个任务允许的最大迭代次数。",
+  "turnIncrement": "轮次增量",
+  "turnIncrementDescription": "恢复暂停的任务时增加的轮次数。",
+  "turnsValue": "{count} 轮",
+  "builtInTools": "内置工具",
+  "page": "页",
+  "removeBookmark": "移除书签",
+  "addBookmark": "添加书签",
+  "editBookmark": "编辑书签",
+  "bookmarkAnnotationHint": "输入注释（最多 200 个字符）",
+  "noteType": "笔记类型",
+  "excludeTags": "排除标签",
+  "excludeTagsHint": "选择要排除的标签",
+  "selectTagsToExclude": "选择要排除的标签",
+  "recoveryManager": "恢复管理器",
+  "backupAndRestore": "备份与恢复",
+  "databaseNotConnected": "数据库未连接",
+  "fileUsageUnavailable": "文件使用状态不可用",
+  "fileUsageDetails": "文件使用详情",
+  "noReferencesFound": "数据库中未找到引用",
+  "usedByNotes": "被 {count} 条笔记使用",
+  "usedByConversations": "用于 {count} 条对话消息",
+  "noteNoLongerExists": "笔记已不存在",
+  "messageNoLongerExists": "消息已不存在",
+  "showDetails": "显示详情",
+  "forceRefetchImages": "强制重新获取图片",
+  "fetchingImage": "正在获取图片..."
 }
