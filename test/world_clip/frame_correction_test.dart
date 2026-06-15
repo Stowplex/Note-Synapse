@@ -56,6 +56,15 @@ void main() {
     mat.dispose();
   });
 
+  test('90-degree rotation expands the canvas (swaps dimensions)', () async {
+    final src = _solidPng(40, 20);
+    final out = await correction.apply(src, [RotateCorrection(degrees: 90)]);
+    final mat = cv.imdecode(out, cv.IMREAD_COLOR);
+    expect(mat.cols, 20); // was 40 wide
+    expect(mat.rows, 40); // was 20 tall — not clipped to 40x20
+    mat.dispose();
+  });
+
   test('degenerate mesh (all corners coincident) does not throw', () async {
     final src = _solidPng(40, 20);
     // All four control points dragged to the same spot — the per-cell

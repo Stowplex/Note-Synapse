@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 import 'models/correction.dart';
@@ -59,9 +60,18 @@ class OpenCvFrameCorrection implements FrameCorrection {
   }
 
   cv.Mat _rotate(cv.Mat src, RotateCorrection c) {
-    final center = cv.Point2f(src.cols / 2, src.rows / 2);
+    final w = src.cols, h = src.rows;
+    final center = cv.Point2f(w / 2, h / 2);
     final m = cv.getRotationMatrix2D(center, -c.degrees, 1.0);
-    final out = cv.warpAffine(src, m, (src.cols, src.rows));
+    // Expand the output canvas to fit the rotated content so a 90°/arbitrary
+    // rotation doesn't clip the corners (the default dsize would crop).
+    final rad = c.degrees * math.pi / 180.0;
+    final cosA = math.cos(rad).abs(), sinA = math.sin(rad).abs();
+    final newW = (w * cosA + h * sinA).round().clamp(1, 1 << 30);
+    final newH = (w * sinA + h * cosA).round().clamp(1, 1 << 30);
+    m.setNum(0, 2, m.atNum(0, 2) + (newW - w) / 2);
+    m.setNum(1, 2, m.atNum(1, 2) + (newH - h) / 2);
+    final out = cv.warpAffine(src, m, (newW, newH));
     m.dispose();
     return out;
   }

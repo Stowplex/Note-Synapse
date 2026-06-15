@@ -9,6 +9,7 @@ import '../../providers/app_provider.dart';
 import '../../services/service_locator.dart';
 import '../../services/world_clip/video_source.dart';
 import '../../services/world_clip/frame_extractor.dart';
+import '../../services/world_clip/frame_selector.dart';
 import '../../services/world_clip/frame_correction.dart';
 import '../../services/world_clip/clip_project_store.dart';
 import '../../services/world_clip/clip_compiler.dart';
@@ -17,7 +18,7 @@ import '../../services/world_clip/models/clip_spec.dart';
 import '../../services/world_clip/models/correction.dart';
 import 'world_clip_timeline.dart';
 import 'clip_review_screen.dart';
-import 'mesh_editor.dart';
+import 'correction_editor.dart';
 
 /// Stages of the capture flow. Per-clip correction (mesh editor) is reached as
 /// a pushed route from the review stage rather than a top-level stage.
@@ -40,6 +41,9 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   FrameExtractor? _extractor;
   List<int> _timestamps = [];
   final Set<int> _tagged = {};
+  int? _selectedTs; // current scrub position in the timeline stage
+  bool _detecting = false;
+  String _detectLabel = '';
 
   List<Uint8List> _reviewPages = [];
   List<int> _orderedTags = [];
@@ -79,6 +83,7 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
       _project = project;
       _extractor = extractor;
       _timestamps = timestamps;
+      _selectedTs = timestamps.isEmpty ? null : timestamps.first;
       _stage = WorldClipStage.timeline;
     });
   }
@@ -99,8 +104,74 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
       _tagged
         ..clear()
         ..addAll(project.clips.map((c) => c.frameTimestampMs));
+      _selectedTs = timestamps.isEmpty ? null : timestamps.first;
       _stage = WorldClipStage.timeline;
     });
+  }
+
+  /// Toggles the key-frame tag for the currently-selected scrub frame and
+  /// persists (the explicit "Set/Remove key-frame" button).
+  Future<void> _toggleSelectedKeyframe() async {
+    final ts = _selectedTs;
+    if (ts == null) return;
+    await _onToggleTag(ts);
+  }
+
+  /// Auto-suggests key frames: samples ~every 3rd timeline frame, scores each
+  /// with the extractor's sharpness/scene-change features, and tags the frames
+  /// the pure [FrameSelector] heuristic picks. Runs with a progress overlay.
+  Future<void> _autoDetectKeyframes() async {
+    final extractor = _extractor;
+    if (extractor == null || _timestamps.isEmpty) return;
+    final sampled = [
+      for (var i = 0; i < _timestamps.length; i += 3) _timestamps[i]
+    ];
+    setState(() {
+      _detecting = true;
+      _detectLabel = 'Analyzing 0/${sampled.length}';
+    });
+    final features = <FrameFeature>[];
+    int? prev;
+    try {
+      for (var i = 0; i < sampled.length; i++) {
+        features.add(await extractor.featureAt(sampled[i],
+            previousTimestampMs: prev));
+        prev = sampled[i];
+        if (!mounted) return;
+        setState(() => _detectLabel = 'Analyzing ${i + 1}/${sampled.length}');
+      }
+    } catch (_) {
+      // Feature extraction failed (e.g. decode hiccup) — abort gracefully.
+      if (mounted) setState(() => _detecting = false);
+      return;
+    }
+    const selector = FrameSelector(
+      sharpnessThreshold: 80,
+      sceneChangeThreshold: 0.25,
+      minGapMs: 1500,
+    );
+    final picks = selector.suggest(features);
+    for (final ts in picks) {
+      if (_clipFor(ts) == null) {
+        _tagged.add(ts);
+        _project!.clips.add(ClipSpec(
+            id: ts.toString(),
+            frameTimestampMs: ts,
+            order: _project!.clips.length,
+            corrections: const []));
+      }
+    }
+    await _store!.save(_project!);
+    if (!mounted) return;
+    setState(() {
+      _detecting = false;
+      if (picks.isNotEmpty) _selectedTs = picks.first;
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Suggested ${picks.length} key frame(s)')),
+      );
+    }
   }
 
   /// The ClipSpec for [ts], or null when the frame isn't tagged.
@@ -191,7 +262,7 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     await Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => Scaffold(
         appBar: AppBar(title: Text(AppLocalizations.of(context)!.worldClip)),
-        body: MeshEditor(
+        body: CorrectionEditor(
           framePng: full,
           initial: _correctionsFor(ts),
           onDone: (corrections) async {
@@ -226,25 +297,64 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     Navigator.of(context).pop(note.id);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    return Scaffold(
-      appBar: AppBar(title: Text(l10n.worldClip)),
-      body: switch (_stage) {
-        WorldClipStage.source => _SourceStage(onPicked: _onPickVideo),
-        WorldClipStage.timeline => Column(
-            children: [
-              Expanded(
-                child: WorldClipTimeline(
-                  timestamps: _timestamps,
-                  taggedTimestamps: _tagged,
-                  thumbnailBuilder: (ts) => _extractor!.thumbnailAt(ts),
-                  onToggleTag: _onToggleTag,
-                ),
+  Widget _buildTimelineStage(AppLocalizations l10n) {
+    final selectedTagged =
+        _selectedTs != null && _tagged.contains(_selectedTs);
+    return Stack(
+      children: [
+        Column(
+          children: [
+            // Large preview of the scrub position (video-editor layout).
+            Expanded(
+              child: Container(
+                color: Colors.black,
+                width: double.infinity,
+                child: _selectedTs == null
+                    ? const Center(child: Text('No frames',
+                        style: TextStyle(color: Colors.white70)))
+                    : _LargePreview(
+                        timestampMs: _selectedTs!,
+                        builder: (ts) =>
+                            _extractor!.thumbnailAt(ts, maxWidth: 720),
+                      ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(12),
+            ),
+            // Key-frame + auto-detect controls.
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.tonalIcon(
+                      onPressed: _selectedTs == null
+                          ? null
+                          : _toggleSelectedKeyframe,
+                      icon: Icon(selectedTagged ? Icons.key_off : Icons.key),
+                      label: Text(selectedTagged
+                          ? 'Remove key frame'
+                          : 'Set key frame'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: _detecting ? null : _autoDetectKeyframes,
+                    icon: const Icon(Icons.auto_awesome),
+                    label: const Text('Auto'),
+                  ),
+                ],
+              ),
+            ),
+            WorldClipTimeline(
+              timestamps: _timestamps,
+              taggedTimestamps: _tagged,
+              selectedTimestamp: _selectedTs,
+              thumbnailBuilder: (ts) => _extractor!.thumbnailAt(ts),
+              onSelect: (ts) => setState(() => _selectedTs = ts),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: SizedBox(
+                width: double.infinity,
                 child: FilledButton(
                   onPressed: _tagged.isEmpty
                       ? null
@@ -252,11 +362,41 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
                           setState(() => _stage = WorldClipStage.review);
                           await _buildReviewPages();
                         },
-                  child: Text(l10n.worldClipReview),
+                  child: Text('${l10n.worldClipReview} (${_tagged.length})'),
                 ),
               ),
-            ],
+            ),
+          ],
+        ),
+        if (_detecting)
+          Positioned.fill(
+            child: ColoredBox(
+              color: const Color(0x99000000),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 12),
+                    Text(_detectLabel,
+                        style: const TextStyle(color: Colors.white)),
+                  ],
+                ),
+              ),
+            ),
           ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.worldClip)),
+      body: switch (_stage) {
+        WorldClipStage.source => _SourceStage(onPicked: _onPickVideo),
+        WorldClipStage.timeline => _buildTimelineStage(l10n),
         WorldClipStage.review => _reviewPages.isEmpty
             ? const Center(child: CircularProgressIndicator())
             : ClipReviewScreen(
@@ -292,6 +432,33 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
                 onCompileImages: () => _compile(ClipOutputFormat.inlineImages),
               ),
       },
+    );
+  }
+}
+
+/// Large scrub preview that memoizes the decoded frame per timestamp so
+/// re-selecting a frame doesn't re-decode it.
+class _LargePreview extends StatefulWidget {
+  final int timestampMs;
+  final Future<Uint8List> Function(int timestampMs) builder;
+  const _LargePreview({required this.timestampMs, required this.builder});
+
+  @override
+  State<_LargePreview> createState() => _LargePreviewState();
+}
+
+class _LargePreviewState extends State<_LargePreview> {
+  final Map<int, Future<Uint8List>> _cache = {};
+
+  Future<Uint8List> _frameFor(int ts) => _cache[ts] ??= widget.builder(ts);
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List>(
+      future: _frameFor(widget.timestampMs),
+      builder: (context, snap) => snap.hasData
+          ? Image.memory(snap.data!, fit: BoxFit.contain)
+          : const Center(child: CircularProgressIndicator()),
     );
   }
 }

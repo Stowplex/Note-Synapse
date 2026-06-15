@@ -1,22 +1,25 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
-/// A horizontal proxy-thumbnail strip. Tapping a thumb toggles its key-frame
-/// tag (a tagged thumb is highlighted). Thumbnails load lazily via
-/// [thumbnailBuilder] and are memoized per timestamp, so toggling a tag (which
-/// rebuilds the strip) does not re-decode every visible frame.
+/// A horizontal proxy-thumbnail strip for scrubbing. Tapping a thumb *selects*
+/// it (drives the large preview above); key-frame tagging is an explicit button
+/// in the parent. The selected thumb is outlined; tagged (key-frame) thumbs get
+/// a corner marker + colored border. Thumbnails are memoized per timestamp so
+/// selecting one doesn't re-decode the whole strip.
 class WorldClipTimeline extends StatefulWidget {
   final List<int> timestamps;
   final Set<int> taggedTimestamps;
+  final int? selectedTimestamp;
   final Future<Uint8List> Function(int timestampMs) thumbnailBuilder;
-  final void Function(int timestampMs) onToggleTag;
+  final void Function(int timestampMs) onSelect;
 
   const WorldClipTimeline({
     super.key,
     required this.timestamps,
     required this.taggedTimestamps,
+    required this.selectedTimestamp,
     required this.thumbnailBuilder,
-    required this.onToggleTag,
+    required this.onSelect,
   });
 
   @override
@@ -32,30 +35,44 @@ class _WorldClipTimelineState extends State<WorldClipTimeline> {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 120,
+      height: 96,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: widget.timestamps.length,
         itemBuilder: (context, i) {
           final ts = widget.timestamps[i];
           final tagged = widget.taggedTimestamps.contains(ts);
+          final selected = widget.selectedTimestamp == ts;
           return GestureDetector(
             key: ValueKey('wc-thumb-$ts'),
-            onTap: () => widget.onToggleTag(ts),
+            onTap: () => widget.onSelect(ts),
             child: Container(
-              width: 90,
+              width: 80,
               margin: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 border: Border.all(
-                  color: tagged ? Colors.blue : Colors.transparent,
-                  width: 3,
+                  color: selected
+                      ? Colors.white
+                      : (tagged ? Colors.blue : Colors.transparent),
+                  width: selected ? 3 : (tagged ? 3 : 1),
                 ),
               ),
-              child: FutureBuilder<Uint8List>(
-                future: _thumbnailFor(ts),
-                builder: (context, snap) => snap.hasData
-                    ? Image.memory(snap.data!, fit: BoxFit.cover)
-                    : const Center(child: CircularProgressIndicator()),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  FutureBuilder<Uint8List>(
+                    future: _thumbnailFor(ts),
+                    builder: (context, snap) => snap.hasData
+                        ? Image.memory(snap.data!, fit: BoxFit.cover)
+                        : const Center(child: CircularProgressIndicator()),
+                  ),
+                  if (tagged)
+                    const Positioned(
+                      top: 2,
+                      right: 2,
+                      child: Icon(Icons.key, size: 16, color: Colors.blue),
+                    ),
+                ],
               ),
             ),
           );

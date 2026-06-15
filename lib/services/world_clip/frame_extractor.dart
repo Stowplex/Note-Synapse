@@ -74,10 +74,15 @@ class PlatformFrameExtractor implements FrameExtractor {
   @override
   Future<Uint8List> fullFrameAt(int timestampMs) => _frame(timestampMs, 0);
 
+  /// Width used when decoding frames purely for feature scoring. Smaller than
+  /// full-res keeps auto key-frame detection responsive; the sharpness/diff
+  /// thresholds in [FrameSelector] are relative, so the downscale is fine.
+  static const int _featureWidth = 480;
+
   @override
   Future<FrameFeature> featureAt(int timestampMs,
       {int? previousTimestampMs}) async {
-    final mat = cv.imdecode(await _frame(timestampMs, 0), cv.IMREAD_COLOR);
+    final mat = cv.imdecode(await _frame(timestampMs, _featureWidth), cv.IMREAD_COLOR);
     final gray = cv.cvtColor(mat, cv.COLOR_BGR2GRAY);
     final lap = cv.laplacian(gray, cv.MatType.CV_64F);
     // opencv_dart 2.x: meanStdDev returns (Scalar mean, Scalar stddev).
@@ -86,7 +91,7 @@ class PlatformFrameExtractor implements FrameExtractor {
 
     double diff = 1.0;
     if (previousTimestampMs != null) {
-      final prev = cv.imdecode(await _frame(previousTimestampMs, 0), cv.IMREAD_COLOR);
+      final prev = cv.imdecode(await _frame(previousTimestampMs, _featureWidth), cv.IMREAD_COLOR);
       final prevGray = cv.cvtColor(prev, cv.COLOR_BGR2GRAY);
       final small = cv.resize(gray, (64, 64));
       final prevSmall = cv.resize(prevGray, (64, 64));
