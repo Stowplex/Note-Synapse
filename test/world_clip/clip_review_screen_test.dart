@@ -35,4 +35,54 @@ void main() {
     expect(find.byType(Image), findsNWidgets(2));
     expect(find.byKey(const ValueKey('wc-compile')), findsOneWidget);
   });
+
+  testWidgets('multi-select + clone edits passes source + selected targets',
+      (tester) async {
+    int? cloneSource;
+    Set<int>? cloneTargets;
+    Widget app(Widget child) => MaterialApp(
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: child),
+        );
+
+    await tester.pumpWidget(app(ClipReviewScreen(
+      pages: [png, png, png],
+      onReorder: (a, b) {},
+      onRemove: (i) {},
+      onCompilePdf: () {},
+      onCompileImages: () {},
+      onEdit: (i) {},
+      onCloneEdits: (s, t) {
+        cloneSource = s;
+        cloneTargets = t;
+      },
+    )));
+    await tester.pumpAndSettle();
+
+    // Enter multi-select mode.
+    await tester.tap(find.byKey(const ValueKey('wc-multiselect-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.text('Select all'), findsOneWidget);
+
+    // Select pages 1 and 2 (targets) by tapping their rows.
+    await tester.tap(find.byKey(const ValueKey('wc-page-1')));
+    await tester.tap(find.byKey(const ValueKey('wc-page-2')));
+    await tester.pumpAndSettle();
+    expect(find.text('2 selected'), findsOneWidget);
+
+    // Open page 0's menu and clone its edits to the selection.
+    await tester.tap(find.byKey(const ValueKey('wc-menu-0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Clone edits').last);
+    await tester.pumpAndSettle();
+
+    expect(cloneSource, 0);
+    expect(cloneTargets, {1, 2});
+  });
 }

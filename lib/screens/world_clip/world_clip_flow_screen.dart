@@ -49,6 +49,7 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   int? _selectedTs; // current scrub position in the timeline stage
   bool _detecting = false;
   String _detectLabel = '';
+  bool _cloning = false; // batch clone-edits in progress (review stage)
   // Shared timeline-thumbnail cache: warmed in the background and reused by the
   // strip, the scrub highlight, and (crucially) auto key-frame detection so the
   // detector scores already-decoded thumbnails instead of re-extracting frames.
@@ -329,6 +330,46 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     ));
   }
 
+  /// Batch-applies [sourceIndex]'s corrections (rotation + crop / keystone) to
+  /// every page in [targetIndices], re-rendering each affected review page and
+  /// persisting. Cloned corrections are deep-copied so the pages stay
+  /// independently editable afterwards.
+  Future<void> _cloneEdits(int sourceIndex, Set<int> targetIndices) async {
+    if (sourceIndex < 0 || sourceIndex >= _orderedTags.length) return;
+    final sourceCorrections = _correctionsFor(_orderedTags[sourceIndex]);
+    final targets = targetIndices
+        .where((i) => i >= 0 && i < _orderedTags.length && i != sourceIndex)
+        .toList();
+    if (targets.isEmpty) return;
+
+    setState(() => _cloning = true);
+    final correction = getIt<FrameCorrection>();
+    try {
+      for (final i in targets) {
+        final ts = _orderedTags[i];
+        // Deep-copy via JSON so each clip owns its corrections.
+        final cloned = [
+          for (final c in sourceCorrections)
+            Correction.fromJson(c.toJson())
+        ];
+        _setCorrectionsFor(ts, cloned);
+        final full = await _extractor!.fullFrameAt(ts);
+        final corrected =
+            await correction.apply(full, cloned, maxWidth: _maxPageWidth);
+        final current = _orderedTags.indexOf(ts);
+        if (current >= 0) _reviewPages[current] = corrected;
+      }
+      await _store!.save(_project!);
+    } finally {
+      if (mounted) setState(() => _cloning = false);
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cloned edits to ${targets.length} page(s)')),
+      );
+    }
+  }
+
   Future<void> _compile(ClipOutputFormat format) async {
     final note = await ClipCompiler().compile(
       title: _project!.name,
@@ -444,7 +485,9 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
         WorldClipStage.timeline => _buildTimelineStage(l10n),
         WorldClipStage.review => _reviewPages.isEmpty
             ? const Center(child: CircularProgressIndicator())
-            : ClipReviewScreen(
+            : Stack(
+                children: [
+                  ClipReviewScreen(
                 pages: _reviewPages,
                 onReorder: (oldI, newI) {
                   setState(() {
@@ -473,8 +516,18 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
                   _persistOrder();
                 },
                 onEdit: _editClip,
+                onCloneEdits: _cloneEdits,
                 onCompilePdf: () => _compile(ClipOutputFormat.pdf),
                 onCompileImages: () => _compile(ClipOutputFormat.inlineImages),
+              ),
+                  if (_cloning)
+                    const Positioned.fill(
+                      child: ColoredBox(
+                        color: Color(0x99000000),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                    ),
+                ],
               ),
       },
     );
