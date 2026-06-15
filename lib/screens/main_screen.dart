@@ -18,6 +18,7 @@ import 'ai_action_screen.dart';
 import 'note_detail_screen.dart';
 import 'share_screen.dart';
 import 'settings_screen.dart';
+import 'world_clip/world_clip_flow_screen.dart';
 import '../services/logger_service.dart';
 import '../utils/file_utils.dart';
 
@@ -215,6 +216,17 @@ class _MainScreenState extends State<MainScreen> {
                         onTap: () {
                           Navigator.pop(context);
                           _createNoteFromClipboard(context);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.movie_creation_outlined),
+                        title: Text(l10n.worldClip),
+                        subtitle: Text(l10n.worldClipSubtitle),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => const WorldClipFlowScreen(),
+                          ));
                         },
                       ),
                     ],

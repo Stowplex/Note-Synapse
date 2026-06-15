@@ -31,6 +31,7 @@ import 'settings/about_screen.dart';
 import 'package:flutter/foundation.dart';
 import 'settings/debug_menu_screen.dart';
 import 'settings/web_logins_screen.dart';
+import 'world_clip/world_clip_projects_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -61,6 +62,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   builder: (context) => const GettingStartedScreen(),
                 ),
               ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.movie_creation_outlined),
+              title: Text(l10n.worldClipProjects),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const WorldClipProjectsScreen(),
+              )),
             ),
           ),
           const SizedBox(height: 8),

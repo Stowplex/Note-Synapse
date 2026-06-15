@@ -325,6 +325,43 @@ class AppLocalizationsEn extends AppLocalizations {
       'Create note from clipboard content';
 
   @override
+  String get worldClip => 'World Clip';
+
+  @override
+  String get worldClipSubtitle => 'Turn a video into a note';
+
+  @override
+  String get worldClipProjects => 'World Clip Projects';
+
+  @override
+  String get worldClipImportVideo => 'Import video';
+
+  @override
+  String get worldClipNoFramesSelected =>
+      'Select at least one frame to continue';
+
+  @override
+  String get worldClipReview => 'Review clips';
+
+  @override
+  String get worldClipCompile => 'Create note';
+
+  @override
+  String get worldClipOutputPdf => 'As a PDF';
+
+  @override
+  String get worldClipOutputImages => 'As inline images';
+
+  @override
+  String get worldClipDeleteProject => 'Delete project';
+
+  @override
+  String get worldClipNewFromSameVideo => 'New project from this video';
+
+  @override
+  String get worldClipEmptyProjects => 'No saved World Clip projects';
+
+  @override
   String get recordingStarted => 'Recording started';
 
   @override

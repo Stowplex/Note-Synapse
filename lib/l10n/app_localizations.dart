@@ -662,6 +662,78 @@ abstract class AppLocalizations {
   /// **'Create note from clipboard content'**
   String get newNoteFromClipboardSubtitle;
 
+  /// No description provided for @worldClip.
+  ///
+  /// In en, this message translates to:
+  /// **'World Clip'**
+  String get worldClip;
+
+  /// No description provided for @worldClipSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn a video into a note'**
+  String get worldClipSubtitle;
+
+  /// No description provided for @worldClipProjects.
+  ///
+  /// In en, this message translates to:
+  /// **'World Clip Projects'**
+  String get worldClipProjects;
+
+  /// No description provided for @worldClipImportVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Import video'**
+  String get worldClipImportVideo;
+
+  /// No description provided for @worldClipNoFramesSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Select at least one frame to continue'**
+  String get worldClipNoFramesSelected;
+
+  /// No description provided for @worldClipReview.
+  ///
+  /// In en, this message translates to:
+  /// **'Review clips'**
+  String get worldClipReview;
+
+  /// No description provided for @worldClipCompile.
+  ///
+  /// In en, this message translates to:
+  /// **'Create note'**
+  String get worldClipCompile;
+
+  /// No description provided for @worldClipOutputPdf.
+  ///
+  /// In en, this message translates to:
+  /// **'As a PDF'**
+  String get worldClipOutputPdf;
+
+  /// No description provided for @worldClipOutputImages.
+  ///
+  /// In en, this message translates to:
+  /// **'As inline images'**
+  String get worldClipOutputImages;
+
+  /// No description provided for @worldClipDeleteProject.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete project'**
+  String get worldClipDeleteProject;
+
+  /// No description provided for @worldClipNewFromSameVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'New project from this video'**
+  String get worldClipNewFromSameVideo;
+
+  /// No description provided for @worldClipEmptyProjects.
+  ///
+  /// In en, this message translates to:
+  /// **'No saved World Clip projects'**
+  String get worldClipEmptyProjects;
+
   /// No description provided for @recordingStarted.
   ///
   /// In en, this message translates to:
