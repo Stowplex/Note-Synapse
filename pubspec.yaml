@@ -168,6 +168,7 @@ dependencies:
   json_repair_flutter: ^2.0.2
   package_info_plus: ^9.0.0
   mustache_template: ^2.0.0
+  opencv_dart: ^2.2.1+4
 
 # Compile sqlite3 from the bundled amalgamation with FTS3/FTS4 enabled.
 # Reason: production code uses `CREATE VIRTUAL TABLE notes_fts USING fts4`,

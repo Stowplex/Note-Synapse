@@ -174,6 +174,31 @@ Risks, in priority order:
 
 No DB migration, no new AI surface, no new key storage.
 
+### Spike result (2026-06-15)
+
+- **Resolved package:** `opencv_dart ^2.2.1+4` (backed by `dartcv4 2.2.1+4`), **not**
+  the `^1.3.5` the plan first guessed. `flutter pub get` resolved cleanly with no
+  constraint conflicts. The compatibility shim `package:opencv_dart/opencv_dart.dart`
+  still re-exports the full API, so `import ... as cv;` is unchanged.
+- **API validation (host):** every symbol the plan relies on was confirmed present in
+  2.2.1+4: `VideoCapture.fromFile` / `isOpened` / `get(int)` / `read()` → `(bool, Mat)`
+  / `release()`; `imencode` → `(bool, Uint8List)`; `imdecode(Uint8List, int)`;
+  `cvtColor`, `laplacian(src, ddepth)`, `meanStdDev` → `(Scalar, Scalar)`, `resize`
+  (takes a `(int,int)` record), `absDiff`, `mean` → `Scalar`; `getRotationMatrix2D`,
+  `warpAffine`, `getPerspectiveTransform2f`, `warpPerspective`; `Mat.create`,
+  `Mat.zeros`, `Mat.region`, `clone`, `copyTo`, `Rect`, `Point2f`, `VecPoint2f.fromList`,
+  `MatType.CV_8UC3` / `CV_64F`.
+- **2.x deltas applied in implementation:** `meanStdDev` returns a `Scalar` (not a
+  `Mat`), so sharpness reads `stddev.val1` rather than `stddev.at<double>(0,0)`. All
+  other plan call sites are API-compatible with 2.x as written.
+- **Decision: PASS (API), with a caveat.** `OpenCvFrameExtractor` (Task 8) uses
+  `VideoCapture`. The on-device decode gate (real iOS + Android) from the original
+  spike could **not** be executed in this headless environment; the host-OpenCV
+  integration test (Task 8) skips gracefully when the host build lacks a video
+  backend. The `FrameExtractor` seam preserves the documented fallback (native
+  method-channel grab or `ffmpeg_kit_flutter_new`) should on-device decode fail
+  QA — no architecture change is needed to switch backends.
+
 ## 7. Testing strategy
 
 Follows the repo's mockito + `getIt` `resetForTesting()` pattern.
