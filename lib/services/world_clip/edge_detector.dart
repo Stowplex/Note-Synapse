@@ -3,19 +3,25 @@ import 'package:opencv_dart/opencv_dart.dart' as cv;
 import 'models/mesh_grid.dart';
 import 'models/norm_point.dart';
 
-/// Auto-detects the largest document-like quadrilateral in a frame so the
-/// keystone editor can seed its mesh corners. Pure OpenCV `imgproc` (works in
-/// opencv_dart 2.x; only `videoio` is unavailable). Returns null when no
-/// convincing quad is found.
+/// A full-frame quad (the four image corners) — used when the document fills
+/// the frame (e.g. a screenshot / full-page capture) or no inner doc is found.
+MeshGrid fullFrameQuad() => MeshGrid.identity(rows: 1, cols: 1);
+
+/// Auto-detects the document quadrilateral in a frame so the keystone editor
+/// can seed its mesh corners. Pure OpenCV `imgproc` (works in opencv_dart 2.x;
+/// only `videoio` is unavailable).
 ///
-/// Pipeline (robust to real-world photos): downscale → gray → blur → Canny →
-/// morphological close (bridge edge gaps) → external contours. For the largest
-/// contours it tries, in order: a 4-point convex `approxPolyDP` at several
-/// tolerances, the same on the convex hull, then `minAreaRect` as a rotated-
-/// rectangle fallback. Coordinates are returned normalized (0..1), so working
-/// on a downscaled copy is exact.
+/// Strategy: documents are typically *brighter* than their background (paper on
+/// a desk, a lit page), so instead of relying on a fully-closed edge outline
+/// (which real photos rarely have — gaps/folds/low-contrast edges leave the
+/// contour open and tiny), it segments the bright region with an Otsu threshold
+/// and a morphological close (fills interior text holes into one solid blob).
+/// The largest blob's quad is recovered via convex `approxPolyDP` → convex hull
+/// → `minAreaRect`. If no convincing inner blob is found, it falls back to the
+/// full frame so a frame-filling document still snaps to the edges. Returns
+/// null only when the frame can't be decoded.
 MeshGrid? detectDocumentQuad(Uint8List framePng,
-    {double minAreaFraction = 0.12}) {
+    {double minAreaFraction = 0.10}) {
   final src = cv.imdecode(framePng, cv.IMREAD_COLOR);
   final scratch = <cv.Mat>[];
   cv.Mat keep(cv.Mat m) {
@@ -24,9 +30,9 @@ MeshGrid? detectDocumentQuad(Uint8List framePng,
   }
 
   try {
-    if (src.cols < 8 || src.rows < 8) return null;
+    if (src.isEmpty || src.cols < 8 || src.rows < 8) return null;
 
-    // Work on a downscaled copy for speed and stable Canny thresholds.
+    // Work on a downscaled copy for speed and stable thresholds.
     const workWidth = 1024;
     cv.Mat work = src;
     if (src.cols > workWidth) {
@@ -39,39 +45,42 @@ MeshGrid? detectDocumentQuad(Uint8List framePng,
 
     final gray = keep(cv.cvtColor(work, cv.COLOR_BGR2GRAY));
     final blurred = keep(cv.gaussianBlur(gray, (5, 5), 0));
-    final edges = keep(cv.canny(blurred, 50, 150));
-    final kernel =
-        keep(cv.getStructuringElement(cv.MORPH_RECT, (7, 7)));
-    // Close bridges the small gaps that otherwise leave the page outline open.
-    final closed = keep(cv.morphologyEx(edges, cv.MORPH_CLOSE, kernel));
+    // Otsu picks the bright-doc / dark-background split automatically; the
+    // result is a FILLED region (robust to outline gaps).
+    final (_, binary) =
+        cv.threshold(blurred, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
+    keep(binary);
+    // Close with a large kernel so interior text/figures merge into the page
+    // blob rather than carving it into many small contours.
+    final kernel = keep(cv.getStructuringElement(cv.MORPH_RECT, (15, 15)));
+    final closed = keep(cv.morphologyEx(binary, cv.MORPH_CLOSE, kernel));
 
     final (contours, hierarchy) =
         cv.findContours(closed, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
     try {
-      // Sort contour indices by area, largest first.
-      final indices = <int>[];
+      // Pick the single largest blob (the document).
+      var bestIdx = -1;
+      var bestArea = 0.0;
       for (var i = 0; i < contours.length; i++) {
-        indices.add(i);
-      }
-      indices.sort((a, b) =>
-          cv.contourArea(contours[b]).compareTo(cv.contourArea(contours[a])));
-
-      for (final i in indices) {
-        final contour = contours[i];
-        final area = cv.contourArea(contour);
-        if (area < minArea) break; // sorted desc — nothing else qualifies
-
-        final quad = _quadFromContour(contour, area);
-        if (quad == null) continue;
-        final normalized = [
-          for (final p in quad) NormPoint(p.$1 / w, p.$2 / h)
-        ];
-        final ordered = orderQuadCorners(normalized);
-        if (_cornersDistinct(ordered)) {
-          return MeshGrid(rows: 1, cols: 1, points: ordered);
+        final a = cv.contourArea(contours[i]);
+        if (a > bestArea) {
+          bestArea = a;
+          bestIdx = i;
         }
       }
-      return null;
+
+      if (bestIdx >= 0 && bestArea >= minArea) {
+        final quad = _quadFromContour(contours[bestIdx], bestArea);
+        if (quad != null) {
+          final ordered = orderQuadCorners(
+              [for (final p in quad) NormPoint(p.$1 / w, p.$2 / h)]);
+          if (_cornersDistinct(ordered)) {
+            return MeshGrid(rows: 1, cols: 1, points: ordered);
+          }
+        }
+      }
+      // No convincing inner document → assume it fills the frame.
+      return fullFrameQuad();
     } finally {
       contours.dispose();
       hierarchy.dispose();
