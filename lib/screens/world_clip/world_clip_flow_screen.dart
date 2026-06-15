@@ -305,6 +305,10 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     final full = await _extractor!.fullFrameAt(ts);
     if (!mounted) return;
     await Navigator.of(context).push(MaterialPageRoute(
+      // fullscreenDialog disables the iOS swipe-back-to-pop gesture, which
+      // otherwise collides with dragging the keystone corner handles near the
+      // screen edge.
+      fullscreenDialog: true,
       builder: (_) => Scaffold(
         appBar: AppBar(title: Text(AppLocalizations.of(context)!.worldClip)),
         body: CorrectionEditor(

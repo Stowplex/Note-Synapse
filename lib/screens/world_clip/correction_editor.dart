@@ -183,7 +183,9 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
         Expanded(
           child: Center(
             child: Padding(
-              padding: const EdgeInsets.all(28), // room to grab edge handles
+              // Generous gutter so corner handles sit well clear of the screen
+              // edge (and the OS back-swipe zone) and stay easy to grab.
+              padding: const EdgeInsets.all(48),
               child: AspectRatio(
                 aspectRatio: _aspect,
                 child: LayoutBuilder(
@@ -223,7 +225,7 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
   }
 
   Widget _handle(int i, double w, double h) {
-    const hit = 48.0;
+    const hit = 56.0;
     final p = _grid.points[i];
     return Positioned(
       left: p.x * w - hit / 2,

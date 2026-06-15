@@ -36,5 +36,22 @@ void main() {
     test('tolerates a tiny frame without throwing', () {
       expect(detectDocumentQuad(_solidPng(1, 1)), isNull);
     });
+
+    test('detects a bright rectangular page on a dark background', () {
+      // Dark canvas with a large white "page" inset from the edges.
+      final mat = cv.Mat.create(rows: 400, cols: 300, type: cv.MatType.CV_8UC3);
+      cv.rectangle(mat, cv.Rect(40, 60, 220, 280), cv.Scalar.all(255),
+          thickness: -1); // filled
+      final (_, png) = cv.imencode('.png', mat);
+      mat.dispose();
+
+      final grid = detectDocumentQuad(png);
+      expect(grid, isNotNull);
+      expect(grid!.points.length, 4);
+      // Top-left corner near the rectangle's normalized origin (40/300, 60/400).
+      final tl = grid.points.first;
+      expect(tl.x, closeTo(40 / 300, 0.08));
+      expect(tl.y, closeTo(60 / 400, 0.08));
+    });
   });
 }
