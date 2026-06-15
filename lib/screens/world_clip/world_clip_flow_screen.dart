@@ -44,6 +44,28 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   int? _selectedTs; // current scrub position in the timeline stage
   bool _detecting = false;
   String _detectLabel = '';
+  // Shared timeline-thumbnail cache: warmed in the background and reused by the
+  // strip, the scrub highlight, and (crucially) auto key-frame detection so the
+  // detector scores already-decoded thumbnails instead of re-extracting frames.
+  final Map<int, Future<Uint8List>> _thumbCache = {};
+
+  Future<Uint8List> _thumb(int ts) =>
+      _thumbCache[ts] ??= _extractor!.thumbnailAt(ts);
+
+  /// Eagerly decodes timeline thumbnails in the background so scrubbing and
+  /// auto-detect are responsive. Bails if the user leaves the timeline.
+  Future<void> _prewarmThumbnails() async {
+    for (final ts in List<int>.from(_timestamps)) {
+      if (!mounted || _stage != WorldClipStage.timeline || _extractor == null) {
+        return;
+      }
+      try {
+        await _thumb(ts);
+      } catch (_) {
+        // Skip frames that fail to decode; detection/strip tolerate gaps.
+      }
+    }
+  }
 
   List<Uint8List> _reviewPages = [];
   List<int> _orderedTags = [];
@@ -86,6 +108,7 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
       _selectedTs = timestamps.isEmpty ? null : timestamps.first;
       _stage = WorldClipStage.timeline;
     });
+    _prewarmThumbnails();
   }
 
   Future<void> _resume(String projectId) async {
@@ -107,6 +130,7 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
       _selectedTs = timestamps.isEmpty ? null : timestamps.first;
       _stage = WorldClipStage.timeline;
     });
+    _prewarmThumbnails();
   }
 
   /// Toggles the key-frame tag for the currently-selected scrub frame and
@@ -118,11 +142,10 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   }
 
   /// Auto-suggests key frames: samples ~every 3rd timeline frame, scores each
-  /// with the extractor's sharpness/scene-change features, and tags the frames
-  /// the pure [FrameSelector] heuristic picks. Runs with a progress overlay.
+  /// from the *cached timeline thumbnail* (reused, not re-decoded), and tags
+  /// the frames the pure [FrameSelector] heuristic picks. Progress overlay.
   Future<void> _autoDetectKeyframes() async {
-    final extractor = _extractor;
-    if (extractor == null || _timestamps.isEmpty) return;
+    if (_extractor == null || _timestamps.isEmpty) return;
     final sampled = [
       for (var i = 0; i < _timestamps.length; i += 3) _timestamps[i]
     ];
@@ -131,12 +154,13 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
       _detectLabel = 'Analyzing 0/${sampled.length}';
     });
     final features = <FrameFeature>[];
-    int? prev;
+    Uint8List? prevPng;
     try {
       for (var i = 0; i < sampled.length; i++) {
-        features.add(await extractor.featureAt(sampled[i],
-            previousTimestampMs: prev));
-        prev = sampled[i];
+        final png = await _thumb(sampled[i]);
+        features.add(computeFrameFeature(
+            timestampMs: sampled[i], framePng: png, prevFramePng: prevPng));
+        prevPng = png;
         if (!mounted) return;
         setState(() => _detectLabel = 'Analyzing ${i + 1}/${sampled.length}');
       }
@@ -349,7 +373,7 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
               timestamps: _timestamps,
               taggedTimestamps: _tagged,
               selectedTimestamp: _selectedTs,
-              thumbnailBuilder: (ts) => _extractor!.thumbnailAt(ts),
+              thumbnailBuilder: _thumb,
               onSelect: (ts) => setState(() => _selectedTs = ts),
             ),
             Padding(
@@ -452,6 +476,8 @@ class _LargePreviewState extends State<_LargePreview> {
   final Map<int, Future<Uint8List>> _cache = {};
   static const _cap = 24; // bound memory on long videos (full-size previews)
 
+  final TransformationController _zoom = TransformationController();
+
   Future<Uint8List> _frameFor(int ts) {
     final f = _cache[ts] ??= widget.builder(ts);
     if (_cache.length > _cap && _cache.keys.first != ts) {
@@ -461,11 +487,32 @@ class _LargePreviewState extends State<_LargePreview> {
   }
 
   @override
+  void didUpdateWidget(_LargePreview old) {
+    super.didUpdateWidget(old);
+    // Reset zoom/pan when scrubbing to a different frame.
+    if (old.timestampMs != widget.timestampMs) {
+      _zoom.value = Matrix4.identity();
+    }
+  }
+
+  @override
+  void dispose() {
+    _zoom.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return FutureBuilder<Uint8List>(
       future: _frameFor(widget.timestampMs),
       builder: (context, snap) => snap.hasData
-          ? Image.memory(snap.data!, fit: BoxFit.contain)
+          // Pinch/double-tap-pan to inspect sharpness at full detail.
+          ? InteractiveViewer(
+              transformationController: _zoom,
+              minScale: 1,
+              maxScale: 8,
+              child: Center(child: Image.memory(snap.data!, fit: BoxFit.contain)),
+            )
           : const Center(child: CircularProgressIndicator()),
     );
   }

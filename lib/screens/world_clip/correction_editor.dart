@@ -120,25 +120,36 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
     }
   }
 
-  /// Adds a horizontal crease by resampling the current mesh to one more row,
-  /// preserving the existing (possibly auto-detected / hand-dragged) corners
-  /// instead of resetting to a full-frame rectangle.
-  void _addCrease() => setState(() {
-        final oldRows = _grid.rows, cols = _grid.cols, newRows = oldRows + 1;
-        NormPoint at(int r, int c) => _grid.points[r * (cols + 1) + c];
+  /// Adds a crease by resampling the current mesh to one more row
+  /// ([horizontal] = true, a fold across the page) or one more column
+  /// ([horizontal] = false, a fold down the page), preserving the existing
+  /// (auto-detected / hand-dragged) corners instead of resetting to a rect.
+  void _addCrease({required bool horizontal}) => setState(() {
+        final oldRows = _grid.rows, oldCols = _grid.cols;
+        NormPoint at(int r, int c) => _grid.points[r * (oldCols + 1) + c];
+        final newRows = horizontal ? oldRows + 1 : oldRows;
+        final newCols = horizontal ? oldCols : oldCols + 1;
         final pts = <NormPoint>[];
         for (var r = 0; r <= newRows; r++) {
-          final t = r / newRows * oldRows; // continuous old-row index
-          final r0 = t.floor().clamp(0, oldRows);
+          final tr = r / newRows * oldRows; // continuous old-row index
+          final r0 = tr.floor().clamp(0, oldRows);
           final r1 = (r0 + 1).clamp(0, oldRows);
-          final f = t - r0;
-          for (var c = 0; c <= cols; c++) {
-            final p0 = at(r0, c), p1 = at(r1, c);
-            pts.add(NormPoint(
-                p0.x + (p1.x - p0.x) * f, p0.y + (p1.y - p0.y) * f));
+          final fr = tr - r0;
+          for (var c = 0; c <= newCols; c++) {
+            final tc = c / newCols * oldCols; // continuous old-col index
+            final c0 = tc.floor().clamp(0, oldCols);
+            final c1 = (c0 + 1).clamp(0, oldCols);
+            final fc = tc - c0;
+            // Bilinear sample of the old grid at (tr, tc).
+            final p00 = at(r0, c0), p01 = at(r0, c1);
+            final p10 = at(r1, c0), p11 = at(r1, c1);
+            double lerp(double a, double b, double t) => a + (b - a) * t;
+            final topX = lerp(p00.x, p01.x, fc), topY = lerp(p00.y, p01.y, fc);
+            final botX = lerp(p10.x, p11.x, fc), botY = lerp(p10.y, p11.y, fc);
+            pts.add(NormPoint(lerp(topX, botX, fr), lerp(topY, botY, fr)));
           }
         }
-        _grid = MeshGrid(rows: newRows, cols: cols, points: pts);
+        _grid = MeshGrid(rows: newRows, cols: newCols, points: pts);
       });
 
   void _reset() {
@@ -285,10 +296,15 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
                   icon: const Icon(Icons.auto_fix_high),
                   label: const Text('Auto edges'),
                 ),
-                TextButton.icon(
-                  onPressed: _addCrease,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Crease'),
+                IconButton(
+                  tooltip: 'Add horizontal crease',
+                  icon: const Icon(Icons.table_rows),
+                  onPressed: () => _addCrease(horizontal: true),
+                ),
+                IconButton(
+                  tooltip: 'Add vertical crease',
+                  icon: const Icon(Icons.view_column),
+                  onPressed: () => _addCrease(horizontal: false),
                 ),
                 IconButton(
                   tooltip: 'Reset',

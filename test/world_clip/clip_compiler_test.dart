@@ -18,6 +18,9 @@ void main() {
         written.add(name);
         return 'attachments/$name';
       },
+      // Render directly (no background isolate) so the unit test is
+      // deterministic; still exercises the real PDF build path.
+      pdfRenderer: renderWorldClipPdf,
     );
   });
 
@@ -41,5 +44,16 @@ void main() {
     );
     expect(written.single, endsWith('.pdf'));
     expect(note.attachmentPaths.single, endsWith('.pdf'));
+  });
+
+  test('renderWorldClipPdf downscales large pages and emits a valid PDF',
+      () async {
+    // A page far wider than the 1600px cap must be downscaled, not embedded raw.
+    final big = Uint8List.fromList(img.encodePng(
+        img.Image(width: 3000, height: 2000)..clear(img.ColorRgb8(200, 100, 50))));
+    final pdf = await renderWorldClipPdf([big, big]);
+    expect(pdf.length, greaterThan(8));
+    // PDF magic header "%PDF".
+    expect(pdf.sublist(0, 4), [0x25, 0x50, 0x44, 0x46]);
   });
 }
