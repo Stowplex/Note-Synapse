@@ -166,3 +166,6 @@ app.*.map.json
 # Git worktrees
 .worktrees/
 
+
+# World Clip local detection fixtures (personal photos / debug masks)
+test/world_clip/fixtures/
