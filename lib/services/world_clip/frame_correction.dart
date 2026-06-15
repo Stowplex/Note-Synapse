@@ -5,14 +5,17 @@ import 'models/correction.dart';
 import 'models/mesh_grid.dart';
 
 /// Applies an ordered list of [Correction]s to a PNG frame, returning a PNG.
+/// When [maxWidth] is set and the result is wider, it is downscaled — callers
+/// use this to bound the resolution of corrected pages held in memory.
 abstract class FrameCorrection {
-  Future<Uint8List> apply(Uint8List sourcePng, List<Correction> corrections);
+  Future<Uint8List> apply(Uint8List sourcePng, List<Correction> corrections,
+      {int? maxWidth});
 }
 
 class OpenCvFrameCorrection implements FrameCorrection {
   @override
-  Future<Uint8List> apply(
-      Uint8List sourcePng, List<Correction> corrections) async {
+  Future<Uint8List> apply(Uint8List sourcePng, List<Correction> corrections,
+      {int? maxWidth}) async {
     var mat = cv.imdecode(sourcePng, cv.IMREAD_COLOR);
     try {
       for (final c in corrections) {
@@ -23,6 +26,15 @@ class OpenCvFrameCorrection implements FrameCorrection {
         };
         if (!identical(next, mat)) mat.dispose();
         mat = next;
+      }
+      // Cap output resolution (cheap OpenCV resize on the decoded Mat — avoids
+      // holding/encoding full-res pages, the source of the many-image OOM).
+      if (maxWidth != null && mat.cols > maxWidth) {
+        final scaled = cv.resize(
+            mat, (maxWidth, (mat.rows * maxWidth / mat.cols).round()),
+            interpolation: cv.INTER_AREA);
+        mat.dispose();
+        mat = scaled;
       }
       final (_, png) = cv.imencode('.png', mat);
       return png;

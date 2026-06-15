@@ -45,6 +45,15 @@ void main() {
     mat.dispose();
   });
 
+  test('maxWidth downscales the corrected output', () async {
+    final big = _solidPng(2000, 1000);
+    final out = await correction.apply(big, const [], maxWidth: 800);
+    final mat = cv.imdecode(out, cv.IMREAD_COLOR);
+    expect(mat.cols, 800);
+    expect(mat.rows, 400); // aspect preserved
+    mat.dispose();
+  });
+
   test('crop extending past the edge is clamped, not a crash', () async {
     final src = _solidPng(40, 20);
     // x+width and y+height both exceed 1.0 — must clamp instead of throwing.

@@ -34,6 +34,11 @@ class WorldClipFlowScreen extends StatefulWidget {
 }
 
 class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
+  // Cap corrected-page resolution so the in-memory review pages (and the PDF /
+  // inline-image / isolate-copy payloads built from them) stay bounded — this
+  // is the root mitigation for OOM on clips with many pages.
+  static const int _maxPageWidth = 1600;
+
   WorldClipStage _stage = WorldClipStage.source;
 
   ClipProjectStore? _store;
@@ -48,14 +53,25 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   // strip, the scrub highlight, and (crucially) auto key-frame detection so the
   // detector scores already-decoded thumbnails instead of re-extracting frames.
   final Map<int, Future<Uint8List>> _thumbCache = {};
+  // Bound resident thumbnail memory (each ~10-20KB). LRU-evict the oldest so a
+  // long video can't accumulate every decoded thumbnail (would OOM).
+  static const int _thumbCacheCap = 150;
 
-  Future<Uint8List> _thumb(int ts) =>
-      _thumbCache[ts] ??= _extractor!.thumbnailAt(ts);
+  Future<Uint8List> _thumb(int ts) {
+    final f = _thumbCache[ts] ??= _extractor!.thumbnailAt(ts);
+    if (_thumbCache.length > _thumbCacheCap && _thumbCache.keys.first != ts) {
+      _thumbCache.remove(_thumbCache.keys.first);
+    }
+    return f;
+  }
 
-  /// Eagerly decodes timeline thumbnails in the background so scrubbing and
-  /// auto-detect are responsive. Bails if the user leaves the timeline.
+  /// Eagerly decodes the first window of timeline thumbnails in the background
+  /// so the strip and scrubbing are responsive on entry. Bounded by the cache
+  /// cap — warming more than fits would just thrash eviction. The rest load
+  /// lazily as the strip scrolls / detection samples them.
   Future<void> _prewarmThumbnails() async {
-    for (final ts in List<int>.from(_timestamps)) {
+    final warm = _timestamps.take(_thumbCacheCap).toList();
+    for (final ts in warm) {
       if (!mounted || _stage != WorldClipStage.timeline || _extractor == null) {
         return;
       }
@@ -169,8 +185,11 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
       if (mounted) setState(() => _detecting = false);
       return;
     }
+    // Threshold tuned for ~240px thumbnails (variance-of-Laplacian scales with
+    // resolution, so it's lower than a full-res cutoff would be). Kept lenient
+    // so detection over-suggests rather than missing frames — the user prunes.
     const selector = FrameSelector(
-      sharpnessThreshold: 80,
+      sharpnessThreshold: 20,
       sceneChangeThreshold: 0.25,
       minGapMs: 1500,
     );
@@ -252,7 +271,8 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     for (final ts in _orderedTags) {
       final full = await _extractor!.fullFrameAt(ts);
       try {
-        pages.add(await correction.apply(full, _correctionsFor(ts)));
+        pages.add(await correction.apply(full, _correctionsFor(ts),
+            maxWidth: _maxPageWidth));
       } catch (_) {
         // A bad correction must not strand the whole review on a spinner —
         // fall back to the uncorrected frame so the page still shows.
@@ -294,7 +314,8 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
             _setCorrectionsFor(ts, corrections);
             await _store!.save(_project!);
             final corrected =
-                await getIt<FrameCorrection>().apply(full, corrections);
+                await getIt<FrameCorrection>()
+                    .apply(full, corrections, maxWidth: _maxPageWidth);
             if (!mounted) return;
             // Re-resolve by timestamp: the page may have moved or been removed
             // while the editor was open, so the captured index can be stale.
