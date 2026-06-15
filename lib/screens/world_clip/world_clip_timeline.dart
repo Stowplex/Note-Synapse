@@ -2,8 +2,10 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 /// A horizontal proxy-thumbnail strip. Tapping a thumb toggles its key-frame
-/// tag (a tagged thumb is highlighted). Thumbnails load lazily via [thumbnailBuilder].
-class WorldClipTimeline extends StatelessWidget {
+/// tag (a tagged thumb is highlighted). Thumbnails load lazily via
+/// [thumbnailBuilder] and are memoized per timestamp, so toggling a tag (which
+/// rebuilds the strip) does not re-decode every visible frame.
+class WorldClipTimeline extends StatefulWidget {
   final List<int> timestamps;
   final Set<int> taggedTimestamps;
   final Future<Uint8List> Function(int timestampMs) thumbnailBuilder;
@@ -18,18 +20,28 @@ class WorldClipTimeline extends StatelessWidget {
   });
 
   @override
+  State<WorldClipTimeline> createState() => _WorldClipTimelineState();
+}
+
+class _WorldClipTimelineState extends State<WorldClipTimeline> {
+  final Map<int, Future<Uint8List>> _thumbnails = {};
+
+  Future<Uint8List> _thumbnailFor(int ts) =>
+      _thumbnails[ts] ??= widget.thumbnailBuilder(ts);
+
+  @override
   Widget build(BuildContext context) {
     return SizedBox(
       height: 120,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        itemCount: timestamps.length,
+        itemCount: widget.timestamps.length,
         itemBuilder: (context, i) {
-          final ts = timestamps[i];
-          final tagged = taggedTimestamps.contains(ts);
+          final ts = widget.timestamps[i];
+          final tagged = widget.taggedTimestamps.contains(ts);
           return GestureDetector(
             key: ValueKey('wc-thumb-$ts'),
-            onTap: () => onToggleTag(ts),
+            onTap: () => widget.onToggleTag(ts),
             child: Container(
               width: 90,
               margin: const EdgeInsets.all(4),
@@ -40,7 +52,7 @@ class WorldClipTimeline extends StatelessWidget {
                 ),
               ),
               child: FutureBuilder<Uint8List>(
-                future: thumbnailBuilder(ts),
+                future: _thumbnailFor(ts),
                 builder: (context, snap) => snap.hasData
                     ? Image.memory(snap.data!, fit: BoxFit.cover)
                     : const Center(child: CircularProgressIndicator()),

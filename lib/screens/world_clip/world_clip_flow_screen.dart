@@ -19,7 +19,9 @@ import 'world_clip_timeline.dart';
 import 'clip_review_screen.dart';
 import 'mesh_editor.dart';
 
-enum WorldClipStage { source, timeline, correct, review, compile }
+/// Stages of the capture flow. Per-clip correction (mesh editor) is reached as
+/// a pushed route from the review stage rather than a top-level stage.
+enum WorldClipStage { source, timeline, review }
 
 class WorldClipFlowScreen extends StatefulWidget {
   /// When non-null, resume an existing cached project by id.
@@ -101,18 +103,46 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     });
   }
 
+  /// The ClipSpec for [ts], or null when the frame isn't tagged.
+  ClipSpec? _clipFor(int ts) {
+    final i = _project!.clips.indexWhere((c) => c.frameTimestampMs == ts);
+    return i < 0 ? null : _project!.clips[i];
+  }
+
+  /// Tagged timestamps in the user's chosen order (persisted `ClipSpec.order`,
+  /// ties broken by timestamp) so a reorder survives a resume.
+  List<int> _orderedTagsFromClips() {
+    final clips = _project!.clips.toList()
+      ..sort((a, b) {
+        final byOrder = a.order.compareTo(b.order);
+        return byOrder != 0
+            ? byOrder
+            : a.frameTimestampMs.compareTo(b.frameTimestampMs);
+      });
+    return clips.map((c) => c.frameTimestampMs).toList();
+  }
+
+  /// Rewrites every ClipSpec.order to match the current `_orderedTags` and
+  /// persists, so review-stage reorder/remove are durable.
+  Future<void> _persistOrder() async {
+    for (var i = 0; i < _orderedTags.length; i++) {
+      _clipFor(_orderedTags[i])?.order = i;
+    }
+    await _store!.save(_project!);
+  }
+
   Future<void> _onToggleTag(int ts) async {
     setState(() =>
         _tagged.contains(ts) ? _tagged.remove(ts) : _tagged.add(ts));
-    // Sync ClipSpecs with the tag set and save.
+    // Sync ClipSpecs with the tag set: drop untagged, append new tags.
     _project!.clips
         .removeWhere((c) => !_tagged.contains(c.frameTimestampMs));
     for (final t in _tagged) {
-      if (!_project!.clips.any((c) => c.frameTimestampMs == t)) {
+      if (_clipFor(t) == null) {
         _project!.clips.add(ClipSpec(
             id: t.toString(),
             frameTimestampMs: t,
-            order: 0,
+            order: _project!.clips.length,
             corrections: const []));
       }
     }
@@ -121,7 +151,7 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
 
   Future<void> _buildReviewPages() async {
     final correction = getIt<FrameCorrection>();
-    _orderedTags = _tagged.toList()..sort();
+    _orderedTags = _orderedTagsFromClips();
     final pages = <Uint8List>[];
     for (final ts in _orderedTags) {
       final full = await _extractor!.fullFrameAt(ts);
@@ -131,21 +161,15 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     setState(() => _reviewPages = pages);
   }
 
-  List<Correction> _correctionsFor(int ts) => _project!.clips
-      .firstWhere((c) => c.frameTimestampMs == ts,
-          orElse: () => ClipSpec(
-              id: ts.toString(),
-              frameTimestampMs: ts,
-              order: 0,
-              corrections: const []))
-      .corrections;
+  List<Correction> _correctionsFor(int ts) =>
+      _clipFor(ts)?.corrections ?? const [];
 
   void _setCorrectionsFor(int ts, List<Correction> corrections) {
     final existing = _project!.clips.indexWhere((c) => c.frameTimestampMs == ts);
     final spec = ClipSpec(
         id: ts.toString(),
         frameTimestampMs: ts,
-        order: _orderedTags.indexOf(ts),
+        order: existing >= 0 ? _project!.clips[existing].order : _orderedTags.indexOf(ts),
         corrections: corrections);
     if (existing >= 0) {
       _project!.clips[existing] = spec;
@@ -226,22 +250,31 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
             ? const Center(child: CircularProgressIndicator())
             : ClipReviewScreen(
                 pages: _reviewPages,
-                onReorder: (oldI, newI) => setState(() {
-                  if (newI > oldI) newI -= 1;
-                  final t = _orderedTags.removeAt(oldI);
-                  _orderedTags.insert(newI, t);
-                  final pg = _reviewPages.removeAt(oldI);
-                  _reviewPages.insert(newI, pg);
-                }),
-                onRemove: (i) => setState(() {
-                  _orderedTags.removeAt(i);
-                  _reviewPages.removeAt(i);
-                }),
+                onReorder: (oldI, newI) {
+                  setState(() {
+                    if (newI > oldI) newI -= 1;
+                    final t = _orderedTags.removeAt(oldI);
+                    _orderedTags.insert(newI, t);
+                    final pg = _reviewPages.removeAt(oldI);
+                    _reviewPages.insert(newI, pg);
+                  });
+                  _persistOrder();
+                },
+                onRemove: (i) {
+                  final ts = _orderedTags[i];
+                  setState(() {
+                    _orderedTags.removeAt(i);
+                    _reviewPages.removeAt(i);
+                    _tagged.remove(ts);
+                    _project!.clips
+                        .removeWhere((c) => c.frameTimestampMs == ts);
+                  });
+                  _persistOrder();
+                },
                 onEdit: _editClip,
                 onCompilePdf: () => _compile(ClipOutputFormat.pdf),
                 onCompileImages: () => _compile(ClipOutputFormat.inlineImages),
               ),
-        _ => Center(child: Text('Stage: ${_stage.name}')),
       },
     );
   }
