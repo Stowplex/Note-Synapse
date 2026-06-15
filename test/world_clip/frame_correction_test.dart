@@ -4,6 +4,7 @@ import 'package:opencv_dart/opencv_dart.dart' as cv;
 import 'package:note_synapse/services/world_clip/frame_correction.dart';
 import 'package:note_synapse/services/world_clip/models/correction.dart';
 import 'package:note_synapse/services/world_clip/models/mesh_grid.dart';
+import 'package:note_synapse/services/world_clip/models/norm_point.dart';
 
 Uint8List _solidPng(int w, int h) {
   final mat = cv.Mat.create(rows: h, cols: w, type: cv.MatType.CV_8UC3);
@@ -52,6 +53,20 @@ void main() {
     final mat = cv.imdecode(out, cv.IMREAD_COLOR);
     expect(mat.cols, inInclusiveRange(1, 40));
     expect(mat.rows, inInclusiveRange(1, 20));
+    mat.dispose();
+  });
+
+  test('degenerate mesh (all corners coincident) does not throw', () async {
+    final src = _solidPng(40, 20);
+    // All four control points dragged to the same spot — the per-cell
+    // perspective transform is degenerate; apply() must degrade, not throw.
+    final grid = MeshGrid(rows: 1, cols: 1, points: const [
+      NormPoint(0, 0), NormPoint(0, 0), NormPoint(0, 0), NormPoint(0, 0),
+    ]);
+    final out = await correction.apply(src, [MeshDewarpCorrection(grid: grid)]);
+    final mat = cv.imdecode(out, cv.IMREAD_COLOR);
+    expect(mat.cols, 40);
+    expect(mat.rows, 20);
     mat.dispose();
   });
 

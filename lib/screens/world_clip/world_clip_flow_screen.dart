@@ -155,7 +155,13 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     final pages = <Uint8List>[];
     for (final ts in _orderedTags) {
       final full = await _extractor!.fullFrameAt(ts);
-      pages.add(await correction.apply(full, _correctionsFor(ts)));
+      try {
+        pages.add(await correction.apply(full, _correctionsFor(ts)));
+      } catch (_) {
+        // A bad correction must not strand the whole review on a spinner —
+        // fall back to the uncorrected frame so the page still shows.
+        pages.add(full);
+      }
     }
     if (!mounted) return;
     setState(() => _reviewPages = pages);
@@ -194,7 +200,12 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
             final corrected =
                 await getIt<FrameCorrection>().apply(full, corrections);
             if (!mounted) return;
-            setState(() => _reviewPages[index] = corrected);
+            // Re-resolve by timestamp: the page may have moved or been removed
+            // while the editor was open, so the captured index can be stale.
+            final current = _orderedTags.indexOf(ts);
+            if (current >= 0) {
+              setState(() => _reviewPages[current] = corrected);
+            }
             if (mounted) Navigator.of(context).pop();
           },
         ),
@@ -268,6 +279,11 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
                     _tagged.remove(ts);
                     _project!.clips
                         .removeWhere((c) => c.frameTimestampMs == ts);
+                    // Removing the last page would otherwise strand the review
+                    // stage on its loading spinner — step back to the timeline.
+                    if (_reviewPages.isEmpty) {
+                      _stage = WorldClipStage.timeline;
+                    }
                   });
                   _persistOrder();
                 },

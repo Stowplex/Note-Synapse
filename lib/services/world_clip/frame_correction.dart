@@ -13,29 +13,37 @@ class OpenCvFrameCorrection implements FrameCorrection {
   Future<Uint8List> apply(
       Uint8List sourcePng, List<Correction> corrections) async {
     var mat = cv.imdecode(sourcePng, cv.IMREAD_COLOR);
-    for (final c in corrections) {
-      final next = switch (c) {
-        CropCorrection() => _crop(mat, c),
-        RotateCorrection() => _rotate(mat, c),
-        MeshDewarpCorrection() => _meshDewarp(mat, c.grid),
-      };
-      if (!identical(next, mat)) mat.dispose();
-      mat = next;
+    try {
+      for (final c in corrections) {
+        final next = switch (c) {
+          CropCorrection() => _crop(mat, c),
+          RotateCorrection() => _rotate(mat, c),
+          MeshDewarpCorrection() => _meshDewarp(mat, c.grid),
+        };
+        if (!identical(next, mat)) mat.dispose();
+        mat = next;
+      }
+      final (_, png) = cv.imencode('.png', mat);
+      return png;
+    } finally {
+      // Guarantees the accumulator is freed even if a correction throws
+      // (OpenCV Mats are not GC-managed); callers handle the rethrow.
+      mat.dispose();
     }
-    final (_, png) = cv.imencode('.png', mat);
-    mat.dispose();
-    return png;
   }
 
   cv.Mat _crop(cv.Mat src, CropCorrection c) {
-    return src.region(_safeRect(
+    final view = src.region(_safeRect(
       (c.x * src.cols).round(),
       (c.y * src.rows).round(),
       (c.width * src.cols).round(),
       (c.height * src.rows).round(),
       src.cols,
       src.rows,
-    )).clone();
+    ));
+    final out = view.clone();
+    view.dispose(); // region() returns a header view that must be freed.
+    return out;
   }
 
   /// Builds a Rect guaranteed to sit fully inside a [maxW]x[maxH] Mat with
@@ -67,6 +75,15 @@ class OpenCvFrameCorrection implements FrameCorrection {
     int idx(int r, int c) => r * (grid.cols + 1) + c;
     for (var r = 0; r < grid.rows; r++) {
       for (var c = 0; c < grid.cols; c++) {
+        // Integer cell edges, shared by the destination quad and the copy
+        // region so the rect always lands inside `out`/`warped` (the last
+        // edge rounds to exactly w/h, avoiding an out-of-bounds region()).
+        final ix0 = (c / grid.cols * w).round(), ix1 = ((c + 1) / grid.cols * w).round();
+        final iy0 = (r / grid.rows * h).round(), iy1 = ((r + 1) / grid.rows * h).round();
+        // Skip cells that round to zero extent (cols/rows finer than the
+        // pixel grid) — a zero-area destination quad is a degenerate transform.
+        if (ix1 <= ix0 || iy1 <= iy0) continue;
+
         final tl = grid.points[idx(r, c)];
         final tr = grid.points[idx(r, c + 1)];
         final br = grid.points[idx(r + 1, c + 1)];
@@ -77,30 +94,33 @@ class OpenCvFrameCorrection implements FrameCorrection {
           cv.Point2f(br.x * w, br.y * h),
           cv.Point2f(bl.x * w, bl.y * h),
         ]);
-        // Integer cell edges, shared by the destination quad and the copy
-        // region so the rect always lands inside `out`/`warped` (the last
-        // edge rounds to exactly w/h, avoiding an out-of-bounds region()).
-        final ix0 = (c / grid.cols * w).round(), ix1 = ((c + 1) / grid.cols * w).round();
-        final iy0 = (r / grid.rows * h).round(), iy1 = ((r + 1) / grid.rows * h).round();
         final dstPts = cv.VecPoint2f.fromList([
           cv.Point2f(ix0.toDouble(), iy0.toDouble()),
           cv.Point2f(ix1.toDouble(), iy0.toDouble()),
           cv.Point2f(ix1.toDouble(), iy1.toDouble()),
           cv.Point2f(ix0.toDouble(), iy1.toDouble()),
         ]);
-        final m = cv.getPerspectiveTransform2f(srcPts, dstPts);
-        final warped = cv.warpPerspective(src, m, (w, h));
-        // Copy the destination cell region from `warped` into `out`.
-        final cellRect = _safeRect(ix0, iy0, ix1 - ix0, iy1 - iy0, w, h);
-        final cellSrc = warped.region(cellRect);
-        final cellDst = out.region(cellRect);
-        cellSrc.copyTo(cellDst);
-        m.dispose();
-        warped.dispose();
-        cellSrc.dispose();
-        cellDst.dispose();
-        srcPts.dispose();
-        dstPts.dispose();
+        cv.Mat? m, warped, cellSrc, cellDst;
+        try {
+          m = cv.getPerspectiveTransform2f(srcPts, dstPts);
+          warped = cv.warpPerspective(src, m, (w, h));
+          // Copy the destination cell region from `warped` into `out`.
+          final cellRect = _safeRect(ix0, iy0, ix1 - ix0, iy1 - iy0, w, h);
+          cellSrc = warped.region(cellRect);
+          cellDst = out.region(cellRect);
+          cellSrc.copyTo(cellDst);
+        } catch (_) {
+          // Degenerate cell transform (e.g. the user dragged all four mesh
+          // corners together → coincident points). Leave this cell blank
+          // rather than aborting the whole frame.
+        } finally {
+          m?.dispose();
+          warped?.dispose();
+          cellSrc?.dispose();
+          cellDst?.dispose();
+          srcPts.dispose();
+          dstPts.dispose();
+        }
       }
     }
     return out;
