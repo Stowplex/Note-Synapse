@@ -53,4 +53,20 @@ void main() {
     final fresh = ClipProjectStore(Directory('${tmp.path}/never_created'));
     expect(await fresh.listAll(), isEmpty);
   });
+
+  test('clip order survives a save/reload so a reorder persists on resume',
+      () async {
+    final p = await store.create(name: 'Reordered', sourceVideo: fakeVideo);
+    // Two clips whose `order` is the reverse of their timestamp order — this
+    // is what a review-stage drag produces; resume must replay `order`.
+    p.clips.add(ClipSpec(
+        id: 'late', frameTimestampMs: 2000, order: 0, corrections: const []));
+    p.clips.add(ClipSpec(
+        id: 'early', frameTimestampMs: 1000, order: 1, corrections: const []));
+    await store.save(p);
+
+    final loaded = (await store.load(p.id))!;
+    loaded.clips.sort((a, b) => a.order.compareTo(b.order));
+    expect(loaded.clips.map((c) => c.frameTimestampMs), [2000, 1000]);
+  });
 }
