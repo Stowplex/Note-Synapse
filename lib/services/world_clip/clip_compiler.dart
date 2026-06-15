@@ -76,7 +76,11 @@ class ClipCompiler {
           final path = await _writeAttachment(
               pageImagesPng[i], 'worldclip_${stamp}_$i.png');
           attachmentPaths.add(path);
-          buf.writeln('![clip ${i + 1}]($path)');
+          // The note renderer resolves image links by base name against the
+          // attachments dir, so the markdown must NOT include the
+          // "attachments/" prefix that saveFileToPrivateStorage returns.
+          final fileName = path.split('/').last;
+          buf.writeln('![clip ${i + 1}]($fileName)');
           buf.writeln();
         }
         content = buf.toString().trimRight();

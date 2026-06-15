@@ -34,6 +34,13 @@ void main() {
     expect(written.length, 2);
     expect(note.attachmentPaths.length, 2);
     expect(note.content, contains('![')); // images embedded in markdown
+    // attachmentPaths keep the full 'attachments/...' path for the DB,
+    expect(note.attachmentPaths.every((p) => p.startsWith('attachments/')),
+        isTrue);
+    // but the markdown links must be the bare base name (renderer resolves
+    // those against the attachments dir — 'attachments/...' won't resolve).
+    expect(note.content, isNot(contains('](attachments/')));
+    expect(note.content, contains('](worldclip_'));
   });
 
   test('pdf output builds a note with a single pdf attachment', () async {
