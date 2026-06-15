@@ -72,7 +72,7 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
         sourceVideo: file);
     final videoPath =
         p.join(store.projectDir(project.id).path, project.sourceVideoFileName);
-    final extractor = OpenCvFrameExtractor(videoPath);
+    final extractor = PlatformFrameExtractor(videoPath);
     final timestamps = await extractor.sampleTimestamps(fps: 5);
     if (!mounted) return;
     setState(() {
@@ -89,7 +89,7 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     if (project == null) return;
     final videoPath =
         p.join(store.projectDir(project.id).path, project.sourceVideoFileName);
-    final extractor = OpenCvFrameExtractor(videoPath);
+    final extractor = PlatformFrameExtractor(videoPath);
     final timestamps = await extractor.sampleTimestamps(fps: 5);
     if (!mounted) return;
     setState(() {

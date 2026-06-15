@@ -1,10 +1,9 @@
-import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 import 'frame_selector.dart';
 
 /// Decodes a source video into proxy thumbnails, full-res frames, and
-/// per-frame features. The seam lets the OpenCV backend be swapped for a
-/// native/ffmpeg extractor (see Task 1 spike decision).
+/// per-frame features. The seam lets the decode backend be swapped.
 abstract class FrameExtractor {
   /// Frame timestamps (ms) sampled at [fps], ascending.
   Future<List<int>> sampleTimestamps({int fps = 5});
@@ -21,85 +20,78 @@ abstract class FrameExtractor {
   void dispose();
 }
 
-class OpenCvFrameExtractor implements FrameExtractor {
+/// Extracts frames via a platform method channel backed by Android's
+/// `MediaMetadataRetriever` and iOS's `AVAssetImageGenerator`.
+///
+/// opencv_dart 2.2.x dropped its FFmpeg backend, so its `VideoCapture` cannot
+/// decode video files (the Task-1 spike's documented risk #1). Video *decode*
+/// therefore runs natively; OpenCV's `imgproc` (which still works) is reused
+/// only for the sharpness/scene-change feature math on already-decoded frames.
+class PlatformFrameExtractor implements FrameExtractor {
+  static const MethodChannel _defaultChannel =
+      MethodChannel('note_synapse/video_frames');
+
   final String videoPath;
-  late final cv.VideoCapture _cap;
-  late final double _fps;
-  late final double _frameCount;
+  final MethodChannel _channel;
+  int? _durationMs;
 
-  OpenCvFrameExtractor(this.videoPath) {
-    _cap = cv.VideoCapture.fromFile(videoPath);
-    if (!_cap.isOpened) {
-      throw StateError('Could not open video: $videoPath');
-    }
-    _fps = _cap.get(cv.CAP_PROP_FPS);
-    _frameCount = _cap.get(cv.CAP_PROP_FRAME_COUNT);
-  }
+  PlatformFrameExtractor(this.videoPath, {MethodChannel? channel})
+      : _channel = channel ?? _defaultChannel;
 
-  int get _durationMs =>
-      (_fps > 0 && _frameCount > 0) ? (_frameCount / _fps * 1000).round() : 0;
+  Future<int> _duration() async =>
+      _durationMs ??=
+          (await _channel.invokeMethod<int>('getDuration', {'path': videoPath})) ??
+              0;
 
   @override
   Future<List<int>> sampleTimestamps({int fps = 5}) async {
+    final durationMs = await _duration();
     final step = (1000 / fps).round();
     final out = <int>[];
-    for (var t = 0; t < _durationMs; t += step) {
+    for (var t = 0; t < durationMs; t += step) {
       out.add(t);
     }
     return out;
   }
 
-  cv.Mat _readAt(int timestampMs) {
-    _cap.set(cv.CAP_PROP_POS_MSEC, timestampMs.toDouble());
-    final (ok, mat) = _cap.read();
-    if (!ok || mat.isEmpty) {
-      mat.dispose();
+  /// Fetches one frame as PNG bytes. [maxWidth] == 0 means full resolution.
+  Future<Uint8List> _frame(int timestampMs, int maxWidth) async {
+    final bytes = await _channel.invokeMethod<Uint8List>('extractFrame', {
+      'path': videoPath,
+      'timeMs': timestampMs,
+      'maxWidth': maxWidth,
+    });
+    if (bytes == null || bytes.isEmpty) {
       throw StateError('No frame at ${timestampMs}ms');
     }
-    return mat;
+    return bytes;
   }
 
   @override
-  Future<Uint8List> thumbnailAt(int timestampMs, {int maxWidth = 240}) async {
-    final mat = _readAt(timestampMs);
-    final scale = maxWidth / mat.cols;
-    final resized = cv.resize(
-        mat, (maxWidth, (mat.rows * scale).round()),
-        interpolation: cv.INTER_AREA);
-    final (_, png) = cv.imencode('.png', resized);
-    mat.dispose();
-    resized.dispose();
-    return png;
-  }
+  Future<Uint8List> thumbnailAt(int timestampMs, {int maxWidth = 240}) =>
+      _frame(timestampMs, maxWidth);
 
   @override
-  Future<Uint8List> fullFrameAt(int timestampMs) async {
-    final mat = _readAt(timestampMs);
-    final (_, png) = cv.imencode('.png', mat);
-    mat.dispose();
-    return png;
-  }
+  Future<Uint8List> fullFrameAt(int timestampMs) => _frame(timestampMs, 0);
 
   @override
   Future<FrameFeature> featureAt(int timestampMs,
       {int? previousTimestampMs}) async {
-    final mat = _readAt(timestampMs);
+    final mat = cv.imdecode(await _frame(timestampMs, 0), cv.IMREAD_COLOR);
     final gray = cv.cvtColor(mat, cv.COLOR_BGR2GRAY);
     final lap = cv.laplacian(gray, cv.MatType.CV_64F);
     // opencv_dart 2.x: meanStdDev returns (Scalar mean, Scalar stddev).
     final (_, stddev) = cv.meanStdDev(lap);
-    final sharpness = stddev.val1;
-    final variance = sharpness * sharpness;
+    final variance = stddev.val1 * stddev.val1;
 
     double diff = 1.0;
     if (previousTimestampMs != null) {
-      final prev = _readAt(previousTimestampMs);
+      final prev = cv.imdecode(await _frame(previousTimestampMs, 0), cv.IMREAD_COLOR);
       final prevGray = cv.cvtColor(prev, cv.COLOR_BGR2GRAY);
       final small = cv.resize(gray, (64, 64));
       final prevSmall = cv.resize(prevGray, (64, 64));
       final delta = cv.absDiff(small, prevSmall);
-      final mean = cv.mean(delta);
-      diff = mean.val1 / 255.0;
+      diff = cv.mean(delta).val1 / 255.0;
       prev.dispose();
       prevGray.dispose();
       small.dispose();
@@ -115,5 +107,5 @@ class OpenCvFrameExtractor implements FrameExtractor {
   }
 
   @override
-  void dispose() => _cap.release();
+  void dispose() {}
 }

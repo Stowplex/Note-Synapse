@@ -191,13 +191,20 @@ No DB migration, no new AI surface, no new key storage.
 - **2.x deltas applied in implementation:** `meanStdDev` returns a `Scalar` (not a
   `Mat`), so sharpness reads `stddev.val1` rather than `stddev.at<double>(0,0)`. All
   other plan call sites are API-compatible with 2.x as written.
-- **Decision: PASS (API), with a caveat.** `OpenCvFrameExtractor` (Task 8) uses
-  `VideoCapture`. The on-device decode gate (real iOS + Android) from the original
-  spike could **not** be executed in this headless environment; the host-OpenCV
-  integration test (Task 8) skips gracefully when the host build lacks a video
-  backend. The `FrameExtractor` seam preserves the documented fallback (native
-  method-channel grab or `ffmpeg_kit_flutter_new`) should on-device decode fail
-  QA — no architecture change is needed to switch backends.
+- **Decision (revised after on-device QA): FAIL → fell back to a native
+  method-channel extractor.** On a real Android device, `VideoCapture.fromFile`
+  threw `Failed to lookup symbol 'cv_VideoCapture_create_1'`: in dartcv 2.2.x the
+  `videoio` module is excluded by default *and* **FFmpeg was removed entirely**
+  (`dartcv >= 2.2.0`), so OpenCV cannot decode video files on any platform —
+  risk #1 realized. Per the documented mitigation, `OpenCvFrameExtractor` was
+  replaced (behind the unchanged `FrameExtractor` seam) by **`PlatformFrameExtractor`**,
+  which decodes via a `note_synapse/video_frames` method channel backed by
+  Android `MediaMetadataRetriever` and iOS `AVAssetImageGenerator` (duration +
+  frame-at-timestamp; no FFmpeg, no extra deps). OpenCV's `imgproc` (which still
+  works) is retained for the correction toolbox and the sharpness/diff feature
+  math on already-decoded frames. Only the extractor class changed; models,
+  store, selector, compiler, corrections, and all UI were untouched — validating
+  the seam. Note: World Clip is mobile-only (the channel has no desktop handler).
 
 ## 7. Testing strategy
 
