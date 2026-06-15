@@ -157,14 +157,14 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     await _onToggleTag(ts);
   }
 
-  /// Auto-suggests key frames: samples ~every 3rd timeline frame, scores each
-  /// from the *cached timeline thumbnail* (reused, not re-decoded), and tags
-  /// the frames the pure [FrameSelector] heuristic picks. Progress overlay.
+  /// Auto-suggests key frames: scores every sampled thumbnail (reused from the
+  /// cache, not re-decoded) for sharpness + inter-frame motion, then segments
+  /// the clip into stable holds and tags the sharpest frame of each held page.
+  /// Progress overlay. Uses the full timeline sampling so brief page holds are
+  /// not missed.
   Future<void> _autoDetectKeyframes() async {
     if (_extractor == null || _timestamps.isEmpty) return;
-    final sampled = [
-      for (var i = 0; i < _timestamps.length; i += 3) _timestamps[i]
-    ];
+    final sampled = List<int>.from(_timestamps);
     setState(() {
       _detecting = true;
       _detectLabel = 'Analyzing 0/${sampled.length}';
@@ -185,14 +185,9 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
       if (mounted) setState(() => _detecting = false);
       return;
     }
-    // Threshold tuned for ~240px thumbnails (variance-of-Laplacian scales with
-    // resolution, so it's lower than a full-res cutoff would be). Kept lenient
-    // so detection over-suggests rather than missing frames — the user prunes.
-    const selector = FrameSelector(
-      sharpnessThreshold: 20,
-      sceneChangeThreshold: 0.25,
-      minGapMs: 1500,
-    );
+    // Defaults segment the clip into stable page-holds with an adaptive motion
+    // threshold, so this self-tunes to a steady e-reader or a handheld book.
+    const selector = FrameSelector();
     if (!mounted) return; // user left mid-detection — don't mutate/persist
     final picks = selector.suggest(features);
     for (final ts in picks) {
