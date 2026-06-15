@@ -55,6 +55,25 @@ void main() {
       File('test/world_clip/fixtures/${name}_mask.png')
           .writeAsBytesSync(maskPng);
 
+      // Draw the detected quad on the work image so the snap can be eyeballed.
+      if (grid != null) {
+        final pts = grid.points
+            .map((p) => cv.Point((p.x * w).round(), (p.y * h).round()))
+            .toList();
+        // Order TL,TR,BR,BL for a closed outline.
+        final poly = [pts[0], pts[1], pts[3], pts[2]];
+        for (var i = 0; i < 4; i++) {
+          cv.line(work, poly[i], poly[(i + 1) % 4], cv.Scalar(0, 0, 255),
+              thickness: 4);
+        }
+        for (final p in poly) {
+          cv.circle(work, p, 10, cv.Scalar(0, 255, 0), thickness: -1);
+        }
+        final (_, overlayPng) = cv.imencode('.png', work);
+        File('test/world_clip/fixtures/${name}_overlay.png')
+            .writeAsBytesSync(overlayPng);
+      }
+
       src.dispose();
       if (!identical(work, src)) work.dispose();
       gray.dispose();

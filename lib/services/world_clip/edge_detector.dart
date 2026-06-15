@@ -93,46 +93,46 @@ MeshGrid? detectDocumentQuad(Uint8List framePng,
   }
 }
 
-/// Extracts four corner points (in pixel coords) from a contour, trying
-/// progressively looser strategies. Returns null if none yields a usable quad.
+/// Extracts four corner points (in pixel coords) from a document blob.
+/// Returns null if no usable quad is found.
 List<(double, double)>? _quadFromContour(cv.VecPoint contour, double area) {
-  final peri = cv.arcLength(contour, true);
-
-  // 1) Direct polygon approximation at a few tolerances.
-  for (final eps in const [0.02, 0.03, 0.05, 0.08]) {
-    final approx = cv.approxPolyDP(contour, eps * peri, true);
-    try {
-      if (approx.length == 4 && cv.isContourConvex(approx)) {
-        return [for (var j = 0; j < 4; j++) (approx[j].x.toDouble(), approx[j].y.toDouble())];
-      }
-    } finally {
-      approx.dispose();
-    }
-  }
-
-  // 2) Approximate the convex hull (handles concave noise on the outline).
+  // 1) Extreme corners of the convex hull. For a page-shaped blob the four
+  //    physical corners are the extremes of (x+y) and (x-y), so this snaps to
+  //    the true edges (unlike approxPolyDP, which simplifies corners inward).
   final hullMat = cv.convexHull(contour);
   cv.VecPoint? hull;
   try {
     hull = cv.VecPoint.fromMat(hullMat);
-    final hullPeri = cv.arcLength(hull, true);
-    for (final eps in const [0.02, 0.04, 0.08]) {
-      final approx = cv.approxPolyDP(hull, eps * hullPeri, true);
-      try {
-        if (approx.length == 4) {
-          return [for (var j = 0; j < 4; j++) (approx[j].x.toDouble(), approx[j].y.toDouble())];
-        }
-      } finally {
-        approx.dispose();
+    final n = hull.length;
+    if (n >= 4) {
+      var tl = hull[0], tr = hull[0], br = hull[0], bl = hull[0];
+      var tlS = (tl.x + tl.y).toDouble(), brS = (br.x + br.y).toDouble();
+      var trD = (tr.x - tr.y).toDouble(), blD = (bl.x - bl.y).toDouble();
+      for (var i = 1; i < n; i++) {
+        final p = hull[i];
+        final s = (p.x + p.y).toDouble(), d = (p.x - p.y).toDouble();
+        if (s < tlS) { tl = p; tlS = s; }
+        if (s > brS) { br = p; brS = s; }
+        if (d > trD) { tr = p; trD = d; }
+        if (d < blD) { bl = p; blD = d; }
       }
+      final quad = [
+        (tl.x.toDouble(), tl.y.toDouble()),
+        (tr.x.toDouble(), tr.y.toDouble()),
+        (br.x.toDouble(), br.y.toDouble()),
+        (bl.x.toDouble(), bl.y.toDouble()),
+      ];
+      // Accept only if the corner quad actually encloses the blob (it can be
+      // degenerate near 45° rotation, where corners aren't diagonal extremes).
+      if (_polygonArea(quad) >= area * 0.85) return quad;
     }
   } finally {
     hullMat.dispose();
     hull?.dispose();
   }
 
-  // 3) Rotated bounding rectangle — accept if the contour fills most of it
-  //    (i.e. the contour really is roughly rectangular, like a page).
+  // 2) Rotated bounding rectangle — tight enclosing quad for rotated pages
+  //    where the diagonal-extreme heuristic above doesn't hold.
   final rr = cv.minAreaRect(contour);
   final boxPts = rr.points;
   try {
