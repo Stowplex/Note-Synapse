@@ -40,6 +40,7 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
   Uint8List _basePng = Uint8List(0);
   double _aspect = 1;
   bool _busy = false;
+  int _recomputeGen = 0; // discards stale rotation renders (race guard)
 
   double get _totalRotation => _quarterTurns * 90 + _fineDeg;
 
@@ -47,10 +48,14 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
   void initState() {
     super.initState();
     _engine = widget.correction ?? getIt<FrameCorrection>();
-    final rotation = widget.initial
+    var rotation = widget.initial
         .whereType<RotateCorrection>()
         .fold<double>(0, (sum, r) => sum + r.degrees);
-    _quarterTurns = (rotation ~/ 90) % 4;
+    // Normalize to [0, 360) so a stored -90 (rotate-left) re-opens correctly
+    // instead of producing negative quarter-turns + a bogus fine tilt.
+    rotation = rotation % 360;
+    if (rotation < 0) rotation += 360;
+    _quarterTurns = (rotation / 90).round() % 4;
     _fineDeg = (rotation - _quarterTurns * 90).clamp(-15, 15).toDouble();
     final mesh = widget.initial.whereType<MeshDewarpCorrection>();
     _grid = mesh.isEmpty ? MeshGrid.identity(rows: 1, cols: 1) : mesh.first.grid;
@@ -61,16 +66,22 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
   /// Re-renders the base preview with the current rotation so what the user
   /// drags on matches exactly what the pipeline will produce.
   Future<void> _recomputeBase({bool resetGrid = true}) async {
+    final gen = ++_recomputeGen;
     setState(() => _busy = true);
+    // Yield a frame so the busy overlay paints before the synchronous OpenCV
+    // warp blocks the UI isolate.
+    await Future<void>.delayed(Duration.zero);
+    final rotation = _totalRotation;
     Uint8List base;
-    if (_totalRotation % 360 == 0) {
+    if (rotation % 360 == 0) {
       base = widget.framePng;
     } else {
       base = await _engine
-          .apply(widget.framePng, [RotateCorrection(degrees: _totalRotation)]);
+          .apply(widget.framePng, [RotateCorrection(degrees: rotation)]);
     }
     final size = await _decodeSize(base);
-    if (!mounted) return;
+    // Drop the result if a newer rotation has since been requested.
+    if (!mounted || gen != _recomputeGen) return;
     setState(() {
       _basePng = base;
       _aspect = size.height == 0 ? 1 : size.width / size.height;
@@ -109,16 +120,35 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
     }
   }
 
+  /// Adds a horizontal crease by resampling the current mesh to one more row,
+  /// preserving the existing (possibly auto-detected / hand-dragged) corners
+  /// instead of resetting to a full-frame rectangle.
   void _addCrease() => setState(() {
-        _grid = MeshGrid.identity(rows: _grid.rows + 1, cols: _grid.cols);
+        final oldRows = _grid.rows, cols = _grid.cols, newRows = oldRows + 1;
+        NormPoint at(int r, int c) => _grid.points[r * (cols + 1) + c];
+        final pts = <NormPoint>[];
+        for (var r = 0; r <= newRows; r++) {
+          final t = r / newRows * oldRows; // continuous old-row index
+          final r0 = t.floor().clamp(0, oldRows);
+          final r1 = (r0 + 1).clamp(0, oldRows);
+          final f = t - r0;
+          for (var c = 0; c <= cols; c++) {
+            final p0 = at(r0, c), p1 = at(r1, c);
+            pts.add(NormPoint(
+                p0.x + (p1.x - p0.x) * f, p0.y + (p1.y - p0.y) * f));
+          }
+        }
+        _grid = MeshGrid(rows: newRows, cols: cols, points: pts);
       });
 
-  void _reset() => setState(() {
-        _quarterTurns = 0;
-        _fineDeg = 0;
-        _grid = MeshGrid.identity(rows: 1, cols: 1);
-        _recomputeBase(resetGrid: false);
-      });
+  void _reset() {
+    setState(() {
+      _quarterTurns = 0;
+      _fineDeg = 0;
+      _grid = MeshGrid.identity(rows: 1, cols: 1);
+    });
+    _recomputeBase(resetGrid: false);
+  }
 
   void _movePoint(int index, double nx, double ny) => setState(() {
         final pts = List<NormPoint>.from(_grid.points);

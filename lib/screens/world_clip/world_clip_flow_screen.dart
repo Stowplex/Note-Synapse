@@ -150,6 +150,7 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
       sceneChangeThreshold: 0.25,
       minGapMs: 1500,
     );
+    if (!mounted) return; // user left mid-detection — don't mutate/persist
     final picks = selector.suggest(features);
     for (final ts in picks) {
       if (_clipFor(ts) == null) {
@@ -449,8 +450,15 @@ class _LargePreview extends StatefulWidget {
 
 class _LargePreviewState extends State<_LargePreview> {
   final Map<int, Future<Uint8List>> _cache = {};
+  static const _cap = 24; // bound memory on long videos (full-size previews)
 
-  Future<Uint8List> _frameFor(int ts) => _cache[ts] ??= widget.builder(ts);
+  Future<Uint8List> _frameFor(int ts) {
+    final f = _cache[ts] ??= widget.builder(ts);
+    if (_cache.length > _cap && _cache.keys.first != ts) {
+      _cache.remove(_cache.keys.first);
+    }
+    return f;
+  }
 
   @override
   Widget build(BuildContext context) {

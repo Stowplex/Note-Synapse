@@ -45,7 +45,11 @@ MeshGrid? detectDocumentQuad(Uint8List framePng,
         }
       }
       if (best == null) return null;
-      return MeshGrid(rows: 1, cols: 1, points: orderQuadCorners(best));
+      final ordered = orderQuadCorners(best);
+      // Reject quads whose corners collapse together (a non-convex or
+      // near-degenerate contour) — such a seed would dewarp to a blank page.
+      if (!_cornersDistinct(ordered)) return null;
+      return MeshGrid(rows: 1, cols: 1, points: ordered);
     } finally {
       contours.dispose();
       hierarchy.dispose();
@@ -56,6 +60,18 @@ MeshGrid? detectDocumentQuad(Uint8List framePng,
     blurred?.dispose();
     edges?.dispose();
   }
+}
+
+/// True when all four corners are pairwise separated by at least [minGap]
+/// (normalized), i.e. the quad hasn't collapsed onto fewer distinct points.
+bool _cornersDistinct(List<NormPoint> pts, {double minGap = 0.05}) {
+  for (var i = 0; i < pts.length; i++) {
+    for (var j = i + 1; j < pts.length; j++) {
+      final dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y;
+      if (dx * dx + dy * dy < minGap * minGap) return false;
+    }
+  }
+  return true;
 }
 
 /// Reorders four corner points into MeshGrid row-major order

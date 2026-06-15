@@ -110,19 +110,29 @@ class OpenCvFrameCorrection implements FrameCorrection {
           cv.Point2f(ix1.toDouble(), iy1.toDouble()),
           cv.Point2f(ix0.toDouble(), iy1.toDouble()),
         ]);
+        final cellRect = _safeRect(ix0, iy0, ix1 - ix0, iy1 - iy0, w, h);
         cv.Mat? m, warped, cellSrc, cellDst;
         try {
           m = cv.getPerspectiveTransform2f(srcPts, dstPts);
           warped = cv.warpPerspective(src, m, (w, h));
           // Copy the destination cell region from `warped` into `out`.
-          final cellRect = _safeRect(ix0, iy0, ix1 - ix0, iy1 - iy0, w, h);
           cellSrc = warped.region(cellRect);
           cellDst = out.region(cellRect);
           cellSrc.copyTo(cellDst);
         } catch (_) {
-          // Degenerate cell transform (e.g. the user dragged all four mesh
-          // corners together → coincident points). Leave this cell blank
-          // rather than aborting the whole frame.
+          // Degenerate cell transform (e.g. coincident corners). Fall back to
+          // the original pixels for this cell so the page is never silently
+          // blanked — a bad mesh degrades to ~identity, not black.
+          final passSrc = src.region(cellRect);
+          final passDst = out.region(cellRect);
+          try {
+            passSrc.copyTo(passDst);
+          } catch (_) {
+            // Last resort: leave the cell as-is.
+          } finally {
+            passSrc.dispose();
+            passDst.dispose();
+          }
         } finally {
           m?.dispose();
           warped?.dispose();

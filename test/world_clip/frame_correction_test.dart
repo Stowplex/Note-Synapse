@@ -65,10 +65,15 @@ void main() {
     mat.dispose();
   });
 
-  test('degenerate mesh (all corners coincident) does not throw', () async {
-    final src = _solidPng(40, 20);
-    // All four control points dragged to the same spot — the per-cell
-    // perspective transform is degenerate; apply() must degrade, not throw.
+  test('degenerate mesh falls back to source pixels (not a black page)',
+      () async {
+    // Mid-gray source so a black (blanked) result is detectable.
+    final grayMat =
+        cv.Mat.create(rows: 20, cols: 40, r: 128, g: 128, b: 128, type: cv.MatType.CV_8UC3);
+    final (_, src) = cv.imencode('.png', grayMat);
+    grayMat.dispose();
+    // All four control points coincident — the perspective transform is
+    // degenerate; apply() must degrade to the original pixels, not blank.
     final grid = MeshGrid(rows: 1, cols: 1, points: const [
       NormPoint(0, 0), NormPoint(0, 0), NormPoint(0, 0), NormPoint(0, 0),
     ]);
@@ -76,6 +81,7 @@ void main() {
     final mat = cv.imdecode(out, cv.IMREAD_COLOR);
     expect(mat.cols, 40);
     expect(mat.rows, 20);
+    expect(cv.mean(mat).val1, greaterThan(64), reason: 'page must not be blank');
     mat.dispose();
   });
 

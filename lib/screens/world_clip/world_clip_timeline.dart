@@ -28,9 +28,24 @@ class WorldClipTimeline extends StatefulWidget {
 
 class _WorldClipTimelineState extends State<WorldClipTimeline> {
   final Map<int, Future<Uint8List>> _thumbnails = {};
+  static const _cap = 200; // bound memory on very long timelines
 
-  Future<Uint8List> _thumbnailFor(int ts) =>
-      _thumbnails[ts] ??= widget.thumbnailBuilder(ts);
+  Future<Uint8List> _thumbnailFor(int ts) {
+    final f = _thumbnails[ts] ??= widget.thumbnailBuilder(ts);
+    if (_thumbnails.length > _cap && _thumbnails.keys.first != ts) {
+      _thumbnails.remove(_thumbnails.keys.first);
+    }
+    return f;
+  }
+
+  @override
+  void didUpdateWidget(WorldClipTimeline old) {
+    super.didUpdateWidget(old);
+    // A new video reuses the same timestamps; drop stale cached thumbnails.
+    if (!identical(old.thumbnailBuilder, widget.thumbnailBuilder)) {
+      _thumbnails.clear();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

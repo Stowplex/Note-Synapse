@@ -82,33 +82,42 @@ class PlatformFrameExtractor implements FrameExtractor {
   @override
   Future<FrameFeature> featureAt(int timestampMs,
       {int? previousTimestampMs}) async {
-    final mat = cv.imdecode(await _frame(timestampMs, _featureWidth), cv.IMREAD_COLOR);
-    final gray = cv.cvtColor(mat, cv.COLOR_BGR2GRAY);
-    final lap = cv.laplacian(gray, cv.MatType.CV_64F);
-    // opencv_dart 2.x: meanStdDev returns (Scalar mean, Scalar stddev).
-    final (_, stddev) = cv.meanStdDev(lap);
-    final variance = stddev.val1 * stddev.val1;
-
-    double diff = 1.0;
-    if (previousTimestampMs != null) {
-      final prev = cv.imdecode(await _frame(previousTimestampMs, _featureWidth), cv.IMREAD_COLOR);
-      final prevGray = cv.cvtColor(prev, cv.COLOR_BGR2GRAY);
-      final small = cv.resize(gray, (64, 64));
-      final prevSmall = cv.resize(prevGray, (64, 64));
-      final delta = cv.absDiff(small, prevSmall);
-      diff = cv.mean(delta).val1 / 255.0;
-      prev.dispose();
-      prevGray.dispose();
-      small.dispose();
-      prevSmall.dispose();
-      delta.dispose();
+    final bytes = await _frame(timestampMs, _featureWidth);
+    final prevBytes = previousTimestampMs == null
+        ? null
+        : await _frame(previousTimestampMs, _featureWidth);
+    // Track every native Mat so a throw mid-computation can't leak (these are
+    // not GC-managed; featureAt runs in a loop during auto key-frame detect).
+    final mats = <cv.Mat>[];
+    cv.Mat track(cv.Mat m) {
+      mats.add(m);
+      return m;
     }
 
-    mat.dispose();
-    gray.dispose();
-    lap.dispose();
-    return FrameFeature(
-        timestampMs: timestampMs, sharpness: variance, diffFromPrev: diff);
+    try {
+      final mat = track(cv.imdecode(bytes, cv.IMREAD_COLOR));
+      final gray = track(cv.cvtColor(mat, cv.COLOR_BGR2GRAY));
+      final lap = track(cv.laplacian(gray, cv.MatType.CV_64F));
+      // opencv_dart 2.x: meanStdDev returns (Scalar mean, Scalar stddev).
+      final (_, stddev) = cv.meanStdDev(lap);
+      final variance = stddev.val1 * stddev.val1;
+
+      double diff = 1.0;
+      if (prevBytes != null) {
+        final prev = track(cv.imdecode(prevBytes, cv.IMREAD_COLOR));
+        final prevGray = track(cv.cvtColor(prev, cv.COLOR_BGR2GRAY));
+        final small = track(cv.resize(gray, (64, 64)));
+        final prevSmall = track(cv.resize(prevGray, (64, 64)));
+        final delta = track(cv.absDiff(small, prevSmall));
+        diff = cv.mean(delta).val1 / 255.0;
+      }
+      return FrameFeature(
+          timestampMs: timestampMs, sharpness: variance, diffFromPrev: diff);
+    } finally {
+      for (final m in mats) {
+        m.dispose();
+      }
+    }
   }
 
   @override
