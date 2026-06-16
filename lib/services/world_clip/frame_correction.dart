@@ -94,7 +94,19 @@ class OpenCvFrameCorrection implements FrameCorrection {
   cv.Mat _meshDewarp(cv.Mat src, MeshGrid grid) {
     final w = src.cols, h = src.rows;
     final out = cv.Mat.zeros(h, w, src.type);
-    int idx(int r, int c) => r * (grid.cols + 1) + c;
+    // Copies [rect] from [from] into the same region of `out`, disposing the
+    // region views. Used for both the warped cell and the degenerate fallback.
+    void copyRegion(cv.Mat from, cv.Rect rect) {
+      final s = from.region(rect);
+      final d = out.region(rect);
+      try {
+        s.copyTo(d);
+      } finally {
+        s.dispose();
+        d.dispose();
+      }
+    }
+
     for (var r = 0; r < grid.rows; r++) {
       for (var c = 0; c < grid.cols; c++) {
         // Integer cell edges, shared by the destination quad and the copy
@@ -106,10 +118,8 @@ class OpenCvFrameCorrection implements FrameCorrection {
         // pixel grid) — a zero-area destination quad is a degenerate transform.
         if (ix1 <= ix0 || iy1 <= iy0) continue;
 
-        final tl = grid.points[idx(r, c)];
-        final tr = grid.points[idx(r, c + 1)];
-        final br = grid.points[idx(r + 1, c + 1)];
-        final bl = grid.points[idx(r + 1, c)];
+        final tl = grid.at(r, c), tr = grid.at(r, c + 1);
+        final br = grid.at(r + 1, c + 1), bl = grid.at(r + 1, c);
         final srcPts = cv.VecPoint2f.fromList([
           cv.Point2f(tl.x * w, tl.y * h),
           cv.Point2f(tr.x * w, tr.y * h),
@@ -123,33 +133,21 @@ class OpenCvFrameCorrection implements FrameCorrection {
           cv.Point2f(ix0.toDouble(), iy1.toDouble()),
         ]);
         final cellRect = _safeRect(ix0, iy0, ix1 - ix0, iy1 - iy0, w, h);
-        cv.Mat? m, warped, cellSrc, cellDst;
+        cv.Mat? m, warped;
         try {
           m = cv.getPerspectiveTransform2f(srcPts, dstPts);
           warped = cv.warpPerspective(src, m, (w, h));
-          // Copy the destination cell region from `warped` into `out`.
-          cellSrc = warped.region(cellRect);
-          cellDst = out.region(cellRect);
-          cellSrc.copyTo(cellDst);
+          copyRegion(warped, cellRect);
         } catch (_) {
           // Degenerate cell transform (e.g. coincident corners). Fall back to
           // the original pixels for this cell so the page is never silently
           // blanked — a bad mesh degrades to ~identity, not black.
-          final passSrc = src.region(cellRect);
-          final passDst = out.region(cellRect);
           try {
-            passSrc.copyTo(passDst);
-          } catch (_) {
-            // Last resort: leave the cell as-is.
-          } finally {
-            passSrc.dispose();
-            passDst.dispose();
-          }
+            copyRegion(src, cellRect);
+          } catch (_) {/* last resort: leave the cell as-is */}
         } finally {
           m?.dispose();
           warped?.dispose();
-          cellSrc?.dispose();
-          cellDst?.dispose();
           srcPts.dispose();
           dstPts.dispose();
         }

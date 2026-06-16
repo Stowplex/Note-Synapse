@@ -23,6 +23,24 @@ class ClipProject {
     this.manualOrder = false,
   });
 
+  /// The clip for [ts], or null if that frame isn't tagged.
+  ClipSpec? clipForTimestamp(int ts) {
+    for (final c in clips) {
+      if (c.frameTimestampMs == ts) return c;
+    }
+    return null;
+  }
+
+  /// Returns the clip for [ts], creating an empty one (appended) if needed.
+  ClipSpec ensureClip(int ts) =>
+      clipForTimestamp(ts) ??
+      (clips..add(ClipSpec(
+        id: ts.toString(),
+        frameTimestampMs: ts,
+        order: clips.length,
+        corrections: [],
+      ))).last;
+
   /// Clips in display order: video (timestamp) order by default, or the
   /// persisted [ClipSpec.order] once the user has drag-reordered
   /// ([manualOrder]). Ties always broken by timestamp.

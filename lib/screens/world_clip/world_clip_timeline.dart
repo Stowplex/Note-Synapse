@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'frame_memo_cache.dart';
 
 /// A horizontal proxy-thumbnail strip for scrubbing. Tapping a thumb *selects*
 /// it (drives the large preview above); key-frame tagging is an explicit button
@@ -27,16 +28,10 @@ class WorldClipTimeline extends StatefulWidget {
 }
 
 class _WorldClipTimelineState extends State<WorldClipTimeline> {
-  final Map<int, Future<Uint8List>> _thumbnails = {};
-  static const _cap = 200; // bound memory on very long timelines
+  final _thumbnails = FrameMemoCache(200); // bound memory on long timelines
 
-  Future<Uint8List> _thumbnailFor(int ts) {
-    final f = _thumbnails[ts] ??= widget.thumbnailBuilder(ts);
-    if (_thumbnails.length > _cap && _thumbnails.keys.first != ts) {
-      _thumbnails.remove(_thumbnails.keys.first);
-    }
-    return f;
-  }
+  Future<Uint8List> _thumbnailFor(int ts) =>
+      _thumbnails.getOrAdd(ts, () => widget.thumbnailBuilder(ts));
 
   @override
   void didUpdateWidget(WorldClipTimeline old) {

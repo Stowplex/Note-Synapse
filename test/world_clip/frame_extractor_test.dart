@@ -42,17 +42,6 @@ void main() {
     expect(lastMaxWidth, 120);
   });
 
-  test('featureAt computes sharpness/diff from the decoded frames', () async {
-    messenger.setMockMethodCallHandler(channel, (call) async {
-      return call.method == 'extractFrame' ? png(32, 32) : null;
-    });
-    final ex = PlatformFrameExtractor('/x.mp4', channel: channel);
-    final f = await ex.featureAt(500, previousTimestampMs: 0);
-    expect(f.timestampMs, 500);
-    expect(f.sharpness, greaterThanOrEqualTo(0));
-    expect(f.diffFromPrev, inInclusiveRange(0.0, 1.0));
-  });
-
   test('throws StateError when the native side returns no frame', () async {
     messenger.setMockMethodCallHandler(channel, (call) async => null);
     final ex = PlatformFrameExtractor('/x.mp4', channel: channel);

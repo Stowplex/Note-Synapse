@@ -14,9 +14,6 @@ abstract class FrameExtractor {
   /// Full-resolution PNG frame at [timestampMs].
   Future<Uint8List> fullFrameAt(int timestampMs);
 
-  /// Sharpness + diff-from-previous feature at [timestampMs].
-  Future<FrameFeature> featureAt(int timestampMs, {int? previousTimestampMs});
-
   void dispose();
 }
 
@@ -73,22 +70,6 @@ class PlatformFrameExtractor implements FrameExtractor {
 
   @override
   Future<Uint8List> fullFrameAt(int timestampMs) => _frame(timestampMs, 0);
-
-  /// Width used when decoding frames purely for feature scoring. Smaller than
-  /// full-res keeps auto key-frame detection responsive; the sharpness/diff
-  /// thresholds in [FrameSelector] are relative, so the downscale is fine.
-  static const int _featureWidth = 480;
-
-  @override
-  Future<FrameFeature> featureAt(int timestampMs,
-      {int? previousTimestampMs}) async {
-    final bytes = await _frame(timestampMs, _featureWidth);
-    final prevBytes = previousTimestampMs == null
-        ? null
-        : await _frame(previousTimestampMs, _featureWidth);
-    return computeFrameFeature(
-        timestampMs: timestampMs, framePng: bytes, prevFramePng: prevBytes);
-  }
 
   @override
   void dispose() {}

@@ -9,6 +9,11 @@ class MeshGrid {
 
   const MeshGrid({required this.rows, required this.cols, required this.points});
 
+  /// The control point at grid cell-corner (row [r], column [c]), 0..rows /
+  /// 0..cols. Centralizes the row-major stride so the (cols+1) invariant lives
+  /// next to the data.
+  NormPoint at(int r, int c) => points[r * (cols + 1) + c];
+
   factory MeshGrid.identity({required int rows, required int cols}) {
     final pts = <NormPoint>[];
     for (var r = 0; r <= rows; r++) {

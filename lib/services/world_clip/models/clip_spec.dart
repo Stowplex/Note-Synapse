@@ -5,7 +5,7 @@ class ClipSpec {
   final String id;
   final int frameTimestampMs;
   int order;
-  final List<Correction> corrections;
+  List<Correction> corrections;
 
   ClipSpec({
     required this.id,

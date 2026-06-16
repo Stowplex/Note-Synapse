@@ -15,22 +15,24 @@ typedef AttachmentWriter = Future<String> Function(
 /// Renders ordered page PNGs into a single PDF byte buffer.
 typedef PdfRenderer = Future<Uint8List> Function(List<Uint8List> pageImagesPng);
 
-/// Max width (px) for an embedded PDF page. Full-res frames (often 1080p–4K)
-/// rasterize into huge in-memory bitmaps; capping bounds memory so a clip with
-/// many pages doesn't OOM the device.
-const int _pdfMaxPageWidth = 1600;
+/// Max width (px) for a compiled World Clip page. Full-res frames (often
+/// 1080p–4K) hold/rasterize into huge in-memory bitmaps; capping bounds memory
+/// so a clip with many pages doesn't OOM the device. Single source of truth for
+/// the page-resolution policy — the flow downscales corrected pages to this,
+/// and the PDF renderer enforces it again as a safety net.
+const int kWorldClipMaxPageWidth = 1600;
 
 /// Builds the PDF on whatever isolate calls it (used via [compute] in
 /// production so the heavy decode/rasterize never blocks the UI thread).
-/// Each page is downscaled to [_pdfMaxPageWidth] and re-encoded as JPEG to keep
+/// Each page is downscaled to [kWorldClipMaxPageWidth] and re-encoded as JPEG to keep
 /// peak memory and the output file bounded. Top-level so it is isolate-sendable.
 Future<Uint8List> renderWorldClipPdf(List<Uint8List> pages) async {
   final doc = pw.Document();
   for (final png in pages) {
     var bytes = png;
     final decoded = img.decodeImage(png);
-    if (decoded != null && decoded.width > _pdfMaxPageWidth) {
-      final resized = img.copyResize(decoded, width: _pdfMaxPageWidth);
+    if (decoded != null && decoded.width > kWorldClipMaxPageWidth) {
+      final resized = img.copyResize(decoded, width: kWorldClipMaxPageWidth);
       bytes = Uint8List.fromList(img.encodeJpg(resized, quality: 85));
     }
     final image = pw.MemoryImage(bytes);

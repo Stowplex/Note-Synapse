@@ -19,6 +19,7 @@ import '../../services/world_clip/models/correction.dart';
 import 'world_clip_timeline.dart';
 import 'clip_review_screen.dart';
 import 'correction_editor.dart';
+import 'frame_memo_cache.dart';
 
 /// Stages of the capture flow. Per-clip correction (mesh editor) is reached as
 /// a pushed route from the review stage rather than a top-level stage.
@@ -34,11 +35,6 @@ class WorldClipFlowScreen extends StatefulWidget {
 }
 
 class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
-  // Cap corrected-page resolution so the in-memory review pages (and the PDF /
-  // inline-image / isolate-copy payloads built from them) stay bounded — this
-  // is the root mitigation for OOM on clips with many pages.
-  static const int _maxPageWidth = 1600;
-
   WorldClipStage _stage = WorldClipStage.source;
 
   ClipProjectStore? _store;
@@ -54,18 +50,12 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   // Shared timeline-thumbnail cache: warmed in the background and reused by the
   // strip, the scrub highlight, and (crucially) auto key-frame detection so the
   // detector scores already-decoded thumbnails instead of re-extracting frames.
-  final Map<int, Future<Uint8List>> _thumbCache = {};
-  // Bound resident thumbnail memory (each ~10-20KB). LRU-evict the oldest so a
-  // long video can't accumulate every decoded thumbnail (would OOM).
+  // Bounded so a long video can't accumulate every decoded thumbnail (OOM).
   static const int _thumbCacheCap = 150;
+  final _thumbCache = FrameMemoCache(_thumbCacheCap);
 
-  Future<Uint8List> _thumb(int ts) {
-    final f = _thumbCache[ts] ??= _extractor!.thumbnailAt(ts);
-    if (_thumbCache.length > _thumbCacheCap && _thumbCache.keys.first != ts) {
-      _thumbCache.remove(_thumbCache.keys.first);
-    }
-    return f;
-  }
+  Future<Uint8List> _thumb(int ts) =>
+      _thumbCache.getOrAdd(ts, () => _extractor!.thumbnailAt(ts));
 
   /// Eagerly decodes the first window of timeline thumbnails in the background
   /// so the strip and scrubbing are responsive on entry. Bounded by the cache
@@ -193,14 +183,8 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     if (!mounted) return; // user left mid-detection — don't mutate/persist
     final picks = selector.suggest(features);
     for (final ts in picks) {
-      if (_clipFor(ts) == null) {
-        _tagged.add(ts);
-        _project!.clips.add(ClipSpec(
-            id: ts.toString(),
-            frameTimestampMs: ts,
-            order: _project!.clips.length,
-            corrections: const []));
-      }
+      _tagged.add(ts);
+      _project!.ensureClip(ts);
     }
     await _store!.save(_project!);
     if (!mounted) return;
@@ -215,12 +199,6 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     }
   }
 
-  /// The ClipSpec for [ts], or null when the frame isn't tagged.
-  ClipSpec? _clipFor(int ts) {
-    final i = _project!.clips.indexWhere((c) => c.frameTimestampMs == ts);
-    return i < 0 ? null : _project!.clips[i];
-  }
-
   /// Tagged timestamps in display order. By default this is video (timestamp)
   /// order — so auto-detected and manually-added frames interleave correctly;
   /// only once the user has drag-reordered ([ClipProject.manualOrder]) does the
@@ -232,7 +210,7 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   /// persists, so review-stage reorder/remove are durable.
   Future<void> _persistOrder() async {
     for (var i = 0; i < _orderedTags.length; i++) {
-      _clipFor(_orderedTags[i])?.order = i;
+      _project!.clipForTimestamp(_orderedTags[i])?.order = i;
     }
     await _store!.save(_project!);
   }
@@ -240,55 +218,39 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   Future<void> _onToggleTag(int ts) async {
     setState(() =>
         _tagged.contains(ts) ? _tagged.remove(ts) : _tagged.add(ts));
-    // Sync ClipSpecs with the tag set: drop untagged, append new tags.
+    // Sync ClipSpecs with the tag set: drop untagged, ensure tagged exist.
     _project!.clips
         .removeWhere((c) => !_tagged.contains(c.frameTimestampMs));
     for (final t in _tagged) {
-      if (_clipFor(t) == null) {
-        _project!.clips.add(ClipSpec(
-            id: t.toString(),
-            frameTimestampMs: t,
-            order: _project!.clips.length,
-            corrections: const []));
-      }
+      _project!.ensureClip(t);
     }
     await _store!.save(_project!);
   }
 
-  Future<void> _buildReviewPages() async {
-    final correction = getIt<FrameCorrection>();
-    _orderedTags = _orderedTagsFromClips();
-    final pages = <Uint8List>[];
-    for (final ts in _orderedTags) {
-      final full = await _extractor!.fullFrameAt(ts);
-      try {
-        pages.add(await correction.apply(full, _correctionsFor(ts),
-            maxWidth: _maxPageWidth));
-      } catch (_) {
-        // A bad correction must not strand the whole review on a spinner —
-        // fall back to the uncorrected frame so the page still shows.
-        pages.add(full);
-      }
+  List<Correction> _correctionsFor(int ts) =>
+      _project!.clipForTimestamp(ts)?.corrections ?? const [];
+
+  void _setCorrectionsFor(int ts, List<Correction> corrections) =>
+      _project!.ensureClip(ts).corrections = corrections;
+
+  /// Decodes the full frame at [ts] and applies its corrections, capped to the
+  /// shared page-width. Falls back to the uncorrected frame if a correction
+  /// throws, so a bad edit never strands the review on a spinner.
+  Future<Uint8List> _renderCorrectedPage(int ts) async {
+    final full = await _extractor!.fullFrameAt(ts);
+    try {
+      return await getIt<FrameCorrection>()
+          .apply(full, _correctionsFor(ts), maxWidth: kWorldClipMaxPageWidth);
+    } catch (_) {
+      return full;
     }
-    if (!mounted) return;
-    setState(() => _reviewPages = pages);
   }
 
-  List<Correction> _correctionsFor(int ts) =>
-      _clipFor(ts)?.corrections ?? const [];
-
-  void _setCorrectionsFor(int ts, List<Correction> corrections) {
-    final existing = _project!.clips.indexWhere((c) => c.frameTimestampMs == ts);
-    final spec = ClipSpec(
-        id: ts.toString(),
-        frameTimestampMs: ts,
-        order: existing >= 0 ? _project!.clips[existing].order : _orderedTags.indexOf(ts),
-        corrections: corrections);
-    if (existing >= 0) {
-      _project!.clips[existing] = spec;
-    } else {
-      _project!.clips.add(spec);
-    }
+  Future<void> _buildReviewPages() async {
+    _orderedTags = _orderedTagsFromClips();
+    final pages = [for (final ts in _orderedTags) await _renderCorrectedPage(ts)];
+    if (!mounted) return;
+    setState(() => _reviewPages = pages);
   }
 
   Future<void> _editClip(int index) async {
@@ -310,7 +272,7 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
             await _store!.save(_project!);
             final corrected =
                 await getIt<FrameCorrection>()
-                    .apply(full, corrections, maxWidth: _maxPageWidth);
+                    .apply(full, corrections, maxWidth: kWorldClipMaxPageWidth);
             if (!mounted) return;
             // Re-resolve by timestamp: the page may have moved or been removed
             // while the editor was open, so the captured index can be stale.
@@ -338,19 +300,14 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     if (targets.isEmpty) return;
 
     setState(() => _cloning = true);
-    final correction = getIt<FrameCorrection>();
     try {
       for (final i in targets) {
         final ts = _orderedTags[i];
         // Deep-copy via JSON so each clip owns its corrections.
-        final cloned = [
-          for (final c in sourceCorrections)
-            Correction.fromJson(c.toJson())
-        ];
-        _setCorrectionsFor(ts, cloned);
-        final full = await _extractor!.fullFrameAt(ts);
-        final corrected =
-            await correction.apply(full, cloned, maxWidth: _maxPageWidth);
+        _setCorrectionsFor(ts, [
+          for (final c in sourceCorrections) Correction.fromJson(c.toJson())
+        ]);
+        final corrected = await _renderCorrectedPage(ts);
         final current = _orderedTags.indexOf(ts);
         if (current >= 0) _reviewPages[current] = corrected;
       }
@@ -455,24 +412,30 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
             ),
           ],
         ),
-        if (_detecting)
-          Positioned.fill(
-            child: ColoredBox(
-              color: const Color(0x99000000),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const CircularProgressIndicator(),
-                    const SizedBox(height: 12),
-                    Text(_detectLabel,
-                        style: const TextStyle(color: Colors.white)),
-                  ],
-                ),
-              ),
-            ),
-          ),
+        if (_detecting) _progressOverlay(label: _detectLabel),
       ],
+    );
+  }
+
+  /// A full-screen scrim + spinner (optionally labelled) shown over a stage
+  /// during a long async op (detect / clone / compile).
+  Widget _progressOverlay({String? label}) {
+    return Positioned.fill(
+      child: ColoredBox(
+        color: const Color(0x99000000),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              if (label != null && label.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(label, style: const TextStyle(color: Colors.white)),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -524,32 +487,8 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
                 onCompilePdf: () => _compile(ClipOutputFormat.pdf),
                 onCompileImages: () => _compile(ClipOutputFormat.inlineImages),
               ),
-                  if (_cloning)
-                    const Positioned.fill(
-                      child: ColoredBox(
-                        color: Color(0x99000000),
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                    ),
-                  if (_compiling)
-                    Positioned.fill(
-                      child: ColoredBox(
-                        color: const Color(0x99000000),
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const CircularProgressIndicator(),
-                              const SizedBox(height: 12),
-                              Text(
-                                AppLocalizations.of(context)!.worldClipCompile,
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
+                  if (_cloning) _progressOverlay(),
+                  if (_compiling) _progressOverlay(label: l10n.worldClipCompile),
                 ],
               ),
       },
@@ -569,18 +508,12 @@ class _LargePreview extends StatefulWidget {
 }
 
 class _LargePreviewState extends State<_LargePreview> {
-  final Map<int, Future<Uint8List>> _cache = {};
-  static const _cap = 24; // bound memory on long videos (full-size previews)
-
+  // Bound memory — preview frames are larger (720px) than strip thumbnails.
+  final _cache = FrameMemoCache(24);
   final TransformationController _zoom = TransformationController();
 
-  Future<Uint8List> _frameFor(int ts) {
-    final f = _cache[ts] ??= widget.builder(ts);
-    if (_cache.length > _cap && _cache.keys.first != ts) {
-      _cache.remove(_cache.keys.first);
-    }
-    return f;
-  }
+  Future<Uint8List> _frameFor(int ts) =>
+      _cache.getOrAdd(ts, () => widget.builder(ts));
 
   @override
   void didUpdateWidget(_LargePreview old) {
