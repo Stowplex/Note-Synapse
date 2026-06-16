@@ -50,6 +50,7 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   bool _detecting = false;
   String _detectLabel = '';
   bool _cloning = false; // batch clone-edits in progress (review stage)
+  bool _compiling = false; // building the note (PDF/inline) in progress
   // Shared timeline-thumbnail cache: warmed in the background and reused by the
   // strip, the scrub highlight, and (crucially) auto key-frame detection so the
   // detector scores already-decoded thumbnails instead of re-extracting frames.
@@ -371,16 +372,22 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   }
 
   Future<void> _compile(ClipOutputFormat format) async {
-    final note = await ClipCompiler().compile(
-      title: _project!.name,
-      pageImagesPng: _reviewPages,
-      format: format,
-    );
-    if (!mounted) return;
-    // addNote inserts and updates the in-memory list + notifies listeners.
-    await context.read<AppProvider>().addNote(note);
-    if (!mounted) return;
-    Navigator.of(context).pop(note.id);
+    if (_compiling) return; // guard against double-tap
+    setState(() => _compiling = true);
+    try {
+      final note = await ClipCompiler().compile(
+        title: _project!.name,
+        pageImagesPng: _reviewPages,
+        format: format,
+      );
+      if (!mounted) return;
+      // addNote inserts and updates the in-memory list + notifies listeners.
+      await context.read<AppProvider>().addNote(note);
+      if (!mounted) return;
+      Navigator.of(context).pop(note.id);
+    } finally {
+      if (mounted) setState(() => _compiling = false);
+    }
   }
 
   Widget _buildTimelineStage(AppLocalizations l10n) {
@@ -525,6 +532,25 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
                       child: ColoredBox(
                         color: Color(0x99000000),
                         child: Center(child: CircularProgressIndicator()),
+                      ),
+                    ),
+                  if (_compiling)
+                    Positioned.fill(
+                      child: ColoredBox(
+                        color: const Color(0x99000000),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const CircularProgressIndicator(),
+                              const SizedBox(height: 12),
+                              Text(
+                                AppLocalizations.of(context)!.worldClipCompile,
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                 ],
