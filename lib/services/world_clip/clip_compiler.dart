@@ -22,6 +22,11 @@ typedef PdfRenderer = Future<Uint8List> Function(List<Uint8List> pageImagesPng);
 /// and the PDF renderer enforces it again as a safety net.
 const int kWorldClipMaxPageWidth = 1600;
 
+/// JPEG quality (1–100) for compiled World Clip pages. Video frames are already
+/// lossy/photographic with no alpha, so JPEG at this quality is visually fine
+/// and ~an order of magnitude smaller than lossless PNG.
+const int kWorldClipJpegQuality = 80;
+
 /// Builds the PDF on whatever isolate calls it (used via [compute] in
 /// production so the heavy decode/rasterize never blocks the UI thread).
 /// Each page is downscaled to [kWorldClipMaxPageWidth] and re-encoded as JPEG to keep
@@ -45,6 +50,11 @@ Future<Uint8List> renderWorldClipPdf(List<Uint8List> pages) async {
   }
   return doc.save();
 }
+
+/// Picks the file extension for image [bytes] from its magic number (JPEG
+/// starts FF D8; otherwise assume PNG) so the attachment is named correctly.
+String _imageExtension(Uint8List bytes) =>
+    (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xD8) ? 'jpg' : 'png';
 
 /// Compiles ordered, fully-corrected page images into a Note (not persisted).
 /// The caller persists via AppProvider.addNote(note).
@@ -75,8 +85,8 @@ class ClipCompiler {
         attachmentPaths = [];
         final buf = StringBuffer();
         for (var i = 0; i < pageImagesPng.length; i++) {
-          final path = await _writeAttachment(
-              pageImagesPng[i], 'worldclip_${stamp}_$i.png');
+          final path = await _writeAttachment(pageImagesPng[i],
+              'worldclip_${stamp}_$i.${_imageExtension(pageImagesPng[i])}');
           attachmentPaths.add(path);
           // The note renderer resolves image links by base name against the
           // attachments dir, so the markdown must NOT include the

@@ -239,8 +239,12 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   Future<Uint8List> _renderCorrectedPage(int ts) async {
     final full = await _extractor!.fullFrameAt(ts);
     try {
-      return await getIt<FrameCorrection>()
-          .apply(full, _correctionsFor(ts), maxWidth: kWorldClipMaxPageWidth);
+      return await getIt<FrameCorrection>().apply(
+        full,
+        _correctionsFor(ts),
+        maxWidth: kWorldClipMaxPageWidth,
+        jpegQuality: kWorldClipJpegQuality,
+      );
     } catch (_) {
       return full;
     }
@@ -270,9 +274,12 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
           onDone: (corrections) async {
             _setCorrectionsFor(ts, corrections);
             await _store!.save(_project!);
-            final corrected =
-                await getIt<FrameCorrection>()
-                    .apply(full, corrections, maxWidth: kWorldClipMaxPageWidth);
+            final corrected = await getIt<FrameCorrection>().apply(
+              full,
+              corrections,
+              maxWidth: kWorldClipMaxPageWidth,
+              jpegQuality: kWorldClipJpegQuality,
+            );
             if (!mounted) return;
             // Re-resolve by timestamp: the page may have moved or been removed
             // while the editor was open, so the captured index can be stale.

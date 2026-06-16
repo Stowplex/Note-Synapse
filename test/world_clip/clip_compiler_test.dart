@@ -43,6 +43,19 @@ void main() {
     expect(note.content, contains('](worldclip_'));
   });
 
+  test('inline images are named/linked by their actual format (jpeg)',
+      () async {
+    final jpg = Uint8List.fromList(
+        img.encodeJpg(img.Image(width: 4, height: 4)..clear(img.ColorRgb8(1, 2, 3))));
+    final note = await compiler.compile(
+      title: 'My Clip',
+      pageImagesPng: [jpg],
+      format: ClipOutputFormat.inlineImages,
+    );
+    expect(written.single, endsWith('.jpg'));
+    expect(note.content, contains('.jpg)'));
+  });
+
   test('pdf output builds a note with a single pdf attachment', () async {
     final note = await compiler.compile(
       title: 'My Clip',

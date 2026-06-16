@@ -54,6 +54,18 @@ void main() {
     mat.dispose();
   });
 
+  test('jpegQuality outputs a decodable JPEG (not PNG)', () async {
+    final src = _solidPng(64, 48);
+    final out = await correction.apply(src, const [], jpegQuality: 80);
+    // JPEG magic bytes.
+    expect(out[0], 0xFF);
+    expect(out[1], 0xD8);
+    final mat = cv.imdecode(out, cv.IMREAD_COLOR);
+    expect(mat.cols, 64);
+    expect(mat.rows, 48);
+    mat.dispose();
+  });
+
   test('crop extending past the edge is clamped, not a crash', () async {
     final src = _solidPng(40, 20);
     // x+width and y+height both exceed 1.0 — must clamp instead of throwing.

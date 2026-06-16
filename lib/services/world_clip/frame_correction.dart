@@ -4,18 +4,20 @@ import 'package:opencv_dart/opencv_dart.dart' as cv;
 import 'models/correction.dart';
 import 'models/mesh_grid.dart';
 
-/// Applies an ordered list of [Correction]s to a PNG frame, returning a PNG.
-/// When [maxWidth] is set and the result is wider, it is downscaled — callers
-/// use this to bound the resolution of corrected pages held in memory.
+/// Applies an ordered list of [Correction]s to a source frame, returning the
+/// corrected image bytes. When [maxWidth] is set and the result is wider it is
+/// downscaled (bounds memory). When [jpegQuality] is set the output is JPEG at
+/// that quality (1–100) instead of PNG — video frames are photographic with no
+/// alpha, so JPEG is far smaller; otherwise PNG (lossless) is returned.
 abstract class FrameCorrection {
   Future<Uint8List> apply(Uint8List sourcePng, List<Correction> corrections,
-      {int? maxWidth});
+      {int? maxWidth, int? jpegQuality});
 }
 
 class OpenCvFrameCorrection implements FrameCorrection {
   @override
   Future<Uint8List> apply(Uint8List sourcePng, List<Correction> corrections,
-      {int? maxWidth}) async {
+      {int? maxWidth, int? jpegQuality}) async {
     var mat = cv.imdecode(sourcePng, cv.IMREAD_COLOR);
     try {
       for (final c in corrections) {
@@ -35,6 +37,16 @@ class OpenCvFrameCorrection implements FrameCorrection {
             interpolation: cv.INTER_AREA);
         mat.dispose();
         mat = scaled;
+      }
+      if (jpegQuality != null) {
+        final params =
+            cv.VecI32.fromList([cv.IMWRITE_JPEG_QUALITY, jpegQuality]);
+        try {
+          final (_, jpg) = cv.imencode('.jpg', mat, params: params);
+          return jpg;
+        } finally {
+          params.dispose();
+        }
       }
       final (_, png) = cv.imencode('.png', mat);
       return png;
