@@ -221,18 +221,12 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     return i < 0 ? null : _project!.clips[i];
   }
 
-  /// Tagged timestamps in the user's chosen order (persisted `ClipSpec.order`,
-  /// ties broken by timestamp) so a reorder survives a resume.
-  List<int> _orderedTagsFromClips() {
-    final clips = _project!.clips.toList()
-      ..sort((a, b) {
-        final byOrder = a.order.compareTo(b.order);
-        return byOrder != 0
-            ? byOrder
-            : a.frameTimestampMs.compareTo(b.frameTimestampMs);
-      });
-    return clips.map((c) => c.frameTimestampMs).toList();
-  }
+  /// Tagged timestamps in display order. By default this is video (timestamp)
+  /// order — so auto-detected and manually-added frames interleave correctly;
+  /// only once the user has drag-reordered ([ClipProject.manualOrder]) does the
+  /// persisted [ClipSpec.order] take over (ties still broken by timestamp).
+  List<int> _orderedTagsFromClips() =>
+      _project!.orderedClips().map((c) => c.frameTimestampMs).toList();
 
   /// Rewrites every ClipSpec.order to match the current `_orderedTags` and
   /// persists, so review-stage reorder/remove are durable.
@@ -503,6 +497,9 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
                     _orderedTags.insert(newI, t);
                     final pg = _reviewPages.removeAt(oldI);
                     _reviewPages.insert(newI, pg);
+                    // Switch to manual ordering; from now on the dragged order
+                    // is honored instead of timestamp order.
+                    _project!.manualOrder = true;
                   });
                   _persistOrder();
                 },
