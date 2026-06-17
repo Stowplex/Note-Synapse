@@ -46,6 +46,31 @@ void main() {
     expect(p.orderedClips().map((c) => c.frameTimestampMs), [2000, 1000]);
   });
 
+  test('imageFileNames round-trip + isPictureProject', () {
+    final pics = ClipProject(
+      id: 'p',
+      name: 'Pics',
+      createdAt: DateTime.fromMillisecondsSinceEpoch(0),
+      sourceVideoFileName: '',
+      imageFileNames: const ['image_0.jpg', 'image_1.png'],
+      clips: [
+        ClipSpec(id: '0', frameTimestampMs: 0, order: 0, corrections: const []),
+      ],
+    );
+    expect(pics.isPictureProject, isTrue);
+    final back = ClipProject.fromJson(pics.toJson());
+    expect(back.imageFileNames, ['image_0.jpg', 'image_1.png']);
+    expect(back.isPictureProject, isTrue);
+    // A video project (no images) is not a picture project, and old JSON
+    // without the field defaults to empty.
+    expect(
+        ClipProject.fromJson({
+          'id': 'v', 'name': 'n', 'createdAt': 0, 'sourceVideo': 's.mp4',
+          'clips': <dynamic>[],
+        }).isPictureProject,
+        isFalse);
+  });
+
   test('manualOrder round-trips through json', () {
     final p = project(const [], manualOrder: true);
     expect(ClipProject.fromJson(p.toJson()).manualOrder, isTrue);

@@ -119,10 +119,48 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     _prewarmThumbnails();
   }
 
+  /// "Import Pictures": multi-pick images and go straight to the review /
+  /// keystone-correction stage (no video timeline / key-frame step).
+  Future<void> _onPickImages() async {
+    final files = await getIt<VideoSource>().pickImages();
+    if (files.isEmpty) return;
+    final store = await _ensureStore();
+    final project = await store.createFromImages(
+        name: 'Pictures ${DateTime.now().toIso8601String().substring(0, 16)}',
+        images: files);
+    if (!mounted) return;
+    await _enterPictureReview(store, project);
+  }
+
+  /// Sets up a picture project's frame source and opens the review stage,
+  /// skipping the timeline. Shared by fresh import and resume.
+  Future<void> _enterPictureReview(
+      ClipProjectStore store, ClipProject project) async {
+    final indices = project.clips.map((c) => c.frameTimestampMs).toList()
+      ..sort();
+    setState(() {
+      _project = project;
+      _extractor = PictureFrameExtractor(store.imagePaths(project));
+      _timestamps = indices;
+      _tagged
+        ..clear()
+        ..addAll(indices);
+      _selectedTs = indices.isEmpty ? null : indices.first;
+      _stage = WorldClipStage.review;
+      _reviewPages = [];
+    });
+    await _buildReviewPages();
+  }
+
   Future<void> _resume(String projectId) async {
     final store = await _ensureStore();
     final project = await store.load(projectId);
     if (project == null) return;
+    if (project.isPictureProject) {
+      if (!mounted) return;
+      await _enterPictureReview(store, project);
+      return;
+    }
     final videoPath =
         p.join(store.projectDir(project.id).path, project.sourceVideoFileName);
     final extractor = PlatformFrameExtractor(videoPath);
@@ -452,7 +490,8 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(l10n.worldClip)),
       body: switch (_stage) {
-        WorldClipStage.source => _SourceStage(onPicked: _onPickVideo),
+        WorldClipStage.source => _SourceStage(
+            onPickVideo: _onPickVideo, onPickImages: _onPickImages),
         WorldClipStage.timeline => _buildTimelineStage(l10n),
         WorldClipStage.review => _reviewPages.isEmpty
             ? const Center(child: CircularProgressIndicator())
@@ -555,17 +594,29 @@ class _LargePreviewState extends State<_LargePreview> {
 }
 
 class _SourceStage extends StatelessWidget {
-  final VoidCallback onPicked;
-  const _SourceStage({required this.onPicked});
+  final VoidCallback onPickVideo;
+  final VoidCallback onPickImages;
+  const _SourceStage({required this.onPickVideo, required this.onPickImages});
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Center(
-      child: ElevatedButton.icon(
-        icon: const Icon(Icons.video_library),
-        label: Text(l10n.worldClipImportVideo),
-        onPressed: onPicked,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          ElevatedButton.icon(
+            icon: const Icon(Icons.video_library),
+            label: Text(l10n.worldClipImportVideo),
+            onPressed: onPickVideo,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.photo_library),
+            label: Text(l10n.worldClipImportPictures),
+            onPressed: onPickImages,
+          ),
+        ],
       ),
     );
   }

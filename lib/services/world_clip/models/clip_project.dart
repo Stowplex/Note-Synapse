@@ -6,8 +6,13 @@ class ClipProject {
   final String id;
   String name;
   final DateTime createdAt;
-  final String sourceVideoFileName; // relative to the project dir
+  final String sourceVideoFileName; // relative to the project dir; '' for pictures
   final List<ClipSpec> clips;
+
+  /// For picture-import projects: the copied image filenames (relative to the
+  /// project's clips dir), indexed by [ClipSpec.frameTimestampMs]. Empty for
+  /// video projects.
+  final List<String> imageFileNames;
 
   /// Whether the user has manually drag-reordered clips. While false, clips are
   /// presented in video (timestamp) order; once true, the persisted
@@ -20,8 +25,13 @@ class ClipProject {
     required this.createdAt,
     required this.sourceVideoFileName,
     required this.clips,
+    this.imageFileNames = const [],
     this.manualOrder = false,
   });
+
+  /// True when this project was built from imported pictures rather than a
+  /// video (so it has no frame extractor / timeline).
+  bool get isPictureProject => imageFileNames.isNotEmpty;
 
   /// The clip for [ts], or null if that frame isn't tagged.
   ClipSpec? clipForTimestamp(int ts) {
@@ -61,6 +71,7 @@ class ClipProject {
         'name': name,
         'createdAt': createdAt.millisecondsSinceEpoch,
         'sourceVideo': sourceVideoFileName,
+        'imageFileNames': imageFileNames,
         'manualOrder': manualOrder,
         'clips': clips.map((c) => c.toJson()).toList(),
       };
@@ -71,6 +82,8 @@ class ClipProject {
         createdAt:
             DateTime.fromMillisecondsSinceEpoch(j['createdAt'] as int),
         sourceVideoFileName: j['sourceVideo'] as String,
+        imageFileNames:
+            (j['imageFileNames'] as List?)?.cast<String>() ?? const [],
         manualOrder: j['manualOrder'] as bool? ?? false,
         clips: (j['clips'] as List)
             .map((e) => ClipSpec.fromJson(e as Map<String, dynamic>))

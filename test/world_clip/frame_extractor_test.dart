@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -58,5 +59,20 @@ void main() {
     final f1 = computeFrameFeature(
         timestampMs: 200, framePng: png(32, 32), prevFramePng: png(32, 32));
     expect(f1.diffFromPrev, inInclusiveRange(0.0, 1.0));
+  });
+
+  test('PictureFrameExtractor serves images by index', () async {
+    final tmp = await Directory.systemTemp.createTemp('wc_pics');
+    final a = File('${tmp.path}/a.jpg')..writeAsBytesSync(png(4, 4));
+    final b = File('${tmp.path}/b.jpg')..writeAsBytesSync(png(6, 6));
+    final ex = PictureFrameExtractor([a.path, b.path]);
+
+    expect(await ex.sampleTimestamps(), [0, 1]);
+    expect(await ex.fullFrameAt(0), png(4, 4));
+    expect(await ex.thumbnailAt(1), png(6, 6));
+    expect(() => ex.fullFrameAt(2), throwsStateError);
+    expect(() => ex.fullFrameAt(-1), throwsStateError);
+
+    await tmp.delete(recursive: true);
   });
 }

@@ -10,4 +10,13 @@ void main() {
   test('FakeVideoSource yields null when configured empty', () async {
     expect(await FakeVideoSource(null).pickVideo(), isNull);
   });
+
+  test('FakeVideoSource yields its configured picture paths', () async {
+    final src = FakeVideoSource(null, imagePaths: ['/a.jpg', '/b.jpg']);
+    expect((await src.pickImages()).map((f) => f.path), ['/a.jpg', '/b.jpg']);
+  });
+
+  test('FakeVideoSource yields no pictures by default', () async {
+    expect(await FakeVideoSource(null).pickImages(), isEmpty);
+  });
 }

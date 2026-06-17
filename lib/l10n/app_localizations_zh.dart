@@ -326,6 +326,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get worldClipImportVideo => '导入视频';
 
   @override
+  String get worldClipImportPictures => '导入图片';
+
+  @override
   String get worldClipNoFramesSelected => '请至少选择一帧以继续';
 
   @override

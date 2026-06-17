@@ -686,6 +686,12 @@ abstract class AppLocalizations {
   /// **'Import video'**
   String get worldClipImportVideo;
 
+  /// No description provided for @worldClipImportPictures.
+  ///
+  /// In en, this message translates to:
+  /// **'Import pictures'**
+  String get worldClipImportPictures;
+
   /// No description provided for @worldClipNoFramesSelected.
   ///
   /// In en, this message translates to:

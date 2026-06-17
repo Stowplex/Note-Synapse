@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 import 'frame_selector.dart';
@@ -70,6 +71,33 @@ class PlatformFrameExtractor implements FrameExtractor {
 
   @override
   Future<Uint8List> fullFrameAt(int timestampMs) => _frame(timestampMs, 0);
+
+  @override
+  void dispose() {}
+}
+
+/// A [FrameExtractor] backed by a fixed list of image files (the "Import
+/// Pictures" path). The "timestamp" of each frame is simply its index, so the
+/// review pipeline (which keys pages by frame id) works unchanged.
+class PictureFrameExtractor implements FrameExtractor {
+  final List<String> imagePaths;
+  PictureFrameExtractor(this.imagePaths);
+
+  @override
+  Future<List<int>> sampleTimestamps({int fps = 5}) async =>
+      [for (var i = 0; i < imagePaths.length; i++) i];
+
+  @override
+  Future<Uint8List> thumbnailAt(int index, {int maxWidth = 240}) =>
+      fullFrameAt(index);
+
+  @override
+  Future<Uint8List> fullFrameAt(int index) {
+    if (index < 0 || index >= imagePaths.length) {
+      throw StateError('No image at index $index');
+    }
+    return File(imagePaths[index]).readAsBytes();
+  }
 
   @override
   void dispose() {}

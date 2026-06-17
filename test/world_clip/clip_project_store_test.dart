@@ -18,6 +18,28 @@ void main() {
     if (await tmp.exists()) await tmp.delete(recursive: true);
   });
 
+  test('createFromImages copies images and pre-populates clips', () async {
+    final imgs = [
+      File('${tmp.path}/a.jpg')..writeAsBytesSync([1, 2]),
+      File('${tmp.path}/b.png')..writeAsBytesSync([3, 4]),
+    ];
+    final p = await store.createFromImages(name: 'Pics', images: imgs);
+    expect(p.isPictureProject, isTrue);
+    expect(p.sourceVideoFileName, '');
+    expect(p.imageFileNames, ['image_0.jpg', 'image_1.png']);
+    // One clip per image, indexed 0..n-1.
+    expect(p.clips.map((c) => c.frameTimestampMs), [0, 1]);
+    // Images copied into the project, resolvable via imagePaths.
+    final paths = store.imagePaths(p);
+    expect(paths.length, 2);
+    expect(File(paths[0]).existsSync(), isTrue);
+    expect(File(paths[1]).existsSync(), isTrue);
+    // Round-trips as a picture project.
+    final loaded = (await store.load(p.id))!;
+    expect(loaded.isPictureProject, isTrue);
+    expect(loaded.imageFileNames, ['image_0.jpg', 'image_1.png']);
+  });
+
   test('create copies the source video and persists project.json', () async {
     final p = await store.create(name: 'Book', sourceVideo: fakeVideo);
     final dir = store.projectDir(p.id);

@@ -337,6 +337,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get worldClipImportVideo => 'Import video';
 
   @override
+  String get worldClipImportPictures => 'Import pictures';
+
+  @override
   String get worldClipNoFramesSelected =>
       'Select at least one frame to continue';
 
