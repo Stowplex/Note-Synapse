@@ -270,6 +270,84 @@ class McpToolIntegrationService {
     }
   }
 
+  /// Maximum nesting depth rendered for object/array parameter schemas.
+  /// Top-level params are depth 1; we descend through nested objects and the
+  /// element shape of object arrays (e.g. `modification` -> `link` -> `added`
+  /// -> `relation`/`target`, which is depth 4). This covers every built-in
+  /// tool schema while still capping pathologically deep inputs so the prompt
+  /// can't blow up.
+  static const int _maxSchemaDepth = 4;
+
+  /// Recursively render a JSON-schema `properties` map into the textual tool
+  /// catalog so the model can see nested object/array shapes (not just the
+  /// top-level parameter name). Without this, an object parameter renders as
+  /// only "- modification (object): The modification object." and the model
+  /// has to guess the inner structure.
+  static void _writeSchemaProperties(
+    StringBuffer buffer,
+    Map<String, dynamic> properties, {
+    List<dynamic>? required,
+    required bool compact,
+    required int depth,
+  }) {
+    final requiredSet = required == null
+        ? const <String>{}
+        : required.map((e) => e.toString()).toSet();
+    final indent = '  ' * depth;
+    properties.forEach((paramName, raw) {
+      if (raw is! Map<String, dynamic>) return;
+      final details = raw;
+      final paramType = details['type'] ?? 'any';
+      final paramDesc = details['description'];
+      final requiredMark = requiredSet.contains(paramName) ? ', required' : '';
+      final descSuffix =
+          (paramDesc is String && paramDesc.isNotEmpty) ? ': $paramDesc' : '';
+      buffer.writeln('$indent- $paramName ($paramType$requiredMark)$descSuffix');
+
+      final enumValues = details['enum'];
+      if (enumValues is List && enumValues.isNotEmpty) {
+        buffer.writeln('$indent  Allowed values: ${enumValues.join(", ")}');
+      }
+
+      if (depth >= _maxSchemaDepth) return;
+
+      // Nested object: descend into its properties.
+      final nestedProps = details['properties'];
+      if (nestedProps is Map<String, dynamic> && nestedProps.isNotEmpty) {
+        _writeSchemaProperties(
+          buffer,
+          nestedProps,
+          required: details['required'] as List?,
+          compact: compact,
+          depth: depth + 1,
+        );
+      }
+
+      // Array of objects: descend into the item shape so the model knows what
+      // each array element looks like.
+      final items = details['items'];
+      if (items is Map<String, dynamic>) {
+        final itemProps = items['properties'];
+        if (itemProps is Map<String, dynamic> && itemProps.isNotEmpty) {
+          _writeSchemaProperties(
+            buffer,
+            itemProps,
+            required: items['required'] as List?,
+            compact: compact,
+            depth: depth + 1,
+          );
+        } else {
+          final itemEnum = items['enum'];
+          if (itemEnum is List && itemEnum.isNotEmpty) {
+            buffer.writeln(
+              '$indent  Item allowed values: ${itemEnum.join(", ")}',
+            );
+          }
+        }
+      }
+    });
+  }
+
   static String _buildToolCatalogDescription(
     Map<String, List<McpTool>> toolsByEndpoint, {
     required bool compact,
@@ -314,15 +392,13 @@ class McpToolIntegrationService {
             if (!compact) {
               detailsBuffer.writeln('Parameters:');
             }
-            properties.forEach((paramName, paramDetails) {
-              final details = paramDetails as Map<String, dynamic>;
-              final paramType = details['type'] ?? 'any';
-              final paramDesc = details['description'] ?? '';
-              detailsBuffer.writeln('  - $paramName ($paramType): $paramDesc');
-              if (!compact && details.containsKey('enum')) {
-                detailsBuffer.writeln('    Allowed values: ${details['enum']}');
-              }
-            });
+            _writeSchemaProperties(
+              detailsBuffer,
+              properties,
+              required: required,
+              compact: compact,
+              depth: 1,
+            );
           }
         }
         detailsBuffer.writeln();

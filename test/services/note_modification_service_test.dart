@@ -64,6 +64,51 @@ void main() {
       );
     });
 
+    test(
+      'applyModifications rejects scalar content with a self-describing error',
+      () async {
+        // The agent commonly sends content as a raw string instead of the
+        // {action, text} object. Previously this surfaced as an opaque
+        // type-cast error; now it must explain the expected shape.
+        expect(
+          () => service.applyModifications('test-id', {
+            'content': '### Summary text',
+            'tags': {
+              'added': ['ingested'],
+            },
+          }),
+          throwsA(
+            isA<Exception>().having(
+              (e) => e.toString(),
+              'message',
+              allOf(
+                contains('"content"'),
+                contains('expected an object'),
+                contains('action'),
+              ),
+            ),
+          ),
+        );
+        // Validation happens before the DB is touched.
+        verifyNever(mockDb.getNoteById(any));
+      },
+    );
+
+    test('applyModifications rejects array-shaped tags field', () async {
+      expect(
+        () => service.applyModifications('test-id', {
+          'tags': ['ingested'],
+        }),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            allOf(contains('"tags"'), contains('added')),
+          ),
+        ),
+      );
+    });
+
     test('applyModifications appends content when action is append', () async {
       final note = Note(
         id: 'test-id',

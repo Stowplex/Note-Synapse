@@ -837,6 +837,84 @@ void main() {
       expect(result, isNot(contains('=== MCP TOOLS AVAILABLE ===')));
       expect(result, contains('- test_tool: A test tool'));
     });
+
+    test('expands nested object/array parameter schemas in compact mode', () {
+      // Mirrors the modify_note shape that previously rendered as only
+      // "- modification (object): The modification object." leaving the model
+      // to guess the inner structure.
+      final tools = {
+        'System': [
+          McpTool(
+            name: 'modify_note',
+            description: 'Modify a note.',
+            inputSchema: {
+              'type': 'object',
+              'properties': {
+                'note_id': {'type': 'string', 'description': 'The note id.'},
+                'modification': {
+                  'type': 'object',
+                  'description': 'The modification object.',
+                  'properties': {
+                    'content': {
+                      'type': 'object',
+                      'properties': {
+                        'action': {
+                          'type': 'string',
+                          'enum': ['append', 'prepend', 'replace', 'no-op'],
+                        },
+                        'text': {'type': 'string'},
+                      },
+                    },
+                    'tags': {
+                      'type': 'object',
+                      'properties': {
+                        'added': {
+                          'type': 'array',
+                          'items': {'type': 'string'},
+                        },
+                      },
+                    },
+                    'link': {
+                      'type': 'object',
+                      'properties': {
+                        'added': {
+                          'type': 'array',
+                          'items': {
+                            'type': 'object',
+                            'properties': {
+                              'relation': {'type': 'string'},
+                              'target': {'type': 'string'},
+                            },
+                            'required': ['relation', 'target'],
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              'required': ['note_id', 'modification'],
+            },
+          ),
+        ],
+      };
+      final result = McpToolIntegrationService.testBuildToolCatalogDescription(
+        tools,
+        compact: true,
+        includeHeader: false,
+      );
+      // Top-level param still rendered.
+      expect(result, contains('- modification (object'));
+      // Level 2: the nested object fields are now visible.
+      expect(result, contains('content (object)'));
+      expect(result, contains('tags (object)'));
+      // Level 3: scalar leaves and enum values reach the model.
+      expect(result, contains('action (string)'));
+      expect(result, contains('Allowed values: append, prepend, replace, no-op'));
+      // Array-of-object items descend into element fields (relation/target).
+      expect(result, contains('relation (string'));
+      expect(result, contains('target (string'));
+    });
   });
 
   group('PromptTemplateService preload', () {
