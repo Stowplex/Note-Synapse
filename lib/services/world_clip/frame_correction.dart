@@ -20,6 +20,11 @@ class OpenCvFrameCorrection implements FrameCorrection {
       {int? maxWidth, int? jpegQuality}) async {
     var mat = cv.imdecode(sourcePng, cv.IMREAD_COLOR);
     try {
+      if (mat.isEmpty) {
+        // Undecodable input (corrupt / unsupported codec) — don't feed an
+        // empty Mat into the ops below.
+        throw StateError('Could not decode source image');
+      }
       for (final c in corrections) {
         final next = switch (c) {
           CropCorrection() => _crop(mat, c),

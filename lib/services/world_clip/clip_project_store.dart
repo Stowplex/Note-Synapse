@@ -48,6 +48,11 @@ class ClipProjectStore {
     required String name,
     required List<File> images,
   }) async {
+    // A picture project is identified by a non-empty imageFileNames list; an
+    // empty import would be misclassified as a video project on resume.
+    if (images.isEmpty) {
+      throw ArgumentError('createFromImages requires at least one image');
+    }
     final id = const Uuid().v4();
     await projectDir(id).create(recursive: true);
     await proxyDir(id).create(recursive: true);

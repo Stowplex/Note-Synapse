@@ -54,6 +54,12 @@ void main() {
     mat.dispose();
   });
 
+  test('undecodable input throws instead of feeding an empty Mat', () async {
+    await expectLater(
+        correction.apply(Uint8List.fromList([1, 2, 3, 4]), const []),
+        throwsA(isA<StateError>()));
+  });
+
   test('jpegQuality outputs a decodable JPEG (not PNG)', () async {
     final src = _solidPng(64, 48);
     final out = await correction.apply(src, const [], jpegQuality: 80);

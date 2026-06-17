@@ -62,6 +62,17 @@ void main() {
     expect(find.byKey(const ValueKey('wc-page-1')), findsOneWidget);
     expect(find.byKey(const ValueKey('wc-compile')), findsOneWidget);
 
+    // Deleting every page of a picture project returns to the source picker
+    // (it has no video timeline to fall back to).
+    for (var n = 0; n < 2; n++) {
+      await tester.tap(find.byKey(const ValueKey('wc-menu-0')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+    }
+    expect(find.byIcon(Icons.photo_library), findsOneWidget); // back on source
+    expect(find.byIcon(Icons.video_library), findsOneWidget);
+
     await tester.runAsync(() => tmp.delete(recursive: true));
   });
 }

@@ -40,6 +40,12 @@ void main() {
     expect(loaded.imageFileNames, ['image_0.jpg', 'image_1.png']);
   });
 
+  test('createFromImages rejects an empty image list', () async {
+    await expectLater(
+        store.createFromImages(name: 'x', images: const []),
+        throwsArgumentError);
+  });
+
   test('create copies the source video and persists project.json', () async {
     final p = await store.create(name: 'Book', sourceVideo: fakeVideo);
     final dir = store.projectDir(p.id);

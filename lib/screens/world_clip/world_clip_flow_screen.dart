@@ -521,9 +521,13 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
                     _project!.clips
                         .removeWhere((c) => c.frameTimestampMs == ts);
                     // Removing the last page would otherwise strand the review
-                    // stage on its loading spinner — step back to the timeline.
+                    // stage on its loading spinner. Picture projects have no
+                    // timeline, so step back to the source picker; video
+                    // projects step back to the timeline to re-tag.
                     if (_reviewPages.isEmpty) {
-                      _stage = WorldClipStage.timeline;
+                      _stage = _project!.isPictureProject
+                          ? WorldClipStage.source
+                          : WorldClipStage.timeline;
                     }
                   });
                   _persistOrder();
