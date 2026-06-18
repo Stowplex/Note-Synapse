@@ -692,6 +692,30 @@ abstract class AppLocalizations {
   /// **'Import pictures'**
   String get worldClipImportPictures;
 
+  /// No description provided for @worldClipScreenCapture.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen capture'**
+  String get worldClipScreenCapture;
+
+  /// No description provided for @worldClipScreenCaptureRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording your screen…'**
+  String get worldClipScreenCaptureRecording;
+
+  /// No description provided for @worldClipScreenCaptureHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to the app you want to capture. When you\'re done, return here and tap Stop, or use the notification.'**
+  String get worldClipScreenCaptureHint;
+
+  /// No description provided for @worldClipScreenCaptureStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop & import'**
+  String get worldClipScreenCaptureStop;
+
   /// No description provided for @worldClipNoFramesSelected.
   ///
   /// In en, this message translates to:

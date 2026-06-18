@@ -9,6 +9,7 @@ import 'package:note_synapse/l10n/app_localizations.dart';
 import 'package:note_synapse/screens/world_clip/world_clip_flow_screen.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/services/world_clip/video_source.dart';
+import 'package:note_synapse/services/world_clip/screen_capture_service.dart';
 import 'package:note_synapse/services/world_clip/frame_correction.dart';
 
 class _FakePathProvider extends PathProviderPlatform
@@ -38,6 +39,8 @@ void main() {
     await resetForTesting();
     getIt.registerSingleton<VideoSource>(
         FakeVideoSource(null, imagePaths: imagePaths));
+    getIt.registerSingleton<ScreenCaptureService>(
+        FakeScreenCaptureService(supported: false));
     getIt.registerSingleton<FrameCorrection>(OpenCvFrameCorrection());
 
     await tester.pumpWidget(const MaterialApp(

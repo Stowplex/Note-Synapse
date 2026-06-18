@@ -1,9 +1,12 @@
 package com.github.kkspeed.note_synapse.note_synapse
 
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -13,14 +16,20 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterActivity(), ScreenCaptureService.Listener {
     private val CHANNEL = "com.github.kkspeed/share"
     private val NATIVE_CAPTURE_CHANNEL = "note_synapse/native_capture"
     private val VIDEO_FRAMES_CHANNEL = "note_synapse/video_frames"
+    private val SCREEN_CAPTURE_CHANNEL = "note_synapse/screen_capture"
 
     private val SAVE_FILE_REQUEST_CODE = 1001
+    private val SCREEN_CAPTURE_REQUEST_CODE = 1002
     private var pendingResult: MethodChannel.Result? = null
     private var sourceFilePath: String? = null
+
+    private var screenCaptureChannel: MethodChannel? = null
+    private var pendingCaptureStartResult: MethodChannel.Result? = null
+    private var pendingCaptureOutputPath: String? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -63,6 +72,67 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        val screenCapture = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger, SCREEN_CAPTURE_CHANNEL)
+        screenCaptureChannel = screenCapture
+        ScreenCaptureService.listener = this
+        screenCapture.setMethodCallHandler { call, result ->
+            when (call.method) {
+                // MediaProjection consent + VirtualDisplay exist from API 21;
+                // the mediaProjection FGS *type* (Q+) is applied conditionally
+                // in the service, so capture is supported on all minSdk targets.
+                // Matches the Dart Platform.isAndroid gate (no contract drift).
+                "isSupported" ->
+                    result.success(Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
+                "startCapture" -> startScreenCapture(result)
+                "stopCapture" -> {
+                    startService(Intent(this, ScreenCaptureService::class.java)
+                        .apply { action = ScreenCaptureService.ACTION_STOP })
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
+        // Deliver a recording that finished while the engine was rebuilding
+        // (e.g. the notification's Stop fired with the activity backgrounded).
+        // Note: if the OS fully killed the process, the Dart record() completer
+        // is gone and this delivery is a no-op — the recording would be lost.
+        // Acceptable for now; surfacing an orphaned capture on resume is future
+        // work. The common case (backgrounded, engine alive) is covered.
+        ScreenCaptureService.pendingCompletedPath?.let { path ->
+            screenCapture.invokeMethod("onCaptureComplete", path)
+            ScreenCaptureService.pendingCompletedPath = null
+        }
+    }
+
+    /// Launches the MediaProjection consent dialog. The result is wired up in
+    /// onActivityResult, which starts the foreground recording service.
+    private fun startScreenCapture(result: MethodChannel.Result) {
+        if (pendingCaptureStartResult != null) {
+            result.success(false) // a consent request is already in flight
+            return
+        }
+        pendingCaptureStartResult = result
+        pendingCaptureOutputPath =
+            File(cacheDir, "screen_capture_${System.currentTimeMillis()}.mp4").absolutePath
+        val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+            as MediaProjectionManager
+        startActivityForResult(mpm.createScreenCaptureIntent(), SCREEN_CAPTURE_REQUEST_CODE)
+    }
+
+    override fun onScreenCaptureComplete(path: String?) {
+        runOnUiThread {
+            screenCaptureChannel?.invokeMethod("onCaptureComplete", path)
+            ScreenCaptureService.pendingCompletedPath = null
+        }
+    }
+
+    override fun onDestroy() {
+        if (ScreenCaptureService.listener === this) {
+            ScreenCaptureService.listener = null
+        }
+        super.onDestroy()
     }
 
     /// Reads the video duration (ms) off the main thread to avoid ANRs.
@@ -134,6 +204,30 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == SCREEN_CAPTURE_REQUEST_CODE) {
+            val startResult = pendingCaptureStartResult
+            val outputPath = pendingCaptureOutputPath
+            pendingCaptureStartResult = null
+            pendingCaptureOutputPath = null
+            if (resultCode == RESULT_OK && data != null && outputPath != null) {
+                val svc = Intent(this, ScreenCaptureService::class.java).apply {
+                    action = ScreenCaptureService.ACTION_START
+                    putExtra(ScreenCaptureService.EXTRA_RESULT_CODE, resultCode)
+                    putExtra(ScreenCaptureService.EXTRA_DATA, data)
+                    putExtra(ScreenCaptureService.EXTRA_OUTPUT_PATH, outputPath)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(svc)
+                } else {
+                    startService(svc)
+                }
+                startResult?.success(true)
+            } else {
+                startResult?.success(false) // user denied / cancelled consent
+            }
+            return
+        }
 
         if (requestCode == SAVE_FILE_REQUEST_CODE) {
             if (resultCode == RESULT_OK && data?.data != null) {

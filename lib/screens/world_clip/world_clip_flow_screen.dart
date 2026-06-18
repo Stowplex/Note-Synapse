@@ -8,6 +8,7 @@ import '../../l10n/app_localizations.dart';
 import '../../providers/app_provider.dart';
 import '../../services/service_locator.dart';
 import '../../services/world_clip/video_source.dart';
+import '../../services/world_clip/screen_capture_service.dart';
 import '../../services/world_clip/frame_extractor.dart';
 import '../../services/world_clip/frame_selector.dart';
 import '../../services/world_clip/frame_correction.dart';
@@ -47,6 +48,7 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   String _detectLabel = '';
   bool _cloning = false; // batch clone-edits in progress (review stage)
   bool _compiling = false; // building the note (PDF/inline) in progress
+  bool _capturing = false; // screen recording in progress (source stage)
   // Shared timeline-thumbnail cache: warmed in the background and reused by the
   // strip, the scrub highlight, and (crucially) auto key-frame detection so the
   // detector scores already-decoded thumbnails instead of re-extracting frames.
@@ -100,6 +102,32 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   Future<void> _onPickVideo() async {
     final file = await getIt<VideoSource>().pickVideo();
     if (file == null) return;
+    await _startVideoProject(file);
+  }
+
+  /// "Screen Capture": records the device screen (the user switches to the app
+  /// they want to film, then stops via the in-app button or the notification),
+  /// then routes the recording into the same video pipeline as a gallery
+  /// import. Shows the recording overlay while the capture is live.
+  Future<void> _onScreenCapture() async {
+    final svc = getIt<ScreenCaptureService>();
+    setState(() => _capturing = true);
+    File? file;
+    try {
+      file = await svc.record();
+    } finally {
+      if (mounted) setState(() => _capturing = false);
+    }
+    if (file == null) return; // cancelled / denied / failed
+    await _startVideoProject(file);
+  }
+
+  Future<void> _stopScreenCapture() =>
+      getIt<ScreenCaptureService>().stop();
+
+  /// Copies [file] into a fresh project, samples its frames, and opens the
+  /// timeline stage. Shared by gallery import and screen capture.
+  Future<void> _startVideoProject(File file) async {
     final store = await _ensureStore();
     final project = await store.create(
         name: 'Clip ${DateTime.now().toIso8601String().substring(0, 16)}',
@@ -487,12 +515,14 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    return Scaffold(
-      appBar: AppBar(title: Text(l10n.worldClip)),
-      body: switch (_stage) {
-        WorldClipStage.source => _SourceStage(
-            onPickVideo: _onPickVideo, onPickImages: _onPickImages),
-        WorldClipStage.timeline => _buildTimelineStage(l10n),
+    final stageBody = switch (_stage) {
+      WorldClipStage.source => _SourceStage(
+          onPickVideo: _onPickVideo,
+          onPickImages: _onPickImages,
+          onScreenCapture: _onScreenCapture,
+          screenCaptureSupported: getIt<ScreenCaptureService>().isSupported,
+        ),
+      WorldClipStage.timeline => _buildTimelineStage(l10n),
         WorldClipStage.review => _reviewPages.isEmpty
             ? const Center(child: CircularProgressIndicator())
             : Stack(
@@ -541,7 +571,55 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
                   if (_compiling) _progressOverlay(label: l10n.worldClipCompile),
                 ],
               ),
-      },
+    };
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.worldClip)),
+      body: Stack(
+        children: [
+          stageBody,
+          if (_capturing) _recordingOverlay(l10n),
+        ],
+      ),
+    );
+  }
+
+  /// Full-screen overlay shown while a screen recording is live: the recording
+  /// indicator, instructions to switch to the target app, and a Stop button
+  /// (the foreground-service notification offers the same Stop action).
+  Widget _recordingOverlay(AppLocalizations l10n) {
+    return Positioned.fill(
+      child: ColoredBox(
+        color: const Color(0xCC000000),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.fiber_manual_record,
+                    color: Colors.redAccent, size: 48),
+                const SizedBox(height: 16),
+                Text(l10n.worldClipScreenCaptureRecording,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text(l10n.worldClipScreenCaptureHint,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white70)),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  key: const ValueKey('wc-capture-stop'),
+                  onPressed: _stopScreenCapture,
+                  icon: const Icon(Icons.stop),
+                  label: Text(l10n.worldClipScreenCaptureStop),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -600,7 +678,14 @@ class _LargePreviewState extends State<_LargePreview> {
 class _SourceStage extends StatelessWidget {
   final VoidCallback onPickVideo;
   final VoidCallback onPickImages;
-  const _SourceStage({required this.onPickVideo, required this.onPickImages});
+  final VoidCallback onScreenCapture;
+  final bool screenCaptureSupported;
+  const _SourceStage({
+    required this.onPickVideo,
+    required this.onPickImages,
+    required this.onScreenCapture,
+    required this.screenCaptureSupported,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -620,6 +705,15 @@ class _SourceStage extends StatelessWidget {
             label: Text(l10n.worldClipImportPictures),
             onPressed: onPickImages,
           ),
+          if (screenCaptureSupported) ...[
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              key: const ValueKey('wc-screen-capture'),
+              icon: const Icon(Icons.fiber_manual_record),
+              label: Text(l10n.worldClipScreenCapture),
+              onPressed: onScreenCapture,
+            ),
+          ],
         ],
       ),
     );

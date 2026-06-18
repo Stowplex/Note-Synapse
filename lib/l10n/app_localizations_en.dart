@@ -340,6 +340,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get worldClipImportPictures => 'Import pictures';
 
   @override
+  String get worldClipScreenCapture => 'Screen capture';
+
+  @override
+  String get worldClipScreenCaptureRecording => 'Recording your screen…';
+
+  @override
+  String get worldClipScreenCaptureHint =>
+      'Switch to the app you want to capture. When you\'re done, return here and tap Stop, or use the notification.';
+
+  @override
+  String get worldClipScreenCaptureStop => 'Stop & import';
+
+  @override
   String get worldClipNoFramesSelected =>
       'Select at least one frame to continue';
 

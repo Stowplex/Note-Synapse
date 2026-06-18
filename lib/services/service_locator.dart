@@ -25,6 +25,7 @@ import 'prompts/prompt_template_service.dart';
 import 'web_session_service.dart';
 import 'world_clip/frame_correction.dart';
 import 'world_clip/video_source.dart';
+import 'world_clip/screen_capture_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -210,6 +211,12 @@ void registerWorldClipServices() {
   }
   if (!getIt.isRegistered<VideoSource>()) {
     getIt.registerLazySingleton<VideoSource>(() => GalleryVideoSource());
+  }
+  if (!getIt.isRegistered<ScreenCaptureService>()) {
+    getIt.registerLazySingleton<ScreenCaptureService>(() =>
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+            ? MethodChannelScreenCaptureService()
+            : UnsupportedScreenCaptureService());
   }
 }
 

@@ -329,6 +329,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get worldClipImportPictures => '导入图片';
 
   @override
+  String get worldClipScreenCapture => '屏幕录制';
+
+  @override
+  String get worldClipScreenCaptureRecording => '正在录制屏幕…';
+
+  @override
+  String get worldClipScreenCaptureHint => '切换到你想要录制的应用。完成后返回此处点击停止，或使用通知栏停止。';
+
+  @override
+  String get worldClipScreenCaptureStop => '停止并导入';
+
+  @override
   String get worldClipNoFramesSelected => '请至少选择一帧以继续';
 
   @override
