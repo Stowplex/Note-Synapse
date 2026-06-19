@@ -20,6 +20,43 @@ class NoteModificationService {
   /// [db] - The database service for persistence operations.
   NoteModificationService(this._db);
 
+  /// Known modification fields that must be JSON objects (not bare strings or
+  /// arrays), paired with a hint describing their correct shape. The agent
+  /// frequently passes `content` as a raw string or `tags` as a bare array;
+  /// without this guard the failure surfaces as an opaque
+  /// `type 'String' is not a subtype of type 'Map<String, dynamic>'` cast
+  /// error that the model cannot recover from.
+  ///
+  /// `link` is intentionally excluded: its handler accepts both the
+  /// `{added, removed}` object and a bare array of links, so neither shape is
+  /// an error.
+  static const Map<String, String> _objectFieldHints = {
+    'content':
+        '{"action": "append|prepend|replace", "text": "...", '
+        '"section": "(optional) markdown heading to target", '
+        '"insert_position": "(optional) append|prepend within the section"}',
+    'title': '{"new_title": "..."}',
+    'tags': '{"added": ["tag1"], "removed": ["tag2"]}',
+    'attachments': '{"added": ["file.png"], "removed": ["old.png"]}',
+    'subnote':
+        '{"added": [{"name": "...", "content": "..."}], "removed": ["id"]}',
+  };
+
+  /// Validates that each present modification field has the expected object
+  /// shape, throwing a self-describing error the model can act on instead of
+  /// an opaque type-cast failure.
+  static void _validateModificationShape(Map<String, dynamic> modification) {
+    _objectFieldHints.forEach((field, hint) {
+      if (modification.containsKey(field) && modification[field] is! Map) {
+        final actual = modification[field].runtimeType;
+        throw Exception(
+          'Invalid "$field" in modification: expected an object but got '
+          '$actual. The "$field" field must be shaped like: $hint',
+        );
+      }
+    });
+  }
+
   /// Applies modifications defined in the JSON schema to a note.
   /// Returns the updated Note object.
   Future<Note> applyModifications(
@@ -29,6 +66,8 @@ class NoteModificationService {
     LoggerService.debug(
       'Applying modifications to note $noteId: $modifications',
     );
+
+    _validateModificationShape(modifications);
 
     final note = await _db.getNoteById(noteId);
     if (note == null) {
@@ -60,6 +99,8 @@ class NoteModificationService {
       if (modification == null) {
         throw Exception('Each update must include a modification object.');
       }
+
+      _validateModificationShape(modification);
 
       final note = await _db.getNoteById(noteId);
       if (note == null) {

@@ -314,6 +314,57 @@ class AppLocalizationsZh extends AppLocalizations {
   String get newNoteFromClipboardSubtitle => '从剪贴板内容创建笔记';
 
   @override
+  String get worldClip => '世界剪辑';
+
+  @override
+  String get worldClipSubtitle => '将视频转换为笔记';
+
+  @override
+  String get worldClipProjects => '世界剪辑项目';
+
+  @override
+  String get worldClipImportVideo => '导入视频';
+
+  @override
+  String get worldClipImportPictures => '导入图片';
+
+  @override
+  String get worldClipScreenCapture => '屏幕录制';
+
+  @override
+  String get worldClipScreenCaptureRecording => '正在录制屏幕…';
+
+  @override
+  String get worldClipScreenCaptureHint => '切换到你想要录制的应用。完成后返回此处点击停止，或使用通知栏停止。';
+
+  @override
+  String get worldClipScreenCaptureStop => '停止并导入';
+
+  @override
+  String get worldClipNoFramesSelected => '请至少选择一帧以继续';
+
+  @override
+  String get worldClipReview => '查看剪辑';
+
+  @override
+  String get worldClipCompile => '创建笔记';
+
+  @override
+  String get worldClipOutputPdf => '导出为 PDF';
+
+  @override
+  String get worldClipOutputImages => '导出为内嵌图片';
+
+  @override
+  String get worldClipDeleteProject => '删除项目';
+
+  @override
+  String get worldClipNewFromSameVideo => '用此视频新建项目';
+
+  @override
+  String get worldClipEmptyProjects => '没有已保存的世界剪辑项目';
+
+  @override
   String get recordingStarted => '录音已开始';
 
   @override

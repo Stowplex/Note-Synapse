@@ -1,0 +1,78 @@
+import 'dart:io';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
+import 'package:note_synapse/services/world_clip/frame_extractor.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  const channel = MethodChannel('test/video_frames');
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+
+  Uint8List png(int w, int h) => Uint8List.fromList(
+      img.encodePng(img.Image(width: w, height: h)..clear(img.ColorRgb8(30, 60, 90))));
+
+  tearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+  test('sampleTimestamps derives steps from the native duration', () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      return call.method == 'getDuration' ? 2000 : null;
+    });
+    final ex = PlatformFrameExtractor('/x.mp4', channel: channel);
+    final ts = await ex.sampleTimestamps(fps: 5); // step 200ms over 2000ms
+    expect(ts.first, 0);
+    expect(ts.length, 10);
+    expect(ts.last, 1800);
+  });
+
+  test('fullFrameAt and thumbnailAt return the native frame bytes', () async {
+    final bytes = png(8, 6);
+    int? lastMaxWidth;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'extractFrame') {
+        lastMaxWidth = (call.arguments as Map)['maxWidth'] as int;
+        return bytes;
+      }
+      return null;
+    });
+    final ex = PlatformFrameExtractor('/x.mp4', channel: channel);
+    expect(await ex.fullFrameAt(0), equals(bytes));
+    expect(lastMaxWidth, 0); // full frame requests no downscale
+    await ex.thumbnailAt(0, maxWidth: 120);
+    expect(lastMaxWidth, 120);
+  });
+
+  test('throws StateError when the native side returns no frame', () async {
+    messenger.setMockMethodCallHandler(channel, (call) async => null);
+    final ex = PlatformFrameExtractor('/x.mp4', channel: channel);
+    expect(() => ex.fullFrameAt(0), throwsStateError);
+  });
+
+  test('computeFrameFeature scores PNG bytes directly (used on thumbnails)',
+      () {
+    final f0 = computeFrameFeature(timestampMs: 0, framePng: png(32, 32));
+    expect(f0.timestampMs, 0);
+    expect(f0.sharpness, greaterThanOrEqualTo(0));
+    expect(f0.diffFromPrev, 1.0); // no previous frame
+
+    final f1 = computeFrameFeature(
+        timestampMs: 200, framePng: png(32, 32), prevFramePng: png(32, 32));
+    expect(f1.diffFromPrev, inInclusiveRange(0.0, 1.0));
+  });
+
+  test('PictureFrameExtractor serves images by index', () async {
+    final tmp = await Directory.systemTemp.createTemp('wc_pics');
+    final a = File('${tmp.path}/a.jpg')..writeAsBytesSync(png(4, 4));
+    final b = File('${tmp.path}/b.jpg')..writeAsBytesSync(png(6, 6));
+    final ex = PictureFrameExtractor([a.path, b.path]);
+
+    expect(await ex.sampleTimestamps(), [0, 1]);
+    expect(await ex.fullFrameAt(0), png(4, 4));
+    expect(await ex.thumbnailAt(1), png(6, 6));
+    expect(() => ex.fullFrameAt(2), throwsStateError);
+    expect(() => ex.fullFrameAt(-1), throwsStateError);
+
+    await tmp.delete(recursive: true);
+  });
+}

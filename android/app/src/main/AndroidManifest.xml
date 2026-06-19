@@ -19,7 +19,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    
+
+    <!-- World Clip screen capture (MediaProjection foreground service) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
+
     <application
         android:label="Note Synapse"
         android:name="${applicationName}"
@@ -102,6 +105,12 @@
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="dataSync"
+            android:exported="false"/>
+
+        <!-- World Clip screen recording (MediaProjection) -->
+        <service
+            android:name=".ScreenCaptureService"
+            android:foregroundServiceType="mediaProjection"
             android:exported="false"/>
     </application>
     <!-- Required to query activities that can process text, see:

@@ -46,7 +46,29 @@ import AVFoundation
         result(FlutterMethodNotImplemented)
       }
     }
-    
+
+    let videoFramesChannel = FlutterMethodChannel(
+      name: "note_synapse/video_frames",
+      binaryMessenger: controller.binaryMessenger
+    )
+    videoFramesChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
+      guard let args = call.arguments as? [String: Any],
+            let path = args["path"] as? String else {
+        result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing video path", details: nil))
+        return
+      }
+      switch call.method {
+      case "getDuration":
+        self?.getVideoDuration(path: path, result: result)
+      case "extractFrame":
+        let timeMs = args["timeMs"] as? Int ?? 0
+        let maxWidth = args["maxWidth"] as? Int ?? 0
+        self?.extractVideoFrame(path: path, timeMs: timeMs, maxWidth: maxWidth, result: result)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
   
@@ -322,6 +344,42 @@ import AVFoundation
     }
   }
   
+  private func getVideoDuration(path: String, result: @escaping FlutterResult) {
+    let asset = AVURLAsset(url: URL(fileURLWithPath: path))
+    let seconds = CMTimeGetSeconds(asset.duration)
+    let ms = seconds.isFinite ? Int(seconds * 1000) : 0
+    result(ms)
+  }
+
+  /// Decodes the frame nearest `timeMs` as PNG bytes, scaled to `maxWidth`
+  /// when > 0. Runs off the main thread (image generation can be slow).
+  private func extractVideoFrame(path: String, timeMs: Int, maxWidth: Int, result: @escaping FlutterResult) {
+    DispatchQueue.global(qos: .userInitiated).async {
+      let asset = AVURLAsset(url: URL(fileURLWithPath: path))
+      let generator = AVAssetImageGenerator(asset: asset)
+      generator.appliesPreferredTrackTransform = true
+      generator.requestedTimeToleranceBefore = .zero
+      generator.requestedTimeToleranceAfter = .zero
+      if maxWidth > 0 {
+        generator.maximumSize = CGSize(width: CGFloat(maxWidth), height: CGFloat.greatestFiniteMagnitude)
+      }
+      let time = CMTime(value: CMTimeValue(timeMs), timescale: 1000)
+      do {
+        let cgImage = try generator.copyCGImage(at: time, actualTime: nil)
+        let data = UIImage(cgImage: cgImage).pngData()
+        DispatchQueue.main.async {
+          if let data = data {
+            result(FlutterStandardTypedData(bytes: data))
+          } else {
+            result(nil)
+          }
+        }
+      } catch {
+        DispatchQueue.main.async { result(nil) }
+      }
+    }
+  }
+
   private struct SharedItem: Codable {
     var text: String?
     var url: String?

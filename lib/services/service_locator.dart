@@ -23,6 +23,9 @@ import 'fork_service.dart';
 import 'marker_chat_send_service.dart';
 import 'prompts/prompt_template_service.dart';
 import 'web_session_service.dart';
+import 'world_clip/frame_correction.dart';
+import 'world_clip/video_source.dart';
+import 'world_clip/screen_capture_service.dart';
 
 /// Global GetIt instance for service location.
 final GetIt getIt = GetIt.instance;
@@ -195,6 +198,25 @@ void setupServiceLocator() {
     getIt.registerLazySingleton<MarkerChatSendService>(
       () => MarkerChatSendService(),
     );
+  }
+
+  registerWorldClipServices();
+}
+
+/// World Clip services. Called from setupServiceLocator(); separated so tests
+/// can register just this slice.
+void registerWorldClipServices() {
+  if (!getIt.isRegistered<FrameCorrection>()) {
+    getIt.registerLazySingleton<FrameCorrection>(() => OpenCvFrameCorrection());
+  }
+  if (!getIt.isRegistered<VideoSource>()) {
+    getIt.registerLazySingleton<VideoSource>(() => GalleryVideoSource());
+  }
+  if (!getIt.isRegistered<ScreenCaptureService>()) {
+    getIt.registerLazySingleton<ScreenCaptureService>(() =>
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+            ? MethodChannelScreenCaptureService()
+            : UnsupportedScreenCaptureService());
   }
 }
 
