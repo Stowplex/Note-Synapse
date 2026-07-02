@@ -3,7 +3,18 @@
 
 Note Synapse is a local-first, open-source note-taking app built for developers, researchers, and power users who want to **program their thoughts**.
 
-### [Download Nightly Debug Build APK (Dev Key)](https://github.com/kkspeed/Note-Synapse/releases)
+### Download
+
+**Debug build available for free on Github**
+
+[Download Nightly Debug Build APK (Dev Key)](https://github.com/kkspeed/Note-Synapse/releases)
+
+**You can also get the release build from Google Play**
+
+<a href="https://play.google.com/store/apps/details?id=com.github.kkspeed.note_synapse.note_synapse">
+  <img src="https://raw.githubusercontent.com/pioug/google-play-badges/refs/heads/main/svg/en.svg" alt="Get it on Google Play" width="200"/>
+</a>
+
 
 ---
 
