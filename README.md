@@ -12,7 +12,7 @@ Note Synapse is a local-first, open-source note-taking app built for developers,
 **You can also get the release build from Google Play**
 
 <a href=""https://play.google.com/store/apps/details?id=com.github.kkspeed.note_synapse.note_synapse>
-  <img src="https://google.com" alt="Get it on Google Play" width="200"/>
+  <img src="https://raw.githubusercontent.com/pioug/google-play-badges/refs/heads/main/svg/en.svg" alt="Get it on Google Play" width="200"/>
 </a>
 
 
