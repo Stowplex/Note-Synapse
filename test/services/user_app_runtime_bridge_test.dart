@@ -20,6 +20,7 @@ import 'package:note_synapse/services/logger_service.dart';
 import 'package:note_synapse/services/note_modification_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/services/sql_query_service.dart';
+import 'package:note_synapse/services/tts_service.dart';
 import 'package:note_synapse/services/user_app_runtime_bridge.dart';
 import 'package:note_synapse/services/user_app_service.dart';
 import 'package:uuid/uuid.dart';
@@ -45,6 +46,7 @@ void main() {
   late MockAIService mockAIService;
   late MockInAppWebViewController mockWebViewController;
   late MockNoteModificationService mockModificationService;
+  late RecordingTtsService fakeTtsService;
   late UserAppRuntimeBridge bridge;
 
   // Store registered handlers to simulate JS calls
@@ -64,6 +66,7 @@ void main() {
     mockAIService = MockAIService();
     mockWebViewController = MockInAppWebViewController();
     mockModificationService = MockNoteModificationService();
+    fakeTtsService = RecordingTtsService();
 
     getIt.registerSingleton<AppProvider>(mockAppProvider);
     getIt.registerSingleton<UserAppService>(mockUserAppService);
@@ -71,6 +74,7 @@ void main() {
     getIt.registerSingleton<SqlQueryService>(mockSqlQueryService);
     getIt.registerSingleton<AIService>(mockAIService);
     getIt.registerSingleton<NoteModificationService>(mockModificationService);
+    getIt.registerSingleton<TtsService>(fakeTtsService);
 
     // Mock addJavaScriptHandler to capture callbacks
     when(
@@ -119,6 +123,9 @@ void main() {
       expect(jsHandlers.containsKey('readAttachment'), isTrue);
       expect(jsHandlers.containsKey('saveTemp'), isTrue);
       expect(jsHandlers.containsKey('saveNotes'), isTrue);
+      expect(jsHandlers.containsKey('ttsSpeak'), isTrue);
+      expect(jsHandlers.containsKey('ttsStop'), isTrue);
+      expect(jsHandlers.containsKey('ttsGetLanguages'), isTrue);
     });
 
     group('buildBootstrapScript', () {
@@ -215,6 +222,109 @@ void main() {
           );
         },
       );
+
+      test('surfaces truncation info in the response', () async {
+        const sql = 'SELECT * FROM notes';
+        when(
+          mockSqlQueryService.getQueryType(sql),
+        ).thenReturn(SqlQueryType.select);
+        when(mockSqlQueryService.isReadOnlyQuery(sql)).thenReturn(true);
+        when(
+          mockSqlQueryService.executeQuery(
+            any,
+            requireApprovalForWrites: anyNamed('requireApprovalForWrites'),
+            allowWriteOperations: anyNamed('allowWriteOperations'),
+          ),
+        ).thenAnswer(
+          (_) async => SqlQueryResult(
+            success: true,
+            data: List.generate(100, (i) => {'id': '$i'}),
+            truncated: true,
+            totalRows: 250,
+          ),
+        );
+
+        final result = await jsHandlers['runQuery']!([sql]);
+
+        expect(result['success'], isTrue);
+        expect(result['truncated'], isTrue);
+        expect(result['totalRows'], 250);
+      });
+
+      test('omits truncation info when results are complete', () async {
+        const sql = 'SELECT * FROM notes';
+        when(
+          mockSqlQueryService.getQueryType(sql),
+        ).thenReturn(SqlQueryType.select);
+        when(mockSqlQueryService.isReadOnlyQuery(sql)).thenReturn(true);
+        when(
+          mockSqlQueryService.executeQuery(
+            any,
+            requireApprovalForWrites: anyNamed('requireApprovalForWrites'),
+            allowWriteOperations: anyNamed('allowWriteOperations'),
+          ),
+        ).thenAnswer(
+          (_) async => SqlQueryResult(
+            success: true,
+            data: [
+              {'id': '1'},
+            ],
+          ),
+        );
+
+        final result = await jsHandlers['runQuery']!([sql]);
+
+        expect(result['success'], isTrue);
+        expect(result.containsKey('truncated'), isFalse);
+        expect(result.containsKey('totalRows'), isFalse);
+      });
+    });
+
+    group('tts handlers', () {
+      setUp(() {
+        bridge.registerJavaScriptHandlers(mockWebViewController);
+      });
+
+      test('ttsSpeak forwards text and options to TtsService', () async {
+        final result = await jsHandlers['ttsSpeak']!([
+          'Bonjour',
+          {'language': 'fr-FR', 'rate': 0.4},
+        ]);
+
+        expect(result['success'], isTrue);
+        expect(fakeTtsService.speakCalls, [
+          {
+            'text': 'Bonjour',
+            'language': 'fr-FR',
+            'rate': 0.4,
+            'pitch': null,
+            'volume': null,
+          },
+        ]);
+      });
+
+      test('ttsSpeak rejects empty text', () async {
+        final result = await jsHandlers['ttsSpeak']!(['   ']);
+
+        expect(result['success'], isFalse);
+        expect(fakeTtsService.speakCalls, isEmpty);
+      });
+
+      test('ttsStop delegates to TtsService', () async {
+        final result = await jsHandlers['ttsStop']!([]);
+
+        expect(result['success'], isTrue);
+        expect(fakeTtsService.stopCalls, 1);
+      });
+
+      test('ttsGetLanguages returns languages from TtsService', () async {
+        fakeTtsService.languages = ['en-US', 'ja-JP'];
+
+        final result = await jsHandlers['ttsGetLanguages']!([]);
+
+        expect(result['success'], isTrue);
+        expect(result['data'], ['en-US', 'ja-JP']);
+      });
     });
 
     group('chatAI', () {
@@ -687,4 +797,37 @@ class MockPathProviderPlatform extends Fake
   Future<String?> getTemporaryPath() async {
     return tempPath;
   }
+}
+
+/// Hand-written TtsService fake (kept out of build_runner: the platform
+/// channel is never exercised in tests, only call recording is needed).
+class RecordingTtsService extends TtsService {
+  final List<Map<String, dynamic>> speakCalls = [];
+  int stopCalls = 0;
+  List<String> languages = [];
+
+  @override
+  Future<void> speak(
+    String text, {
+    String? language,
+    double? rate,
+    double? pitch,
+    double? volume,
+  }) async {
+    speakCalls.add({
+      'text': text,
+      'language': language,
+      'rate': rate,
+      'pitch': pitch,
+      'volume': volume,
+    });
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCalls++;
+  }
+
+  @override
+  Future<List<String>> getLanguages() async => languages;
 }

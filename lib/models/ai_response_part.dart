@@ -1,14 +1,15 @@
 /// Represents a single part in a multi-part AI response.
 ///
 /// Used when `response_type: 'multi_part'` is specified in SynapseAPI calls.
-/// Each part is either text content or an image with base64 data URL.
+/// Each part is text content, or an image/audio clip with base64 data URL.
 class AiResponsePart {
-  /// The type of this response part: 'text' or 'image'.
+  /// The type of this response part: 'text', 'image', or 'audio'.
   final String type;
 
   /// The content of this part.
   /// For 'text' type: the text content itself.
   /// For 'image' type: a base64 data URL (e.g., 'data:image/png;base64,...').
+  /// For 'audio' type: a base64 data URL (e.g., 'data:audio/wav;base64,...').
   final String content;
 
   const AiResponsePart({required this.type, required this.content});
@@ -28,6 +29,10 @@ class AiResponsePart {
         content: 'data:$mimeType;base64,$base64Data',
       );
 
+  /// Creates an audio response part from a base64 data URL.
+  factory AiResponsePart.audio(String base64DataUrl) =>
+      AiResponsePart(type: 'audio', content: base64DataUrl);
+
   /// Converts this part to a JSON map for serialization.
   Map<String, dynamic> toJson() => {'type': type, 'content': content};
 
@@ -44,6 +49,9 @@ class AiResponsePart {
 
   /// Whether this part is an image part.
   bool get isImage => type == 'image';
+
+  /// Whether this part is an audio part.
+  bool get isAudio => type == 'audio';
 
   @override
   String toString() =>

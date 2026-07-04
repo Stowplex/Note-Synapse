@@ -347,6 +347,15 @@ class SplitView extends StatelessWidget {
     if (caps.supportsImageGeneration) {
       icons.add(_buildIcon(Icons.brush, l10n.imageGenCapability, Colors.pink));
     }
+    if (caps.supportsSpeechGeneration) {
+      icons.add(
+        _buildIcon(
+          Icons.record_voice_over,
+          l10n.speechGenCapability,
+          Colors.indigo,
+        ),
+      );
+    }
     if (caps.supportsCodeGeneration) {
       icons.add(_buildIcon(Icons.code, l10n.codeGenCapability, Colors.teal));
     }
@@ -407,6 +416,7 @@ class _FeatureMatrixSheet extends StatelessWidget {
                     DataColumn(label: Text(l10n.videoInColumn)),
                     DataColumn(label: Text(l10n.audioColumn)),
                     DataColumn(label: Text(l10n.imgGenColumn)),
+                    DataColumn(label: Text(l10n.ttsGenColumn)),
                     DataColumn(label: Text(l10n.codeGenColumn)),
                     DataColumn(label: Text(l10n.docsColumn)),
                   ],
@@ -441,6 +451,7 @@ class _FeatureMatrixSheet extends StatelessWidget {
                         _buildBoolCell(caps?.supportsVideo ?? false),
                         _buildBoolCell(caps?.supportsAudio ?? false),
                         _buildBoolCell(caps?.supportsImageGeneration ?? false),
+                        _buildBoolCell(caps?.supportsSpeechGeneration ?? false),
                         _buildBoolCell(caps?.supportsCodeGeneration ?? false),
                         _buildBoolCell(caps?.supportsDocuments ?? false),
                       ],

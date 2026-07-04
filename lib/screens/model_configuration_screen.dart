@@ -51,6 +51,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
   bool _supportsAudio = false;
   bool _supportsVideo = false;
   bool _supportsImageGeneration = false;
+  bool _supportsSpeechGeneration = false;
   bool _supportsCodeGeneration = false;
   bool _supportsToolOrchestration = false;
 
@@ -208,6 +209,8 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
       _supportsVideo = preset.customCapabilitiesObject?.supportsVideo ?? false;
       _supportsImageGeneration =
           preset.customCapabilitiesObject?.supportsImageGeneration ?? false;
+      _supportsSpeechGeneration =
+          preset.customCapabilitiesObject?.supportsSpeechGeneration ?? false;
       _supportsCodeGeneration =
           preset.customCapabilitiesObject?.supportsCodeGeneration ?? false;
       _supportsToolOrchestration =
@@ -255,6 +258,9 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               config.customCapabilitiesObject?.supportsVideo ?? false;
           _supportsImageGeneration =
               config.customCapabilitiesObject?.supportsImageGeneration ?? false;
+          _supportsSpeechGeneration =
+              config.customCapabilitiesObject?.supportsSpeechGeneration ??
+                  false;
           _supportsCodeGeneration =
               config.customCapabilitiesObject?.supportsCodeGeneration ?? false;
           _supportsToolOrchestration =
@@ -307,6 +313,7 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
         supportsAudio: _supportsAudio,
         supportsVideo: _supportsVideo,
         supportsImageGeneration: _supportsImageGeneration,
+        supportsSpeechGeneration: _supportsSpeechGeneration,
         supportsCodeGeneration: _supportsCodeGeneration,
         supportsToolOrchestration: _supportsToolOrchestration,
       );
@@ -895,6 +902,18 @@ class _ModelConfigurationScreenState extends State<ModelConfigurationScreen> {
               onChanged: (value) {
                 setState(() {
                   _supportsImageGeneration = value ?? false;
+                });
+              },
+            ),
+            CheckboxListTile(
+              title: const Text('Generate Speech (TTS)'),
+              subtitle: const Text(
+                'Model can generate spoken audio from text prompts',
+              ),
+              value: _supportsSpeechGeneration,
+              onChanged: (value) {
+                setState(() {
+                  _supportsSpeechGeneration = value ?? false;
                 });
               },
             ),

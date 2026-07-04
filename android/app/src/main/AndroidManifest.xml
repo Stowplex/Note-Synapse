@@ -136,5 +136,9 @@
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="file"/>
         </intent>
+        <!-- Required for flutter_tts to discover the device TTS engine on Android 11+ -->
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE"/>
+        </intent>
     </queries>
 </manifest>

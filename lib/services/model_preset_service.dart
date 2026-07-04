@@ -72,6 +72,8 @@ class ModelPresetService {
                 doc['model_capabilities']?.contains('support_video') ?? false,
             supportsImageGeneration:
                 doc['model_capabilities']?.contains('generate_image') ?? false,
+            supportsSpeechGeneration:
+                doc['model_capabilities']?.contains('generate_tts') ?? false,
             supportsCodeGeneration:
                 doc['model_capabilities']?.contains('support_code_generation') ?? false,
           );

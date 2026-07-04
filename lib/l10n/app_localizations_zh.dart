@@ -4576,6 +4576,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get imageGenCapability => '图像生成';
 
   @override
+  String get speechGenCapability => '语音生成';
+
+  @override
   String get codeGenCapability => '代码生成';
 
   @override
@@ -4595,6 +4598,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get imgGenColumn => '图像生成';
+
+  @override
+  String get ttsGenColumn => '语音生成';
 
   @override
   String get codeGenColumn => '代码生成';

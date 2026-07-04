@@ -368,6 +368,21 @@ class MockConversationService extends _i1.Mock
           as _i10.Future<_i3.Conversation?>);
 
   @override
+  _i10.Future<void> renameConversation({
+    required String? conversationId,
+    required String? title,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#renameConversation, [], {
+              #conversationId: conversationId,
+              #title: title,
+            }),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
+          )
+          as _i10.Future<void>);
+
+  @override
   _i10.Future<List<_i3.ConversationMessage>> getConversationMessages(
     String? conversationId,
   ) =>

@@ -16,6 +16,7 @@ import '../../models/model_type.dart';
 import '../../models/model_config.dart';
 import '../../utils/file_type_utils.dart';
 import '../../models/generation_context.dart';
+import '../../utils/audio_wav_utils.dart';
 import '../../utils/synapse_temp_utils.dart';
 
 /// Gemini model implementation
@@ -173,6 +174,7 @@ class GeminiModel implements AIModel {
         sanitizedMessages,
         generationConfig: generationConfig,
       );
+      _applySpeechGenerationConfig(requestBody, context);
 
       return await _makeRequestMultiPart(
         apiKey,
@@ -180,6 +182,57 @@ class GeminiModel implements AIModel {
         requestId: actualRequestId,
       );
     }, requestId: actualRequestId);
+  }
+
+  bool get _isSpeechGenerationModel =>
+      _config?.customCapabilitiesObject?.supportsSpeechGeneration == true;
+
+  /// Adjusts [requestBody] for speech-generation (TTS) models.
+  ///
+  /// TTS models only produce audio and reject requests carrying a
+  /// systemInstruction or non-audio response modalities, so the generation
+  /// config is rebuilt with just temperature + audio output settings.
+  void _applySpeechGenerationConfig(
+    Map<String, dynamic> requestBody,
+    GenerationContext context,
+  ) {
+    if (!_isSpeechGenerationModel) return;
+
+    requestBody.remove('systemInstruction');
+
+    final existingConfig = requestBody['generationConfig'];
+    final voice = context.getValue<String>('ttsVoice') ?? 'Kore';
+    requestBody['generationConfig'] = {
+      if (existingConfig is Map<String, dynamic> &&
+          existingConfig['temperature'] != null)
+        'temperature': existingConfig['temperature'],
+      'responseModalities': ['AUDIO'],
+      'speechConfig': {
+        'voiceConfig': {
+          'prebuiltVoiceConfig': {'voiceName': voice},
+        },
+      },
+    };
+  }
+
+  /// Converts inline audio from the API into a playable (mimeType, base64)
+  /// pair, wrapping raw PCM in a WAV container when needed.
+  /// Returns null if the audio cannot be decoded.
+  (String, String)? _playableAudioFromInline(String mimeType, String data) {
+    try {
+      if (!AudioWavUtils.isRawPcm(mimeType)) {
+        // Already a playable container (e.g. audio/wav, audio/mp3).
+        return (mimeType, data);
+      }
+      final wavBytes = AudioWavUtils.pcm16ToWav(
+        base64Decode(data),
+        sampleRate: AudioWavUtils.sampleRateFromMimeType(mimeType),
+      );
+      return ('audio/wav', base64Encode(wavBytes));
+    } catch (e) {
+      LoggerService.error('Failed to convert inline audio: $e');
+      return null;
+    }
   }
 
   @override
@@ -218,6 +271,7 @@ class GeminiModel implements AIModel {
         sanitizedMessages,
         generationConfig: generationConfig,
       );
+      _applySpeechGenerationConfig(requestBody, context);
 
       // Add model features if present
       final modelFeatures =
@@ -1001,6 +1055,24 @@ class GeminiModel implements AIModel {
                         LoggerService.error('Failed to save inline image: $e');
                         buffer.writeln('\n[Image generation failed]\n');
                       }
+                    } else if (mimeType.startsWith('audio/')) {
+                      final audio = _playableAudioFromInline(mimeType, data);
+                      if (audio != null) {
+                        try {
+                          final result = await SynapseTempUtils.saveTempData(
+                            mimeType: audio.$1,
+                            base64Data: audio.$2,
+                          );
+                          buffer.writeln('\n[Generated Audio](${result.uri})\n');
+                        } catch (e) {
+                          LoggerService.error(
+                            'Failed to save inline audio: $e',
+                          );
+                          buffer.writeln('\n[Audio generation failed]\n');
+                        }
+                      } else {
+                        buffer.writeln('\n[Audio generation failed]\n');
+                      }
                     }
                   }
                 }
@@ -1140,14 +1212,14 @@ class GeminiModel implements AIModel {
                   textBuffer.writeln('```\n');
                 }
 
-                // Handle inline_data (images)
+                // Handle inline_data (images and audio)
                 final inlineData = part['inlineData'];
                 if (inlineData is Map<String, dynamic>) {
                   final mimeType = inlineData['mimeType'] as String?;
-                  final imageData = inlineData['data'] as String?;
+                  final inlineContent = inlineData['data'] as String?;
 
                   if (mimeType != null &&
-                      imageData != null &&
+                      inlineContent != null &&
                       mimeType.startsWith('image/')) {
                     // First, flush any accumulated text
                     if (textBuffer.isNotEmpty) {
@@ -1160,8 +1232,29 @@ class GeminiModel implements AIModel {
                     // Add image part with base64 data URL
                     parts.add({
                       'type': 'image',
-                      'content': 'data:$mimeType;base64,$imageData',
+                      'content': 'data:$mimeType;base64,$inlineContent',
                     });
+                  } else if (mimeType != null &&
+                      inlineContent != null &&
+                      mimeType.startsWith('audio/')) {
+                    final audio = _playableAudioFromInline(
+                      mimeType,
+                      inlineContent,
+                    );
+                    if (audio != null) {
+                      if (textBuffer.isNotEmpty) {
+                        parts.add({
+                          'type': 'text',
+                          'content': textBuffer.toString(),
+                        });
+                        textBuffer.clear();
+                      }
+                      // Add audio part with playable base64 data URL
+                      parts.add({
+                        'type': 'audio',
+                        'content': 'data:${audio.$1};base64,${audio.$2}',
+                      });
+                    }
                   }
                 }
               } else if (part is String && part.isNotEmpty) {

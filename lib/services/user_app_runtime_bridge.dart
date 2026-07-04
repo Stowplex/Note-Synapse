@@ -19,6 +19,7 @@ import '../utils/synapse_temp_utils.dart';
 import 'note_modification_service.dart';
 import 'sql_query_service.dart';
 import 'service_locator.dart';
+import 'tts_service.dart';
 
 typedef OpenNoteCallback = Future<void> Function(Note note, bool replaceWindow);
 typedef OpenConversationsCallback =
@@ -97,6 +98,7 @@ class UserAppRuntimeBridge {
 
   DatabaseService get _databaseService => getIt<DatabaseService>();
   SqlQueryService get _sqlQueryService => getIt<SqlQueryService>();
+  TtsService get _ttsService => getIt<TtsService>();
   static final HttpClient _proxyHttpClient = HttpClient()
     ..autoUncompress = true;
 
@@ -243,6 +245,20 @@ class UserAppRuntimeBridge {
             const result = await window.flutter_inappwebview.callHandler('openAIActions', notes ?? []);
             return result;
           },
+          tts: {
+            speak: async (text, options = {}) => {
+              const result = await window.flutter_inappwebview.callHandler('ttsSpeak', text ?? '', options ?? {});
+              return result;
+            },
+            stop: async () => {
+              const result = await window.flutter_inappwebview.callHandler('ttsStop');
+              return result;
+            },
+            getLanguages: async () => {
+              const result = await window.flutter_inappwebview.callHandler('ttsGetLanguages');
+              return result;
+            },
+          },
           Notes: $notesJson,
           Params: $paramsJson,
         };
@@ -331,7 +347,13 @@ class UserAppRuntimeBridge {
             LoggerService.debug(
               '[Synapse.runQuery] Success - Returned ${result.data?.length ?? 0} rows in ${duration.inMilliseconds}ms',
             );
-            return {'success': true, 'data': result.data ?? []};
+            return {
+              'success': true,
+              'data': result.data ?? [],
+              if (result.truncated) 'truncated': true,
+              if (result.truncated && result.totalRows != null)
+                'totalRows': result.totalRows,
+            };
           } else {
             LoggerService.error('[Synapse.runQuery] Error: ${result.error}');
             return {'success': false, 'error': result.error};
@@ -582,6 +604,8 @@ class UserAppRuntimeBridge {
               : null;
           final responseType = options?['response_type'] as String? ?? 'string';
           final isMultiPart = responseType == 'multi_part';
+          final voiceRaw = options?['voice'];
+          final String? voice = voiceRaw is String ? voiceRaw : null;
 
           if (isMultiPart) {
             LoggerService.debug(
@@ -594,6 +618,7 @@ class UserAppRuntimeBridge {
               topP: validated.topP,
               attachedFiles: attachments,
               modelHint: modelHint,
+              voice: voice,
             );
 
             final duration = DateTime.now().difference(startTime);
@@ -609,6 +634,7 @@ class UserAppRuntimeBridge {
               topP: validated.topP,
               attachedFiles: attachments,
               modelHint: modelHint,
+              voice: voice,
             );
 
             final duration = DateTime.now().difference(startTime);
@@ -621,6 +647,77 @@ class UserAppRuntimeBridge {
           final duration = DateTime.now().difference(startTime);
           LoggerService.error(
             '[Synapse.chatAI] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'ttsSpeak',
+      callback: (args) async {
+        final startTime = DateTime.now();
+        try {
+          final text = args.isNotEmpty ? args.first as String : '';
+          if (text.trim().isEmpty) {
+            return {'success': false, 'error': 'No text provided to speak.'};
+          }
+          final options = args.length > 1
+              ? args[1] as Map<String, dynamic>?
+              : null;
+          final language = options?['language'] as String?;
+          final rate = (options?['rate'] as num?)?.toDouble();
+          final pitch = (options?['pitch'] as num?)?.toDouble();
+          final volume = (options?['volume'] as num?)?.toDouble();
+          LoggerService.debug(
+            '[Synapse.tts.speak] Called with ${text.length} chars, language: $language',
+          );
+          await _ttsService.speak(
+            text,
+            language: language,
+            rate: rate,
+            pitch: pitch,
+            volume: volume,
+          );
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.debug(
+            '[Synapse.tts.speak] Completed in ${duration.inMilliseconds}ms',
+          );
+          return {'success': true};
+        } catch (e) {
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.error(
+            '[Synapse.tts.speak] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'ttsStop',
+      callback: (args) async {
+        try {
+          await _ttsService.stop();
+          return {'success': true};
+        } catch (e) {
+          LoggerService.error('[Synapse.tts.stop] Error: $e', error: e);
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'ttsGetLanguages',
+      callback: (args) async {
+        try {
+          final languages = await _ttsService.getLanguages();
+          return {'success': true, 'data': languages};
+        } catch (e) {
+          LoggerService.error(
+            '[Synapse.tts.getLanguages] Error: $e',
             error: e,
           );
           return {'success': false, 'error': e.toString()};

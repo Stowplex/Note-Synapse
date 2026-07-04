@@ -8354,6 +8354,12 @@ abstract class AppLocalizations {
   /// **'Image Gen'**
   String get imageGenCapability;
 
+  /// No description provided for @speechGenCapability.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech Gen'**
+  String get speechGenCapability;
+
   /// No description provided for @codeGenCapability.
   ///
   /// In en, this message translates to:
@@ -8395,6 +8401,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Img Gen'**
   String get imgGenColumn;
+
+  /// No description provided for @ttsGenColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech Gen'**
+  String get ttsGenColumn;
 
   /// No description provided for @codeGenColumn.
   ///

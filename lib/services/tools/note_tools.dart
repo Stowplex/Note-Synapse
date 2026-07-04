@@ -678,9 +678,10 @@ Example: SELECT id, title, tags FROM notes WHERE tags LIKE '%topic%' ORDER BY up
       }
     }
 
-    if (result.data!.length == 50) {
+    if (result.truncated) {
       return {
-        'warning': 'Result truncated to 50 rows',
+        'warning':
+            'Result truncated to ${result.data!.length} of ${result.totalRows} rows',
         'data': result.toMarkdownTable(),
       };
     }

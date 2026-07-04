@@ -1,6 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/mockito.dart';
 import 'package:note_synapse/services/sql_query_service.dart';
 import 'package:note_synapse/services/database_service.dart';
+
+// Reuse the generated DatabaseService mock from the bridge test to avoid a
+// separate build_runner target.
+import 'user_app_runtime_bridge_test.mocks.dart' show MockDatabaseService;
 
 void main() {
   group('SqlQueryService', () {
@@ -469,6 +474,83 @@ void main() {
         final json = result.toJson();
         expect(json.containsKey('data'), isFalse);
         expect(json.containsKey('error'), isFalse);
+      });
+
+      test('toJson includes truncation info when truncated', () {
+        final result = SqlQueryResult(
+          success: true,
+          data: [
+            {'id': '1'},
+          ],
+          truncated: true,
+          totalRows: 250,
+        );
+
+        final json = result.toJson();
+        expect(json['truncated'], isTrue);
+        expect(json['totalRows'], 250);
+      });
+
+      test('toJson omits truncation info when not truncated', () {
+        final result = SqlQueryResult(
+          success: true,
+          data: [
+            {'id': '1'},
+          ],
+          totalRows: 1,
+        );
+
+        final json = result.toJson();
+        expect(json.containsKey('truncated'), isFalse);
+        expect(json.containsKey('totalRows'), isFalse);
+      });
+    });
+
+    group('executeQuery row limits', () {
+      late MockDatabaseService mockDb;
+      late SqlQueryService queryService;
+
+      setUp(() {
+        mockDb = MockDatabaseService();
+        queryService = SqlQueryService(mockDb);
+      });
+
+      test('truncates results beyond maxRows and reports truncation',
+          () async {
+        final rows = List.generate(150, (i) => <String, dynamic>{'id': i});
+        when(mockDb.runRawQuery(any)).thenAnswer((_) async => rows);
+
+        final result = await queryService.executeQuery('SELECT * FROM note');
+
+        expect(result.success, isTrue);
+        expect(result.data!.length, 100);
+        expect(result.truncated, isTrue);
+        expect(result.totalRows, 150);
+      });
+
+      test('respects a custom maxRows', () async {
+        final rows = List.generate(60, (i) => <String, dynamic>{'id': i});
+        when(mockDb.runRawQuery(any)).thenAnswer((_) async => rows);
+
+        final result = await queryService.executeQuery(
+          'SELECT * FROM note',
+          maxRows: 50,
+        );
+
+        expect(result.data!.length, 50);
+        expect(result.truncated, isTrue);
+        expect(result.totalRows, 60);
+      });
+
+      test('does not report truncation when within the limit', () async {
+        final rows = List.generate(5, (i) => <String, dynamic>{'id': i});
+        when(mockDb.runRawQuery(any)).thenAnswer((_) async => rows);
+
+        final result = await queryService.executeQuery('SELECT * FROM note');
+
+        expect(result.data!.length, 5);
+        expect(result.truncated, isFalse);
+        expect(result.totalRows, 5);
       });
     });
   });

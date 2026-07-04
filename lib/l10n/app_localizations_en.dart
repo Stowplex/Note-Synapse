@@ -4818,6 +4818,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get imageGenCapability => 'Image Gen';
 
   @override
+  String get speechGenCapability => 'Speech Gen';
+
+  @override
   String get codeGenCapability => 'Code Gen';
 
   @override
@@ -4837,6 +4840,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get imgGenColumn => 'Img Gen';
+
+  @override
+  String get ttsGenColumn => 'Speech Gen';
 
   @override
   String get codeGenColumn => 'Code Gen';
