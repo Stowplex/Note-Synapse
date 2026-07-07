@@ -148,9 +148,19 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   }
 
   /// "Import Pictures": multi-pick images and go straight to the review /
-  /// keystone-correction stage (no video timeline / key-frame step).
+  /// keystone-correction stage (no video timeline / key-frame step). RAW
+  /// captures (DNG twins of the JPEGs on Pixel/ProRAW) are indistinguishable
+  /// in the OS picker and undecodable downstream, so they are dropped here
+  /// with a notice instead of failing later in the pipeline.
   Future<void> _onPickImages() async {
-    final files = await getIt<VideoSource>().pickImages();
+    final picked = await getIt<VideoSource>().pickImages();
+    final files = [for (final f in picked) if (!isRawImagePath(f.path)) f];
+    final skippedRaw = picked.length - files.length;
+    if (skippedRaw > 0 && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(AppLocalizations.of(context)!
+              .worldClipSkippedRawImages(skippedRaw))));
+    }
     if (files.isEmpty) return;
     final store = await _ensureStore();
     final project = await store.createFromImages(

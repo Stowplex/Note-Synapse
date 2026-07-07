@@ -378,6 +378,29 @@ class AppLocalizationsEn extends AppLocalizations {
   String get worldClipEmptyProjects => 'No saved World Clip projects';
 
   @override
+  String get worldClipColorAdjust => 'Color adjustments';
+
+  @override
+  String get worldClipContrast => 'Contrast';
+
+  @override
+  String get worldClipSaturation => 'Saturation';
+
+  @override
+  String get worldClipTemperature => 'Warmth';
+
+  @override
+  String get worldClipShapeTools => 'Shape tools';
+
+  @override
+  String get worldClipResetColor => 'Reset colors';
+
+  @override
+  String worldClipSkippedRawImages(int count) {
+    return 'Skipped $count RAW image(s) — RAW is not supported';
+  }
+
+  @override
   String get recordingStarted => 'Recording started';
 
   @override

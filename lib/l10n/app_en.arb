@@ -110,6 +110,20 @@
   "worldClipDeleteProject": "Delete project",
   "worldClipNewFromSameVideo": "New project from this video",
   "worldClipEmptyProjects": "No saved World Clip projects",
+  "worldClipColorAdjust": "Color adjustments",
+  "worldClipContrast": "Contrast",
+  "worldClipSaturation": "Saturation",
+  "worldClipTemperature": "Warmth",
+  "worldClipShapeTools": "Shape tools",
+  "worldClipResetColor": "Reset colors",
+  "worldClipSkippedRawImages": "Skipped {count} RAW image(s) — RAW is not supported",
+  "@worldClipSkippedRawImages": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "recordingStarted": "Recording started",
   "failedToStartRecording": "Failed to start recording. Please check microphone permissions.",
   "failedToStartRecordingLinux": "Failed to start recording. Please check if gstreamer and PulseAudio are installed.",

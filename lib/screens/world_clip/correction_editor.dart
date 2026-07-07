@@ -1,6 +1,7 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/app_localizations.dart';
 import '../../services/service_locator.dart';
 import '../../services/world_clip/edge_detector.dart';
 import '../../services/world_clip/frame_correction.dart';
@@ -11,7 +12,8 @@ import '../../services/world_clip/models/norm_point.dart';
 /// Per-clip correction editor: rotate the frame to the right orientation, then
 /// drag the keystone quad (with optional creases) over the document. Includes
 /// auto edge detection and connecting region lines so the selection reads like
-/// a crop tool rather than loose bubbles.
+/// a crop tool rather than loose bubbles. A second toolbar panel adjusts
+/// contrast / saturation / color temperature with a live preview.
 class CorrectionEditor extends StatefulWidget {
   final Uint8List framePng;
   final List<Correction> initial;
@@ -41,6 +43,10 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
   double _aspect = 1;
   bool _busy = false;
   int _recomputeGen = 0; // discards stale rotation renders (race guard)
+  bool _colorPanel = false; // toolbar shows color sliders instead of shape tools
+  double _contrast = 1;
+  double _saturation = 1;
+  double _temperature = 0;
 
   double get _totalRotation => _quarterTurns * 90 + _fineDeg;
 
@@ -59,6 +65,12 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
     _fineDeg = (rotation - _quarterTurns * 90).clamp(-15, 15).toDouble();
     final mesh = widget.initial.whereType<MeshDewarpCorrection>();
     _grid = mesh.isEmpty ? MeshGrid.identity(rows: 1, cols: 1) : mesh.first.grid;
+    final color = widget.initial.whereType<ColorAdjustCorrection>();
+    if (color.isNotEmpty) {
+      _contrast = color.first.contrast;
+      _saturation = color.first.saturation;
+      _temperature = color.first.temperature;
+    }
     _basePng = widget.framePng;
     _recomputeBase(resetGrid: false);
   }
@@ -107,7 +119,15 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
 
   Future<void> _autoDetect() async {
     setState(() => _busy = true);
+    // Yield a frame so the busy overlay paints before the synchronous OpenCV
+    // detection blocks the UI isolate.
+    await Future<void>.delayed(Duration.zero);
     final quad = detectDocumentQuad(_basePng);
+    if (kDebugMode) {
+      debugPrint('WorldClip autoDetect: input=${_basePng.length}B quad='
+          '${quad?.points.map((p) => '(${p.x.toStringAsFixed(3)},'
+              '${p.y.toStringAsFixed(3)})').join()}');
+    }
     if (!mounted) return;
     setState(() {
       _busy = false;
@@ -157,8 +177,31 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
       _quarterTurns = 0;
       _fineDeg = 0;
       _grid = MeshGrid.identity(rows: 1, cols: 1);
+      _resetColor();
     });
     _recomputeBase(resetGrid: false);
+  }
+
+  // Callers wrap in setState.
+  void _resetColor() {
+    _contrast = 1;
+    _saturation = 1;
+    _temperature = 0;
+  }
+
+  ColorAdjustCorrection get _colorAdjust => ColorAdjustCorrection(
+      contrast: _contrast, saturation: _saturation, temperature: _temperature);
+
+  /// The live-preview filter — built from the same 3x4 RGB matrix the OpenCV
+  /// pipeline applies, so the preview matches the compiled page exactly.
+  ColorFilter get _previewFilter {
+    final m = _colorAdjust.rgbMatrix();
+    return ColorFilter.matrix([
+      m[0], m[1], m[2], 0, m[3],
+      m[4], m[5], m[6], 0, m[7],
+      m[8], m[9], m[10], 0, m[11],
+      0, 0, 0, 1, 0,
+    ]);
   }
 
   void _movePoint(int index, double nx, double ny) => setState(() {
@@ -168,10 +211,12 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
       });
 
   void _done() {
+    final color = _colorAdjust;
     final corrections = <Correction>[
       if (_totalRotation % 360 != 0)
         RotateCorrection(degrees: _totalRotation),
       MeshDewarpCorrection(grid: _grid),
+      if (!color.isNeutral) color,
     ];
     widget.onDone(corrections);
   }
@@ -195,7 +240,10 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
                       clipBehavior: Clip.none,
                       children: [
                         Positioned.fill(
-                          child: Image.memory(_basePng, fit: BoxFit.fill),
+                          child: ColorFiltered(
+                            colorFilter: _previewFilter,
+                            child: Image.memory(_basePng, fit: BoxFit.fill),
+                          ),
                         ),
                         Positioned.fill(
                           child: CustomPaint(
@@ -256,73 +304,182 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
   }
 
   Widget _toolbar() {
+    final l10n = AppLocalizations.of(context)!;
     return Material(
       elevation: 8,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: _colorPanel ? _colorToolbar(l10n) : _shapeToolbar(l10n),
+      ),
+    );
+  }
+
+  Widget _shapeToolbar(AppLocalizations l10n) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text('Level: ${_fineDeg.toStringAsFixed(0)}°',
-                      style: Theme.of(context).textTheme.labelSmall),
-                ),
-              ],
-            ),
-            Slider(
-              value: _fineDeg,
-              min: -15,
-              max: 15,
-              divisions: 30,
-              label: '${_fineDeg.toStringAsFixed(0)}°',
-              onChanged: (v) => setState(() => _fineDeg = v),
-              onChangeEnd: (_) => _recomputeBase(resetGrid: false),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  tooltip: 'Rotate left',
-                  icon: const Icon(Icons.rotate_left),
-                  onPressed: () => _rotate(-1),
-                ),
-                IconButton(
-                  tooltip: 'Rotate right',
-                  icon: const Icon(Icons.rotate_right),
-                  onPressed: () => _rotate(1),
-                ),
-                TextButton.icon(
-                  onPressed: _autoDetect,
-                  icon: const Icon(Icons.auto_fix_high),
-                  label: const Text('Auto edges'),
-                ),
-                IconButton(
-                  tooltip: 'Add horizontal crease',
-                  icon: const Icon(Icons.table_rows),
-                  onPressed: () => _addCrease(horizontal: true),
-                ),
-                IconButton(
-                  tooltip: 'Add vertical crease',
-                  icon: const Icon(Icons.view_column),
-                  onPressed: () => _addCrease(horizontal: false),
-                ),
-                IconButton(
-                  tooltip: 'Reset',
-                  icon: const Icon(Icons.restart_alt),
-                  onPressed: _reset,
-                ),
-                FilledButton(
-                  key: const ValueKey('wc-mesh-done'),
-                  onPressed: _done,
-                  child: const Text('Done'),
-                ),
-              ],
+            Expanded(
+              child: Text('Level: ${_fineDeg.toStringAsFixed(0)}°',
+                  style: Theme.of(context).textTheme.labelSmall),
             ),
           ],
         ),
-      ),
+        Slider(
+          value: _fineDeg,
+          min: -15,
+          max: 15,
+          divisions: 30,
+          label: '${_fineDeg.toStringAsFixed(0)}°',
+          onChanged: (v) => setState(() => _fineDeg = v),
+          onChangeEnd: (_) => _recomputeBase(resetGrid: false),
+        ),
+        Row(
+          children: [
+            // The tool strip can outgrow narrow phones (especially with large
+            // display scaling), so it scrolls horizontally while Done stays
+            // pinned — never pushed off the edge or into the back-swipe zone.
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Rotate left',
+                      icon: const Icon(Icons.rotate_left),
+                      onPressed: () => _rotate(-1),
+                    ),
+                    IconButton(
+                      tooltip: 'Rotate right',
+                      icon: const Icon(Icons.rotate_right),
+                      onPressed: () => _rotate(1),
+                    ),
+                    TextButton.icon(
+                      onPressed: _autoDetect,
+                      icon: const Icon(Icons.auto_fix_high),
+                      label: const Text('Auto edges'),
+                    ),
+                    IconButton(
+                      tooltip: 'Add horizontal crease',
+                      icon: const Icon(Icons.table_rows),
+                      onPressed: () => _addCrease(horizontal: true),
+                    ),
+                    IconButton(
+                      tooltip: 'Add vertical crease',
+                      icon: const Icon(Icons.view_column),
+                      onPressed: () => _addCrease(horizontal: false),
+                    ),
+                    IconButton(
+                      key: const ValueKey('wc-color-toggle'),
+                      tooltip: l10n.worldClipColorAdjust,
+                      icon: const Icon(Icons.palette_outlined),
+                      onPressed: () => setState(() => _colorPanel = true),
+                    ),
+                    IconButton(
+                      tooltip: 'Reset',
+                      icon: const Icon(Icons.restart_alt),
+                      onPressed: _reset,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              key: const ValueKey('wc-mesh-done'),
+              onPressed: _done,
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _colorToolbar(AppLocalizations l10n) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _colorSlider(
+          key: const ValueKey('wc-contrast'),
+          label: l10n.worldClipContrast,
+          value: _contrast,
+          min: 0.5,
+          max: 1.5,
+          display: '${(_contrast * 100).round()}%',
+          onChanged: (v) => setState(() => _contrast = v),
+        ),
+        _colorSlider(
+          key: const ValueKey('wc-saturation'),
+          label: l10n.worldClipSaturation,
+          value: _saturation,
+          min: 0,
+          max: 2,
+          display: '${(_saturation * 100).round()}%',
+          onChanged: (v) => setState(() => _saturation = v),
+        ),
+        _colorSlider(
+          key: const ValueKey('wc-temperature'),
+          label: l10n.worldClipTemperature,
+          value: _temperature,
+          min: -1,
+          max: 1,
+          display: (_temperature * 100).round().toString(),
+          onChanged: (v) => setState(() => _temperature = v),
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            IconButton(
+              key: const ValueKey('wc-color-back'),
+              tooltip: l10n.worldClipShapeTools,
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => setState(() => _colorPanel = false),
+            ),
+            IconButton(
+              tooltip: l10n.worldClipResetColor,
+              icon: const Icon(Icons.format_color_reset),
+              onPressed: () => setState(_resetColor),
+            ),
+            FilledButton(
+              key: const ValueKey('wc-color-done'),
+              onPressed: _done,
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _colorSlider({
+    required Key key,
+    required String label,
+    required double value,
+    required double min,
+    required double max,
+    required String display,
+    required ValueChanged<double> onChanged,
+  }) {
+    final style = Theme.of(context).textTheme.labelSmall;
+    return Row(
+      children: [
+        SizedBox(width: 80, child: Text(label, style: style)),
+        Expanded(
+          child: Slider(
+            key: key,
+            value: value,
+            min: min,
+            max: max,
+            onChanged: onChanged,
+          ),
+        ),
+        SizedBox(
+          width: 44,
+          child: Text(display, style: style, textAlign: TextAlign.right),
+        ),
+      ],
     );
   }
 }

@@ -72,6 +72,65 @@ void main() {
     mat.dispose();
   });
 
+  test('colorAdjust temperature warms: red up, blue down', () async {
+    // Mid-gray so both channels have headroom in each direction.
+    final grayMat = cv.Mat.create(
+        rows: 8, cols: 8, r: 128, g: 128, b: 128, type: cv.MatType.CV_8UC3);
+    final (_, src) = cv.imencode('.png', grayMat);
+    grayMat.dispose();
+
+    final out = await correction
+        .apply(src, [ColorAdjustCorrection(temperature: 1)]);
+    final mat = cv.imdecode(out, cv.IMREAD_COLOR);
+    final px = mat.atPixel(4, 4); // BGR
+    expect(px[0], lessThan(128), reason: 'blue should drop when warming');
+    expect(px[1], 128, reason: 'green unchanged');
+    expect(px[2], greaterThan(128), reason: 'red should rise when warming');
+    mat.dispose();
+  });
+
+  test('colorAdjust zero saturation makes the image gray', () async {
+    final colored = cv.Mat.create(
+        rows: 8, cols: 8, r: 200, g: 60, b: 30, type: cv.MatType.CV_8UC3);
+    final (_, src) = cv.imencode('.png', colored);
+    colored.dispose();
+
+    final out =
+        await correction.apply(src, [ColorAdjustCorrection(saturation: 0)]);
+    final mat = cv.imdecode(out, cv.IMREAD_COLOR);
+    final px = mat.atPixel(4, 4);
+    expect(px[0], px[1]);
+    expect(px[1], px[2]);
+    mat.dispose();
+  });
+
+  test('colorAdjust contrast pivots around mid-gray', () async {
+    // A bright pixel value moves further from 128 when contrast > 1.
+    final brightMat = cv.Mat.create(
+        rows: 8, cols: 8, r: 200, g: 200, b: 200, type: cv.MatType.CV_8UC3);
+    final (_, src) = cv.imencode('.png', brightMat);
+    brightMat.dispose();
+
+    final out =
+        await correction.apply(src, [ColorAdjustCorrection(contrast: 1.5)]);
+    final mat = cv.imdecode(out, cv.IMREAD_COLOR);
+    // (200 - 128) * 1.5 + 128 = 236
+    expect(mat.atPixel(4, 4)[0], 236);
+    mat.dispose();
+  });
+
+  test('neutral colorAdjust leaves pixels unchanged', () async {
+    final m = cv.Mat.create(
+        rows: 8, cols: 8, r: 12, g: 34, b: 56, type: cv.MatType.CV_8UC3);
+    final (_, src) = cv.imencode('.png', m);
+    m.dispose();
+
+    final out = await correction.apply(src, [ColorAdjustCorrection()]);
+    final mat = cv.imdecode(out, cv.IMREAD_COLOR);
+    expect(mat.atPixel(4, 4), [56, 34, 12]); // BGR of rgb(12, 34, 56)
+    mat.dispose();
+  });
+
   test('crop extending past the edge is clamped, not a crash', () async {
     final src = _solidPng(40, 20);
     // x+width and y+height both exceed 1.0 — must clamp instead of throwing.

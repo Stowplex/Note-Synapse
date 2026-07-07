@@ -105,6 +105,20 @@
   "worldClipDeleteProject": "删除项目",
   "worldClipNewFromSameVideo": "用此视频新建项目",
   "worldClipEmptyProjects": "没有已保存的世界剪辑项目",
+  "worldClipColorAdjust": "颜色调整",
+  "worldClipContrast": "对比度",
+  "worldClipSaturation": "饱和度",
+  "worldClipTemperature": "色温",
+  "worldClipShapeTools": "形状工具",
+  "worldClipResetColor": "重置颜色",
+  "worldClipSkippedRawImages": "已跳过 {count} 张 RAW 图片（不支持 RAW 格式）",
+  "@worldClipSkippedRawImages": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "recordingStarted": "录音已开始",
   "failedToStartRecording": "开始录音失败。请检查麦克风权限。",
   "failedToStartRecordingLinux": "开始录音失败。请检查是否安装了gstreamer和PulseAudio。",

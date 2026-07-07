@@ -764,6 +764,48 @@ abstract class AppLocalizations {
   /// **'No saved World Clip projects'**
   String get worldClipEmptyProjects;
 
+  /// No description provided for @worldClipColorAdjust.
+  ///
+  /// In en, this message translates to:
+  /// **'Color adjustments'**
+  String get worldClipColorAdjust;
+
+  /// No description provided for @worldClipContrast.
+  ///
+  /// In en, this message translates to:
+  /// **'Contrast'**
+  String get worldClipContrast;
+
+  /// No description provided for @worldClipSaturation.
+  ///
+  /// In en, this message translates to:
+  /// **'Saturation'**
+  String get worldClipSaturation;
+
+  /// No description provided for @worldClipTemperature.
+  ///
+  /// In en, this message translates to:
+  /// **'Warmth'**
+  String get worldClipTemperature;
+
+  /// No description provided for @worldClipShapeTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Shape tools'**
+  String get worldClipShapeTools;
+
+  /// No description provided for @worldClipResetColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset colors'**
+  String get worldClipResetColor;
+
+  /// No description provided for @worldClipSkippedRawImages.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped {count} RAW image(s) — RAW is not supported'**
+  String worldClipSkippedRawImages(int count);
+
   /// No description provided for @recordingStarted.
   ///
   /// In en, this message translates to:

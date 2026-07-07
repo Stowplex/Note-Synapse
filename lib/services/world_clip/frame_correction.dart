@@ -30,6 +30,7 @@ class OpenCvFrameCorrection implements FrameCorrection {
           CropCorrection() => _crop(mat, c),
           RotateCorrection() => _rotate(mat, c),
           MeshDewarpCorrection() => _meshDewarp(mat, c.grid),
+          ColorAdjustCorrection() => _colorAdjust(mat, c),
         };
         if (!identical(next, mat)) mat.dispose();
         mat = next;
@@ -86,6 +87,31 @@ class OpenCvFrameCorrection implements FrameCorrection {
     final ww = w.clamp(1, maxW - x0);
     final hh = h.clamp(1, maxH - y0);
     return cv.Rect(x0, y0, ww, hh);
+  }
+
+  /// Applies the contrast/saturation/temperature affine color transform via
+  /// cv.transform with a 3x4 matrix (the implicit 4th input component is 1,
+  /// so the last column is the additive offset). The shared RGB matrix from
+  /// the model is reordered here for OpenCV's BGR channel layout; results are
+  /// saturate-cast back to 8-bit by OpenCV.
+  cv.Mat _colorAdjust(cv.Mat src, ColorAdjustCorrection c) {
+    if (c.isNeutral) return src;
+    final rgb = c.rgbMatrix(); // row-major 3x4 over (R, G, B, 1)
+    // BGR reorder: output row i takes RGB row (2-i); input col j maps to RGB
+    // col (2-j); the offset column stays in place.
+    final bgr = List<double>.filled(12, 0);
+    for (var i = 0; i < 3; i++) {
+      for (var j = 0; j < 3; j++) {
+        bgr[i * 4 + j] = rgb[(2 - i) * 4 + (2 - j)];
+      }
+      bgr[i * 4 + 3] = rgb[(2 - i) * 4 + 3];
+    }
+    final m = cv.Mat.fromList(3, 4, cv.MatType.CV_32FC1, bgr);
+    try {
+      return cv.transform(src, m);
+    } finally {
+      m.dispose();
+    }
   }
 
   cv.Mat _rotate(cv.Mat src, RotateCorrection c) {

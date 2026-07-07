@@ -365,6 +365,29 @@ class AppLocalizationsZh extends AppLocalizations {
   String get worldClipEmptyProjects => '没有已保存的世界剪辑项目';
 
   @override
+  String get worldClipColorAdjust => '颜色调整';
+
+  @override
+  String get worldClipContrast => '对比度';
+
+  @override
+  String get worldClipSaturation => '饱和度';
+
+  @override
+  String get worldClipTemperature => '色温';
+
+  @override
+  String get worldClipShapeTools => '形状工具';
+
+  @override
+  String get worldClipResetColor => '重置颜色';
+
+  @override
+  String worldClipSkippedRawImages(int count) {
+    return '已跳过 $count 张 RAW 图片（不支持 RAW 格式）';
+  }
+
+  @override
   String get recordingStarted => '录音已开始';
 
   @override
