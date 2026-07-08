@@ -85,4 +85,49 @@ void main() {
     expect(cloneSource, 0);
     expect(cloneTargets, {1, 2});
   });
+
+  testWidgets('clone edit actions passes source + selected targets',
+      (tester) async {
+    int? actionSource;
+    Set<int>? actionTargets;
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: ClipReviewScreen(
+          pages: [png, png, png],
+          onReorder: (a, b) {},
+          onRemove: (i) {},
+          onCompilePdf: () {},
+          onCompileImages: () {},
+          onEdit: (i) {},
+          onCloneEdits: (s, t) {},
+          onCloneEditActions: (s, t) {
+            actionSource = s;
+            actionTargets = t;
+          },
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('wc-multiselect-toggle')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('wc-page-1')));
+    await tester.tap(find.byKey(const ValueKey('wc-page-2')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('wc-menu-0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Clone edit actions').last);
+    await tester.pumpAndSettle();
+
+    expect(actionSource, 0);
+    expect(actionTargets, {1, 2});
+  });
 }

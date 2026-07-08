@@ -764,6 +764,258 @@ abstract class AppLocalizations {
   /// **'No saved World Clip projects'**
   String get worldClipEmptyProjects;
 
+  /// No description provided for @worldClipColorAdjust.
+  ///
+  /// In en, this message translates to:
+  /// **'Color adjustments'**
+  String get worldClipColorAdjust;
+
+  /// No description provided for @worldClipContrast.
+  ///
+  /// In en, this message translates to:
+  /// **'Contrast'**
+  String get worldClipContrast;
+
+  /// No description provided for @worldClipSaturation.
+  ///
+  /// In en, this message translates to:
+  /// **'Saturation'**
+  String get worldClipSaturation;
+
+  /// No description provided for @worldClipTemperature.
+  ///
+  /// In en, this message translates to:
+  /// **'Warmth'**
+  String get worldClipTemperature;
+
+  /// No description provided for @worldClipShapeTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Shape tools'**
+  String get worldClipShapeTools;
+
+  /// No description provided for @worldClipResetColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset colors'**
+  String get worldClipResetColor;
+
+  /// No description provided for @worldClipBrightness.
+  ///
+  /// In en, this message translates to:
+  /// **'Brightness'**
+  String get worldClipBrightness;
+
+  /// No description provided for @worldClipHighlights.
+  ///
+  /// In en, this message translates to:
+  /// **'Highlights'**
+  String get worldClipHighlights;
+
+  /// No description provided for @worldClipShadows.
+  ///
+  /// In en, this message translates to:
+  /// **'Shadows'**
+  String get worldClipShadows;
+
+  /// No description provided for @worldClipBlacks.
+  ///
+  /// In en, this message translates to:
+  /// **'Blacks'**
+  String get worldClipBlacks;
+
+  /// No description provided for @worldClipWhites.
+  ///
+  /// In en, this message translates to:
+  /// **'Whites'**
+  String get worldClipWhites;
+
+  /// No description provided for @worldClipCloneEditActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Clone edit actions'**
+  String get worldClipCloneEditActions;
+
+  /// No description provided for @worldClipSelectMultiple.
+  ///
+  /// In en, this message translates to:
+  /// **'Select multiple'**
+  String get worldClipSelectMultiple;
+
+  /// No description provided for @worldClipDoneSelecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Done selecting'**
+  String get worldClipDoneSelecting;
+
+  /// No description provided for @worldClipNSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String worldClipNSelected(int count);
+
+  /// No description provided for @worldClipSelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get worldClipSelectAll;
+
+  /// No description provided for @worldClipDeselectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Deselect all'**
+  String get worldClipDeselectAll;
+
+  /// No description provided for @worldClipEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get worldClipEdit;
+
+  /// No description provided for @worldClipCloneEdits.
+  ///
+  /// In en, this message translates to:
+  /// **'Clone edits'**
+  String get worldClipCloneEdits;
+
+  /// No description provided for @worldClipCloneToSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'to {count} selected'**
+  String worldClipCloneToSelected(int count);
+
+  /// No description provided for @worldClipSelectPagesFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'select pages first'**
+  String get worldClipSelectPagesFirst;
+
+  /// No description provided for @worldClipDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get worldClipDelete;
+
+  /// No description provided for @worldClipLevel.
+  ///
+  /// In en, this message translates to:
+  /// **'Level'**
+  String get worldClipLevel;
+
+  /// No description provided for @worldClipRotateLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'Rotate left'**
+  String get worldClipRotateLeft;
+
+  /// No description provided for @worldClipRotateRight.
+  ///
+  /// In en, this message translates to:
+  /// **'Rotate right'**
+  String get worldClipRotateRight;
+
+  /// No description provided for @worldClipAutoEdges.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto edges'**
+  String get worldClipAutoEdges;
+
+  /// No description provided for @worldClipAddHorizontalCrease.
+  ///
+  /// In en, this message translates to:
+  /// **'Add horizontal crease'**
+  String get worldClipAddHorizontalCrease;
+
+  /// No description provided for @worldClipAddVerticalCrease.
+  ///
+  /// In en, this message translates to:
+  /// **'Add vertical crease'**
+  String get worldClipAddVerticalCrease;
+
+  /// No description provided for @worldClipResetTool.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get worldClipResetTool;
+
+  /// No description provided for @worldClipDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get worldClipDone;
+
+  /// No description provided for @worldClipNoEdgesDetected.
+  ///
+  /// In en, this message translates to:
+  /// **'No document edges detected'**
+  String get worldClipNoEdgesDetected;
+
+  /// No description provided for @worldClipNoFrames.
+  ///
+  /// In en, this message translates to:
+  /// **'No frames'**
+  String get worldClipNoFrames;
+
+  /// No description provided for @worldClipSetKeyFrame.
+  ///
+  /// In en, this message translates to:
+  /// **'Set key frame'**
+  String get worldClipSetKeyFrame;
+
+  /// No description provided for @worldClipRemoveKeyFrame.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove key frame'**
+  String get worldClipRemoveKeyFrame;
+
+  /// No description provided for @worldClipAutoButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto'**
+  String get worldClipAutoButton;
+
+  /// No description provided for @worldClipSuggestedKeyFrames.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested {count} key frame(s)'**
+  String worldClipSuggestedKeyFrames(int count);
+
+  /// No description provided for @worldClipAnalyzing.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyzing {current}/{total}'**
+  String worldClipAnalyzing(int current, int total);
+
+  /// No description provided for @worldClipClonedEdits.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloned edits to {count} page(s)'**
+  String worldClipClonedEdits(int count);
+
+  /// No description provided for @worldClipAutoDetecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-detecting {current}/{total}'**
+  String worldClipAutoDetecting(int current, int total);
+
+  /// No description provided for @worldClipAutoEdited.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-edited {count} page(s)'**
+  String worldClipAutoEdited(int count);
+
+  /// No description provided for @worldClipClipsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} clips'**
+  String worldClipClipsCount(int count);
+
+  /// No description provided for @worldClipSkippedRawImages.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped {count} RAW image(s) — RAW is not supported'**
+  String worldClipSkippedRawImages(int count);
+
   /// No description provided for @recordingStarted.
   ///
   /// In en, this message translates to:
@@ -8354,6 +8606,12 @@ abstract class AppLocalizations {
   /// **'Image Gen'**
   String get imageGenCapability;
 
+  /// No description provided for @speechGenCapability.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech Gen'**
+  String get speechGenCapability;
+
   /// No description provided for @codeGenCapability.
   ///
   /// In en, this message translates to:
@@ -8395,6 +8653,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Img Gen'**
   String get imgGenColumn;
+
+  /// No description provided for @ttsGenColumn.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech Gen'**
+  String get ttsGenColumn;
 
   /// No description provided for @codeGenColumn.
   ///

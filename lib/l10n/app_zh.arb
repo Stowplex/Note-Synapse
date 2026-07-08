@@ -105,6 +105,117 @@
   "worldClipDeleteProject": "删除项目",
   "worldClipNewFromSameVideo": "用此视频新建项目",
   "worldClipEmptyProjects": "没有已保存的世界剪辑项目",
+  "worldClipColorAdjust": "颜色调整",
+  "worldClipContrast": "对比度",
+  "worldClipSaturation": "饱和度",
+  "worldClipTemperature": "色温",
+  "worldClipShapeTools": "形状工具",
+  "worldClipResetColor": "重置颜色",
+  "worldClipBrightness": "亮度",
+  "worldClipHighlights": "高光",
+  "worldClipShadows": "阴影",
+  "worldClipBlacks": "黑色",
+  "worldClipWhites": "白色",
+  "worldClipCloneEditActions": "克隆编辑操作",
+  "worldClipSelectMultiple": "多选",
+  "worldClipDoneSelecting": "完成选择",
+  "worldClipNSelected": "已选择 {count} 项",
+  "@worldClipNSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipSelectAll": "全选",
+  "worldClipDeselectAll": "取消全选",
+  "worldClipEdit": "编辑",
+  "worldClipCloneEdits": "克隆编辑",
+  "worldClipCloneToSelected": "应用到 {count} 个已选页面",
+  "@worldClipCloneToSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipSelectPagesFirst": "请先选择页面",
+  "worldClipDelete": "删除",
+  "worldClipLevel": "校平",
+  "worldClipRotateLeft": "向左旋转",
+  "worldClipRotateRight": "向右旋转",
+  "worldClipAutoEdges": "自动检测边缘",
+  "worldClipAddHorizontalCrease": "添加水平折痕",
+  "worldClipAddVerticalCrease": "添加垂直折痕",
+  "worldClipResetTool": "重置",
+  "worldClipDone": "完成",
+  "worldClipNoEdgesDetected": "未检测到文档边缘",
+  "worldClipNoFrames": "没有帧",
+  "worldClipSetKeyFrame": "设为关键帧",
+  "worldClipRemoveKeyFrame": "移除关键帧",
+  "worldClipAutoButton": "自动",
+  "worldClipSuggestedKeyFrames": "已推荐 {count} 个关键帧",
+  "@worldClipSuggestedKeyFrames": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipAnalyzing": "分析中 {current}/{total}",
+  "@worldClipAnalyzing": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipClonedEdits": "已将编辑克隆到 {count} 个页面",
+  "@worldClipClonedEdits": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipAutoDetecting": "自动检测中 {current}/{total}",
+  "@worldClipAutoDetecting": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipAutoEdited": "已自动编辑 {count} 个页面",
+  "@worldClipAutoEdited": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipClipsCount": "{count} 个剪辑",
+  "@worldClipClipsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipSkippedRawImages": "已跳过 {count} 张 RAW 图片（不支持 RAW 格式）",
+  "@worldClipSkippedRawImages": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "recordingStarted": "录音已开始",
   "failedToStartRecording": "开始录音失败。请检查麦克风权限。",
   "failedToStartRecordingLinux": "开始录音失败。请检查是否安装了gstreamer和PulseAudio。",
@@ -1891,6 +2002,7 @@
   "audioInputCapability": "音频输入",
   "docsCapability": "文档",
   "imageGenCapability": "图像生成",
+  "speechGenCapability": "语音生成",
   "codeGenCapability": "代码生成",
   "modelFeatureMatrix": "模型功能矩阵",
   "modelNameColumn": "模型名称",
@@ -1898,6 +2010,7 @@
   "videoInColumn": "视频输入",
   "audioColumn": "音频",
   "imgGenColumn": "图像生成",
+  "ttsGenColumn": "语音生成",
   "codeGenColumn": "代码生成",
   "docsColumn": "文档",
   "errorLoadingModelPreferences": "加载模型偏好时出错：{error}",

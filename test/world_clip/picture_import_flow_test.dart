@@ -32,6 +32,9 @@ void main() {
       imagePaths = [
         (File('${tmp.path}/p0.jpg')..writeAsBytesSync(jpg(60))).path,
         (File('${tmp.path}/p1.jpg')..writeAsBytesSync(jpg(180))).path,
+        // A RAW twin (as from a Pixel DNG+JPG capture): must be filtered out
+        // before entering the project, not decoded as a page.
+        (File('${tmp.path}/p2.dng')..writeAsBytesSync(jpg(90))).path,
       ];
     });
 
@@ -59,10 +62,13 @@ void main() {
     await tester.pump();
 
     // We skipped the timeline (no Import buttons / scrub) and landed on the
-    // review list showing one tile per picture, with the compile bar.
+    // review list showing one tile per non-RAW picture, with the compile bar.
     expect(find.byIcon(Icons.photo_library), findsNothing);
     expect(find.byKey(const ValueKey('wc-page-0')), findsOneWidget);
     expect(find.byKey(const ValueKey('wc-page-1')), findsOneWidget);
+    // The .dng was skipped (with a notice), so there is no third page.
+    expect(find.byKey(const ValueKey('wc-page-2')), findsNothing);
+    expect(find.textContaining('RAW'), findsOneWidget);
     expect(find.byKey(const ValueKey('wc-compile')), findsOneWidget);
 
     // Deleting every page of a picture project returns to the source picker

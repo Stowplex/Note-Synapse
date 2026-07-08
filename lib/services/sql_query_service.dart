@@ -39,6 +39,8 @@ class SqlQueryResult {
     this.error,
     this.isReadOnly = true,
     this.wasApproved = false,
+    this.truncated = false,
+    this.totalRows,
   });
 
   final bool success;
@@ -46,6 +48,13 @@ class SqlQueryResult {
   final String? error;
   final bool isReadOnly;
   final bool wasApproved;
+
+  /// Whether [data] was truncated to the row limit.
+  final bool truncated;
+
+  /// The number of rows the query actually produced (only set when known,
+  /// i.e. on successful execution).
+  final int? totalRows;
 
   /// Format the result as a markdown table for display.
   String toMarkdownTable() {
@@ -73,6 +82,8 @@ class SqlQueryResult {
       'success': success,
       if (data != null) 'data': data,
       if (error != null) 'error': error,
+      if (truncated) 'truncated': true,
+      if (truncated && totalRows != null) 'totalRows': totalRows,
     };
   }
 }
@@ -259,7 +270,7 @@ class SqlQueryService {
     String sql, {
     bool requireApprovalForWrites = true,
     bool allowWriteOperations = true,
-    int maxRows = 50,
+    int maxRows = 100,
   }) async {
     final queryType = getQueryType(sql);
     final isReadOnly = isReadOnlyQuery(sql);
@@ -313,11 +324,12 @@ class SqlQueryService {
       );
 
       // Truncate results if necessary
-      final truncatedResults = results.length > maxRows
+      final wasTruncated = results.length > maxRows;
+      final truncatedResults = wasTruncated
           ? results.take(maxRows).toList()
           : results;
 
-      if (results.length > maxRows) {
+      if (wasTruncated) {
         LoggerService.debug(
           '[SqlQueryService] Results truncated from ${results.length} to $maxRows rows',
         );
@@ -328,6 +340,8 @@ class SqlQueryService {
         data: truncatedResults,
         isReadOnly: isReadOnly,
         wasApproved: !isReadOnly && _sessionApprovedWrites,
+        truncated: wasTruncated,
+        totalRows: results.length,
       );
     } catch (e) {
       LoggerService.error('[SqlQueryService] Query execution failed: $e');

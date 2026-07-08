@@ -602,6 +602,7 @@ class ModelSelector {
   ///
   /// Supported hints:
   /// - 'image_gen': Model supports image generation
+  /// - 'tts': Model supports speech (audio) generation
   /// - 'audio': Model supports audio processing
   /// - 'video': Model supports video processing
   /// - 'documents': Model supports document understanding
@@ -660,6 +661,9 @@ class ModelSelector {
           break;
         case 'image_gen':
           if (!caps.supportsImageGeneration) return false;
+          break;
+        case 'tts':
+          if (!caps.supportsSpeechGeneration) return false;
           break;
         case 'generateCode':
           if (!caps.supportsCodeGeneration) return false;
@@ -764,6 +768,27 @@ class ModelSelector {
 
         if (model.customCapabilitiesObject?.supportsImageGeneration == true) {
           _logSelection(model, 'image_gen_priority_global', requiredCaps);
+          return model;
+        }
+      }
+    }
+
+    // Priority B2: Speech Generation (TTS)
+    if (requiredCaps.contains('tts')) {
+      // Try to find speech gen support in candidates first
+      for (final model in candidates) {
+        if (model.customCapabilitiesObject?.supportsSpeechGeneration == true) {
+          _logSelection(model, 'tts_priority_candidate', requiredCaps);
+          return model;
+        }
+      }
+
+      // Then try any configured model (global search)
+      for (final model in allModels) {
+        if (candidates.any((c) => c.id == model.id)) continue;
+
+        if (model.customCapabilitiesObject?.supportsSpeechGeneration == true) {
+          _logSelection(model, 'tts_priority_global', requiredCaps);
           return model;
         }
       }

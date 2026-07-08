@@ -1966,6 +1966,14 @@ class MockSkillService extends _i1.Mock implements _i26.SkillService {
   }
 
   @override
+  bool get includeBundledSkills =>
+      (super.noSuchMethod(
+            Invocation.getter(#includeBundledSkills),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
   _i26.SkillMetadata? parseSkillMetadata(String? noteId, String? content) =>
       (super.noSuchMethod(
             Invocation.method(#parseSkillMetadata, [noteId, content]),
@@ -1992,6 +2000,14 @@ class MockSkillService extends _i1.Mock implements _i26.SkillService {
             ),
           )
           as _i6.Future<Map<String, _i26.SkillMetadata>>);
+
+  @override
+  _i6.Future<String?> loadBundledSkillContent(String? noteId) =>
+      (super.noSuchMethod(
+            Invocation.method(#loadBundledSkillContent, [noteId]),
+            returnValue: _i6.Future<String?>.value(),
+          )
+          as _i6.Future<String?>);
 
   @override
   String buildSkillIndexPrompt(

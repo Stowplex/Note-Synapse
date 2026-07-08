@@ -7,6 +7,7 @@ class ModelCapabilities {
   final bool supportsAudio;
   final bool supportsVideo;
   final bool supportsImageGeneration;
+  final bool supportsSpeechGeneration;
   final bool supportsCodeGeneration;
   final bool supportsToolOrchestration;
   final List<String> supportedImageFormats;
@@ -21,6 +22,7 @@ class ModelCapabilities {
     required this.supportsAudio,
     required this.supportsVideo,
     this.supportsImageGeneration = false,
+    this.supportsSpeechGeneration = false,
     this.supportsCodeGeneration = false,
     this.supportsToolOrchestration = true,
     this.supportedImageFormats = const ['jpg', 'jpeg', 'png', 'gif', 'webp'],
@@ -60,6 +62,7 @@ class ModelCapabilities {
     if (supportsAudio) capabilities.add('Audio');
     if (supportsVideo) capabilities.add('Video');
     if (supportsImageGeneration) capabilities.add('Image Generation');
+    if (supportsSpeechGeneration) capabilities.add('Speech Generation');
     if (supportsCodeGeneration) capabilities.add('Code Generation');
     if (supportsToolOrchestration) capabilities.add('Tool Orchestration');
 
@@ -91,6 +94,7 @@ class ModelCapabilities {
           supportsAudio == other.supportsAudio &&
           supportsVideo == other.supportsVideo &&
           supportsImageGeneration == other.supportsImageGeneration &&
+          supportsSpeechGeneration == other.supportsSpeechGeneration &&
           supportsCodeGeneration == other.supportsCodeGeneration &&
           supportsToolOrchestration == other.supportsToolOrchestration;
 
@@ -103,6 +107,7 @@ class ModelCapabilities {
       supportsAudio.hashCode ^
       supportsVideo.hashCode ^
       supportsImageGeneration.hashCode ^
+      supportsSpeechGeneration.hashCode ^
       supportsCodeGeneration.hashCode ^
       supportsToolOrchestration.hashCode;
 
@@ -116,6 +121,7 @@ class ModelCapabilities {
       'supportsAudio': supportsAudio,
       'supportsVideo': supportsVideo,
       'supportsImageGeneration': supportsImageGeneration,
+      'supportsSpeechGeneration': supportsSpeechGeneration,
       'supportsCodeGeneration': supportsCodeGeneration,
       'supportsToolOrchestration': supportsToolOrchestration,
       'supportedImageFormats': supportedImageFormats,
@@ -142,6 +148,8 @@ class ModelCapabilities {
       supportsVideo: json['supportsVideo'] as bool? ?? false,
       supportsImageGeneration:
           json['supportsImageGeneration'] as bool? ?? false,
+      supportsSpeechGeneration:
+          json['supportsSpeechGeneration'] as bool? ?? false,
       supportsCodeGeneration: json['supportsCodeGeneration'] as bool? ?? false,
       supportsToolOrchestration:
           json['supportsToolOrchestration'] as bool? ??

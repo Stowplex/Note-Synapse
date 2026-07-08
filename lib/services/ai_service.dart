@@ -567,6 +567,9 @@ class AIService {
   }
 
   /// Chat AI with configurable parameters
+  ///
+  /// When [modelHint] contains 'tts', a speech-generation model is selected
+  /// and [voice] (a prebuilt voice name) controls the speaker.
   Future<String> chatAI(
     String prompt, {
     double? temperature,
@@ -575,9 +578,13 @@ class AIService {
     List<PlatformFile>? attachedFiles,
     GenerationContext? generationContext,
     List<String>? modelHint,
+    String? voice,
   }) async {
     final context = generationContext ?? GenerationContext();
     final requestId = context.ensureRequestId();
+    if (voice != null && voice.isNotEmpty) {
+      context.setValue('ttsVoice', voice);
+    }
 
     return await _withErrorHandling('chat AI', () async {
       LoggerService.debug(
@@ -624,7 +631,9 @@ class AIService {
   /// Chat AI with multi-part response support.
   ///
   /// When [modelHint] contains 'image_gen', selects a model with image generation capability.
-  /// Returns a list of response parts (text and/or images).
+  /// When [modelHint] contains 'tts', selects a speech-generation model and
+  /// [voice] (a prebuilt voice name) controls the speaker.
+  /// Returns a list of response parts (text, images, and/or audio).
   Future<List<Map<String, dynamic>>> chatAIMultiPart(
     String prompt, {
     double? temperature,
@@ -633,9 +642,13 @@ class AIService {
     List<PlatformFile>? attachedFiles,
     GenerationContext? generationContext,
     List<String>? modelHint,
+    String? voice,
   }) async {
     final context = generationContext ?? GenerationContext();
     final requestId = context.ensureRequestId();
+    if (voice != null && voice.isNotEmpty) {
+      context.setValue('ttsVoice', voice);
+    }
 
     return await _withErrorHandling('chat AI multi-part', () async {
       LoggerService.debug(

@@ -915,6 +915,7 @@ class MockAIService extends _i1.Mock implements _i16.AIService {
     List<_i12.PlatformFile>? attachedFiles,
     _i13.GenerationContext? generationContext,
     List<String>? modelHint,
+    String? voice,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -927,6 +928,7 @@ class MockAIService extends _i1.Mock implements _i16.AIService {
                 #attachedFiles: attachedFiles,
                 #generationContext: generationContext,
                 #modelHint: modelHint,
+                #voice: voice,
               },
             ),
             returnValue: _i6.Future<String>.value(
@@ -942,6 +944,7 @@ class MockAIService extends _i1.Mock implements _i16.AIService {
                     #attachedFiles: attachedFiles,
                     #generationContext: generationContext,
                     #modelHint: modelHint,
+                    #voice: voice,
                   },
                 ),
               ),
@@ -958,6 +961,7 @@ class MockAIService extends _i1.Mock implements _i16.AIService {
     List<_i12.PlatformFile>? attachedFiles,
     _i13.GenerationContext? generationContext,
     List<String>? modelHint,
+    String? voice,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -970,6 +974,7 @@ class MockAIService extends _i1.Mock implements _i16.AIService {
                 #attachedFiles: attachedFiles,
                 #generationContext: generationContext,
                 #modelHint: modelHint,
+                #voice: voice,
               },
             ),
             returnValue: _i6.Future<List<Map<String, dynamic>>>.value(

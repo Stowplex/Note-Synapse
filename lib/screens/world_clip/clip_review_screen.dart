@@ -18,6 +18,13 @@ class ClipReviewScreen extends StatefulWidget {
   /// keystone) onto every page in [targetIndices].
   final void Function(int sourceIndex, Set<int> targetIndices)? onCloneEdits;
 
+  /// Optional batch clone of the edit *actions*: copy [sourceIndex]'s
+  /// rotation/color settings but re-run document auto-detection on each
+  /// target's own frame (pages framed differently each get a fitted quad,
+  /// instead of pasting the source's literal crop).
+  final void Function(int sourceIndex, Set<int> targetIndices)?
+      onCloneEditActions;
+
   const ClipReviewScreen({
     super.key,
     required this.pages,
@@ -27,6 +34,7 @@ class ClipReviewScreen extends StatefulWidget {
     required this.onCompileImages,
     this.onEdit,
     this.onCloneEdits,
+    this.onCloneEditActions,
   });
 
   @override
@@ -106,6 +114,7 @@ class _ClipReviewScreenState extends State<ClipReviewScreen> {
   }
 
   Widget _selectionBar() {
+    final l10n = AppLocalizations.of(context)!;
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: Padding(
@@ -114,16 +123,21 @@ class _ClipReviewScreenState extends State<ClipReviewScreen> {
           children: [
             IconButton(
               key: const ValueKey('wc-multiselect-toggle'),
-              tooltip: _multiSelect ? 'Done selecting' : 'Select multiple',
+              tooltip: _multiSelect
+                  ? l10n.worldClipDoneSelecting
+                  : l10n.worldClipSelectMultiple,
               icon: Icon(_multiSelect ? Icons.close : Icons.checklist),
               onPressed: _toggleMultiSelect,
             ),
             if (_multiSelect) ...[
-              Expanded(child: Text('${_selected.length} selected')),
-              TextButton(onPressed: _selectAll, child: const Text('Select all')),
-              TextButton(onPressed: _clear, child: const Text('Deselect all')),
+              Expanded(child: Text(l10n.worldClipNSelected(_selected.length))),
+              TextButton(
+                  onPressed: _selectAll,
+                  child: Text(l10n.worldClipSelectAll)),
+              TextButton(
+                  onPressed: _clear, child: Text(l10n.worldClipDeselectAll)),
             ] else
-              const Expanded(child: Text('Review clips')),
+              Expanded(child: Text(l10n.worldClipReview)),
           ],
         ),
       ),
@@ -131,6 +145,7 @@ class _ClipReviewScreenState extends State<ClipReviewScreen> {
   }
 
   Widget _tile(BuildContext context, int i) {
+    final l10n = AppLocalizations.of(context)!;
     final selected = _selected.contains(i);
     return ListTile(
       key: ValueKey('wc-page-$i'),
@@ -156,6 +171,9 @@ class _ClipReviewScreenState extends State<ClipReviewScreen> {
             case 'clone':
               widget.onCloneEdits?.call(i, Set<int>.of(_selected));
               break;
+            case 'cloneActions':
+              widget.onCloneEditActions?.call(i, Set<int>.of(_selected));
+              break;
             case 'delete':
               widget.onRemove(i);
               break;
@@ -163,10 +181,11 @@ class _ClipReviewScreenState extends State<ClipReviewScreen> {
         },
         itemBuilder: (context) => [
           if (widget.onEdit != null)
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'edit',
               child: ListTile(
-                  leading: Icon(Icons.crop), title: Text('Edit')),
+                  leading: const Icon(Icons.crop),
+                  title: Text(l10n.worldClipEdit)),
             ),
           if (widget.onCloneEdits != null)
             PopupMenuItem(
@@ -174,16 +193,29 @@ class _ClipReviewScreenState extends State<ClipReviewScreen> {
               enabled: _multiSelect && _selected.isNotEmpty,
               child: ListTile(
                 leading: const Icon(Icons.content_copy),
-                title: const Text('Clone edits'),
+                title: Text(l10n.worldClipCloneEdits),
                 subtitle: Text(_multiSelect && _selected.isNotEmpty
-                    ? 'to ${_selected.length} selected'
-                    : 'select pages first'),
+                    ? l10n.worldClipCloneToSelected(_selected.length)
+                    : l10n.worldClipSelectPagesFirst),
               ),
             ),
-          const PopupMenuItem(
+          if (widget.onCloneEditActions != null)
+            PopupMenuItem(
+              value: 'cloneActions',
+              enabled: _multiSelect && _selected.isNotEmpty,
+              child: ListTile(
+                leading: const Icon(Icons.auto_fix_high),
+                title: Text(l10n.worldClipCloneEditActions),
+                subtitle: Text(_multiSelect && _selected.isNotEmpty
+                    ? l10n.worldClipCloneToSelected(_selected.length)
+                    : l10n.worldClipSelectPagesFirst),
+              ),
+            ),
+          PopupMenuItem(
             value: 'delete',
             child: ListTile(
-                leading: Icon(Icons.delete_outline), title: Text('Delete')),
+                leading: const Icon(Icons.delete_outline),
+                title: Text(l10n.worldClipDelete)),
           ),
         ],
       ),

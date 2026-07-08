@@ -19,4 +19,19 @@ void main() {
   test('FakeVideoSource yields no pictures by default', () async {
     expect(await FakeVideoSource(null).pickImages(), isEmpty);
   });
+
+  test('isRawImagePath spots RAW extensions case-insensitively', () {
+    expect(isRawImagePath('/dcim/PXL_1234.dng'), isTrue);
+    expect(isRawImagePath('/dcim/PXL_1234.DNG'), isTrue);
+    expect(isRawImagePath('/photos/IMG_1.CR3'), isTrue);
+    expect(isRawImagePath('/photos/shot.nef'), isTrue);
+  });
+
+  test('isRawImagePath passes ordinary images and odd paths through', () {
+    expect(isRawImagePath('/dcim/PXL_1234.jpg'), isFalse);
+    expect(isRawImagePath('/dcim/PXL_1234.jpeg'), isFalse);
+    expect(isRawImagePath('/dcim/photo.png'), isFalse);
+    expect(isRawImagePath('/dcim/heic.HEIC'), isFalse);
+    expect(isRawImagePath('/dcim/no_extension'), isFalse);
+  });
 }
