@@ -116,6 +116,12 @@
   "worldClipTemperature": "Warmth",
   "worldClipShapeTools": "Shape tools",
   "worldClipResetColor": "Reset colors",
+  "worldClipBrightness": "Brightness",
+  "worldClipHighlights": "Highlights",
+  "worldClipShadows": "Shadows",
+  "worldClipBlacks": "Blacks",
+  "worldClipWhites": "Whites",
+  "worldClipCloneEditActions": "Clone edit actions",
   "worldClipSkippedRawImages": "Skipped {count} RAW image(s) — RAW is not supported",
   "@worldClipSkippedRawImages": {
     "placeholders": {

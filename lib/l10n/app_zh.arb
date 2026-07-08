@@ -111,6 +111,12 @@
   "worldClipTemperature": "色温",
   "worldClipShapeTools": "形状工具",
   "worldClipResetColor": "重置颜色",
+  "worldClipBrightness": "亮度",
+  "worldClipHighlights": "高光",
+  "worldClipShadows": "阴影",
+  "worldClipBlacks": "黑色",
+  "worldClipWhites": "白色",
+  "worldClipCloneEditActions": "克隆编辑操作",
   "worldClipSkippedRawImages": "已跳过 {count} 张 RAW 图片（不支持 RAW 格式）",
   "@worldClipSkippedRawImages": {
     "placeholders": {

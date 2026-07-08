@@ -383,6 +383,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get worldClipResetColor => '重置颜色';
 
   @override
+  String get worldClipBrightness => '亮度';
+
+  @override
+  String get worldClipHighlights => '高光';
+
+  @override
+  String get worldClipShadows => '阴影';
+
+  @override
+  String get worldClipBlacks => '黑色';
+
+  @override
+  String get worldClipWhites => '白色';
+
+  @override
+  String get worldClipCloneEditActions => '克隆编辑操作';
+
+  @override
   String worldClipSkippedRawImages(int count) {
     return '已跳过 $count 张 RAW 图片（不支持 RAW 格式）';
   }

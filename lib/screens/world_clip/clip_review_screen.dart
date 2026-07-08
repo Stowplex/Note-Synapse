@@ -18,6 +18,13 @@ class ClipReviewScreen extends StatefulWidget {
   /// keystone) onto every page in [targetIndices].
   final void Function(int sourceIndex, Set<int> targetIndices)? onCloneEdits;
 
+  /// Optional batch clone of the edit *actions*: copy [sourceIndex]'s
+  /// rotation/color settings but re-run document auto-detection on each
+  /// target's own frame (pages framed differently each get a fitted quad,
+  /// instead of pasting the source's literal crop).
+  final void Function(int sourceIndex, Set<int> targetIndices)?
+      onCloneEditActions;
+
   const ClipReviewScreen({
     super.key,
     required this.pages,
@@ -27,6 +34,7 @@ class ClipReviewScreen extends StatefulWidget {
     required this.onCompileImages,
     this.onEdit,
     this.onCloneEdits,
+    this.onCloneEditActions,
   });
 
   @override
@@ -156,6 +164,9 @@ class _ClipReviewScreenState extends State<ClipReviewScreen> {
             case 'clone':
               widget.onCloneEdits?.call(i, Set<int>.of(_selected));
               break;
+            case 'cloneActions':
+              widget.onCloneEditActions?.call(i, Set<int>.of(_selected));
+              break;
             case 'delete':
               widget.onRemove(i);
               break;
@@ -175,6 +186,19 @@ class _ClipReviewScreenState extends State<ClipReviewScreen> {
               child: ListTile(
                 leading: const Icon(Icons.content_copy),
                 title: const Text('Clone edits'),
+                subtitle: Text(_multiSelect && _selected.isNotEmpty
+                    ? 'to ${_selected.length} selected'
+                    : 'select pages first'),
+              ),
+            ),
+          if (widget.onCloneEditActions != null)
+            PopupMenuItem(
+              value: 'cloneActions',
+              enabled: _multiSelect && _selected.isNotEmpty,
+              child: ListTile(
+                leading: const Icon(Icons.auto_fix_high),
+                title: Text(AppLocalizations.of(context)!
+                    .worldClipCloneEditActions),
                 subtitle: Text(_multiSelect && _selected.isNotEmpty
                     ? 'to ${_selected.length} selected'
                     : 'select pages first'),

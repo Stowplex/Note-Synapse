@@ -55,12 +55,14 @@ class RotateCorrection extends Correction {
       RotateCorrection(degrees: (j['degrees'] as num).toDouble());
 }
 
-/// Contrast / saturation / color-temperature adjustment.
+/// Color and tone adjustment.
 ///
-/// All three compose into a single affine transform of RGB values, exposed by
-/// [rgbMatrix] and shared by the OpenCV render path and the Flutter
-/// `ColorFilter.matrix` live preview so both produce the same pixels.
-/// Neutral values: contrast 1, saturation 1, temperature 0.
+/// Two stages, both implemented in the OpenCV render path:
+/// 1. An affine transform of RGB values (contrast / saturation / color
+///    temperature), exposed by [rgbMatrix].
+/// 2. A per-channel tone curve (brightness / highlights / shadows / blacks /
+///    whites), exposed as a 256-entry lookup table by [toneLut].
+/// Neutral values: contrast 1, saturation 1, everything else 0.
 class ColorAdjustCorrection extends Correction {
   /// Multiplier around mid-gray (128); 1 = unchanged.
   final double contrast;
@@ -71,18 +73,68 @@ class ColorAdjustCorrection extends Correction {
   /// -1 (cool, more blue) .. 1 (warm, more red); 0 = unchanged.
   final double temperature;
 
+  /// Uniform exposure shift, -1..1; 0 = unchanged.
+  final double brightness;
+
+  /// Brightens/darkens the upper tonal range only, -1..1.
+  final double highlights;
+
+  /// Lifts/deepens the lower tonal range only, -1..1.
+  final double shadows;
+
+  /// Black point: the very darkest tones, tighter range than [shadows].
+  final double blacks;
+
+  /// White point: the very brightest tones, tighter range than [highlights].
+  final double whites;
+
   ColorAdjustCorrection({
     this.contrast = 1,
     this.saturation = 1,
     this.temperature = 0,
+    this.brightness = 0,
+    this.highlights = 0,
+    this.shadows = 0,
+    this.blacks = 0,
+    this.whites = 0,
   });
 
-  bool get isNeutral => contrast == 1 && saturation == 1 && temperature == 0;
+  bool get isAffineNeutral =>
+      contrast == 1 && saturation == 1 && temperature == 0;
+
+  bool get isToneNeutral =>
+      brightness == 0 &&
+      highlights == 0 &&
+      shadows == 0 &&
+      blacks == 0 &&
+      whites == 0;
+
+  bool get isNeutral => isAffineNeutral && isToneNeutral;
 
   /// Strength of the temperature slider at full deflection: ±30% red/blue.
   static const double _tempGain = 0.3;
 
-  /// The combined color transform as a row-major 3x4 matrix over RGB in the
+  /// Max tone shift (in 0-255 levels) at full slider deflection.
+  static const double _toneRange = 64;
+
+  /// The tone curve as a 256-entry lookup table (applied per channel after
+  /// the affine stage). Each slider adds a weighted offset: brightness is
+  /// uniform, shadows/highlights taper quadratically into the low/high end,
+  /// blacks/whites taper cubically so they move only the extremes.
+  List<int> toneLut() {
+    return List<int>.generate(256, (v) {
+      final x = v / 255.0;
+      final out = v +
+          brightness * _toneRange +
+          shadows * _toneRange * (1 - x) * (1 - x) +
+          highlights * _toneRange * x * x +
+          blacks * _toneRange * (1 - x) * (1 - x) * (1 - x) +
+          whites * _toneRange * x * x * x;
+      return out.round().clamp(0, 255);
+    });
+  }
+
+  /// The affine color transform as a row-major 3x4 matrix over RGB in the
   /// 0-255 domain: out = M[0..2] * (R, G, B) + M[3].
   /// Composition order: temperature → saturation → contrast.
   List<double> rgbMatrix() {
@@ -113,6 +165,11 @@ class ColorAdjustCorrection extends Correction {
         'contrast': contrast,
         'saturation': saturation,
         'temperature': temperature,
+        'brightness': brightness,
+        'highlights': highlights,
+        'shadows': shadows,
+        'blacks': blacks,
+        'whites': whites,
       };
 
   factory ColorAdjustCorrection.fromJson(Map<String, dynamic> j) =>
@@ -120,6 +177,11 @@ class ColorAdjustCorrection extends Correction {
         contrast: (j['contrast'] as num?)?.toDouble() ?? 1,
         saturation: (j['saturation'] as num?)?.toDouble() ?? 1,
         temperature: (j['temperature'] as num?)?.toDouble() ?? 0,
+        brightness: (j['brightness'] as num?)?.toDouble() ?? 0,
+        highlights: (j['highlights'] as num?)?.toDouble() ?? 0,
+        shadows: (j['shadows'] as num?)?.toDouble() ?? 0,
+        blacks: (j['blacks'] as num?)?.toDouble() ?? 0,
+        whites: (j['whites'] as num?)?.toDouble() ?? 0,
       );
 }
 

@@ -800,6 +800,42 @@ abstract class AppLocalizations {
   /// **'Reset colors'**
   String get worldClipResetColor;
 
+  /// No description provided for @worldClipBrightness.
+  ///
+  /// In en, this message translates to:
+  /// **'Brightness'**
+  String get worldClipBrightness;
+
+  /// No description provided for @worldClipHighlights.
+  ///
+  /// In en, this message translates to:
+  /// **'Highlights'**
+  String get worldClipHighlights;
+
+  /// No description provided for @worldClipShadows.
+  ///
+  /// In en, this message translates to:
+  /// **'Shadows'**
+  String get worldClipShadows;
+
+  /// No description provided for @worldClipBlacks.
+  ///
+  /// In en, this message translates to:
+  /// **'Blacks'**
+  String get worldClipBlacks;
+
+  /// No description provided for @worldClipWhites.
+  ///
+  /// In en, this message translates to:
+  /// **'Whites'**
+  String get worldClipWhites;
+
+  /// No description provided for @worldClipCloneEditActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Clone edit actions'**
+  String get worldClipCloneEditActions;
+
   /// No description provided for @worldClipSkippedRawImages.
   ///
   /// In en, this message translates to:

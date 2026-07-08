@@ -396,6 +396,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get worldClipResetColor => 'Reset colors';
 
   @override
+  String get worldClipBrightness => 'Brightness';
+
+  @override
+  String get worldClipHighlights => 'Highlights';
+
+  @override
+  String get worldClipShadows => 'Shadows';
+
+  @override
+  String get worldClipBlacks => 'Blacks';
+
+  @override
+  String get worldClipWhites => 'Whites';
+
+  @override
+  String get worldClipCloneEditActions => 'Clone edit actions';
+
+  @override
   String worldClipSkippedRawImages(int count) {
     return 'Skipped $count RAW image(s) — RAW is not supported';
   }

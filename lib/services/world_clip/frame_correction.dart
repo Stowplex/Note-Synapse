@@ -89,29 +89,48 @@ class OpenCvFrameCorrection implements FrameCorrection {
     return cv.Rect(x0, y0, ww, hh);
   }
 
-  /// Applies the contrast/saturation/temperature affine color transform via
-  /// cv.transform with a 3x4 matrix (the implicit 4th input component is 1,
-  /// so the last column is the additive offset). The shared RGB matrix from
-  /// the model is reordered here for OpenCV's BGR channel layout; results are
-  /// saturate-cast back to 8-bit by OpenCV.
+  /// Applies the color adjustment in two stages:
+  /// 1. Contrast/saturation/temperature as an affine transform via
+  ///    cv.transform with a 3x4 matrix (the implicit 4th input component is
+  ///    1, so the last column is the additive offset). The shared RGB matrix
+  ///    from the model is reordered here for OpenCV's BGR channel layout.
+  /// 2. Brightness/highlights/shadows/blacks/whites as a per-channel tone
+  ///    curve via cv.LUT.
+  /// Results are saturate-cast back to 8-bit by OpenCV at each stage.
   cv.Mat _colorAdjust(cv.Mat src, ColorAdjustCorrection c) {
     if (c.isNeutral) return src;
-    final rgb = c.rgbMatrix(); // row-major 3x4 over (R, G, B, 1)
-    // BGR reorder: output row i takes RGB row (2-i); input col j maps to RGB
-    // col (2-j); the offset column stays in place.
-    final bgr = List<double>.filled(12, 0);
-    for (var i = 0; i < 3; i++) {
-      for (var j = 0; j < 3; j++) {
-        bgr[i * 4 + j] = rgb[(2 - i) * 4 + (2 - j)];
+    var current = src;
+    if (!c.isAffineNeutral) {
+      final rgb = c.rgbMatrix(); // row-major 3x4 over (R, G, B, 1)
+      // BGR reorder: output row i takes RGB row (2-i); input col j maps to
+      // RGB col (2-j); the offset column stays in place.
+      final bgr = List<double>.filled(12, 0);
+      for (var i = 0; i < 3; i++) {
+        for (var j = 0; j < 3; j++) {
+          bgr[i * 4 + j] = rgb[(2 - i) * 4 + (2 - j)];
+        }
+        bgr[i * 4 + 3] = rgb[(2 - i) * 4 + 3];
       }
-      bgr[i * 4 + 3] = rgb[(2 - i) * 4 + 3];
+      final m = cv.Mat.fromList(3, 4, cv.MatType.CV_32FC1, bgr);
+      try {
+        current = cv.transform(src, m);
+      } finally {
+        m.dispose();
+      }
     }
-    final m = cv.Mat.fromList(3, 4, cv.MatType.CV_32FC1, bgr);
-    try {
-      return cv.transform(src, m);
-    } finally {
-      m.dispose();
+    if (!c.isToneNeutral) {
+      // A single-channel 256-entry LUT applies the same curve to B, G and R.
+      final lut =
+          cv.Mat.fromList(1, 256, cv.MatType.CV_8UC1, c.toneLut());
+      try {
+        final toned = cv.LUT(current, lut);
+        if (!identical(current, src)) current.dispose();
+        current = toned;
+      } finally {
+        lut.dispose();
+      }
     }
+    return current;
   }
 
   cv.Mat _rotate(cv.Mat src, RotateCorrection c) {

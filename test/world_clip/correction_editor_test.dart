@@ -65,7 +65,8 @@ void main() {
     final slider = find.byKey(const ValueKey('wc-saturation'));
     expect(slider, findsOneWidget);
     await tester.drag(slider, const Offset(-400, 0));
-    await tester.pump();
+    // Let the engine-rendered color preview finish (it schedules timers).
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('wc-color-done')));
     await tester.pump();
@@ -75,6 +76,27 @@ void main() {
     expect(color, hasLength(1));
     expect(color.first.saturation, 0);
     expect(result!.whereType<MeshDewarpCorrection>(), isNotEmpty);
+  });
+
+  testWidgets('tone sliders emit their values via onDone', (tester) async {
+    List<Correction>? result;
+    await _pumpEditor(tester, _png(48, 32), onDone: (c) => result = c);
+
+    await tester.tap(find.byKey(const ValueKey('wc-color-toggle')));
+    await tester.pump();
+
+    final slider = find.byKey(const ValueKey('wc-brightness'));
+    await tester.ensureVisible(slider);
+    await tester.pump();
+    await tester.drag(slider, const Offset(400, 0)); // full right → +1
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('wc-color-done')));
+    await tester.pump();
+
+    final color = result!.whereType<ColorAdjustCorrection>().single;
+    expect(color.brightness, greaterThan(0.5));
+    expect(color.isToneNeutral, isFalse);
   });
 
   testWidgets('tool strip scrolls on a narrow screen with Done pinned',

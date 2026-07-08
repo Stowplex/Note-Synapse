@@ -47,6 +47,18 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
   double _contrast = 1;
   double _saturation = 1;
   double _temperature = 0;
+  double _brightness = 0;
+  double _highlights = 0;
+  double _shadows = 0;
+  double _blacks = 0;
+  double _whites = 0;
+  // Engine-rendered color preview (tone curves can't be expressed as a
+  // Flutter ColorFilter matrix): a downscaled base is re-rendered through the
+  // real pipeline on slider changes, single-flight with latest-wins.
+  Uint8List? _previewBase; // downscaled _basePng, built lazily per base
+  Uint8List? _tonedPng; // color-adjusted preview; null = show _basePng
+  bool _previewRendering = false;
+  bool _previewDirty = false;
 
   double get _totalRotation => _quarterTurns * 90 + _fineDeg;
 
@@ -70,6 +82,11 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
       _contrast = color.first.contrast;
       _saturation = color.first.saturation;
       _temperature = color.first.temperature;
+      _brightness = color.first.brightness;
+      _highlights = color.first.highlights;
+      _shadows = color.first.shadows;
+      _blacks = color.first.blacks;
+      _whites = color.first.whites;
     }
     _basePng = widget.framePng;
     _recomputeBase(resetGrid: false);
@@ -98,8 +115,50 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
       _basePng = base;
       _aspect = size.height == 0 ? 1 : size.width / size.height;
       if (resetGrid) _grid = MeshGrid.identity(rows: 1, cols: 1);
+      // The base changed — stale color previews (built from the old rotation)
+      // must not be shown or reused.
+      _previewBase = null;
+      _tonedPng = null;
       _busy = false;
     });
+    _refreshColorPreview();
+  }
+
+  /// Re-renders the color preview through the real correction engine on a
+  /// downscaled base. Single-flight: slider drags mark it dirty and the loop
+  /// renders the latest values, so fast drags never queue stale renders.
+  Future<void> _refreshColorPreview() async {
+    _previewDirty = true;
+    if (_previewRendering) return;
+    _previewRendering = true;
+    try {
+      while (_previewDirty && mounted) {
+        _previewDirty = false;
+        final adjust = _colorAdjust;
+        if (adjust.isNeutral) {
+          if (_tonedPng != null) setState(() => _tonedPng = null);
+          continue;
+        }
+        try {
+          // JPEG keeps decode/encode fast enough for near-live dragging.
+          _previewBase ??= await _engine
+              .apply(_basePng, const [], maxWidth: 1024, jpegQuality: 90);
+          final toned =
+              await _engine.apply(_previewBase!, [adjust], jpegQuality: 90);
+          if (!mounted) return;
+          setState(() => _tonedPng = toned);
+        } catch (_) {
+          // Undecodable preview render — fall back to the unadjusted base.
+          if (!mounted) return;
+          setState(() => _tonedPng = null);
+        }
+        // Yield so slider/gesture events interleave with the synchronous
+        // OpenCV work instead of starving until the drag ends.
+        await Future<void>.delayed(Duration.zero);
+      }
+    } finally {
+      _previewRendering = false;
+    }
   }
 
   Future<Size> _decodeSize(Uint8List bytes) async {
@@ -182,27 +241,28 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
     _recomputeBase(resetGrid: false);
   }
 
-  // Callers wrap in setState.
+  // Callers wrap in setState and refresh the preview.
   void _resetColor() {
     _contrast = 1;
     _saturation = 1;
     _temperature = 0;
+    _brightness = 0;
+    _highlights = 0;
+    _shadows = 0;
+    _blacks = 0;
+    _whites = 0;
   }
 
   ColorAdjustCorrection get _colorAdjust => ColorAdjustCorrection(
-      contrast: _contrast, saturation: _saturation, temperature: _temperature);
-
-  /// The live-preview filter — built from the same 3x4 RGB matrix the OpenCV
-  /// pipeline applies, so the preview matches the compiled page exactly.
-  ColorFilter get _previewFilter {
-    final m = _colorAdjust.rgbMatrix();
-    return ColorFilter.matrix([
-      m[0], m[1], m[2], 0, m[3],
-      m[4], m[5], m[6], 0, m[7],
-      m[8], m[9], m[10], 0, m[11],
-      0, 0, 0, 1, 0,
-    ]);
-  }
+        contrast: _contrast,
+        saturation: _saturation,
+        temperature: _temperature,
+        brightness: _brightness,
+        highlights: _highlights,
+        shadows: _shadows,
+        blacks: _blacks,
+        whites: _whites,
+      );
 
   void _movePoint(int index, double nx, double ny) => setState(() {
         final pts = List<NormPoint>.from(_grid.points);
@@ -240,10 +300,10 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
                       clipBehavior: Clip.none,
                       children: [
                         Positioned.fill(
-                          child: ColorFiltered(
-                            colorFilter: _previewFilter,
-                            child: Image.memory(_basePng, fit: BoxFit.fill),
-                          ),
+                          // gaplessPlayback avoids a white flash each time
+                          // the engine swaps in a fresh color preview.
+                          child: Image.memory(_tonedPng ?? _basePng,
+                              fit: BoxFit.fill, gaplessPlayback: true),
                         ),
                         Positioned.fill(
                           child: CustomPaint(
@@ -398,35 +458,56 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
   }
 
   Widget _colorToolbar(AppLocalizations l10n) {
+    // (key, label, value, min, max, percent display, setter)
+    final sliders = <(String, String, double, double, double, bool,
+        void Function(double))>[
+      ('wc-contrast', l10n.worldClipContrast, _contrast, 0.5, 1.5, true,
+          (v) => _contrast = v),
+      ('wc-saturation', l10n.worldClipSaturation, _saturation, 0, 2, true,
+          (v) => _saturation = v),
+      ('wc-temperature', l10n.worldClipTemperature, _temperature, -1, 1, false,
+          (v) => _temperature = v),
+      ('wc-brightness', l10n.worldClipBrightness, _brightness, -1, 1, false,
+          (v) => _brightness = v),
+      ('wc-highlights', l10n.worldClipHighlights, _highlights, -1, 1, false,
+          (v) => _highlights = v),
+      ('wc-shadows', l10n.worldClipShadows, _shadows, -1, 1, false,
+          (v) => _shadows = v),
+      ('wc-blacks', l10n.worldClipBlacks, _blacks, -1, 1, false,
+          (v) => _blacks = v),
+      ('wc-whites', l10n.worldClipWhites, _whites, -1, 1, false,
+          (v) => _whites = v),
+    ];
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _colorSlider(
-          key: const ValueKey('wc-contrast'),
-          label: l10n.worldClipContrast,
-          value: _contrast,
-          min: 0.5,
-          max: 1.5,
-          display: '${(_contrast * 100).round()}%',
-          onChanged: (v) => setState(() => _contrast = v),
-        ),
-        _colorSlider(
-          key: const ValueKey('wc-saturation'),
-          label: l10n.worldClipSaturation,
-          value: _saturation,
-          min: 0,
-          max: 2,
-          display: '${(_saturation * 100).round()}%',
-          onChanged: (v) => setState(() => _saturation = v),
-        ),
-        _colorSlider(
-          key: const ValueKey('wc-temperature'),
-          label: l10n.worldClipTemperature,
-          value: _temperature,
-          min: -1,
-          max: 1,
-          display: (_temperature * 100).round().toString(),
-          onChanged: (v) => setState(() => _temperature = v),
+        // More sliders than fit a phone toolbar — scroll within a fixed cap
+        // so the image preview keeps most of the screen.
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 240),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final (key, label, value, min, max, percent, set)
+                    in sliders)
+                  _colorSlider(
+                    key: ValueKey(key),
+                    label: label,
+                    value: value,
+                    min: min,
+                    max: max,
+                    display: percent
+                        ? '${(value * 100).round()}%'
+                        : (value * 100).round().toString(),
+                    onChanged: (v) {
+                      setState(() => set(v));
+                      _refreshColorPreview();
+                    },
+                  ),
+              ],
+            ),
+          ),
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -440,7 +521,10 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
             IconButton(
               tooltip: l10n.worldClipResetColor,
               icon: const Icon(Icons.format_color_reset),
-              onPressed: () => setState(_resetColor),
+              onPressed: () {
+                setState(_resetColor);
+                _refreshColorPreview();
+              },
             ),
             FilledButton(
               key: const ValueKey('wc-color-done'),

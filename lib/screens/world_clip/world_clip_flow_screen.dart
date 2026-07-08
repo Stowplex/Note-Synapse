@@ -11,12 +11,14 @@ import '../../services/world_clip/video_source.dart';
 import '../../services/world_clip/screen_capture_service.dart';
 import '../../services/world_clip/frame_extractor.dart';
 import '../../services/world_clip/frame_selector.dart';
+import '../../services/world_clip/edge_detector.dart';
 import '../../services/world_clip/frame_correction.dart';
 import '../../services/world_clip/clip_project_store.dart';
 import '../../services/world_clip/clip_compiler.dart';
 import '../../services/world_clip/models/clip_project.dart';
 import '../../services/world_clip/models/clip_spec.dart';
 import '../../services/world_clip/models/correction.dart';
+import '../../services/world_clip/models/mesh_grid.dart';
 import 'world_clip_timeline.dart';
 import 'clip_review_screen.dart';
 import 'correction_editor.dart';
@@ -47,6 +49,7 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   bool _detecting = false;
   String _detectLabel = '';
   bool _cloning = false; // batch clone-edits in progress (review stage)
+  String _cloneLabel = ''; // progress label for the clone overlay
   bool _compiling = false; // building the note (PDF/inline) in progress
   bool _capturing = false; // screen recording in progress (source stage)
   // Shared timeline-thumbnail cache: warmed in the background and reused by the
@@ -382,7 +385,10 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
         .toList();
     if (targets.isEmpty) return;
 
-    setState(() => _cloning = true);
+    setState(() {
+      _cloning = true;
+      _cloneLabel = '';
+    });
     try {
       for (final i in targets) {
         final ts = _orderedTags[i];
@@ -401,6 +407,67 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Cloned edits to ${targets.length} page(s)')),
+      );
+    }
+  }
+
+  /// Batch "clone edit actions": copies [sourceIndex]'s rotation and color
+  /// adjustments, but re-runs document auto-detection on each target's own
+  /// (rotated) frame instead of pasting the source's literal keystone quad —
+  /// pages framed slightly differently each get their own fitted crop.
+  Future<void> _cloneEditActions(int sourceIndex, Set<int> targetIndices) async {
+    if (sourceIndex < 0 || sourceIndex >= _orderedTags.length) return;
+    final source = _correctionsFor(_orderedTags[sourceIndex]);
+    final rotation = source
+        .whereType<RotateCorrection>()
+        .fold<double>(0, (sum, r) => sum + r.degrees);
+    final colors = source.whereType<ColorAdjustCorrection>().toList();
+    final targets = targetIndices
+        .where((i) => i >= 0 && i < _orderedTags.length && i != sourceIndex)
+        .toList();
+    if (targets.isEmpty) return;
+
+    setState(() {
+      _cloning = true;
+      _cloneLabel = '';
+    });
+    final engine = getIt<FrameCorrection>();
+    try {
+      for (var n = 0; n < targets.length; n++) {
+        setState(
+            () => _cloneLabel = 'Auto-detecting ${n + 1}/${targets.length}');
+        // Yield a frame so the progress overlay repaints before the
+        // synchronous OpenCV detection blocks the UI isolate.
+        await Future<void>.delayed(Duration.zero);
+        final ts = _orderedTags[targets[n]];
+        final full = await _extractor!.fullFrameAt(ts);
+        // Detect on the rotated frame, exactly like "Auto edges" in the
+        // editor does after the same rotation.
+        final base = rotation % 360 == 0
+            ? full
+            : await engine.apply(full, [RotateCorrection(degrees: rotation)]);
+        final grid = detectDocumentQuad(base);
+        _setCorrectionsFor(ts, [
+          if (rotation % 360 != 0) RotateCorrection(degrees: rotation),
+          MeshDewarpCorrection(
+              grid: grid ?? MeshGrid.identity(rows: 1, cols: 1)),
+          // Deep-copy so each clip owns its color adjustments.
+          for (final c in colors)
+            Correction.fromJson(c.toJson()),
+        ]);
+        final corrected = await _renderCorrectedPage(ts);
+        if (!mounted) return;
+        final current = _orderedTags.indexOf(ts);
+        if (current >= 0) setState(() => _reviewPages[current] = corrected);
+      }
+      await _store!.save(_project!);
+    } finally {
+      if (mounted) setState(() => _cloning = false);
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Auto-edited ${targets.length} page(s)')),
       );
     }
   }
@@ -574,10 +641,11 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
                 },
                 onEdit: _editClip,
                 onCloneEdits: _cloneEdits,
+                onCloneEditActions: _cloneEditActions,
                 onCompilePdf: () => _compile(ClipOutputFormat.pdf),
                 onCompileImages: () => _compile(ClipOutputFormat.inlineImages),
               ),
-                  if (_cloning) _progressOverlay(),
+                  if (_cloning) _progressOverlay(label: _cloneLabel),
                   if (_compiling) _progressOverlay(label: l10n.worldClipCompile),
                 ],
               ),
