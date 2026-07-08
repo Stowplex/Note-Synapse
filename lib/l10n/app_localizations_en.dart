@@ -414,6 +414,109 @@ class AppLocalizationsEn extends AppLocalizations {
   String get worldClipCloneEditActions => 'Clone edit actions';
 
   @override
+  String get worldClipSelectMultiple => 'Select multiple';
+
+  @override
+  String get worldClipDoneSelecting => 'Done selecting';
+
+  @override
+  String worldClipNSelected(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String get worldClipSelectAll => 'Select all';
+
+  @override
+  String get worldClipDeselectAll => 'Deselect all';
+
+  @override
+  String get worldClipEdit => 'Edit';
+
+  @override
+  String get worldClipCloneEdits => 'Clone edits';
+
+  @override
+  String worldClipCloneToSelected(int count) {
+    return 'to $count selected';
+  }
+
+  @override
+  String get worldClipSelectPagesFirst => 'select pages first';
+
+  @override
+  String get worldClipDelete => 'Delete';
+
+  @override
+  String get worldClipLevel => 'Level';
+
+  @override
+  String get worldClipRotateLeft => 'Rotate left';
+
+  @override
+  String get worldClipRotateRight => 'Rotate right';
+
+  @override
+  String get worldClipAutoEdges => 'Auto edges';
+
+  @override
+  String get worldClipAddHorizontalCrease => 'Add horizontal crease';
+
+  @override
+  String get worldClipAddVerticalCrease => 'Add vertical crease';
+
+  @override
+  String get worldClipResetTool => 'Reset';
+
+  @override
+  String get worldClipDone => 'Done';
+
+  @override
+  String get worldClipNoEdgesDetected => 'No document edges detected';
+
+  @override
+  String get worldClipNoFrames => 'No frames';
+
+  @override
+  String get worldClipSetKeyFrame => 'Set key frame';
+
+  @override
+  String get worldClipRemoveKeyFrame => 'Remove key frame';
+
+  @override
+  String get worldClipAutoButton => 'Auto';
+
+  @override
+  String worldClipSuggestedKeyFrames(int count) {
+    return 'Suggested $count key frame(s)';
+  }
+
+  @override
+  String worldClipAnalyzing(int current, int total) {
+    return 'Analyzing $current/$total';
+  }
+
+  @override
+  String worldClipClonedEdits(int count) {
+    return 'Cloned edits to $count page(s)';
+  }
+
+  @override
+  String worldClipAutoDetecting(int current, int total) {
+    return 'Auto-detecting $current/$total';
+  }
+
+  @override
+  String worldClipAutoEdited(int count) {
+    return 'Auto-edited $count page(s)';
+  }
+
+  @override
+  String worldClipClipsCount(int count) {
+    return '$count clips';
+  }
+
+  @override
   String worldClipSkippedRawImages(int count) {
     return 'Skipped $count RAW image(s) — RAW is not supported';
   }

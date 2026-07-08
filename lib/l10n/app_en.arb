@@ -122,6 +122,97 @@
   "worldClipBlacks": "Blacks",
   "worldClipWhites": "Whites",
   "worldClipCloneEditActions": "Clone edit actions",
+  "worldClipSelectMultiple": "Select multiple",
+  "worldClipDoneSelecting": "Done selecting",
+  "worldClipNSelected": "{count} selected",
+  "@worldClipNSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipSelectAll": "Select all",
+  "worldClipDeselectAll": "Deselect all",
+  "worldClipEdit": "Edit",
+  "worldClipCloneEdits": "Clone edits",
+  "worldClipCloneToSelected": "to {count} selected",
+  "@worldClipCloneToSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipSelectPagesFirst": "select pages first",
+  "worldClipDelete": "Delete",
+  "worldClipLevel": "Level",
+  "worldClipRotateLeft": "Rotate left",
+  "worldClipRotateRight": "Rotate right",
+  "worldClipAutoEdges": "Auto edges",
+  "worldClipAddHorizontalCrease": "Add horizontal crease",
+  "worldClipAddVerticalCrease": "Add vertical crease",
+  "worldClipResetTool": "Reset",
+  "worldClipDone": "Done",
+  "worldClipNoEdgesDetected": "No document edges detected",
+  "worldClipNoFrames": "No frames",
+  "worldClipSetKeyFrame": "Set key frame",
+  "worldClipRemoveKeyFrame": "Remove key frame",
+  "worldClipAutoButton": "Auto",
+  "worldClipSuggestedKeyFrames": "Suggested {count} key frame(s)",
+  "@worldClipSuggestedKeyFrames": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipAnalyzing": "Analyzing {current}/{total}",
+  "@worldClipAnalyzing": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipClonedEdits": "Cloned edits to {count} page(s)",
+  "@worldClipClonedEdits": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipAutoDetecting": "Auto-detecting {current}/{total}",
+  "@worldClipAutoDetecting": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipAutoEdited": "Auto-edited {count} page(s)",
+  "@worldClipAutoEdited": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipClipsCount": "{count} clips",
+  "@worldClipClipsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "worldClipSkippedRawImages": "Skipped {count} RAW image(s) — RAW is not supported",
   "@worldClipSkippedRawImages": {
     "placeholders": {

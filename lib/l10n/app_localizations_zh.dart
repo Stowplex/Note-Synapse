@@ -401,6 +401,109 @@ class AppLocalizationsZh extends AppLocalizations {
   String get worldClipCloneEditActions => '克隆编辑操作';
 
   @override
+  String get worldClipSelectMultiple => '多选';
+
+  @override
+  String get worldClipDoneSelecting => '完成选择';
+
+  @override
+  String worldClipNSelected(int count) {
+    return '已选择 $count 项';
+  }
+
+  @override
+  String get worldClipSelectAll => '全选';
+
+  @override
+  String get worldClipDeselectAll => '取消全选';
+
+  @override
+  String get worldClipEdit => '编辑';
+
+  @override
+  String get worldClipCloneEdits => '克隆编辑';
+
+  @override
+  String worldClipCloneToSelected(int count) {
+    return '应用到 $count 个已选页面';
+  }
+
+  @override
+  String get worldClipSelectPagesFirst => '请先选择页面';
+
+  @override
+  String get worldClipDelete => '删除';
+
+  @override
+  String get worldClipLevel => '校平';
+
+  @override
+  String get worldClipRotateLeft => '向左旋转';
+
+  @override
+  String get worldClipRotateRight => '向右旋转';
+
+  @override
+  String get worldClipAutoEdges => '自动检测边缘';
+
+  @override
+  String get worldClipAddHorizontalCrease => '添加水平折痕';
+
+  @override
+  String get worldClipAddVerticalCrease => '添加垂直折痕';
+
+  @override
+  String get worldClipResetTool => '重置';
+
+  @override
+  String get worldClipDone => '完成';
+
+  @override
+  String get worldClipNoEdgesDetected => '未检测到文档边缘';
+
+  @override
+  String get worldClipNoFrames => '没有帧';
+
+  @override
+  String get worldClipSetKeyFrame => '设为关键帧';
+
+  @override
+  String get worldClipRemoveKeyFrame => '移除关键帧';
+
+  @override
+  String get worldClipAutoButton => '自动';
+
+  @override
+  String worldClipSuggestedKeyFrames(int count) {
+    return '已推荐 $count 个关键帧';
+  }
+
+  @override
+  String worldClipAnalyzing(int current, int total) {
+    return '分析中 $current/$total';
+  }
+
+  @override
+  String worldClipClonedEdits(int count) {
+    return '已将编辑克隆到 $count 个页面';
+  }
+
+  @override
+  String worldClipAutoDetecting(int current, int total) {
+    return '自动检测中 $current/$total';
+  }
+
+  @override
+  String worldClipAutoEdited(int count) {
+    return '已自动编辑 $count 个页面';
+  }
+
+  @override
+  String worldClipClipsCount(int count) {
+    return '$count 个剪辑';
+  }
+
+  @override
   String worldClipSkippedRawImages(int count) {
     return '已跳过 $count 张 RAW 图片（不支持 RAW 格式）';
   }

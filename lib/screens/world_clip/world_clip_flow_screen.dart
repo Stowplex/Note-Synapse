@@ -238,7 +238,8 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     final sampled = List<int>.from(_timestamps);
     setState(() {
       _detecting = true;
-      _detectLabel = 'Analyzing 0/${sampled.length}';
+      _detectLabel =
+          AppLocalizations.of(context)!.worldClipAnalyzing(0, sampled.length);
     });
     final features = <FrameFeature>[];
     Uint8List? prevPng;
@@ -249,7 +250,8 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
             timestampMs: sampled[i], framePng: png, prevFramePng: prevPng));
         prevPng = png;
         if (!mounted) return;
-        setState(() => _detectLabel = 'Analyzing ${i + 1}/${sampled.length}');
+        setState(() => _detectLabel = AppLocalizations.of(context)!
+            .worldClipAnalyzing(i + 1, sampled.length));
       }
     } catch (_) {
       // Feature extraction failed (e.g. decode hiccup) — abort gracefully.
@@ -273,7 +275,9 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     });
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Suggested ${picks.length} key frame(s)')),
+        SnackBar(
+            content: Text(AppLocalizations.of(context)!
+                .worldClipSuggestedKeyFrames(picks.length))),
       );
     }
   }
@@ -406,7 +410,9 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cloned edits to ${targets.length} page(s)')),
+        SnackBar(
+            content: Text(AppLocalizations.of(context)!
+                .worldClipClonedEdits(targets.length))),
       );
     }
   }
@@ -434,8 +440,8 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     final engine = getIt<FrameCorrection>();
     try {
       for (var n = 0; n < targets.length; n++) {
-        setState(
-            () => _cloneLabel = 'Auto-detecting ${n + 1}/${targets.length}');
+        setState(() => _cloneLabel = AppLocalizations.of(context)!
+            .worldClipAutoDetecting(n + 1, targets.length));
         // Yield a frame so the progress overlay repaints before the
         // synchronous OpenCV detection blocks the UI isolate.
         await Future<void>.delayed(Duration.zero);
@@ -467,7 +473,8 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Auto-edited ${targets.length} page(s)')),
+            content: Text(AppLocalizations.of(context)!
+                .worldClipAutoEdited(targets.length))),
       );
     }
   }
@@ -504,8 +511,9 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
                 color: Colors.black,
                 width: double.infinity,
                 child: _selectedTs == null
-                    ? const Center(child: Text('No frames',
-                        style: TextStyle(color: Colors.white70)))
+                    ? Center(
+                        child: Text(l10n.worldClipNoFrames,
+                            style: const TextStyle(color: Colors.white70)))
                     : _LargePreview(
                         timestampMs: _selectedTs!,
                         builder: (ts) =>
@@ -525,15 +533,15 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
                           : _toggleSelectedKeyframe,
                       icon: Icon(selectedTagged ? Icons.key_off : Icons.key),
                       label: Text(selectedTagged
-                          ? 'Remove key frame'
-                          : 'Set key frame'),
+                          ? l10n.worldClipRemoveKeyFrame
+                          : l10n.worldClipSetKeyFrame),
                     ),
                   ),
                   const SizedBox(width: 8),
                   OutlinedButton.icon(
                     onPressed: _detecting ? null : _autoDetectKeyframes,
                     icon: const Icon(Icons.auto_awesome),
-                    label: const Text('Auto'),
+                    label: Text(l10n.worldClipAutoButton),
                   ),
                 ],
               ),

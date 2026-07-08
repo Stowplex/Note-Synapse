@@ -194,7 +194,9 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
     });
     if (quad == null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No document edges detected')),
+        SnackBar(
+            content:
+                Text(AppLocalizations.of(context)!.worldClipNoEdgesDetected)),
       );
     }
   }
@@ -381,7 +383,8 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
         Row(
           children: [
             Expanded(
-              child: Text('Level: ${_fineDeg.toStringAsFixed(0)}°',
+              child: Text(
+                  '${l10n.worldClipLevel}: ${_fineDeg.toStringAsFixed(0)}°',
                   style: Theme.of(context).textTheme.labelSmall),
             ),
           ],
@@ -406,27 +409,27 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
                 child: Row(
                   children: [
                     IconButton(
-                      tooltip: 'Rotate left',
+                      tooltip: l10n.worldClipRotateLeft,
                       icon: const Icon(Icons.rotate_left),
                       onPressed: () => _rotate(-1),
                     ),
                     IconButton(
-                      tooltip: 'Rotate right',
+                      tooltip: l10n.worldClipRotateRight,
                       icon: const Icon(Icons.rotate_right),
                       onPressed: () => _rotate(1),
                     ),
                     TextButton.icon(
                       onPressed: _autoDetect,
                       icon: const Icon(Icons.auto_fix_high),
-                      label: const Text('Auto edges'),
+                      label: Text(l10n.worldClipAutoEdges),
                     ),
                     IconButton(
-                      tooltip: 'Add horizontal crease',
+                      tooltip: l10n.worldClipAddHorizontalCrease,
                       icon: const Icon(Icons.table_rows),
                       onPressed: () => _addCrease(horizontal: true),
                     ),
                     IconButton(
-                      tooltip: 'Add vertical crease',
+                      tooltip: l10n.worldClipAddVerticalCrease,
                       icon: const Icon(Icons.view_column),
                       onPressed: () => _addCrease(horizontal: false),
                     ),
@@ -437,7 +440,7 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
                       onPressed: () => setState(() => _colorPanel = true),
                     ),
                     IconButton(
-                      tooltip: 'Reset',
+                      tooltip: l10n.worldClipResetTool,
                       icon: const Icon(Icons.restart_alt),
                       onPressed: _reset,
                     ),
@@ -449,7 +452,7 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
             FilledButton(
               key: const ValueKey('wc-mesh-done'),
               onPressed: _done,
-              child: const Text('Done'),
+              child: Text(l10n.worldClipDone),
             ),
           ],
         ),
@@ -529,7 +532,7 @@ class _CorrectionEditorState extends State<CorrectionEditor> {
             FilledButton(
               key: const ValueKey('wc-color-done'),
               onPressed: _done,
-              child: const Text('Done'),
+              child: Text(l10n.worldClipDone),
             ),
           ],
         ),

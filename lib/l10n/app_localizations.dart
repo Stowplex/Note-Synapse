@@ -836,6 +836,180 @@ abstract class AppLocalizations {
   /// **'Clone edit actions'**
   String get worldClipCloneEditActions;
 
+  /// No description provided for @worldClipSelectMultiple.
+  ///
+  /// In en, this message translates to:
+  /// **'Select multiple'**
+  String get worldClipSelectMultiple;
+
+  /// No description provided for @worldClipDoneSelecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Done selecting'**
+  String get worldClipDoneSelecting;
+
+  /// No description provided for @worldClipNSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String worldClipNSelected(int count);
+
+  /// No description provided for @worldClipSelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get worldClipSelectAll;
+
+  /// No description provided for @worldClipDeselectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Deselect all'**
+  String get worldClipDeselectAll;
+
+  /// No description provided for @worldClipEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get worldClipEdit;
+
+  /// No description provided for @worldClipCloneEdits.
+  ///
+  /// In en, this message translates to:
+  /// **'Clone edits'**
+  String get worldClipCloneEdits;
+
+  /// No description provided for @worldClipCloneToSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'to {count} selected'**
+  String worldClipCloneToSelected(int count);
+
+  /// No description provided for @worldClipSelectPagesFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'select pages first'**
+  String get worldClipSelectPagesFirst;
+
+  /// No description provided for @worldClipDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get worldClipDelete;
+
+  /// No description provided for @worldClipLevel.
+  ///
+  /// In en, this message translates to:
+  /// **'Level'**
+  String get worldClipLevel;
+
+  /// No description provided for @worldClipRotateLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'Rotate left'**
+  String get worldClipRotateLeft;
+
+  /// No description provided for @worldClipRotateRight.
+  ///
+  /// In en, this message translates to:
+  /// **'Rotate right'**
+  String get worldClipRotateRight;
+
+  /// No description provided for @worldClipAutoEdges.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto edges'**
+  String get worldClipAutoEdges;
+
+  /// No description provided for @worldClipAddHorizontalCrease.
+  ///
+  /// In en, this message translates to:
+  /// **'Add horizontal crease'**
+  String get worldClipAddHorizontalCrease;
+
+  /// No description provided for @worldClipAddVerticalCrease.
+  ///
+  /// In en, this message translates to:
+  /// **'Add vertical crease'**
+  String get worldClipAddVerticalCrease;
+
+  /// No description provided for @worldClipResetTool.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get worldClipResetTool;
+
+  /// No description provided for @worldClipDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get worldClipDone;
+
+  /// No description provided for @worldClipNoEdgesDetected.
+  ///
+  /// In en, this message translates to:
+  /// **'No document edges detected'**
+  String get worldClipNoEdgesDetected;
+
+  /// No description provided for @worldClipNoFrames.
+  ///
+  /// In en, this message translates to:
+  /// **'No frames'**
+  String get worldClipNoFrames;
+
+  /// No description provided for @worldClipSetKeyFrame.
+  ///
+  /// In en, this message translates to:
+  /// **'Set key frame'**
+  String get worldClipSetKeyFrame;
+
+  /// No description provided for @worldClipRemoveKeyFrame.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove key frame'**
+  String get worldClipRemoveKeyFrame;
+
+  /// No description provided for @worldClipAutoButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto'**
+  String get worldClipAutoButton;
+
+  /// No description provided for @worldClipSuggestedKeyFrames.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested {count} key frame(s)'**
+  String worldClipSuggestedKeyFrames(int count);
+
+  /// No description provided for @worldClipAnalyzing.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyzing {current}/{total}'**
+  String worldClipAnalyzing(int current, int total);
+
+  /// No description provided for @worldClipClonedEdits.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloned edits to {count} page(s)'**
+  String worldClipClonedEdits(int count);
+
+  /// No description provided for @worldClipAutoDetecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-detecting {current}/{total}'**
+  String worldClipAutoDetecting(int current, int total);
+
+  /// No description provided for @worldClipAutoEdited.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-edited {count} page(s)'**
+  String worldClipAutoEdited(int count);
+
+  /// No description provided for @worldClipClipsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} clips'**
+  String worldClipClipsCount(int count);
+
   /// No description provided for @worldClipSkippedRawImages.
   ///
   /// In en, this message translates to:
