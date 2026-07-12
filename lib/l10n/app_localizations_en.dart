@@ -712,7 +712,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get exitMultiSelectMode => 'Exit Multi-Select Mode';
 
   @override
-  String get searchNotes => 'Search notes...';
+  String get searchNotes => 'Search notes';
 
   @override
   String get allNotes => 'All Notes';
@@ -5080,4 +5080,29 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get requestMobileSite => 'Request mobile site';
+
+  @override
+  String get webLoginAppsWithAccess => 'Apps with access';
+
+  @override
+  String get revoke => 'Revoke';
+
+  @override
+  String get revokeAppAccessTitle => 'Revoke access';
+
+  @override
+  String revokeAppAccessConfirm(String appName, String domain) {
+    return 'Remove \"$appName\" access to your $domain login?';
+  }
+
+  @override
+  String get selectNotes => 'Select notes';
+
+  @override
+  String get selectAction => 'Select';
+
+  @override
+  String addWithCount(int count) {
+    return 'Add ($count)';
+  }
 }

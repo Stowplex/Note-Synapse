@@ -64,15 +64,24 @@
        * headers: object - Key/value pairs of request headers (values must be strings)
        * body: string - Raw text payload (used when `json` is not provided)
        * json: any - JavaScript object/array automatically JSON-encoded; takes precedence over `body`
+       * bodyBinary: string - base64 raw binary request body (Content-Type defaults to application/octet-stream)
+       * multipart: array - Build a multipart/form-data body. Each element: { name: string, filename?: string, mimeType?: string, and ONE of: text (string) | dataBase64 (base64 string) | attachmentPath (a note attachment path - streamed from disk, no base64 needed) }. Sets Content-Type automatically. Ideal for file uploads.
+       * session: boolean - Attach the user's saved login cookies for the URL's domain (see Synapse.session). PERMISSION-GATED: the first use prompts the user to approve this app's access to that login. Cookie values are added on the Dart side and never exposed to your code. Use this to call a site as the logged-in user.
+       * followRedirects: boolean - Defaults to true. Set false to receive a 3xx response as-is (inspect `redirectedTo` / the Location header, e.g. to detect an expired session redirecting to a login page).
+       * responseMode: 'auto' | 'text' | 'binary' | 'tempFile' - How to return the body. 'auto' (default) returns text for text-like MIME types and base64 otherwise. 'text'/'binary' force that form. 'tempFile' saves the bytes to a synapsetemp:// URI (returned as `uri`) instead of copying them through - use for large or binary downloads.
      Response format:
        {
          status: 'success' | 'error',
          statusCode?: number,      // Present when the request reached the server
-         error?: string,           // Present when status === 'error'
-         content?: {
+         error?: string,           // Present when status === 'error'. For session:true: 'permission_denied' (user declined) or 'permission_required' (no approval UI available)
+         headers?: object,         // Response headers (name -> value)
+         redirectedTo?: string,    // Final/redirect URL when a redirect occurred
+         content?: {               // Present unless responseMode is 'tempFile'
            mime: string,           // MIME type returned by the server
-           data: string            // UTF-8 text when mime starts with 'text/', otherwise base64 encoded string
-         }
+           data: string            // UTF-8 text or base64 (see responseMode)
+         },
+         uri?: string,             // Present when responseMode is 'tempFile': a synapsetemp:// URI to the bytes
+         mime?: string             // Present alongside uri
        }
      Usage notes:
        * Passing a plain headers object as the second argument is still supported; it will be treated as `{headers: ...}`.
@@ -80,6 +89,7 @@
        * When providing a text `body`, the Content-Type defaults to `text/plain; charset=utf-8` if unspecified.
        * Always handle the possibility of `status === 'error'`.
        * When `content.mime` does not start with `text/`, decode the base64 string before using binary data.
+       * Use `session: true` for ordinary authenticated API calls; only reach for `originFetch` when a request needs a real in-browser context that plain HTTP cannot satisfy.
    - Synapse.fetchWebPage(url: string) - Fetch a webpage and extract its content as markdown. This function loads the webpage, and converts it to markdown format, while stripping off scripts, and styles tag.
      Param format: a string URL (must be HTTP or HTTPS)
      Response format:
@@ -96,6 +106,44 @@
        * This function fetches the webpage, and converts it to markdown.
        * The markdown field contains the cleaned, readable content in markdown format, which is ideal for further processing or display.
        * The function may throw an error if the URL is invalid, the page cannot be loaded, or WebView is not supported on the platform.
+   - Synapse.originFetch(url: string, options?: object) - Perform an HTTP request from INSIDE a real browser (WebView) context loaded at the target's origin, so the browser's cookie jar, session, and Sec-Fetch semantics apply. Use this (instead of proxyFetch) for resources that require a real browser context - e.g. endpoints protected by a login session the user established via an in-app browser login, or hosts that reject plain HTTP clients.
+     Param format:
+       url: string                    // HTTP(S) URL to request
+       options?: {
+         origin?: string,             // Origin to load the WebView at (default: the URL's own origin). The request can only read the response body when it is same-origin with this.
+         method?: string,             // HTTP method (default 'GET')
+         headers?: object,            // Request headers
+         responseMode?: 'tempFile' | 'binary' | 'text'  // default 'tempFile'
+       }
+     Response format:
+       {
+         status: 'success' | 'error',
+         error?: string,              // Present when failed
+         statusCode?: number,         // HTTP status of the response
+         mime?: string,               // Response content type
+         uri?: string,                // (responseMode 'tempFile') a synapsetemp:// URI to the downloaded bytes - pass to saveNotes/updateNotes/chatAI
+         content?: { mime: string, data: string }  // (responseMode 'text' | 'binary') text string or base64
+       }
+     Usage notes:
+       * The in-page fetch can only READ the response body when it is same-origin with `origin` (or the server sends CORS headers). For same-origin authenticated resources this is the reliable way to fetch with the user's session.
+       * Cross-origin responses without CORS, and cross-origin redirects, cannot be read by design and return an error - load the WebView at the correct origin.
+       * Prefer responseMode 'tempFile' for large or binary downloads (audio, PDFs): the bytes are saved to a synapsetemp:// URI instead of being copied through the bridge.
+       * Use proxyFetch for ordinary API calls; reach for originFetch only when a browser session/context is required.
+   - Synapse.downloadFile(url: string, options?: object) => { status: 'success' | 'error', statusCode?, mime?, uri?, bytes?, error? } - Download an authenticated file using the user's LIVE saved-login cookies (freshest available), following redirects, streaming the bytes to a synapsetemp:// URI (returned as `uri`). PERMISSION-GATED by the same per-app+domain grant as session requests. options: { headers?: object } to add/override request headers. Errors: 'permission_denied'/'permission_required' (grant), 'auth_required' (the server returned a login page instead of the file). Use for large login-gated downloads (e.g. a generated media file on a login-protected CDN); save the returned uri via saveNotes attachments.
+   - Synapse.session.* - Use a web login the user established inside the app to make authenticated requests to a site (e.g. a service with no public API). Cookies stay on the Dart side; combine with proxyFetch/originFetch to call the site as the logged-in user.
+     - Synapse.session.status(domainOrUrl: string) => { success, loggedIn: boolean, domain: string, savedAt?: string }
+         Check whether a saved login exists for a domain. No permission needed. Call this first.
+     - Synapse.session.requestLogin({ url: string }) => { success, loggedIn: boolean, domain: string, error?: string }
+         Open an in-app browser at `url` so the user can sign in; the session is captured automatically on success. Returns error 'no_ui' if called with no UI available (e.g. a background tool run) — in that case ask the user to open the app's login screen. Call when status() reports loggedIn=false.
+     - Synapse.session.getCookies(domainOrUrl: string) => { success, domain: string, cookies?: [{ name, value, domain?, path? }], error?: string }
+         Read the saved cookies for a domain. PERMISSION-GATED: the first call prompts the user to approve this app's access to that login; once approved it is remembered. Errors: 'permission_denied' (user declined), 'permission_required' (approval UI unavailable), 'no_session' (no saved login). Only use when you must compute something from a cookie value in-app; to simply send authenticated requests, prefer proxyFetch with the saved session instead of handling cookie values yourself.
+   - Synapse.crypto.digest(algorithm: string, data: object) => { success, hex?: string, error?: string } - Compute a hash. algorithm is 'sha1' or 'sha256'; data is { text: string } or { base64: string }. Returns the lowercase hex digest. Use for content hashing (e.g. detecting whether a note changed since last sync). The Web Crypto API is unavailable in this environment, so use this instead.
+   - Synapse.exportNotes(noteIds: string[], options?: object) => { success, notes?: [{ id, title, markdown, attachments?: [{ id, path, fileName, mimeType }] }], error?: string } - Render notes to portable Markdown exactly as the app's own share/export does (sub-notes and linked notes inlined). options: { includeSubNotesAndLinkedNotes?: boolean (default true), includeAttachmentList?: boolean (default true) }. Each attachment `path` can be passed to proxyFetch multipart `attachmentPath` to upload the file. Prefer this over reassembling note content from runQuery.
+   - Synapse.pickNotes(options?: object) => { success, notes?: [{ id, title }], cancelled?: boolean, error?: string } - Show a native note picker and return the user's selection AS REFERENCES (ids/titles only, never content). options: { multiSelect?: boolean (default true), title?: string, initialTag?: string, initialQuery?: string, preselectedIds?: string[] }. Use this to let the user choose which notes a plugin should act on without their content entering the AI conversation. Returns error 'no_ui' if no UI is available (e.g. a background task).
+   - Synapse.tasks.* - Schedule your own AI tool to run later, so a long-running remote job can finish even after this app's UI is closed (e.g. poll a generation to completion). The scheduled tool runs headlessly; have it do its work and either reschedule itself or stop.
+     - Synapse.tasks.schedule({ tool: string, params?: object, delaySeconds?: number, maxRuns?: number }) => { success, taskId?: string, error?: string } - Run `tool` (one of THIS app's tool_spec tools) after `delaySeconds` (default 60), repeating every `delaySeconds` until `maxRuns` (default 1) is reached.
+     - Synapse.tasks.cancel(taskId: string) => { success, error? } - Cancel a scheduled task (call this from inside a tool once its job is done).
+     - Synapse.tasks.list() => { success, tasks?: [{ taskId, tool, fireAt, runCount, maxRuns }] } - List this app's scheduled tasks.
    - Synapse.readAttachment(attachmentPath: string) - Read an attachment file and return its base64 encoded data
      Param format: a string path to an attachment file (must exist in database)
      Response format: 

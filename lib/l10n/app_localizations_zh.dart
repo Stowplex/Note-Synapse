@@ -693,7 +693,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get exitMultiSelectMode => '退出多选模式';
 
   @override
-  String get searchNotes => '搜索笔记...';
+  String get searchNotes => '搜索笔记';
 
   @override
   String get allNotes => '所有笔记';
@@ -4827,4 +4827,29 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get requestMobileSite => '请求移动版网站';
+
+  @override
+  String get webLoginAppsWithAccess => '有访问权限的应用';
+
+  @override
+  String get revoke => '撤销';
+
+  @override
+  String get revokeAppAccessTitle => '撤销访问权限';
+
+  @override
+  String revokeAppAccessConfirm(String appName, String domain) {
+    return '移除“$appName”对你 $domain 登录的访问权限？';
+  }
+
+  @override
+  String get selectNotes => '选择笔记';
+
+  @override
+  String get selectAction => '选择';
+
+  @override
+  String addWithCount(int count) {
+    return '添加（$count）';
+  }
 }

@@ -7,7 +7,7 @@ import 'database_service.dart';
 import 'service_locator.dart';
 
 /// Type of approval being requested.
-enum ApprovalType { sqlWrite, noteModification, noteDeletion }
+enum ApprovalType { sqlWrite, noteModification, noteDeletion, sessionAccess }
 
 /// Encapsulates details of an approval request.
 class ApprovalRequest {
@@ -146,6 +146,25 @@ class ApprovalRequest {
       details: details,
       warningMessage: 'This action cannot be undone.',
       sessionApprovalLabel: 'Allow for this session',
+    );
+  }
+
+  /// Create a request to let an app use a saved web-login session for [domain].
+  factory ApprovalRequest.sessionAccess({
+    required String domain,
+    String? source,
+  }) {
+    return ApprovalRequest(
+      type: ApprovalType.sessionAccess,
+      title: 'Allow use of your $domain login?',
+      description: source != null
+          ? '$source wants to use your saved login for:'
+          : 'This app wants to use your saved login for:',
+      details: domain,
+      warningMessage:
+          'The app will be able to make requests as you on $domain and any of '
+          'its subdomains, and to read that login’s cookies. Access lasts '
+          'until you remove the saved $domain login in Web Logins settings.',
     );
   }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../services/app_domain_grant_service.dart';
+import '../../services/database_service.dart';
 import '../../services/service_locator.dart';
 import '../../services/web_session_service.dart';
 import 'web_login_browser_screen.dart';
@@ -16,6 +18,8 @@ class WebLoginsScreen extends StatefulWidget {
 
 class _WebLoginsScreenState extends State<WebLoginsScreen> {
   WebSessionService get _service => getIt<WebSessionService>();
+  AppDomainGrantService get _grants => getIt<AppDomainGrantService>();
+  DatabaseService get _db => getIt<DatabaseService>();
 
   late Future<List<_WebLoginEntry>> _entriesFuture;
 
@@ -29,10 +33,53 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
     final domains = await _service.listDomains();
     // The per-domain reads are independent, so issue them together.
     final sessions = await Future.wait(domains.map(_service.getSession));
+    final grantedApps = await Future.wait(domains.map(_loadGrantedApps));
     return [
       for (var i = 0; i < domains.length; i++)
-        _WebLoginEntry(domain: domains[i], savedAt: sessions[i]?.savedAt),
+        _WebLoginEntry(
+          domain: domains[i],
+          savedAt: sessions[i]?.savedAt,
+          apps: grantedApps[i],
+        ),
     ];
+  }
+
+  /// Resolves the apps granted access to [domain] into displayable entries,
+  /// skipping grants whose app no longer exists.
+  Future<List<_GrantedApp>> _loadGrantedApps(String domain) async {
+    final appUuids = await _grants.appsForDomain(domain);
+    // The per-uuid lookups are independent — resolve them together.
+    final apps = await Future.wait(appUuids.map(_db.getUserAppByUuid));
+    return [
+      for (var i = 0; i < appUuids.length; i++)
+        _GrantedApp(uuid: appUuids[i], name: apps[i]?.name ?? appUuids[i]),
+    ];
+  }
+
+  Future<void> _revokeApp(String domain, _GrantedApp app) async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.revokeAppAccessTitle),
+        content: Text(l10n.revokeAppAccessConfirm(app.name, domain)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l10n.revoke),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await _grants.revoke(app.uuid, domain);
+      if (!mounted) return;
+      _refresh();
+    }
   }
 
   void _refresh() {
@@ -144,15 +191,41 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
                 ),
               ...entries.map(
                 (entry) => Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.cookie_outlined),
-                    title: Text(entry.domain),
-                    subtitle: Text(_formatSavedAt(entry.savedAt)),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      tooltip: l10n.deleteLogin,
-                      onPressed: () => _deleteLogin(entry.domain),
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.cookie_outlined),
+                        title: Text(entry.domain),
+                        subtitle: Text(_formatSavedAt(entry.savedAt)),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          tooltip: l10n.deleteLogin,
+                          onPressed: () => _deleteLogin(entry.domain),
+                        ),
+                      ),
+                      if (entry.apps.isNotEmpty) ...[
+                        const Divider(height: 1),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                          child: Text(
+                            l10n.webLoginAppsWithAccess,
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                        ),
+                        ...entry.apps.map(
+                          (app) => ListTile(
+                            dense: true,
+                            leading: const Icon(Icons.extension_outlined, size: 20),
+                            title: Text(app.name),
+                            trailing: TextButton(
+                              onPressed: () => _revokeApp(entry.domain, app),
+                              child: Text(l10n.revoke),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
@@ -186,8 +259,20 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
 }
 
 class _WebLoginEntry {
-  const _WebLoginEntry({required this.domain, required this.savedAt});
+  const _WebLoginEntry({
+    required this.domain,
+    required this.savedAt,
+    this.apps = const [],
+  });
 
   final String domain;
   final DateTime? savedAt;
+  final List<_GrantedApp> apps;
+}
+
+class _GrantedApp {
+  const _GrantedApp({required this.uuid, required this.name});
+
+  final String uuid;
+  final String name;
 }

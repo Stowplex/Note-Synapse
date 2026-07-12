@@ -2097,5 +2097,24 @@
   "messageNoLongerExists": "消息已不存在",
   "showDetails": "显示详情",
   "forceRefetchImages": "强制重新获取图片",
-  "fetchingImage": "正在获取图片..."
+  "fetchingImage": "正在获取图片...",
+  "webLoginAppsWithAccess": "有访问权限的应用",
+  "revoke": "撤销",
+  "revokeAppAccessTitle": "撤销访问权限",
+  "revokeAppAccessConfirm": "移除“{appName}”对你 {domain} 登录的访问权限？",
+  "@revokeAppAccessConfirm": {
+    "placeholders": {
+      "appName": {"type": "String"},
+      "domain": {"type": "String"}
+    }
+  },
+  "selectNotes": "选择笔记",
+  "searchNotes": "搜索笔记",
+  "selectAction": "选择",
+  "addWithCount": "添加（{count}）",
+  "@addWithCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  }
 }

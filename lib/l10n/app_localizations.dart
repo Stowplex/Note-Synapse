@@ -1349,7 +1349,7 @@ abstract class AppLocalizations {
   /// No description provided for @searchNotes.
   ///
   /// In en, this message translates to:
-  /// **'Search notes...'**
+  /// **'Search notes'**
   String get searchNotes;
 
   /// No description provided for @allNotes.
@@ -8803,6 +8803,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Request mobile site'**
   String get requestMobileSite;
+
+  /// No description provided for @webLoginAppsWithAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Apps with access'**
+  String get webLoginAppsWithAccess;
+
+  /// No description provided for @revoke.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke'**
+  String get revoke;
+
+  /// No description provided for @revokeAppAccessTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke access'**
+  String get revokeAppAccessTitle;
+
+  /// No description provided for @revokeAppAccessConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove \"{appName}\" access to your {domain} login?'**
+  String revokeAppAccessConfirm(String appName, String domain);
+
+  /// No description provided for @selectNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Select notes'**
+  String get selectNotes;
+
+  /// No description provided for @selectAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get selectAction;
+
+  /// No description provided for @addWithCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Add ({count})'**
+  String addWithCount(int count);
 }
 
 class _AppLocalizationsDelegate

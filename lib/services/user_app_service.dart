@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
@@ -10,6 +11,7 @@ import '../models/app_revision.dart';
 import '../models/note.dart';
 import '../models/user_app.dart';
 import 'ai_service.dart';
+import 'app_domain_grant_service.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
 import 'network_provider.dart';
@@ -20,6 +22,7 @@ import 'prompts/registrations/app_prompt_configuration.dart';
 import 'user_app_library_service.dart';
 import 'global_library_service.dart';
 import '../models/generation_context.dart';
+import '../utils/synapse_temp_utils.dart';
 import 'service_locator.dart';
 
 class UserAppService {
@@ -72,6 +75,17 @@ class UserAppService {
 
   // Delete a user app
   Future<void> deleteUserApp(String appId) async {
+    // Best-effort: revoke any session grants this app held so they don't dangle
+    // (and can't be inherited if the uuid is reused). A cleanup failure must not
+    // block the actual deletion, so it is caught separately.
+    try {
+      final app = await _databaseService.getUserApp(appId);
+      if (app != null) {
+        await getIt<AppDomainGrantService>().revokeAllForApp(app.uuid);
+      }
+    } catch (e) {
+      LoggerService.warning('Failed to revoke grants for deleted app: $e');
+    }
     try {
       await _databaseService.deleteUserApp(appId);
     } catch (e) {
@@ -999,6 +1013,203 @@ IMPORTANT:
       } catch (e) {
         LoggerService.warning(
           '[Synapse.fetchWebPage] Error disposing headless webview: $e',
+        );
+      }
+    }
+  }
+
+  /// Performs an HTTP request from inside a headless WebView loaded at [origin]
+  /// (defaults to [url]'s origin), so the platform WebView's cookie jar and
+  /// browser fetch semantics apply. This lets plugins reach resources that
+  /// gate on a real browser context (Sec-Fetch headers, session cookies the
+  /// user established via an in-app login) which plain Dart HTTP cannot satisfy.
+  ///
+  /// The in-page `fetch` can only read the response body when it is same-origin
+  /// with [origin] (or CORS-enabled). Use this for same-origin authenticated
+  /// resources and as a fallback transport when a host blocks non-browser HTTP.
+  /// Cross-origin responses without CORS (and cross-origin redirects) cannot be
+  /// read by design and will return an error.
+  ///
+  /// Returns `{status, statusCode, mime, uri}` where `uri` is a `synapsetemp://`
+  /// reference to the downloaded bytes (or `{status, statusCode, mime, data}`
+  /// with a text/base64 body when [responseMode] is `text`/`binary`).
+  static Future<Map<String, dynamic>> originFetch(
+    String urlRaw, {
+    String? originRaw,
+    String method = 'GET',
+    Map<String, String> headers = const {},
+    String responseMode = 'tempFile',
+    Duration timeout = const Duration(seconds: 60),
+  }) async {
+    final url = urlRaw.trim();
+    if (url.isEmpty) {
+      throw ArgumentError('URL is required');
+    }
+    if (!isWebViewSupported()) {
+      throw Exception('WebView is not supported on this platform.');
+    }
+
+    final uri = Uri.tryParse(url);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      throw ArgumentError('Only HTTP(S) URLs are supported: $urlRaw');
+    }
+
+    // The WebView is loaded at the origin so the in-page fetch runs in that
+    // security context. Default to the target URL's own origin.
+    final origin = (originRaw != null && originRaw.trim().isNotEmpty)
+        ? originRaw.trim()
+        : uri.replace(path: '/', query: '', fragment: '').toString();
+
+    final startTime = DateTime.now();
+    LoggerService.debug('[Synapse.originFetch] $method $url via origin $origin');
+
+    final completer = Completer<Map<String, dynamic>>();
+    final requestId = const Uuid().v4();
+    final methodUpper = method.toUpperCase();
+    // The origin page may fire onLoadStop more than once (HTTP->HTTPS upgrade,
+    // consent/locale redirects). Run the in-page fetch exactly once.
+    var fetchDispatched = false;
+
+    final headlessWebView = HeadlessInAppWebView(
+      initialUrlRequest: URLRequest(url: WebUri(origin)),
+      initialSettings: InAppWebViewSettings(
+        allowFileAccess: false,
+        allowContentAccess: false,
+        allowFileAccessFromFileURLs: false,
+        javaScriptEnabled: true,
+        mediaPlaybackRequiresUserGesture: false,
+      ),
+      onLoadStop: (controller, loadedUrl) async {
+        if (completer.isCompleted || fetchDispatched) {
+          return;
+        }
+        fetchDispatched = true;
+        // Register a handler the page will call with the fetch result.
+        controller.addJavaScriptHandler(
+          handlerName: 'originFetchResult_$requestId',
+          callback: (args) {
+            if (!completer.isCompleted && args.isNotEmpty && args.first is Map) {
+              completer.complete(Map<String, dynamic>.from(args.first as Map));
+            }
+            return null;
+          },
+        );
+
+        final headersJson = jsonEncode(headers);
+        final urlJson = jsonEncode(url);
+        final methodJson = jsonEncode(methodUpper);
+        // Read the body as an ArrayBuffer and base64-encode it so binary
+        // payloads survive the JS->Dart bridge intact.
+        await controller.evaluateJavascript(
+          source: '''
+            (async function() {
+              const send = (payload) => window.flutter_inappwebview
+                .callHandler('originFetchResult_$requestId', payload);
+              try {
+                const resp = await fetch($urlJson, {
+                  method: $methodJson,
+                  headers: $headersJson,
+                  credentials: 'include',
+                  redirect: 'follow',
+                });
+                const buf = await resp.arrayBuffer();
+                let binary = '';
+                const bytes = new Uint8Array(buf);
+                const chunk = 0x8000;
+                for (let i = 0; i < bytes.length; i += chunk) {
+                  binary += String.fromCharCode.apply(
+                    null, bytes.subarray(i, i + chunk));
+                }
+                send({
+                  ok: true,
+                  statusCode: resp.status,
+                  mime: (resp.headers.get('content-type') || '')
+                    .split(';')[0].trim(),
+                  base64: btoa(binary),
+                });
+              } catch (e) {
+                send({ ok: false, error: String(e && e.message || e) });
+              }
+            })();
+          ''',
+        );
+      },
+      onReceivedError: (controller, request, error) {
+        if (!completer.isCompleted && (request.isForMainFrame ?? false)) {
+          completer.completeError(
+            Exception('Failed to load origin $origin: ${error.description}'),
+          );
+        }
+      },
+    );
+
+    await headlessWebView.run();
+    try {
+      final result = await completer.future.timeout(
+        timeout,
+        onTimeout: () => throw Exception('Timed out fetching $url'),
+      );
+
+      if (result['ok'] != true) {
+        throw Exception(result['error']?.toString() ?? 'originFetch failed');
+      }
+
+      final statusCode = (result['statusCode'] as num?)?.toInt() ?? 0;
+      final mime = (result['mime'] as String?)?.trim().isNotEmpty == true
+          ? (result['mime'] as String).trim()
+          : 'application/octet-stream';
+      final base64Data = result['base64'] as String? ?? '';
+
+      final duration = DateTime.now().difference(startTime);
+      LoggerService.debug(
+        '[Synapse.originFetch] $statusCode ($mime) in ${duration.inMilliseconds}ms',
+      );
+
+      if (responseMode == 'text') {
+        return {
+          'status': 'success',
+          'statusCode': statusCode,
+          'content': {
+            'mime': mime,
+            'data': utf8.decode(base64Decode(base64Data), allowMalformed: true),
+          },
+        };
+      }
+      if (responseMode == 'binary') {
+        return {
+          'status': 'success',
+          'statusCode': statusCode,
+          'content': {'mime': mime, 'data': base64Data},
+        };
+      }
+      // Default 'tempFile': persist bytes and return a synapsetemp:// URI so
+      // large downloads never round-trip through the bridge again.
+      final saved = await SynapseTempUtils.saveTempData(
+        mimeType: mime,
+        base64Data: base64Data,
+      );
+      return {
+        'status': 'success',
+        'statusCode': statusCode,
+        'mime': mime,
+        'uri': saved.uri,
+      };
+    } catch (e, stackTrace) {
+      final duration = DateTime.now().difference(startTime);
+      LoggerService.error(
+        '[Synapse.originFetch] Error after ${duration.inMilliseconds}ms for $url: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      return {'status': 'error', 'error': e.toString()};
+    } finally {
+      try {
+        if (headlessWebView.isRunning()) {
+          await headlessWebView.dispose();
+        }
+      } catch (e) {
+        LoggerService.warning(
+          '[Synapse.originFetch] Error disposing headless webview: $e',
         );
       }
     }

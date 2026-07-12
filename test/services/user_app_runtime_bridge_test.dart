@@ -23,9 +23,36 @@ import 'package:note_synapse/services/sql_query_service.dart';
 import 'package:note_synapse/services/tts_service.dart';
 import 'package:note_synapse/services/user_app_runtime_bridge.dart';
 import 'package:note_synapse/services/user_app_service.dart';
+import 'package:note_synapse/services/web_session_service.dart';
+import 'package:note_synapse/services/app_domain_grant_service.dart';
+import 'package:note_synapse/services/crypto_service.dart';
+import 'package:note_synapse/services/plugin_task_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import 'user_app_runtime_bridge_test.mocks.dart';
+
+/// In-memory [SessionStorageBackend] so [WebSessionService] is deterministic in
+/// tests. Seed [data] with `web_session_<domain>` entries to simulate a login.
+class _MemoryStorage implements SessionStorageBackend {
+  final Map<String, String> data = {};
+  @override
+  Future<void> write(String key, String value) async => data[key] = value;
+  @override
+  Future<String?> read(String key) async => data[key];
+  @override
+  Future<void> delete(String key) async => data.remove(key);
+}
+
+/// [CookieGateway] that records restores and returns nothing.
+class _NoopCookieGateway implements CookieGateway {
+  @override
+  Future<List<WebSessionCookie>> getCookies(String url) async => const [];
+  @override
+  Future<void> setCookie(String url, WebSessionCookie cookie) async {}
+  @override
+  Future<void> deleteCookies(String url) async {}
+}
 
 // Mocks for dependencies
 @GenerateNiceMocks([
@@ -48,6 +75,8 @@ void main() {
   late MockNoteModificationService mockModificationService;
   late RecordingTtsService fakeTtsService;
   late UserAppRuntimeBridge bridge;
+  late _MemoryStorage sessionStorage;
+  late AppDomainGrantService grantService;
 
   // Store registered handlers to simulate JS calls
   final Map<String, JavaScriptHandlerCallback> jsHandlers = {};
@@ -55,6 +84,7 @@ void main() {
 
   setUp(() async {
     getIt.reset();
+    SharedPreferences.setMockInitialValues({});
     tempDir = await Directory.systemTemp.createTemp();
     PathProviderPlatform.instance = MockPathProviderPlatform(tempDir.path);
 
@@ -75,6 +105,22 @@ void main() {
     getIt.registerSingleton<AIService>(mockAIService);
     getIt.registerSingleton<NoteModificationService>(mockModificationService);
     getIt.registerSingleton<TtsService>(fakeTtsService);
+
+    sessionStorage = _MemoryStorage();
+    getIt.registerSingleton<WebSessionService>(
+      WebSessionService(
+        cookieGateway: _NoopCookieGateway(),
+        storage: sessionStorage,
+      ),
+    );
+    grantService = AppDomainGrantService(
+      prefs: await SharedPreferences.getInstance(),
+    );
+    getIt.registerSingleton<AppDomainGrantService>(grantService);
+    getIt.registerSingleton<CryptoService>(CryptoService());
+    getIt.registerSingleton<PluginTaskService>(
+      PluginTaskService(prefs: await SharedPreferences.getInstance()),
+    );
 
     // Mock addJavaScriptHandler to capture callbacks
     when(
@@ -116,6 +162,17 @@ void main() {
       expect(jsHandlers.containsKey('storeAppState'), isTrue);
       expect(jsHandlers.containsKey('loadAppState'), isTrue);
       expect(jsHandlers.containsKey('proxyFetch'), isTrue);
+      expect(jsHandlers.containsKey('originFetch'), isTrue);
+      expect(jsHandlers.containsKey('sessionRequestLogin'), isTrue);
+      expect(jsHandlers.containsKey('sessionStatus'), isTrue);
+      expect(jsHandlers.containsKey('sessionGetCookies'), isTrue);
+      expect(jsHandlers.containsKey('cryptoDigest'), isTrue);
+      expect(jsHandlers.containsKey('downloadFile'), isTrue);
+      expect(jsHandlers.containsKey('exportNotes'), isTrue);
+      expect(jsHandlers.containsKey('pickNotes'), isTrue);
+      expect(jsHandlers.containsKey('tasksSchedule'), isTrue);
+      expect(jsHandlers.containsKey('tasksCancel'), isTrue);
+      expect(jsHandlers.containsKey('tasksList'), isTrue);
       expect(jsHandlers.containsKey('chatAI'), isTrue);
       expect(jsHandlers.containsKey('log'), isTrue);
       expect(jsHandlers.containsKey('copy-to-clipboard'), isTrue);
@@ -405,6 +462,103 @@ void main() {
         final result = await jsHandlers['proxyFetch']!([{}]);
         expect(result['status'], 'error');
         expect(result['error'], contains('URL is required'));
+      });
+
+      test('session:true without a grant and no approval UI is denied',
+          () async {
+        // Permission is checked before any network request is made.
+        final result = await jsHandlers['proxyFetch']!([
+          {'url': 'https://example.com/api', 'session': true},
+        ]);
+        expect(result['status'], 'error');
+        expect(result['error'], 'permission_required');
+      });
+
+      test('multipart with a non-ASCII filename does not crash', () async {
+        final result = await jsHandlers['proxyFetch']!([
+          {
+            'url': 'https://example.com/upload',
+            'method': 'POST',
+            'multipart': [
+              {
+                'name': 'file',
+                'filename': '笔记.pdf',
+                'mimeType': 'application/pdf',
+                'dataBase64': base64Encode(utf8.encode('hello')),
+              },
+            ],
+          },
+        ]);
+        // Before the fix, ascii.encode on the filename threw FormatException.
+        expect(result['status'], 'success');
+      });
+
+      test('downloadFile without a grant and no approval UI is denied',
+          () async {
+        // Permission is checked before any network request is made.
+        final result = await jsHandlers['downloadFile']!([
+          {'url': 'https://example.com/file.m4a'},
+        ]);
+        expect(result['status'], 'error');
+        expect(result['error'], 'permission_required');
+      });
+
+      test('Set-Cookie is stripped from the response headers exposed to JS',
+          () async {
+        final result = await jsHandlers['proxyFetch']!([
+          {'url': 'https://example.com/api'},
+        ]);
+        expect(result['status'], 'success');
+        final headers = result['headers'] as Map;
+        expect(headers.containsKey('x-custom'), isTrue);
+        expect(
+          headers.keys.map((k) => k.toString().toLowerCase()),
+          isNot(contains('set-cookie')),
+        );
+      });
+    });
+
+    group('session handlers', () {
+      setUp(() {
+        bridge.registerJavaScriptHandlers(mockWebViewController);
+      });
+
+      test('status reports loggedIn=false when no session is saved', () async {
+        final result = await jsHandlers['sessionStatus']!(['example.com']);
+        expect(result['success'], isTrue);
+        expect(result['loggedIn'], isFalse);
+        expect(result['domain'], 'example.com');
+      });
+
+      test('status derives the registrable domain from a URL', () async {
+        final result =
+            await jsHandlers['sessionStatus']!(['https://a.b.example.com/x']);
+        expect(result['domain'], 'example.com');
+      });
+
+      test('getCookies without a grant and no approval UI requires permission',
+          () async {
+        final result = await jsHandlers['sessionGetCookies']!(['example.com']);
+        expect(result['success'], isFalse);
+        expect(result['error'], 'permission_required');
+      });
+
+      test('getCookies returns no_session once granted but nothing saved',
+          () async {
+        await grantService.grant('test-uuid', 'example.com');
+        final result = await jsHandlers['sessionGetCookies']!(['example.com']);
+        // Grant passes; there is simply no stored session in this test.
+        expect(result['success'], isFalse);
+        expect(result['error'], 'no_session');
+      });
+
+      test('requestLogin returns no_ui when no login callback is wired',
+          () async {
+        final result =
+            await jsHandlers['sessionRequestLogin']!(['https://example.com']);
+        expect(result['success'], isFalse);
+        expect(result['error'], 'no_ui');
+        expect(result['domain'], 'example.com');
       });
     });
 
@@ -746,6 +900,12 @@ class MockHttpClientRequest extends Fake implements HttpClientRequest {
   final HttpHeaders headers = MockHttpHeaders();
 
   @override
+  bool followRedirects = true;
+
+  @override
+  int maxRedirects = 5;
+
+  @override
   Future<HttpClientResponse> close() async {
     return MockHttpClientResponse();
   }
@@ -759,7 +919,13 @@ class MockHttpClientResponse extends Fake implements HttpClientResponse {
   final int statusCode = 200;
 
   @override
-  final HttpHeaders headers = MockHttpHeaders();
+  bool get isRedirect => false;
+
+  @override
+  List<RedirectInfo> get redirects => const [];
+
+  @override
+  final HttpHeaders headers = MockResponseHeaders();
 
   @override
   StreamSubscription<List<int>> listen(
@@ -784,6 +950,27 @@ class MockHttpHeaders extends Fake implements HttpHeaders {
 
   @override
   String? value(String name) => null;
+}
+
+/// Response headers that include a Set-Cookie so the sensitive-header filter can
+/// be exercised.
+class MockResponseHeaders extends Fake implements HttpHeaders {
+  final Map<String, List<String>> _values = {
+    'content-type': ['text/plain'],
+    'set-cookie': ['sid=secret; HttpOnly'],
+    'x-custom': ['ok'],
+  };
+
+  @override
+  void set(String name, Object value, {bool preserveHeaderCase = false}) {}
+
+  @override
+  String? value(String name) => _values[name.toLowerCase()]?.join(', ');
+
+  @override
+  void forEach(void Function(String name, List<String> values) action) {
+    _values.forEach(action);
+  }
 }
 
 class MockPathProviderPlatform extends Fake

@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script type="text/tool-spec"><![CDATA[tool_spec
+  - name: notebooklm_list_notebooks
+    description: |
+      List the user's NotebookLM notebooks. Call this first to get a notebook_id
+      for the other tools, or to show the user what notebooks exist.
+    input_params: {}
+    output_params:
+      notebooks:
+        type: array
+        description: Array of { id, title } for each notebook. Present on success.
+      error:
+        type: string
+        description: Error message. Present on failure (e.g. not signed in).
+  - name: notebooklm_query
+    description: |
+      Ask a question answered from the sources in a NotebookLM notebook. The
+      answer is grounded in the synced documents, with citations.
+    input_params:
+      question:
+        type: string
+        description: The question to ask.
+        required: true
+      notebook_id:
+        type: string
+        description: The notebook id (from notebooklm_list_notebooks).
+        required: true
+    output_params:
+      answer:
+        type: string
+        description: The grounded answer (Markdown). Present on success.
+      error:
+        type: string
+  - name: notebooklm_sync_notes
+    description: |
+      Push local Note Synapse notes into a NotebookLM notebook as sources.
+      Provide note_ids OR a tag; if neither is given and a UI is available, the
+      user is asked to pick notes. Changed notes are re-pushed; note content
+      goes straight to NotebookLM and is never routed through the conversation.
+    input_params:
+      notebook_id:
+        type: string
+        description: Target notebook id.
+        required: true
+      note_ids:
+        type: array
+        description: Explicit local note ids to sync (optional).
+      tag:
+        type: string
+        description: Sync all notes carrying this tag (optional).
+    output_params:
+      added: { type: number }
+      updated: { type: number }
+      unchanged: { type: number }
+      failed: { type: number }
+      error: { type: string }
+  - name: notebooklm_generate_podcast
+    description: |
+      Start generating an Audio Overview (podcast) from a notebook's sources.
+      Returns immediately with an artifact_id; generation takes 1-5 minutes and
+      is polled in the background. When ready, a note linking to it is created.
+    input_params:
+      notebook_id:
+        type: string
+        required: true
+      format:
+        type: string
+        description: "One of: deep_dive (default), brief, critique, debate."
+      language:
+        type: string
+        description: BCP-47 language code (default en).
+    output_params:
+      artifact_id: { type: string }
+      status: { type: string }
+      error: { type: string }
+  - name: notebooklm_generate_slides
+    description: |
+      Start generating a Slide Deck from a notebook's sources. Returns an
+      artifact_id immediately; polled in the background like podcasts.
+    input_params:
+      notebook_id:
+        type: string
+        required: true
+    output_params:
+      artifact_id: { type: string }
+      status: { type: string }
+      error: { type: string }
+  - name: notebooklm_artifact_status
+    description: |
+      Check whether a generated studio artifact (podcast/slides) is ready. When
+      complete, saves a note linking to it and returns the created note_id.
+    input_params:
+      notebook_id:
+        type: string
+        required: true
+      artifact_id:
+        type: string
+        required: true
+    output_params:
+      status:
+        type: string
+        description: "pending | complete | failed | not_found."
+      note_id:
+        type: string
+        description: Id of the note created when complete (if any).
+      error: { type: string }
+  ]]></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NotebookLM Manager</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, system-ui, sans-serif;
+      margin: 0; padding: 16px; line-height: 1.4;
+      background: Canvas; color: CanvasText;
+    }
+    h1 { font-size: 1.2rem; margin: 0 0 4px; }
+    .muted { opacity: 0.7; font-size: 0.85rem; }
+    .card {
+      border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+      border-radius: 10px; padding: 12px; margin: 12px 0;
+    }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    button {
+      font: inherit; padding: 8px 12px; border-radius: 8px; cursor: pointer;
+      border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+      background: color-mix(in srgb, CanvasText 8%, Canvas);
+      color: CanvasText;
+    }
+    button.primary {
+      background: #2563eb; border-color: #2563eb; color: white;
+    }
+    button:disabled { opacity: 0.5; cursor: default; }
+    input, select, textarea {
+      font: inherit; padding: 8px; border-radius: 8px; width: 100%;
+      border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+      background: Canvas; color: CanvasText;
+    }
+    textarea { min-height: 90px; resize: vertical; }
+    label { display: block; font-size: 0.8rem; opacity: 0.8; margin: 8px 0 2px; }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .ok { background: #16a34a; } .bad { background: #dc2626; }
+    .nb-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px; border-radius: 8px; cursor: pointer;
+    }
+    .nb-item.selected { background: color-mix(in srgb, #2563eb 20%, transparent); }
+    .nb-item .title { font-weight: 600; }
+    .answer {
+      white-space: pre-wrap; border-left: 3px solid #2563eb;
+      padding-left: 10px; margin-top: 8px;
+    }
+    .err { color: #dc2626; font-size: 0.85rem; }
+    .spinner { font-size: 0.85rem; opacity: 0.7; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>NotebookLM Manager</h1>
+  <div class="muted">Sync notes to Google NotebookLM and ask questions across them.</div>
+
+  <div class="card">
+    <div class="row">
+      <span id="authDot" class="status-dot bad"></span>
+      <span id="authText">Checking connection…</span>
+      <span style="flex:1"></span>
+      <button id="connectBtn" class="primary hidden">Connect NotebookLM</button>
+    </div>
+    <div id="authErr" class="err"></div>
+  </div>
+
+  <div id="main" class="hidden">
+    <div class="card">
+      <div class="row">
+        <strong style="flex:1">Notebooks</strong>
+        <button id="refreshBtn">Refresh</button>
+      </div>
+      <div id="nbList"></div>
+      <div class="row" style="margin-top:8px">
+        <input id="newNbTitle" placeholder="New notebook title" style="flex:1" />
+        <button id="createNbBtn">Create</button>
+      </div>
+    </div>
+
+    <div id="nbActions" class="card hidden">
+      <div class="muted">Selected: <span id="selNbTitle"></span></div>
+
+      <label for="srcTitle">Add a text source</label>
+      <input id="srcTitle" placeholder="Source title" />
+      <textarea id="srcBody" placeholder="Text content to add as a source"></textarea>
+      <div class="row" style="margin-top:6px">
+        <button id="addSrcBtn" class="primary">Add source</button>
+        <span id="addSrcStatus" class="spinner"></span>
+      </div>
+
+      <div id="srcList" style="margin-top:10px"></div>
+
+      <hr style="margin:14px 0; border:none; border-top:1px solid color-mix(in srgb, CanvasText 15%, transparent)" />
+      <strong>Sync local notes</strong>
+      <div class="muted">Push Note Synapse notes into this notebook as sources. Re-syncing updates changed notes and removes deleted ones.</div>
+      <div class="row" style="margin-top:8px">
+        <button id="pickNotesBtn">Choose notes…</button>
+        <input id="syncTag" placeholder="…or a tag, e.g. project-x" style="flex:1" />
+        <button id="syncTagBtn">Sync tag</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button id="cleanupBtn">Clean up deleted</button>
+        <span id="syncStatus" class="spinner"></span>
+      </div>
+      <div id="syncList" style="margin-top:8px"></div>
+      <div class="row" style="margin-top:6px">
+        <button id="exportStateBtn">Export sync state as note</button>
+        <button id="importStateBtn">Import sync state</button>
+      </div>
+
+      <hr style="margin:14px 0; border:none; border-top:1px solid color-mix(in srgb, CanvasText 15%, transparent)" />
+      <strong>Studio</strong>
+      <div class="muted">Generate an audio overview (podcast) or a slide deck from this notebook's sources. Takes a few minutes; a note linking to the result is created when ready.</div>
+      <div class="row" style="margin-top:8px">
+        <select id="podcastFormat" style="flex:1">
+          <option value="deep_dive">Deep dive</option>
+          <option value="brief">Brief</option>
+          <option value="critique">Critique</option>
+          <option value="debate">Debate</option>
+        </select>
+        <button id="genPodcastBtn" class="primary">Generate podcast</button>
+        <button id="genSlidesBtn">Generate slides</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <span id="studioStatus" class="spinner"></span>
+      </div>
+
+      <label for="queryInput">Ask a question</label>
+      <textarea id="queryInput" placeholder="What do these sources say about…"></textarea>
+      <div class="row" style="margin-top:6px">
+        <button id="askBtn" class="primary">Ask</button>
+        <span id="askStatus" class="spinner"></span>
+      </div>
+      <div id="answer" class="answer hidden"></div>
+    </div>
+  </div>
+
+  <script>
+  // ==========================================================================
+  // NotebookLM protocol client (pure JS, over the Synapse plugin API).
+  //
+  // All requests go through Synapse.proxyFetch({session:true}) so they carry the
+  // user's NotebookLM login cookies (established via Synapse.session). RPC ids
+  // and param shapes were verified against the live service; keep them in this
+  // one block since Google rotates them.
+  // ==========================================================================
+  const NLM = {
+    ORIGIN: 'https://notebooklm.google.com',
+    RPC: {
+      LIST: 'wXbhsf', CREATE: 'CCqFvf', DETAIL: 'rLM1Ne',
+      ADD_SOURCE: 'izAoDd', DELETE_SOURCE: 'tGMBJ',
+      ADD_SOURCE_FILE: 'o4cbdc', // register a file for resumable upload
+      CREATE_STUDIO: 'R7cb6c',   // create audio / slides / etc.
+      POLL_STUDIO: 'gArtLc',     // poll studio artifact status
+    },
+    STUDIO_TYPE: { AUDIO: 1, SLIDES: 8 },
+    UPLOAD_PATH: '/upload/_/',
+    QUERY_PATH:
+      '/_/LabsTailwindUi/data/google.internal.labs.tailwind.orchestration.v1' +
+      '.LabsTailwindOrchestrationService/GenerateFreeFormStreamed',
+  };
+
+  // File types NotebookLM accepts as uploaded sources (by extension).
+  const UPLOADABLE_EXT = new Set([
+    'pdf', 'txt', 'md', 'markdown', 'docx', 'csv', 'epub',
+    'mp3', 'm4a', 'wav', 'aac', 'ogg', 'opus', 'mp4',
+    'jpg', 'jpeg', 'png', 'gif', 'webp',
+  ]);
+  function isUploadable(fileName) {
+    const ext = (fileName.split('.').pop() || '').toLowerCase();
+    return UPLOADABLE_EXT.has(ext);
+  }
+  // Byte length of base64 data without materializing the decoded string.
+  function b64ByteLength(b64) {
+    const clean = (b64 || '').replace(/[^A-Za-z0-9+/=]/g, '');
+    const pad = (clean.match(/=+$/) || [''])[0].length;
+    return Math.floor(clean.length * 3 / 4) - pad;
+  }
+  // Case-insensitive lookup in a response headers map.
+  function headerValue(headers, name) {
+    if (!headers) return null;
+    const lower = name.toLowerCase();
+    for (const k of Object.keys(headers)) {
+      if (k.toLowerCase() === lower) return headers[k];
+    }
+    return null;
+  }
+  // Pull the downloadable media URL from a studio artifact array. Audio artifacts
+  // nest an [url, priority, "audio/mp4"] media list (prefer the -dv download
+  // variant); slide decks put a URL around position 16. Best-effort: scan for a
+  // google-hosted media URL, preferring an audio/mp4 download variant.
+  function extractMediaUrl(artifact) {
+    let audioDv = null, audioAny = null, other = null;
+    (function walk(x) {
+      if (Array.isArray(x)) {
+        if (x.length >= 3 && typeof x[0] === 'string' &&
+            x[0].startsWith('http') && x[2] === 'audio/mp4') {
+          if (x[0].indexOf('-dv') !== -1) audioDv = audioDv || x[0];
+          else audioAny = audioAny || x[0];
+        }
+        for (const e of x) walk(e);
+      } else if (typeof x === 'string' && x.startsWith('http') &&
+                 !other && /googleusercontent|lh3\.google/.test(x)) {
+        other = x;
+      }
+    })(artifact);
+    return audioDv || audioAny || other || null;
+  }
+
+  // First string found anywhere in a nested array (used to pull a source id).
+  function firstString(x) {
+    if (typeof x === 'string') return x;
+    if (Array.isArray(x)) {
+      for (const e of x) { const r = firstString(e); if (r) return r; }
+    }
+    return null;
+  }
+
+  // Per-session tokens scraped from the app page. Session-bound; re-scrape on
+  // any auth failure.
+  let tokens = { at: '', fsid: '', bl: '' };
+
+  const domain = 'google.com';
+
+  // ==========================================================================
+  // Sync state (persisted in the app's own storage via Synapse.storeAppState).
+  // Shape: { syncMap: { <notebookId>: { <localNoteId>: {
+  //   remoteSourceId, contentHash, syncedAt, title } } } }
+  // The map lets us detect changes (hash), re-push updates (delete+re-add,
+  // NotebookLM has no in-place update), and clean up orphans.
+  // ==========================================================================
+  let appState = { syncMap: {} };
+
+  async function loadState() {
+    try {
+      const res = await Synapse.loadAppState();
+      if (res && res.success && res.data && typeof res.data === 'object') {
+        appState = Object.assign({ syncMap: {} }, res.data);
+        if (!appState.syncMap) appState.syncMap = {};
+      }
+    } catch (_) { /* first run: keep defaults */ }
+  }
+
+  async function saveState() {
+    try { await Synapse.storeAppState(appState); } catch (_) {}
+  }
+
+  function notebookMap(notebookId) {
+    if (!appState.syncMap[notebookId]) appState.syncMap[notebookId] = {};
+    return appState.syncMap[notebookId];
+  }
+
+  // Single source of truth for "is a UI present" (used by both the tool gate
+  // and the UI bootstrap). Missing env ⇒ treat as interactive.
+  function isInteractive() {
+    return !window.Synapse || !window.Synapse.tool ||
+      !window.Synapse.tool.env || window.Synapse.tool.env.isInteractive;
+  }
+
+  async function scrapeTokens() {
+    const res = await Synapse.proxyFetch(NLM.ORIGIN + '/', {
+      session: true, responseMode: 'text',
+    });
+    if (res.status !== 'success') throw new Error(res.error || 'page fetch failed');
+    const html = res.content ? res.content.data : '';
+    const at = /"SNlM0e":"([^"]+)"/.exec(html);
+    const fsid = /"FdrFJe":"([^"]+)"/.exec(html);
+    const bl = /"cfb2h":"([^"]+)"/.exec(html);
+    if (!at) throw new Error('not_logged_in');
+    tokens = { at: at[1], fsid: fsid ? fsid[1] : '', bl: bl ? bl[1] : '' };
+  }
+
+  function stripAntiXssi(text) {
+    return text.startsWith(")]}'") ? text.slice(4) : text;
+  }
+
+  // Parse a batchexecute response, returning the decoded inner JSON for rpcId.
+  function parseBatchExecute(raw, rpcId) {
+    raw = stripAntiXssi(raw);
+    const lines = raw.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('[')) continue;
+      let rows;
+      try { rows = JSON.parse(trimmed); } catch (_) { continue; }
+      for (const row of rows) {
+        if (Array.isArray(row) && row[0] === 'wrb.fr' && row[1] === rpcId &&
+            typeof row[2] === 'string') {
+          return JSON.parse(row[2]);
+        }
+      }
+    }
+    return null;
+  }
+
+  async function batchExecute(rpcId, params, sourcePath, retried) {
+    if (!tokens.at) await scrapeTokens();
+    const fReq = JSON.stringify([[[rpcId, JSON.stringify(params), null, 'generic']]]);
+    const url = NLM.ORIGIN +
+      '/_/LabsTailwindUi/data/batchexecute?rpcids=' + rpcId +
+      '&source-path=' + encodeURIComponent(sourcePath || '/') +
+      '&f.sid=' + encodeURIComponent(tokens.fsid) +
+      '&bl=' + encodeURIComponent(tokens.bl) + '&hl=en&rt=c';
+    const body = 'f.req=' + encodeURIComponent(fReq) +
+      '&at=' + encodeURIComponent(tokens.at);
+    const res = await Synapse.proxyFetch(url, {
+      session: true, method: 'POST', responseMode: 'text',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        'x-goog-csrf-token': tokens.at,
+        'x-same-domain': '1',
+      },
+      body,
+    });
+    if (res.status !== 'success') throw new Error(res.error || 'request failed');
+    const raw = res.content ? res.content.data : '';
+    // A stale token surfaces as a 400/401 inside the envelope; re-scrape once.
+    // Retry state is per-call (a parameter), so concurrent calls don't clobber
+    // each other's retry.
+    if (/\["er",/.test(raw) && !retried) {
+      tokens.at = '';
+      return await batchExecute(rpcId, params, sourcePath, true);
+    }
+    return parseBatchExecute(raw, rpcId);
+  }
+
+  const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
+
+  const nlmClient = {
+    async listNotebooks() {
+      const inner = await batchExecute(NLM.RPC.LIST, [null, 1, null, [2]]);
+      const notebooks = [];
+      const rows = (inner && inner[0]) || [];
+      for (const entry of rows) {
+        // [title, [sources...], notebookId, emoji, ...]
+        if (Array.isArray(entry) && typeof entry[0] === 'string') {
+          notebooks.push({ id: entry[2], title: entry[0], emoji: entry[3] || '' });
+        }
+      }
+      return notebooks;
+    },
+
+    async createNotebook(title) {
+      const inner = await batchExecute(NLM.RPC.CREATE, [
+        title, null, null, [2],
+        [1, null, null, null, null, null, null, null, null, null, [1]],
+      ]);
+      // inner[2] is the new notebook id.
+      return inner && inner[2];
+    },
+
+    async addTextSource(notebookId, title, text) {
+      const sourceData =
+        [null, [title, text], null, 2, null, null, null, null, null, null, 1];
+      const inner = await batchExecute(
+        NLM.RPC.ADD_SOURCE,
+        [[sourceData], notebookId, [2],
+          [1, null, null, null, null, null, null, null, null, null, [1]]],
+        '/notebook/' + notebookId,
+      );
+      const flat = JSON.stringify(inner || '');
+      const ids = flat.match(UUID_RE) || [];
+      return ids[0];
+    },
+
+    async deleteSource(notebookId, sourceId) {
+      await batchExecute(
+        NLM.RPC.DELETE_SOURCE,
+        [[[sourceId]], [2]],
+        '/notebook/' + notebookId,
+      );
+      return true;
+    },
+
+    async listSources(notebookId) {
+      const inner = await batchExecute(
+        NLM.RPC.DETAIL, [notebookId], '/notebook/' + notebookId);
+      const flat = JSON.stringify(inner || '');
+      const ids = (flat.match(UUID_RE) || []).filter((id) => id !== notebookId);
+      return Array.from(new Set(ids));
+    },
+
+    // Upload a local file as a source via Google's 3-step resumable upload
+    // (validated to work over plain session-cookie HTTP — no browser context).
+    // dataBase64 is the file's bytes; returns the new source id.
+    async addFileSource(notebookId, fileName, mimeType, dataBase64) {
+      // Step 1: register the file source → SOURCE_ID.
+      const reg = await batchExecute(
+        NLM.RPC.ADD_SOURCE_FILE,
+        [[[fileName]], notebookId, [2],
+          [1, null, null, null, null, null, null, null, null, null, [1]]],
+        '/notebook/' + notebookId);
+      const sourceId = firstString(reg);
+      if (!sourceId) throw new Error('file source registration failed');
+
+      // Step 2: start the resumable upload session → x-goog-upload-url header.
+      const startRes = await Synapse.proxyFetch(NLM.ORIGIN + NLM.UPLOAD_PATH + '?authuser=0', {
+        session: true, method: 'POST', responseMode: 'text',
+        headers: {
+          'accept': '*/*',
+          'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'x-goog-authuser': '0',
+          'x-goog-upload-command': 'start',
+          'x-goog-upload-header-content-length': String(b64ByteLength(dataBase64)),
+          'x-goog-upload-protocol': 'resumable',
+        },
+        body: JSON.stringify({
+          PROJECT_ID: notebookId, SOURCE_NAME: fileName, SOURCE_ID: sourceId,
+        }),
+      });
+      if (startRes.status !== 'success') {
+        throw new Error(startRes.error || 'upload start failed');
+      }
+      const uploadUrl = headerValue(startRes.headers, 'x-goog-upload-url');
+      if (!uploadUrl) throw new Error('no upload URL returned (auth?)');
+
+      // Step 3: send the bytes and finalize.
+      const putRes = await Synapse.proxyFetch(uploadUrl, {
+        session: true, method: 'POST', responseMode: 'text',
+        headers: {
+          'accept': '*/*',
+          'content-type': 'application/x-www-form-urlencoded;charset=utf-8',
+          'x-goog-authuser': '0',
+          'x-goog-upload-command': 'upload, finalize',
+          'x-goog-upload-offset': '0',
+        },
+        bodyBinary: dataBase64,
+      });
+      if (putRes.status !== 'success') {
+        throw new Error(putRes.error || 'upload finalize failed');
+      }
+      return sourceId;
+    },
+
+    async query(notebookId, sourceIds, question) {
+      if (!tokens.at) await scrapeTokens();
+      const conversationId = crypto && crypto.randomUUID
+        ? crypto.randomUUID() : String(Date.now());
+      const sourcesArray = (sourceIds || []).map((id) => [[id]]);
+      const params = [sourcesArray, question, null, [2, null, [1]], conversationId];
+      const fReq = JSON.stringify([null, JSON.stringify(params)]);
+      const reqid = Math.floor(100000 + Math.random() * 800000);
+      const url = NLM.ORIGIN + NLM.QUERY_PATH +
+        '?bl=' + encodeURIComponent(tokens.bl) + '&hl=en&_reqid=' + reqid +
+        '&rt=c&f.sid=' + encodeURIComponent(tokens.fsid);
+      const body = 'f.req=' + encodeURIComponent(fReq) +
+        '&at=' + encodeURIComponent(tokens.at);
+      const res = await Synapse.proxyFetch(url, {
+        session: true, method: 'POST', responseMode: 'text',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'x-goog-csrf-token': tokens.at, 'x-same-domain': '1',
+        },
+        body,
+      });
+      if (res.status !== 'success') throw new Error(res.error || 'query failed');
+      return extractAnswer(res.content ? res.content.data : '');
+    },
+
+    _allSourceIds(notebookId) { return this.listSources(notebookId); },
+
+    // Start an Audio Overview (podcast). format: deep_dive|brief|critique|debate.
+    async createAudioOverview(notebookId, opts) {
+      opts = opts || {};
+      const FMT = { deep_dive: 1, brief: 2, critique: 3, debate: 4 };
+      const format = FMT[opts.format] || 1;
+      const language = opts.language || 'en';
+      const sids = await this.listSources(notebookId);
+      if (!sids.length) throw new Error('notebook has no sources to generate from');
+      const nested = sids.map((id) => [[id]]);
+      const simple = sids.map((id) => [id]);
+      const audioOptions = [null, ['', 2, null, simple, language, null, format]];
+      const content = [null, null, NLM.STUDIO_TYPE.AUDIO, nested, null, null, audioOptions];
+      const inner = await batchExecute(
+        NLM.RPC.CREATE_STUDIO, [[2], notebookId, content], '/notebook/' + notebookId);
+      return firstString(inner); // artifact id
+    },
+
+    // Start a Slide Deck.
+    async createSlides(notebookId, opts) {
+      opts = opts || {};
+      const language = opts.language || 'en';
+      const sids = await this.listSources(notebookId);
+      if (!sids.length) throw new Error('notebook has no sources to generate from');
+      const nested = sids.map((id) => [[id]]);
+      const slideOptions = [[opts.focus || null, language, 1, 3]]; // format, length
+      // slide-deck options sit at position 16 of the content array.
+      const content = [null, null, NLM.STUDIO_TYPE.SLIDES, nested,
+        null, null, null, null, null, null, null, null, null, null, null, null,
+        slideOptions];
+      const inner = await batchExecute(
+        NLM.RPC.CREATE_STUDIO, [[2], notebookId, content], '/notebook/' + notebookId);
+      return firstString(inner); // artifact id
+    },
+
+    // Poll studio artifacts; returns [{id, title, type, statusCode, complete}].
+    async pollStudio(notebookId) {
+      const inner = await batchExecute(
+        NLM.RPC.POLL_STUDIO,
+        [[2], notebookId, 'NOT artifact.status = "ARTIFACT_STATUS_SUGGESTED"'],
+        '/notebook/' + notebookId);
+      const list = (inner && (Array.isArray(inner[0]) ? inner[0] : inner)) || [];
+      const out = [];
+      for (const a of list) {
+        if (!Array.isArray(a) || a.length < 5) continue;
+        const statusCode = a[4];
+        out.push({
+          id: a[0], title: a[1] || '', type: a[2],
+          statusCode, complete: statusCode === 3, failed: statusCode === 4,
+          mediaUrl: extractMediaUrl(a),
+        });
+      }
+      return out;
+    },
+  };
+
+  // ==========================================================================
+  // Sync: push local notes to a notebook as text sources, tracking a mapping so
+  // changes re-push (delete + re-add) and deleted notes are cleaned up.
+  // ==========================================================================
+  const nlmSync = {
+    // Sync a set of local note ids into notebookId. Returns a per-note report.
+    async syncNotes(notebookId, noteIds) {
+      const map = notebookMap(notebookId);
+      const report = { added: 0, updated: 0, unchanged: 0, failed: [] };
+
+      const exported = await Synapse.exportNotes(noteIds, {
+        includeSubNotesAndLinkedNotes: true,
+        includeAttachmentList: true,
+      });
+      if (!exported || !exported.success) {
+        throw new Error((exported && exported.error) || 'exportNotes failed');
+      }
+
+      for (const note of exported.notes) {
+        try {
+          const allAtts = note.attachments || [];
+          const eligible = allAtts.filter((a) => isUploadable(a.fileName));
+          const ineligible = allAtts.filter((a) => !isUploadable(a.fileName));
+
+          // The note body is a text source. Unsupported attachment types (that
+          // can't be uploaded) are listed inline so the info isn't lost.
+          let body = note.markdown;
+          if (ineligible.length) {
+            body += '\n\n---\nAttachments not uploaded (unsupported type):\n' +
+              ineligible.map((a) => '- ' + a.fileName).join('\n');
+          }
+          const hashRes = await Synapse.crypto.digest('sha256', { text: body });
+          const hash = hashRes && hashRes.hex;
+          if (!hash) throw new Error('could not hash note content');
+
+          const wasExisting = !!map[note.id];
+          const prevAttachments =
+            (map[note.id] && map[note.id].attachments) || {};
+          const textChanged = !map[note.id] || map[note.id].contentHash !== hash;
+
+          if (textChanged) {
+            // NotebookLM can't update in place: delete the old text source and
+            // drop the mapping up front so a failed re-add can't leave us
+            // pointing at a deleted source.
+            if (map[note.id] && map[note.id].remoteSourceId) {
+              try { await nlmClient.deleteSource(notebookId, map[note.id].remoteSourceId); }
+              catch (_) {}
+            }
+            delete map[note.id];
+            const remoteSourceId =
+              await nlmClient.addTextSource(notebookId, note.title || 'Note', body);
+            if (!remoteSourceId) throw new Error('no source id returned');
+            map[note.id] = {
+              remoteSourceId,
+              contentHash: hash,
+              syncedAt: Date.now(),
+              title: note.title || 'Note',
+              attachments: prevAttachments,
+            };
+          } else {
+            map[note.id].attachments = prevAttachments;
+          }
+
+          // Sync eligible attachments as file sources (hash-tracked like notes).
+          const attChanged =
+            await this._syncAttachments(notebookId, map[note.id], eligible);
+          map[note.id].syncedAt = Date.now();
+
+          if (textChanged && !wasExisting) report.added++;
+          else if (textChanged || attChanged) report.updated++;
+          else report.unchanged++;
+        } catch (e) {
+          report.failed.push({ id: note.id, error: String(e.message || e) });
+        }
+      }
+      await saveState();
+      return report;
+    },
+
+    // Uploads/updates/removes a note's eligible attachments as file sources,
+    // tracking each by content hash in entry.attachments. Returns true if any
+    // attachment source changed.
+    async _syncAttachments(notebookId, entry, eligible) {
+      entry.attachments = entry.attachments || {};
+      let changed = false;
+      const seen = new Set();
+
+      for (const att of eligible) {
+        seen.add(att.id);
+        const read = await Synapse.readAttachment(att.path);
+        if (!read || !read.success || !read.data) {
+          throw new Error('could not read attachment ' + att.fileName);
+        }
+        const ah = await Synapse.crypto.digest('sha256', { base64: read.data });
+        const ahash = ah && ah.hex;
+        if (!ahash) throw new Error('could not hash attachment ' + att.fileName);
+
+        const prev = entry.attachments[att.id];
+        if (prev && prev.contentHash === ahash) continue; // unchanged
+
+        if (prev && prev.remoteSourceId) {
+          try { await nlmClient.deleteSource(notebookId, prev.remoteSourceId); }
+          catch (_) {}
+        }
+        delete entry.attachments[att.id];
+        const rid = await nlmClient.addFileSource(
+          notebookId, att.fileName, read.mimeType || att.mimeType, read.data);
+        entry.attachments[att.id] = {
+          remoteSourceId: rid, contentHash: ahash, fileName: att.fileName,
+        };
+        changed = true;
+      }
+
+      // Remove file sources for attachments no longer on the note.
+      for (const id of Object.keys(entry.attachments)) {
+        if (!seen.has(id)) {
+          try { await nlmClient.deleteSource(notebookId, entry.attachments[id].remoteSourceId); }
+          catch (_) {}
+          delete entry.attachments[id];
+          changed = true;
+        }
+      }
+      return changed;
+    },
+
+    // All remote source ids for an entry (text + attachments).
+    _entrySourceIds(entry) {
+      const ids = [];
+      if (entry.remoteSourceId) ids.push(entry.remoteSourceId);
+      for (const a of Object.values(entry.attachments || {})) {
+        if (a.remoteSourceId) ids.push(a.remoteSourceId);
+      }
+      return ids;
+    },
+
+    // Remove previously-synced sources (text + attachments) for local note ids.
+    async removeNotes(notebookId, noteIds) {
+      const map = notebookMap(notebookId);
+      let removed = 0;
+      for (const id of noteIds) {
+        const entry = map[id];
+        if (!entry) continue;
+        for (const sid of this._entrySourceIds(entry)) {
+          try { await nlmClient.deleteSource(notebookId, sid); } catch (_) {}
+        }
+        delete map[id];
+        removed++;
+      }
+      await saveState();
+      return removed;
+    },
+
+    // Delete remote sources whose local note no longer exists.
+    async cleanupOrphans(notebookId) {
+      const map = notebookMap(notebookId);
+      const localIds = Object.keys(map);
+      if (!localIds.length) return 0;
+      const res = await Synapse.runQuery(
+        'SELECT id FROM notes WHERE id IN (' +
+        localIds.map((id) => "'" + id.replace(/'/g, "''") + "'").join(',') + ')');
+      const alive = new Set(
+        (res && res.success && res.data ? res.data : []).map((r) => r.id));
+      let removed = 0;
+      for (const id of localIds) {
+        if (!alive.has(id)) {
+          for (const sid of this._entrySourceIds(map[id])) {
+            try { await nlmClient.deleteSource(notebookId, sid); } catch (_) {}
+          }
+          delete map[id];
+          removed++;
+        }
+      }
+      if (removed) await saveState();
+      return removed;
+    },
+
+    syncedEntries(notebookId) {
+      return Object.entries(notebookMap(notebookId))
+        .map(([localId, v]) => Object.assign({ localId }, v));
+    },
+  };
+
+  // ==========================================================================
+  // Studio: generate podcasts / slide decks, poll to completion in the
+  // background (via Synapse.tasks), and save a note linking to the result.
+  // (The media BYTES aren't downloaded into an attachment: the artifact URL
+  // cross-origin-redirects and needs a browser-navigation download primitive
+  // that in-page fetch can't provide — tracked as a future infra item. The
+  // saved note links to the artifact in NotebookLM, which is stable.)
+  // ==========================================================================
+  const nlmStudio = {
+    notebookLink(notebookId) {
+      return NLM.ORIGIN + '/notebook/' + notebookId;
+    },
+
+    // Kick off generation and schedule a background completion poll.
+    async generate(kind, notebookId, opts) {
+      const artifactId = kind === 'slides'
+        ? await nlmClient.createSlides(notebookId, opts)
+        : await nlmClient.createAudioOverview(notebookId, opts);
+      if (!artifactId) throw new Error('generation did not return an artifact id');
+      appState.artifactKinds = appState.artifactKinds || {};
+      appState.artifactKinds[artifactId] = kind;
+      await saveState();
+      // Poll every 30s for up to ~8 min via the generic task scheduler; the
+      // scheduled tool re-checks status and saves the note when ready.
+      try {
+        const sched = await Synapse.tasks.schedule({
+          tool: 'notebooklm_artifact_status',
+          params: { notebook_id: notebookId, artifact_id: artifactId },
+          delaySeconds: 30, maxRuns: 16,
+        });
+        if (sched && sched.taskId) {
+          appState.artifactTasks = appState.artifactTasks || {};
+          appState.artifactTasks[artifactId] = sched.taskId;
+          await saveState();
+        }
+      } catch (_) { /* scheduler unavailable — UI/agent can still poll */ }
+      return artifactId;
+    },
+
+    // Check one artifact; when complete, save a linking note exactly once.
+    async check(notebookId, artifactId) {
+      appState.savedArtifacts = appState.savedArtifacts || {};
+      // Dedup on KEY presence (not truthiness) so a saved artifact whose note
+      // id came back empty still dedups instead of re-saving on the next poll.
+      if (Object.prototype.hasOwnProperty.call(appState.savedArtifacts, artifactId)) {
+        return { status: 'complete', note_id: appState.savedArtifacts[artifactId] || undefined };
+      }
+      const artifacts = await nlmClient.pollStudio(notebookId);
+      const art = artifacts.find((a) => a.id === artifactId);
+      if (!art) return { status: 'not_found' };
+      if (art.failed) return { status: 'failed' };
+      if (!art.complete) return { status: 'pending' };
+
+      const kind = (appState.artifactKinds || {})[artifactId] ||
+        (art.type === NLM.STUDIO_TYPE.SLIDES ? 'slides' : 'podcast');
+      const title = art.title || (kind === 'slides' ? 'Slide deck' : 'Podcast');
+
+      // Best-effort: pull the media bytes into an attachment. This uses the
+      // user's live login cookies; it may fail if the CDN requires true browser
+      // download semantics — in that case we still save a note linking to the
+      // artifact in NotebookLM (which is always available).
+      let attachments;
+      let note = 'Open it in NotebookLM:\n' + this.notebookLink(notebookId) + '\n';
+      if (art.mediaUrl) {
+        try {
+          const dl = await Synapse.downloadFile(art.mediaUrl);
+          if (dl && dl.status === 'success' && dl.uri) {
+            attachments = [dl.uri];
+            note = 'Downloaded and attached below.\n\n' + note;
+          } else {
+            note = '(Could not download the file automatically: ' +
+              ((dl && dl.error) || 'unknown') + '.)\n\n' + note;
+          }
+        } catch (_) {
+          note = '(Automatic download failed.)\n\n' + note;
+        }
+      }
+
+      const save = await Synapse.saveNotes([{
+        title: (kind === 'slides' ? 'Slides ready: ' : 'Podcast ready: ') + title,
+        content: 'Your NotebookLM ' + (kind === 'slides' ? 'slide deck' : 'podcast') +
+          ' "' + title + '" is ready.\n\n' + note,
+        type: 'note',
+        attachments: attachments,
+      }]);
+      const noteId = (save && (save.savedNoteIds ? save.savedNoteIds[0] : save.noteId)) || '';
+      // Stop the background poll now that it's done (separate task store — does
+      // not touch appState).
+      const taskId = (appState.artifactTasks || {})[artifactId];
+      if (taskId) { try { await Synapse.tasks.cancel(taskId); } catch (_) {} }
+      // Re-load the freshest appState and persist the completion with NO await
+      // between read and write, so this (possibly background) context doesn't
+      // clobber syncMap changes another context made since wrap()'s loadState.
+      await loadState();
+      appState.savedArtifacts = appState.savedArtifacts || {};
+      appState.savedArtifacts[artifactId] = noteId; // string (may be ''); key presence = saved
+      await saveState();
+      return { status: 'complete', note_id: noteId || undefined };
+    },
+  };
+
+  // The streaming query endpoint returns chunks; the final answer is the last
+  // long human-readable markdown string. Pull the best candidate.
+  function extractAnswer(raw) {
+    raw = stripAntiXssi(raw);
+    const candidates = [];
+    const re = /"((?:[^"\\]|\\.){40,})"/g;
+    let m;
+    while ((m = re.exec(raw)) !== null) {
+      let s = m[1];
+      try { s = JSON.parse('"' + s + '"'); } catch (_) {}
+      if (s.includes(' ') && !s.startsWith('http')) candidates.push(s);
+    }
+    // Prefer answers that are not "thinking" preambles.
+    const answers = candidates.filter((c) => !/^\*\*[A-Z]/.test(c));
+    return (answers[answers.length - 1] || candidates[candidates.length - 1] ||
+      '(no answer parsed)');
+  }
+
+  // Resolve a tag to local note ids via SQL. Note content never leaves the
+  // device for the AI — only ids — and is sent straight to NotebookLM on sync.
+  async function notesForTag(tag) {
+    const clean = String(tag).replace(/^#/, '').replace(/'/g, "''");
+    const res = await Synapse.runQuery(
+      "SELECT n.id FROM notes n JOIN note_tags nt ON nt.noteId = n.id " +
+      "JOIN tags t ON t.id = nt.tagId WHERE t.name = '" + clean + "'");
+    if (!res || !res.success) return [];
+    return (res.data || []).map((r) => r.id);
+  }
+
+  // ==========================================================================
+  // AI-callable tools (registered for both headless invocation and the
+  // interactive playground). See the tool_spec CDATA block in <head>.
+  // ==========================================================================
+  function registerTools() {
+    if (!window.Synapse || !window.Synapse.tool || !window.Synapse.tool.registered) return;
+    const reg = window.Synapse.tool.registered;
+    const wrap = (fn) => async (params) => {
+      await loadState();
+      try { return await fn(params || {}); }
+      catch (e) { return { error: String((e && e.message) || e) }; }
+    };
+    reg.notebooklm_list_notebooks = wrap(async () => ({
+      notebooks: await nlmClient.listNotebooks(),
+    }));
+    reg.notebooklm_query = wrap(async (p) => {
+      if (!p.notebook_id || !p.question) return { error: 'notebook_id and question are required' };
+      const sources = await nlmClient.listSources(p.notebook_id);
+      return { answer: await nlmClient.query(p.notebook_id, sources, p.question) };
+    });
+    reg.notebooklm_sync_notes = wrap(async (p) => {
+      if (!p.notebook_id) return { error: 'notebook_id is required' };
+      let ids = Array.isArray(p.note_ids) ? p.note_ids : null;
+      if ((!ids || !ids.length) && p.tag) ids = await notesForTag(p.tag);
+      if ((!ids || !ids.length) && isInteractive()) {
+        const picked = await Synapse.pickNotes({ title: 'Select notes to sync', multiSelect: true });
+        if (picked && picked.success && !picked.cancelled) ids = (picked.notes || []).map((n) => n.id);
+      }
+      if (!ids || !ids.length) return { error: 'provide note_ids or a tag' };
+      const r = await nlmSync.syncNotes(p.notebook_id, ids);
+      return { added: r.added, updated: r.updated, unchanged: r.unchanged, failed: r.failed.length };
+    });
+    reg.notebooklm_generate_podcast = wrap(async (p) => {
+      if (!p.notebook_id) return { error: 'notebook_id is required' };
+      const id = await nlmStudio.generate('podcast', p.notebook_id,
+        { format: p.format, language: p.language });
+      return { artifact_id: id, status: 'pending' };
+    });
+    reg.notebooklm_generate_slides = wrap(async (p) => {
+      if (!p.notebook_id) return { error: 'notebook_id is required' };
+      const id = await nlmStudio.generate('slides', p.notebook_id, {});
+      return { artifact_id: id, status: 'pending' };
+    });
+    reg.notebooklm_artifact_status = wrap(async (p) => {
+      if (!p.notebook_id || !p.artifact_id) return { error: 'notebook_id and artifact_id are required' };
+      return await nlmStudio.check(p.notebook_id, p.artifact_id);
+    });
+  }
+  registerTools();
+
+  // ==========================================================================
+  // Auth + UI
+  // ==========================================================================
+  const $ = (id) => document.getElementById(id);
+  let selectedNotebook = null;
+
+  async function refreshAuth() {
+    const status = await Synapse.session.status(domain);
+    const connected = status && status.loggedIn;
+    $('authDot').className = 'status-dot ' + (connected ? 'ok' : 'bad');
+    $('authText').textContent = connected
+      ? 'Connected to NotebookLM' : 'Not connected';
+    $('connectBtn').classList.toggle('hidden', connected);
+    $('main').classList.toggle('hidden', !connected);
+    if (connected) await loadNotebooks();
+  }
+
+  async function connect() {
+    $('authErr').textContent = '';
+    const res = await Synapse.session.requestLogin({ url: NLM.ORIGIN });
+    if (res && res.loggedIn) {
+      tokens.at = '';
+      await refreshAuth();
+    } else if (res && res.error === 'no_ui') {
+      $('authErr').textContent =
+        'Open this app directly to sign in to NotebookLM.';
+    } else {
+      $('authErr').textContent = 'Sign-in was not completed.';
+    }
+  }
+
+  async function loadNotebooks() {
+    $('nbList').innerHTML = '<div class="spinner">Loading…</div>';
+    try {
+      const notebooks = await nlmClient.listNotebooks();
+      $('nbList').innerHTML = '';
+      if (!notebooks.length) {
+        $('nbList').innerHTML = '<div class="muted">No notebooks yet.</div>';
+      }
+      for (const nb of notebooks) {
+        const el = document.createElement('div');
+        el.className = 'nb-item';
+        el.innerHTML = '<span class="title">' + (nb.emoji || '📓') + ' ' +
+          escapeHtml(nb.title) + '</span>';
+        el.onclick = () => selectNotebook(nb, el);
+        $('nbList').appendChild(el);
+      }
+    } catch (e) {
+      $('nbList').innerHTML = '<div class="err">' + escapeHtml(String(e.message || e)) +
+        '</div>';
+      if (String(e.message).includes('not_logged_in')) await refreshAuth();
+    }
+  }
+
+  function selectNotebook(nb, el) {
+    selectedNotebook = nb;
+    document.querySelectorAll('.nb-item').forEach((n) => n.classList.remove('selected'));
+    el.classList.add('selected');
+    $('selNbTitle').textContent = nb.title;
+    $('nbActions').classList.remove('hidden');
+    $('answer').classList.add('hidden');
+    loadSources();
+    renderSyncList();
+  }
+
+  function renderSyncList() {
+    if (!selectedNotebook) return;
+    const entries = nlmSync.syncedEntries(selectedNotebook.id);
+    if (!entries.length) {
+      $('syncList').innerHTML = '<div class="muted">No notes synced to this notebook yet.</div>';
+      return;
+    }
+    $('syncList').innerHTML = '<div class="muted">' + entries.length +
+      ' note(s) synced:</div>';
+    for (const e of entries) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.style.justifyContent = 'space-between';
+      const when = e.syncedAt ? new Date(e.syncedAt).toLocaleString() : '';
+      const attCount = Object.keys(e.attachments || {}).length;
+      const label = escapeHtml(e.title || 'Note') +
+        (attCount ? ' <span class="muted">(+' + attCount + ' file' +
+          (attCount > 1 ? 's' : '') + ')</span>' : '');
+      row.innerHTML = '<span class="title">' + label +
+        '</span><span class="muted">' + when + '</span>';
+      $('syncList').appendChild(row);
+    }
+  }
+
+  async function runSync(noteIds) {
+    if (!selectedNotebook || !noteIds.length) return;
+    $('syncStatus').textContent = 'Syncing ' + noteIds.length + ' note(s)…';
+    try {
+      const r = await nlmSync.syncNotes(selectedNotebook.id, noteIds);
+      let msg = r.added + ' added, ' + r.updated + ' updated, ' +
+        r.unchanged + ' unchanged';
+      if (r.failed.length) msg += ', ' + r.failed.length + ' failed';
+      $('syncStatus').textContent = msg;
+      renderSyncList();
+      await loadSources();
+    } catch (e) {
+      $('syncStatus').textContent = '';
+      alert(e.message || e);
+    }
+  }
+
+  async function loadSources() {
+    if (!selectedNotebook) return;
+    $('srcList').innerHTML = '<div class="spinner">Loading sources…</div>';
+    try {
+      const ids = await nlmClient.listSources(selectedNotebook.id);
+      if (!ids.length) { $('srcList').innerHTML = '<div class="muted">No sources.</div>'; return; }
+      $('srcList').innerHTML = '';
+      for (const id of ids) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.style.justifyContent = 'space-between';
+        row.innerHTML = '<span class="muted">' + id.slice(0, 8) + '…</span>';
+        const del = document.createElement('button');
+        del.textContent = 'Delete';
+        del.onclick = async () => {
+          del.disabled = true;
+          try { await nlmClient.deleteSource(selectedNotebook.id, id); await loadSources(); }
+          catch (e) { del.disabled = false; alert(e.message || e); }
+        };
+        row.appendChild(del);
+        $('srcList').appendChild(row);
+      }
+    } catch (e) {
+      $('srcList').innerHTML = '<div class="err">' + escapeHtml(String(e.message || e)) + '</div>';
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  $('connectBtn').onclick = connect;
+  $('refreshBtn').onclick = loadNotebooks;
+
+  $('createNbBtn').onclick = async () => {
+    const title = $('newNbTitle').value.trim();
+    if (!title) return;
+    $('createNbBtn').disabled = true;
+    try {
+      await nlmClient.createNotebook(title);
+      $('newNbTitle').value = '';
+      await loadNotebooks();
+    } catch (e) { alert(e.message || e); }
+    finally { $('createNbBtn').disabled = false; }
+  };
+
+  $('addSrcBtn').onclick = async () => {
+    if (!selectedNotebook) return;
+    const title = $('srcTitle').value.trim() || 'Untitled';
+    const text = $('srcBody').value.trim();
+    if (!text) return;
+    $('addSrcBtn').disabled = true;
+    $('addSrcStatus').textContent = 'Adding…';
+    try {
+      await nlmClient.addTextSource(selectedNotebook.id, title, text);
+      $('srcTitle').value = ''; $('srcBody').value = '';
+      $('addSrcStatus').textContent = 'Added.';
+      await loadSources();
+    } catch (e) { $('addSrcStatus').textContent = ''; alert(e.message || e); }
+    finally { $('addSrcBtn').disabled = false; }
+  };
+
+  $('pickNotesBtn').onclick = async () => {
+    if (!selectedNotebook) return;
+    const res = await Synapse.pickNotes({
+      title: 'Select notes to sync to ' + selectedNotebook.title,
+      multiSelect: true,
+    });
+    if (res && res.error === 'no_ui') {
+      alert('Open this app directly to choose notes, or sync by tag.');
+      return;
+    }
+    if (res && res.success && !res.cancelled && (res.notes || []).length) {
+      await runSync(res.notes.map((n) => n.id));
+    }
+  };
+
+  $('syncTagBtn').onclick = async () => {
+    if (!selectedNotebook) return;
+    const tag = $('syncTag').value.trim().replace(/^#/, '');
+    if (!tag) return;
+    const ids = await notesForTag(tag);
+    if (!ids.length) { alert('No notes with tag #' + tag); return; }
+    await runSync(ids);
+  };
+
+  $('cleanupBtn').onclick = async () => {
+    if (!selectedNotebook) return;
+    $('syncStatus').textContent = 'Cleaning up…';
+    try {
+      const removed = await nlmSync.cleanupOrphans(selectedNotebook.id);
+      $('syncStatus').textContent = removed + ' orphaned source(s) removed';
+      renderSyncList();
+      await loadSources();
+    } catch (e) { $('syncStatus').textContent = ''; alert(e.message || e); }
+  };
+
+  $('exportStateBtn').onclick = async () => {
+    try {
+      const json = JSON.stringify(appState, null, 2);
+      const res = await Synapse.saveNotes([{
+        title: 'NotebookLM sync state — ' + new Date().toLocaleDateString(),
+        content: 'Backup of NotebookLM Manager sync state.\n\n```json\n' +
+          json + '\n```',
+        type: 'note',
+      }]);
+      if (res && res.success) alert('Saved sync state as a note.');
+      else alert('Could not save state note.');
+    } catch (e) { alert(e.message || e); }
+  };
+
+  $('importStateBtn').onclick = async () => {
+    const res = await Synapse.pickNotes({
+      title: 'Pick the sync-state note to import', multiSelect: false,
+    });
+    if (!res || !res.success || res.cancelled || !(res.notes || []).length) return;
+    const exported = await Synapse.exportNotes([res.notes[0].id],
+      { includeSubNotesAndLinkedNotes: false, includeAttachmentList: false });
+    if (!exported || !exported.success || !(exported.notes || []).length) {
+      alert('Could not read that note.'); return;
+    }
+    const m = /```json\s*([\s\S]*?)```/.exec(exported.notes[0].markdown);
+    if (!m) { alert('That note has no sync-state JSON block.'); return; }
+    try {
+      const parsed = JSON.parse(m[1]);
+      if (!parsed || typeof parsed !== 'object' || !parsed.syncMap) {
+        throw new Error('missing syncMap');
+      }
+      // MERGE the backup into the current state (per notebook) rather than
+      // replacing it — replacing would drop mappings for notes synced since the
+      // backup, orphaning their remote sources.
+      const incoming = parsed.syncMap || {};
+      let merged = 0;
+      for (const nb of Object.keys(incoming)) {
+        appState.syncMap[nb] = Object.assign(
+          appState.syncMap[nb] || {}, incoming[nb]);
+        merged += Object.keys(incoming[nb] || {}).length;
+      }
+      await saveState();
+      renderSyncList();
+      alert('Sync state imported (' + merged + ' entries merged).');
+    } catch (e) { alert('Invalid sync-state note: ' + (e.message || e)); }
+  };
+
+  async function runGenerate(kind) {
+    if (!selectedNotebook) return;
+    $('studioStatus').textContent = 'Starting ' +
+      (kind === 'slides' ? 'slide deck' : 'podcast') + ' generation…';
+    try {
+      const artifactId = await nlmStudio.generate(kind, selectedNotebook.id,
+        kind === 'slides' ? {} : { format: $('podcastFormat').value });
+      $('studioStatus').textContent =
+        'Generating (artifact ' + artifactId.slice(0, 8) +
+        '…). A note will appear when it is ready — usually 1–5 minutes.';
+    } catch (e) { $('studioStatus').textContent = ''; alert(e.message || e); }
+  }
+  $('genPodcastBtn').onclick = () => runGenerate('podcast');
+  $('genSlidesBtn').onclick = () => runGenerate('slides');
+
+  $('askBtn').onclick = async () => {
+    if (!selectedNotebook) return;
+    const question = $('queryInput').value.trim();
+    if (!question) return;
+    $('askBtn').disabled = true;
+    $('askStatus').textContent = 'Thinking…';
+    $('answer').classList.add('hidden');
+    try {
+      const sources = await nlmClient.listSources(selectedNotebook.id);
+      const answer = await nlmClient.query(selectedNotebook.id, sources, question);
+      $('answer').textContent = answer;
+      $('answer').classList.remove('hidden');
+      $('askStatus').textContent = '';
+    } catch (e) { $('askStatus').textContent = ''; alert(e.message || e); }
+    finally { $('askBtn').disabled = false; }
+  };
+
+  // Only drive the interactive UI when a UI is present. In headless AI-tool
+  // invocations, the tools above are registered and the UI stays dormant.
+  if (isInteractive()) {
+    (async () => { await loadState(); await refreshAuth(); })();
+  }
+  </script>
+</body>
+</html>

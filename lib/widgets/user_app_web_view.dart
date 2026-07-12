@@ -18,7 +18,9 @@ import '../services/global_library_service.dart';
 import '../services/logger_service.dart';
 import '../services/sql_query_service.dart';
 import '../services/user_app_runtime_bridge.dart';
+import '../screens/settings/web_login_browser_screen.dart';
 import 'approval_dialog.dart';
+import 'note_picker_sheet.dart';
 
 typedef UserAppOpenNote =
     Future<void> Function(Note note, bool replaceWindow);
@@ -227,6 +229,47 @@ class _UserAppWebViewState extends State<UserAppWebView> {
           return true;
         }
         return false;
+      },
+      onWebLoginRequest: (source, url) async {
+        if (!mounted) return false;
+        // Open the in-app login browser; it captures + persists the session
+        // and pops `true` once the user saves their login.
+        final result = await Navigator.of(context).push<bool>(
+          MaterialPageRoute(
+            builder: (_) => WebLoginBrowserScreen(initialUrl: url),
+          ),
+        );
+        return result == true;
+      },
+      onSessionAccessApprovalRequest: (source, domain) async {
+        if (!mounted) return false;
+        final request = ApprovalRequest.sessionAccess(
+          domain: domain,
+          source: widget.sourceLabel,
+        );
+        final result = await ApprovalDialog.showWithContext(context, request);
+        return result.approved;
+      },
+      onPickNotes: (source, options) async {
+        if (!mounted) return null;
+        final preselected = (options['preselectedIds'] as List?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            const <String>[];
+        final selected = await NotePickerSheet.show(
+          context,
+          title: options['title'] as String?,
+          multiSelect: options['multiSelect'] != false,
+          initialTag: options['initialTag'] as String?,
+          initialQuery: options['initialQuery'] as String?,
+          preselectedIds: preselected,
+        );
+        if (selected == null) {
+          return null; // cancelled
+        }
+        return [
+          for (final note in selected) {'id': note.id, 'title': note.title},
+        ];
       },
     );
   }
