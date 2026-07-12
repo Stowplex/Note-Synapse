@@ -4,16 +4,68 @@
   <script type="text/tool-spec"><![CDATA[tool_spec
   - name: notebooklm_list_notebooks
     description: |
-      List the user's NotebookLM notebooks. Call this first to get a notebook_id
-      for the other tools, or to show the user what notebooks exist.
+      List the user's NotebookLM notebooks (collections). Call this first to
+      resolve a notebook_id from a title the user named, or to show what
+      collections exist. Each entry includes the Note-Synapse-side `purpose`
+      label and how many local notes were synced into it.
     input_params: {}
     output_params:
       notebooks:
         type: array
-        description: Array of { id, title } for each notebook. Present on success.
+        description: |
+          Array of { id, title, purpose, synced_note_count } per notebook.
+          Present on success. `purpose` is the user's label for the collection
+          (may be empty); `synced_note_count` is how many local notes are in it.
       error:
         type: string
         description: Error message. Present on failure (e.g. not signed in).
+  - name: notebooklm_create_notebook
+    description: |
+      Create a new NotebookLM notebook (collection). Use when the user asks to
+      add notes to a collection that does not exist yet. Set `purpose` to a short
+      description of what the collection is for so it is identifiable later.
+    input_params:
+      title:
+        type: string
+        description: The collection title.
+        required: true
+      purpose:
+        type: string
+        description: What the collection is for (a Note-Synapse-side label).
+    output_params:
+      notebook_id: { type: string }
+      title: { type: string }
+      error: { type: string }
+  - name: notebooklm_collection_info
+    description: |
+      Describe a collection: its title, its purpose, and the list of Note
+      Synapse notes synced into it. Use to answer "what is collection X for" or
+      "what's in collection X".
+    input_params:
+      notebook_id:
+        type: string
+        required: true
+    output_params:
+      title: { type: string }
+      purpose: { type: string }
+      notes:
+        type: array
+        description: Titles of the local notes synced into the collection.
+      error: { type: string }
+  - name: notebooklm_set_purpose
+    description: |
+      Set or update a collection's purpose label (what it is for), stored on the
+      Note Synapse side.
+    input_params:
+      notebook_id:
+        type: string
+        required: true
+      purpose:
+        type: string
+        required: true
+    output_params:
+      ok: { type: boolean }
+      error: { type: string }
   - name: notebooklm_query
     description: |
       Ask a question answered from the sources in a NotebookLM notebook. The
@@ -189,6 +241,13 @@
     <div id="nbActions" class="card hidden">
       <div class="muted">Selected: <span id="selNbTitle"></span></div>
 
+      <label for="nbPurpose">What is this collection for? (a label to help you recognise it)</label>
+      <input id="nbPurpose" placeholder="e.g. Papers on retrieval-augmented generation" />
+      <div class="row" style="margin-top:6px">
+        <button id="savePurposeBtn">Save purpose</button>
+        <span id="purposeStatus" class="spinner"></span>
+      </div>
+
       <label for="srcTitle">Add a text source</label>
       <input id="srcTitle" placeholder="Source title" />
       <textarea id="srcBody" placeholder="Text content to add as a source"></textarea>
@@ -212,8 +271,8 @@
       </div>
       <div id="syncList" style="margin-top:8px"></div>
       <div class="row" style="margin-top:6px">
-        <button id="exportStateBtn">Export sync state as note</button>
-        <button id="importStateBtn">Import sync state</button>
+        <button id="exportStateBtn">Export collections summary</button>
+        <button id="importStateBtn">Import collections state</button>
       </div>
 
       <hr style="margin:14px 0; border:none; border-top:1px solid color-mix(in srgb, CanvasText 15%, transparent)" />
@@ -332,19 +391,25 @@
 
   // ==========================================================================
   // Sync state (persisted in the app's own storage via Synapse.storeAppState).
-  // Shape: { syncMap: { <notebookId>: { <localNoteId>: {
-  //   remoteSourceId, contentHash, syncedAt, title } } } }
-  // The map lets us detect changes (hash), re-push updates (delete+re-add,
-  // NotebookLM has no in-place update), and clean up orphans.
+  // Two Note-Synapse-side records, keyed by NotebookLM notebook id:
+  //   collections[id] = { title, purpose, updatedAt }
+  //     — what this collection IS: its NotebookLM title plus a user-written
+  //       purpose so the user can tell collections apart on the Note Synapse
+  //       side ("papers on retrieval-augmented generation", etc.).
+  //   syncMap[id][localNoteId] = { remoteSourceId, contentHash, syncedAt,
+  //                                title, attachments }
+  //     — which local notes were pushed into that collection (for change
+  //       detection, re-push, and orphan cleanup).
   // ==========================================================================
-  let appState = { syncMap: {} };
+  let appState = { syncMap: {}, collections: {} };
 
   async function loadState() {
     try {
       const res = await Synapse.loadAppState();
       if (res && res.success && res.data && typeof res.data === 'object') {
-        appState = Object.assign({ syncMap: {} }, res.data);
+        appState = Object.assign({ syncMap: {}, collections: {} }, res.data);
         if (!appState.syncMap) appState.syncMap = {};
+        if (!appState.collections) appState.collections = {};
       }
     } catch (_) { /* first run: keep defaults */ }
   }
@@ -353,9 +418,42 @@
     try { await Synapse.storeAppState(appState); } catch (_) {}
   }
 
+  // Persist collection metadata WITHOUT clobbering another context's writes:
+  // reload the freshest state, merge our (newer) collection records in, then
+  // save with no await between reload and save. Used by read/refresh paths that
+  // only need to persist auto-remembered titles/purposes (never the whole blob).
+  async function persistCollections() {
+    const local = appState.collections || {};
+    await loadState();
+    appState.collections = appState.collections || {};
+    for (const id of Object.keys(local)) {
+      const cur = appState.collections[id];
+      if (!cur || (local[id].updatedAt || 0) >= (cur.updatedAt || 0)) {
+        appState.collections[id] = local[id];
+      }
+    }
+    await saveState();
+  }
+
   function notebookMap(notebookId) {
     if (!appState.syncMap[notebookId]) appState.syncMap[notebookId] = {};
     return appState.syncMap[notebookId];
+  }
+
+  // Record/update a collection's identity (title + optional purpose).
+  function rememberCollection(notebookId, title, purpose) {
+    const existing = appState.collections[notebookId] || {};
+    appState.collections[notebookId] = {
+      title: title != null ? title : existing.title || '',
+      purpose: purpose != null ? purpose : existing.purpose || '',
+      updatedAt: Date.now(),
+    };
+  }
+  function collectionInfo(notebookId) {
+    return appState.collections[notebookId] || { title: '', purpose: '' };
+  }
+  function syncedCount(notebookId) {
+    return Object.keys(appState.syncMap[notebookId] || {}).length;
   }
 
   // Single source of truth for "is a UI present" (used by both the tool gate
@@ -1021,9 +1119,43 @@
       try { return await fn(params || {}); }
       catch (e) { return { error: friendlyError(e) }; }
     };
-    reg.notebooklm_list_notebooks = wrap(async () => ({
-      notebooks: await nlmClient.listNotebooks(),
-    }));
+    reg.notebooklm_list_notebooks = wrap(async () => {
+      const notebooks = await nlmClient.listNotebooks();
+      // Enrich with the Note-Synapse-side purpose + synced-note count so the AI
+      // can pick/describe collections meaningfully.
+      for (const nb of notebooks) {
+        rememberCollection(nb.id, nb.title);
+        nb.purpose = collectionInfo(nb.id).purpose || '';
+        nb.synced_note_count = syncedCount(nb.id);
+      }
+      await persistCollections();
+      return { notebooks };
+    });
+    reg.notebooklm_create_notebook = wrap(async (p) => {
+      if (!p.title) return { error: 'title is required' };
+      const id = await nlmClient.createNotebook(p.title);
+      if (!id) return { error: 'could not create notebook' };
+      rememberCollection(id, p.title, p.purpose || '');
+      await persistCollections();
+      return { notebook_id: id, title: p.title };
+    });
+    reg.notebooklm_collection_info = wrap(async (p) => {
+      if (!p.notebook_id) return { error: 'notebook_id is required' };
+      const info = collectionInfo(p.notebook_id);
+      return {
+        title: info.title || '',
+        purpose: info.purpose || '',
+        notes: nlmSync.syncedEntries(p.notebook_id).map((e) => e.title || 'Note'),
+      };
+    });
+    reg.notebooklm_set_purpose = wrap(async (p) => {
+      if (!p.notebook_id || p.purpose == null) {
+        return { error: 'notebook_id and purpose are required' };
+      }
+      rememberCollection(p.notebook_id, null, String(p.purpose));
+      await persistCollections();
+      return { ok: true };
+    });
     reg.notebooklm_query = wrap(async (p) => {
       if (!p.notebook_id || !p.question) return { error: 'notebook_id and question are required' };
       const sources = await nlmClient.listSources(p.notebook_id);
@@ -1106,13 +1238,24 @@
         $('nbList').innerHTML = '<div class="muted">No notebooks yet.</div>';
       }
       for (const nb of notebooks) {
+        // Remember the title so collections are identifiable even before select.
+        rememberCollection(nb.id, nb.title);
+        const info = collectionInfo(nb.id);
+        const count = syncedCount(nb.id);
+        const meta = [];
+        if (info.purpose) meta.push(escapeHtml(info.purpose));
+        if (count) meta.push(count + ' note' + (count > 1 ? 's' : '') + ' synced');
         const el = document.createElement('div');
         el.className = 'nb-item';
+        el.style.flexDirection = 'column';
+        el.style.alignItems = 'flex-start';
         el.innerHTML = '<span class="title">' + (nb.emoji || '📓') + ' ' +
-          escapeHtml(nb.title) + '</span>';
+          escapeHtml(nb.title) + '</span>' +
+          (meta.length ? '<span class="muted">' + meta.join(' · ') + '</span>' : '');
         el.onclick = () => selectNotebook(nb, el);
         $('nbList').appendChild(el);
       }
+      await persistCollections();
     } catch (e) {
       $('nbList').innerHTML = '<div class="err">' + escapeHtml(friendlyError(e)) +
         '</div>';
@@ -1125,6 +1268,9 @@
     document.querySelectorAll('.nb-item').forEach((n) => n.classList.remove('selected'));
     el.classList.add('selected');
     $('selNbTitle').textContent = nb.title;
+    rememberCollection(nb.id, nb.title);
+    $('nbPurpose').value = collectionInfo(nb.id).purpose || '';
+    $('purposeStatus').textContent = '';
     $('nbActions').classList.remove('hidden');
     $('answer').classList.add('hidden');
     loadSources();
@@ -1135,11 +1281,12 @@
     if (!selectedNotebook) return;
     const entries = nlmSync.syncedEntries(selectedNotebook.id);
     if (!entries.length) {
-      $('syncList').innerHTML = '<div class="muted">No notes synced to this notebook yet.</div>';
+      $('syncList').innerHTML =
+        '<div class="muted">No Note Synapse notes synced to this collection yet.</div>';
       return;
     }
     $('syncList').innerHTML = '<div class="muted">' + entries.length +
-      ' note(s) synced:</div>';
+      ' Note Synapse note(s) synced into this collection:</div>';
     for (const e of entries) {
       const row = document.createElement('div');
       row.className = 'row';
@@ -1212,11 +1359,20 @@
     if (!title) return;
     $('createNbBtn').disabled = true;
     try {
-      await nlmClient.createNotebook(title);
+      const id = await nlmClient.createNotebook(title);
+      if (id) rememberCollection(id, title);
       $('newNbTitle').value = '';
-      await loadNotebooks();
+      await loadNotebooks(); // persists the new collection via persistCollections
     } catch (e) { uiError(e); }
     finally { $('createNbBtn').disabled = false; }
+  };
+
+  $('savePurposeBtn').onclick = async () => {
+    if (!selectedNotebook) return;
+    rememberCollection(selectedNotebook.id, selectedNotebook.title,
+      $('nbPurpose').value.trim());
+    $('purposeStatus').textContent = 'Saved.';
+    await loadNotebooks(); // persists (via persistCollections) + refreshes subtitles
   };
 
   $('addSrcBtn').onclick = async () => {
@@ -1279,17 +1435,44 @@
     } catch (e) { $('syncStatus').textContent = ''; uiError(e); }
   };
 
+  // Build a human-readable summary of collections: what each collection is for
+  // and which Note Synapse notes are in it. (A machine-readable JSON block is
+  // appended so the note can be re-imported.)
+  function buildStateSummaryMarkdown() {
+    const ids = Object.keys(appState.collections || {})
+      .filter((id) => syncedCount(id) > 0 ||
+        (appState.collections[id].purpose || '').trim());
+    let md = '# NotebookLM collections\n\n';
+    if (!ids.length) {
+      md += '_No collections synced yet._\n\n';
+    }
+    for (const id of ids) {
+      const info = appState.collections[id];
+      md += '## ' + (info.title || 'Untitled collection') + '\n';
+      if (info.purpose) md += '*Purpose:* ' + info.purpose + '\n';
+      md += '[Open in NotebookLM](' + NLM.ORIGIN + '/notebook/' + id + ')\n\n';
+      const entries = nlmSync.syncedEntries(id);
+      md += 'Synced notes (' + entries.length + '):\n';
+      for (const e of entries) {
+        const atts = Object.keys(e.attachments || {}).length;
+        md += '- ' + (e.title || 'Note') + (atts ? ' (+' + atts + ' file' +
+          (atts > 1 ? 's' : '') + ')' : '') + '\n';
+      }
+      md += '\n';
+    }
+    md += '```json\n' + JSON.stringify(appState) + '\n```\n';
+    return md;
+  }
+
   $('exportStateBtn').onclick = async () => {
     try {
-      const json = JSON.stringify(appState, null, 2);
       const res = await Synapse.saveNotes([{
-        title: 'NotebookLM sync state — ' + new Date().toLocaleDateString(),
-        content: 'Backup of NotebookLM Manager sync state.\n\n```json\n' +
-          json + '\n```',
+        title: 'NotebookLM collections — ' + new Date().toLocaleDateString(),
+        content: buildStateSummaryMarkdown(),
         type: 'note',
       }]);
-      if (res && res.success) alert('Saved sync state as a note.');
-      else alert('Could not save state note.');
+      if (res && res.success) alert('Saved a collections summary note.');
+      else alert('Could not save the note.');
     } catch (e) { uiError(e); }
   };
 
@@ -1313,16 +1496,33 @@
       // MERGE the backup into the current state (per notebook) rather than
       // replacing it — replacing would drop mappings for notes synced since the
       // backup, orphaning their remote sources.
+      // Import is ADDITIVE and current-wins: only restore entries missing from
+      // the current state. Never overwrite a current mapping with an older
+      // backup value (that would point at a stale/deleted remote source and
+      // orphan the real one).
       const incoming = parsed.syncMap || {};
       let merged = 0;
       for (const nb of Object.keys(incoming)) {
-        appState.syncMap[nb] = Object.assign(
-          appState.syncMap[nb] || {}, incoming[nb]);
-        merged += Object.keys(incoming[nb] || {}).length;
+        appState.syncMap[nb] = appState.syncMap[nb] || {};
+        for (const noteId of Object.keys(incoming[nb] || {})) {
+          if (!(noteId in appState.syncMap[nb])) {
+            appState.syncMap[nb][noteId] = incoming[nb][noteId];
+            merged++;
+          }
+        }
+      }
+      // Collection metadata: keep newer-by-updatedAt; fill in missing ones.
+      const incomingCols = parsed.collections || {};
+      appState.collections = appState.collections || {};
+      for (const nb of Object.keys(incomingCols)) {
+        const cur = appState.collections[nb];
+        if (!cur || (incomingCols[nb].updatedAt || 0) > (cur.updatedAt || 0)) {
+          appState.collections[nb] = incomingCols[nb];
+        }
       }
       await saveState();
       renderSyncList();
-      alert('Sync state imported (' + merged + ' entries merged).');
+      alert('Collections state imported (' + merged + ' note mappings merged).');
     } catch (e) { alert('Invalid sync-state note: ' + (e.message || e)); }
   };
 
