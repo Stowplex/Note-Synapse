@@ -8827,24 +8827,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Remove \"{appName}\" access to your {domain} login?'**
   String revokeAppAccessConfirm(String appName, String domain);
-
-  /// No description provided for @selectNotes.
-  ///
-  /// In en, this message translates to:
-  /// **'Select notes'**
-  String get selectNotes;
-
-  /// No description provided for @selectAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Select'**
-  String get selectAction;
-
-  /// No description provided for @addWithCount.
-  ///
-  /// In en, this message translates to:
-  /// **'Add ({count})'**
-  String addWithCount(int count);
 }
 
 class _AppLocalizationsDelegate

@@ -67,6 +67,14 @@ typedef PickNotesCallback =
       Map<String, dynamic> options,
     );
 
+/// Asks the host to present a native tag picker with [options]; resolves to the
+/// selected tag names, or `null` if the user cancelled.
+typedef PickTagsCallback =
+    Future<List<String>?> Function(
+      UserAppRuntimeBridge source,
+      Map<String, dynamic> options,
+    );
+
 /// Shared runtime bridge that wires the Synapse JavaScript API into a WebView.
 ///
 /// This bridge is used by both the interactive user app playground and the
@@ -88,6 +96,7 @@ class UserAppRuntimeBridge {
     this.onWebLoginRequest,
     this.onSessionAccessApprovalRequest,
     this.onPickNotes,
+    this.onPickTags,
   }) : _selectedNotes = selectedNotes ?? const [],
        _params = params ?? const {};
 
@@ -106,6 +115,7 @@ class UserAppRuntimeBridge {
   final WebLoginRequestCallback? onWebLoginRequest;
   final SessionAccessApprovalCallback? onSessionAccessApprovalRequest;
   final PickNotesCallback? onPickNotes;
+  final PickTagsCallback? onPickTags;
 
   bool _sessionApprovedModifications = false;
   bool _sessionApprovedSqlWrites = false;
@@ -345,6 +355,9 @@ class UserAppRuntimeBridge {
           },
           pickNotes: async (options = {}) => {
             return await window.flutter_inappwebview.callHandler('pickNotes', options ?? {});
+          },
+          pickTags: async (options = {}) => {
+            return await window.flutter_inappwebview.callHandler('pickTags', options ?? {});
           },
           tasks: {
             schedule: async (options = {}) => {
@@ -1237,6 +1250,29 @@ class UserAppRuntimeBridge {
           return {'success': true, 'notes': selected};
         } catch (e) {
           LoggerService.error('[Synapse.pickNotes] Error: $e', error: e);
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'pickTags',
+      callback: (args) async {
+        try {
+          final options = (args.isNotEmpty && args.first is Map)
+              ? Map<String, dynamic>.from(args.first as Map)
+              : <String, dynamic>{};
+          final callback = onPickTags;
+          if (callback == null) {
+            return {'success': false, 'error': 'no_ui'};
+          }
+          final selected = await callback(this, options);
+          if (selected == null) {
+            return {'success': true, 'cancelled': true, 'tags': []};
+          }
+          return {'success': true, 'tags': selected};
+        } catch (e) {
+          LoggerService.error('[Synapse.pickTags] Error: $e', error: e);
           return {'success': false, 'error': e.toString()};
         }
       },

@@ -5094,15 +5094,4 @@ class AppLocalizationsEn extends AppLocalizations {
   String revokeAppAccessConfirm(String appName, String domain) {
     return 'Remove \"$appName\" access to your $domain login?';
   }
-
-  @override
-  String get selectNotes => 'Select notes';
-
-  @override
-  String get selectAction => 'Select';
-
-  @override
-  String addWithCount(int count) {
-    return 'Add ($count)';
-  }
 }

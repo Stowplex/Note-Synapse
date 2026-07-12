@@ -4841,15 +4841,4 @@ class AppLocalizationsZh extends AppLocalizations {
   String revokeAppAccessConfirm(String appName, String domain) {
     return '移除“$appName”对你 $domain 登录的访问权限？';
   }
-
-  @override
-  String get selectNotes => '选择笔记';
-
-  @override
-  String get selectAction => '选择';
-
-  @override
-  String addWithCount(int count) {
-    return '添加（$count）';
-  }
 }

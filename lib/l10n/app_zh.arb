@@ -2108,13 +2108,5 @@
       "domain": {"type": "String"}
     }
   },
-  "selectNotes": "选择笔记",
-  "searchNotes": "搜索笔记",
-  "selectAction": "选择",
-  "addWithCount": "添加（{count}）",
-  "@addWithCount": {
-    "placeholders": {
-      "count": {"type": "int"}
-    }
-  }
+  "searchNotes": "搜索笔记"
 }

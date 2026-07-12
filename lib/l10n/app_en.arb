@@ -2159,13 +2159,5 @@
       "domain": {"type": "String"}
     }
   },
-  "selectNotes": "Select notes",
-  "searchNotes": "Search notes",
-  "selectAction": "Select",
-  "addWithCount": "Add ({count})",
-  "@addWithCount": {
-    "placeholders": {
-      "count": {"type": "int"}
-    }
-  }
+  "searchNotes": "Search notes"
 }

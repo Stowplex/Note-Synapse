@@ -204,8 +204,7 @@
       <div class="muted">Push Note Synapse notes into this notebook as sources. Re-syncing updates changed notes and removes deleted ones.</div>
       <div class="row" style="margin-top:8px">
         <button id="pickNotesBtn">Choose notes…</button>
-        <input id="syncTag" placeholder="…or a tag, e.g. project-x" style="flex:1" />
-        <button id="syncTagBtn">Sync tag</button>
+        <button id="syncTagBtn">Sync by tags…</button>
       </div>
       <div class="row" style="margin-top:6px">
         <button id="cleanupBtn">Clean up deleted</button>
@@ -402,6 +401,45 @@
     return null;
   }
 
+  // Extract the numeric error code from an ["er", …, <code>, …] envelope row.
+  function errorCodeFromEnvelope(raw) {
+    const s = stripAntiXssi(raw);
+    for (const line of s.split('\n')) {
+      const t = line.trim();
+      if (!t.startsWith('[')) continue;
+      let rows; try { rows = JSON.parse(t); } catch (_) { continue; }
+      for (const row of rows) {
+        if (Array.isArray(row) && row[0] === 'er') {
+          for (const el of row) if (typeof el === 'number' && el >= 400) return el;
+        }
+      }
+    }
+    return null;
+  }
+
+  // Map internal error codes to user-facing guidance.
+  function friendlyError(e) {
+    if (e == null) return 'Unknown error';
+    const m = String((e && e.message) || e);
+    if (m === 'rate_limited') {
+      return 'NotebookLM rate limit reached (the free tier allows roughly ' +
+        '50 queries/day). Please try again later.';
+    }
+    if (m === 'session_expired' || m === 'not_logged_in') {
+      return 'Your NotebookLM session has expired — please reconnect.';
+    }
+    if (/^nlm_error_/.test(m)) {
+      return 'NotebookLM returned an error (code ' + m.replace('nlm_error_', '') +
+        '). This may be temporary; if it persists, the integration may need an update.';
+    }
+    return m;
+  }
+
+  function isAuthError(e) {
+    const m = String((e && e.message) || e);
+    return m === 'session_expired' || m === 'not_logged_in';
+  }
+
   async function batchExecute(rpcId, params, sourcePath, retried) {
     if (!tokens.at) await scrapeTokens();
     const fReq = JSON.stringify([[[rpcId, JSON.stringify(params), null, 'generic']]]);
@@ -422,13 +460,31 @@
       body,
     });
     if (res.status !== 'success') throw new Error(res.error || 'request failed');
-    const raw = res.content ? res.content.data : '';
-    // A stale token surfaces as a 400/401 inside the envelope; re-scrape once.
-    // Retry state is per-call (a parameter), so concurrent calls don't clobber
-    // each other's retry.
-    if (/\["er",/.test(raw) && !retried) {
-      tokens.at = '';
-      return await batchExecute(rpcId, params, sourcePath, true);
+    const raw = (res.content && typeof res.content.data === 'string')
+      ? res.content.data : '';
+
+    // A valid batchexecute response always starts with the )]}' anti-XSSI
+    // prefix. Anything else (an HTML login page, a redirect body, an endpoint
+    // that moved) means the session lapsed or the API drifted — re-scrape once,
+    // then surface a clear session error rather than a confusing parse failure.
+    if (!raw.startsWith(")]}'")) {
+      if (!retried) {
+        tokens.at = '';
+        return await batchExecute(rpcId, params, sourcePath, true);
+      }
+      throw new Error('session_expired');
+    }
+
+    // Classify an ["er", …] error envelope. Retry state is per-call so
+    // concurrent calls don't clobber each other's retry.
+    const code = errorCodeFromEnvelope(raw);
+    if (code != null) {
+      if (code === 429) throw new Error('rate_limited'); // don't retry a limit
+      if ((code === 400 || code === 401) && !retried) {
+        tokens.at = ''; // stale f.sid / at — re-scrape and retry once
+        return await batchExecute(rpcId, params, sourcePath, true);
+      }
+      throw new Error('nlm_error_' + code);
     }
     return parseBatchExecute(raw, rpcId);
   }
@@ -541,7 +597,7 @@
       return sourceId;
     },
 
-    async query(notebookId, sourceIds, question) {
+    async query(notebookId, sourceIds, question, retried) {
       if (!tokens.at) await scrapeTokens();
       const conversationId = crypto && crypto.randomUUID
         ? crypto.randomUUID() : String(Date.now());
@@ -563,7 +619,19 @@
         body,
       });
       if (res.status !== 'success') throw new Error(res.error || 'query failed');
-      return extractAnswer(res.content ? res.content.data : '');
+      const raw = (res.content && typeof res.content.data === 'string')
+        ? res.content.data : '';
+      // Same session guard as batchExecute: a non-)]}' body is a login page /
+      // moved endpoint, not an answer. Re-scrape once, then flag session_expired
+      // (so the user gets "please reconnect", not a blank/garbage answer).
+      if (!raw.startsWith(")]}'")) {
+        if (!retried) {
+          tokens.at = '';
+          return await this.query(notebookId, sourceIds, question, true);
+        }
+        throw new Error('session_expired');
+      }
+      return extractAnswer(raw);
     },
 
     _allSourceIds(notebookId) { return this.listSources(notebookId); },
@@ -924,16 +992,22 @@
       '(no answer parsed)');
   }
 
-  // Resolve a tag to local note ids via SQL. Note content never leaves the
-  // device for the AI — only ids — and is sent straight to NotebookLM on sync.
-  async function notesForTag(tag) {
-    const clean = String(tag).replace(/^#/, '').replace(/'/g, "''");
+  // Resolve one or more tags to the union of local note ids via SQL. Note
+  // content never leaves the device for the AI — only ids — and is sent
+  // straight to NotebookLM on sync.
+  async function notesForTags(tags) {
+    const list = (Array.isArray(tags) ? tags : [tags])
+      .map((t) => String(t).replace(/^#/, '').trim())
+      .filter(Boolean)
+      .map((t) => "'" + t.replace(/'/g, "''") + "'");
+    if (!list.length) return [];
     const res = await Synapse.runQuery(
-      "SELECT n.id FROM notes n JOIN note_tags nt ON nt.noteId = n.id " +
-      "JOIN tags t ON t.id = nt.tagId WHERE t.name = '" + clean + "'");
+      "SELECT DISTINCT n.id FROM notes n JOIN note_tags nt ON nt.noteId = n.id " +
+      "JOIN tags t ON t.id = nt.tagId WHERE t.name IN (" + list.join(',') + ")");
     if (!res || !res.success) return [];
     return (res.data || []).map((r) => r.id);
   }
+  const notesForTag = (tag) => notesForTags([tag]); // back-compat for the tool
 
   // ==========================================================================
   // AI-callable tools (registered for both headless invocation and the
@@ -945,7 +1019,7 @@
     const wrap = (fn) => async (params) => {
       await loadState();
       try { return await fn(params || {}); }
-      catch (e) { return { error: String((e && e.message) || e) }; }
+      catch (e) { return { error: friendlyError(e) }; }
     };
     reg.notebooklm_list_notebooks = wrap(async () => ({
       notebooks: await nlmClient.listNotebooks(),
@@ -991,6 +1065,13 @@
   const $ = (id) => document.getElementById(id);
   let selectedNotebook = null;
 
+  // Surface an error to the user with friendly text, and if the session lapsed,
+  // flip the UI back to the "Connect" state so they can reconnect.
+  function uiError(e) {
+    if (isAuthError(e)) { refreshAuth().catch(() => {}); }
+    alert(friendlyError(e));
+  }
+
   async function refreshAuth() {
     const status = await Synapse.session.status(domain);
     const connected = status && status.loggedIn;
@@ -1033,9 +1114,9 @@
         $('nbList').appendChild(el);
       }
     } catch (e) {
-      $('nbList').innerHTML = '<div class="err">' + escapeHtml(String(e.message || e)) +
+      $('nbList').innerHTML = '<div class="err">' + escapeHtml(friendlyError(e)) +
         '</div>';
-      if (String(e.message).includes('not_logged_in')) await refreshAuth();
+      if (isAuthError(e)) await refreshAuth();
     }
   }
 
@@ -1087,7 +1168,7 @@
       await loadSources();
     } catch (e) {
       $('syncStatus').textContent = '';
-      alert(e.message || e);
+      uiError(e);
     }
   }
 
@@ -1108,7 +1189,7 @@
         del.onclick = async () => {
           del.disabled = true;
           try { await nlmClient.deleteSource(selectedNotebook.id, id); await loadSources(); }
-          catch (e) { del.disabled = false; alert(e.message || e); }
+          catch (e) { del.disabled = false; uiError(e); }
         };
         row.appendChild(del);
         $('srcList').appendChild(row);
@@ -1134,7 +1215,7 @@
       await nlmClient.createNotebook(title);
       $('newNbTitle').value = '';
       await loadNotebooks();
-    } catch (e) { alert(e.message || e); }
+    } catch (e) { uiError(e); }
     finally { $('createNbBtn').disabled = false; }
   };
 
@@ -1150,7 +1231,7 @@
       $('srcTitle').value = ''; $('srcBody').value = '';
       $('addSrcStatus').textContent = 'Added.';
       await loadSources();
-    } catch (e) { $('addSrcStatus').textContent = ''; alert(e.message || e); }
+    } catch (e) { $('addSrcStatus').textContent = ''; uiError(e); }
     finally { $('addSrcBtn').disabled = false; }
   };
 
@@ -1171,10 +1252,19 @@
 
   $('syncTagBtn').onclick = async () => {
     if (!selectedNotebook) return;
-    const tag = $('syncTag').value.trim().replace(/^#/, '');
-    if (!tag) return;
-    const ids = await notesForTag(tag);
-    if (!ids.length) { alert('No notes with tag #' + tag); return; }
+    const picked = await Synapse.pickTags({ title: 'Select tags to sync' });
+    if (picked && picked.error === 'no_ui') {
+      alert('Open this app directly to choose tags.');
+      return;
+    }
+    if (!picked || !picked.success || picked.cancelled) return;
+    const tags = picked.tags || [];
+    if (!tags.length) return;
+    const ids = await notesForTags(tags);
+    if (!ids.length) {
+      alert('No notes with the selected tag(s): ' + tags.join(', '));
+      return;
+    }
     await runSync(ids);
   };
 
@@ -1186,7 +1276,7 @@
       $('syncStatus').textContent = removed + ' orphaned source(s) removed';
       renderSyncList();
       await loadSources();
-    } catch (e) { $('syncStatus').textContent = ''; alert(e.message || e); }
+    } catch (e) { $('syncStatus').textContent = ''; uiError(e); }
   };
 
   $('exportStateBtn').onclick = async () => {
@@ -1200,7 +1290,7 @@
       }]);
       if (res && res.success) alert('Saved sync state as a note.');
       else alert('Could not save state note.');
-    } catch (e) { alert(e.message || e); }
+    } catch (e) { uiError(e); }
   };
 
   $('importStateBtn').onclick = async () => {
@@ -1246,7 +1336,7 @@
       $('studioStatus').textContent =
         'Generating (artifact ' + artifactId.slice(0, 8) +
         '…). A note will appear when it is ready — usually 1–5 minutes.';
-    } catch (e) { $('studioStatus').textContent = ''; alert(e.message || e); }
+    } catch (e) { $('studioStatus').textContent = ''; uiError(e); }
   }
   $('genPodcastBtn').onclick = () => runGenerate('podcast');
   $('genSlidesBtn').onclick = () => runGenerate('slides');
@@ -1264,7 +1354,7 @@
       $('answer').textContent = answer;
       $('answer').classList.remove('hidden');
       $('askStatus').textContent = '';
-    } catch (e) { $('askStatus').textContent = ''; alert(e.message || e); }
+    } catch (e) { $('askStatus').textContent = ''; uiError(e); }
     finally { $('askBtn').disabled = false; }
   };
 

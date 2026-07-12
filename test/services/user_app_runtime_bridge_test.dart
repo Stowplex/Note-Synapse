@@ -170,6 +170,7 @@ void main() {
       expect(jsHandlers.containsKey('downloadFile'), isTrue);
       expect(jsHandlers.containsKey('exportNotes'), isTrue);
       expect(jsHandlers.containsKey('pickNotes'), isTrue);
+      expect(jsHandlers.containsKey('pickTags'), isTrue);
       expect(jsHandlers.containsKey('tasksSchedule'), isTrue);
       expect(jsHandlers.containsKey('tasksCancel'), isTrue);
       expect(jsHandlers.containsKey('tasksList'), isTrue);
@@ -559,6 +560,12 @@ void main() {
         expect(result['success'], isFalse);
         expect(result['error'], 'no_ui');
         expect(result['domain'], 'example.com');
+      });
+
+      test('pickTags returns no_ui when no picker callback is wired', () async {
+        final result = await jsHandlers['pickTags']!([{'title': 'Tags'}]);
+        expect(result['success'], isFalse);
+        expect(result['error'], 'no_ui');
       });
     });
 
