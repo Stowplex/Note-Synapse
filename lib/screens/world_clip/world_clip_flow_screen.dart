@@ -11,6 +11,7 @@ import '../../services/world_clip/video_source.dart';
 import '../../services/world_clip/screen_capture_service.dart';
 import '../../services/world_clip/frame_extractor.dart';
 import '../../services/world_clip/frame_selector.dart';
+import '../../services/world_clip/keyframe_detector.dart';
 import '../../services/world_clip/edge_detector.dart';
 import '../../services/world_clip/frame_correction.dart';
 import '../../services/world_clip/clip_project_store.dart';
@@ -23,10 +24,36 @@ import 'world_clip_timeline.dart';
 import 'clip_review_screen.dart';
 import 'correction_editor.dart';
 import 'frame_memo_cache.dart';
+import 'picture_sequence_screen.dart';
+import 'progress_scrim.dart';
 
 /// Stages of the capture flow. Per-clip correction (mesh editor) is reached as
 /// a pushed route from the review stage rather than a top-level stage.
 enum WorldClipStage { source, timeline, review }
+
+/// Nearest tagged key-frame strictly before [current], or the last one when
+/// nothing is selected; null when there is none to go to. Top-level so the
+/// timeline stage's prev/next navigation is unit-testable without driving
+/// device-only frame extraction.
+int? previousKeyframe(Set<int> tagged, int? current) {
+  int? best;
+  for (final t in tagged) {
+    if (current != null && t >= current) continue;
+    if (best == null || t > best) best = t;
+  }
+  return best;
+}
+
+/// Nearest tagged key-frame strictly after [current], or the first one when
+/// nothing is selected; null when there is none to go to.
+int? nextKeyframe(Set<int> tagged, int? current) {
+  int? best;
+  for (final t in tagged) {
+    if (current != null && t <= current) continue;
+    if (best == null || t < best) best = t;
+  }
+  return best;
+}
 
 class WorldClipFlowScreen extends StatefulWidget {
   /// When non-null, resume an existing cached project by id.
@@ -164,13 +191,62 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
           content: Text(AppLocalizations.of(context)!
               .worldClipSkippedRawImages(skippedRaw))));
     }
-    if (files.isEmpty) return;
+    if (files.isEmpty || !mounted) return;
+    await _importPictureFiles(files);
+  }
+
+  /// "Picture Sequence": in-app camera capture of a still-photo sequence
+  /// (optionally anti-glare-fused per page — see [PictureSequenceScreen]).
+  /// Feeds the resulting files through the exact same picture-import pipeline
+  /// as [_onPickImages] — the two differ only in how the images were acquired.
+  Future<void> _onPictureSequence() async {
+    final files = await Navigator.of(context).push<List<File>?>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => PictureSequenceScreen(),
+      ),
+    );
+    if (files == null || files.isEmpty || !mounted) return;
+    // The captured pages live in a temp dir PictureSequenceScreen created and
+    // handed off (rather than cleaning up itself, since deleting them before
+    // the import's copy finishes would race it) — reclaim it once they're
+    // safely copied into the project.
+    await _importPictureFiles(files, cleanupDir: files.first.parent);
+  }
+
+  /// Copies [files] into a fresh picture project and opens the review stage —
+  /// the single import pipeline shared by "Import pictures" and "Picture
+  /// sequence" (they differ only in how the images were acquired). Deletes
+  /// [cleanupDir] (best-effort) once the copy succeeded.
+  Future<void> _importPictureFiles(List<File> files,
+      {Directory? cleanupDir}) async {
+    final name = AppLocalizations.of(context)!.worldClipPicturesProjectName(
+        DateTime.now().toIso8601String().substring(0, 16));
     final store = await _ensureStore();
-    final project = await store.createFromImages(
-        name: 'Pictures ${DateTime.now().toIso8601String().substring(0, 16)}',
-        images: files);
+    final ClipProject project;
+    try {
+      project = await store.createFromImages(name: name, images: files);
+    } catch (e) {
+      // The source files are unreachable to the user either way — reclaim
+      // them rather than stranding them in the temp dir until OS cleanup.
+      await _deleteQuietly(cleanupDir);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                AppLocalizations.of(context)!.worldClipImportFailed('$e'))));
+      }
+      return;
+    }
+    await _deleteQuietly(cleanupDir);
     if (!mounted) return;
     await _enterPictureReview(store, project);
+  }
+
+  static Future<void> _deleteQuietly(Directory? dir) async {
+    if (dir == null) return;
+    try {
+      await dir.delete(recursive: true);
+    } catch (_) {}
   }
 
   /// Sets up a picture project's frame source and opens the review stage,
@@ -210,11 +286,18 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     setState(() {
       _project = project;
       _extractor = extractor;
-      _timestamps = timestamps;
+      // Auto-detection's fast-scroll refinement can persist tags BETWEEN the
+      // fps-5 samples — merge them back in so every restored tag has a thumb
+      // in the strip (same merge _autoDetectKeyframes does in-session).
+      _timestamps = {
+        ...timestamps,
+        ...project.clips.map((c) => c.frameTimestampMs),
+      }.toList()
+        ..sort();
       _tagged
         ..clear()
         ..addAll(project.clips.map((c) => c.frameTimestampMs));
-      _selectedTs = timestamps.isEmpty ? null : timestamps.first;
+      _selectedTs = _timestamps.isEmpty ? null : _timestamps.first;
       _stage = WorldClipStage.timeline;
     });
     _prewarmThumbnails();
@@ -228,11 +311,12 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     await _onToggleTag(ts);
   }
 
-  /// Auto-suggests key frames: scores every sampled thumbnail (reused from the
-  /// cache, not re-decoded) for sharpness + inter-frame motion, then segments
-  /// the clip into stable holds and tags the sharpest frame of each held page.
-  /// Progress overlay. Uses the full timeline sampling so brief page holds are
-  /// not missed.
+  /// Auto-suggests key frames via [KeyframeDetector]: every sampled thumbnail
+  /// (reused from the cache, not re-decoded) is scored for sharpness,
+  /// inter-frame motion, and 2D viewport shift; the clip is then classified —
+  /// a scrolling/panning capture is walked by cumulative coverage (no dropped
+  /// lines, bounded overlap) while a page-flip capture keeps the original
+  /// stable-hold segmentation — and near-identical pages are pruned.
   Future<void> _autoDetectKeyframes() async {
     if (_extractor == null || _timestamps.isEmpty) return;
     final sampled = List<int>.from(_timestamps);
@@ -241,28 +325,28 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
       _detectLabel =
           AppLocalizations.of(context)!.worldClipAnalyzing(0, sampled.length);
     });
-    final features = <FrameFeature>[];
-    Uint8List? prevPng;
+    KeyframeDetectionResult? result;
     try {
-      for (var i = 0; i < sampled.length; i++) {
-        final png = await _thumb(sampled[i]);
-        features.add(computeFrameFeature(
-            timestampMs: sampled[i], framePng: png, prevFramePng: prevPng));
-        prevPng = png;
-        if (!mounted) return;
-        setState(() => _detectLabel = AppLocalizations.of(context)!
-            .worldClipAnalyzing(i + 1, sampled.length));
-      }
+      final detector = KeyframeDetector(
+        thumbAt: _thumb,
+        shouldAbort: () => !mounted,
+        onProgress: (done, total) {
+          if (mounted) {
+            setState(() => _detectLabel =
+                AppLocalizations.of(context)!.worldClipAnalyzing(done, total));
+          }
+        },
+      );
+      result = await detector.detect(sampled);
     } catch (_) {
-      // Feature extraction failed (e.g. decode hiccup) — abort gracefully.
-      if (mounted) setState(() => _detecting = false);
+      result = null; // decode hiccup mid-detection — abort gracefully
+    }
+    if (!mounted) return; // user left mid-detection — don't mutate/persist
+    if (result == null) {
+      setState(() => _detecting = false);
       return;
     }
-    // Defaults segment the clip into stable page-holds with an adaptive motion
-    // threshold, so this self-tunes to a steady e-reader or a handheld book.
-    const selector = FrameSelector();
-    if (!mounted) return; // user left mid-detection — don't mutate/persist
-    final picks = selector.suggest(features);
+    final picks = result.timestamps;
     for (final ts in picks) {
       _tagged.add(ts);
       _project!.ensureClip(ts);
@@ -271,14 +355,21 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
     if (!mounted) return;
     setState(() {
       _detecting = false;
+      // Fast-scroll refinement can suggest frames BETWEEN the original
+      // samples — merge them into the strip so their tags are visible.
+      _timestamps = {..._timestamps, ...picks}.toList()..sort();
       if (picks.isNotEmpty) _selectedTs = picks.first;
     });
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(AppLocalizations.of(context)!
-                .worldClipSuggestedKeyFrames(picks.length))),
-      );
+      final l10n = AppLocalizations.of(context)!;
+      // Edge state: no clear pages found and no manual tags yet.
+      final message = picks.isEmpty && _tagged.isEmpty
+          ? l10n.worldClipNoClearPages
+          : result.mode == CaptureMode.scroll
+              ? l10n.worldClipSuggestedKeyFramesScrolling(picks.length)
+              : l10n.worldClipSuggestedKeyFrames(picks.length);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -501,6 +592,8 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
   Widget _buildTimelineStage(AppLocalizations l10n) {
     final selectedTagged =
         _selectedTs != null && _tagged.contains(_selectedTs);
+    final prevKey = previousKeyframe(_tagged, _selectedTs);
+    final nextKey = nextKeyframe(_tagged, _selectedTs);
     return Stack(
       children: [
         Column(
@@ -521,11 +614,20 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
                       ),
               ),
             ),
-            // Key-frame + auto-detect controls.
+            // Key-frame navigation + tagging + auto-detect controls.
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: Row(
                 children: [
+                  IconButton.outlined(
+                    key: const ValueKey('wc-prev-key'),
+                    tooltip: l10n.worldClipPreviousKeyFrame,
+                    onPressed: prevKey == null
+                        ? null
+                        : () => setState(() => _selectedTs = prevKey),
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: FilledButton.tonalIcon(
                       onPressed: _selectedTs == null
@@ -536,6 +638,15 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
                           ? l10n.worldClipRemoveKeyFrame
                           : l10n.worldClipSetKeyFrame),
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.outlined(
+                    key: const ValueKey('wc-next-key'),
+                    tooltip: l10n.worldClipNextKeyFrame,
+                    onPressed: nextKey == null
+                        ? null
+                        : () => setState(() => _selectedTs = nextKey),
+                    icon: const Icon(Icons.chevron_right),
                   ),
                   const SizedBox(width: 8),
                   OutlinedButton.icon(
@@ -570,30 +681,8 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
             ),
           ],
         ),
-        if (_detecting) _progressOverlay(label: _detectLabel),
+        if (_detecting) ProgressScrim(label: _detectLabel),
       ],
-    );
-  }
-
-  /// A full-screen scrim + spinner (optionally labelled) shown over a stage
-  /// during a long async op (detect / clone / compile).
-  Widget _progressOverlay({String? label}) {
-    return Positioned.fill(
-      child: ColoredBox(
-        color: const Color(0x99000000),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              if (label != null && label.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(label, style: const TextStyle(color: Colors.white)),
-              ],
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -604,6 +693,7 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
       WorldClipStage.source => _SourceStage(
           onPickVideo: _onPickVideo,
           onPickImages: _onPickImages,
+          onPictureSequence: _onPictureSequence,
           onScreenCapture: _onScreenCapture,
           screenCaptureSupported: getIt<ScreenCaptureService>().isSupported,
         ),
@@ -653,8 +743,8 @@ class _WorldClipFlowScreenState extends State<WorldClipFlowScreen> {
                 onCompilePdf: () => _compile(ClipOutputFormat.pdf),
                 onCompileImages: () => _compile(ClipOutputFormat.inlineImages),
               ),
-                  if (_cloning) _progressOverlay(label: _cloneLabel),
-                  if (_compiling) _progressOverlay(label: l10n.worldClipCompile),
+                  if (_cloning) ProgressScrim(label: _cloneLabel),
+                  if (_compiling) ProgressScrim(label: l10n.worldClipCompile),
                 ],
               ),
     };
@@ -764,11 +854,13 @@ class _LargePreviewState extends State<_LargePreview> {
 class _SourceStage extends StatelessWidget {
   final VoidCallback onPickVideo;
   final VoidCallback onPickImages;
+  final VoidCallback onPictureSequence;
   final VoidCallback onScreenCapture;
   final bool screenCaptureSupported;
   const _SourceStage({
     required this.onPickVideo,
     required this.onPickImages,
+    required this.onPictureSequence,
     required this.onScreenCapture,
     required this.screenCaptureSupported,
   });
@@ -790,6 +882,13 @@ class _SourceStage extends StatelessWidget {
             icon: const Icon(Icons.photo_library),
             label: Text(l10n.worldClipImportPictures),
             onPressed: onPickImages,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            key: const ValueKey('wc-picture-sequence'),
+            icon: const Icon(Icons.burst_mode),
+            label: Text(l10n.worldClipPictureSequence),
+            onPressed: onPictureSequence,
           ),
           if (screenCaptureSupported) ...[
             const SizedBox(height: 16),

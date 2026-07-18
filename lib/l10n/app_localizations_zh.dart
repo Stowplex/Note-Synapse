@@ -479,6 +479,133 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String worldClipSuggestedKeyFramesScrolling(int count) {
+    return '已推荐 $count 个关键帧（滚动录屏）';
+  }
+
+  @override
+  String get worldClipNoClearPages => '未找到清晰的页面 — 请放慢移动速度';
+
+  @override
+  String get worldClipPreviousKeyFrame => '上一个关键帧';
+
+  @override
+  String get worldClipNextKeyFrame => '下一个关键帧';
+
+  @override
+  String get worldClipPictureSequence => '连拍图片序列';
+
+  @override
+  String worldClipPsDone(int count) {
+    return '完成（$count）';
+  }
+
+  @override
+  String get worldClipPsAntiGlare => '防反光';
+
+  @override
+  String get worldClipPsRetake => '重拍';
+
+  @override
+  String get worldClipPsKeep => '保留';
+
+  @override
+  String get worldClipPsRetakePage => '重拍此页';
+
+  @override
+  String get worldClipPsDiscardPage => '删除此页';
+
+  @override
+  String get worldClipPsDiscardTitle => '放弃本次拍摄？';
+
+  @override
+  String worldClipPsDiscardBody(int count) {
+    return '将丢弃已拍摄的 $count 页。';
+  }
+
+  @override
+  String get worldClipPsDiscardShotsBody => '将丢弃当前页面已拍摄的照片。';
+
+  @override
+  String get worldClipPsKeepEditing => '继续编辑';
+
+  @override
+  String get worldClipPsDiscard => '放弃';
+
+  @override
+  String get worldClipPsCombining => '正在合成照片…';
+
+  @override
+  String get worldClipPsFuseFallback => '无法合成这些照片 — 已使用第一张';
+
+  @override
+  String worldClipPsShotFailed(String error) {
+    return '拍摄失败：$error';
+  }
+
+  @override
+  String worldClipPsSaveFailed(String error) {
+    return '无法保存该页：$error';
+  }
+
+  @override
+  String worldClipPsFlashFailed(String error) {
+    return '无法切换闪光灯：$error';
+  }
+
+  @override
+  String get worldClipPsCameraError => '无法打开相机';
+
+  @override
+  String get worldClipPsNoPages => '还没有拍摄页面';
+
+  @override
+  String worldClipImportFailed(String error) {
+    return '无法导入图片：$error';
+  }
+
+  @override
+  String worldClipPicturesProjectName(String date) {
+    return '图片 $date';
+  }
+
+  @override
+  String worldClipPsStepProgress(String label, int current, int total) {
+    return '$label（$current/$total）';
+  }
+
+  @override
+  String get worldClipAgLabelCenter => '中央';
+
+  @override
+  String get worldClipAgLabelTopLeft => '左上';
+
+  @override
+  String get worldClipAgLabelTopRight => '右上';
+
+  @override
+  String get worldClipAgLabelBottomLeft => '左下';
+
+  @override
+  String get worldClipAgLabelBottomRight => '右下';
+
+  @override
+  String get worldClipAgInstructionCenter => '将相机保持水平，置于页面正上方';
+
+  @override
+  String get worldClipAgInstructionTopLeft =>
+      '移动相机（移动手臂而非仅转手腕）到页面的左上方，保持整页在画面内';
+
+  @override
+  String get worldClipAgInstructionTopRight => '现在移到页面的右上方，保持整页在画面内';
+
+  @override
+  String get worldClipAgInstructionBottomLeft => '现在移到页面的左下方，保持整页在画面内';
+
+  @override
+  String get worldClipAgInstructionBottomRight => '现在移到页面的右下方，保持整页在画面内';
+
+  @override
   String worldClipAnalyzing(int current, int total) {
     return '分析中 $current/$total';
   }

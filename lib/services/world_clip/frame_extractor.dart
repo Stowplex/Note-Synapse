@@ -1,7 +1,5 @@
 import 'dart:io';
 import 'package:flutter/services.dart';
-import 'package:opencv_dart/opencv_dart.dart' as cv;
-import 'frame_selector.dart';
 
 /// Decodes a source video into proxy thumbnails, full-res frames, and
 /// per-frame features. The seam lets the decode backend be swapped.
@@ -101,45 +99,4 @@ class PictureFrameExtractor implements FrameExtractor {
 
   @override
   void dispose() {}
-}
-
-/// Computes the sharpness (variance-of-Laplacian) and scene-change (diff from
-/// the previous frame) features from already-decoded PNG bytes. Kept separate
-/// from [FrameExtractor] so auto key-frame detection can score the *cached
-/// timeline thumbnails* directly (no extra video decode). Uses OpenCV
-/// `imgproc` only, which works in opencv_dart 2.x.
-FrameFeature computeFrameFeature({
-  required int timestampMs,
-  required Uint8List framePng,
-  Uint8List? prevFramePng,
-}) {
-  final mats = <cv.Mat>[];
-  cv.Mat track(cv.Mat m) {
-    mats.add(m);
-    return m;
-  }
-
-  try {
-    final mat = track(cv.imdecode(framePng, cv.IMREAD_COLOR));
-    final gray = track(cv.cvtColor(mat, cv.COLOR_BGR2GRAY));
-    final lap = track(cv.laplacian(gray, cv.MatType.CV_64F));
-    final (_, stddev) = cv.meanStdDev(lap);
-    final variance = stddev.val1 * stddev.val1;
-
-    double diff = 1.0;
-    if (prevFramePng != null) {
-      final prev = track(cv.imdecode(prevFramePng, cv.IMREAD_COLOR));
-      final prevGray = track(cv.cvtColor(prev, cv.COLOR_BGR2GRAY));
-      final small = track(cv.resize(gray, (64, 64)));
-      final prevSmall = track(cv.resize(prevGray, (64, 64)));
-      final delta = track(cv.absDiff(small, prevSmall));
-      diff = cv.mean(delta).val1 / 255.0;
-    }
-    return FrameFeature(
-        timestampMs: timestampMs, sharpness: variance, diffFromPrev: diff);
-  } finally {
-    for (final m in mats) {
-      m.dispose();
-    }
-  }
 }
