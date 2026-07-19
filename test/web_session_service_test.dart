@@ -342,4 +342,101 @@ void main() {
       expect(cookies.restored, isEmpty);
     });
   });
+
+  group('cookieHeaderFor', () {
+    late _FakeStorage storage;
+    late _FakeCookieGateway cookies;
+    late WebSessionService service;
+
+    setUp(() {
+      storage = _FakeStorage();
+      cookies = _FakeCookieGateway();
+      service = WebSessionService(cookieGateway: cookies, storage: storage);
+    });
+
+    Future<void> saveSession(
+      String url,
+      List<WebSessionCookie> sessionCookies,
+    ) async {
+      cookies.available[url] = sessionCookies;
+      await service.saveSessionFromUrl(url);
+    }
+
+    test('returns empty string when there is no saved session', () async {
+      expect(await service.cookieHeaderFor('https://example.com/x'), '');
+    });
+
+    test('joins matching cookies as name=value pairs', () async {
+      await saveSession('https://app.example.com/', const [
+        WebSessionCookie(name: 'sid', value: 'abc', domain: '.example.com'),
+        WebSessionCookie(name: 'csrf', value: 'xyz', domain: '.example.com'),
+      ]);
+
+      final header = await service.cookieHeaderFor('https://app.example.com/api');
+      expect(header.split('; ')..sort(), ['csrf=xyz', 'sid=abc']);
+    });
+
+    test('omits Secure cookies for http requests', () async {
+      await saveSession('https://example.com/', const [
+        WebSessionCookie(
+          name: 'sec',
+          value: '1',
+          domain: '.example.com',
+          isSecure: true,
+        ),
+        WebSessionCookie(name: 'plain', value: '2', domain: '.example.com'),
+      ]);
+
+      expect(await service.cookieHeaderFor('http://example.com/'), 'plain=2');
+      final https = await service.cookieHeaderFor('https://example.com/');
+      expect(https.contains('sec=1'), true);
+    });
+
+    test('excludes cookies whose path does not match the request', () async {
+      await saveSession('https://example.com/', const [
+        WebSessionCookie(
+          name: 'scoped',
+          value: 'v',
+          domain: '.example.com',
+          path: '/admin',
+        ),
+      ]);
+
+      expect(await service.cookieHeaderFor('https://example.com/public'), '');
+      expect(
+        await service.cookieHeaderFor('https://example.com/admin/x'),
+        'scoped=v',
+      );
+    });
+
+    test('liveCookieHeaderFor merges host + registrable-domain live cookies',
+        () async {
+      // The live jar returns host-scoped cookies for the exact URL and the
+      // registrable-domain read pulls the domain-wide auth cookies.
+      cookies.available['https://lh3.example.com/media?x=1'] = const [
+        WebSessionCookie(name: 'HOSTC', value: 'h'),
+      ];
+      cookies.available['https://example.com'] = const [
+        WebSessionCookie(name: 'SID', value: 'auth', domain: '.example.com'),
+      ];
+      final header =
+          await service.liveCookieHeaderFor('https://lh3.example.com/media?x=1');
+      expect(header.split('; ')..sort(), ['HOSTC=h', 'SID=auth']);
+    });
+
+    test('liveCookieHeaderFor returns empty when the jar has nothing', () async {
+      expect(await service.liveCookieHeaderFor('https://none.example.com/'), '');
+    });
+
+    test('host-only cookie is scoped to the captured host', () async {
+      // Host-only cookie (no Domain) captured on a.example.com must go to that
+      // exact host but not to a sibling host b.example.com.
+      await saveSession('https://a.example.com/', const [
+        WebSessionCookie(name: 'host', value: 'only'),
+      ]);
+
+      expect(await service.cookieHeaderFor('https://a.example.com/'), 'host=only');
+      expect(await service.cookieHeaderFor('https://b.example.com/'), '');
+    });
+  });
 }

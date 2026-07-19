@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
+import '../providers/app_provider.dart';
 import 'database_service.dart';
 import 'note_modification_service.dart';
 import 'content_ingestion_service.dart';
@@ -24,6 +25,9 @@ import 'marker_chat_send_service.dart';
 import 'prompts/prompt_template_service.dart';
 import 'tts_service.dart';
 import 'web_session_service.dart';
+import 'app_domain_grant_service.dart';
+import 'crypto_service.dart';
+import 'plugin_task_service.dart';
 import 'world_clip/frame_correction.dart';
 import 'world_clip/video_source.dart';
 import 'world_clip/screen_capture_service.dart';
@@ -68,6 +72,27 @@ void setupServiceLocator() {
 
   if (!getIt.isRegistered<WebSessionService>()) {
     getIt.registerLazySingleton<WebSessionService>(() => WebSessionService());
+  }
+
+  if (!getIt.isRegistered<AppDomainGrantService>()) {
+    getIt.registerLazySingleton<AppDomainGrantService>(
+      () => AppDomainGrantService(),
+    );
+  }
+
+  if (!getIt.isRegistered<CryptoService>()) {
+    getIt.registerLazySingleton<CryptoService>(() => CryptoService());
+  }
+
+  if (!getIt.isRegistered<PluginTaskService>()) {
+    getIt.registerLazySingleton<PluginTaskService>(() => PluginTaskService());
+  }
+
+  // Registered so non-widget services (e.g. PluginTaskService firing a plugin
+  // tool from a background timer) can reach the same AppProvider the UI uses.
+  // main.dart provides this same instance via ChangeNotifierProvider.value.
+  if (!getIt.isRegistered<AppProvider>()) {
+    getIt.registerLazySingleton<AppProvider>(() => AppProvider());
   }
 
   if (!getIt.isRegistered<TtsService>()) {

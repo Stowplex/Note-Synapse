@@ -167,6 +167,111 @@
       }
     }
   },
+  "worldClipSuggestedKeyFramesScrolling": "Suggested {count} key frame(s) (scrolling capture)",
+  "@worldClipSuggestedKeyFramesScrolling": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipNoClearPages": "No clear pages found — try a slower pan",
+  "worldClipPreviousKeyFrame": "Previous key frame",
+  "worldClipNextKeyFrame": "Next key frame",
+  "worldClipPictureSequence": "Picture sequence",
+  "worldClipPsDone": "Done ({count})",
+  "@worldClipPsDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipPsAntiGlare": "Anti-glare",
+  "worldClipPsRetake": "Retake",
+  "worldClipPsKeep": "Keep",
+  "worldClipPsRetakePage": "Retake this page",
+  "worldClipPsDiscardPage": "Discard this page",
+  "worldClipPsDiscardTitle": "Discard sequence?",
+  "worldClipPsDiscardBody": "This will discard {count} captured page(s).",
+  "@worldClipPsDiscardBody": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipPsDiscardShotsBody": "This will discard the shots taken for the current page.",
+  "worldClipPsKeepEditing": "Keep editing",
+  "worldClipPsDiscard": "Discard",
+  "worldClipPsCombining": "Combining shots…",
+  "worldClipPsFuseFallback": "Couldn't combine those shots — used the first one",
+  "worldClipPsShotFailed": "Couldn't take that shot: {error}",
+  "@worldClipPsShotFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "worldClipPsSaveFailed": "Couldn't save that page: {error}",
+  "@worldClipPsSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "worldClipPsFlashFailed": "Couldn't change flash: {error}",
+  "@worldClipPsFlashFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "worldClipPsCameraError": "Couldn't open the camera",
+  "worldClipPsNoPages": "No pages yet",
+  "worldClipImportFailed": "Couldn't import the pictures: {error}",
+  "@worldClipImportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "worldClipPicturesProjectName": "Pictures {date}",
+  "@worldClipPicturesProjectName": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "worldClipPsStepProgress": "{label} ({current}/{total})",
+  "@worldClipPsStepProgress": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipAgLabelCenter": "Center",
+  "worldClipAgLabelTopLeft": "Top-left",
+  "worldClipAgLabelTopRight": "Top-right",
+  "worldClipAgLabelBottomLeft": "Bottom-left",
+  "worldClipAgLabelBottomRight": "Bottom-right",
+  "worldClipAgInstructionCenter": "Hold the camera centered and level over the page",
+  "worldClipAgInstructionTopLeft": "Move the camera — shift your hand, not just your wrist — toward the TOP-LEFT of the page, keeping the whole page in frame",
+  "worldClipAgInstructionTopRight": "Now move toward the TOP-RIGHT of the page, keeping it all in frame",
+  "worldClipAgInstructionBottomLeft": "Now move toward the BOTTOM-LEFT of the page, keeping it all in frame",
+  "worldClipAgInstructionBottomRight": "Now move toward the BOTTOM-RIGHT of the page, keeping it all in frame",
   "worldClipAnalyzing": "Analyzing {current}/{total}",
   "@worldClipAnalyzing": {
     "placeholders": {
@@ -2148,5 +2253,16 @@
   "webLoginSecurityNote": "On this platform, saved logins are stored without OS-level encryption. Only save logins on a device you trust.",
   "webLoginCaptureFailed": "Could not capture a login session. Make sure you are signed in before saving. This feature is unavailable on the web build.",
   "requestDesktopSite": "Request desktop site",
-  "requestMobileSite": "Request mobile site"
+  "requestMobileSite": "Request mobile site",
+  "webLoginAppsWithAccess": "Apps with access",
+  "revoke": "Revoke",
+  "revokeAppAccessTitle": "Revoke access",
+  "revokeAppAccessConfirm": "Remove \"{appName}\" access to your {domain} login?",
+  "@revokeAppAccessConfirm": {
+    "placeholders": {
+      "appName": {"type": "String"},
+      "domain": {"type": "String"}
+    }
+  },
+  "searchNotes": "Search notes"
 }

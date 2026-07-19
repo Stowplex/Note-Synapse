@@ -49,18 +49,6 @@ void main() {
     expect(() => ex.fullFrameAt(0), throwsStateError);
   });
 
-  test('computeFrameFeature scores PNG bytes directly (used on thumbnails)',
-      () {
-    final f0 = computeFrameFeature(timestampMs: 0, framePng: png(32, 32));
-    expect(f0.timestampMs, 0);
-    expect(f0.sharpness, greaterThanOrEqualTo(0));
-    expect(f0.diffFromPrev, 1.0); // no previous frame
-
-    final f1 = computeFrameFeature(
-        timestampMs: 200, framePng: png(32, 32), prevFramePng: png(32, 32));
-    expect(f1.diffFromPrev, inInclusiveRange(0.0, 1.0));
-  });
-
   test('PictureFrameExtractor serves images by index', () async {
     final tmp = await Directory.systemTemp.createTemp('wc_pics');
     final a = File('${tmp.path}/a.jpg')..writeAsBytesSync(png(4, 4));

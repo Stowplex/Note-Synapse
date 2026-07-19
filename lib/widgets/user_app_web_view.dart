@@ -18,7 +18,10 @@ import '../services/global_library_service.dart';
 import '../services/logger_service.dart';
 import '../services/sql_query_service.dart';
 import '../services/user_app_runtime_bridge.dart';
+import '../screens/settings/web_login_browser_screen.dart';
+import '../screens/note_selection_dialog.dart';
 import 'approval_dialog.dart';
+import 'tag_selection_dialog.dart';
 
 typedef UserAppOpenNote =
     Future<void> Function(Note note, bool replaceWindow);
@@ -227,6 +230,75 @@ class _UserAppWebViewState extends State<UserAppWebView> {
           return true;
         }
         return false;
+      },
+      onWebLoginRequest: (source, url) async {
+        if (!mounted) return false;
+        // Open the in-app login browser; it captures + persists the session
+        // and pops `true` once the user saves their login.
+        final result = await Navigator.of(context).push<bool>(
+          MaterialPageRoute(
+            builder: (_) => WebLoginBrowserScreen(initialUrl: url),
+          ),
+        );
+        return result == true;
+      },
+      onSessionAccessApprovalRequest: (source, domain) async {
+        if (!mounted) return false;
+        final request = ApprovalRequest.sessionAccess(
+          domain: domain,
+          source: widget.sourceLabel,
+        );
+        final result = await ApprovalDialog.showWithContext(context, request);
+        return result.approved;
+      },
+      onPickNotes: (source, options) async {
+        if (!mounted) return null;
+        final preselected = (options['preselectedIds'] as List?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            const <String>[];
+        final initialTag = options['initialTag'] as String?;
+        // Reuse the app's rich note picker (tag filters, search, card previews,
+        // multi/single select) instead of a bespoke sheet.
+        final selected = await showDialog<List<Note>>(
+          context: context,
+          builder: (dialogContext) => NoteSelectionDialog(
+            title: options['title'] as String?,
+            singleSelection: options['multiSelect'] == false,
+            initialSelectedNoteIds: preselected,
+            initialTags:
+                (initialTag != null && initialTag.isNotEmpty) ? [initialTag] : null,
+            onNotesSelected: (notes) =>
+                Navigator.of(dialogContext).pop(notes),
+          ),
+        );
+        if (selected == null) {
+          return null; // cancelled
+        }
+        return [
+          for (final note in selected) {'id': note.id, 'title': note.title},
+        ];
+      },
+      onPickTags: (source, options) async {
+        if (!mounted) return null;
+        final preselected = (options['preselectedTags'] as List?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            const <String>[];
+        // Reuse the app's tag selection dialog (search, "Add from Filter",
+        // multi-select) — returns the chosen tag names.
+        final tags = await showDialog<List<String>>(
+          context: context,
+          builder: (_) => TagSelectionDialog(
+            title: options['title'] as String?,
+            initialSelectedTags: preselected,
+            allowEmptySelection: false,
+            // Picking existing tags to act on — don't let the user invent a new
+            // tag that matches zero notes.
+            allowCreateNew: false,
+          ),
+        );
+        return tags; // null when cancelled
       },
     );
   }

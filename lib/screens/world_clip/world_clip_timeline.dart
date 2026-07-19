@@ -29,6 +29,10 @@ class WorldClipTimeline extends StatefulWidget {
 
 class _WorldClipTimelineState extends State<WorldClipTimeline> {
   final _thumbnails = FrameMemoCache(200); // bound memory on long timelines
+  final _controller = ScrollController();
+
+  /// Thumb width (80) plus its horizontal margins (4 + 4).
+  static const double _itemExtent = 88;
 
   Future<Uint8List> _thumbnailFor(int ts) =>
       _thumbnails.getOrAdd(ts, () => widget.thumbnailBuilder(ts));
@@ -40,6 +44,45 @@ class _WorldClipTimelineState extends State<WorldClipTimeline> {
     if (!identical(old.thumbnailBuilder, widget.thumbnailBuilder)) {
       _thumbnails.clear();
     }
+    final sel = widget.selectedTimestamp;
+    if (sel != null && sel != old.selectedTimestamp) {
+      _revealSelected(sel);
+    }
+  }
+
+  /// Scrolls the strip so the selected thumb sits centered (clamped at the
+  /// ends) — keeps keyframe navigation from the parent's prev/next buttons
+  /// in view even when the target is far off-screen. A thumb that's already
+  /// fully visible is left alone, so directly tapping thumbs never yanks the
+  /// strip out from under the user's finger.
+  void _revealSelected(int ts) {
+    final i = widget.timestamps.indexOf(ts);
+    if (i < 0) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_controller.hasClients) return;
+      final pos = _controller.position;
+      final itemStart = i * _itemExtent;
+      if (itemStart >= pos.pixels &&
+          itemStart + _itemExtent <= pos.pixels + pos.viewportDimension) {
+        return; // fully in view already
+      }
+      final target =
+          (itemStart - (pos.viewportDimension - _itemExtent) / 2).clamp(
+        0.0,
+        pos.maxScrollExtent,
+      );
+      _controller.animateTo(
+        target,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
@@ -47,6 +90,7 @@ class _WorldClipTimelineState extends State<WorldClipTimeline> {
     return SizedBox(
       height: 96,
       child: ListView.builder(
+        controller: _controller,
         scrollDirection: Axis.horizontal,
         itemCount: widget.timestamps.length,
         itemBuilder: (context, i) {

@@ -6,8 +6,12 @@
     <!-- Audio recording permissions -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     
-    <!-- Camera permissions for image picker -->
+    <!-- Camera permissions for image picker and World Clip picture sequence.
+         The camera is optional: without one, capture entry points simply
+         fail to open, so don't let the permission imply a required feature
+         (which would hide the app from camera-less devices on Play). -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     
     <!-- Media access for audio recording playback -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />

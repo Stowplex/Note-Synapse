@@ -21,6 +21,7 @@ import 'services/logger_service.dart';
 import 'services/agent_service.dart';
 import 'services/background_agent_service.dart';
 import 'services/service_locator.dart';
+import 'services/plugin_task_service.dart';
 import 'services/tag_image_service.dart';
 import 'services/wake_lock_service.dart' as wake_lock;
 import 'services/network_provider.dart';
@@ -67,6 +68,9 @@ Future<void> _bootstrap() async {
 
     // Initialize background agent service for Android foreground service
     await BackgroundAgentService.init();
+
+    // Re-arm any persisted plugin task schedules (e.g. studio polling).
+    await getIt<PluginTaskService>().initialize();
 
     runApp(const NoteSynapseApp());
   } catch (e, stack) {
@@ -157,7 +161,7 @@ class NoteSynapseApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (context) => AppProvider()),
+        ChangeNotifierProvider.value(value: getIt<AppProvider>()),
         ChangeNotifierProvider.value(value: getIt<AgentService>()),
       ], // ...
       child: Consumer<AppProvider>(

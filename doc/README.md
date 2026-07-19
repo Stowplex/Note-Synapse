@@ -15,6 +15,7 @@
 
 ## AI & Thinking
 -   **[AI Conversations](guides/ai/ai_conversations.md)**: non-linear conversations with notes as context, forking throughts, and pruning context.
+-   **[Agent Skills](guides/ai/agent_skills.md)**: Teach the AI reusable workflows with notes, tool references, and tag-triggered automation.
 -   **[Agentic Research](guides/ai/agents.md)**: Complex task planning and execution.
 -   **[Immersive Reading](guides/ai/immersive_reading.md)**: Intuitively interacting with documents.
 -   **[Smart Model Matching](guides/ai/smart_model_matching.md)**: Automatically switch models based on capabilities.
@@ -22,6 +23,7 @@
 
 ## Productivity
 -   **[Web Clipper](guides/productivity/web_clipper.md)**: Saving knowledge from the web.
+-   **[World Capture](guides/productivity/world_capture.md)**: Turn videos, photo sequences, and screen recordings into clean page notes.
 -   **[Calendar & Tasks](guides/productivity/calendar.md)**: Scheduling and task management.
 -   **[Multi-Function Tab](guides/productivity/multi_function_tab.md)**: Custom default views.
 

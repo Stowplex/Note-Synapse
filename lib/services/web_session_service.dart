@@ -520,6 +520,136 @@ class WebSessionService {
     return 'https://${uri.host}';
   }
 
+  /// Builds an RFC 6265 `Cookie` request-header value (`name=value; name2=…`)
+  /// from the saved session for [url]'s registrable domain, including only the
+  /// live cookies that would actually be sent to [url]'s host and path.
+  ///
+  /// Returns an empty string if there is no saved session or no cookie matches.
+  /// Intended for Dart-side injection into outbound HTTP requests (e.g.
+  /// Builds a `Cookie` header from the LIVE platform cookie jar (not the saved
+  /// snapshot) for [url], merging in the registrable domain's cookies.
+  ///
+  /// Reading live cookies matters for cross-host, auth-gated downloads (e.g. a
+  /// generated media file on a `*.google.com` CDN): the freshest rotated auth
+  /// cookies live in the jar, and the registrable-domain read pulls the
+  /// `.<domain>` cookies that a bare host read wouldn't return. Returns '' if
+  /// unsupported or nothing is stored.
+  Future<String> liveCookieHeaderFor(String url) async {
+    if (!isSupported) {
+      return '';
+    }
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null || uri.host.isEmpty) {
+      return '';
+    }
+    final chosen = <String, String>{};
+    Future<void> collect(String forUrl) async {
+      try {
+        for (final c in await _cookies.getCookies(forUrl)) {
+          if (c.value.isNotEmpty) {
+            chosen[c.name] = c.value;
+          }
+        }
+      } catch (e) {
+        LoggerService.warning('WebSessionService: live getCookies failed: $e');
+      }
+    }
+
+    // Read the registrable-domain cookies first, then the exact-host cookies, so
+    // that on a name collision the more-specific host cookie wins (consistent
+    // with cookieHeaderFor's _isMoreSpecific preference).
+    final domain = domainKeyFor(url);
+    if (domain.isNotEmpty) {
+      await collect('https://$domain');
+    }
+    await collect(url);
+    return chosen.entries.map((e) => '${e.key}=${e.value}').join('; ');
+  }
+
+  /// `proxyFetch({session: true})`); the values never need to cross into JS.
+  Future<String> cookieHeaderFor(String url) async {
+    if (!isSupported) {
+      return '';
+    }
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null || uri.host.isEmpty) {
+      return '';
+    }
+    final domain = domainKeyFor(url);
+    if (domain.isEmpty) {
+      return '';
+    }
+    final session = await getSession(domain);
+    if (session == null) {
+      return '';
+    }
+
+    final host = uri.host.toLowerCase();
+    final path = uri.path.isEmpty ? '/' : uri.path;
+    final secure = uri.scheme.toLowerCase() == 'https';
+    // Host-only cookies (no Domain attribute) are scoped to the exact host they
+    // were captured on, mirroring restoreCookies. WebSessionCookie doesn't store
+    // that host per cookie, so use the session's captured host as the anchor.
+    final savedHost = Uri.tryParse(session.savedUrl)?.host.toLowerCase();
+
+    // De-duplicate by cookie name, preferring the more specific (host-only /
+    // longer-path) cookie, matching how a browser resolves duplicate names.
+    final chosen = <String, WebSessionCookie>{};
+    for (final cookie in session.liveCookies) {
+      if (cookie.isSecure == true && !secure) {
+        continue;
+      }
+      if (!_hostMatches(host, cookie.domain, savedHost)) {
+        continue;
+      }
+      if (!_pathMatches(path, cookie.path)) {
+        continue;
+      }
+      final existing = chosen[cookie.name];
+      if (existing == null || _isMoreSpecific(cookie, existing)) {
+        chosen[cookie.name] = cookie;
+      }
+    }
+
+    return chosen.values.map((c) => '${c.name}=${c.value}').join('; ');
+  }
+
+  /// RFC 6265 host-match: a host-only cookie (no/blank Domain) matches only the
+  /// exact host it was captured on ([savedHost]); a domain cookie matches its
+  /// domain and any subdomain.
+  static bool _hostMatches(String host, String? cookieDomain, String? savedHost) {
+    if (cookieDomain == null || cookieDomain.isEmpty) {
+      // Host-only: send only to the captured host. If the captured host is
+      // unknown, fall back to sending it (the session is the user's own login
+      // and is already scoped to this registrable domain).
+      return savedHost == null || savedHost.isEmpty || host == savedHost;
+    }
+    final cd = cookieDomain.replaceAll(RegExp(r'^\.+'), '').toLowerCase();
+    return host == cd || host.endsWith('.$cd');
+  }
+
+  /// RFC 6265 path-match: request path equals the cookie path, or is a prefix
+  /// with a `/` boundary.
+  static bool _pathMatches(String requestPath, String? cookiePath) {
+    final cp = (cookiePath == null || cookiePath.isEmpty) ? '/' : cookiePath;
+    if (requestPath == cp) {
+      return true;
+    }
+    if (requestPath.startsWith(cp)) {
+      return cp.endsWith('/') || requestPath[cp.length] == '/';
+    }
+    return false;
+  }
+
+  static bool _isMoreSpecific(WebSessionCookie a, WebSessionCookie b) {
+    final aHostOnly = a.domain == null || a.domain!.isEmpty;
+    final bHostOnly = b.domain == null || b.domain!.isEmpty;
+    if (aHostOnly != bHostOnly) {
+      return aHostOnly; // host-only beats domain cookie
+    }
+    return (a.path?.length ?? 1) > (b.path?.length ?? 1);
+  }
+
   /// Restores the saved session (if any) for the registrable domain of [url]
   /// into the live cookie store, so a subsequent navigation to [url] is
   /// authenticated.

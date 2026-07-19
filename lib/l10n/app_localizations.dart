@@ -980,6 +980,222 @@ abstract class AppLocalizations {
   /// **'Suggested {count} key frame(s)'**
   String worldClipSuggestedKeyFrames(int count);
 
+  /// No description provided for @worldClipSuggestedKeyFramesScrolling.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested {count} key frame(s) (scrolling capture)'**
+  String worldClipSuggestedKeyFramesScrolling(int count);
+
+  /// No description provided for @worldClipNoClearPages.
+  ///
+  /// In en, this message translates to:
+  /// **'No clear pages found — try a slower pan'**
+  String get worldClipNoClearPages;
+
+  /// No description provided for @worldClipPreviousKeyFrame.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous key frame'**
+  String get worldClipPreviousKeyFrame;
+
+  /// No description provided for @worldClipNextKeyFrame.
+  ///
+  /// In en, this message translates to:
+  /// **'Next key frame'**
+  String get worldClipNextKeyFrame;
+
+  /// No description provided for @worldClipPictureSequence.
+  ///
+  /// In en, this message translates to:
+  /// **'Picture sequence'**
+  String get worldClipPictureSequence;
+
+  /// No description provided for @worldClipPsDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Done ({count})'**
+  String worldClipPsDone(int count);
+
+  /// No description provided for @worldClipPsAntiGlare.
+  ///
+  /// In en, this message translates to:
+  /// **'Anti-glare'**
+  String get worldClipPsAntiGlare;
+
+  /// No description provided for @worldClipPsRetake.
+  ///
+  /// In en, this message translates to:
+  /// **'Retake'**
+  String get worldClipPsRetake;
+
+  /// No description provided for @worldClipPsKeep.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep'**
+  String get worldClipPsKeep;
+
+  /// No description provided for @worldClipPsRetakePage.
+  ///
+  /// In en, this message translates to:
+  /// **'Retake this page'**
+  String get worldClipPsRetakePage;
+
+  /// No description provided for @worldClipPsDiscardPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard this page'**
+  String get worldClipPsDiscardPage;
+
+  /// No description provided for @worldClipPsDiscardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard sequence?'**
+  String get worldClipPsDiscardTitle;
+
+  /// No description provided for @worldClipPsDiscardBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This will discard {count} captured page(s).'**
+  String worldClipPsDiscardBody(int count);
+
+  /// No description provided for @worldClipPsDiscardShotsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This will discard the shots taken for the current page.'**
+  String get worldClipPsDiscardShotsBody;
+
+  /// No description provided for @worldClipPsKeepEditing.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep editing'**
+  String get worldClipPsKeepEditing;
+
+  /// No description provided for @worldClipPsDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get worldClipPsDiscard;
+
+  /// No description provided for @worldClipPsCombining.
+  ///
+  /// In en, this message translates to:
+  /// **'Combining shots…'**
+  String get worldClipPsCombining;
+
+  /// No description provided for @worldClipPsFuseFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t combine those shots — used the first one'**
+  String get worldClipPsFuseFallback;
+
+  /// No description provided for @worldClipPsShotFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t take that shot: {error}'**
+  String worldClipPsShotFailed(String error);
+
+  /// No description provided for @worldClipPsSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save that page: {error}'**
+  String worldClipPsSaveFailed(String error);
+
+  /// No description provided for @worldClipPsFlashFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t change flash: {error}'**
+  String worldClipPsFlashFailed(String error);
+
+  /// No description provided for @worldClipPsCameraError.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t open the camera'**
+  String get worldClipPsCameraError;
+
+  /// No description provided for @worldClipPsNoPages.
+  ///
+  /// In en, this message translates to:
+  /// **'No pages yet'**
+  String get worldClipPsNoPages;
+
+  /// No description provided for @worldClipImportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t import the pictures: {error}'**
+  String worldClipImportFailed(String error);
+
+  /// No description provided for @worldClipPicturesProjectName.
+  ///
+  /// In en, this message translates to:
+  /// **'Pictures {date}'**
+  String worldClipPicturesProjectName(String date);
+
+  /// No description provided for @worldClipPsStepProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} ({current}/{total})'**
+  String worldClipPsStepProgress(String label, int current, int total);
+
+  /// No description provided for @worldClipAgLabelCenter.
+  ///
+  /// In en, this message translates to:
+  /// **'Center'**
+  String get worldClipAgLabelCenter;
+
+  /// No description provided for @worldClipAgLabelTopLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'Top-left'**
+  String get worldClipAgLabelTopLeft;
+
+  /// No description provided for @worldClipAgLabelTopRight.
+  ///
+  /// In en, this message translates to:
+  /// **'Top-right'**
+  String get worldClipAgLabelTopRight;
+
+  /// No description provided for @worldClipAgLabelBottomLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'Bottom-left'**
+  String get worldClipAgLabelBottomLeft;
+
+  /// No description provided for @worldClipAgLabelBottomRight.
+  ///
+  /// In en, this message translates to:
+  /// **'Bottom-right'**
+  String get worldClipAgLabelBottomRight;
+
+  /// No description provided for @worldClipAgInstructionCenter.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold the camera centered and level over the page'**
+  String get worldClipAgInstructionCenter;
+
+  /// No description provided for @worldClipAgInstructionTopLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'Move the camera — shift your hand, not just your wrist — toward the TOP-LEFT of the page, keeping the whole page in frame'**
+  String get worldClipAgInstructionTopLeft;
+
+  /// No description provided for @worldClipAgInstructionTopRight.
+  ///
+  /// In en, this message translates to:
+  /// **'Now move toward the TOP-RIGHT of the page, keeping it all in frame'**
+  String get worldClipAgInstructionTopRight;
+
+  /// No description provided for @worldClipAgInstructionBottomLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'Now move toward the BOTTOM-LEFT of the page, keeping it all in frame'**
+  String get worldClipAgInstructionBottomLeft;
+
+  /// No description provided for @worldClipAgInstructionBottomRight.
+  ///
+  /// In en, this message translates to:
+  /// **'Now move toward the BOTTOM-RIGHT of the page, keeping it all in frame'**
+  String get worldClipAgInstructionBottomRight;
+
   /// No description provided for @worldClipAnalyzing.
   ///
   /// In en, this message translates to:
@@ -1349,7 +1565,7 @@ abstract class AppLocalizations {
   /// No description provided for @searchNotes.
   ///
   /// In en, this message translates to:
-  /// **'Search notes...'**
+  /// **'Search notes'**
   String get searchNotes;
 
   /// No description provided for @allNotes.
@@ -8803,6 +9019,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Request mobile site'**
   String get requestMobileSite;
+
+  /// No description provided for @webLoginAppsWithAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Apps with access'**
+  String get webLoginAppsWithAccess;
+
+  /// No description provided for @revoke.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke'**
+  String get revoke;
+
+  /// No description provided for @revokeAppAccessTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke access'**
+  String get revokeAppAccessTitle;
+
+  /// No description provided for @revokeAppAccessConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove \"{appName}\" access to your {domain} login?'**
+  String revokeAppAccessConfirm(String appName, String domain);
 }
 
 class _AppLocalizationsDelegate

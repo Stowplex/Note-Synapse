@@ -1,20 +1,28 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' show Locale;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:uuid/uuid.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/note.dart';
 import '../models/user_app.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_service.dart';
 import '../services/database_service.dart';
+import 'web_session_service.dart';
+import 'app_domain_grant_service.dart';
+import 'crypto_service.dart';
+import 'plugin_task_service.dart';
+import 'share_service.dart';
 import '../services/logger_service.dart';
 import '../services/user_app_service.dart';
 import '../utils/file_type_utils.dart';
+import '../utils/file_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 import 'note_modification_service.dart';
 import 'sql_query_service.dart';
@@ -40,6 +48,33 @@ typedef SqlWriteApprovalCallback =
 typedef DeletionApprovalCallback =
     Future<bool> Function(UserAppRuntimeBridge source, List<String> noteIds);
 
+/// Asks the host to open the in-app web login browser at [url] so the user can
+/// sign into a site; resolves `true` once a session was captured.
+typedef WebLoginRequestCallback =
+    Future<bool> Function(UserAppRuntimeBridge source, String url);
+
+/// Asks the host to confirm the app may use the saved web-login session for
+/// [domain]; resolves `true` if the user approves. Approval is persisted as a
+/// grant so it is only prompted once per app+domain.
+typedef SessionAccessApprovalCallback =
+    Future<bool> Function(UserAppRuntimeBridge source, String domain);
+
+/// Asks the host to present a native note picker with [options]; resolves to the
+/// selected notes as `{id, title}` maps, or `null` if the user cancelled.
+typedef PickNotesCallback =
+    Future<List<Map<String, String>>?> Function(
+      UserAppRuntimeBridge source,
+      Map<String, dynamic> options,
+    );
+
+/// Asks the host to present a native tag picker with [options]; resolves to the
+/// selected tag names, or `null` if the user cancelled.
+typedef PickTagsCallback =
+    Future<List<String>?> Function(
+      UserAppRuntimeBridge source,
+      Map<String, dynamic> options,
+    );
+
 /// Shared runtime bridge that wires the Synapse JavaScript API into a WebView.
 ///
 /// This bridge is used by both the interactive user app playground and the
@@ -58,6 +93,10 @@ class UserAppRuntimeBridge {
     this.onModificationRequest,
     this.onSqlWriteApprovalRequest,
     this.onDeletionApprovalRequest,
+    this.onWebLoginRequest,
+    this.onSessionAccessApprovalRequest,
+    this.onPickNotes,
+    this.onPickTags,
   }) : _selectedNotes = selectedNotes ?? const [],
        _params = params ?? const {};
 
@@ -73,6 +112,10 @@ class UserAppRuntimeBridge {
   final ModificationRequestCallback? onModificationRequest;
   final SqlWriteApprovalCallback? onSqlWriteApprovalRequest;
   final DeletionApprovalCallback? onDeletionApprovalRequest;
+  final WebLoginRequestCallback? onWebLoginRequest;
+  final SessionAccessApprovalCallback? onSessionAccessApprovalRequest;
+  final PickNotesCallback? onPickNotes;
+  final PickTagsCallback? onPickTags;
 
   bool _sessionApprovedModifications = false;
   bool _sessionApprovedSqlWrites = false;
@@ -99,6 +142,9 @@ class UserAppRuntimeBridge {
   DatabaseService get _databaseService => getIt<DatabaseService>();
   SqlQueryService get _sqlQueryService => getIt<SqlQueryService>();
   TtsService get _ttsService => getIt<TtsService>();
+  WebSessionService get _webSessionService => getIt<WebSessionService>();
+  AppDomainGrantService get _appDomainGrantService =>
+      getIt<AppDomainGrantService>();
   static final HttpClient _proxyHttpClient = HttpClient()
     ..autoUncompress = true;
 
@@ -171,39 +217,46 @@ class UserAppRuntimeBridge {
             return result;
           },
           proxyFetch: async (url, options = {}) => {
-            const normalizedOptions = options ?? {};
-            const hasExplicitOptions =
-              normalizedOptions &&
-              typeof normalizedOptions === 'object' &&
-              !Array.isArray(normalizedOptions) &&
-              (
-                Object.prototype.hasOwnProperty.call(normalizedOptions, 'method') ||
-                Object.prototype.hasOwnProperty.call(normalizedOptions, 'body') ||
-                Object.prototype.hasOwnProperty.call(normalizedOptions, 'json') ||
-                Object.prototype.hasOwnProperty.call(normalizedOptions, 'headers')
-              );
+            const o =
+              (options && typeof options === 'object' && !Array.isArray(options))
+                ? options : {};
+            const explicitKeys = ['method', 'body', 'json', 'headers',
+              'bodyBinary', 'multipart', 'session', 'followRedirects', 'responseMode'];
+            const hasExplicitOptions = explicitKeys.some(
+              (k) => Object.prototype.hasOwnProperty.call(o, k));
 
             let headers = {};
-            if (
-              normalizedOptions &&
-              typeof normalizedOptions === 'object' &&
-              !Array.isArray(normalizedOptions)
-            ) {
-              if (hasExplicitOptions) {
-                if (normalizedOptions.headers && typeof normalizedOptions.headers === 'object') {
-                  headers = normalizedOptions.headers;
-                }
-              } else {
-                headers = normalizedOptions;
+            if (hasExplicitOptions) {
+              if (o.headers && typeof o.headers === 'object') {
+                headers = o.headers;
               }
+            } else {
+              // Legacy: a bare options object with none of the known keys is
+              // treated as the headers map.
+              headers = o;
             }
 
             const payload = {
               url,
-              method: hasExplicitOptions && normalizedOptions.method ? normalizedOptions.method : 'GET',
+              method: hasExplicitOptions && o.method ? o.method : 'GET',
               headers,
-              body: hasExplicitOptions ? normalizedOptions.body ?? null : null,
-              json: hasExplicitOptions ? normalizedOptions.json ?? null : null,
+              body: hasExplicitOptions ? o.body ?? null : null,
+              json: hasExplicitOptions ? o.json ?? null : null,
+              bodyBinary: hasExplicitOptions ? o.bodyBinary ?? null : null,
+              multipart: hasExplicitOptions ? o.multipart ?? null : null,
+              session: hasExplicitOptions ? o.session === true : false,
+              // When attaching the user's session cookies, do NOT auto-follow
+              // redirects by default: a cross-host 3xx would otherwise carry the
+              // cookies onward, and surfacing the 3xx also lets the plugin detect
+              // an expired session redirecting to a login page. Callers can still
+              // opt back in with followRedirects: true.
+              followRedirects: hasExplicitOptions
+                ? (Object.prototype.hasOwnProperty.call(o, 'followRedirects')
+                    ? o.followRedirects !== false
+                    : o.session !== true)
+                : true,
+              responseMode: hasExplicitOptions && typeof o.responseMode === 'string'
+                ? o.responseMode : 'auto',
             };
 
             const result = await window.flutter_inappwebview.callHandler('proxyFetch', payload);
@@ -212,6 +265,26 @@ class UserAppRuntimeBridge {
           fetchWebPage: async (url) => {
             const result = await window.flutter_inappwebview.callHandler('fetchWebPage', url);
             return result;
+          },
+          originFetch: async (url, options = {}) => {
+            const opts = (options && typeof options === 'object' && !Array.isArray(options)) ? options : {};
+            const payload = {
+              url,
+              origin: typeof opts.origin === 'string' ? opts.origin : null,
+              method: typeof opts.method === 'string' ? opts.method : 'GET',
+              headers: (opts.headers && typeof opts.headers === 'object') ? opts.headers : {},
+              responseMode: typeof opts.responseMode === 'string' ? opts.responseMode : 'tempFile',
+            };
+            const result = await window.flutter_inappwebview.callHandler('originFetch', payload);
+            return result;
+          },
+          downloadFile: async (url, options = {}) => {
+            const opts = (options && typeof options === 'object' && !Array.isArray(options)) ? options : {};
+            const payload = {
+              url,
+              headers: (opts.headers && typeof opts.headers === 'object') ? opts.headers : {},
+            };
+            return await window.flutter_inappwebview.callHandler('downloadFile', payload);
           },
           readAttachment: async (attachmentPath) => {
             const result = await window.flutter_inappwebview.callHandler('readAttachment', attachmentPath);
@@ -257,6 +330,44 @@ class UserAppRuntimeBridge {
             getLanguages: async () => {
               const result = await window.flutter_inappwebview.callHandler('ttsGetLanguages');
               return result;
+            },
+          },
+          session: {
+            requestLogin: async (options = {}) => {
+              const url = (options && typeof options === 'object' && !Array.isArray(options))
+                ? (options.url || '') : (typeof options === 'string' ? options : '');
+              return await window.flutter_inappwebview.callHandler('sessionRequestLogin', url);
+            },
+            status: async (domain) => {
+              return await window.flutter_inappwebview.callHandler('sessionStatus', domain ?? '');
+            },
+            getCookies: async (domain) => {
+              return await window.flutter_inappwebview.callHandler('sessionGetCookies', domain ?? '');
+            },
+          },
+          crypto: {
+            digest: async (algorithm, data) => {
+              return await window.flutter_inappwebview.callHandler('cryptoDigest', algorithm ?? '', data ?? {});
+            },
+          },
+          exportNotes: async (noteIds, options = {}) => {
+            return await window.flutter_inappwebview.callHandler('exportNotes', noteIds ?? [], options ?? {});
+          },
+          pickNotes: async (options = {}) => {
+            return await window.flutter_inappwebview.callHandler('pickNotes', options ?? {});
+          },
+          pickTags: async (options = {}) => {
+            return await window.flutter_inappwebview.callHandler('pickTags', options ?? {});
+          },
+          tasks: {
+            schedule: async (options = {}) => {
+              return await window.flutter_inappwebview.callHandler('tasksSchedule', options ?? {});
+            },
+            cancel: async (taskId) => {
+              return await window.flutter_inappwebview.callHandler('tasksCancel', taskId ?? '');
+            },
+            list: async () => {
+              return await window.flutter_inappwebview.callHandler('tasksList');
             },
           },
           Notes: $notesJson,
@@ -476,18 +587,40 @@ class UserAppRuntimeBridge {
             });
           }
 
-          String? requestBody;
-          final jsonBody = rawOptions['json'];
-          if (jsonBody != null) {
-            try {
-              requestBody = jsonEncode(jsonBody);
-              LoggerService.debug('proxyFetch requestBody: $requestBody');
+          // Attach the user's saved login cookies when requested. This is
+          // gated on a per-app grant for the URL's domain; cookie *values*
+          // never cross into JS.
+          if (rawOptions['session'] == true) {
+            final permission = await _applySessionCookies(urlRaw, headers);
+            if (permission != null) {
+              return permission; // permission_required / permission_denied
+            }
+          }
 
-              final contentTypeKey = headers.keys.firstWhere(
-                (key) => key.toLowerCase() == HttpHeaders.contentTypeHeader,
-                orElse: () => '',
-              );
-              if (contentTypeKey.isEmpty) {
+          // Body precedence: multipart > bodyBinary > json > body. multipart
+          // and bodyBinary produce raw bytes; json/body produce a string.
+          List<int>? bodyBytes;
+          final multipart = rawOptions['multipart'];
+          final bodyBinary = rawOptions['bodyBinary'];
+          final jsonBody = rawOptions['json'];
+          if (multipart is List) {
+            final built = await _buildMultipartBody(multipart);
+            bodyBytes = built.bytes;
+            headers[HttpHeaders.contentTypeHeader] = built.contentType;
+          } else if (bodyBinary != null) {
+            bodyBytes = base64Decode(bodyBinary.toString());
+            if (!headers.keys.any(
+              (k) => k.toLowerCase() == HttpHeaders.contentTypeHeader,
+            )) {
+              headers[HttpHeaders.contentTypeHeader] =
+                  'application/octet-stream';
+            }
+          } else if (jsonBody != null) {
+            try {
+              bodyBytes = utf8.encode(jsonEncode(jsonBody));
+              if (!headers.keys.any(
+                (k) => k.toLowerCase() == HttpHeaders.contentTypeHeader,
+              )) {
                 headers[HttpHeaders.contentTypeHeader] =
                     'application/json; charset=utf-8';
               }
@@ -495,12 +628,10 @@ class UserAppRuntimeBridge {
               throw ArgumentError('Failed to encode JSON body: $e');
             }
           } else if (rawOptions['body'] != null) {
-            requestBody = rawOptions['body'].toString();
-            final contentTypeKey = headers.keys.firstWhere(
-              (key) => key.toLowerCase() == HttpHeaders.contentTypeHeader,
-              orElse: () => '',
-            );
-            if (contentTypeKey.isEmpty) {
+            bodyBytes = utf8.encode(rawOptions['body'].toString());
+            if (!headers.keys.any(
+              (k) => k.toLowerCase() == HttpHeaders.contentTypeHeader,
+            )) {
               headers[HttpHeaders.contentTypeHeader] =
                   'text/plain; charset=utf-8';
             }
@@ -511,6 +642,9 @@ class UserAppRuntimeBridge {
           );
 
           final request = await _proxyHttpClient.openUrl(method, uri);
+          // followRedirects defaults to true; when false a 3xx is returned as-is
+          // so the caller can inspect the Location (auth-expiry detection).
+          request.followRedirects = rawOptions['followRedirects'] != false;
           headers.forEach((key, value) {
             try {
               request.headers.set(key, value);
@@ -521,8 +655,8 @@ class UserAppRuntimeBridge {
             }
           });
 
-          if (requestBody != null && method != 'GET' && method != 'HEAD') {
-            request.add(utf8.encode(requestBody));
+          if (bodyBytes != null && method != 'GET' && method != 'HEAD') {
+            request.add(bodyBytes);
           }
 
           final response = await request.close();
@@ -538,33 +672,56 @@ class UserAppRuntimeBridge {
           final normalizedMime = mime.split(';').first.trim().isNotEmpty
               ? mime.split(';').first.trim()
               : 'application/octet-stream';
-          var isText = normalizedMime.toLowerCase().startsWith('text/');
-          switch (normalizedMime.toLowerCase()) {
-            case 'application/json':
-              isText = true;
-              break;
-            case 'application/javascript':
-              isText = true;
-              break;
-            case 'application/xml':
-              isText = true;
-            default:
-              break;
+
+          // Expose response headers generically, but never leak credential
+          // headers into JS — Set-Cookie carries rotated session tokens and
+          // must stay Dart-side to preserve the cookie-isolation model.
+          const sensitiveResponseHeaders = {'set-cookie', 'set-cookie2'};
+          final responseHeaders = <String, String>{};
+          response.headers.forEach((name, values) {
+            if (sensitiveResponseHeaders.contains(name.toLowerCase())) {
+              return;
+            }
+            responseHeaders[name] = values.join(', ');
+          });
+          String? redirectedTo;
+          if (response.redirects.isNotEmpty) {
+            redirectedTo = response.redirects.last.location.toString();
+          } else if (response.isRedirect) {
+            redirectedTo = response.headers.value(HttpHeaders.locationHeader);
           }
-          final data = isText
-              ? utf8.decode(bytes, allowMalformed: true)
-              : base64Encode(bytes);
 
           final duration = DateTime.now().difference(startTime);
           LoggerService.debug(
             '[Synapse.proxyFetch] Success (${response.statusCode}) in ${duration.inMilliseconds}ms',
           );
 
-          return {
+          final result = <String, dynamic>{
             'status': 'success',
             'statusCode': response.statusCode,
-            'content': {'mime': normalizedMime, 'data': data},
+            'headers': responseHeaders,
+            if (redirectedTo != null) 'redirectedTo': redirectedTo,
           };
+
+          final responseMode =
+              (rawOptions['responseMode'] as String?) ?? 'auto';
+          if (responseMode == 'tempFile') {
+            final saved = await SynapseTempUtils.saveTempData(
+              mimeType: normalizedMime,
+              base64Data: base64Encode(bytes),
+            );
+            result['uri'] = saved.uri;
+            result['mime'] = normalizedMime;
+          } else {
+            final asText = responseMode == 'text' ||
+                (responseMode == 'auto' && _isTextMime(normalizedMime));
+            final asBinary = responseMode == 'binary';
+            final data = (asText && !asBinary)
+                ? utf8.decode(bytes, allowMalformed: true)
+                : base64Encode(bytes);
+            result['content'] = {'mime': normalizedMime, 'data': data};
+          }
+          return result;
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
           LoggerService.error(
@@ -786,6 +943,489 @@ class UserAppRuntimeBridge {
             '[Synapse.fetchWebPage] Error after ${duration.inMilliseconds}ms: $e',
             error: e,
           );
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'originFetch',
+      callback: (args) async {
+        final startTime = DateTime.now();
+        try {
+          if (args.isEmpty || args.first is! Map) {
+            throw ArgumentError('Request options are required');
+          }
+          final options = Map<String, dynamic>.from(args.first as Map);
+          final url = (options['url'] as String?)?.trim() ?? '';
+          if (url.isEmpty) {
+            throw ArgumentError('URL is required');
+          }
+
+          final headers = <String, String>{};
+          final rawHeaders = options['headers'];
+          if (rawHeaders is Map) {
+            rawHeaders.forEach((key, value) {
+              if (key != null && value != null) {
+                headers[key.toString()] = value.toString();
+              }
+            });
+          }
+
+          LoggerService.debug('[Synapse.originFetch] Called with URL: $url');
+          final result = await UserAppService.originFetch(
+            url,
+            originRaw: options['origin'] as String?,
+            method: (options['method'] as String?) ?? 'GET',
+            headers: headers,
+            responseMode:
+                (options['responseMode'] as String?) ?? 'tempFile',
+          );
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.debug(
+            '[Synapse.originFetch] Completed in ${duration.inMilliseconds}ms',
+          );
+          return result;
+        } catch (e) {
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.error(
+            '[Synapse.originFetch] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
+          return {'status': 'error', 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'sessionRequestLogin',
+      callback: (args) async {
+        try {
+          final url = args.isNotEmpty ? (args.first?.toString().trim() ?? '') : '';
+          if (url.isEmpty) {
+            throw ArgumentError('A url is required to request login');
+          }
+          final domain = WebSessionService.domainKeyFor(url);
+          final callback = onWebLoginRequest;
+          if (callback == null) {
+            // Headless / no UI available to present the login browser.
+            return {'success': false, 'error': 'no_ui', 'domain': domain};
+          }
+          final loggedIn = await callback(this, url);
+          return {'success': loggedIn, 'loggedIn': loggedIn, 'domain': domain};
+        } catch (e) {
+          LoggerService.error('[Synapse.session.requestLogin] Error: $e', error: e);
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'sessionStatus',
+      callback: (args) async {
+        try {
+          final input = args.isNotEmpty ? (args.first?.toString().trim() ?? '') : '';
+          if (input.isEmpty) {
+            throw ArgumentError('A domain or url is required');
+          }
+          final domain = WebSessionService.domainKeyFor(input);
+          final session = await _webSessionService.getSession(domain);
+          final loggedIn = session != null && session.liveCookies.isNotEmpty;
+          return {
+            'success': true,
+            'loggedIn': loggedIn,
+            'domain': domain,
+            'savedAt': session?.savedAt.toIso8601String(),
+          };
+        } catch (e) {
+          LoggerService.error('[Synapse.session.status] Error: $e', error: e);
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'sessionGetCookies',
+      callback: (args) async {
+        try {
+          final input = args.isNotEmpty ? (args.first?.toString().trim() ?? '') : '';
+          if (input.isEmpty) {
+            throw ArgumentError('A domain or url is required');
+          }
+          final domain = WebSessionService.domainKeyFor(input);
+
+          // Reading raw cookie values is sensitive: gate on a per-app+domain
+          // grant, prompting the user for approval the first time.
+          var granted = await _appDomainGrantService.isGranted(app.uuid, domain);
+          if (!granted) {
+            final callback = onSessionAccessApprovalRequest;
+            if (callback == null) {
+              return {'success': false, 'error': 'permission_required'};
+            }
+            granted = await callback(this, domain);
+            if (granted) {
+              await _appDomainGrantService.grant(app.uuid, domain);
+            }
+          }
+          if (!granted) {
+            return {'success': false, 'error': 'permission_denied'};
+          }
+
+          final session = await _webSessionService.getSession(domain);
+          if (session == null || session.liveCookies.isEmpty) {
+            return {'success': false, 'error': 'no_session', 'domain': domain};
+          }
+          final cookies = session.liveCookies
+              .map((c) => {
+                    'name': c.name,
+                    'value': c.value,
+                    if (c.domain != null) 'domain': c.domain,
+                    if (c.path != null) 'path': c.path,
+                  })
+              .toList();
+          return {'success': true, 'domain': domain, 'cookies': cookies};
+        } catch (e) {
+          LoggerService.error('[Synapse.session.getCookies] Error: $e', error: e);
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'downloadFile',
+      callback: (args) async {
+        final startTime = DateTime.now();
+        try {
+          if (args.isEmpty || args.first is! Map) {
+            throw ArgumentError('Request options are required');
+          }
+          final options = Map<String, dynamic>.from(args.first as Map);
+          final urlRaw = (options['url'] as String?)?.trim() ?? '';
+          if (urlRaw.isEmpty) {
+            throw ArgumentError('url is required');
+          }
+          final uri = Uri.parse(urlRaw);
+          if (uri.scheme != 'http' && uri.scheme != 'https') {
+            throw ArgumentError('Only HTTP(S) URLs are supported');
+          }
+
+          // Same grant as session use — downloading with the user's live login
+          // acts as them on that site.
+          final granted =
+              await _ensureDomainGrant(WebSessionService.domainKeyFor(urlRaw));
+          if (granted == null) {
+            return {'status': 'error', 'error': 'permission_required'};
+          }
+          if (!granted) {
+            return {'status': 'error', 'error': 'permission_denied'};
+          }
+
+          final extraHeaders = <String, String>{};
+          final rawHeaders = options['headers'];
+          if (rawHeaders is Map) {
+            rawHeaders.forEach((k, v) {
+              if (k != null && v != null) {
+                extraHeaders[k.toString()] = v.toString();
+              }
+            });
+          }
+
+          // Follow redirects MANUALLY so cookies are re-scoped per hop: each
+          // request carries only the live cookies for that hop's own domain. A
+          // cross-domain redirect therefore never carries the granted domain's
+          // cookies onward (the leak dart:io's auto-follow would cause).
+          var currentUri = uri;
+          HttpClientResponse? response;
+          for (var hop = 0; hop <= 10; hop++) {
+            final request = await _proxyHttpClient.openUrl('GET', currentUri);
+            request.followRedirects = false;
+            final hopHeaders = <String, String>{
+              'user-agent':
+                  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
+                      '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+              'referer': '${currentUri.scheme}://${currentUri.host}/',
+              'sec-fetch-site': 'cross-site',
+              'sec-fetch-dest': 'document',
+              'sec-fetch-mode': 'navigate',
+              'sec-fetch-user': '?1',
+              ...extraHeaders,
+            };
+            final hopCookies =
+                await _webSessionService.liveCookieHeaderFor(currentUri.toString());
+            if (hopCookies.isNotEmpty) {
+              hopHeaders['cookie'] = hopCookies;
+            }
+            hopHeaders.forEach((k, v) {
+              try {
+                request.headers.set(k, v);
+              } catch (_) {}
+            });
+            final resp = await request.close();
+            if (resp.isRedirect) {
+              final loc = resp.headers.value(HttpHeaders.locationHeader);
+              await resp.drain<void>();
+              if (loc == null || hop == 10) {
+                return {'status': 'error', 'error': 'too_many_redirects'};
+              }
+              currentUri = currentUri.resolve(loc);
+              continue;
+            }
+            response = resp;
+            break;
+          }
+          if (response == null) {
+            return {'status': 'error', 'error': 'no_response'};
+          }
+
+          // A non-2xx response is not the file (auth/error page). Surface it
+          // rather than saving an error body as the "download".
+          if (response.statusCode < 200 || response.statusCode >= 300) {
+            await response.drain<void>();
+            return {
+              'status': 'error',
+              'error': 'auth_required',
+              'statusCode': response.statusCode,
+            };
+          }
+
+          final bytesBuilder = BytesBuilder(copy: false);
+          await for (final chunk in response) {
+            bytesBuilder.add(chunk);
+          }
+          final bytes = bytesBuilder.takeBytes();
+          final mime = (response.headers.value(HttpHeaders.contentTypeHeader) ??
+                  'application/octet-stream')
+              .split(';')
+              .first
+              .trim();
+
+          // Downloadable media/binary is never text/* — a text body means a
+          // login/error page slipped through.
+          if (mime.startsWith('text/')) {
+            return {
+              'status': 'error',
+              'error': 'auth_required',
+              'statusCode': response.statusCode,
+            };
+          }
+
+          final saved = await SynapseTempUtils.saveTempData(
+            mimeType: mime.isEmpty ? 'application/octet-stream' : mime,
+            bytes: bytes,
+          );
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.debug(
+            '[Synapse.downloadFile] ${response.statusCode} $mime '
+            '(${bytes.length}B) in ${duration.inMilliseconds}ms',
+          );
+          return {
+            'status': 'success',
+            'statusCode': response.statusCode,
+            'mime': mime,
+            'uri': saved.uri,
+            'bytes': bytes.length,
+          };
+        } catch (e) {
+          LoggerService.error('[Synapse.downloadFile] Error: $e', error: e);
+          return {'status': 'error', 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'pickNotes',
+      callback: (args) async {
+        try {
+          final options = (args.isNotEmpty && args.first is Map)
+              ? Map<String, dynamic>.from(args.first as Map)
+              : <String, dynamic>{};
+          final callback = onPickNotes;
+          if (callback == null) {
+            return {'success': false, 'error': 'no_ui'};
+          }
+          final selected = await callback(this, options);
+          if (selected == null) {
+            return {'success': true, 'cancelled': true, 'notes': []};
+          }
+          return {'success': true, 'notes': selected};
+        } catch (e) {
+          LoggerService.error('[Synapse.pickNotes] Error: $e', error: e);
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'pickTags',
+      callback: (args) async {
+        try {
+          final options = (args.isNotEmpty && args.first is Map)
+              ? Map<String, dynamic>.from(args.first as Map)
+              : <String, dynamic>{};
+          final callback = onPickTags;
+          if (callback == null) {
+            return {'success': false, 'error': 'no_ui'};
+          }
+          final selected = await callback(this, options);
+          if (selected == null) {
+            return {'success': true, 'cancelled': true, 'tags': []};
+          }
+          return {'success': true, 'tags': selected};
+        } catch (e) {
+          LoggerService.error('[Synapse.pickTags] Error: $e', error: e);
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'cryptoDigest',
+      callback: (args) async {
+        try {
+          final algorithm = args.isNotEmpty ? (args[0]?.toString() ?? '') : '';
+          final data = (args.length > 1 && args[1] is Map)
+              ? Map<String, dynamic>.from(args[1] as Map)
+              : <String, dynamic>{};
+          final text = data['text'] as String?;
+          final base64Data = (data['base64'] ?? data['base64Data']) as String?;
+          final hex = getIt<CryptoService>().digestHex(
+            algorithm,
+            text: text,
+            base64Data: base64Data,
+          );
+          return {'success': true, 'hex': hex};
+        } catch (e) {
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'exportNotes',
+      callback: (args) async {
+        try {
+          final rawIds = args.isNotEmpty ? args.first : null;
+          final noteIds = <String>[];
+          if (rawIds is List) {
+            for (final id in rawIds) {
+              if (id != null && id.toString().trim().isNotEmpty) {
+                noteIds.add(id.toString());
+              }
+            }
+          }
+          if (noteIds.isEmpty) {
+            throw ArgumentError('noteIds must be a non-empty array');
+          }
+          final options = (args.length > 1 && args[1] is Map)
+              ? Map<String, dynamic>.from(args[1] as Map)
+              : <String, dynamic>{};
+          final includeLinked =
+              options['includeSubNotesAndLinkedNotes'] != false;
+          final includeAttachments = options['includeAttachmentList'] != false;
+
+          // Load a default (English) localization instance; exportNotes has no
+          // BuildContext, and the l10n only affects section labels in the
+          // exported markdown.
+          final l10n = await AppLocalizations.delegate.load(const Locale('en'));
+
+          final exported = <Map<String, dynamic>>[];
+          for (final noteId in noteIds) {
+            final note = await _databaseService.getNote(noteId);
+            if (note == null) {
+              continue;
+            }
+            final markdown = await ShareService.generateMarkdownText(
+              notes: [note],
+              includeSubNotesAndLinkedNotes: includeLinked,
+              appProvider: appProvider,
+              l10n: l10n,
+            );
+            final entry = <String, dynamic>{
+              'id': note.id,
+              'title': note.title,
+              'markdown': markdown,
+            };
+            if (includeAttachments) {
+              final attachments =
+                  await _databaseService.getAttachmentsForNote(noteId);
+              entry['attachments'] = [
+                for (final att in attachments)
+                  {
+                    'id': att.id,
+                    'path': await FileUtils.resolvePortableAttachmentPath(
+                      att.filePath,
+                    ),
+                    'fileName': att.fileName,
+                    'mimeType': att.fileType,
+                  },
+              ];
+            }
+            exported.add(entry);
+          }
+
+          return {'success': true, 'notes': exported};
+        } catch (e) {
+          LoggerService.error('[Synapse.exportNotes] Error: $e', error: e);
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'tasksSchedule',
+      callback: (args) async {
+        try {
+          final options = (args.isNotEmpty && args.first is Map)
+              ? Map<String, dynamic>.from(args.first as Map)
+              : <String, dynamic>{};
+          final tool = (options['tool'] as String?)?.trim() ?? '';
+          if (tool.isEmpty) {
+            throw ArgumentError('tool is required');
+          }
+          final params = (options['params'] is Map)
+              ? Map<String, dynamic>.from(options['params'] as Map)
+              : <String, dynamic>{};
+          final delaySeconds =
+              (options['delaySeconds'] as num?)?.toInt() ?? 60;
+          final maxRuns = (options['maxRuns'] as num?)?.toInt() ?? 1;
+          final taskId = await getIt<PluginTaskService>().schedule(
+            appUuid: app.uuid,
+            tool: tool,
+            params: params,
+            delaySeconds: delaySeconds,
+            maxRuns: maxRuns,
+          );
+          return {'success': true, 'taskId': taskId};
+        } catch (e) {
+          LoggerService.error('[Synapse.tasks.schedule] Error: $e', error: e);
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'tasksCancel',
+      callback: (args) async {
+        try {
+          final taskId = args.isNotEmpty ? (args.first?.toString() ?? '') : '';
+          if (taskId.isEmpty) {
+            throw ArgumentError('taskId is required');
+          }
+          await getIt<PluginTaskService>().cancel(taskId);
+          return {'success': true};
+        } catch (e) {
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'tasksList',
+      callback: (args) async {
+        try {
+          final tasks = await getIt<PluginTaskService>().list(app.uuid);
+          return {'success': true, 'tasks': tasks};
+        } catch (e) {
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -1516,6 +2156,139 @@ class UserAppRuntimeBridge {
     }
 
     return validAttachments;
+  }
+
+  /// Whether [mime] should be surfaced as a decoded text string rather than
+  /// base64 in `responseMode: 'auto'`.
+  static bool _isTextMime(String mime) {
+    final m = mime.toLowerCase();
+    return m.startsWith('text/') ||
+        m == 'application/json' ||
+        m == 'application/javascript' ||
+        m == 'application/xml';
+  }
+
+  /// Resolves the per-app grant for [url]'s domain and, if allowed, merges the
+  /// user's saved-session cookies into [headers]. Returns `null` on success, or
+  /// an error result map (`permission_required` / `permission_denied`) that the
+  /// caller should return as-is.
+  /// Ensures this app has a grant to use the saved login for [domain],
+  /// prompting for approval the first time. Returns `true` (granted),
+  /// `false` (user declined), or `null` (no approval UI available).
+  Future<bool?> _ensureDomainGrant(String domain) async {
+    if (await _appDomainGrantService.isGranted(app.uuid, domain)) {
+      return true;
+    }
+    final callback = onSessionAccessApprovalRequest;
+    if (callback == null) {
+      return null;
+    }
+    final granted = await callback(this, domain);
+    if (granted) {
+      await _appDomainGrantService.grant(app.uuid, domain);
+    }
+    return granted;
+  }
+
+  Future<Map<String, dynamic>?> _applySessionCookies(
+    String url,
+    Map<String, String> headers,
+  ) async {
+    final granted = await _ensureDomainGrant(WebSessionService.domainKeyFor(url));
+    if (granted == null) {
+      return {'status': 'error', 'error': 'permission_required'};
+    }
+    if (!granted) {
+      return {'status': 'error', 'error': 'permission_denied'};
+    }
+
+    final cookieHeader = await _webSessionService.cookieHeaderFor(url);
+    if (cookieHeader.isNotEmpty) {
+      final existingKey = headers.keys.firstWhere(
+        (k) => k.toLowerCase() == 'cookie',
+        orElse: () => '',
+      );
+      if (existingKey.isEmpty) {
+        headers['Cookie'] = cookieHeader;
+      } else {
+        // Preserve any cookies the plugin set explicitly, then append ours.
+        headers[existingKey] = '${headers[existingKey]}; $cookieHeader';
+      }
+    }
+    return null;
+  }
+
+  /// Builds a `multipart/form-data` request body from a list of part specs.
+  ///
+  /// Each part is a map with `name` and one of `text`, `dataBase64`, or
+  /// `attachmentPath` (streamed from disk without a base64 round-trip through
+  /// the plugin), plus optional `filename` and `mimeType`.
+  Future<({List<int> bytes, String contentType})> _buildMultipartBody(
+    List<dynamic> parts,
+  ) async {
+    final boundary =
+        '----SynapseBoundary${DateTime.now().microsecondsSinceEpoch}';
+    final builder = BytesBuilder();
+    // UTF-8 (not ASCII) so non-ASCII names/filenames don't throw; browsers send
+    // form-data field values as UTF-8 too.
+    void writeHeader(String s) => builder.add(utf8.encode(s));
+    // Prevent header injection / malformed parts: drop CR/LF and escape quotes
+    // and backslashes in quoted-string header values.
+    String quote(String v) =>
+        v.replaceAll(RegExp(r'[\r\n]'), '').replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+
+    for (final raw in parts) {
+      if (raw is! Map) {
+        continue;
+      }
+      final part = Map<String, dynamic>.from(raw);
+      final name = (part['name'] as String?)?.trim() ?? '';
+      if (name.isEmpty) {
+        continue;
+      }
+      final filename = part['filename'] as String?;
+      var mimeType = part['mimeType'] as String?;
+
+      List<int> contentBytes;
+      if (part['attachmentPath'] != null) {
+        final attachment =
+            await _readAttachmentFromPath(part['attachmentPath'].toString());
+        if (attachment == null) {
+          throw ArgumentError(
+            'Attachment not found: ${part['attachmentPath']}',
+          );
+        }
+        contentBytes = base64Decode(attachment['data'] as String);
+        mimeType ??= attachment['mimeType'] as String?;
+      } else if (part['dataBase64'] != null) {
+        contentBytes = base64Decode(part['dataBase64'].toString());
+      } else if (part['text'] != null) {
+        contentBytes = utf8.encode(part['text'].toString());
+      } else {
+        contentBytes = const [];
+      }
+
+      final disposition = StringBuffer(
+        'Content-Disposition: form-data; name="${quote(name)}"',
+      );
+      if (filename != null) {
+        disposition.write('; filename="${quote(filename)}"');
+      }
+      writeHeader('--$boundary\r\n');
+      writeHeader('$disposition\r\n');
+      if (mimeType != null && mimeType.isNotEmpty) {
+        writeHeader('Content-Type: ${quote(mimeType)}\r\n');
+      }
+      writeHeader('\r\n');
+      builder.add(contentBytes);
+      writeHeader('\r\n');
+    }
+    writeHeader('--$boundary--\r\n');
+
+    return (
+      bytes: builder.takeBytes(),
+      contentType: 'multipart/form-data; boundary=$boundary',
+    );
   }
 
   Future<Map<String, dynamic>?> _readAttachmentFromPath(

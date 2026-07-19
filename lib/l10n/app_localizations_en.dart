@@ -492,6 +492,139 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String worldClipSuggestedKeyFramesScrolling(int count) {
+    return 'Suggested $count key frame(s) (scrolling capture)';
+  }
+
+  @override
+  String get worldClipNoClearPages => 'No clear pages found — try a slower pan';
+
+  @override
+  String get worldClipPreviousKeyFrame => 'Previous key frame';
+
+  @override
+  String get worldClipNextKeyFrame => 'Next key frame';
+
+  @override
+  String get worldClipPictureSequence => 'Picture sequence';
+
+  @override
+  String worldClipPsDone(int count) {
+    return 'Done ($count)';
+  }
+
+  @override
+  String get worldClipPsAntiGlare => 'Anti-glare';
+
+  @override
+  String get worldClipPsRetake => 'Retake';
+
+  @override
+  String get worldClipPsKeep => 'Keep';
+
+  @override
+  String get worldClipPsRetakePage => 'Retake this page';
+
+  @override
+  String get worldClipPsDiscardPage => 'Discard this page';
+
+  @override
+  String get worldClipPsDiscardTitle => 'Discard sequence?';
+
+  @override
+  String worldClipPsDiscardBody(int count) {
+    return 'This will discard $count captured page(s).';
+  }
+
+  @override
+  String get worldClipPsDiscardShotsBody =>
+      'This will discard the shots taken for the current page.';
+
+  @override
+  String get worldClipPsKeepEditing => 'Keep editing';
+
+  @override
+  String get worldClipPsDiscard => 'Discard';
+
+  @override
+  String get worldClipPsCombining => 'Combining shots…';
+
+  @override
+  String get worldClipPsFuseFallback =>
+      'Couldn\'t combine those shots — used the first one';
+
+  @override
+  String worldClipPsShotFailed(String error) {
+    return 'Couldn\'t take that shot: $error';
+  }
+
+  @override
+  String worldClipPsSaveFailed(String error) {
+    return 'Couldn\'t save that page: $error';
+  }
+
+  @override
+  String worldClipPsFlashFailed(String error) {
+    return 'Couldn\'t change flash: $error';
+  }
+
+  @override
+  String get worldClipPsCameraError => 'Couldn\'t open the camera';
+
+  @override
+  String get worldClipPsNoPages => 'No pages yet';
+
+  @override
+  String worldClipImportFailed(String error) {
+    return 'Couldn\'t import the pictures: $error';
+  }
+
+  @override
+  String worldClipPicturesProjectName(String date) {
+    return 'Pictures $date';
+  }
+
+  @override
+  String worldClipPsStepProgress(String label, int current, int total) {
+    return '$label ($current/$total)';
+  }
+
+  @override
+  String get worldClipAgLabelCenter => 'Center';
+
+  @override
+  String get worldClipAgLabelTopLeft => 'Top-left';
+
+  @override
+  String get worldClipAgLabelTopRight => 'Top-right';
+
+  @override
+  String get worldClipAgLabelBottomLeft => 'Bottom-left';
+
+  @override
+  String get worldClipAgLabelBottomRight => 'Bottom-right';
+
+  @override
+  String get worldClipAgInstructionCenter =>
+      'Hold the camera centered and level over the page';
+
+  @override
+  String get worldClipAgInstructionTopLeft =>
+      'Move the camera — shift your hand, not just your wrist — toward the TOP-LEFT of the page, keeping the whole page in frame';
+
+  @override
+  String get worldClipAgInstructionTopRight =>
+      'Now move toward the TOP-RIGHT of the page, keeping it all in frame';
+
+  @override
+  String get worldClipAgInstructionBottomLeft =>
+      'Now move toward the BOTTOM-LEFT of the page, keeping it all in frame';
+
+  @override
+  String get worldClipAgInstructionBottomRight =>
+      'Now move toward the BOTTOM-RIGHT of the page, keeping it all in frame';
+
+  @override
   String worldClipAnalyzing(int current, int total) {
     return 'Analyzing $current/$total';
   }
@@ -712,7 +845,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get exitMultiSelectMode => 'Exit Multi-Select Mode';
 
   @override
-  String get searchNotes => 'Search notes...';
+  String get searchNotes => 'Search notes';
 
   @override
   String get allNotes => 'All Notes';
@@ -5080,4 +5213,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get requestMobileSite => 'Request mobile site';
+
+  @override
+  String get webLoginAppsWithAccess => 'Apps with access';
+
+  @override
+  String get revoke => 'Revoke';
+
+  @override
+  String get revokeAppAccessTitle => 'Revoke access';
+
+  @override
+  String revokeAppAccessConfirm(String appName, String domain) {
+    return 'Remove \"$appName\" access to your $domain login?';
+  }
 }

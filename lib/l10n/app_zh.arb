@@ -162,6 +162,111 @@
       }
     }
   },
+  "worldClipSuggestedKeyFramesScrolling": "已推荐 {count} 个关键帧（滚动录屏）",
+  "@worldClipSuggestedKeyFramesScrolling": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipNoClearPages": "未找到清晰的页面 — 请放慢移动速度",
+  "worldClipPreviousKeyFrame": "上一个关键帧",
+  "worldClipNextKeyFrame": "下一个关键帧",
+  "worldClipPictureSequence": "连拍图片序列",
+  "worldClipPsDone": "完成（{count}）",
+  "@worldClipPsDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipPsAntiGlare": "防反光",
+  "worldClipPsRetake": "重拍",
+  "worldClipPsKeep": "保留",
+  "worldClipPsRetakePage": "重拍此页",
+  "worldClipPsDiscardPage": "删除此页",
+  "worldClipPsDiscardTitle": "放弃本次拍摄？",
+  "worldClipPsDiscardBody": "将丢弃已拍摄的 {count} 页。",
+  "@worldClipPsDiscardBody": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipPsDiscardShotsBody": "将丢弃当前页面已拍摄的照片。",
+  "worldClipPsKeepEditing": "继续编辑",
+  "worldClipPsDiscard": "放弃",
+  "worldClipPsCombining": "正在合成照片…",
+  "worldClipPsFuseFallback": "无法合成这些照片 — 已使用第一张",
+  "worldClipPsShotFailed": "拍摄失败：{error}",
+  "@worldClipPsShotFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "worldClipPsSaveFailed": "无法保存该页：{error}",
+  "@worldClipPsSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "worldClipPsFlashFailed": "无法切换闪光灯：{error}",
+  "@worldClipPsFlashFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "worldClipPsCameraError": "无法打开相机",
+  "worldClipPsNoPages": "还没有拍摄页面",
+  "worldClipImportFailed": "无法导入图片：{error}",
+  "@worldClipImportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "worldClipPicturesProjectName": "图片 {date}",
+  "@worldClipPicturesProjectName": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "worldClipPsStepProgress": "{label}（{current}/{total}）",
+  "@worldClipPsStepProgress": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "worldClipAgLabelCenter": "中央",
+  "worldClipAgLabelTopLeft": "左上",
+  "worldClipAgLabelTopRight": "右上",
+  "worldClipAgLabelBottomLeft": "左下",
+  "worldClipAgLabelBottomRight": "右下",
+  "worldClipAgInstructionCenter": "将相机保持水平，置于页面正上方",
+  "worldClipAgInstructionTopLeft": "移动相机（移动手臂而非仅转手腕）到页面的左上方，保持整页在画面内",
+  "worldClipAgInstructionTopRight": "现在移到页面的右上方，保持整页在画面内",
+  "worldClipAgInstructionBottomLeft": "现在移到页面的左下方，保持整页在画面内",
+  "worldClipAgInstructionBottomRight": "现在移到页面的右下方，保持整页在画面内",
   "worldClipAnalyzing": "分析中 {current}/{total}",
   "@worldClipAnalyzing": {
     "placeholders": {
@@ -2097,5 +2202,16 @@
   "messageNoLongerExists": "消息已不存在",
   "showDetails": "显示详情",
   "forceRefetchImages": "强制重新获取图片",
-  "fetchingImage": "正在获取图片..."
+  "fetchingImage": "正在获取图片...",
+  "webLoginAppsWithAccess": "有访问权限的应用",
+  "revoke": "撤销",
+  "revokeAppAccessTitle": "撤销访问权限",
+  "revokeAppAccessConfirm": "移除“{appName}”对你 {domain} 登录的访问权限？",
+  "@revokeAppAccessConfirm": {
+    "placeholders": {
+      "appName": {"type": "String"},
+      "domain": {"type": "String"}
+    }
+  },
+  "searchNotes": "搜索笔记"
 }

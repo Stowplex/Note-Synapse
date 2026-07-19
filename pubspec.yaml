@@ -56,6 +56,9 @@ dependencies:
   # Image handling
   image: ^4.2.0
   image_picker: ^1.0.4
+
+  # In-app still-photo capture (World Clip picture sequence)
+  camera: ^0.11.0
   
   # Voice recording
   permission_handler: ^11.0.1
@@ -181,6 +184,18 @@ dependencies:
 # and downstream Flutter builds that ride on the dart sqlite3 native asset).
 hooks:
   user_defines:
+    # dartcv4 (opencv_dart's native backend) only compiles core/imgproc/imgcodecs
+    # by default. glare_fusion.dart's feature-based alignment needs ORB/BFMatcher
+    # (features2d) and findHomography (calib3d) too.
+    # NOTE: `include_modules` REPLACES the default set rather than adding to it,
+    # so imgcodecs/imgproc must be listed explicitly too or the rest of the app's
+    # (much heavier) existing OpenCV usage silently loses those symbols.
+    dartcv4:
+      include_modules:
+        - imgcodecs
+        - imgproc
+        - calib3d
+        - features2d
     sqlite3:
       source: source
       path: third_party/sqlite3/sqlite3.c
