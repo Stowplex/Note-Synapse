@@ -1,5 +1,7 @@
 # DOS Station
 
+![play](media/dos-station-play.png)
+
 Play classic DOS games stored inside your notes. DOS Station is a Note Synapse
 user app that runs a full DOSBox emulator (compiled to WebAssembly) entirely
 inside the plugin sandbox, using only the public Synapse API:
@@ -21,6 +23,11 @@ inside the plugin sandbox, using only the public Synapse API:
   (js-dos 6.22.60, ~2 MB) is downloaded via `Synapse.proxyFetch`, verified
   against pinned SHA-256 hashes with `Synapse.crypto.digest`, and cached in
   app state (`Synapse.storeAppState`) so later runs work offline.
+
+
+![note](media/dos-station-note.png)
+
+![add-to-note](media/dos-station-add-to-note.png)
 
 ## Installing
 
