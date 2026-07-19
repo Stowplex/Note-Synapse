@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DOS Station — dev harness</title>
+<style>
+  body{margin:0;display:flex;height:100vh;font-family:ui-monospace,Menlo,monospace;background:#111;color:#ddd;}
+  #frame{flex:1;border:0;min-width:0;}
+  #side{width:380px;display:flex;flex-direction:column;border-left:1px solid #333;}
+  #side h1{font-size:13px;margin:8px;color:#7f7;}
+  #log{flex:1;overflow:auto;font-size:11px;white-space:pre-wrap;word-break:break-word;
+       margin:0;padding:8px;border-top:1px solid #333;}
+</style>
+</head>
+<body>
+<iframe id="frame" allow="autoplay"></iframe>
+<div id="side">
+  <h1>DOS Station harness — Synapse call log</h1>
+  <pre id="log"></pre>
+</div>
+<script>
+  window.harnessLog = (m) => {
+    const el = document.getElementById('log');
+    el.textContent += m + '\n';
+    el.scrollTop = el.scrollHeight;
+  };
+  (async () => {
+    const html = await (await fetch('../plugins/dos_station.html')).text();
+    // Inject the Synapse stub before any plugin scripts run.
+    const patched = html.replace('<head>',
+      '<head><script src="synapse_stub.js"><' + '/script>');
+    const frame = document.getElementById('frame');
+    frame.srcdoc = patched;
+  })();
+</script>
+</body>
+</html>

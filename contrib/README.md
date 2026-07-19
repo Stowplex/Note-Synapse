@@ -47,3 +47,9 @@ contrib/
   grounded in a notebook, and generate podcasts/slides. Uses NotebookLM's
   private web interfaces, which is why it is distributed here rather than
   bundled with the app.
+- **dos-station** — play DOS games stored in notes: mounts a note's `.zip`
+  attachment as the C: drive of a DOSBox/WebAssembly emulator configured by a
+  ` ```dosbox ` block in the note, with on-screen keyboard/gamepad overlays
+  and one-tap frame capture appended back to the note. Downloads the js-dos
+  engine (DOSBox, GPL-2.0) onto the user's device at runtime, which is why it
+  is distributed here rather than bundled with the app.
