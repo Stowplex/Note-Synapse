@@ -1,0 +1,1366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>DOS Station</title>
+<!--
+  DOS Station — a Note Synapse user app that plays DOS games stored in notes.
+
+  * Reads a .zip attachment from a note (Synapse.readAttachment), unpacks it in
+    JS and mounts it as the DOS C: drive of a DOSBox-to-WebAssembly emulator.
+  * The emulator engine (js-dos 6.22.60 "wdosbox", DOSBox is GPL-2.0) is
+    downloaded on first run via Synapse.proxyFetch, verified against pinned
+    SHA-256 hashes with Synapse.crypto.digest, and cached with
+    Synapse.storeAppState for offline use. The engine is fetched onto the
+    user's device and is not distributed with this file.
+  * Emulator config comes from a ```dosbox fenced block in the note body.
+  * Frames can be captured back into the note (attachment + inline markdown
+    append) via Synapse.updateNotes.
+
+  Plugin code license: MIT (c) Note Synapse contributors.
+  Embedded library: fflate 0.8.2 (MIT) — https://github.com/101arrowz/fflate
+-->
+<style>
+  :root{
+    --bg:#07090d; --panel:#10151d; --panel2:#161d28; --line:#223041;
+    --ph:#3dff7c; --ph-dim:#1d7a41; --amber:#ffb020; --red:#ff5252;
+    --txt:#c8ffdd; --muted:#6f9b82;
+    font-size:16px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--txt);
+    font-family:ui-monospace,"Cascadia Mono",Menlo,Consolas,"Roboto Mono",monospace;
+    overflow:hidden; touch-action:manipulation;
+    -webkit-user-select:none; user-select:none;
+  }
+  /* ---- CRT flavor ------------------------------------------------------ */
+  .crt::after{
+    content:""; pointer-events:none; position:absolute; inset:0; z-index:60;
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,.028) 0 1px, transparent 1px 3px),
+      radial-gradient(ellipse at center, transparent 58%, rgba(0,0,0,.38) 100%);
+  }
+  .screen{position:absolute; inset:0; display:none; flex-direction:column;}
+  body[data-screen="boot"]     #scr-boot,
+  body[data-screen="setup"]    #scr-setup,
+  body[data-screen="launcher"] #scr-launcher,
+  body[data-screen="player"]   #scr-player{display:flex;}
+
+  /* ---- generic UI ------------------------------------------------------ */
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:.5em;
+    background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+    border-bottom-color:#0c1016; border-radius:6px; padding:.7em 1em;
+    font:inherit; font-size:.95rem; cursor:pointer; text-align:center;
+  }
+  .btn:active{transform:translateY(1px); filter:brightness(1.25);}
+  .btn.primary{background:#0d2b18; border-color:var(--ph-dim); color:var(--ph);
+    text-shadow:0 0 6px rgba(61,255,124,.5); font-weight:700;}
+  .btn.warn{color:var(--amber); border-color:#5c4310;}
+  .btn.small{padding:.35em .6em; font-size:.8rem;}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px;}
+  .tag{display:inline-block; font-size:.68rem; letter-spacing:.08em; padding:.15em .5em;
+    border:1px solid var(--ph-dim); color:var(--ph); border-radius:4px;}
+  .tag.amber{border-color:#6b4c12; color:var(--amber);}
+  .muted{color:var(--muted);}
+  h1,h2{margin:.2em 0; font-weight:700; letter-spacing:.04em;}
+
+  /* ---- boot / TTY ------------------------------------------------------ */
+  #scr-boot{background:#04060a; padding:18px; position:relative;}
+  .ttytext{
+    white-space:pre-wrap; word-break:break-word; color:var(--ph); margin:0;
+    font-size:.82rem; line-height:1.5; text-shadow:0 0 7px rgba(61,255,124,.35);
+    overflow-y:auto; flex:1;
+  }
+  .cursor::after{content:"█"; animation:blink 1s steps(1) infinite;}
+  @keyframes blink{50%{opacity:0;}}
+
+  /* ---- setup / launcher ------------------------------------------------ */
+  #scr-setup,#scr-launcher{padding:20px; overflow-y:auto; position:relative; gap:14px; align-items:center;}
+  .logo{
+    color:var(--ph); text-shadow:0 0 14px rgba(61,255,124,.45);
+    font-size:.55rem; line-height:1.15; white-space:pre; margin:10px 0 0;
+    text-align:center;
+  }
+  .sub{color:var(--muted); font-size:.8rem; letter-spacing:.14em; text-align:center;}
+  .stack{display:flex; flex-direction:column; gap:10px; width:min(520px,100%);}
+  .exe-row{display:flex; align-items:center; gap:10px; width:100%;}
+  .exe-row .btn{flex:1; justify-content:flex-start;}
+  .divider{border-top:1px dashed var(--line); margin:6px 0;}
+
+  /* ---- player ---------------------------------------------------------- */
+  #scr-player{background:#000;}
+  #hud{
+    display:flex; align-items:center; gap:6px; padding:6px 8px;
+    background:linear-gradient(#131a24,#0c1119); border-bottom:1px solid var(--line);
+    z-index:40; flex-wrap:nowrap;
+  }
+  #hud .title{
+    flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font-size:.8rem; color:var(--ph); text-shadow:0 0 6px rgba(61,255,124,.4);
+  }
+  .led{width:8px; height:8px; border-radius:50%; background:#28323f; box-shadow:none; flex:none;}
+  .led.on{background:var(--ph); box-shadow:0 0 8px var(--ph);}
+  .hudbtn{
+    flex:none; background:var(--panel2); border:1px solid var(--line); color:var(--txt);
+    border-radius:6px; font-size:1.02rem; line-height:1; padding:.42em .55em; cursor:pointer;
+  }
+  .hudbtn.active{border-color:var(--ph-dim); color:var(--ph); box-shadow:0 0 6px rgba(61,255,124,.35) inset;}
+  #stage{position:relative; flex:1; min-height:0; display:flex;}
+  #cnv{
+    /* !important: the SDL glue writes inline width/height styles on mode
+       changes; keep the canvas letterboxed inside the stage regardless. */
+    width:100% !important; height:100% !important; object-fit:contain;
+    background:#000; image-rendering:pixelated; display:block; touch-action:none;
+  }
+  #tty{
+    position:absolute; inset:0; z-index:30; background:rgba(3,6,9,.96);
+    padding:14px; display:flex; overflow:hidden;
+  }
+  #tty.hidden{display:none;}
+
+  /* ---- on-screen keyboard --------------------------------------------- */
+  #kb{
+    position:absolute; left:0; right:0; bottom:0; z-index:45;
+    background:rgba(9,13,19,.94); border-top:1px solid var(--line);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom)); display:none;
+    touch-action:none;
+  }
+  #kb.show{display:block;}
+  .kbrow{display:flex; gap:4px; margin:4px 2px;}
+  .k{
+    flex:1 1 0; min-width:0; background:#1a2230; border:1px solid #2c3a4e;
+    border-bottom:2px solid #0b0f15; color:var(--txt); border-radius:5px;
+    font:inherit; font-size:.78rem; padding:.62em 0; text-align:center; cursor:pointer;
+  }
+  .k:active,.k.down{background:#2c4a35; color:var(--ph);}
+  .k.mod.armed{background:#0d2b18; color:var(--ph); border-color:var(--ph-dim);
+    box-shadow:0 0 7px rgba(61,255,124,.4) inset;}
+  #typebar{display:flex; gap:5px; margin:2px 2px 6px;}
+  #typebar input{
+    flex:1; min-width:0; background:#0b1016; color:var(--ph); border:1px solid var(--line);
+    border-radius:5px; font:inherit; font-size:.9rem; padding:.45em .6em;
+    -webkit-user-select:text; user-select:text;
+  }
+
+  /* ---- virtual gamepad -------------------------------------------------- */
+  #pad{position:absolute; inset:0; z-index:44; display:none; pointer-events:none;}
+  #pad.show{display:block;}
+  #dpad{
+    position:absolute; left:14px; bottom:calc(16px + env(safe-area-inset-bottom));
+    width:148px; height:148px; border-radius:50%; pointer-events:auto;
+    background:radial-gradient(circle, rgba(30,40,54,.55) 0 60%, rgba(30,40,54,.25) 100%);
+    border:1px solid rgba(80,110,140,.5); touch-action:none;
+  }
+  #dstick{
+    position:absolute; width:56px; height:56px; border-radius:50%;
+    left:46px; top:46px; background:rgba(61,255,124,.28);
+    border:1px solid var(--ph-dim); pointer-events:none;
+  }
+  #padbtns{
+    position:absolute; right:14px; bottom:calc(16px + env(safe-area-inset-bottom));
+    display:flex; gap:12px; align-items:flex-end; pointer-events:auto;
+  }
+  .pbtn{
+    width:62px; height:62px; border-radius:50%; touch-action:none;
+    background:rgba(30,40,54,.6); border:1px solid rgba(80,110,140,.6);
+    color:var(--txt); font:inherit; font-size:.72rem; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:2px; cursor:pointer;
+  }
+  .pbtn b{font-size:1rem; color:var(--ph);}
+  .pbtn.down{background:rgba(61,255,124,.3);}
+  #padcfg{
+    position:absolute; right:14px; bottom:calc(96px + env(safe-area-inset-bottom));
+    pointer-events:auto; display:flex; gap:6px;
+  }
+  #padcfg select{
+    background:#0b1016; color:var(--txt); border:1px solid var(--line);
+    font:inherit; font-size:.68rem; border-radius:4px; padding:2px;
+  }
+
+  /* ---- capture modal / toast ------------------------------------------ */
+  #flash{position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:70;}
+  #flash.go{animation:flashA .28s ease-out;}
+  @keyframes flashA{0%{opacity:.85;}100%{opacity:0;}}
+  .modal-wrap{
+    position:absolute; inset:0; z-index:80; display:none;
+    align-items:center; justify-content:center; background:rgba(2,4,7,.78); padding:14px;
+  }
+  .modal-wrap.show{display:flex;}
+  .modal{
+    width:min(460px,100%); max-height:100%; overflow-y:auto;
+    background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .modal img{width:100%; border:1px solid var(--line); border-radius:6px; image-rendering:pixelated; background:#000;}
+  .modal textarea{
+    background:#0b1016; color:var(--txt); border:1px solid var(--line); border-radius:6px;
+    font:inherit; font-size:.9rem; padding:.6em; min-height:64px; resize:vertical;
+    -webkit-user-select:text; user-select:text;
+  }
+  .modal .row{display:flex; gap:8px;}
+  .modal .row .btn{flex:1;}
+  #aiOut{
+    display:none; background:#0b1016; border:1px dashed var(--ph-dim); border-radius:6px;
+    padding:.6em; font-size:.85rem; white-space:pre-wrap; color:var(--txt);
+  }
+  #toast{
+    position:absolute; left:50%; transform:translateX(-50%);
+    bottom:calc(20px + env(safe-area-inset-bottom)); z-index:90;
+    background:#0d2b18; color:var(--ph); border:1px solid var(--ph-dim);
+    padding:.6em 1.1em; border-radius:8px; font-size:.85rem; opacity:0;
+    transition:opacity .25s; pointer-events:none; max-width:88%; text-align:center;
+  }
+  #toast.show{opacity:1;}
+  #toast.err{background:#2b0d0d; color:#ffb2b2; border-color:#7a1d1d;}
+</style>
+</head>
+<body data-screen="boot" class="crt">
+
+<!-- ======================= BOOT ======================= -->
+<div class="screen" id="scr-boot">
+  <pre class="ttytext cursor" id="bootlog"></pre>
+</div>
+
+<!-- ======================= SETUP (no note yet) ======================= -->
+<div class="screen" id="scr-setup">
+  <pre class="logo" id="logo"></pre>
+  <div class="sub">NOTE&nbsp;SYNAPSE&nbsp;·&nbsp;RETRO&nbsp;COMPUTING&nbsp;BAY</div>
+  <div class="stack" id="setupStack"></div>
+</div>
+
+<!-- ======================= LAUNCHER ======================= -->
+<div class="screen" id="scr-launcher">
+  <pre class="logo" id="logo2"></pre>
+  <div class="stack" id="launchStack"></div>
+</div>
+
+<!-- ======================= PLAYER ======================= -->
+<div class="screen" id="scr-player">
+  <div id="hud">
+    <button class="hudbtn" id="btnEject" title="Eject">⏏</button>
+    <span class="led on" id="ledPower"></span>
+    <span class="led" id="ledDisk"></span>
+    <span class="title" id="hudTitle">DOS STATION</span>
+    <button class="hudbtn" id="btnTty" title="Console">≣</button>
+    <button class="hudbtn" id="btnKb" title="Keyboard">⌨</button>
+    <button class="hudbtn" id="btnPad" title="Gamepad">🎮</button>
+    <button class="hudbtn" id="btnShot" title="Capture frame">📸</button>
+    <button class="hudbtn" id="btnPause" title="Pause">⏸</button>
+  </div>
+  <div id="stage">
+    <canvas id="cnv" width="0" height="0"></canvas>
+    <div id="tty"><pre class="ttytext cursor" id="ttylog"></pre></div>
+    <div id="pad">
+      <div id="dpad"><div id="dstick"></div></div>
+      <div id="padcfg">
+        <select id="mapA"></select><select id="mapB"></select><select id="mapC"></select>
+      </div>
+      <div id="padbtns">
+        <button class="pbtn" id="pbC"><b>C</b><span id="lblC"></span></button>
+        <button class="pbtn" id="pbB"><b>B</b><span id="lblB"></span></button>
+        <button class="pbtn" id="pbA"><b>A</b><span id="lblA"></span></button>
+      </div>
+    </div>
+    <div id="kb"></div>
+    <div id="flash"></div>
+  </div>
+</div>
+
+<!-- ======================= CAPTURE MODAL ======================= -->
+<div class="modal-wrap" id="capWrap">
+  <div class="modal">
+    <h2 style="font-size:.95rem;">📸 FRAME CAPTURED</h2>
+    <img id="capImg" alt="captured frame">
+    <div id="aiOut"></div>
+    <textarea id="capText" placeholder="Optional note about this moment…"></textarea>
+    <div class="row">
+      <button class="btn" id="btnAskAI">🤖 Ask AI</button>
+      <button class="btn primary" id="btnSaveCap">💾 Append to note</button>
+    </div>
+    <div class="row">
+      <button class="btn" id="btnCloseCap">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>/* fflate 0.8.2 | MIT | https://github.com/101arrowz/fflate */
+!function(f){typeof module!='undefined'&&typeof exports=='object'?module.exports=f():typeof define!='undefined'&&define.amd?define(f):(typeof self!='undefined'?self:this).fflate=f()}(function(){var _e={};"use strict";var t=(typeof module!='undefined'&&typeof exports=='object'?function(_f){"use strict";var e,t=";var __w=require('worker_threads');__w.parentPort.on('message',function(m){onmessage({data:m})}),postMessage=function(m,t){__w.parentPort.postMessage(m,t)},close=process.exit;self=global";try{e=require("worker_threads").Worker}catch(e){}exports.default=e?function(r,n,o,a,s){var u=!1,i=new e(r+t,{eval:!0}).on("error",(function(e){return s(e,null)})).on("message",(function(e){return s(null,e)})).on("exit",(function(e){e&&!u&&s(Error("exited with code "+e),null)}));return i.postMessage(o,a),i.terminate=function(){return u=!0,e.prototype.terminate.call(i)},i}:function(e,t,r,n,o){setImmediate((function(){return o(Error("async operations unsupported - update to Node 12+ (or Node 10-11 with the --experimental-worker CLI flag)"),null)}));var a=function(){};return{terminate:a,postMessage:a}};return _f}:function(_f){"use strict";var e={};_f.default=function(r,t,s,a,n){var o=new Worker(e[t]||(e[t]=URL.createObjectURL(new Blob([r+';addEventListener("error",function(e){e=e.error;postMessage({$e$:[e.message,e.code,e.stack]})})'],{type:"text/javascript"}))));return o.onmessage=function(e){var r=e.data,t=r.$e$;if(t){var s=Error(t[0]);s.code=t[1],s.stack=t[2],n(s,null)}else n(null,r)},o.postMessage(s,a),o};return _f})({}),n=Uint8Array,r=Uint16Array,e=Int32Array,i=new n([0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0,0,0,0]),o=new n([0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13,0,0]),s=new n([16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15]),a=function(t,n){for(var i=new r(31),o=0;o<31;++o)i[o]=n+=1<<t[o-1];var s=new e(i[30]);for(o=1;o<30;++o)for(var a=i[o];a<i[o+1];++a)s[a]=a-i[o]<<5|o;return{b:i,r:s}},u=a(i,2),h=u.b,f=u.r;h[28]=258,f[258]=28;for(var l=a(o,0),c=l.b,p=l.r,v=new r(32768),d=0;d<32768;++d){var g=(43690&d)>>1|(21845&d)<<1;v[d]=((65280&(g=(61680&(g=(52428&g)>>2|(13107&g)<<2))>>4|(3855&g)<<4))>>8|(255&g)<<8)>>1}var y=function(t,n,e){for(var i=t.length,o=0,s=new r(n);o<i;++o)t[o]&&++s[t[o]-1];var a,u=new r(n);for(o=1;o<n;++o)u[o]=u[o-1]+s[o-1]<<1;if(e){a=new r(1<<n);var h=15-n;for(o=0;o<i;++o)if(t[o])for(var f=o<<4|t[o],l=n-t[o],c=u[t[o]-1]++<<l,p=c|(1<<l)-1;c<=p;++c)a[v[c]>>h]=f}else for(a=new r(i),o=0;o<i;++o)t[o]&&(a[o]=v[u[t[o]-1]++]>>15-t[o]);return a},m=new n(288);for(d=0;d<144;++d)m[d]=8;for(d=144;d<256;++d)m[d]=9;for(d=256;d<280;++d)m[d]=7;for(d=280;d<288;++d)m[d]=8;var b=new n(32);for(d=0;d<32;++d)b[d]=5;var w=y(m,9,0),x=y(m,9,1),z=y(b,5,0),k=y(b,5,1),M=function(t){for(var n=t[0],r=1;r<t.length;++r)t[r]>n&&(n=t[r]);return n},S=function(t,n,r){var e=n/8|0;return(t[e]|t[e+1]<<8)>>(7&n)&r},A=function(t,n){var r=n/8|0;return(t[r]|t[r+1]<<8|t[r+2]<<16)>>(7&n)},T=function(t){return(t+7)/8|0},D=function(t,r,e){return(null==r||r<0)&&(r=0),(null==e||e>t.length)&&(e=t.length),new n(t.subarray(r,e))};_e.FlateErrorCode={UnexpectedEOF:0,InvalidBlockType:1,InvalidLengthLiteral:2,InvalidDistance:3,StreamFinished:4,NoStreamHandler:5,InvalidHeader:6,NoCallback:7,InvalidUTF8:8,ExtraFieldTooLong:9,InvalidDate:10,FilenameTooLong:11,StreamFinishing:12,InvalidZipData:13,UnknownCompressionMethod:14};var C=["unexpected EOF","invalid block type","invalid length/literal","invalid distance","stream finished","no stream handler",,"no callback","invalid UTF-8 data","extra field too long","date not in range 1980-2099","filename too long","stream finishing","invalid zip data"],I=function(t,n,r){var e=Error(n||C[t]);if(e.code=t,Error.captureStackTrace&&Error.captureStackTrace(e,I),!r)throw e;return e},U=function(t,r,e,a){var u=t.length,f=a?a.length:0;if(!u||r.f&&!r.l)return e||new n(0);var l=!e,p=l||2!=r.i,v=r.i;l&&(e=new n(3*u));var d=function(t){var r=e.length;if(t>r){var i=new n(Math.max(2*r,t));i.set(e),e=i}},g=r.f||0,m=r.p||0,b=r.b||0,w=r.l,z=r.d,C=r.m,U=r.n,F=8*u;do{if(!w){g=S(t,m,1);var E=S(t,m+1,3);if(m+=3,!E){var Z=t[(J=T(m)+4)-4]|t[J-3]<<8,q=J+Z;if(q>u){v&&I(0);break}p&&d(b+Z),e.set(t.subarray(J,q),b),r.b=b+=Z,r.p=m=8*q,r.f=g;continue}if(1==E)w=x,z=k,C=9,U=5;else if(2==E){var O=S(t,m,31)+257,G=S(t,m+10,15)+4,L=O+S(t,m+5,31)+1;m+=14;for(var H=new n(L),j=new n(19),N=0;N<G;++N)j[s[N]]=S(t,m+3*N,7);m+=3*G;var P=M(j),B=(1<<P)-1,Y=y(j,P,1);for(N=0;N<L;){var J,K=Y[S(t,m,B)];if(m+=15&K,(J=K>>4)<16)H[N++]=J;else{var Q=0,R=0;for(16==J?(R=3+S(t,m,3),m+=2,Q=H[N-1]):17==J?(R=3+S(t,m,7),m+=3):18==J&&(R=11+S(t,m,127),m+=7);R--;)H[N++]=Q}}var V=H.subarray(0,O),W=H.subarray(O);C=M(V),U=M(W),w=y(V,C,1),z=y(W,U,1)}else I(1);if(m>F){v&&I(0);break}}p&&d(b+131072);for(var X=(1<<C)-1,$=(1<<U)-1,_=m;;_=m){var tt=(Q=w[A(t,m)&X])>>4;if((m+=15&Q)>F){v&&I(0);break}if(Q||I(2),tt<256)e[b++]=tt;else{if(256==tt){_=m,w=null;break}var nt=tt-254;tt>264&&(nt=S(t,m,(1<<(it=i[N=tt-257]))-1)+h[N],m+=it);var rt=z[A(t,m)&$],et=rt>>4;if(rt||I(3),m+=15&rt,W=c[et],et>3){var it=o[et];W+=A(t,m)&(1<<it)-1,m+=it}if(m>F){v&&I(0);break}p&&d(b+131072);var ot=b+nt;if(b<W){var st=f-W,at=Math.min(W,ot);for(st+b<0&&I(3);b<at;++b)e[b]=a[st+b]}for(;b<ot;++b)e[b]=e[b-W]}}r.l=w,r.p=_,r.b=b,r.f=g,w&&(g=1,r.m=C,r.d=z,r.n=U)}while(!g);return b!=e.length&&l?D(e,0,b):e.subarray(0,b)},F=function(t,n,r){var e=n/8|0;t[e]|=r<<=7&n,t[e+1]|=r>>8},E=function(t,n,r){var e=n/8|0;t[e]|=r<<=7&n,t[e+1]|=r>>8,t[e+2]|=r>>16},Z=function(t,e){for(var i=[],o=0;o<t.length;++o)t[o]&&i.push({s:o,f:t[o]});var s=i.length,a=i.slice();if(!s)return{t:N,l:0};if(1==s){var u=new n(i[0].s+1);return u[i[0].s]=1,{t:u,l:1}}i.sort((function(t,n){return t.f-n.f})),i.push({s:-1,f:25001});var h=i[0],f=i[1],l=0,c=1,p=2;for(i[0]={s:-1,f:h.f+f.f,l:h,r:f};c!=s-1;)h=i[i[l].f<i[p].f?l++:p++],f=i[l!=c&&i[l].f<i[p].f?l++:p++],i[c++]={s:-1,f:h.f+f.f,l:h,r:f};var v=a[0].s;for(o=1;o<s;++o)a[o].s>v&&(v=a[o].s);var d=new r(v+1),g=q(i[c-1],d,0);if(g>e){o=0;var y=0,m=g-e,b=1<<m;for(a.sort((function(t,n){return d[n.s]-d[t.s]||t.f-n.f}));o<s;++o){var w=a[o].s;if(!(d[w]>e))break;y+=b-(1<<g-d[w]),d[w]=e}for(y>>=m;y>0;){var x=a[o].s;d[x]<e?y-=1<<e-d[x]++-1:++o}for(;o>=0&&y;--o){var z=a[o].s;d[z]==e&&(--d[z],++y)}g=e}return{t:new n(d),l:g}},q=function(t,n,r){return-1==t.s?Math.max(q(t.l,n,r+1),q(t.r,n,r+1)):n[t.s]=r},O=function(t){for(var n=t.length;n&&!t[--n];);for(var e=new r(++n),i=0,o=t[0],s=1,a=function(t){e[i++]=t},u=1;u<=n;++u)if(t[u]==o&&u!=n)++s;else{if(!o&&s>2){for(;s>138;s-=138)a(32754);s>2&&(a(s>10?s-11<<5|28690:s-3<<5|12305),s=0)}else if(s>3){for(a(o),--s;s>6;s-=6)a(8304);s>2&&(a(s-3<<5|8208),s=0)}for(;s--;)a(o);s=1,o=t[u]}return{c:e.subarray(0,i),n:n}},G=function(t,n){for(var r=0,e=0;e<n.length;++e)r+=t[e]*n[e];return r},L=function(t,n,r){var e=r.length,i=T(n+2);t[i]=255&e,t[i+1]=e>>8,t[i+2]=255^t[i],t[i+3]=255^t[i+1];for(var o=0;o<e;++o)t[i+o+4]=r[o];return 8*(i+4+e)},H=function(t,n,e,a,u,h,f,l,c,p,v){F(n,v++,e),++u[256];for(var d=Z(u,15),g=d.t,x=d.l,k=Z(h,15),M=k.t,S=k.l,A=O(g),T=A.c,D=A.n,C=O(M),I=C.c,U=C.n,q=new r(19),H=0;H<T.length;++H)++q[31&T[H]];for(H=0;H<I.length;++H)++q[31&I[H]];for(var j=Z(q,7),N=j.t,P=j.l,B=19;B>4&&!N[s[B-1]];--B);var Y,J,K,Q,R=p+5<<3,V=G(u,m)+G(h,b)+f,W=G(u,g)+G(h,M)+f+14+3*B+G(q,N)+2*q[16]+3*q[17]+7*q[18];if(c>=0&&R<=V&&R<=W)return L(n,v,t.subarray(c,c+p));if(F(n,v,1+(W<V)),v+=2,W<V){Y=y(g,x,0),J=g,K=y(M,S,0),Q=M;var X=y(N,P,0);for(F(n,v,D-257),F(n,v+5,U-1),F(n,v+10,B-4),v+=14,H=0;H<B;++H)F(n,v+3*H,N[s[H]]);v+=3*B;for(var $=[T,I],_=0;_<2;++_){var tt=$[_];for(H=0;H<tt.length;++H)F(n,v,X[rt=31&tt[H]]),v+=N[rt],rt>15&&(F(n,v,tt[H]>>5&127),v+=tt[H]>>12)}}else Y=w,J=m,K=z,Q=b;for(H=0;H<l;++H){var nt=a[H];if(nt>255){var rt;E(n,v,Y[257+(rt=nt>>18&31)]),v+=J[rt+257],rt>7&&(F(n,v,nt>>23&31),v+=i[rt]);var et=31&nt;E(n,v,K[et]),v+=Q[et],et>3&&(E(n,v,nt>>5&8191),v+=o[et])}else E(n,v,Y[nt]),v+=J[nt]}return E(n,v,Y[256]),v+J[256]},j=new e([65540,131080,131088,131104,262176,1048704,1048832,2114560,2117632]),N=new n(0),P=function(t,s,a,u,h,l){var c=l.z||t.length,v=new n(u+c+5*(1+Math.ceil(c/7e3))+h),d=v.subarray(u,v.length-h),g=l.l,y=7&(l.r||0);if(s){y&&(d[0]=l.r>>3);for(var m=j[s-1],b=m>>13,w=8191&m,x=(1<<a)-1,z=l.p||new r(32768),k=l.h||new r(x+1),M=Math.ceil(a/3),S=2*M,A=function(n){return(t[n]^t[n+1]<<M^t[n+2]<<S)&x},C=new e(25e3),I=new r(288),U=new r(32),F=0,E=0,Z=l.i||0,q=0,O=l.w||0,G=0;Z+2<c;++Z){var N=A(Z),P=32767&Z,B=k[N];if(z[P]=B,k[N]=P,O<=Z){var Y=c-Z;if((F>7e3||q>24576)&&(Y>423||!g)){y=H(t,d,0,C,I,U,E,q,G,Z-G,y),q=F=E=0,G=Z;for(var J=0;J<286;++J)I[J]=0;for(J=0;J<30;++J)U[J]=0}var K=2,Q=0,R=w,V=P-B&32767;if(Y>2&&N==A(Z-V))for(var W=Math.min(b,Y)-1,X=Math.min(32767,Z),$=Math.min(258,Y);V<=X&&--R&&P!=B;){if(t[Z+K]==t[Z+K-V]){for(var _=0;_<$&&t[Z+_]==t[Z+_-V];++_);if(_>K){if(K=_,Q=V,_>W)break;var tt=Math.min(V,_-2),nt=0;for(J=0;J<tt;++J){var rt=Z-V+J&32767,et=rt-z[rt]&32767;et>nt&&(nt=et,B=rt)}}}V+=(P=B)-(B=z[P])&32767}if(Q){C[q++]=268435456|f[K]<<18|p[Q];var it=31&f[K],ot=31&p[Q];E+=i[it]+o[ot],++I[257+it],++U[ot],O=Z+K,++F}else C[q++]=t[Z],++I[t[Z]]}}for(Z=Math.max(Z,O);Z<c;++Z)C[q++]=t[Z],++I[t[Z]];y=H(t,d,g,C,I,U,E,q,G,Z-G,y),g||(l.r=7&y|d[y/8|0]<<3,y-=7,l.h=k,l.p=z,l.i=Z,l.w=O)}else{for(Z=l.w||0;Z<c+g;Z+=65535){var st=Z+65535;st>=c&&(d[y/8|0]=g,st=c),y=L(d,y+1,t.subarray(Z,st))}l.i=c}return D(v,0,u+T(y)+h)},B=function(){for(var t=new Int32Array(256),n=0;n<256;++n){for(var r=n,e=9;--e;)r=(1&r&&-306674912)^r>>>1;t[n]=r}return t}(),Y=function(){var t=-1;return{p:function(n){for(var r=t,e=0;e<n.length;++e)r=B[255&r^n[e]]^r>>>8;t=r},d:function(){return~t}}},J=function(){var t=1,n=0;return{p:function(r){for(var e=t,i=n,o=0|r.length,s=0;s!=o;){for(var a=Math.min(s+2655,o);s<a;++s)i+=e+=r[s];e=(65535&e)+15*(e>>16),i=(65535&i)+15*(i>>16)}t=e,n=i},d:function(){return(255&(t%=65521))<<24|(65280&t)<<8|(255&(n%=65521))<<8|n>>8}}},K=function(t,r,e,i,o){if(!o&&(o={l:1},r.dictionary)){var s=r.dictionary.subarray(-32768),a=new n(s.length+t.length);a.set(s),a.set(t,s.length),t=a,o.w=s.length}return P(t,null==r.level?6:r.level,null==r.mem?o.l?Math.ceil(1.5*Math.max(8,Math.min(13,Math.log(t.length)))):20:12+r.mem,e,i,o)},Q=function(t,n){var r={};for(var e in t)r[e]=t[e];for(var e in n)r[e]=n[e];return r},R=function(t,n,r){for(var e=t(),i=""+t,o=i.slice(i.indexOf("[")+1,i.lastIndexOf("]")).replace(/\s+/g,"").split(","),s=0;s<e.length;++s){var a=e[s],u=o[s];if("function"==typeof a){n+=";"+u+"=";var h=""+a;if(a.prototype)if(-1!=h.indexOf("[native code]")){var f=h.indexOf(" ",8)+1;n+=h.slice(f,h.indexOf("(",f))}else for(var l in n+=h,a.prototype)n+=";"+u+".prototype."+l+"="+a.prototype[l];else n+=h}else r[u]=a}return n},V=[],W=function(t){var n=[];for(var r in t)t[r].buffer&&n.push((t[r]=new t[r].constructor(t[r])).buffer);return n},X=function(n,r,e,i){if(!V[e]){for(var o="",s={},a=n.length-1,u=0;u<a;++u)o=R(n[u],o,s);V[e]={c:R(n[a],o,s),e:s}}var h=Q({},V[e].e);return(0,t.default)(V[e].c+";onmessage=function(e){for(var k in e.data)self[k]=e.data[k];onmessage="+r+"}",e,h,W(h),i)},$=function(){return[n,r,e,i,o,s,h,c,x,k,v,C,y,M,S,A,T,D,I,U,Tt,it,ot]},_=function(){return[n,r,e,i,o,s,f,p,w,m,z,b,v,j,N,y,F,E,Z,q,O,G,L,H,T,D,P,K,kt,it]},tt=function(){return[pt,gt,ct,Y,B]},nt=function(){return[vt,dt]},rt=function(){return[yt,ct,J]},et=function(){return[mt]},it=function(t){return postMessage(t,[t.buffer])},ot=function(t){return t&&{out:t.size&&new n(t.size),dictionary:t.dictionary}},st=function(t,n,r,e,i,o){var s=X(r,e,i,(function(t,n){s.terminate(),o(t,n)}));return s.postMessage([t,n],n.consume?[t.buffer]:[]),function(){s.terminate()}},at=function(t){return t.ondata=function(t,n){return postMessage([t,n],[t.buffer])},function(n){n.data.length?(t.push(n.data[0],n.data[1]),postMessage([n.data[0].length])):t.flush()}},ut=function(t,n,r,e,i,o,s){var a,u=X(t,e,i,(function(t,r){t?(u.terminate(),n.ondata.call(n,t)):Array.isArray(r)?1==r.length?(n.queuedSize-=r[0],n.ondrain&&n.ondrain(r[0])):(r[1]&&u.terminate(),n.ondata.call(n,t,r[0],r[1])):s(r)}));u.postMessage(r),n.queuedSize=0,n.push=function(t,r){n.ondata||I(5),a&&n.ondata(I(4,0,1),null,!!r),n.queuedSize+=t.length,u.postMessage([t,a=r],[t.buffer])},n.terminate=function(){u.terminate()},o&&(n.flush=function(){u.postMessage([])})},ht=function(t,n){return t[n]|t[n+1]<<8},ft=function(t,n){return(t[n]|t[n+1]<<8|t[n+2]<<16|t[n+3]<<24)>>>0},lt=function(t,n){return ft(t,n)+4294967296*ft(t,n+4)},ct=function(t,n,r){for(;r;++n)t[n]=r,r>>>=8},pt=function(t,n){var r=n.filename;if(t[0]=31,t[1]=139,t[2]=8,t[8]=n.level<2?4:9==n.level?2:0,t[9]=3,0!=n.mtime&&ct(t,4,Math.floor(new Date(n.mtime||Date.now())/1e3)),r){t[3]=8;for(var e=0;e<=r.length;++e)t[e+10]=r.charCodeAt(e)}},vt=function(t){31==t[0]&&139==t[1]&&8==t[2]||I(6,"invalid gzip data");var n=t[3],r=10;4&n&&(r+=2+(t[10]|t[11]<<8));for(var e=(n>>3&1)+(n>>4&1);e>0;e-=!t[r++]);return r+(2&n)},dt=function(t){var n=t.length;return(t[n-4]|t[n-3]<<8|t[n-2]<<16|t[n-1]<<24)>>>0},gt=function(t){return 10+(t.filename?t.filename.length+1:0)},yt=function(t,n){var r=n.level,e=0==r?0:r<6?1:9==r?3:2;if(t[0]=120,t[1]=e<<6|(n.dictionary&&32),t[1]|=31-(t[0]<<8|t[1])%31,n.dictionary){var i=J();i.p(n.dictionary),ct(t,2,i.d())}},mt=function(t,n){return(8!=(15&t[0])||t[0]>>4>7||(t[0]<<8|t[1])%31)&&I(6,"invalid zlib data"),(t[1]>>5&1)==+!n&&I(6,"invalid zlib data: "+(32&t[1]?"need":"unexpected")+" dictionary"),2+(t[1]>>3&4)};function bt(t,n){return"function"==typeof t&&(n=t,t={}),this.ondata=n,t}var wt=function(){function t(t,r){if("function"==typeof t&&(r=t,t={}),this.ondata=r,this.o=t||{},this.s={l:0,i:32768,w:32768,z:32768},this.b=new n(98304),this.o.dictionary){var e=this.o.dictionary.subarray(-32768);this.b.set(e,32768-e.length),this.s.i=32768-e.length}}return t.prototype.p=function(t,n){this.ondata(K(t,this.o,0,0,this.s),n)},t.prototype.push=function(t,r){this.ondata||I(5),this.s.l&&I(4);var e=t.length+this.s.z;if(e>this.b.length){if(e>2*this.b.length-32768){var i=new n(-32768&e);i.set(this.b.subarray(0,this.s.z)),this.b=i}var o=this.b.length-this.s.z;this.b.set(t.subarray(0,o),this.s.z),this.s.z=this.b.length,this.p(this.b,!1),this.b.set(this.b.subarray(-32768)),this.b.set(t.subarray(o),32768),this.s.z=t.length-o+32768,this.s.i=32766,this.s.w=32768}else this.b.set(t,this.s.z),this.s.z+=t.length;this.s.l=1&r,(this.s.z>this.s.w+8191||r)&&(this.p(this.b,r||!1),this.s.w=this.s.i,this.s.i-=2)},t.prototype.flush=function(){this.ondata||I(5),this.s.l&&I(4),this.p(this.b,!1),this.s.w=this.s.i,this.s.i-=2},t}();_e.Deflate=wt;var xt=function(){return function(t,n){ut([_,function(){return[at,wt]}],this,bt.call(this,t,n),(function(t){var n=new wt(t.data);onmessage=at(n)}),6,1)}}();function zt(t,n,r){return r||(r=n,n={}),"function"!=typeof r&&I(7),st(t,n,[_],(function(t){return it(kt(t.data[0],t.data[1]))}),0,r)}function kt(t,n){return K(t,n||{},0,0)}_e.AsyncDeflate=xt,_e.deflate=zt,_e.deflateSync=kt;var Mt=function(){function t(t,r){"function"==typeof t&&(r=t,t={}),this.ondata=r;var e=t&&t.dictionary&&t.dictionary.subarray(-32768);this.s={i:0,b:e?e.length:0},this.o=new n(32768),this.p=new n(0),e&&this.o.set(e)}return t.prototype.e=function(t){if(this.ondata||I(5),this.d&&I(4),this.p.length){if(t.length){var r=new n(this.p.length+t.length);r.set(this.p),r.set(t,this.p.length),this.p=r}}else this.p=t},t.prototype.c=function(t){this.s.i=+(this.d=t||!1);var n=this.s.b,r=U(this.p,this.s,this.o);this.ondata(D(r,n,this.s.b),this.d),this.o=D(r,this.s.b-32768),this.s.b=this.o.length,this.p=D(this.p,this.s.p/8|0),this.s.p&=7},t.prototype.push=function(t,n){this.e(t),this.c(n)},t}();_e.Inflate=Mt;var St=function(){return function(t,n){ut([$,function(){return[at,Mt]}],this,bt.call(this,t,n),(function(t){var n=new Mt(t.data);onmessage=at(n)}),7,0)}}();function At(t,n,r){return r||(r=n,n={}),"function"!=typeof r&&I(7),st(t,n,[$],(function(t){return it(Tt(t.data[0],ot(t.data[1])))}),1,r)}function Tt(t,n){return U(t,{i:2},n&&n.out,n&&n.dictionary)}_e.AsyncInflate=St,_e.inflate=At,_e.inflateSync=Tt;var Dt=function(){function t(t,n){this.c=Y(),this.l=0,this.v=1,wt.call(this,t,n)}return t.prototype.push=function(t,n){this.c.p(t),this.l+=t.length,wt.prototype.push.call(this,t,n)},t.prototype.p=function(t,n){var r=K(t,this.o,this.v&&gt(this.o),n&&8,this.s);this.v&&(pt(r,this.o),this.v=0),n&&(ct(r,r.length-8,this.c.d()),ct(r,r.length-4,this.l)),this.ondata(r,n)},t.prototype.flush=function(){wt.prototype.flush.call(this)},t}();_e.Gzip=Dt,_e.Compress=Dt;var Ct=function(){return function(t,n){ut([_,tt,function(){return[at,wt,Dt]}],this,bt.call(this,t,n),(function(t){var n=new Dt(t.data);onmessage=at(n)}),8,1)}}();function It(t,n,r){return r||(r=n,n={}),"function"!=typeof r&&I(7),st(t,n,[_,tt,function(){return[Ut]}],(function(t){return it(Ut(t.data[0],t.data[1]))}),2,r)}function Ut(t,n){n||(n={});var r=Y(),e=t.length;r.p(t);var i=K(t,n,gt(n),8),o=i.length;return pt(i,n),ct(i,o-8,r.d()),ct(i,o-4,e),i}_e.AsyncGzip=Ct,_e.AsyncCompress=Ct,_e.gzip=It,_e.compress=It,_e.gzipSync=Ut,_e.compressSync=Ut;var Ft=function(){function t(t,n){this.v=1,this.r=0,Mt.call(this,t,n)}return t.prototype.push=function(t,r){if(Mt.prototype.e.call(this,t),this.r+=t.length,this.v){var e=this.p.subarray(this.v-1),i=e.length>3?vt(e):4;if(i>e.length){if(!r)return}else this.v>1&&this.onmember&&this.onmember(this.r-e.length);this.p=e.subarray(i),this.v=0}Mt.prototype.c.call(this,r),!this.s.f||this.s.l||r||(this.v=T(this.s.p)+9,this.s={i:0},this.o=new n(0),this.push(new n(0),r))},t}();_e.Gunzip=Ft;var Et=function(){return function(t,n){var r=this;ut([$,nt,function(){return[at,Mt,Ft]}],this,bt.call(this,t,n),(function(t){var n=new Ft(t.data);n.onmember=function(t){return postMessage(t)},onmessage=at(n)}),9,0,(function(t){return r.onmember&&r.onmember(t)}))}}();function Zt(t,n,r){return r||(r=n,n={}),"function"!=typeof r&&I(7),st(t,n,[$,nt,function(){return[qt]}],(function(t){return it(qt(t.data[0],t.data[1]))}),3,r)}function qt(t,r){var e=vt(t);return e+8>t.length&&I(6,"invalid gzip data"),U(t.subarray(e,-8),{i:2},r&&r.out||new n(dt(t)),r&&r.dictionary)}_e.AsyncGunzip=Et,_e.gunzip=Zt,_e.gunzipSync=qt;var Ot=function(){function t(t,n){this.c=J(),this.v=1,wt.call(this,t,n)}return t.prototype.push=function(t,n){this.c.p(t),wt.prototype.push.call(this,t,n)},t.prototype.p=function(t,n){var r=K(t,this.o,this.v&&(this.o.dictionary?6:2),n&&4,this.s);this.v&&(yt(r,this.o),this.v=0),n&&ct(r,r.length-4,this.c.d()),this.ondata(r,n)},t.prototype.flush=function(){wt.prototype.flush.call(this)},t}();_e.Zlib=Ot;var Gt=function(){return function(t,n){ut([_,rt,function(){return[at,wt,Ot]}],this,bt.call(this,t,n),(function(t){var n=new Ot(t.data);onmessage=at(n)}),10,1)}}();function Lt(t,n,r){return r||(r=n,n={}),"function"!=typeof r&&I(7),st(t,n,[_,rt,function(){return[Ht]}],(function(t){return it(Ht(t.data[0],t.data[1]))}),4,r)}function Ht(t,n){n||(n={});var r=J();r.p(t);var e=K(t,n,n.dictionary?6:2,4);return yt(e,n),ct(e,e.length-4,r.d()),e}_e.AsyncZlib=Gt,_e.zlib=Lt,_e.zlibSync=Ht;var jt=function(){function t(t,n){Mt.call(this,t,n),this.v=t&&t.dictionary?2:1}return t.prototype.push=function(t,n){if(Mt.prototype.e.call(this,t),this.v){if(this.p.length<6&&!n)return;this.p=this.p.subarray(mt(this.p,this.v-1)),this.v=0}n&&(this.p.length<4&&I(6,"invalid zlib data"),this.p=this.p.subarray(0,-4)),Mt.prototype.c.call(this,n)},t}();_e.Unzlib=jt;var Nt=function(){return function(t,n){ut([$,et,function(){return[at,Mt,jt]}],this,bt.call(this,t,n),(function(t){var n=new jt(t.data);onmessage=at(n)}),11,0)}}();function Pt(t,n,r){return r||(r=n,n={}),"function"!=typeof r&&I(7),st(t,n,[$,et,function(){return[Bt]}],(function(t){return it(Bt(t.data[0],ot(t.data[1])))}),5,r)}function Bt(t,n){return U(t.subarray(mt(t,n&&n.dictionary),-4),{i:2},n&&n.out,n&&n.dictionary)}_e.AsyncUnzlib=Nt,_e.unzlib=Pt,_e.unzlibSync=Bt;var Yt=function(){function t(t,n){this.o=bt.call(this,t,n)||{},this.G=Ft,this.I=Mt,this.Z=jt}return t.prototype.i=function(){var t=this;this.s.ondata=function(n,r){t.ondata(n,r)}},t.prototype.push=function(t,r){if(this.ondata||I(5),this.s)this.s.push(t,r);else{if(this.p&&this.p.length){var e=new n(this.p.length+t.length);e.set(this.p),e.set(t,this.p.length)}else this.p=t;this.p.length>2&&(this.s=31==this.p[0]&&139==this.p[1]&&8==this.p[2]?new this.G(this.o):8!=(15&this.p[0])||this.p[0]>>4>7||(this.p[0]<<8|this.p[1])%31?new this.I(this.o):new this.Z(this.o),this.i(),this.s.push(this.p,r),this.p=null)}},t}();_e.Decompress=Yt;var Jt=function(){function t(t,n){Yt.call(this,t,n),this.queuedSize=0,this.G=Et,this.I=St,this.Z=Nt}return t.prototype.i=function(){var t=this;this.s.ondata=function(n,r,e){t.ondata(n,r,e)},this.s.ondrain=function(n){t.queuedSize-=n,t.ondrain&&t.ondrain(n)}},t.prototype.push=function(t,n){this.queuedSize+=t.length,Yt.prototype.push.call(this,t,n)},t}();function Kt(t,n,r){return r||(r=n,n={}),"function"!=typeof r&&I(7),31==t[0]&&139==t[1]&&8==t[2]?Zt(t,n,r):8!=(15&t[0])||t[0]>>4>7||(t[0]<<8|t[1])%31?At(t,n,r):Pt(t,n,r)}function Qt(t,n){return 31==t[0]&&139==t[1]&&8==t[2]?qt(t,n):8!=(15&t[0])||t[0]>>4>7||(t[0]<<8|t[1])%31?Tt(t,n):Bt(t,n)}_e.AsyncDecompress=Jt,_e.decompress=Kt,_e.decompressSync=Qt;var Rt=function(t,r,e,i){for(var o in t){var s=t[o],a=r+o,u=i;Array.isArray(s)&&(u=Q(i,s[1]),s=s[0]),s instanceof n?e[a]=[s,u]:(e[a+="/"]=[new n(0),u],Rt(s,a,e,i))}},Vt="undefined"!=typeof TextEncoder&&new TextEncoder,Wt="undefined"!=typeof TextDecoder&&new TextDecoder,Xt=0;try{Wt.decode(N,{stream:!0}),Xt=1}catch(t){}var $t=function(t){for(var n="",r=0;;){var e=t[r++],i=(e>127)+(e>223)+(e>239);if(r+i>t.length)return{s:n,r:D(t,r-1)};i?3==i?(e=((15&e)<<18|(63&t[r++])<<12|(63&t[r++])<<6|63&t[r++])-65536,n+=String.fromCharCode(55296|e>>10,56320|1023&e)):n+=String.fromCharCode(1&i?(31&e)<<6|63&t[r++]:(15&e)<<12|(63&t[r++])<<6|63&t[r++]):n+=String.fromCharCode(e)}},_t=function(){function t(t){this.ondata=t,Xt?this.t=new TextDecoder:this.p=N}return t.prototype.push=function(t,r){if(this.ondata||I(5),r=!!r,this.t)return this.ondata(this.t.decode(t,{stream:!0}),r),void(r&&(this.t.decode().length&&I(8),this.t=null));this.p||I(4);var e=new n(this.p.length+t.length);e.set(this.p),e.set(t,this.p.length);var i=$t(e),o=i.s,s=i.r;r?(s.length&&I(8),this.p=null):this.p=s,this.ondata(o,r)},t}();_e.DecodeUTF8=_t;var tn=function(){function t(t){this.ondata=t}return t.prototype.push=function(t,n){this.ondata||I(5),this.d&&I(4),this.ondata(nn(t),this.d=n||!1)},t}();function nn(t,r){if(r){for(var e=new n(t.length),i=0;i<t.length;++i)e[i]=t.charCodeAt(i);return e}if(Vt)return Vt.encode(t);var o=t.length,s=new n(t.length+(t.length>>1)),a=0,u=function(t){s[a++]=t};for(i=0;i<o;++i){if(a+5>s.length){var h=new n(a+8+(o-i<<1));h.set(s),s=h}var f=t.charCodeAt(i);f<128||r?u(f):f<2048?(u(192|f>>6),u(128|63&f)):f>55295&&f<57344?(u(240|(f=65536+(1047552&f)|1023&t.charCodeAt(++i))>>18),u(128|f>>12&63),u(128|f>>6&63),u(128|63&f)):(u(224|f>>12),u(128|f>>6&63),u(128|63&f))}return D(s,0,a)}function rn(t,n){if(n){for(var r="",e=0;e<t.length;e+=16384)r+=String.fromCharCode.apply(null,t.subarray(e,e+16384));return r}if(Wt)return Wt.decode(t);var i=$t(t),o=i.s;return(r=i.r).length&&I(8),o}_e.EncodeUTF8=tn,_e.strToU8=nn,_e.strFromU8=rn;var en=function(t){return 1==t?3:t<6?2:9==t?1:0},on=function(t,n){return n+30+ht(t,n+26)+ht(t,n+28)},sn=function(t,n,r){var e=ht(t,n+28),i=rn(t.subarray(n+46,n+46+e),!(2048&ht(t,n+8))),o=n+46+e,s=ft(t,n+20),a=r&&4294967295==s?an(t,o):[s,ft(t,n+24),ft(t,n+42)],u=a[0],h=a[1],f=a[2];return[ht(t,n+10),u,h,i,o+ht(t,n+30)+ht(t,n+32),f]},an=function(t,n){for(;1!=ht(t,n);n+=4+ht(t,n+2));return[lt(t,n+12),lt(t,n+4),lt(t,n+20)]},un=function(t){var n=0;if(t)for(var r in t){var e=t[r].length;e>65535&&I(9),n+=e+4}return n},hn=function(t,n,r,e,i,o,s,a){var u=e.length,h=r.extra,f=a&&a.length,l=un(h);ct(t,n,null!=s?33639248:67324752),n+=4,null!=s&&(t[n++]=20,t[n++]=r.os),t[n]=20,n+=2,t[n++]=r.flag<<1|(o<0&&8),t[n++]=i&&8,t[n++]=255&r.compression,t[n++]=r.compression>>8;var c=new Date(null==r.mtime?Date.now():r.mtime),p=c.getFullYear()-1980;if((p<0||p>119)&&I(10),ct(t,n,p<<25|c.getMonth()+1<<21|c.getDate()<<16|c.getHours()<<11|c.getMinutes()<<5|c.getSeconds()>>1),n+=4,-1!=o&&(ct(t,n,r.crc),ct(t,n+4,o<0?-o-2:o),ct(t,n+8,r.size)),ct(t,n+12,u),ct(t,n+14,l),n+=16,null!=s&&(ct(t,n,f),ct(t,n+6,r.attrs),ct(t,n+10,s),n+=14),t.set(e,n),n+=u,l)for(var v in h){var d=h[v],g=d.length;ct(t,n,+v),ct(t,n+2,g),t.set(d,n+4),n+=4+g}return f&&(t.set(a,n),n+=f),n},fn=function(t,n,r,e,i){ct(t,n,101010256),ct(t,n+8,r),ct(t,n+10,r),ct(t,n+12,e),ct(t,n+16,i)},ln=function(){function t(t){this.filename=t,this.c=Y(),this.size=0,this.compression=0}return t.prototype.process=function(t,n){this.ondata(null,t,n)},t.prototype.push=function(t,n){this.ondata||I(5),this.c.p(t),this.size+=t.length,n&&(this.crc=this.c.d()),this.process(t,n||!1)},t}();_e.ZipPassThrough=ln;var cn=function(){function t(t,n){var r=this;n||(n={}),ln.call(this,t),this.d=new wt(n,(function(t,n){r.ondata(null,t,n)})),this.compression=8,this.flag=en(n.level)}return t.prototype.process=function(t,n){try{this.d.push(t,n)}catch(t){this.ondata(t,null,n)}},t.prototype.push=function(t,n){ln.prototype.push.call(this,t,n)},t}();_e.ZipDeflate=cn;var pn=function(){function t(t,n){var r=this;n||(n={}),ln.call(this,t),this.d=new xt(n,(function(t,n,e){r.ondata(t,n,e)})),this.compression=8,this.flag=en(n.level),this.terminate=this.d.terminate}return t.prototype.process=function(t,n){this.d.push(t,n)},t.prototype.push=function(t,n){ln.prototype.push.call(this,t,n)},t}();_e.AsyncZipDeflate=pn;var vn=function(){function t(t){this.ondata=t,this.u=[],this.d=1}return t.prototype.add=function(t){var r=this;if(this.ondata||I(5),2&this.d)this.ondata(I(4+8*(1&this.d),0,1),null,!1);else{var e=nn(t.filename),i=e.length,o=t.comment,s=o&&nn(o),a=i!=t.filename.length||s&&o.length!=s.length,u=i+un(t.extra)+30;i>65535&&this.ondata(I(11,0,1),null,!1);var h=new n(u);hn(h,0,t,e,a,-1);var f=[h],l=function(){for(var t=0,n=f;t<n.length;t++)r.ondata(null,n[t],!1);f=[]},c=this.d;this.d=0;var p=this.u.length,v=Q(t,{f:e,u:a,o:s,t:function(){t.terminate&&t.terminate()},r:function(){if(l(),c){var t=r.u[p+1];t?t.r():r.d=1}c=1}}),d=0;t.ondata=function(e,i,o){if(e)r.ondata(e,i,o),r.terminate();else if(d+=i.length,f.push(i),o){var s=new n(16);ct(s,0,134695760),ct(s,4,t.crc),ct(s,8,d),ct(s,12,t.size),f.push(s),v.c=d,v.b=u+d+16,v.crc=t.crc,v.size=t.size,c&&v.r(),c=1}else c&&l()},this.u.push(v)}},t.prototype.end=function(){var t=this;2&this.d?this.ondata(I(4+8*(1&this.d),0,1),null,!0):(this.d?this.e():this.u.push({r:function(){1&t.d&&(t.u.splice(-1,1),t.e())},t:function(){}}),this.d=3)},t.prototype.e=function(){for(var t=0,r=0,e=0,i=0,o=this.u;i<o.length;i++)e+=46+(h=o[i]).f.length+un(h.extra)+(h.o?h.o.length:0);for(var s=new n(e+22),a=0,u=this.u;a<u.length;a++){var h;hn(s,t,h=u[a],h.f,h.u,-h.c-2,r,h.o),t+=46+h.f.length+un(h.extra)+(h.o?h.o.length:0),r+=h.b}fn(s,t,this.u.length,e,r),this.ondata(null,s,!0),this.d=2},t.prototype.terminate=function(){for(var t=0,n=this.u;t<n.length;t++)n[t].t();this.d=2},t}();function dn(t,r,e){e||(e=r,r={}),"function"!=typeof e&&I(7);var i={};Rt(t,"",i,r);var o=Object.keys(i),s=o.length,a=0,u=0,h=s,f=Array(s),l=[],c=function(){for(var t=0;t<l.length;++t)l[t]()},p=function(t,n){xn((function(){e(t,n)}))};xn((function(){p=e}));var v=function(){var t=new n(u+22),r=a,e=u-a;u=0;for(var i=0;i<h;++i){var o=f[i];try{var s=o.c.length;hn(t,u,o,o.f,o.u,s);var l=30+o.f.length+un(o.extra),c=u+l;t.set(o.c,c),hn(t,a,o,o.f,o.u,s,u,o.m),a+=16+l+(o.m?o.m.length:0),u=c+s}catch(t){return p(t,null)}}fn(t,a,f.length,e,r),p(null,t)};s||v();for(var d=function(t){var n=o[t],r=i[n],e=r[0],h=r[1],d=Y(),g=e.length;d.p(e);var y=nn(n),m=y.length,b=h.comment,w=b&&nn(b),x=w&&w.length,z=un(h.extra),k=0==h.level?0:8,M=function(r,e){if(r)c(),p(r,null);else{var i=e.length;f[t]=Q(h,{size:g,crc:d.d(),c:e,f:y,m:w,u:m!=n.length||w&&b.length!=x,compression:k}),a+=30+m+z+i,u+=76+2*(m+z)+(x||0)+i,--s||v()}};if(m>65535&&M(I(11,0,1),null),k)if(g<16e4)try{M(null,kt(e,h))}catch(t){M(t,null)}else l.push(zt(e,h,M));else M(null,e)},g=0;g<h;++g)d(g);return c}function gn(t,r){r||(r={});var e={},i=[];Rt(t,"",e,r);var o=0,s=0;for(var a in e){var u=e[a],h=u[0],f=u[1],l=0==f.level?0:8,c=(M=nn(a)).length,p=f.comment,v=p&&nn(p),d=v&&v.length,g=un(f.extra);c>65535&&I(11);var y=l?kt(h,f):h,m=y.length,b=Y();b.p(h),i.push(Q(f,{size:h.length,crc:b.d(),c:y,f:M,m:v,u:c!=a.length||v&&p.length!=d,o:o,compression:l})),o+=30+c+g+m,s+=76+2*(c+g)+(d||0)+m}for(var w=new n(s+22),x=o,z=s-o,k=0;k<i.length;++k){var M;hn(w,(M=i[k]).o,M,M.f,M.u,M.c.length);var S=30+M.f.length+un(M.extra);w.set(M.c,M.o+S),hn(w,o,M,M.f,M.u,M.c.length,M.o,M.m),o+=16+S+(M.m?M.m.length:0)}return fn(w,o,i.length,z,x),w}_e.Zip=vn,_e.zip=dn,_e.zipSync=gn;var yn=function(){function t(){}return t.prototype.push=function(t,n){this.ondata(null,t,n)},t.compression=0,t}();_e.UnzipPassThrough=yn;var mn=function(){function t(){var t=this;this.i=new Mt((function(n,r){t.ondata(null,n,r)}))}return t.prototype.push=function(t,n){try{this.i.push(t,n)}catch(t){this.ondata(t,null,n)}},t.compression=8,t}();_e.UnzipInflate=mn;var bn=function(){function t(t,n){var r=this;n<32e4?this.i=new Mt((function(t,n){r.ondata(null,t,n)})):(this.i=new St((function(t,n,e){r.ondata(t,n,e)})),this.terminate=this.i.terminate)}return t.prototype.push=function(t,n){this.i.terminate&&(t=D(t,0)),this.i.push(t,n)},t.compression=8,t}();_e.AsyncUnzipInflate=bn;var wn=function(){function t(t){this.onfile=t,this.k=[],this.o={0:yn},this.p=N}return t.prototype.push=function(t,r){var e=this;if(this.onfile||I(5),this.p||I(4),this.c>0){var i=Math.min(this.c,t.length),o=t.subarray(0,i);if(this.c-=i,this.d?this.d.push(o,!this.c):this.k[0].push(o),(t=t.subarray(i)).length)return this.push(t,r)}else{var s=0,a=0,u=void 0,h=void 0;this.p.length?t.length?((h=new n(this.p.length+t.length)).set(this.p),h.set(t,this.p.length)):h=this.p:h=t;for(var f=h.length,l=this.c,c=l&&this.d,p=function(){var t,n=ft(h,a);if(67324752==n){s=1,u=a,v.d=null,v.c=0;var r=ht(h,a+6),i=ht(h,a+8),o=2048&r,c=8&r,p=ht(h,a+26),d=ht(h,a+28);if(f>a+30+p+d){var g=[];v.k.unshift(g),s=2;var y,m=ft(h,a+18),b=ft(h,a+22),w=rn(h.subarray(a+30,a+=30+p),!o);4294967295==m?(t=c?[-2]:an(h,a),m=t[0],b=t[1]):c&&(m=-1),a+=d,v.c=m;var x={name:w,compression:i,start:function(){if(x.ondata||I(5),m){var t=e.o[i];t||x.ondata(I(14,"unknown compression type "+i,1),null,!1),(y=m<0?new t(w):new t(w,m,b)).ondata=function(t,n,r){x.ondata(t,n,r)};for(var n=0,r=g;n<r.length;n++)y.push(r[n],!1);e.k[0]==g&&e.c?e.d=y:y.push(N,!0)}else x.ondata(null,N,!0)},terminate:function(){y&&y.terminate&&y.terminate()}};m>=0&&(x.size=m,x.originalSize=b),v.onfile(x)}return"break"}if(l){if(134695760==n)return u=a+=12+(-2==l&&8),s=3,v.c=0,"break";if(33639248==n)return u=a-=4,s=3,v.c=0,"break"}},v=this;a<f-4&&"break"!==p();++a);if(this.p=N,l<0){var d=h.subarray(0,s?u-12-(-2==l&&8)-(134695760==ft(h,u-16)&&4):a);c?c.push(d,!!s):this.k[+(2==s)].push(d)}if(2&s)return this.push(h.subarray(a),r);this.p=h.subarray(a)}r&&(this.c&&I(13),this.p=null)},t.prototype.register=function(t){this.o[t.compression]=t},t}();_e.Unzip=wn;var xn="function"==typeof queueMicrotask?queueMicrotask:"function"==typeof setTimeout?setTimeout:function(t){t()};function zn(t,r,e){e||(e=r,r={}),"function"!=typeof e&&I(7);var i=[],o=function(){for(var t=0;t<i.length;++t)i[t]()},s={},a=function(t,n){xn((function(){e(t,n)}))};xn((function(){a=e}));for(var u=t.length-22;101010256!=ft(t,u);--u)if(!u||t.length-u>65558)return a(I(13,0,1),null),o;var h=ht(t,u+8);if(h){var f=h,l=ft(t,u+16),c=4294967295==l||65535==f;if(c){var p=ft(t,u-12);(c=101075792==ft(t,p))&&(f=h=ft(t,p+32),l=ft(t,p+48))}for(var v=r&&r.filter,d=function(r){var e=sn(t,l,c),u=e[0],f=e[1],p=e[2],d=e[3],g=e[4],y=on(t,e[5]);l=g;var m=function(t,n){t?(o(),a(t,null)):(n&&(s[d]=n),--h||a(null,s))};if(!v||v({name:d,size:f,originalSize:p,compression:u}))if(u)if(8==u){var b=t.subarray(y,y+f);if(p<524288||f>.8*p)try{m(null,Tt(b,{out:new n(p)}))}catch(t){m(t,null)}else i.push(At(b,{size:p},m))}else m(I(14,"unknown compression type "+u,1),null);else m(null,D(t,y,y+f));else m(null,null)},g=0;g<f;++g)d()}else a(null,{});return o}function kn(t,r){for(var e={},i=t.length-22;101010256!=ft(t,i);--i)(!i||t.length-i>65558)&&I(13);var o=ht(t,i+8);if(!o)return{};var s=ft(t,i+16),a=4294967295==s||65535==o;if(a){var u=ft(t,i-12);(a=101075792==ft(t,u))&&(o=ft(t,u+32),s=ft(t,u+48))}for(var h=r&&r.filter,f=0;f<o;++f){var l=sn(t,s,a),c=l[0],p=l[1],v=l[2],d=l[3],g=l[4],y=on(t,l[5]);s=g,h&&!h({name:d,size:p,originalSize:v,compression:c})||(c?8==c?e[d]=Tt(t.subarray(y,y+p),{out:new n(v)}):I(14,"unknown compression type "+c):e[d]=D(t,y,y+p))}return e}_e.unzip=zn,_e.unzipSync=kn;return _e});</script>
+<script>
+'use strict';
+/* ===================================================================== *
+ *  DOS Station main                                                     *
+ * ===================================================================== */
+
+const ENGINE = {
+  version: '6.22.60',
+  files: {
+    glue: {
+      name: 'wdosbox.js',
+      sha256: '06feec57a69b93f84722c4d0c5ed483484052e6e1d144dc4a98ee10af1d82044',
+      urls: [
+        'https://cdn.jsdelivr.net/npm/js-dos@6.22.60/dist/wdosbox.js',
+        'https://unpkg.com/js-dos@6.22.60/dist/wdosbox.js',
+      ],
+    },
+    wasm: {
+      name: 'wdosbox.wasm.js', // raw wasm binary despite the .js name
+      sha256: '84b873c1e5484a0f1d1adb25871f0daa92f1efc0339a9b54e84e450062182fb0',
+      urls: [
+        'https://cdn.jsdelivr.net/npm/js-dos@6.22.60/dist/wdosbox.wasm.js',
+        'https://unpkg.com/js-dos@6.22.60/dist/wdosbox.wasm.js',
+      ],
+    },
+  },
+};
+
+const BASE_CONF = [
+  '[sdl]', 'autolock=false', '',
+  '[dosbox]', 'machine=svga_s3', 'memsize=16', '',
+  '[cpu]', 'core=auto', 'cputype=auto', 'cycles=auto', '',
+  '[mixer]', 'rate=44100', 'blocksize=2048', 'prebuffer=60', '',
+  '[render]', 'aspect=false', 'frameskip=0', '',
+].join('\n');
+
+const LOGO = [
+' ██████╗  ██████╗ ███████╗',
+' ██╔══██╗██╔═══██╗██╔════╝',
+' ██║  ██║██║   ██║███████╗',
+' ██║  ██║██║   ██║╚════██║',
+' ██████╔╝╚██████╔╝███████║',
+' ╚═════╝  ╚═════╝ ╚══════╝',
+'   S  T  A  T  I  O  N',
+].join('\n');
+
+const $ = (id) => document.getElementById(id);
+
+const state = {
+  appState: {},          // persisted via Synapse.storeAppState (includes engine cache)
+  engine: null,          // {glueText, wasmU8} in-memory
+  noteId: null,
+  noteTitle: '',
+  noteContent: '',
+  attachments: [],       // [{path, name}]
+  zip: null,             // chosen zip {path, name}
+  files: [],             // [{name, data:Uint8Array}] mounted at /dos
+  userConf: null,        // {head, autoexec[]|null} parsed from ```dosbox block
+  executables: [],       // [{path, base, score}]
+  module: null,
+  live: false,
+  paused: false,
+  lastCapture: null,
+  capWasPaused: false,
+  armedMods: new Set(),
+  padMap: { A: 17, B: 18, C: 32 },
+};
+
+/* ---------------------------------------------------------------- utils */
+function log(msg) { console.log('[DOS Station] ' + msg); }
+function logErr(msg, e) { console.log('[DOS Station] ERROR ' + msg + (e && e.stack ? '\n' + e.stack : '')); }
+
+function b64ToU8(b64) {
+  const bin = atob(b64);
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return u8;
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function fmtSize(n) {
+  if (n > 1048576) return (n / 1048576).toFixed(1) + ' MB';
+  if (n > 1024) return (n / 1024).toFixed(0) + ' KB';
+  return n + ' B';
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+let toastTimer = null;
+function toast(msg, isErr) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'show' + (isErr ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, 2600);
+}
+
+/* boot/tty logging --------------------------------------------------- */
+function ttyLog(msg) {
+  for (const id of ['bootlog', 'ttylog']) {
+    const el = $(id);
+    el.textContent += msg + '\n';
+    el.scrollTop = el.scrollHeight;
+  }
+  log(msg);
+}
+function showScreen(name) { document.body.dataset.screen = name; }
+
+function fatal(msg, e) {
+  logErr(msg, e);
+  ttyLog('');
+  ttyLog('*** ' + msg + (e && e.message ? ' — ' + e.message : ''));
+  ttyLog('*** Close and reopen the app to retry.');
+  const el = $('tty');
+  if (el) el.classList.remove('hidden');
+}
+
+/* ------------------------------------------------------ audio unlocking */
+(function patchAudioContext() {
+  const Orig = window.AudioContext || window.webkitAudioContext;
+  if (!Orig) return;
+  const created = [];
+  function Wrapped() {
+    const ctx = new Orig();
+    created.push(ctx);
+    return ctx;
+  }
+  Wrapped.prototype = Orig.prototype;
+  window.AudioContext = Wrapped;
+  try { window.webkitAudioContext = Wrapped; } catch (_) {}
+  const resume = () => {
+    created.forEach((c) => { if (c.state === 'suspended') c.resume().catch(() => {}); });
+  };
+  ['touchend', 'mousedown', 'keydown'].forEach((ev) =>
+    document.addEventListener(ev, resume, true));
+})();
+
+/* ------------------------------------------------------------ app state */
+async function loadPersisted() {
+  try {
+    const r = await Synapse.loadAppState();
+    if (r && r.success && r.data) state.appState = r.data;
+  } catch (e) { logErr('loadAppState failed', e); }
+  if (state.appState.padMap) state.padMap = { ...state.padMap, ...state.appState.padMap };
+}
+async function persist(patch) {
+  state.appState = { ...state.appState, ...patch };
+  try {
+    const r = await Synapse.storeAppState(state.appState);
+    if (!r || !r.success) log('storeAppState declined: ' + (r && r.error));
+  } catch (e) { logErr('storeAppState failed', e); }
+}
+
+/* ------------------------------------------------------------ engine */
+async function fetchEngineFile(spec, label) {
+  for (const url of spec.urls) {
+    try {
+      ttyLog('FETCH ' + label + ' <- ' + new URL(url).host + ' ...');
+      const r = await Synapse.proxyFetch(url, { responseMode: 'binary' });
+      if (!r || r.status !== 'success' || !r.content || !r.content.data) {
+        ttyLog('  ' + (r && (r.error || ('HTTP ' + r.statusCode)) || 'no response'));
+        continue;
+      }
+      const b64 = r.content.data;
+      ttyLog('  VERIFY SHA-256 ...');
+      const d = await Synapse.crypto.digest('sha256', { base64: b64 });
+      if (!d || !d.success || d.hex !== spec.sha256) {
+        ttyLog('  HASH MISMATCH — skipping mirror');
+        continue;
+      }
+      ttyLog('  OK (' + fmtSize(b64.length * 3 / 4) + ')');
+      return b64;
+    } catch (e) {
+      logErr('fetch ' + url, e);
+      ttyLog('  FAILED: ' + (e && e.message));
+    }
+  }
+  throw new Error('Could not download ' + label + ' from any mirror');
+}
+
+async function ensureEngine() {
+  if (state.engine) return state.engine;
+  const cached = state.appState.engine;
+  if (cached && cached.version === ENGINE.version && cached.glue && cached.wasm) {
+    ttyLog('ENGINE CACHE ... HIT (js-dos ' + ENGINE.version + ')');
+    state.engine = {
+      glueText: new TextDecoder().decode(b64ToU8(cached.glue)),
+      wasmU8: b64ToU8(cached.wasm),
+    };
+    return state.engine;
+  }
+  ttyLog('ENGINE CACHE ... MISS');
+  ttyLog('INSTALLING DOSBOX/WASM ENGINE (one-time, ~2 MB)');
+  const glueB64 = await fetchEngineFile(ENGINE.files.glue, 'WDOSBOX.JS');
+  const wasmB64 = await fetchEngineFile(ENGINE.files.wasm, 'WDOSBOX.WASM');
+  await persist({ engine: { version: ENGINE.version, glue: glueB64, wasm: wasmB64 } });
+  ttyLog('ENGINE CACHED FOR OFFLINE USE');
+  state.engine = {
+    glueText: new TextDecoder().decode(b64ToU8(glueB64)),
+    wasmU8: b64ToU8(wasmB64),
+  };
+  return state.engine;
+}
+
+/* ------------------------------------------------------- note handling */
+function baseName(p) { return String(p).split('/').pop(); }
+
+async function resolveLaunchNote() {
+  const notes = (window.Synapse && Synapse.Notes) || [];
+  if (notes.length) {
+    // Prefer a selected note that actually has a .zip attachment.
+    const withZip = notes.find((n) =>
+      (n.attachmentPaths || []).some((p) => /\.zip$/i.test(p)));
+    const n = withZip || notes[0];
+    state.noteId = n.id;
+    state.noteTitle = n.title || 'Untitled note';
+    state.noteContent = n.content || '';
+    state.attachments = (n.attachmentPaths || []).map((p) => ({ path: p, name: baseName(p) }));
+    return true;
+  }
+  return false;
+}
+
+async function loadNoteById(noteId) {
+  const r = await Synapse.exportNotes([noteId], { includeSubNotesAndLinkedNotes: false });
+  if (!r || !r.success || !r.notes || !r.notes.length) {
+    throw new Error((r && r.error) || 'Could not read the note');
+  }
+  const n = r.notes[0];
+  state.noteId = n.id;
+  state.noteTitle = n.title || 'Untitled note';
+  state.noteContent = n.markdown || '';
+  state.attachments = (n.attachments || []).map((a) => ({
+    path: a.path, name: a.fileName || baseName(a.path),
+  }));
+}
+
+function zipAttachments() {
+  return state.attachments.filter((a) => /\.zip$/i.test(a.name) || /\.zip$/i.test(a.path));
+}
+
+/* ------------------------------------------------------- zip mounting */
+async function mountZip(att) {
+  state.zip = att;
+  ttyLog('READ ATTACHMENT "' + att.name + '" ...');
+  const r = await Synapse.readAttachment(att.path);
+  if (!r || !r.success || !r.data) {
+    throw new Error((r && r.error) || 'readAttachment failed');
+  }
+  const u8 = b64ToU8(r.data);
+  ttyLog('  ' + fmtSize(u8.length) + ' — UNPACKING ...');
+  let entries;
+  try {
+    entries = fflate.unzipSync(u8);
+  } catch (e) {
+    throw new Error('Not a valid zip file: ' + (e && e.message));
+  }
+  let files = [];
+  for (const rawName of Object.keys(entries)) {
+    let name = rawName.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+/, '');
+    if (!name || name.endsWith('/')) continue;
+    if (/(^|\/)__MACOSX\//.test(name) || /(^|\/)\.DS_Store$/i.test(name)) continue;
+    files.push({ name, data: entries[rawName] });
+  }
+  if (!files.length) throw new Error('The zip contains no files');
+  // If everything lives in a single wrapper folder, strip it (zip-of-a-folder).
+  for (let guard = 0; guard < 4; guard++) {
+    const tops = new Set(files.map((f) => f.name.split('/')[0]));
+    if (tops.size !== 1 || !files.every((f) => f.name.includes('/'))) break;
+    files = files.map((f) => ({ name: f.name.split('/').slice(1).join('/'), data: f.data }));
+  }
+  state.files = files;
+  ttyLog('  MOUNTED ' + files.length + ' FILES AT C:\\');
+  scanExecutables();
+}
+
+function scanExecutables() {
+  const title = (state.noteTitle + ' ' + (state.zip ? state.zip.name : '')).toLowerCase();
+  const good = /^(start|play|run|go|game)/i;
+  const bad = /(install|setup|unins|config|readme|manual|order|vendor)/i;
+  state.executables = state.files
+    .filter((f) => /\.(exe|com|bat)$/i.test(f.name))
+    .map((f) => {
+      const base = baseName(f.name);
+      const stem = base.replace(/\.[^.]+$/, '').toLowerCase();
+      let score = 0;
+      score -= (f.name.split('/').length - 1) * 10;
+      if (bad.test(stem)) score -= 50;
+      if (good.test(stem)) score += 30;
+      if (stem.length > 2 && title.includes(stem)) score += 25;
+      return { path: f.name, base, score };
+    })
+    .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+}
+
+/* -------------------------------------------------------- conf building */
+function parseUserConf(md) {
+  const m = /```dosbox[ \t]*\r?\n([\s\S]*?)```/i.exec(md || '');
+  if (!m) return null;
+  const head = [];
+  const autoexec = [];
+  let cur = null;
+  let sawAe = false;
+  for (const line of m[1].split(/\r?\n/)) {
+    const s = /^\s*\[([^\]]+)\]/.exec(line);
+    if (s) {
+      cur = s[1].trim().toLowerCase();
+      if (cur === 'autoexec') { sawAe = true; continue; }
+    }
+    if (cur === 'autoexec') autoexec.push(line);
+    else head.push(line);
+  }
+  return { head: head.join('\n').trim(), autoexec: sawAe ? autoexec : null };
+}
+
+function buildConf(exePath) {
+  const user = state.userConf;
+  let conf = BASE_CONF;
+  if (user && user.head) conf += '\n' + user.head + '\n';
+  let ae;
+  if (user && user.autoexec) {
+    ae = user.autoexec.slice();
+    if (!ae.some((l) => /^\s*(mount|imgmount)\s/i.test(l))) {
+      ae.unshift('mount c /dos', 'c:');
+    }
+  } else {
+    ae = ['@echo off', 'mount c /dos', 'c:'];
+    if (exePath) {
+      const parts = exePath.split('/');
+      const base = parts.pop();
+      if (parts.length) ae.push('cd \\' + parts.join('\\'));
+      ae.push(base);
+    } else {
+      ae.push('echo DOS STATION READY. Type DIR to list files.');
+    }
+  }
+  return conf + '\n[autoexec]\n' + ae.join('\n') + '\n';
+}
+
+/* -------------------------------------------------------------- booting */
+function writeGuestFS(M, conf) {
+  M.FS_createPath('/', 'dos', true, true);
+  const made = new Set();
+  for (const f of state.files) {
+    const parts = f.name.split('/');
+    const base = parts.pop();
+    let dir = '';
+    for (const part of parts) {
+      const next = dir ? dir + '/' + part : part;
+      if (!made.has(next)) {
+        M.FS_createPath('/dos' + (dir ? '/' + dir : ''), part, true, true);
+        made.add(next);
+      }
+      dir = next;
+    }
+    M.FS_createDataFile('/dos' + (dir ? '/' + dir : ''), base, f.data, true, true);
+  }
+  M.FS_createDataFile('/', 'dosbox.conf', conf, true, true);
+}
+
+async function boot(exePath) {
+  showScreen('player');
+  $('hudTitle').textContent = state.noteTitle.toUpperCase();
+  $('tty').classList.remove('hidden');
+  try {
+    const eng = await ensureEngine();
+    const conf = buildConf(exePath);
+    log('conf:\n' + conf);
+    if (!window.WDOSBOX) {
+      ttyLog('LOADING ENGINE ...');
+      (0, eval)(eng.glueText);
+      if (!window.WDOSBOX) throw new Error('engine did not initialize');
+    }
+    ttyLog('BOOTING DOSBOX ...');
+    ttyLog('');
+    const M = {
+      canvas: $('cnv'),
+      wasmBinary: eng.wasmU8.buffer,
+      TOTAL_MEMORY: 128 * 1024 * 1024,
+      keyboardListeningElement: document,
+      // js-dos build hooks: the wdosbox binary reads Module.version at startup
+      // and reports events (write_stdout, shell_input, ...) through ping().
+      version: ENGINE.version,
+      ping: function (event, a, b) {
+        if (event === 'write_stdout' && a) log('dosbox: ' + a);
+      },
+      print: (t) => log('dosbox: ' + t),
+      printErr: (t) => log('dosbox! ' + t),
+      preRun: [function () { writeGuestFS(M, conf); }],
+      onAbort: (why) => fatal('Emulator aborted', new Error(String(why))),
+      // The wdosbox glue is built with INVOKE_RUN=0 (js-dos drives it via
+      // callMain), so start DOSBox ourselves once the runtime is up.
+      onRuntimeInitialized: () => {
+        try {
+          M.callMain(['-conf', 'dosbox.conf']);
+        } catch (e) {
+          // emscripten_set_main_loop unwinds with a pseudo-exception; only
+          // treat everything else as a real boot failure.
+          const s = String((e && e.message) || e);
+          if (!/unwind|SimulateInfiniteLoop|ExitStatus/i.test(s)) {
+            fatal('DOSBox failed to start', e);
+          }
+        }
+      },
+    };
+    state.module = M;
+    window.WDOSBOX(M);
+    // Remember this game for next time.
+    persist({
+      lastNote: { id: state.noteId, title: state.noteTitle },
+      choices: {
+        ...(state.appState.choices || {}),
+        [state.noteId]: { zip: state.zip ? state.zip.path : null, exe: exePath || null },
+      },
+    });
+    watchFirstFrame();
+  } catch (e) {
+    fatal('Boot failed', e);
+  }
+}
+
+function watchFirstFrame() {
+  const cnv = $('cnv');
+  let ticks = 0;
+  const iv = setInterval(() => {
+    ticks++;
+    if (cnv.width > 32 && cnv.height > 32) {
+      clearInterval(iv);
+      state.live = true;
+      $('ledDisk').classList.add('on');
+      $('tty').classList.add('hidden');
+      toast('▶ ' + state.noteTitle);
+    } else if (ticks > 120) { // 30 s
+      clearInterval(iv);
+      ttyLog('*** No video signal — check the [autoexec] commands in your note.');
+    }
+  }, 250);
+}
+
+/* =====================================================================
+ *  UI screens
+ * =================================================================== */
+function setupScreen() {
+  showScreen('setup');
+  const stack = $('setupStack');
+  stack.innerHTML = '';
+  const last = state.appState.lastNote;
+  if (last && last.id) {
+    const b = document.createElement('button');
+    b.className = 'btn primary';
+    b.innerHTML = '▶ RESUME: ' + esc(last.title || 'last game');
+    b.onclick = () => startFromNoteId(last.id);
+    stack.appendChild(b);
+  }
+  const pick = document.createElement('button');
+  pick.className = 'btn';
+  pick.textContent = '📋 SELECT A GAME NOTE';
+  pick.onclick = pickNote;
+  stack.appendChild(pick);
+
+  const help = document.createElement('div');
+  help.className = 'card muted';
+  help.style.fontSize = '.78rem';
+  help.innerHTML =
+    'A game note is a normal note with a <b>.zip</b> of a DOS game attached.' +
+    '<br><br>Optional: add a <span class="tag">```dosbox</span> fenced code block ' +
+    'to the note body with dosbox.conf settings (including [autoexec]). ' +
+    'The zip is mounted at C:\\.';
+  stack.appendChild(help);
+}
+
+async function pickNote() {
+  try {
+    const r = await Synapse.pickNotes({
+      multiSelect: false,
+      title: 'Choose a note with a DOS game (.zip attached)',
+    });
+    if (!r || !r.success || !r.notes || !r.notes.length) {
+      if (r && r.cancelled) return;
+      if (r && r.error) toast(r.error, true);
+      return;
+    }
+    await startFromNoteId(r.notes[0].id);
+  } catch (e) {
+    logErr('pickNotes', e);
+    toast('Could not open the note picker', true);
+  }
+}
+
+async function startFromNoteId(noteId) {
+  showScreen('boot');
+  try {
+    ttyLog('READING NOTE ...');
+    await loadNoteById(noteId);
+    await afterNoteLoaded();
+  } catch (e) {
+    fatal('Could not load the note', e);
+    setTimeout(setupScreen, 2200);
+  }
+}
+
+async function afterNoteLoaded() {
+  state.userConf = parseUserConf(state.noteContent);
+  ttyLog('NOTE: ' + state.noteTitle);
+  ttyLog('CONFIG BLOCK ... ' + (state.userConf ? 'FOUND' : 'NOT PRESENT (using defaults)'));
+
+  const zips = zipAttachments();
+  if (!zips.length) {
+    ttyLog('*** This note has no .zip attachment.');
+    setTimeout(() => {
+      setupScreen();
+      toast('Attach a game .zip to "' + state.noteTitle + '" first', true);
+    }, 1600);
+    return;
+  }
+
+  // Pick the zip: embed param > remembered choice > single > chooser.
+  const params = (window.Synapse && Synapse.Params) || {};
+  const remembered = ((state.appState.choices || {})[state.noteId]) || {};
+  let zip = null;
+  if (params.zip) zip = zips.find((z) => z.name.toLowerCase() === String(params.zip).toLowerCase());
+  if (!zip && remembered.zip) zip = zips.find((z) => z.path === remembered.zip);
+  if (!zip && zips.length === 1) zip = zips[0];
+
+  if (!zip) { launcherZipChooser(zips); return; }
+  await mountAndRoute(zip);
+}
+
+async function mountAndRoute(zip) {
+  showScreen('boot');
+  try {
+    await mountZip(zip);
+  } catch (e) {
+    fatal('Could not mount the game zip', e);
+    return;
+  }
+
+  const params = (window.Synapse && Synapse.Params) || {};
+  const remembered = ((state.appState.choices || {})[state.noteId]) || {};
+  const autoboot = params.autoboot === '1' || params.autoboot === 'true' || params.autoboot === true;
+
+  // The note's [autoexec] always wins: boot straight into it.
+  if (state.userConf && state.userConf.autoexec) { boot(null); return; }
+
+  // Explicit program requested by embed params?
+  if (params.exe) {
+    const want = String(params.exe).replace(/\\/g, '/').toLowerCase();
+    const hit = state.executables.find((x) =>
+      x.path.toLowerCase() === want || x.base.toLowerCase() === want);
+    if (hit) { boot(hit.path); return; }
+    ttyLog('*** exe param "' + params.exe + '" not found in zip');
+  }
+
+  if (autoboot) {
+    const exe = (remembered.exe &&
+        state.executables.find((x) => x.path === remembered.exe)) ||
+      (state.executables.length === 1 ? state.executables[0] : null) ||
+      (state.executables.length ? state.executables[0] : null);
+    boot(exe ? (exe.path || exe) : null);
+    return;
+  }
+
+  launcherScreen(remembered.exe);
+}
+
+function launcherZipChooser(zips) {
+  showScreen('launcher');
+  const stack = $('launchStack');
+  stack.innerHTML = '<h2 style="font-size:.95rem;">💾 ' + esc(state.noteTitle) + '</h2>' +
+    '<div class="muted" style="font-size:.8rem;">Several disks found — choose one:</div>';
+  zips.forEach((z) => {
+    const b = document.createElement('button');
+    b.className = 'btn';
+    b.textContent = '💾 ' + z.name;
+    b.onclick = () => mountAndRoute(z);
+    stack.appendChild(b);
+  });
+}
+
+function launcherScreen(rememberedExe) {
+  showScreen('launcher');
+  const stack = $('launchStack');
+  stack.innerHTML = '';
+
+  const head = document.createElement('div');
+  head.className = 'card';
+  head.innerHTML =
+    '<h2 style="font-size:1rem;">💾 ' + esc(state.noteTitle) + '</h2>' +
+    '<div class="muted" style="font-size:.78rem;">' +
+    esc(state.zip.name) + ' · ' + state.files.length + ' files · ' +
+    (state.userConf ? '<span class="tag">NOTE CONFIG</span>' : '<span class="tag amber">DEFAULT CONFIG</span>') +
+    '</div>';
+  stack.appendChild(head);
+
+  if (!state.executables.length) {
+    const w = document.createElement('div');
+    w.className = 'card muted';
+    w.style.fontSize = '.8rem';
+    w.textContent = 'No .exe/.com/.bat found in the zip — you can still boot to the DOS prompt.';
+    stack.appendChild(w);
+  }
+
+  state.executables.forEach((x, i) => {
+    const primary = rememberedExe ? x.path === rememberedExe : i === 0;
+    const b = document.createElement('button');
+    b.className = 'btn' + (primary ? ' primary' : '');
+    b.innerHTML = (primary ? '▶ ' : '· ') + esc(x.path.replace(/\//g, '\\'));
+    b.onclick = () => boot(x.path);
+    stack.appendChild(b);
+  });
+
+  const div = document.createElement('div');
+  div.className = 'divider';
+  stack.appendChild(div);
+
+  const prompt = document.createElement('button');
+  prompt.className = 'btn warn';
+  prompt.textContent = 'C:\\>  BOOT TO DOS PROMPT';
+  prompt.onclick = () => boot(null);
+  stack.appendChild(prompt);
+
+  const zips = zipAttachments();
+  if (zips.length > 1) {
+    const other = document.createElement('button');
+    other.className = 'btn small';
+    other.textContent = '⏏ change disk';
+    other.onclick = () => launcherZipChooser(zips);
+    stack.appendChild(other);
+  }
+}
+
+/* =====================================================================
+ *  Input: synthetic keyboard events into SDL
+ * =================================================================== */
+function sendKey(code, down) {
+  const e = new KeyboardEvent(down ? 'keydown' : 'keyup', { bubbles: true, cancelable: true });
+  Object.defineProperty(e, 'keyCode', { get: () => code });
+  Object.defineProperty(e, 'which', { get: () => code });
+  document.dispatchEvent(e);
+}
+async function tapKey(code, mods) {
+  (mods || []).forEach((m) => sendKey(m, true));
+  sendKey(code, true);
+  // Release immediately: DOSBox's emulated clock can run far ahead of real
+  // time, so even a short real-time hold triggers typematic key repeat.
+  sendKey(code, false);
+  (mods || []).forEach((m) => sendKey(m, false));
+  await sleep(30);
+}
+
+/* character → key mapping for the quick-type bar */
+const CHARKEYS = (() => {
+  const m = {};
+  for (let i = 0; i < 26; i++) {
+    m[String.fromCharCode(97 + i)] = { code: 65 + i };
+    m[String.fromCharCode(65 + i)] = { code: 65 + i, shift: true };
+  }
+  for (let i = 0; i < 10; i++) m[String(i)] = { code: 48 + i };
+  const plain = { ' ': 32, '-': 189, '=': 187, '[': 219, ']': 221, '\\': 220,
+    ';': 186, "'": 222, ',': 188, '.': 190, '/': 191, '`': 192 };
+  for (const c in plain) m[c] = { code: plain[c] };
+  const shifted = { '!': 49, '@': 50, '#': 51, '$': 52, '%': 53, '^': 54, '&': 55,
+    '*': 56, '(': 57, ')': 48, '_': 189, '+': 187, '{': 219, '}': 221, '|': 220,
+    ':': 186, '"': 222, '<': 188, '>': 190, '?': 191, '~': 192 };
+  for (const c in shifted) m[c] = { code: shifted[c], shift: true };
+  return m;
+})();
+
+async function typeString(text, pressEnter) {
+  for (const ch of text) {
+    const k = CHARKEYS[ch];
+    if (!k) continue;
+    await tapKey(k.code, k.shift ? [16] : []);
+  }
+  if (pressEnter) await tapKey(13, []);
+}
+
+/* ------------------------------------------------------ keyboard overlay */
+const KB_LAYOUT = [
+  [['Esc',27],['F1',112],['F2',113],['F3',114],['F4',115],['F5',116],['F6',117],['F7',118],['F8',119],['F9',120],['F10',121]],
+  [['`',192],['1',49],['2',50],['3',51],['4',52],['5',53],['6',54],['7',55],['8',56],['9',57],['0',48],['-',189],['=',187],['⌫',8,1.6]],
+  [['Tab',9,1.4],['Q',81],['W',87],['E',69],['R',82],['T',84],['Y',89],['U',85],['I',73],['O',79],['P',80],['[',219],[']',221],['\\',220]],
+  [['Ctrl',17,1.6,'mod'],['A',65],['S',83],['D',68],['F',70],['G',71],['H',72],['J',74],['K',75],['L',76],[';',186],["'",222],['⏎',13,1.7]],
+  [['Shift',16,2,'mod'],['Z',90],['X',88],['C',67],['V',86],['B',66],['N',78],['M',77],[',',188],['.',190],['/',191],['↑',38,1.2,'hold']],
+  [['Alt',18,1.5,'mod'],['Space',32,6,'hold'],['←',37,1.2,'hold'],['↓',40,1.2,'hold'],['→',39,1.2,'hold']],
+];
+
+function buildKeyboard() {
+  const kb = $('kb');
+  const bar = document.createElement('div');
+  bar.id = 'typebar';
+  const inp = document.createElement('input');
+  inp.placeholder = 'type a command…';
+  inp.autocapitalize = 'off'; inp.autocomplete = 'off'; inp.spellcheck = false;
+  const send = document.createElement('button');
+  send.className = 'btn small'; send.textContent = 'SEND ⏎';
+  send.addEventListener('click', async () => {
+    const v = inp.value; inp.value = ''; inp.blur();
+    if (v) { await typeString(v, true); }
+  });
+  bar.appendChild(inp); bar.appendChild(send);
+  kb.appendChild(bar);
+
+  for (const row of KB_LAYOUT) {
+    const r = document.createElement('div');
+    r.className = 'kbrow';
+    for (const [label, code, w, kind] of row) {
+      const k = document.createElement('button');
+      k.className = 'k' + (kind === 'mod' ? ' mod' : '');
+      k.textContent = label;
+      k.style.flexGrow = w || 1;
+      const clearArmed = () => {
+        state.armedMods.forEach((m) => sendKey(m, false));
+        state.armedMods.clear();
+        document.querySelectorAll('.k.mod.armed').forEach((el) => el.classList.remove('armed'));
+      };
+      const down = (ev) => {
+        ev.preventDefault();
+        if (kind === 'mod') {
+          if (state.armedMods.has(code)) state.armedMods.delete(code);
+          else state.armedMods.add(code);
+          k.classList.toggle('armed', state.armedMods.has(code));
+          return;
+        }
+        if (kind === 'hold') {
+          // Arrows/Space: games read the held state — press until released.
+          sendKey(code, true);
+          k.classList.add('down');
+          return;
+        }
+        // Ordinary keys tap immediately: DOSBox's emulated typematic repeat
+        // is far faster than real time, so even a quick finger hold would
+        // spill repeated characters.
+        state.armedMods.forEach((m) => sendKey(m, true));
+        sendKey(code, true);
+        sendKey(code, false);
+        clearArmed();
+        k.classList.add('down');
+        setTimeout(() => k.classList.remove('down'), 130);
+      };
+      const up = (ev) => {
+        ev.preventDefault();
+        if (kind !== 'hold') return;
+        sendKey(code, false);
+        k.classList.remove('down');
+      };
+      k.addEventListener('touchstart', down, { passive: false });
+      k.addEventListener('touchend', up, { passive: false });
+      k.addEventListener('touchcancel', up, { passive: false });
+      k.addEventListener('mousedown', (e) => { if (!('ontouchstart' in window)) down(e); });
+      k.addEventListener('mouseup', (e) => { if (!('ontouchstart' in window)) up(e); });
+      r.appendChild(k);
+    }
+    kb.appendChild(r);
+  }
+}
+
+/* --------------------------------------------------------- virtual pad */
+const PAD_CHOICES = [
+  ['Ctrl', 17], ['Alt', 18], ['Space', 32], ['Enter', 13], ['Shift', 16],
+  ['Z', 90], ['X', 88], ['Y', 89], ['Esc', 27], ['F1', 112],
+];
+
+function buildPad() {
+  // A/B/C mapping selectors
+  for (const btn of ['A', 'B', 'C']) {
+    const sel = $('map' + btn);
+    for (const [label, code] of PAD_CHOICES) {
+      const o = document.createElement('option');
+      o.value = code; o.textContent = btn + ':' + label;
+      sel.appendChild(o);
+    }
+    sel.value = state.padMap[btn];
+    sel.addEventListener('change', () => {
+      state.padMap[btn] = Number(sel.value);
+      refreshPadLabels();
+      persist({ padMap: state.padMap });
+    });
+  }
+  refreshPadLabels();
+
+  for (const btn of ['A', 'B', 'C']) {
+    const el = $('pb' + btn);
+    const down = (ev) => { ev.preventDefault(); el.classList.add('down'); sendKey(state.padMap[btn], true); };
+    const up = (ev) => { ev.preventDefault(); el.classList.remove('down'); sendKey(state.padMap[btn], false); };
+    el.addEventListener('touchstart', down, { passive: false });
+    el.addEventListener('touchend', up, { passive: false });
+    el.addEventListener('touchcancel', up, { passive: false });
+    el.addEventListener('mousedown', down);
+    el.addEventListener('mouseup', up);
+  }
+
+  // D-pad: track one touch, translate position to arrow-key chords.
+  const dpad = $('dpad');
+  const stick = $('dstick');
+  let touchId = null;
+  const active = new Set();
+  const applyKeys = (want) => {
+    for (const c of [37, 38, 39, 40]) {
+      const on = want.has(c);
+      if (on && !active.has(c)) { sendKey(c, true); active.add(c); }
+      if (!on && active.has(c)) { sendKey(c, false); active.delete(c); }
+    }
+  };
+  const track = (t) => {
+    const r = dpad.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    let dx = t.clientX - cx, dy = t.clientY - cy;
+    const dist = Math.hypot(dx, dy);
+    const max = r.width / 2 - 24;
+    if (dist > max) { dx *= max / dist; dy *= max / dist; }
+    stick.style.left = (r.width / 2 - 28 + dx) + 'px';
+    stick.style.top = (r.height / 2 - 28 + dy) + 'px';
+    const want = new Set();
+    if (dist > 16) {
+      if (dx < -Math.abs(dy) * 0.414) want.add(37);
+      if (dx > Math.abs(dy) * 0.414) want.add(39);
+      if (dy < -Math.abs(dx) * 0.414) want.add(38);
+      if (dy > Math.abs(dx) * 0.414) want.add(40);
+    }
+    applyKeys(want);
+  };
+  const reset = () => {
+    touchId = null;
+    stick.style.left = '46px'; stick.style.top = '46px';
+    applyKeys(new Set());
+  };
+  dpad.addEventListener('touchstart', (ev) => {
+    ev.preventDefault();
+    const t = ev.changedTouches[0];
+    touchId = t.identifier;
+    track(t);
+  }, { passive: false });
+  dpad.addEventListener('touchmove', (ev) => {
+    ev.preventDefault();
+    for (const t of ev.changedTouches) if (t.identifier === touchId) track(t);
+  }, { passive: false });
+  const endT = (ev) => {
+    for (const t of ev.changedTouches) if (t.identifier === touchId) reset();
+  };
+  dpad.addEventListener('touchend', endT);
+  dpad.addEventListener('touchcancel', endT);
+}
+
+function refreshPadLabels() {
+  for (const btn of ['A', 'B', 'C']) {
+    const found = PAD_CHOICES.find(([, c]) => c === state.padMap[btn]);
+    $('lbl' + btn).textContent = found ? found[0] : '?';
+  }
+}
+
+/* =====================================================================
+ *  Frame capture → note
+ * =================================================================== */
+function openCapture() {
+  if (!state.live) { toast('No video yet', true); return; }
+  let dataUrl = null;
+  try {
+    dataUrl = $('cnv').toDataURL('image/png');
+  } catch (e) {
+    logErr('toDataURL', e);
+  }
+  if (!dataUrl || dataUrl.length < 256) { toast('Could not capture the frame', true); return; }
+  state.lastCapture = dataUrl;
+  $('flash').classList.remove('go');
+  void $('flash').offsetWidth;
+  $('flash').classList.add('go');
+  state.capWasPaused = state.paused;
+  if (!state.paused) pauseToggle(true);
+  $('capImg').src = dataUrl;
+  $('capText').value = '';
+  $('aiOut').style.display = 'none';
+  $('aiOut').textContent = '';
+  $('capWrap').classList.add('show');
+}
+
+function closeCapture() {
+  $('capWrap').classList.remove('show');
+  if (!state.capWasPaused && state.paused) pauseToggle(false);
+}
+
+async function saveCapture() {
+  const btn = $('btnSaveCap');
+  btn.disabled = true;
+  btn.textContent = 'SAVING…';
+  try {
+    const stampId = 'dos-capture-' + Date.now();
+    const comment = $('capText').value.trim();
+
+    // 1) attach the frame to the note
+    const add = await Synapse.updateNotes([{
+      id: state.noteId,
+      modification: {
+        attachments: { added: [{ type: 'base64', data: state.lastCapture, fileName: stampId + '.png' }] },
+      },
+    }]);
+    if (!add || !add.success || !add.updatedCount) {
+      throw new Error((add && add.error) || 'attachment declined');
+    }
+
+    // 2) find the stored file name so the image can be embedded inline
+    let imgRef = null;
+    try {
+      const exp = await Synapse.exportNotes([state.noteId], { includeSubNotesAndLinkedNotes: false });
+      const atts = (exp && exp.success && exp.notes && exp.notes[0] && exp.notes[0].attachments) || [];
+      const hit = atts.find((a) =>
+        String(a.path || '').includes(stampId) || String(a.fileName || '').includes(stampId));
+      if (hit && hit.path) imgRef = baseName(hit.path);
+    } catch (e) { logErr('capture path discovery', e); }
+
+    // 3) append the moment to the note body
+    const when = new Date().toLocaleString();
+    let block = '\n\n---\n\n🕹️ **DOS Station** — ' + when;
+    if (imgRef) block += '\n\n![DOS capture](' + imgRef + ')';
+    else block += '\n\n_(frame saved as attachment ' + stampId + '.png)_';
+    if (comment) block += '\n\n' + comment;
+    const app = await Synapse.updateNotes([{
+      id: state.noteId,
+      modification: { content: { action: 'append', text: block } },
+    }]);
+    if (app && app.success && app.updatedCount) {
+      toast('Saved to "' + state.noteTitle + '" ✓');
+      closeCapture();
+    } else {
+      toast('Frame attached, but the text append was declined', true);
+    }
+  } catch (e) {
+    logErr('saveCapture', e);
+    toast('Save failed: ' + (e && e.message), true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💾 Append to note';
+  }
+}
+
+async function askAI() {
+  const out = $('aiOut');
+  out.style.display = 'block';
+  out.textContent = '🤖 examining the frame…';
+  try {
+    const r = await Synapse.chatAI(
+      'This is a screenshot of a DOS game or program running in an emulator. ' +
+      'Briefly describe what is on screen, identify the game if you can, and give one ' +
+      'helpful, spoiler-light tip. Answer in 2-4 plain-text sentences.',
+      { attachments: [{ type: 'base64', mimeType: 'image/png', data: state.lastCapture }] },
+    );
+    if (r && r.success && r.response) {
+      out.textContent = '🤖 ' + r.response;
+      const cur = $('capText');
+      if (!cur.value) cur.value = r.response.trim();
+    } else {
+      out.textContent = 'AI unavailable: ' + ((r && r.error) || 'no response');
+    }
+  } catch (e) {
+    logErr('askAI', e);
+    out.textContent = 'AI request failed: ' + (e && e.message);
+  }
+}
+
+/* =====================================================================
+ *  HUD wiring
+ * =================================================================== */
+function pauseToggle(force) {
+  const M = state.module;
+  if (!M) return;
+  const next = typeof force === 'boolean' ? force : !state.paused;
+  if (next === state.paused) return;
+  state.paused = next;
+  try {
+    if (M.sync_sleep) {
+      // This build runs on ASYNCIFY sleeps (window.postMessage), not
+      // emscripten_set_main_loop, so pause by holding the next wake-up
+      // callback and releasing it on resume.
+      if (!M.__pausePatched) {
+        M.__pausePatched = true;
+        const origSleep = M.sync_sleep.bind(M);
+        M.sync_sleep = function (wakeUp) {
+          if (state.paused) { state.pendingWake = wakeUp; return; }
+          origSleep(wakeUp);
+        };
+      }
+      if (!next && state.pendingWake) {
+        const wake = state.pendingWake;
+        state.pendingWake = null;
+        setTimeout(wake, 0);
+      }
+    } else {
+      if (next) M.pauseMainLoop(); else M.resumeMainLoop();
+    }
+  } catch (e) { logErr('pauseToggle', e); }
+  $('btnPause').textContent = next ? '▶' : '⏸';
+  $('btnPause').classList.toggle('active', next);
+}
+
+function wireHud() {
+  // window.confirm is not reliably wired inside the app's WebView, so Eject
+  // uses an arm-then-confirm double tap instead.
+  let ejectArmed = null;
+  $('btnEject').addEventListener('click', () => {
+    if (ejectArmed) { location.reload(); return; }
+    const b = $('btnEject');
+    b.textContent = '⏏?';
+    b.style.color = 'var(--red)';
+    toast('Tap ⏏ again to end the DOS session');
+    ejectArmed = setTimeout(() => {
+      ejectArmed = null;
+      b.textContent = '⏏';
+      b.style.color = '';
+    }, 2800);
+  });
+  $('btnTty').addEventListener('click', () => $('tty').classList.toggle('hidden'));
+  $('btnKb').addEventListener('click', () => {
+    const on = $('kb').classList.toggle('show');
+    $('btnKb').classList.toggle('active', on);
+    if (on) { $('pad').classList.remove('show'); $('btnPad').classList.remove('active'); }
+  });
+  $('btnPad').addEventListener('click', () => {
+    const on = $('pad').classList.toggle('show');
+    $('btnPad').classList.toggle('active', on);
+    if (on) { $('kb').classList.remove('show'); $('btnKb').classList.remove('active'); }
+  });
+  $('btnShot').addEventListener('click', openCapture);
+  $('btnPause').addEventListener('click', () => pauseToggle());
+  $('btnAskAI').addEventListener('click', askAI);
+  $('btnSaveCap').addEventListener('click', saveCapture);
+  $('btnCloseCap').addEventListener('click', closeCapture);
+}
+
+/* =====================================================================
+ *  Entry
+ * =================================================================== */
+async function main() {
+  $('logo').textContent = LOGO;
+  $('logo2').textContent = LOGO;
+  buildKeyboard();
+  buildPad();
+  wireHud();
+
+  if (!window.Synapse || !Synapse.readAttachment || !Synapse.updateNotes) {
+    showScreen('boot');
+    ttyLog('*** Synapse API not available.');
+    ttyLog('*** DOS Station must run inside Note Synapse as a user app.');
+    return;
+  }
+
+  showScreen('boot');
+  ttyLog('NOTE SYNAPSE · DOS STATION BIOS 1.0');
+  ttyLog('CPU: WEBASSEMBLY VM ......... OK');
+  ttyLog('SYNAPSE BRIDGE .............. OK');
+  await loadPersisted();
+  ttyLog('ENGINE CACHE ................ ' +
+    (state.appState.engine && state.appState.engine.version === ENGINE.version ? 'READY' : 'EMPTY'));
+  ttyLog('');
+
+  try {
+    if (await resolveLaunchNote()) {
+      await afterNoteLoaded();
+    } else {
+      setupScreen();
+    }
+  } catch (e) {
+    fatal('Startup failed', e);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => { main().catch((e) => fatal('init', e)); });
+} else {
+  main().catch((e) => fatal('init', e));
+}
+</script>
+</body>
+</html>
