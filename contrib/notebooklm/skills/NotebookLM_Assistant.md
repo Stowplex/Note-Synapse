@@ -13,7 +13,7 @@ generates a podcast / slide deck from it.
 ## Golden rules
 
 - **Always resolve a notebook by id, never by title.** The user names a
-  collection ("notebook Papers"); you must call `notebooklm_list_notebooks`
+  collection ("notebook Papers"); you must call [NotebookLM Manager.notebooklm_list_notebooks](notesynapse://tool/user_defined/a80d7d5b-0ce5-48bd-8641-9eb357a7e020/notebooklm_list_notebooks)
   first and match the title to its `id`. Every other tool takes a `notebook_id`.
 - **Note content is private.** Syncing sends the note's content straight to
   NotebookLM — it never enters this conversation. You only pass note *ids*.
@@ -27,17 +27,17 @@ generates a podcast / slide deck from it.
 
 | The user wants to… | Do this |
 |---|---|
-| See their collections | `notebooklm_list_notebooks` → list titles (+ purpose, note count) |
-| Add note(s) to collection X | `notebooklm_list_notebooks` → find X's id (create it if missing) → `notebooklm_sync_notes` |
-| Ask a question about collection X | `notebooklm_list_notebooks` → find id → `notebooklm_query` |
-| Know what collection X is / contains | `notebooklm_list_notebooks` → find id → `notebooklm_collection_info` |
-| A podcast from collection X | find id → `notebooklm_generate_podcast` → (later) `notebooklm_artifact_status` |
+| See their collections | [NotebookLM Manager.notebooklm_list_notebooks](notesynapse://tool/user_defined/a80d7d5b-0ce5-48bd-8641-9eb357a7e020/notebooklm_list_notebooks)→ list titles (+ purpose, note count) |
+| Add note(s) to collection X | [NotebookLM Manager.notebooklm_list_notebooks](notesynapse://tool/user_defined/a80d7d5b-0ce5-48bd-8641-9eb357a7e020/notebooklm_list_notebooks) → find X's id (create it if missing) → [NotebookLM Manager.notebooklm_sync_notes](notesynapse://tool/user_defined/a80d7d5b-0ce5-48bd-8641-9eb357a7e020/notebooklm_sync_notes) |
+| Ask a question about collection X | [NotebookLM Manager.notebooklm_list_notebooks](notesynapse://tool/user_defined/a80d7d5b-0ce5-48bd-8641-9eb357a7e020/notebooklm_list_notebooks)→ find id → [NotebookLM Manager.notebooklm_query](notesynapse://tool/user_defined/a80d7d5b-0ce5-48bd-8641-9eb357a7e020/notebooklm_query) |
+| Know what collection X is / contains | `notebooklm_list_notebooks` → find id → [NotebookLM Manager.notebooklm_collection_info](notesynapse://tool/user_defined/a80d7d5b-0ce5-48bd-8641-9eb357a7e020/notebooklm_collection_info) |
+| A podcast from collection X | find id → [NotebookLM Manager.notebooklm_generate_podcast](notesynapse://tool/user_defined/a80d7d5b-0ce5-48bd-8641-9eb357a7e020/notebooklm_generate_podcast) → (later) [NotebookLM Manager.notebooklm_artifact_status](notesynapse://tool/user_defined/a80d7d5b-0ce5-48bd-8641-9eb357a7e020/notebooklm_artifact_status) |
 | Slides from collection X | find id → `notebooklm_generate_slides` → `notebooklm_artifact_status` |
 
 ## Adding notes ("add this to NotebookLM notebook X")
 
 1. `notebooklm_list_notebooks`. Find the notebook whose title matches X.
-2. If none matches, create it: `notebooklm_create_notebook({ title: "X",
+2. If none matches, create it with [NotebookLM Manager.notebooklm_create_notebook](notesynapse://tool/user_defined/a80d7d5b-0ce5-48bd-8641-9eb357a7e020/notebooklm_create_notebook): `notebooklm_create_notebook({ title: "X",
    purpose: "<one line on what it's for>" })` and use the returned
    `notebook_id`. Setting a clear `purpose` is important — it's how the user
    tells collections apart later.
@@ -89,3 +89,4 @@ generates a podcast / slide deck from it.
 - User: *"Make a podcast from RAG Papers."*
   → list → id → `notebooklm_generate_podcast({notebook_id})`; tell them it's
   generating.
+
