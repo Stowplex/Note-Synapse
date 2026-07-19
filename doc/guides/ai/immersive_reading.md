@@ -46,3 +46,16 @@ The immersive mode has a ScratchPad that allows you to take quick notes, stash c
 You can choose to include scratchpad in the conversation context, or save it to a note. 
 
 The scratchpad will be cleared when you leave the immersive reading view and any unsaved changes will be lost.
+
+## Circle and Annotate
+The pen tool can do more than ask questions — it can leave permanent annotations on the note, an image, or a specific PDF page.
+
+With pen mode on, draw freehand to circle something (or use the rectangle tool), then confirm the drawing. What happens next depends on the mode:
+
+-   In normal chat mode, your question is anchored to the circled region — a marker is left on the spot, and tapping it later re-opens that conversation.
+-   In scratchpad mode, sending (with optional text) saves an **annotation**: the drawing is captured as an image and pinned to the circled region, together with your text.
+
+![](../../media/immersive_annotation_marker.png)
+
+Annotation markers reappear whenever you come back to the note. Tap a marker to preview the captured drawing and your text; from the preview you can add the annotation to the scratchpad or remove it permanently.
+
