@@ -13,7 +13,7 @@ uuid: a80d7d5b-0ce5-48bd-8641-9eb357a7e020
 app_type: ai_tool
 description: Sync notes to Google NotebookLM as sources, ask questions, and generate podcasts/slides. Exposes AI tools and an interactive UI. Requires a NotebookLM (Google) login, established in-app.
 author: Note Synapse
-license: BSD v3
+license: MIT
 code: $CODE
 EOF
 
