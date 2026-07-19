@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Neon Cartridge Test Harness</title>
+  <style>
+    html, body, iframe {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      border: 0;
+      background: #080716;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    (() => {
+      const calls = {
+        readAttachment: [],
+        saveTemp: [],
+        updateNotes: [],
+        storeAppState: [],
+        input: [],
+      };
+
+      function makeTestRom() {
+        const bytes = new Uint8Array(16 + 16384 + 8192);
+        bytes.set([0x4e, 0x45, 0x53, 0x1a, 1, 1, 0, 0], 0);
+
+        // Tiny NROM program: initialize the CPU, then loop forever. The reset,
+        // NMI, and IRQ vectors all point to $8000.
+        const program = [
+          0x78,       // SEI
+          0xd8,       // CLD
+          0xa2, 0xff, // LDX #$ff
+          0x9a,       // TXS
+          0x4c, 0x05, 0x80, // JMP $8005
+        ];
+        bytes.set(program, 16);
+        const vectorBase = 16 + 0x3ffa;
+        bytes.set([0x00, 0x80, 0x00, 0x80, 0x00, 0x80], vectorBase);
+
+        let binary = "";
+        const chunkSize = 8192;
+        for (let index = 0; index < bytes.length; index += chunkSize) {
+          binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+        }
+        return btoa(binary);
+      }
+
+      window.harnessCalls = calls;
+      window.mockSynapse = {
+        Notes: [
+          {
+            id: "note-one",
+            title: "Weekend speed-run log",
+            content: "# Runs",
+            attachmentPaths: [
+              "/notes/weekend/demo-cartridge.nes",
+              "/notes/weekend/manual.pdf",
+            ],
+          },
+          {
+            id: "note-two",
+            title: "Boss strategy lab",
+            content: "# Bosses",
+            attachmentPaths: ["/notes/bosses/training-cart.NES"],
+          },
+        ],
+        async readAttachment(path) {
+          calls.readAttachment.push(path);
+          return {
+            success: true,
+            data: makeTestRom(),
+            mimeType: "application/octet-stream",
+          };
+        },
+        async saveTemp(data, mimeType) {
+          calls.saveTemp.push({ data, mimeType });
+          document.documentElement.dataset.saveTempCalls =
+            JSON.stringify(calls.saveTemp);
+          return { success: true, uri: "synapsetemp:///test-capture.png" };
+        },
+        async updateNotes(notes) {
+          calls.updateNotes.push(notes);
+          const update = notes[0];
+          document.documentElement.dataset.captureContract = JSON.stringify({
+            saveTempCount: calls.saveTemp.length,
+            saveMime: calls.saveTemp[0] && calls.saveTemp[0].mimeType,
+            savedBinaryPrefix:
+              calls.saveTemp[0] &&
+              calls.saveTemp[0].data.binary.slice(0, 22),
+            updateCount: calls.updateNotes.length,
+            noteId: update && update.id,
+            attachmentUri:
+              update &&
+              update.modification.attachments.added[0],
+            contentHasComment: Boolean(
+              update &&
+              update.modification.content.text.includes(
+                "Finally cleared the test stage — one life left!",
+              ),
+            ),
+            contentHasInlinePng: Boolean(
+              update &&
+              update.modification.content.text.includes("![NES screenshot") &&
+              update.modification.content.text.includes("data:image/png;base64,"),
+            ),
+          });
+          return { success: true, updatedCount: notes.length };
+        },
+        async loadAppState() {
+          return { success: true, data: null };
+        },
+        async storeAppState(appState) {
+          calls.storeAppState.push(appState);
+          return { success: true };
+        },
+      };
+
+      fetch("../plugins/nes_arcade.html")
+        .then((response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.text();
+        })
+        .then((html) => {
+          const bootstrapped = html
+            .replace(
+              "<head>",
+              '<head><base href="../plugins/">',
+            )
+            .replace(
+              "<body>",
+              "<body><script>window.Synapse = parent.mockSynapse;<" + "/script>",
+            );
+          const frame = document.createElement("iframe");
+          frame.id = "appFrame";
+          frame.title = "Neon Cartridge app";
+          frame.addEventListener("load", () => {
+            const appWindow = frame.contentWindow;
+            const Controller = appWindow.jsnes.Controller;
+            const controller = new Controller();
+
+            controller.buttonDown(Controller.BUTTON_A);
+            controller.buttonDown(Controller.BUTTON_TURBO_A);
+            const turboPattern = [];
+            for (let index = 0; index < 4; index += 1) {
+              controller.clock();
+              turboPattern.push(controller.state[Controller.BUTTON_A]);
+            }
+            controller.buttonUp(Controller.BUTTON_TURBO_A);
+            const regularAHeldAfterTurboRelease =
+              controller.state[Controller.BUTTON_A];
+            controller.buttonUp(Controller.BUTTON_A);
+
+            window.harnessTurboContract = {
+              turboPattern,
+              regularAHeldAfterTurboRelease,
+              regularAAfterRelease: controller.state[Controller.BUTTON_A],
+              pressedValue: 0x41,
+              releasedValue: 0x40,
+            };
+            document.documentElement.dataset.turboContract =
+              JSON.stringify(window.harnessTurboContract);
+
+            const originalDown = Controller.prototype.buttonDown;
+            const originalUp = Controller.prototype.buttonUp;
+            Controller.prototype.buttonDown = function (button) {
+              calls.input.push({ type: "down", button });
+              document.documentElement.dataset.inputCalls =
+                JSON.stringify(calls.input);
+              return originalDown.call(this, button);
+            };
+            Controller.prototype.buttonUp = function (button) {
+              calls.input.push({ type: "up", button });
+              document.documentElement.dataset.inputCalls =
+                JSON.stringify(calls.input);
+              return originalUp.call(this, button);
+            };
+
+          }, { once: true });
+          frame.srcdoc = bootstrapped;
+          document.body.append(frame);
+        })
+        .catch((error) => {
+          document.body.textContent = `Harness failed: ${error.message}`;
+        });
+    })();
+  </script>
+</body>
+</html>

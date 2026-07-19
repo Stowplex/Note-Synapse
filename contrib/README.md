@@ -53,3 +53,6 @@ contrib/
   and one-tap frame capture appended back to the note. Downloads the js-dos
   engine (DOSBox, GPL-2.0) onto the user's device at runtime, which is why it
   is distributed here rather than bundled with the app.
+- **nes-arcade / Neon Cartridge** — play a `.nes` ROM attached to a selected
+  note with phone-ready controls, rapid-fire/rapid-jump buttons, quick saves,
+  and annotated screenshots saved back to the note.
