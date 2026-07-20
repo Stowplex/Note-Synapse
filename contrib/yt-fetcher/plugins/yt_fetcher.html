@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script>
+<![CDATA[tool_spec
+- name: fetch_youtube_data
+  description: Fetches a YouTube video's HTML page to extract the INNERTUBE_API_KEY, attempts to fetch caption data, and retrieves the transcript for 'en' or 'zh' languages. Supports standard video URLs and YouTube live stream links.
+  input_params:
+    video_url:
+      type: string
+      description: The YouTube video URL or video ID (e.g., https://www.youtube.com/watch?v=dQw4w9WgXcQ, dQw4w9WgXcQ, or https://www.youtube.com/live/s5uGpolyHd4).
+      optional: false
+  output_params:
+    api_key:
+      type: string
+      description: The extracted INNERTUBE_API_KEY.
+      optional: true
+    caption_json:
+      type: object
+      description: The raw JSON data for captions, if successfully fetched. This includes the playerCaptionsTracklistRenderer structure.
+      optional: true
+    transcript_text:
+      type: string
+      description: The plain text transcript of the video, if successfully fetched for 'en' or 'zh'.
+      optional: true
+    error:
+      type: string
+      description: Error message if extraction or fetching fails.
+      optional: true
+]]>
+    </script>
+
+    <title>YTFetcher</title>
+    <!--
+    Requirement 1 & 2: HTML must be completely self-contained with embedded CSS and JavaScript.
+    Do not reference any external resources, except Synapse provided libraries.
+    Using Bootstrap for basic styling in the interactive playground.
+    -->
+    <link rel="stylesheet" href="synapse://bootstrap.min.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            padding: 20px;
+            background-color: #f8f9fa;
+            color: #343a40;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #0056b3; /* A shade of blue for headings */
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            font-weight: bold;
+            margin-bottom: 8px;
+            display: block;
+        }
+        .result-box {
+            background-color: #e9ecef;
+            border: 1px solid #ced4da;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            white-space: pre-wrap; /* Preserve whitespace and line breaks */
+            word-break: break-all; /* Break long words */
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+            font-size: 0.9em;
+        }
+        .error-message {
+            color: #dc3545; /* Bootstrap danger color */
+            font-weight: bold;
+        }
+        .success-message {
+            color: #28a745; /* Bootstrap success color */
+            font-weight: bold;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            border-color: #007bff;
+        }
+        .btn-primary:hover {
+            background-color: #0056b3;
+            border-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>YTFetcher: YouTube Data Extractor</h1>
+        <p>This application provides a tool to fetch a YouTube video's HTML page, extract the <code>INNERTUBE_API_KEY</code>, and fetch caption data using YouTube's Innertube API. It supports standard video links and YouTube live stream links.</p>
+
+        <!-- Requirement 3: Document purpose, requirements, and approach in comments -->
+        <!-- Requirement 5: Detect window.Synapse.tool.env.isInteractive to render UI playground -->
+        <div id="playground" style="display: none;">
+            <h2>Tool Playground: <code>fetch_youtube_data</code></h2>
+            <p>Enter a YouTube video URL or a direct video ID below to fetch its HTML, extract the API key, and retrieve caption data. This now supports YouTube live links too.</p>
+            <div class="form-group">
+                <label for="videoUrlInput">YouTube Video URL or ID:</label>
+                <input type="text" class="form-control" id="videoUrlInput" placeholder="e.g., https://www.youtube.com/watch?v=dQw4w9WgXcQ, dQw4w9WgXcQ, or https://www.youtube.com/live/s5uGpolyHd4">
+            </div>
+            <button type="button" class="btn btn-primary mt-3" id="fetchApiKeyButton">Fetch YouTube Data</button>
+
+            <div class="result-box mt-4">
+                <h4>Overall Status:</h4>
+                <pre id="resultOutput" class="mb-0">Awaiting input...</pre>
+
+                <h4 class="mt-3">API Key:</h4>
+                <pre id="apiKeyDisplay" class="mb-0">Not yet fetched.</pre>
+
+                <h4 class="mt-3">Caption Data:</h4>
+                <pre id="captionJsonOutput" class="mb-0">Not yet fetched.</pre>
+
+                <!-- New element for Transcript Text -->
+                <h4 class="mt-3">Transcript Text:</h4>
+                <pre id="transcriptTextOutput" class="mb-0">Not yet fetched.</pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * YTFetcher Application Logic
+         *
+         * Purpose:
+         * This application is designed to extract the INNERTUBE_API_KEY from a YouTube video's HTML page,
+         * fetch caption data using YouTube's Innertube API, and then retrieve the plain text transcript
+         * for English ('en') or Chinese ('zh') languages. It has been updated to support parsing video IDs
+         * from YouTube live stream URLs in addition to standard video URLs.
+         *
+         * Requirements Fulfilled:
+         * 1.  **Self-contained HTML:** All CSS and JavaScript are embedded within this single HTML file.
+         * 2.  **No external resources:** Only Synapse-provided Bootstrap is linked.
+         * 3.  **Documentation:** This comment block details the purpose, requirements, and approach.
+         * 4.  **Synapse APIs:** Utilizes `Synapse.proxyFetch` for secure cross-origin requests, now supporting POST.
+         * 5.  **Tool Exposure:** The `fetch_youtube_data` function is registered as a Synapse tool.
+         * 6.  **`fetch_youtube_data` Functionality:**
+         *     -   Accepts `video_url` (can be a full URL, live URL, or just the video ID).
+         *     -   Constructs a valid YouTube URL and extracts the video ID, now including support for `/live/` paths.
+         *     -   Fetches HTML using `Synapse.proxyFetch` to bypass CORS.
+         *     -   Extracts `INNERTUBE_API_KEY` using a regular expression, mirroring the provided Python logic.
+         *     -   **Fetches caption data:** Performs a POST request to YouTube's Innertube API using `Synapse.proxyFetch` (now supporting POST), following the provided Python logic for constructing the payload and extracting the `playerCaptionsTracklistRenderer`.
+         *     -   **Retrieves Transcript:**
+         *         -   Searches for caption tracks with `languageCode: "en"`.
+         *         -   If "en" is not found, falls back to `languageCode: "zh"`.
+         *         -   Uses the `baseUrl` from the selected track to fetch the transcript XML.
+         *         -   Removes all XML tags from the transcript to provide plain text.
+         *     -   Returns a structured object containing the `api_key` (if found), `caption_json` (if successfully fetched), `transcript_text` (if successfully fetched and processed), and an `error` message detailing any issues.
+         * 7.  **Playground Logging:** In interactive mode, the extracted API key, caption data/status, and transcript text/status are logged to the console.
+         * 8.  **Error Handling:** Robust error handling for invalid input, network issues, extraction failures, and API limitations. Errors are now accumulated.
+         * 9.  **Interactive UI:** A playground is rendered when `window.Synapse.tool.env.isInteractive` is true, displaying results for API key, caption data, and transcript text attempts.
+         *
+         * Approach:
+         * -   The core logic resides in the `fetch_youtube_data` asynchronous function.
+         * -   Input validation ensures a `video_url` is provided and attempts to normalize it to a full YouTube URL, extracting the video ID. The `fullUrlVideoIdRegex` has been updated to correctly parse video IDs from `youtube.com/live/` URLs.
+         * -   `Synapse.proxyFetch` is used to retrieve the video page's HTML content.
+         * -   A regular expression `/"INNERTUBE_API_KEY":\s*"([a-zA-Z0-9_-]+)"/` is applied to the HTML to find and capture the API key.
+         * -   A check for `class="g-recaptcha"` is included to detect potential IP blocking, similar to the Python reference.
+         * -   For caption fetching, the `INNERTUBE_API_URL` and `INNERTUBE_CONTEXT` constants are defined. A `POST` request is made to the Innertube API with the extracted API key and video ID. The response is parsed, and the `playerCaptionsTracklistRenderer` is extracted.
+         * -   Logic identifies the preferred caption track ('en' then 'zh'), fetches its `baseUrl`, and retrieves the XML transcript.
+         * -   The XML transcript is cleaned by removing all tags using a regex.
+         * -   The function returns a structured object containing either the `api_key`, `caption_json`, `transcript_text`, or an `error` message.
+         * -   The interactive playground dynamically updates `pre` tags with the results and logs to the console.
+         */
+
+        // Ensure Synapse object and its tool registration structure exist
+        window.Synapse = window.Synapse || {};
+        window.Synapse.tool = window.Synapse.tool || {};
+        window.Synapse.tool.registered = window.Synapse.tool.registered || {};
+        window.Synapse.tool.env = window.Synapse.tool.env || {};
+
+        // Constants for Innertube API (as per user suggestion)
+        const INNERTUBE_API_URL = "https://www.youtube.com/youtubei/v1/player?key={api_key}";
+        const INNERTUBE_CONTEXT = {"client": {"clientName": "ANDROID", "clientVersion": "20.10.38"}};
+
+        /**
+         * Tool: fetch_youtube_data
+         * Description: Fetches a YouTube video's HTML page to extract the INNERTUBE_API_KEY, attempts to fetch caption data, and retrieves the transcript for 'en' or 'zh' languages.
+         * @param {object} params - The input parameters for the tool.
+         * @param {string} params.video_url - The YouTube video URL or video ID.
+         * @returns {Promise<object>} A promise that resolves to an object containing the api_key, caption_json, transcript_text, or an error.
+         */
+        window.Synapse.tool.registered.fetch_youtube_data = async (params) => {
+            // Requirement 12: Place adequate console logging to help tracking key steps
+            console.log(`[YTFetcher] fetch_youtube_data tool called with params:`, params);
+
+            const videoUrlOrId = params.video_url;
+            const result = { api_key: undefined, caption_json: undefined, transcript_text: undefined, error: undefined };
+
+            if (!videoUrlOrId) {
+                console.error("[YTFetcher] Error: video_url is required.");
+                result.error = "video_url is required.";
+                return result;
+            }
+
+            let youtubeUrl;
+            let videoId; // Will store the extracted video ID
+
+            // Regex to check if the input is likely an 11-character YouTube video ID
+            const videoIdRegex = /^[a-zA-Z0-9_-]{11}$/;
+            // Regex to extract video ID from various YouTube URL formats, including /live/ links
+            const fullUrlVideoIdRegex = /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|live\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i; // Added 'i' flag for case-insensitive matching for robustness
+
+            if (videoIdRegex.test(videoUrlOrId)) {
+                // If it's just a video ID, construct the youtu.be URL
+                videoId = videoUrlOrId;
+                youtubeUrl = `https://youtu.be/${videoId}`;
+                console.log(`[YTFetcher] Detected video ID. Constructing URL: ${youtubeUrl}`);
+            } else if (videoUrlOrId.startsWith("http")) {
+                // If it's a full URL, try to extract the video ID to ensure it's a valid YouTube video URL
+                const match = videoUrlOrId.match(fullUrlVideoIdRegex);
+                if (match && match[1]) {
+                    videoId = match[1];
+                    // Use the canonical youtu.be URL for consistency
+                    youtubeUrl = `https://youtu.be/${videoId}`;
+                    console.log(`[YTFetcher] Using provided URL and canonicalizing to: ${youtubeUrl}`);
+                } else {
+                    console.error("[YTFetcher] Error: Provided URL does not appear to be a valid YouTube video URL.");
+                    result.error = "Invalid YouTube video URL. Please provide a valid YouTube link (e.g., standard or live stream).";
+                    return result;
+                }
+            } else {
+                console.error("[YTFetcher] Error: Invalid video URL or ID format. Please provide a full URL or an 11-character video ID.");
+                result.error = "Invalid video URL or ID format. Please provide a full URL or an 11-character video ID.";
+                return result;
+            }
+
+            // --- Step 1: Fetch HTML and extract API Key ---
+            try {
+                console.log(`[YTFetcher] Attempting to fetch HTML from: ${youtubeUrl}`);
+                // Requirement 4: Use Synapse.proxyFetch to bypass CORS
+                const fetchResult = await Synapse.proxyFetch(youtubeUrl);
+
+                if (fetchResult.status === 'error') {
+                    console.error("[YTFetcher] Synapse.proxyFetch error for HTML:", fetchResult.error);
+                    result.error = `Failed to fetch video page HTML: ${fetchResult.error}`;
+                    return result; // Cannot proceed without HTML
+                }
+
+                if (!fetchResult.content || !fetchResult.content.data) {
+                    console.error("[YTFetcher] No content received from proxyFetch for HTML.");
+                    result.error = "No content received from YouTube. The video might not exist or is inaccessible.";
+                    return result; // Cannot proceed without HTML
+                }
+
+                const htmlContent = fetchResult.content.data;
+                console.log("[YTFetcher] HTML content fetched successfully. Attempting to extract API key...");
+
+                // Python regex from attachment: r"INNERTUBE_API_KEY\":\s*\"([a-zA-Z0-9_-]+)\""
+                // JavaScript equivalent regex:
+                const apiKeyRegex = /"INNERTUBE_API_KEY":\s*"([a-zA-Z0-9_-]+)"/;
+                const match = htmlContent.match(apiKeyRegex);
+
+                if (match && match[1]) {
+                    result.api_key = match[1];
+                    console.log("[YTFetcher] Successfully extracted INNERTUBE_API_KEY.");
+                } else {
+                    // As per Python logic hint, check for reCAPTCHA
+                    if (htmlContent.includes('class="g-recaptcha"')) {
+                        console.warn("[YTFetcher] reCAPTCHA detected. Your IP might be blocked by YouTube.");
+                        result.error = "IP might be blocked by YouTube (reCAPTCHA detected). Try again later or with a different network.";
+                        return result; // API key extraction failed due to reCAPTCHA
+                    }
+                    console.warn("[YTFetcher] INNERTUBE_API_KEY not found in the HTML. Caption fetching might not be possible without it.");
+                    result.error = "INNERTUBE_API_KEY not found in the video page HTML. Cannot proceed with caption fetching.";
+                    return result; // API key is essential for the next step, so return early.
+                }
+
+            } catch (e) {
+                console.error("[YTFetcher] An unexpected error occurred during API key extraction:", e);
+                result.error = `An unexpected error occurred during API key extraction: ${e.message}`;
+                return result;
+            }
+
+            // --- Step 2: Fetch caption data using Innertube API (now supported by Synapse.proxyFetch POST) ---
+            if (result.api_key && videoId) {
+                console.log("[YTFetcher] Attempting to fetch caption data using Innertube API...");
+                const innertubeApiUrlWithKey = INNERTUBE_API_URL.replace('{api_key}', result.api_key);
+
+                const postBody = {
+                    context: INNERTUBE_CONTEXT,
+                    videoId: videoId,
+                };
+
+                try {
+                    console.log("[YTFetcher] Sending POST request to Innertube API:", innertubeApiUrlWithKey, "with body:", postBody);
+                    const innertubeFetchResult = await Synapse.proxyFetch(innertubeApiUrlWithKey, {
+                        method: 'POST',
+                        json: postBody, // Use 'json' option for automatic JSON encoding
+                    });
+
+                    if (innertubeFetchResult.status === 'error') {
+                        console.error("[YTFetcher] Synapse.proxyFetch error for Innertube API:", innertubeFetchResult.error);
+                        result.error = (result.error ? result.error + "\n" : "") + `Caption fetching failed: ${innertubeFetchResult.error}`;
+                    } else if (!innertubeFetchResult.content || !innertubeFetchResult.content.data) {
+                        console.error("[YTFetcher] No content received from Innertube API.");
+                        result.error = (result.error ? result.error + "\n" : "") + "Caption fetching failed: No content received from YouTube Innertube API.";
+                    } else {
+                        // Assuming the content is JSON
+                        let innertubeData;
+                        try {
+                            innertubeData = JSON.parse(innertubeFetchResult.content.data);
+                            console.log("[YTFetcher] Innertube API response received and parsed.");
+
+                            // Extract captions_json as per Python logic: innertube_data.get("captions", {}).get("playerCaptionsTracklistRenderer")
+                            const captionsJson = innertubeData?.captions?.playerCaptionsTracklistRenderer;
+
+                            if (captionsJson && captionsJson.captionTracks && captionsJson.captionTracks.length > 0) {
+                                result.caption_json = captionsJson;
+                                console.log("[YTFetcher] Successfully extracted caption data.");
+
+                                // --- New Step 3: Find and fetch transcript ---
+                                console.log("[YTFetcher] Attempting to find preferred caption track and fetch transcript...");
+                                let selectedTrack = null;
+                                // Prioritize 'en'
+                                selectedTrack = captionsJson.captionTracks.find(track => track.languageCode === 'en');
+                                if (!selectedTrack) {
+                                    // Fallback to 'zh'
+                                    selectedTrack = captionsJson.captionTracks.find(track => track.languageCode === 'zh');
+                                }
+
+                                if (selectedTrack && selectedTrack.baseUrl) {
+                                    console.log(`[YTFetcher] Found caption track for language code '${selectedTrack.languageCode}'. Fetching transcript from: ${selectedTrack.baseUrl}`);
+                                    const transcriptFetchResult = await Synapse.proxyFetch(selectedTrack.baseUrl);
+
+                                    if (transcriptFetchResult.status === 'error') {
+                                        console.error("[YTFetcher] Synapse.proxyFetch error for transcript:", transcriptFetchResult.error);
+                                        result.error = (result.error ? result.error + "\n" : "") + `Transcript fetching failed: ${transcriptFetchResult.error}`;
+                                    } else if (!transcriptFetchResult.content || !transcriptFetchResult.content.data) {
+                                        console.error("[YTFetcher] No content received from transcript URL.");
+                                        result.error = (result.error ? result.error + "\n" : "") + "Transcript fetching failed: No content received from transcript URL.";
+                                    } else {
+                                        const xmlTranscript = transcriptFetchResult.content.data;
+                                        console.log("[YTFetcher] XML transcript fetched. Cleaning tags...");
+                                        // Remove all XML/HTML tags to get plain text
+                                        const plainTextTranscript = xmlTranscript.replace(/<[^>]*>/g, '');
+                                        result.transcript_text = plainTextTranscript.trim();
+                                        console.log("[YTFetcher] Transcript successfully extracted and cleaned.");
+                                    }
+                                } else {
+                                    console.warn("[YTFetcher] No 'en' or 'zh' caption track found with a baseUrl, or captions are disabled.");
+                                    result.error = (result.error ? result.error + "\n" : "") + "No 'en' or 'zh' caption track found with a valid URL for transcript.";
+                                }
+
+                            } else {
+                                console.warn("[YTFetcher] No caption tracks found or captions are disabled for this video.");
+                                result.error = (result.error ? result.error + "\n" : "") + "Caption fetching failed: No caption tracks found or captions are disabled for this video.";
+                            }
+
+                        } catch (parseError) {
+                            console.error("[YTFetcher] Failed to parse Innertube API response as JSON:", parseError);
+                            result.error = (result.error ? result.error + "\n" : "") + `Caption fetching failed: Invalid JSON response from Innertube API: ${parseError.message}`;
+                        }
+                    }
+                } catch (e) {
+                    console.error("[YTFetcher] An unexpected error occurred during Innertube API call:", e);
+                    result.error = (result.error ? result.error + "\n" : "") + `An unexpected error occurred during caption fetching: ${e.message}`;
+                }
+            } else {
+                // This case should ideally be caught earlier if API key or videoId is missing.
+                // This is a fallback to ensure the error message is clear if it somehow reaches here.
+                result.error = (result.error ? result.error + "\n" : "") + "Caption fetching skipped: API key or video ID was not found (pre-requisite for Innertube API call).";
+            }
+
+            return result;
+        };
+
+        // Interactive Playground Logic (Requirement 5: Detect window.Synapse.tool.env.isInteractive)
+        if (window.Synapse.tool.env.isInteractive) {
+            console.log("[YTFetcher] Running in interactive playground mode.");
+            document.addEventListener('DOMContentLoaded', () => {
+                document.getElementById('playground').style.display = 'block'; // Show the playground UI
+                const videoUrlInput = document.getElementById('videoUrlInput');
+                const fetchApiKeyButton = document.getElementById('fetchApiKeyButton');
+                const resultOutput = document.getElementById('resultOutput'); // For overall status/messages
+                const apiKeyDisplay = document.getElementById('apiKeyDisplay'); // For API Key
+                const captionJsonOutput = document.getElementById('captionJsonOutput'); // For Caption JSON or its specific error
+                const transcriptTextOutput = document.getElementById('transcriptTextOutput'); // New: For Transcript Text
+
+                fetchApiKeyButton.addEventListener('click', async () => {
+                    const videoUrl = videoUrlInput.value.trim();
+                    resultOutput.textContent = 'Fetching... Please wait.';
+                    resultOutput.classList.remove('error-message', 'success-message');
+                    apiKeyDisplay.textContent = 'Not yet fetched.';
+                    apiKeyDisplay.classList.remove('error-message', 'success-message');
+                    captionJsonOutput.textContent = 'Not yet fetched.';
+                    captionJsonOutput.classList.remove('error-message', 'success-message');
+                    transcriptTextOutput.textContent = 'Not yet fetched.'; // Initialize new output
+                    transcriptTextOutput.classList.remove('error-message', 'success-message');
+
+                    if (!videoUrl) {
+                        resultOutput.textContent = 'Error: Please enter a YouTube video URL or ID.';
+                        resultOutput.classList.add('error-message');
+                        return;
+                    }
+
+                    try {
+                        const result = await window.Synapse.tool.registered.fetch_youtube_data({ video_url: videoUrl });
+
+                        if (result.api_key) {
+                            apiKeyDisplay.textContent = `API Key: ${result.api_key}`;
+                            apiKeyDisplay.classList.add('success-message');
+                            console.log("[YTFetcher] Playground Result - API Key:", result.api_key);
+                        } else {
+                            apiKeyDisplay.textContent = 'API Key: Not found or could not be extracted.';
+                            apiKeyDisplay.classList.add('error-message');
+                        }
+
+                        if (result.caption_json) {
+                            captionJsonOutput.textContent = JSON.stringify(result.caption_json, null, 2);
+                            captionJsonOutput.classList.add('success-message');
+                            console.log("[YTFetcher] Playground Result - Caption JSON:", result.caption_json);
+                        } else {
+                            // If caption_json is not present, it means it failed or was skipped.
+                            // The error message from the tool will explain why.
+                            captionJsonOutput.textContent = `Caption Data: ${result.error || 'Not available due to an internal error or limitation.'}`;
+                            captionJsonOutput.classList.add('error-message');
+                            console.error("[YTFetcher] Playground Result - Caption Data Error/Status:", result.error);
+                        }
+
+                        // New: Display transcript text
+                        if (result.transcript_text) {
+                            transcriptTextOutput.textContent = result.transcript_text;
+                            transcriptTextOutput.classList.add('success-message');
+                            console.log("[YTFetcher] Playground Result - Transcript Text (first 200 chars):", result.transcript_text.substring(0, 200) + "...");
+                        } else {
+                            transcriptTextOutput.textContent = `Transcript Text: ${result.error || 'Not available due to an internal error or limitation.'}`;
+                            transcriptTextOutput.classList.add('error-message');
+                            console.error("[YTFetcher] Playground Result - Transcript Text Error/Status:", result.error);
+                        }
+
+
+                        if (result.error) {
+                            resultOutput.textContent = `Overall Status: Error - ${result.error}`;
+                            resultOutput.classList.add('error-message');
+                        } else {
+                            resultOutput.textContent = 'Overall Status: Success!';
+                            resultOutput.classList.add('success-message');
+                        }
+
+                    } catch (e) {
+                        resultOutput.textContent = `An unexpected error occurred in the playground: ${e.message}`;
+                        resultOutput.classList.add('error-message');
+                        console.error("[YTFetcher] Playground Catch Error:", e);
+                    }
+                });
+            });
+        } else {
+            console.log("[YTFetcher] Running in headless mode. Playground UI is hidden.");
+        }
+    </script>
+</body>
+</html>

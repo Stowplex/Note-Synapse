@@ -10,6 +10,10 @@ note's attachments and provides:
 - pause, reset, and per-cartridge quick save/load;
 - annotated PNG captures saved both as note attachments and inline Markdown.
 
+
+![](./media/neon-arcade-note.png)
+![](./media/neon-arcade.png)
+
 ## Install
 
 Open `plugins/Neon_Cartridge.yaml` with Note Synapse. Attach a legally obtained
