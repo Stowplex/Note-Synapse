@@ -102,22 +102,52 @@
     return null;
   }
 
-  /** Converts a stored markdown cell into editable plain text. */
+  /**
+   * Converts a stored markdown cell into editable plain text.
+   *
+   * Inside a cell every pipe is preceded by an odd run of backslashes
+   * (an even run would leave the pipe unescaped, i.e. a cell separator),
+   * so `(2k+1) backslashes + |` decodes to `k backslashes + |`.
+   */
   function decodeMdCell(cell) {
     return cell
       .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/\\\|/g, '|');
+      .replace(/(\\*)\\\|/g, function (m, extra) {
+        return extra.slice(0, Math.floor(extra.length / 2)) + '|';
+      });
   }
 
-  /** Converts editable plain text back into a markdown-safe cell. */
+  /**
+   * Converts editable plain text back into a markdown-safe cell — the exact
+   * inverse of decodeMdCell. Backslashes directly before a pipe are doubled
+   * so a cell ending in a backslash can never turn the escaped pipe back
+   * into a separator; other backslashes (markdown escapes like \*) are left
+   * untouched.
+   */
   function encodeMdCell(text) {
     return String(text == null ? '' : text)
-      .replace(/\|/g, '\\|')
+      .replace(/(\\*)\|/g, function (m, run) {
+        return run + run + '\\|';
+      })
       .replace(/\r\n?/g, '\n')
       .replace(/\n/g, '<br>');
   }
 
   var FENCE_RE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+
+  // Default size ceilings. Grids are rectangular, so a single crafted wide
+  // row would otherwise multiply into rows x cols cells during
+  // normalization — limits are enforced BEFORE any O(rows*cols) work.
+  var DEFAULT_MAX_COLS = 4096;
+  var DEFAULT_MAX_CELLS = 2000000;
+
+  function limitOf(limits, key, fallback) {
+    return limits && limits[key] > 0 ? limits[key] : fallback;
+  }
+
+  function tooLargeError() {
+    return new Error('This table is too large to edit here.');
+  }
 
   /**
    * Scans markdown content for GFM pipe tables, skipping fenced code blocks.
@@ -134,8 +164,14 @@
    * Cells in `grid` are decoded for editing (\| -> |, <br> -> newline).
    * Body rows wider than the header extend the grid instead of being cut,
    * so no source data is silently dropped.
+   *
+   * `limits` ({maxCols, maxCells}) bounds the work done for any single
+   * table; a table exceeding the limits is skipped entirely (never offered
+   * for editing) rather than truncated, so no save can drop its data.
    */
-  function scanTables(content) {
+  function scanTables(content, limits) {
+    var maxCols = limitOf(limits, 'maxCols', DEFAULT_MAX_COLS);
+    var maxCells = limitOf(limits, 'maxCells', DEFAULT_MAX_CELLS);
     var lines = String(content == null ? '' : content).split('\n');
     var tables = [];
     var inFence = false;
@@ -180,6 +216,8 @@
 
       var aligns = delim.map(parseAlign);
       var rows = [header];
+      var widest = header.length;
+      var tooLarge = header.length > maxCols;
       var j = i + 2;
       for (; j < lines.length; j++) {
         var body = lines[j];
@@ -189,7 +227,17 @@
         if (FENCE_RE.test(body)) {
           break;
         }
-        rows.push(splitPipeRow(body));
+        var bodyCells = splitPipeRow(body);
+        widest = Math.max(widest, bodyCells.length);
+        if (widest > maxCols || (rows.length + 1) * widest > maxCells) {
+          tooLarge = true;
+        }
+        rows.push(bodyCells);
+      }
+      if (tooLarge) {
+        // Skip past the whole block without building its grid.
+        i = j - 1;
+        continue;
       }
 
       var indentMatch = /^\s*/.exec(line);
@@ -266,15 +314,30 @@
     return '-'.repeat(w);
   }
 
+  /** True when every cell of the row is the empty string. */
+  function rowIsEmpty(row) {
+    for (var i = 0; i < row.length; i++) {
+      if (String(row[i] == null ? '' : row[i]) !== '') {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /**
    * Serializes a grid (row 0 = header) into a pretty-printed GFM table.
+   * Trailing all-empty body rows (e.g. left over from fluid data entry)
+   * are dropped. `eol` joins the emitted lines (default '\n').
    * Returns the table text without a trailing newline.
    */
-  function serializeTable(grid, aligns, indent) {
+  function serializeTable(grid, aligns, indent, eol) {
     var rect = grid.map(function (r) {
       return r.slice();
     });
     normalizeGrid(rect);
+    while (rect.length > 1 && rowIsEmpty(rect[rect.length - 1])) {
+      rect.pop();
+    }
     var cols = rect[0].length;
     var encoded = rect.map(function (row) {
       return row.map(encodeMdCell);
@@ -305,7 +368,7 @@
         out.push(prefix + '| ' + delims.join(' | ') + ' |');
       }
     }
-    return out.join('\n');
+    return out.join(eol || '\n');
   }
 
   // ---------------------------------------------------------------------
@@ -351,9 +414,18 @@
 
   /**
    * RFC 4180 parser.
-   * Returns { rows, delim, lineEnding, hadBom, trailingNewline }.
+   * Returns { rows, delim, lineEnding, hadBom, trailingNewline, arities }.
+   * `arities` records each row's original cell count before the grid is
+   * padded rectangular, so serialization can restore ragged rows and blank
+   * lines byte-for-byte.
+   *
+   * `limits` ({maxCols, maxCells}) throws before the grid is made
+   * rectangular, since one crafted wide row would otherwise multiply into
+   * rows x cols empty cells.
    */
-  function parseDelimited(text, delim) {
+  function parseDelimited(text, delim, limits) {
+    var maxCols = limitOf(limits, 'maxCols', DEFAULT_MAX_COLS);
+    var maxCells = limitOf(limits, 'maxCells', DEFAULT_MAX_CELLS);
     var s = String(text == null ? '' : text);
     var hadBom = s.charCodeAt(0) === 0xfeff;
     if (hadBom) {
@@ -366,14 +438,24 @@
     var inQuotes = false;
     var lineEnding = null;
     var endedWithNewline = false;
+    var widest = 0;
 
     function endCell() {
       row.push(cur);
       cur = '';
+      if (row.length > maxCols) {
+        throw tooLargeError();
+      }
     }
+    var arities = [];
     function endRow() {
       endCell();
+      arities.push(row.length);
       rows.push(row);
+      widest = Math.max(widest, row.length);
+      if ((rows.length + 1) * widest > maxCells) {
+        throw tooLargeError();
+      }
       row = [];
     }
 
@@ -423,16 +505,53 @@
       lineEnding: lineEnding || '\n',
       hadBom: hadBom,
       trailingNewline: endedWithNewline,
+      arities: arities,
     };
   }
 
-  /** Serializes rows with RFC 4180 quoting, honoring the parse metadata. */
+  /**
+   * Serializes rows with RFC 4180 quoting, honoring the parse metadata.
+   *
+   * When `meta.arities` is present (and kept in sync by the editor: -1 for
+   * inserted rows, null after column operations), untouched ragged rows and
+   * blank lines keep their original arity instead of being padded to the
+   * rectangular grid width, and trailing all-empty appended rows are
+   * dropped.
+   */
   function serializeDelimited(rows, meta) {
     var delim = meta.delim || ',';
     var eol = meta.lineEnding || '\n';
+    var arities = meta.arities || null;
     var needsQuote = new RegExp('["\r\n' + (delim === '\t' ? '\\t' : delim) + ']');
-    var lines = rows.map(function (row) {
+
+    var out = rows.slice();
+    if (arities) {
+      // Drop trailing all-empty rows that were appended in the editor.
+      while (
+        out.length > 1 &&
+        (out.length > arities.length || arities[out.length - 1] === -1) &&
+        rowIsEmpty(out[out.length - 1])
+      ) {
+        out.pop();
+      }
+    }
+
+    var lines = out.map(function (row, i) {
+      var width = row.length;
+      if (arities) {
+        var orig = i < arities.length ? arities[i] : -1;
+        if (orig >= 0) {
+          var lastFilled = -1;
+          for (var k = 0; k < row.length; k++) {
+            if (String(row[k] == null ? '' : row[k]) !== '') {
+              lastFilled = k;
+            }
+          }
+          width = Math.min(row.length, Math.max(1, Math.max(orig, lastFilled + 1)));
+        }
+      }
       return row
+        .slice(0, width)
         .map(function (cell) {
           var v = String(cell == null ? '' : cell);
           if (needsQuote.test(v)) {
@@ -486,10 +605,18 @@
     return label;
   }
 
-  /** True when a string can be safely stored as a spreadsheet number. */
+  /**
+   * True only when storing the string as a spreadsheet number is lossless:
+   * the number must format back to the exact same string. Rejects '007'
+   * (leading zeros), '1e5', ' 5 ', '-0', overflow to Infinity, and any
+   * value beyond double precision.
+   */
   function looksNumeric(s) {
-    return /^-?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(s.trim()) &&
-      s.trim().length <= 15;
+    if (typeof s !== 'string' || s === '') {
+      return false;
+    }
+    var n = Number(s);
+    return isFinite(n) && String(n) === s;
   }
 
   return {

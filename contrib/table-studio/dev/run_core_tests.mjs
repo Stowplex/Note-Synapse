@@ -38,6 +38,34 @@ check('encode', core.encodeMdCell('a | b\nc'), 'a \\| b<br>c');
 check('encode crlf', core.encodeMdCell('a\r\nb\rc'), 'a<br>b<br>c');
 check('roundtrip literal br text', core.encodeMdCell(core.decodeMdCell('x<br>y')), 'x<br>y');
 
+// Backslash/pipe escaping must be bijective: a cell whose text ends in a
+// backslash right before a pipe must not decay into a separator.
+check('encode bs-pipe', core.encodeMdCell('a\\|b'), 'a\\\\\\|b');
+check('decode bs-pipe', core.decodeMdCell('a\\\\\\|b'), 'a\\|b');
+check('encode lone bs kept', core.encodeMdCell('C:\\x \\*'), 'C:\\x \\*');
+check('decode lone bs kept', core.decodeMdCell('C:\\x \\*'), 'C:\\x \\*');
+for (const tricky of ['\\|', 'a\\', '\\\\|', 'a\\|\\|b', '|\\', '\\', '\\\\\\|']) {
+  check(
+    'escape bijective ' + JSON.stringify(tricky),
+    core.decodeMdCell(core.encodeMdCell(tricky)),
+    tricky
+  );
+}
+
+// Full table round trip for backslash-adjacent-to-pipe cells: the serialized
+// text must re-scan to the identical grid with no phantom columns.
+{
+  const grid = [
+    ['h', 'x'],
+    ['a\\|', '\\|b'],
+    ['tail\\', '\\\\|'],
+  ];
+  const out = core.serializeTable(grid, [null, null], '');
+  const back = core.scanTables(out);
+  check('bs-pipe table roundtrip', back[0].grid, grid);
+  check('bs-pipe no phantom cols', back[0].grid[0].length, 2);
+}
+
 // ---------------------------------------------------------------------
 // isDelimiterRow
 // ---------------------------------------------------------------------
@@ -234,12 +262,68 @@ ok('delim not mixed', !core.isDelimiterRow('| --- | x |'));
 }
 
 {
-  // Ragged rows become rectangular
+  // Ragged rows become rectangular in the grid, but serialization restores
+  // the original arity for untouched rows.
   const p = core.parseDelimited('a,b,c\n1\n', ',');
   check('csv ragged', p.rows, [
     ['a', 'b', 'c'],
     ['1', '', ''],
   ]);
+  check('csv ragged arities', p.arities, [3, 1]);
+  check('csv ragged roundtrip', core.serializeDelimited(p.rows, p), 'a,b,c\n1\n');
+}
+
+{
+  // Blank lines survive the round trip byte-for-byte.
+  const src = 'a,b\n\n1,2\n';
+  const p = core.parseDelimited(src, ',');
+  check('csv blank line roundtrip', core.serializeDelimited(p.rows, p), src);
+}
+
+{
+  // Editing a cell beyond a ragged row's original arity widens just that row.
+  const p = core.parseDelimited('a,b,c\n1\n', ',');
+  p.rows[1][2] = 'z';
+  check('csv ragged edit widens', core.serializeDelimited(p.rows, p), 'a,b,c\n1,,z\n');
+}
+
+{
+  // Appended all-empty trailing rows (fluid Enter entry) are dropped;
+  // appended rows with content serialize at full width.
+  const p = core.parseDelimited('a,b\n1,2\n', ',');
+  p.rows.push(['', '']);
+  p.rows.push(['', '']);
+  check('csv trailing empties dropped', core.serializeDelimited(p.rows, p), 'a,b\n1,2\n');
+  p.rows[2][0] = 'x';
+  check('csv appended row kept', core.serializeDelimited(p.rows, p), 'a,b\n1,2\nx,\n');
+}
+
+{
+  // Size limits abort before the grid is made rectangular.
+  let threw = false;
+  try {
+    core.parseDelimited('a,b,c,d,e\n1\n', ',', { maxCols: 4 });
+  } catch (e) {
+    threw = true;
+  }
+  check('csv maxCols throws', threw, true);
+  let threw2 = false;
+  try {
+    core.parseDelimited('a,b,c\n1\n2\n3\n', ',', { maxCells: 6 });
+  } catch (e) {
+    threw2 = true;
+  }
+  check('csv maxCells throws', threw2, true);
+}
+
+{
+  // Oversized markdown tables are skipped, not truncated; smaller ones scan.
+  const md = '| a | b | c | d |\n| - | - | - | - |\n\n| x |\n| - |\n| 1 |';
+  const t = core.scanTables(md, { maxCols: 3 });
+  check('md oversized skipped', t.length, 1);
+  check('md oversized survivor', t[0].grid[0], ['x']);
+  const t2 = core.scanTables('| a |\n| - |\n| 1 |\n| 2 |\n| 3 |', { maxCells: 3 });
+  check('md maxCells skipped', t2.length, 0);
 }
 
 {
@@ -274,12 +358,32 @@ check('colLabel AA', core.colLabel(26), 'AA');
 check('colLabel AZ', core.colLabel(51), 'AZ');
 check('colLabel BA', core.colLabel(52), 'BA');
 
+// looksNumeric is lossless-only: the number must format back to the exact
+// same string, so zip codes, phone numbers, and exponents stay text.
 ok('numeric int', core.looksNumeric('42'));
 ok('numeric neg float', core.looksNumeric('-3.5'));
-ok('numeric exp', core.looksNumeric('1e5'));
+ok('numeric decimal', core.looksNumeric('1234.57'));
+ok('not numeric exp', !core.looksNumeric('1e5'));
+ok('not numeric leading zero', !core.looksNumeric('007'));
+ok('not numeric padded', !core.looksNumeric(' 5 '));
+ok('not numeric neg zero', !core.looksNumeric('-0'));
+ok('not numeric overflow', !core.looksNumeric('1e999'));
 ok('not numeric text', !core.looksNumeric('42a'));
 ok('not numeric empty', !core.looksNumeric(''));
 ok('not numeric long', !core.looksNumeric('12345678901234567890'));
+
+{
+  // Trailing all-empty body rows are trimmed from markdown tables; the
+  // header always survives. An explicit eol joins with CRLF.
+  const out = core.serializeTable(
+    [['h'], ['x'], [''], ['']],
+    [null],
+    ''
+  );
+  check('md trailing empties trimmed', out, '| h   |\n| --- |\n| x   |');
+  const crlf = core.serializeTable([['a'], ['1']], [null], '', '\r\n');
+  check('md crlf eol', crlf, '| a   |\r\n| --- |\r\n| 1   |');
+}
 
 {
   const g = [['a'], ['b', 'c']];

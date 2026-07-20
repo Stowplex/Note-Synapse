@@ -130,12 +130,22 @@ void main() {
       expect(source, contains('Save copy as .xlsx'));
       // Formula flattening is disclosed before it happens.
       expect(source, contains('formulas become plain values'));
-      // Oversized inputs are refused instead of truncated.
+      // Oversized inputs are refused instead of truncated, with the size
+      // ceilings enforced BEFORE any rows-x-cols amplification.
       expect(source, contains('MAX_ATTACHMENT_BYTES'));
-      expect(source, contains('MAX_CELLS'));
+      expect(source, contains('SIZE_LIMITS'));
+      expect(core, contains('maxCells'));
+      expect(source, contains('decode_range'));
+      // A failed fresh-content read aborts the save instead of falling back
+      // to a stale snapshot that would clobber concurrent edits.
+      expect(source, contains('strict: true'));
+      // Workbook saves patch only edited cells so untouched formulas,
+      // types, and formats survive.
+      expect(source, contains('function patchWorksheet'));
       // CSV fidelity metadata survives the round trip.
       expect(core, contains('trailingNewline'));
       expect(core, contains('hadBom'));
+      expect(core, contains('arities'));
       // Tables inside fenced code blocks are ignored by the scanner.
       expect(core, contains('FENCE_RE'));
     });

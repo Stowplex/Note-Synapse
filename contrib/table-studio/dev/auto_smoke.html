@@ -136,6 +136,7 @@
     var sales = wb2.Sheets.Sales;
     log('xlsx edited cell saved', sales.A2 && sales.A2.v === 'Widget X', JSON.stringify(sales.A2 && sales.A2.v));
     log('xlsx number kept numeric', sales.B2 && sales.B2.t === 'n' && sales.B2.v === 42, JSON.stringify(sales.B2 && sales.B2.v));
+    log('xlsx untouched formula preserved', sales.B2 && sales.B2.f === '21*2', JSON.stringify(sales.B2 && sales.B2.f));
     var info = wb2.Sheets.Info;
     log('xlsx untouched sheet kept', info && info.A2 && info.A2.v === 'keep me', '');
 
