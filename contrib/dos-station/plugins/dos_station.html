@@ -17,6 +17,9 @@
   * Emulator config comes from a ```dosbox fenced block in the note body.
   * Frames can be captured back into the note (attachment + inline markdown
     append) via Synapse.updateNotes.
+  * Files games write to C: (RPG saves, configs, high scores) are diffed
+    against the game zip and persisted to the note as a dos-saves-*.zip
+    attachment (manual 💾, 60 s autosave, eject); restored on the next boot.
 
   Plugin code license: MIT (c) Note Synapse contributors.
   Embedded library: fflate 0.8.2 (MIT) — https://github.com/101arrowz/fflate
@@ -248,6 +251,7 @@
     <button class="hudbtn" id="btnTty" title="Console">≣</button>
     <button class="hudbtn" id="btnKb" title="Keyboard">⌨</button>
     <button class="hudbtn" id="btnPad" title="Gamepad">🎮</button>
+    <button class="hudbtn" id="btnSave" title="Save game files to note">💾</button>
     <button class="hudbtn" id="btnShot" title="Capture frame">📸</button>
     <button class="hudbtn" id="btnPause" title="Pause">⏸</button>
   </div>
@@ -357,6 +361,10 @@ const state = {
   capWasPaused: false,
   armedMods: new Set(),
   padMap: { A: 17, B: 18, C: 32 },
+  zipBaseline: null,     // Map name -> Uint8Array: pristine game zip contents
+  lastSaveSig: null,     // signature of the last persisted save diff
+  saveBusy: false,
+  autoSaveTimer: null,
 };
 
 /* ---------------------------------------------------------------- utils */
@@ -368,6 +376,18 @@ function b64ToU8(b64) {
   const u8 = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
   return u8;
+}
+function u8ToB64(u8) {
+  let s = '';
+  for (let i = 0; i < u8.length; i += 0x8000) {
+    s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  }
+  return btoa(s);
+}
+function bytesEqual(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function fmtSize(n) {
@@ -529,7 +549,8 @@ async function loadNoteById(noteId) {
 }
 
 function zipAttachments() {
-  return state.attachments.filter((a) => /\.zip$/i.test(a.name) || /\.zip$/i.test(a.path));
+  return state.attachments.filter((a) =>
+    (/\.zip$/i.test(a.name) || /\.zip$/i.test(a.path)) && !isSavesAttachment(a));
 }
 
 /* ------------------------------------------------------- zip mounting */
@@ -562,6 +583,9 @@ async function mountZip(att) {
     if (tops.size !== 1 || !files.every((f) => f.name.includes('/'))) break;
     files = files.map((f) => ({ name: f.name.split('/').slice(1).join('/'), data: f.data }));
   }
+  state.zipBaseline = new Map(files.map((f) => [f.name, f.data]));
+  state.lastSaveSig = null;
+  files = await restoreSaves(files);
   state.files = files;
   ttyLog('  MOUNTED ' + files.length + ' FILES AT C:\\');
   scanExecutables();
@@ -584,6 +608,207 @@ function scanExecutables() {
       return { path: f.name, base, score };
     })
     .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+}
+
+/* ------------------------------------------------------- game saves ----
+ * Anything a game writes to C: (RPG save files, configs, high scores) is
+ * diffed against the pristine game zip, packed with fflate and stored as a
+ * `dos-saves-<zipslug>-<stamp>.zip` attachment on the note, replacing the
+ * previous one. On mount the newest matching saves zip is overlaid on the
+ * game files before DOSBox boots. A `__dos_station__/meta.json` entry inside
+ * the zip records deletions and the source game zip. */
+const SAVES_META_DIR = '__dos_station__/';
+const AUTOSAVE_MS = 60000;
+
+function savesSlug(zipName) {
+  const s = String(zipName).toLowerCase().replace(/\.zip$/, '')
+    .replace(/[^a-z0-9]/g, '').slice(0, 24);
+  return s || 'disk';
+}
+function isSavesAttachment(a) {
+  return /(^|\/)dos-saves-/i.test(a.name) || /(^|\/)dos-saves-/i.test(a.path);
+}
+function isSavesFor(a, slug) {
+  return new RegExp('(^|/)dos-saves-' + slug + '-\\d', 'i').test(a.name) ||
+    new RegExp('(^|/)dos-saves-' + slug + '-\\d', 'i').test(a.path);
+}
+function savesStamp(a) {
+  const m = /dos-saves-.*?-(\d{6,})/i.exec(a.name + ' ' + a.path);
+  return m ? Number(m[1]) : 0;
+}
+function fnv1a(u8) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < u8.length; i++) { h ^= u8[i]; h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(16);
+}
+function saveSig(snap) {
+  const c = snap.changed.map((f) => f.name + ':' + f.data.length + ':' + fnv1a(f.data)).sort();
+  return c.join(',') + '|' + snap.deleted.slice().sort().join(',');
+}
+function safeRelName(name) {
+  return name && !name.startsWith('/') && !name.split('/').includes('..');
+}
+
+/* Overlay the newest saves attachment for this game zip onto the files
+ * about to be mounted. Returns the (possibly patched) file list. */
+async function restoreSaves(files) {
+  const slug = savesSlug(state.zip.name);
+  const cands = state.attachments.filter((a) => isSavesFor(a, slug))
+    .sort((a, b) => savesStamp(b) - savesStamp(a));
+  for (const att of cands) {
+    try {
+      const r = await Synapse.readAttachment(att.path);
+      if (!r || !r.success || !r.data) continue;
+      const entries = fflate.unzipSync(b64ToU8(r.data));
+      let meta = null;
+      const over = [];
+      for (const raw of Object.keys(entries)) {
+        const name = raw.replace(/\\/g, '/');
+        if (name === SAVES_META_DIR + 'meta.json') {
+          try { meta = JSON.parse(fflate.strFromU8(entries[raw])); } catch (_) {}
+          continue;
+        }
+        if (!name || name.endsWith('/') || name.startsWith(SAVES_META_DIR)) continue;
+        if (!safeRelName(name)) continue;
+        over.push({ name, data: entries[raw] });
+      }
+      if (meta && meta.game && meta.game !== state.zip.name) {
+        ttyLog('  SAVES "' + att.name + '" belong to ' + meta.game + ' — skipped');
+        continue;
+      }
+      const map = new Map(files.map((f) => [f.name, f]));
+      for (const o of over) map.set(o.name, o);
+      const deleted = ((meta && meta.deleted) || []).filter(safeRelName);
+      for (const d of deleted) map.delete(d);
+      state.lastSaveSig = saveSig({ changed: over, deleted });
+      ttyLog('  SAVES RESTORED: ' + over.length + ' file' + (over.length === 1 ? '' : 's') +
+        (deleted.length ? ', ' + deleted.length + ' deleted' : ''));
+      return Array.from(map.values());
+    } catch (e) {
+      logErr('restoreSaves ' + att.name, e);
+      ttyLog('  SAVES "' + att.name + '" unreadable — skipped');
+    }
+  }
+  return files;
+}
+
+/* Walk the live guest FS and diff /dos against the pristine game zip. */
+function snapshotChanges() {
+  const FS = state.module && state.module.FS;
+  if (!FS || !state.zipBaseline) return null;
+  const seen = new Set();
+  const changed = [];
+  const readNode = (p) => {
+    const node = FS.lookupPath(p).node;
+    if (node && node.contents && node.contents.subarray) {
+      return node.contents.subarray(0,
+        node.usedBytes !== undefined ? node.usedBytes : node.contents.length);
+    }
+    return FS.readFile(p);
+  };
+  const walk = (dir) => {
+    for (const name of FS.readdir(dir)) {
+      if (name === '.' || name === '..') continue;
+      const p = dir + '/' + name;
+      let st;
+      try { st = FS.stat(p); } catch (_) { continue; }
+      if (FS.isDir(st.mode)) { walk(p); continue; }
+      if (!FS.isFile(st.mode)) continue;
+      const rel = p.slice('/dos/'.length);
+      seen.add(rel);
+      let data;
+      try { data = readNode(p); } catch (e) { logErr('snapshot read ' + p, e); continue; }
+      const base = state.zipBaseline.get(rel);
+      if (!base || !bytesEqual(base, data)) {
+        changed.push({ name: rel, data: new Uint8Array(data) });
+      }
+    }
+  };
+  try { walk('/dos'); } catch (e) { logErr('snapshot walk', e); return null; }
+  const deleted = [];
+  for (const name of state.zipBaseline.keys()) if (!seen.has(name)) deleted.push(name);
+  return { changed, deleted };
+}
+
+async function saveGameState(auto) {
+  if (state.saveBusy) return;
+  if (!state.live || !state.noteId || !state.zip) {
+    if (!auto) toast('Nothing to save yet', true);
+    return;
+  }
+  const snap = snapshotChanges();
+  if (!snap) { if (!auto) toast('Guest filesystem unavailable', true); return; }
+  if (!snap.changed.length && !snap.deleted.length) {
+    if (!auto) toast('No changes on C: to save');
+    return;
+  }
+  const sig = saveSig(snap);
+  if (sig === state.lastSaveSig) { if (!auto) toast('Already saved ✓'); return; }
+  const total = snap.changed.reduce((s, f) => s + f.data.length, 0);
+  if (auto && total > 8 * 1024 * 1024) {
+    log('autosave skipped: changed payload ' + fmtSize(total));
+    return;
+  }
+  state.saveBusy = true;
+  try {
+    const zobj = {};
+    for (const f of snap.changed) zobj[f.name] = f.data;
+    zobj[SAVES_META_DIR + 'meta.json'] = fflate.strToU8(JSON.stringify({
+      v: 1,
+      game: state.zip.name,
+      savedAt: new Date().toISOString(),
+      deleted: snap.deleted,
+    }));
+    const zipU8 = fflate.zipSync(zobj, { level: 6 });
+    const slug = savesSlug(state.zip.name);
+    const fileName = 'dos-saves-' + slug + '-' + Date.now() + '.zip';
+    const oldPaths = state.attachments.filter((a) => isSavesFor(a, slug)).map((a) => a.path);
+    const r = await Synapse.updateNotes([{
+      id: state.noteId,
+      modification: {
+        attachments: {
+          added: [{ type: 'base64', data: u8ToB64(zipU8), fileName }],
+          removed: oldPaths,
+        },
+      },
+    }]);
+    if (!r || !r.success || !r.updatedCount) {
+      throw new Error((r && r.error) || 'update declined');
+    }
+    state.lastSaveSig = sig;
+    // Re-export the note so state.attachments reflects the stored (renamed)
+    // saves file — the next save must remove it, a later restore must find it.
+    try {
+      const exp = await Synapse.exportNotes([state.noteId], { includeSubNotesAndLinkedNotes: false });
+      const n = exp && exp.success && exp.notes && exp.notes[0];
+      if (n) {
+        state.attachments = (n.attachments || []).map((a) => ({
+          path: a.path, name: a.fileName || baseName(a.path),
+        }));
+      }
+    } catch (e) { logErr('saves path discovery', e); }
+    log('saved ' + snap.changed.length + ' files, ' + fmtSize(zipU8.length) +
+      (snap.deleted.length ? ', ' + snap.deleted.length + ' deletions' : ''));
+    toast('💾 ' + (auto ? 'Auto-saved' : 'Saved') + ' ' + snap.changed.length +
+      ' file' + (snap.changed.length === 1 ? '' : 's') + ' (' + fmtSize(zipU8.length) + ')');
+  } catch (e) {
+    logErr('saveGameState', e);
+    if (!auto) toast('Save failed: ' + (e && e.message), true);
+  } finally {
+    state.saveBusy = false;
+  }
+}
+
+function startAutoSave() {
+  if (state.autoSaveTimer) return;
+  state.autoSaveTimer = setInterval(() => {
+    if (state.live && !state.paused && !document.hidden) saveGameState(true);
+  }, AUTOSAVE_MS);
+  // Backgrounding the app is the moment most likely to precede getting
+  // killed — flush a save right away.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && state.live) saveGameState(true);
+  });
 }
 
 /* -------------------------------------------------------- conf building */
@@ -722,6 +947,7 @@ function watchFirstFrame() {
       state.live = true;
       $('ledDisk').classList.add('on');
       $('tty').classList.add('hidden');
+      startAutoSave();
       toast('▶ ' + state.noteTitle);
     } else if (ticks > 120) { // 30 s
       clearInterval(iv);
@@ -1290,7 +1516,13 @@ function wireHud() {
   // uses an arm-then-confirm double tap instead.
   let ejectArmed = null;
   $('btnEject').addEventListener('click', () => {
-    if (ejectArmed) { location.reload(); return; }
+    if (ejectArmed) {
+      // Best-effort flush of unsaved game files before ending the session.
+      const done = () => location.reload();
+      if (state.live) Promise.race([saveGameState(true), sleep(4000)]).then(done, done);
+      else done();
+      return;
+    }
     const b = $('btnEject');
     b.textContent = '⏏?';
     b.style.color = 'var(--red)';
@@ -1312,6 +1544,7 @@ function wireHud() {
     $('btnPad').classList.toggle('active', on);
     if (on) { $('kb').classList.remove('show'); $('btnKb').classList.remove('active'); }
   });
+  $('btnSave').addEventListener('click', () => saveGameState(false));
   $('btnShot').addEventListener('click', openCapture);
   $('btnPause').addEventListener('click', () => pauseToggle());
   $('btnAskAI').addEventListener('click', askAI);
