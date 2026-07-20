@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Table Studio auto smoke</title>
+<style>#results { font-family: monospace; white-space: pre-wrap; }</style>
+</head>
+<body>
+<div id="results">RUNNING</div>
+<iframe id="frame" style="width:400px;height:800px"></iframe>
+<script>
+  var out = [];
+  function log(name, pass, detail) {
+    out.push((pass ? 'PASS ' : 'FAIL ') + name + (detail ? ' :: ' + detail : ''));
+    document.getElementById('results').textContent = out.join('\n');
+  }
+  function sleep(ms) {
+    return new Promise(function (r) { setTimeout(r, ms); });
+  }
+  function q(doc, sel) { return doc.querySelector(sel); }
+  function qa(doc, sel) { return Array.prototype.slice.call(doc.querySelectorAll(sel)); }
+  function tap(el2) {
+    el2.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  }
+
+  Promise.all([
+    fetch('../plugins/table_studio.html').then(function (r) { return r.text(); }),
+    fetch('synapse_stub.js').then(function (r) { return r.text(); }),
+  ]).then(async function (parts) {
+    var html = parts[0]
+      .replace('<script src="src/table_core.js">', '<script src="../plugins/src/table_core.js">')
+      .replace('<script src="vendor/xlsx-0.20.3.full.min.js">', '<script src="../plugins/vendor/xlsx-0.20.3.full.min.js">');
+    var inject = '<script>' + parts[1] + '<' + '/script>';
+    html = html.replace('<div id="app">', inject + '<div id="app">');
+    var frame = document.getElementById('frame');
+    frame.srcdoc = html.replace('<head>', '<head><base href="' + new URL('.', location.href) + '">');
+    await new Promise(function (r) { frame.onload = r; });
+    await sleep(300);
+
+    var win = frame.contentWindow;
+    var doc = frame.contentDocument;
+
+    // --- home renders sources
+    var cards = qa(doc, '.card');
+    log('home cards', cards.length === 4, 'found ' + cards.length);
+
+    // --- open Table 1 (markdown block)
+    tap(cards[0]);
+    await sleep(150);
+    log('editor grid', !!q(doc, 'table.grid'), '');
+    var tds = qa(doc, 'table.grid td');
+    log('grid cells', tds.length === 9, 'found ' + tds.length);
+
+    // --- select body cell and edit it via the edit bar
+    var target = qa(doc, 'table.grid tbody tr')[1].cells[1]; // row 1, col A ("Milk")
+    tap(target);
+    await sleep(50);
+    var input = q(doc, '#cell-input');
+    log('cell loaded into editor', input.value === 'Milk', JSON.stringify(input.value));
+    input.value = 'Whole milk';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(50);
+    log('save enabled', !q(doc, '#save-btn').disabled, '');
+
+    // --- save and verify the note content was rewritten correctly
+    tap(q(doc, '#save-btn'));
+    await sleep(300);
+    var content = (await win.Synapse.runQuery('SELECT content')).data[0].content;
+    log('save rewrote cell', content.indexOf('Whole milk') >= 0, '');
+    log('save kept escape', content.indexOf('oat \\| soy') >= 0, '');
+    log('save kept fence', content.indexOf('| not | a table |') >= 0, '');
+    log('save kept second table', content.indexOf('| Co-op |') >= 0, '');
+    log('no dup table', content.split('| Eggs').length === 2, '');
+
+    // --- undo stack: structural op then undo
+    var undoBtn = q(doc, '#undo-btn');
+    log('undo idle', undoBtn.disabled === false || undoBtn.disabled === true, '');
+
+    // --- back to home
+    tap(qa(doc, '.topbar .icon-btn')[0]);
+    await sleep(150);
+    log('back home', qa(doc, '.card').length === 4, '');
+
+    // --- open CSV attachment
+    var fileCard = qa(doc, '.card')[2];
+    tap(fileCard);
+    await sleep(300);
+    var grid2 = q(doc, 'table.grid');
+    log('csv opens', !!grid2, '');
+    var cell = qa(doc, 'table.grid tbody tr')[1].cells[1];
+    log('csv quoted cell', cell.textContent === 'Apples', JSON.stringify(cell.textContent));
+    tap(cell);
+    await sleep(50);
+    var in2 = q(doc, '#cell-input');
+    in2.value = 'Green apples, tart';
+    in2.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(50);
+    tap(q(doc, '#save-btn'));
+    await sleep(400);
+    log('csv saved toast', q(doc, '#toast').textContent === 'Saved', q(doc, '#toast').textContent);
+
+    // stub renames the file on save; verify new file content via Synapse stub
+    var atts = (await win.Synapse.exportNotes(['note-1'])).notes[0].attachments;
+    var last = atts[atts.length - 1];
+    var read = await win.Synapse.readAttachment(last.path);
+    var text = atob(read.data);
+    log('csv content saved', text.indexOf('"Green apples, tart"') >= 0, JSON.stringify(text));
+    log('csv fidelity', text.indexOf('"Pears, ripe"') >= 0 && text.slice(-1) === '\n', '');
+
+    // --- open XLSX attachment (multi-sheet workbook with a formula)
+    tap(qa(doc, '.topbar .icon-btn')[0]);
+    await sleep(150);
+    var xlsxCard = qa(doc, '.card').filter(function (c) {
+      var n = c.querySelector('.name');
+      return n && n.textContent === 'book.xlsx';
+    })[0];
+    tap(xlsxCard);
+    await sleep(400);
+    log('xlsx opens', !!q(doc, 'table.grid'), '');
+    log('xlsx tabs', qa(doc, '.tab').length === 2, 'found ' + qa(doc, '.tab').length);
+    log('xlsx formula banner', !!q(doc, '.banner'), '');
+    var xcell = qa(doc, 'table.grid tbody tr')[1].cells[1];
+    log('xlsx cell', xcell.textContent === 'Widget', JSON.stringify(xcell.textContent));
+    tap(xcell);
+    await sleep(50);
+    var in3 = q(doc, '#cell-input');
+    in3.value = 'Widget X';
+    in3.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(50);
+    tap(q(doc, '#save-btn'));
+    await sleep(500);
+    var atts2 = (await win.Synapse.exportNotes(['note-1'])).notes[0].attachments;
+    var savedX = atts2.filter(function (a) { return a.fileName === 'book.xlsx'; });
+    var readX = await win.Synapse.readAttachment(savedX[savedX.length - 1].path);
+    var wb2 = win.XLSX.read(readX.data, { type: 'base64' });
+    var sales = wb2.Sheets.Sales;
+    log('xlsx edited cell saved', sales.A2 && sales.A2.v === 'Widget X', JSON.stringify(sales.A2 && sales.A2.v));
+    log('xlsx number kept numeric', sales.B2 && sales.B2.t === 'n' && sales.B2.v === 42, JSON.stringify(sales.B2 && sales.B2.v));
+    var info = wb2.Sheets.Info;
+    log('xlsx untouched sheet kept', info && info.A2 && info.A2.v === 'keep me', '');
+
+    // --- new table flow
+    tap(qa(doc, '.topbar .icon-btn')[0]);
+    await sleep(150);
+    var ghost = qa(doc, '.ghost-btn')[0];
+    tap(ghost);
+    await sleep(150);
+    log('new table editor', !!q(doc, 'table.grid'), '');
+    tap(q(doc, '#save-btn'));
+    await sleep(300);
+    var content2 = (await win.Synapse.runQuery('SELECT content')).data[0].content;
+    log('new table appended', content2.indexOf('| Column 1 | Column 2 | Column 3 |') >= 0, '');
+
+    out.push('DONE');
+    document.getElementById('results').textContent = out.join('\n');
+  }).catch(function (e) {
+    out.push('ERROR ' + (e && e.stack ? e.stack : e));
+    document.getElementById('results').textContent = out.join('\n');
+  });
+</script>
+</body>
+</html>

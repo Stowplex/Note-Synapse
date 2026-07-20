@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Table Studio dev harness</title>
+<style>
+  body { margin: 0; font-family: system-ui, sans-serif; background: #333; }
+  .frame-holder { display: flex; justify-content: center; padding: 20px; }
+  iframe { width: 400px; height: 780px; border: 1px solid #555; border-radius: 24px; background: #fff; }
+  p { color: #ccc; text-align: center; font-size: 13px; }
+</style>
+</head>
+<body>
+<p>Serve this folder over HTTP (e.g. <code>python3 -m http.server</code> from contrib/table-studio) and open /dev/harness.html.</p>
+<div class="frame-holder"><iframe id="frame"></iframe></div>
+<script>
+  // Loads the plugin source, injects the Synapse stub before it boots, and
+  // runs the result in a phone-sized iframe.
+  Promise.all([
+    fetch('../plugins/table_studio.html').then(function (r) { return r.text(); }),
+    fetch('synapse_stub.js').then(function (r) { return r.text(); }),
+  ]).then(function (parts) {
+    var html = parts[0];
+    var stub = parts[1];
+    html = html
+      .replace('<script src="src/table_core.js">', '<script src="../plugins/src/table_core.js">')
+      .replace('<script src="vendor/xlsx-0.20.3.full.min.js">', '<script src="../plugins/vendor/xlsx-0.20.3.full.min.js">');
+    var inject = '<script>' + stub + '<' + '/script>';
+    html = html.replace('<div id="app">', inject + '<div id="app">');
+    var frame = document.getElementById('frame');
+    frame.srcdoc = html.replace('<head>', '<head><base href="' + new URL('.', location.href) + '">');
+  });
+</script>
+</body>
+</html>
