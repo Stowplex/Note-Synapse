@@ -394,5 +394,231 @@ ok('not numeric long', !core.looksNumeric('12345678901234567890'));
   ]);
 }
 
+// =====================================================================
+// univer_bridge.js
+// =====================================================================
+const bridge = require(join(dirname(fileURLToPath(import.meta.url)), '..', 'plugins', 'src', 'univer_bridge.js'));
+const XLSX = require(join(dirname(fileURLToPath(import.meta.url)), '..', 'plugins', 'vendor', 'xlsx-0.20.3.full.min.js'));
+
+// ---------------------------------------------------------------------
+// engine manifest sanity
+// ---------------------------------------------------------------------
+ok('engine has js files', bridge.ENGINE.js.length >= 10);
+ok('engine has css files', bridge.ENGINE.css.length >= 3);
+for (const f of bridge.ENGINE.js.concat(bridge.ENGINE.css)) {
+  ok('engine pin ' + f.name, /^[0-9a-f]{64}$/.test(f.sha256) && f.bytes > 0 && f.path.includes('@'));
+  check('engine mirrors ' + f.name, bridge.engineUrls(f).length, 2);
+}
+ok('engine total plausible', bridge.engineTotalBytes() > 10 * 1024 * 1024);
+
+// ---------------------------------------------------------------------
+// stableNumber — only round-trip-stable numerics become numbers
+// ---------------------------------------------------------------------
+check('num int', bridge.stableNumber('3'), 3);
+check('num negative', bridge.stableNumber('-2.5'), -2.5);
+check('num zero', bridge.stableNumber('0'), 0);
+check('num trailing zero stays text', bridge.stableNumber('3.10'), null);
+check('num leading zeros stay text', bridge.stableNumber('007'), null);
+check('num exponent stays text', bridge.stableNumber('1e3'), null);
+check('num padded stays text', bridge.stableNumber(' 4'), null);
+check('num comma stays text', bridge.stableNumber('1,000'), null);
+check('num empty', bridge.stableNumber(''), null);
+
+// ---------------------------------------------------------------------
+// grid -> sheet data -> grid round trip
+// ---------------------------------------------------------------------
+{
+  const grid = [
+    ['Item', 'Qty', 'Notes'],
+    ['Milk', '2', 'oat | soy'],
+    ['Eggs', '12', ''],
+  ];
+  const data = bridge.gridToSheetData(grid, { headerRow: true, aligns: [null, 'right', null] });
+  check('grid header style', data.cellData[0][1].s, 'ts-h-right');
+  check('grid plain header style', data.cellData[0][0].s, 'ts-h');
+  check('grid number typed', data.cellData[1][1], { v: 2, t: 2, s: 'ts-right' });
+  check('grid text kept', data.cellData[1][2].v, 'oat | soy');
+  ok('grid empty cell omitted', !data.cellData[2] || !data.cellData[2][2]);
+
+  const back = bridge.snapshotToGrid({ cellData: data.cellData }, data.styles, { minRows: 1, minCols: 1 });
+  check('roundtrip grid', back.grid, grid);
+  check('roundtrip aligns', back.aligns, [null, 'right', null]);
+  check('roundtrip no formula', back.hasFormula, false);
+}
+
+// ---------------------------------------------------------------------
+// snapshotToGrid — formulas, booleans, rich text, trailing trim
+// ---------------------------------------------------------------------
+{
+  const sheet = {
+    cellData: {
+      0: { 0: { v: 'a' }, 1: { f: '=1+1', v: 2, t: 2 } },
+      1: { 0: { v: 1, t: 3 }, 1: { p: { body: { dataStream: 'rich\rtext\r\n' } } } },
+      5: { 3: { v: '' } }, // empty far cell must not stretch the grid
+    },
+  };
+  const r = bridge.snapshotToGrid(sheet, {}, { minRows: 1, minCols: 1 });
+  check('snap formula value', r.grid[0][1], '2');
+  check('snap formula flag', r.hasFormula, true);
+  check('snap boolean', r.grid[1][0], 'TRUE');
+  check('snap rich text', r.grid[1][1], 'rich\ntext');
+  check('snap dims trimmed', [r.rows, r.cols], [2, 2]);
+}
+
+// ---------------------------------------------------------------------
+// worksheetToSheetData — formulas, merges, number formats
+// ---------------------------------------------------------------------
+{
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['Name', 'Total'],
+    ['Widget', 42],
+  ]);
+  ws.B2.f = '21*2';
+  ws.B2.z = '0.00';
+  ws.C3 = { t: 'b', v: true };
+  ws['!ref'] = 'A1:C3';
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
+  const d = bridge.worksheetToSheetData(ws, XLSX, 'p-');
+  check('ws formula', d.cellData[1][1].f, '=21*2');
+  check('ws formula cached value', d.cellData[1][1].v, 42);
+  check('ws numfmt style id', d.cellData[1][1].s, 'p-nf-0');
+  check('ws numfmt pattern', d.numfmts['p-nf-0'], { n: { pattern: '0.00' } });
+  check('ws boolean', d.cellData[2][2], { v: 1, t: 3 });
+  check('ws merge', d.mergeData, [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 1 }]);
+  check('ws dims', [d.rows, d.cols], [3, 3]);
+}
+
+// ---------------------------------------------------------------------
+// normalizeSheet / normalizedEqual — data changes count, styling doesn't
+// ---------------------------------------------------------------------
+{
+  const styles = { bold: { bl: 1 }, money: { n: { pattern: '$#,##0' } } };
+  const base = {
+    cellData: {
+      0: { 0: { v: 'a' }, 1: { v: 5, t: 2, s: 'money' } },
+    },
+    mergeData: [{ startRow: 2, startColumn: 0, endRow: 3, endColumn: 1 }],
+  };
+  const n1 = bridge.normalizeSheet(base, styles);
+  check('norm numfmt captured', n1.cells['0,1'].z, '$#,##0');
+  check('norm merges', n1.merges, [[2, 0, 3, 1]]);
+
+  const styledOnly = JSON.parse(JSON.stringify(base));
+  styledOnly.cellData[0][0].s = 'bold';
+  ok('styling-only equal', bridge.normalizedEqual(n1, bridge.normalizeSheet(styledOnly, styles)));
+
+  const valueChanged = JSON.parse(JSON.stringify(base));
+  valueChanged.cellData[0][0].v = 'b';
+  ok('value change detected', !bridge.normalizedEqual(n1, bridge.normalizeSheet(valueChanged, styles)));
+
+  const mergeChanged = JSON.parse(JSON.stringify(base));
+  mergeChanged.mergeData = [];
+  ok('merge change detected', !bridge.normalizedEqual(n1, bridge.normalizeSheet(mergeChanged, styles)));
+
+  const fmtChanged = JSON.parse(JSON.stringify(base));
+  fmtChanged.cellData[0][1].s = null;
+  ok('numfmt change detected', !bridge.normalizedEqual(n1, bridge.normalizeSheet(fmtChanged, styles)));
+}
+
+// ---------------------------------------------------------------------
+// patchWorksheet — untouched cells carried by identity, ref grows
+// ---------------------------------------------------------------------
+{
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['keep', 'old'],
+    ['x', 9],
+  ]);
+  ws.B2.f = '3*3';
+  const styles = {};
+  const baseSnap = {
+    cellData: {
+      0: { 0: { v: 'keep' }, 1: { v: 'old' } },
+      1: { 0: { v: 'x' }, 1: { f: '=3*3', v: 9 } },
+    },
+  };
+  const curSnap = JSON.parse(JSON.stringify(baseSnap));
+  curSnap.cellData[0][1].v = 'new';   // edited
+  delete curSnap.cellData[1][0];      // cleared
+  const baseN = bridge.normalizeSheet(baseSnap, styles);
+  const curN = bridge.normalizeSheet(curSnap, styles);
+  const res = bridge.patchWorksheet(ws, baseN, curN, XLSX);
+  ok('patch changed', res.changed);
+  ok('patch original untouched', ws.B1.v === 'old');
+  check('patch edited cell', res.ws.B1.v, 'new');
+  ok('patch cleared cell removed', !res.ws.A2);
+  ok('patch untouched identity', res.ws.B2 === ws.B2);
+  ok('patch formula untouched', res.ws.B2.f === '3*3');
+}
+
+// no-change patch must report changed=false
+{
+  const ws = XLSX.utils.aoa_to_sheet([['a']]);
+  const snap = { cellData: { 0: { 0: { v: 'a' } } } };
+  const n = bridge.normalizeSheet(snap, {});
+  const res = bridge.patchWorksheet(ws, n, n, XLSX);
+  ok('patch noop', !res.changed);
+}
+
+// patch must grow !ref when an edit lands outside it
+{
+  const ws = XLSX.utils.aoa_to_sheet([['a']]); // !ref A1:A1
+  const baseSnap = { cellData: { 0: { 0: { v: 'a' } } } };
+  const curSnap = { cellData: { 0: { 0: { v: 'a' } }, 4: { 3: { v: 'far' } } } };
+  const res = bridge.patchWorksheet(
+    ws,
+    bridge.normalizeSheet(baseSnap, {}),
+    bridge.normalizeSheet(curSnap, {}),
+    XLSX
+  );
+  check('patch ref grown', res.ws['!ref'], 'A1:D5');
+  check('patch far cell', res.ws.D5.v, 'far');
+}
+
+// ---------------------------------------------------------------------
+// normalizedToWorksheet — full rewrite carries formulas/formats/merges
+// ---------------------------------------------------------------------
+{
+  const snap = {
+    cellData: {
+      0: { 0: { v: 'n', s: 'm' }, 1: { f: '=A2*2', v: 10 } },
+      1: { 0: { v: 5, t: 2 } },
+    },
+    mergeData: [{ startRow: 3, startColumn: 0, endRow: 3, endColumn: 2 }],
+  };
+  const norm = bridge.normalizeSheet(snap, { m: { n: { pattern: '0%' } } });
+  const ws = bridge.normalizedToWorksheet(norm, XLSX);
+  check('rewrite formula', ws.B1.f, 'A2*2');
+  check('rewrite cached value', ws.B1.v, 10);
+  check('rewrite numfmt', ws.A1.z, '0%');
+  check('rewrite number', ws.A2, { t: 'n', v: 5 });
+  check('rewrite merges', ws['!merges'], [{ s: { r: 3, c: 0 }, e: { r: 3, c: 2 } }]);
+  check('rewrite ref', ws['!ref'], 'A1:C4');
+}
+
+// ---------------------------------------------------------------------
+// mutation classification
+// ---------------------------------------------------------------------
+for (const id of [
+  'sheet.mutation.insert-row',
+  'sheet.mutation.remove-rows',
+  'sheet.mutation.insert-col',
+  'sheet.mutation.remove-col',
+  'sheet.mutation.move-rows',
+  'sheet.mutation.move-cols',
+  'sheet.mutation.move-range',
+  'sheet.mutation.reorder-range',
+  'sheet.mutation.remove-sheet',
+]) {
+  ok('structural ' + id, bridge.isStructuralMutation(id));
+}
+for (const id of [
+  'sheet.mutation.set-range-values',
+  'sheet.mutation.set-worksheet-row-height',
+  'sheet.mutation.add-worksheet-merge',
+  'sheet.mutation.set-style',
+]) {
+  ok('non-structural ' + id, !bridge.isStructuralMutation(id));
+}
+
 console.log(`${passed} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);
