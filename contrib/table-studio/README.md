@@ -20,10 +20,13 @@ undo/redo and multi-sheet workbooks.
 Univer's UMD bundles are ~12 MB — far too large to embed in an installable
 user-app YAML. Instead the app follows the DOS Station pattern:
 
-1. On first launch it downloads the engine (react 18.3.1, react-dom,
-   rxjs 7.8.2, `@univerjs/presets` 0.25.1 and the sheets-core / sort /
-   filter / hyper-link / data-validation / conditional-formatting presets)
-   from jsdelivr, falling back to unpkg.
+1. The first time an editor is opened, the app asks for consent and then
+   downloads the engine (react 18.3.1, react-dom, rxjs 7.8.2,
+   `@univerjs/presets` 0.25.1 and the sheets-core / sort / filter /
+   hyper-link / data-validation / conditional-formatting presets) from
+   jsdelivr, falling back to unpkg. Nothing is downloaded before the user
+   taps "Download", and Back cancels a download in progress (already
+   fetched files are kept so a retry resumes).
 2. Every file is verified against a **pinned sha256** (see
    `plugins/src/univer_bridge.js`) before it is allowed to execute; a
    mismatch skips the mirror, and an unverifiable download is refused.
@@ -33,6 +36,16 @@ user-app YAML. Instead the app follows the DOS Station pattern:
 
 SheetJS CE 0.20.3 (xlsx/ods I/O) and fflate stay vendored inside the YAML
 as before.
+
+On touch devices the app swaps Univer's desktop UI plugins for its
+dedicated mobile UI (`UniverMobileUIPlugin` / `UniverSheetsMobileUIPlugin`,
+shipped inside the same pinned bundle), so the spreadsheet gets
+touch-first selection handles, context menus and sheet bar.
+
+To upgrade the engine: `node dev/regen_engine_pins.mjs <new-version>`
+prints fresh ready-to-paste manifest entries (paths, sizes, sha256) for
+`plugins/src/univer_bridge.js`; bump `ENGINE.version`, re-run
+`dev/fetch_univer_mirror.sh`, the harnesses, and `plugins/build.sh`.
 
 ## How saves work
 
@@ -97,6 +110,7 @@ dev/
   auto_smoke.html         # end-to-end UI checks (headless Chrome friendly)
   synapse_stub.js         # the stub used by both harnesses
   fetch_univer_mirror.sh  # local engine mirror so dev runs skip the CDN
+  regen_engine_pins.mjs   # prints fresh manifest pins for engine upgrades
 ```
 
 ## Development

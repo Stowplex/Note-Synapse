@@ -837,8 +837,9 @@
   // app state, inject from cache on every later launch.
   // ------------------------------------------------------------------
   var engine = {
-    status: 'idle', // idle | working | ready | error
-    promise: null,
+    status: 'idle', // idle | downloading | ready | error
+    cachePromise: null,
+    downloadPromise: null,
     error: null,
     progressCb: null, // set by the engine screen while it is visible
     doneBytes: 0,
@@ -846,6 +847,7 @@
     detail: '',
     fileCache: {}, // name -> text, survives a failed run so retries resume
     injected: false,
+    cancelRequested: false,
   };
 
   function engineProgress(detail) {
@@ -853,23 +855,44 @@
     if (engine.progressCb) engine.progressCb();
   }
 
-  function digestB64(b64) {
+  /** Everything the downloader needs from the host, checked up front. */
+  function engineHostReady() {
     var s = window.Synapse;
-    if (!s || !s.crypto || typeof s.crypto.digest !== 'function') {
-      return Promise.resolve(null); // host too old to verify
-    }
-    return s.crypto.digest('sha256', { base64: b64 }).then(function (r) {
-      return r && r.success ? String(r.hex || '').toLowerCase() : null;
+    return !!(
+      s &&
+      typeof s.proxyFetch === 'function' &&
+      typeof s.loadAppState === 'function' &&
+      typeof s.storeAppState === 'function' &&
+      s.crypto &&
+      typeof s.crypto.digest === 'function'
+    );
+  }
+
+  function cancelledError() {
+    var e = new Error('Download cancelled.');
+    e.cancelled = true;
+    return e;
+  }
+
+  /** Resolves the lowercase sha256 hex of base64 bytes; rejects on failure. */
+  function digestB64(b64) {
+    return window.Synapse.crypto.digest('sha256', { base64: b64 }).then(function (r) {
+      if (!r || r.success !== true || typeof r.hex !== 'string') {
+        throw new Error('checksum service failed');
+      }
+      return r.hex.toLowerCase();
     });
   }
 
   function fetchEngineFile(file) {
+    if (engine.cancelRequested) return Promise.reject(cancelledError());
     if (engine.fileCache[file.name]) {
       engine.doneBytes += file.bytes;
       return Promise.resolve(engine.fileCache[file.name]);
     }
     var urls = BRIDGE.engineUrls(file);
     var attempt = function (i) {
+      if (engine.cancelRequested) return Promise.reject(cancelledError());
       if (i >= urls.length) {
         return Promise.reject(new Error('Could not download ' + file.name + ' from any mirror.'));
       }
@@ -877,13 +900,15 @@
       return window.Synapse.proxyFetch(urls[i], { responseMode: 'binary' })
         .then(function (r) {
           if (!r || r.status !== 'success' || !r.content || typeof r.content.data !== 'string') {
-            throw new Error((r && (r.error || 'HTTP ' + r.statusCode)) || 'no response');
+            throw new Error((r && (r.error || 'no response')) || 'no response');
+          }
+          // proxyFetch reports transport success even for HTTP errors; a 404
+          // page must fail here, not as a confusing "checksum mismatch".
+          if (typeof r.statusCode === 'number' && (r.statusCode < 200 || r.statusCode >= 300)) {
+            throw new Error('HTTP ' + r.statusCode);
           }
           var b64 = r.content.data;
           return digestB64(b64).then(function (hex) {
-            if (hex === null) {
-              throw new Error('This version of Note Synapse cannot verify downloads (missing crypto support).');
-            }
             if (hex !== file.sha256) {
               throw new Error('checksum mismatch');
             }
@@ -895,9 +920,8 @@
           });
         })
         .catch(function (e) {
-          // A host-capability error is terminal; a mirror error moves on.
-          if (e && /verify downloads/.test(String(e.message))) throw e;
-          return attempt(i + 1);
+          if (e && e.cancelled) throw e;
+          return attempt(i + 1); // any mirror failure moves to the next mirror
         });
     };
     return attempt(0);
@@ -928,73 +952,112 @@
       .catch(function () { /* cache miss next launch, not fatal */ });
   }
 
-  function downloadEngine() {
-    engine.doneBytes = 0;
-    var jsParts = [];
-    var cssParts = [];
-    var chain = Promise.resolve();
-    BRIDGE.ENGINE.js.forEach(function (file) {
-      chain = chain.then(function () {
-        return fetchEngineFile(file).then(function (t) { jsParts.push(t); });
-      });
-    });
-    BRIDGE.ENGINE.css.forEach(function (file) {
-      chain = chain.then(function () {
-        return fetchEngineFile(file).then(function (t) { cssParts.push(t); });
-      });
-    });
-    return chain.then(function () {
-      var payload = { js: jsParts.join('\n;\n'), css: cssParts.join('\n') };
-      engineProgress('Caching for offline use…');
-      return storeEngine(payload.js, payload.css).then(function () {
-        engine.fileCache = {};
-        return payload;
-      });
-    });
-  }
-
   function injectEngine(payload) {
     if (engine.injected) return;
     var style = document.createElement('style');
     style.textContent = payload.css;
     document.head.appendChild(style);
-    var script = document.createElement('script');
-    script.textContent = payload.js;
-    document.head.appendChild(script);
+    // Guard against a partially-run previous injection: re-executing the
+    // bundle would redeclare its globals and throw.
+    if (!window.UniverPresets) {
+      var script = document.createElement('script');
+      script.textContent = payload.js;
+      document.head.appendChild(script);
+    }
     if (!window.UniverPresets || !window.UniverCore || !window.UniverPresetSheetsCore) {
       throw new Error('The spreadsheet engine failed to initialize.');
     }
     engine.injected = true;
   }
 
-  /** Resolves once Univer's globals are available. Safe to call repeatedly. */
-  function ensureEngine() {
-    if (engine.status === 'ready') return Promise.resolve();
-    if (engine.promise) return engine.promise;
-    engine.status = 'working';
-    engine.error = null;
-    engine.promise = loadCachedEngine()
+  /**
+   * Cache-only readiness: resolves true when the engine booted from the
+   * local cache, false when a download would be needed. Never downloads,
+   * never rejects.
+   */
+  function ensureEngineFromCache() {
+    if (engine.status === 'ready') return Promise.resolve(true);
+    if (engine.cachePromise) return engine.cachePromise;
+    engine.cachePromise = Promise.resolve()
+      .then(function () {
+        var s = window.Synapse;
+        if (!s || typeof s.loadAppState !== 'function') return null;
+        return loadCachedEngine();
+      })
       .then(function (cached) {
-        if (cached) {
-          engine.doneBytes = engine.totalBytes;
-          engineProgress('Loading from cache…');
-          return cached;
+        engine.cachePromise = null;
+        if (!cached) return false;
+        injectEngine(cached);
+        engine.status = 'ready';
+        engine.doneBytes = engine.totalBytes;
+        return true;
+      })
+      .catch(function () {
+        engine.cachePromise = null;
+        return false;
+      });
+    return engine.cachePromise;
+  }
+
+  /**
+   * The full download → verify → cache → inject pipeline. Only ever called
+   * after the user explicitly consented to the download. Rejects with
+   * `.cancelled` when the user backed out mid-download (partial files are
+   * kept in memory so a retry resumes).
+   */
+  function downloadAndReadyEngine() {
+    if (engine.status === 'ready') return Promise.resolve();
+    if (engine.downloadPromise) return engine.downloadPromise;
+    engine.cancelRequested = false;
+    engine.status = 'downloading';
+    engine.error = null;
+    engine.doneBytes = 0;
+    engine.downloadPromise = Promise.resolve()
+      .then(function () {
+        if (!engineHostReady()) {
+          throw new Error(
+            'This version of Note Synapse cannot set up the spreadsheet engine (missing download/verify support). Please update the app.'
+          );
         }
-        return downloadEngine();
+        var jsParts = [];
+        var cssParts = [];
+        var chain = Promise.resolve();
+        BRIDGE.ENGINE.js.forEach(function (file) {
+          chain = chain.then(function () {
+            return fetchEngineFile(file).then(function (t) { jsParts.push(t); });
+          });
+        });
+        BRIDGE.ENGINE.css.forEach(function (file) {
+          chain = chain.then(function () {
+            return fetchEngineFile(file).then(function (t) { cssParts.push(t); });
+          });
+        });
+        return chain.then(function () {
+          var payload = { js: jsParts.join('\n;\n'), css: cssParts.join('\n') };
+          engineProgress('Caching for offline use…');
+          return storeEngine(payload.js, payload.css).then(function () {
+            engine.fileCache = {};
+            return payload;
+          });
+        });
       })
       .then(function (payload) {
         engineProgress('Starting engine…');
         injectEngine(payload);
         engine.status = 'ready';
-        engine.promise = null;
+        engine.downloadPromise = null;
       })
       .catch(function (e) {
-        engine.status = 'error';
-        engine.error = String((e && e.message) || e);
-        engine.promise = null;
+        engine.downloadPromise = null;
+        if (e && e.cancelled) {
+          engine.status = 'idle';
+        } else {
+          engine.status = 'error';
+          engine.error = String((e && e.message) || e);
+        }
         throw e;
       });
-    return engine.promise;
+    return engine.downloadPromise;
   }
 
   // ------------------------------------------------------------------
@@ -1239,9 +1302,7 @@
   // ------------------------------------------------------------------
   // Engine screen — shown while the editor waits for Univer
   // ------------------------------------------------------------------
-  function renderEngineScreen(title, onCancel) {
-    clearChildren(appEl);
-    var screen = el('div', 'screen');
+  function engineTopbar(screen, title, onCancel) {
     var bar = el('div', 'topbar');
     var backBtn = el('button', 'icon-btn');
     backBtn.setAttribute('aria-label', 'Back');
@@ -1250,17 +1311,53 @@
     bar.appendChild(backBtn);
     var titles = el('div', 'titles');
     titles.appendChild(el('h1', null, title));
-    titles.appendChild(el('div', 'subtitle', 'Preparing the spreadsheet engine'));
+    titles.appendChild(el('div', 'subtitle', 'Spreadsheet engine setup'));
     bar.appendChild(titles);
     screen.appendChild(bar);
+  }
+
+  /** One-time consent: nothing is downloaded until the user says so. */
+  function renderEngineConsent(title, onDownload, onCancel) {
+    clearChildren(appEl);
+    var screen = el('div', 'screen');
+    engineTopbar(screen, title, onCancel);
+    var gate = el('div', 'gate');
+    gate.appendChild(svgIcon(ICONS.download));
+    gate.appendChild(el('div', 'big', 'One-time engine download'));
+    gate.appendChild(
+      el('div', null,
+        'Editing uses the Univer spreadsheet engine — a one-time ' +
+        fmtSize(engine.totalBytes) + ' download from jsdelivr/unpkg. Every file is ' +
+        'verified against a pinned checksum and cached, so later launches work offline.')
+    );
+    var actions = el('div', 'empty-state actions');
+    actions.style.flex = 'none';
+    actions.style.padding = '0';
+    var dlBtn = el('button', 'pill-btn');
+    dlBtn.appendChild(svgIcon(ICONS.download));
+    dlBtn.appendChild(el('span', null, 'Download ' + fmtSize(engine.totalBytes)));
+    dlBtn.addEventListener('click', onDownload);
+    var backBtn = el('button', 'ghost-btn', 'Not now');
+    backBtn.addEventListener('click', onCancel);
+    actions.appendChild(dlBtn);
+    actions.appendChild(backBtn);
+    gate.appendChild(actions);
+    screen.appendChild(gate);
+    appEl.appendChild(screen);
+  }
+
+  function renderEngineScreen(title, onCancel) {
+    clearChildren(appEl);
+    var screen = el('div', 'screen');
+    engineTopbar(screen, title, onCancel);
 
     var gate = el('div', 'gate');
     gate.appendChild(svgIcon(ICONS.download));
     gate.appendChild(el('div', 'big', 'Setting up the spreadsheet'));
     gate.appendChild(
       el('div', null,
-        'One-time download of the Univer spreadsheet engine (' +
-        fmtSize(engine.totalBytes) + '). It is verified and cached for offline use.')
+        'Downloading and verifying the Univer engine (' +
+        fmtSize(engine.totalBytes) + ' one-time, cached for offline use). Back cancels the download.')
     );
     var progress = el('div', 'engine-progress');
     var fill = el('div', 'fill');
@@ -1306,34 +1403,54 @@
   var openToken = 0;
 
   /**
-   * Runs `proceed` once the Univer engine is ready, showing the download
-   * screen in the meantime (with cancel/retry). `title` labels the screen.
+   * Runs `proceed` once the Univer engine is ready. Boots silently from
+   * the cache when possible; otherwise asks for download consent first,
+   * then shows progress (Back cancels the download; partial files are
+   * kept so a retry resumes).
    */
   function withEngine(title, proceed) {
     var token = ++openToken;
     var cancel = function () {
       openToken++;
+      engine.cancelRequested = true;
+      engine.progressCb = null;
       renderHome();
     };
-    var attempt = function () {
-      if (engine.status !== 'ready') renderEngineScreen(title, cancel);
-      ensureEngine()
+    var startDownload = function () {
+      renderEngineScreen(title, cancel);
+      downloadAndReadyEngine()
         .then(function () {
           if (token !== openToken) return;
           engine.progressCb = null;
           proceed();
         })
-        .catch(function () {
+        .catch(function (e) {
           if (token !== openToken) return;
+          engine.progressCb = null;
+          if (e && e.cancelled) {
+            renderHome();
+            return;
+          }
           renderEngineError(
             'Engine unavailable',
             engine.error || 'The spreadsheet engine could not be set up. Check your connection and try again.',
-            attempt,
+            startDownload,
             cancel
           );
         });
     };
-    attempt();
+    busy('Preparing spreadsheet…');
+    ensureEngineFromCache().then(function (ready) {
+      unbusy();
+      if (token !== openToken) return;
+      if (ready) {
+        proceed();
+        return;
+      }
+      // A download already running (previous consent) skips re-asking.
+      if (engine.downloadPromise) startDownload();
+      else renderEngineConsent(title, startDownload, cancel);
+    });
   }
 
   // ------------------------------------------------------------------
@@ -1385,7 +1502,9 @@
     ed.sheetId = 'ts-s0';
     ed.sheets = [sheetEntryFromData(ed.sheetId, ed.title, data)];
     ed.styles = data.styles;
-    ed.baseNorms = baseNormsOf(ed);
+    // Baseline for dirty/noop detection: what an unchanged sheet would
+    // serialize to (eol-normalized; the real eol is chosen at save time).
+    ed.baseBlockText = CORE.serializeTable(src.table.grid, src.table.aligns, ed.indent, '\n');
     openEditor(ed);
   }
 
@@ -1408,7 +1527,7 @@
       ed.sheetId = 'ts-s0';
       ed.sheets = [sheetEntryFromData(ed.sheetId, ed.title, data)];
       ed.styles = data.styles;
-      ed.baseNorms = null; // new: always dirty until first save
+      ed.baseBlockText = null; // new: always dirty until first save
       openEditor(ed);
     });
   }
@@ -1448,7 +1567,7 @@
         ed.styles = data.styles;
         ed.origRows = 3;
         ed.origCols = 3;
-        ed.baseNorms = null;
+        ed.baseText = null; // new: always dirty until first save
         openEditor(ed);
       });
   }
@@ -1496,16 +1615,24 @@
           ed.meta = parsed;
           ed.origRows = parsed.rows.length;
           ed.origCols = parsed.rows[0] ? parsed.rows[0].length : 0;
+          // Baseline for dirty/noop detection: the file exactly as stored.
+          ed.baseText = text;
           var data = BRIDGE.gridToSheetData(parsed.rows, {});
           ed.sheetId = 'ts-s0';
           ed.sheets = [sheetEntryFromData(ed.sheetId, safeSheetName(src.att.fileName, 'Sheet1'), data)];
           ed.styles = data.styles;
-          ed.baseNorms = baseNormsOf(ed);
         } else {
           if (typeof window.XLSX === 'undefined') {
             throw new Error('The spreadsheet engine failed to load.');
           }
-          var wb = XLSX.read(res.data, { type: 'base64', cellStyles: false });
+          // cellNF is required: without it SheetJS never populates cell.z,
+          // every number format in the workbook (dates, currency) would be
+          // silently wiped on the first save.
+          var wb = XLSX.read(res.data, {
+            type: 'base64',
+            cellStyles: false,
+            cellNF: true,
+          });
           // Refuse oversized declared ranges BEFORE expanding them.
           var declaredCells = 0;
           wb.SheetNames.forEach(function (name) {
@@ -1536,11 +1663,7 @@
             Object.keys(data.numfmts).forEach(function (k) {
               ed.styles[k] = data.numfmts[k];
             });
-            var univerName = safeSheetName(name, 'Sheet' + (idx + 1));
-            if (usedNames[univerName.toLowerCase()]) {
-              univerName = (univerName.slice(0, 27) + '~' + (idx + 1)).slice(0, 31);
-            }
-            usedNames[univerName.toLowerCase()] = true;
+            var univerName = BRIDGE.uniqueSheetName(usedNames, name, 'Sheet' + (idx + 1));
             ed.sheets.push(sheetEntryFromData(id, univerName, data));
             ed.sheetMeta.push({ id: id, origName: name, univerName: univerName });
           });
@@ -1582,6 +1705,39 @@
     univerInst = null;
   }
 
+  /** Touch-first devices get Univer's dedicated mobile UI. */
+  function wantsMobileUi() {
+    if (window.__TS_FORCE_MOBILE != null) return !!window.__TS_FORCE_MOBILE;
+    return (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window;
+  }
+
+  /**
+   * The core preset hardcodes the desktop UI plugins; on touch devices we
+   * swap in UniverMobileUIPlugin / UniverSheetsMobileUIPlugin (same config,
+   * validated against the pinned 0.25.1 bundle) for a mobile-friendly
+   * spreadsheet interface.
+   */
+  function corePresetFor(ed) {
+    var preset = window.UniverPresetSheetsCore.UniverSheetsCorePreset({
+      container: 'univer-host',
+      // Markdown tables and CSVs are single-sheet documents — the sheet
+      // bar would only offer sheets that can never be saved.
+      footer: ed.format === 'workbook',
+    });
+    var UI = window.UniverUi;
+    var SUI = window.UniverSheetsUi;
+    if (wantsMobileUi() && UI && UI.UniverMobileUIPlugin && SUI && SUI.UniverSheetsMobileUIPlugin) {
+      preset.plugins = preset.plugins.map(function (entry) {
+        var plugin = Array.isArray(entry) ? entry[0] : entry;
+        var cfg = Array.isArray(entry) ? entry[1] : undefined;
+        if (plugin === UI.UniverUIPlugin) return [UI.UniverMobileUIPlugin, cfg];
+        if (plugin === SUI.UniverSheetsUIPlugin) return [SUI.UniverSheetsMobileUIPlugin, cfg];
+        return entry;
+      });
+    }
+    return preset;
+  }
+
   function bootUniver(ed) {
     disposeUniver();
     var P = window.UniverPresets;
@@ -1601,12 +1757,7 @@
       },
       darkMode: window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches,
       presets: [
-        window.UniverPresetSheetsCore.UniverSheetsCorePreset({
-          container: 'univer-host',
-          // Markdown tables and CSVs are single-sheet documents — the sheet
-          // bar would only offer sheets that can never be saved.
-          footer: ed.format === 'workbook',
-        }),
+        corePresetFor(ed),
         window.UniverPresetSheetsSort.UniverSheetsSortPreset(),
         window.UniverPresetSheetsFilter.UniverSheetsFilterPreset(),
         window.UniverPresetSheetsHyperLink.UniverSheetsHyperLinkPreset(),
@@ -1758,22 +1909,63 @@
     renderHome();
   }
 
-  /** Authoritative dirty check: normalized snapshot vs the load baseline. */
+  /**
+   * The CSV serialization of a grid, keeping the original ragged-row
+   * arities only while the sheet still has its original shape.
+   */
+  function csvTextOf(ed, grid, shapeChanged) {
+    return CORE.serializeDelimited(grid, {
+      delim: ed.meta.delim,
+      lineEnding: ed.meta.lineEnding,
+      hadBom: ed.meta.hadBom,
+      trailingNewline: ed.meta.trailingNewline,
+      arities: shapeChanged ? null : ed.meta.arities,
+    });
+  }
+
+  function csvShapeChanged(ed, grid) {
+    return (
+      ed.allStructural ||
+      !!ed.structural[ed.sheetId] ||
+      grid.length !== ed.origRows ||
+      (grid[0] || []).length !== ed.origCols
+    );
+  }
+
+  /**
+   * Authoritative dirty check against the load baseline. Markdown/CSV
+   * compare their would-be serialization (so alignment changes count and
+   * an undone edit counts as clean); workbooks compare per-sheet
+   * normalized data plus sheet order and names.
+   */
   function isActuallyDirty(ed) {
     if (ed.isNew) return true;
     if (!ed.dirtyHint) return false;
-    if (!ed.baseNorms) return true;
     var snap = snapshotNow();
     if (!snap) return false;
-    var ids = Object.keys(ed.baseNorms);
-    // A sheet added or removed in Univer is a change on its own.
-    var orderIds = (snap.sheetOrder || []).slice();
-    if (ed.format === 'workbook' && orderIds.length !== ids.length) return true;
-    for (var i = 0; i < ids.length; i++) {
-      var sheetSnap = snap.sheets[ids[i]];
+    if (ed.kind === 'block' || ed.format === 'text') {
+      var sheetSnap = snap.sheets[ed.sheetId];
       if (!sheetSnap) return true;
-      var cur = BRIDGE.normalizeSheet(sheetSnap, snap.styles);
-      if (!BRIDGE.normalizedEqual(ed.baseNorms[ids[i]], cur)) return true;
+      var r = BRIDGE.snapshotToGrid(sheetSnap, snap.styles, { minRows: 1, minCols: 1 });
+      if (ed.kind === 'block') {
+        if (ed.baseBlockText == null) return true;
+        return CORE.serializeTable(r.grid, r.aligns, ed.indent, '\n') !== ed.baseBlockText;
+      }
+      if (ed.baseText == null) return true;
+      return csvTextOf(ed, r.grid, csvShapeChanged(ed, r.grid)) !== ed.baseText;
+    }
+    if (!ed.baseNorms) return true;
+    var metaList = ed.sheetMeta || [];
+    var order = (snap.sheetOrder || []).filter(function (id) { return snap.sheets[id]; });
+    // Sheets added, removed, or reordered are changes on their own.
+    if (order.length !== metaList.length) return true;
+    for (var i = 0; i < metaList.length; i++) {
+      if (order[i] !== metaList[i].id) return true;
+      var sheetSnap2 = snap.sheets[order[i]];
+      // A rename the user typed in the sheet bar counts as dirty.
+      if (sheetSnap2.name !== metaList[i].univerName) return true;
+      var cur = BRIDGE.normalizeSheet(sheetSnap2, snap.styles);
+      if (!BRIDGE.normalizedEqual(ed.baseNorms[order[i]], cur)) return true;
     }
     return false;
   }
@@ -1796,21 +1988,39 @@
         infoDialog('Save failed', 'The sheet holding this table no longer exists.');
         return;
       }
-      var minRows = ed.kind === 'block' ? 1 : 1;
-      var result = BRIDGE.snapshotToGrid(sheetSnap, snap.styles, { minRows: minRows, minCols: 1 });
+      var result = BRIDGE.snapshotToGrid(sheetSnap, snap.styles, { minRows: 1, minCols: 1 });
       if (result.cols > MAX_COLS || result.rows * result.cols > MAX_CELLS) {
         infoDialog('Save failed', 'The table has grown too large to save here.');
         return;
       }
-      var confirmFlatten = result.hasFormula
+      // Noop early-out: an unchanged (or changed-and-reverted) sheet must
+      // not rewrite the note / re-upload the attachment.
+      if (!ed.isNew) {
+        var unchanged = ed.kind === 'block'
+          ? ed.baseBlockText != null &&
+            CORE.serializeTable(result.grid, result.aligns, ed.indent, '\n') === ed.baseBlockText
+          : ed.baseText != null &&
+            csvTextOf(ed, result.grid, csvShapeChanged(ed, result.grid)) === ed.baseText;
+        if (unchanged) {
+          ed.dirtyHint = false;
+          toast('No changes to save');
+          return;
+        }
+      }
+      // These formats cannot hold formulas or merged cells — disclose what
+      // saving will do to them before it happens.
+      var lossy = [];
+      if (result.hasFormula) lossy.push('formulas are stored as their current values');
+      if (result.hasMerges) lossy.push('merged cells are split back into single cells');
+      var confirmLossy = lossy.length > 0
         ? confirmDialog(
-            'Formulas become values',
+            'Sheet features become plain cells',
             (ed.kind === 'block' ? 'Markdown tables' : 'CSV files') +
-              ' cannot hold formulas. Saving stores each formula’s current value instead.',
-            'Save values'
+              ' cannot hold these, so on save ' + lossy.join(' and ') + '.',
+            'Save'
           )
         : Promise.resolve(true);
-      proceed = confirmFlatten.then(function (ok) {
+      proceed = confirmLossy.then(function (ok) {
         if (!ok) return null;
         return { grid: result.grid, aligns: result.aligns, snap: snap };
       });
@@ -1930,15 +2140,6 @@
     return content.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
   }
 
-  /** Re-baselines the block/CSV editor after its sheet was stored. */
-  function rebaselineSheet(ed, snap) {
-    var sheetSnap = snap.sheets[ed.sheetId];
-    if (sheetSnap) {
-      ed.baseNorms = {};
-      ed.baseNorms[ed.sheetId] = BRIDGE.normalizeSheet(sheetSnap, snap.styles);
-    }
-  }
-
   function saveExistingBlock(ed, input) {
     return fetchNoteContent(ed.note.id, { strict: true }).then(function (content) {
       if (typeof content !== 'string') {
@@ -1960,7 +2161,7 @@
         ed.raw = block + glue;
         ed.startLine = lineOfOffset(newContent, loc.before.length);
         ed.endLine = ed.startLine + block.split('\n').length;
-        rebaselineSheet(ed, input.snap);
+        ed.baseBlockText = CORE.serializeTable(input.grid, input.aligns, ed.indent, '\n');
       });
     });
   }
@@ -1992,7 +2193,7 @@
         ed.title = 'Table ' + tablesOf(ed.note).length;
         var h1 = appEl.querySelector('.topbar h1');
         if (h1) h1.textContent = ed.title;
-        rebaselineSheet(ed, input.snap);
+        ed.baseBlockText = CORE.serializeTable(input.grid, input.aligns, ed.indent, '\n');
       });
     });
   }
@@ -2018,19 +2219,8 @@
       // Ragged-row arities only survive while the sheet keeps its original
       // shape — after inserts/deletes/moves the per-row map no longer lines
       // up with the file's rows.
-      var shapeChanged =
-        ed.allStructural ||
-        ed.structural[ed.sheetId] ||
-        grid.length !== ed.origRows ||
-        (grid[0] || []).length !== ed.origCols;
-      var meta = {
-        delim: ed.meta.delim,
-        lineEnding: ed.meta.lineEnding,
-        hadBom: ed.meta.hadBom,
-        trailingNewline: ed.meta.trailingNewline,
-        arities: shapeChanged ? null : ed.meta.arities,
-      };
-      var text = CORE.serializeDelimited(grid, meta);
+      var shapeChanged = csvShapeChanged(ed, grid);
+      var text = csvTextOf(ed, grid, shapeChanged);
       return {
         base64: bytesToB64(encodeUtf8(text)),
         mime: mimeFor(extOf(ed.saveName)),
@@ -2038,7 +2228,7 @@
           ed.origRows = grid.length;
           ed.origCols = (grid[0] || []).length;
           if (shapeChanged) ed.meta.arities = null;
-          rebaselineSheet(ed, snap);
+          ed.baseText = text;
         },
       };
     }
@@ -2051,25 +2241,29 @@
     }
     var metaById = {};
     (ed.sheetMeta || []).forEach(function (m) { metaById[m.id] = m; });
+    // A pure reorder produces no per-sheet diff but must still be written.
+    var liveOrder = order.filter(function (id) { return snap.sheets[id]; });
+    var origOrder = (ed.sheetMeta || []).map(function (m) { return m.id; });
     var outNames = [];
     var outSheets = {};
     var usedNames = {};
-    var changed = false;
+    var changed = liveOrder.join('\n') !== origOrder.join('\n');
     var newMeta = [];
     var newNorms = {};
+    var totalCells = 0;
     order.forEach(function (sheetId, idx) {
       var sheetSnap = snap.sheets[sheetId];
       if (!sheetSnap) return;
       var cur = BRIDGE.normalizeSheet(sheetSnap, snap.styles);
+      totalCells += Object.keys(cur.cells).length;
+      if (totalCells > MAX_CELLS) {
+        throw new Error('The workbook has grown too large to save here.');
+      }
       var meta = metaById[sheetId];
       var base = meta && ed.baseNorms ? ed.baseNorms[sheetId] : null;
       // Output name: what the sheet is called in Univer now (Excel-safe,
       // deduped) — renames flow through to the file.
-      var name = safeSheetName(sheetSnap.name, 'Sheet' + (idx + 1));
-      if (usedNames[name.toLowerCase()]) {
-        name = (name.slice(0, 27) + '~' + (idx + 1)).slice(0, 31);
-      }
-      usedNames[name.toLowerCase()] = true;
+      var name = BRIDGE.uniqueSheetName(usedNames, sheetSnap.name, 'Sheet' + (idx + 1));
       var origWs = meta ? ed.wb.Sheets[meta.origName] : null;
       var ws;
       if (meta && base && origWs && BRIDGE.normalizedEqual(base, cur)) {
@@ -2198,11 +2392,7 @@
       (snap.sheetOrder || []).forEach(function (sheetId, idx) {
         var sheetSnap = snap.sheets[sheetId];
         if (!sheetSnap) return;
-        var sheetName = safeSheetName(sheetSnap.name, 'Sheet' + (idx + 1));
-        if (usedNames[sheetName.toLowerCase()]) {
-          sheetName = (sheetName.slice(0, 27) + '~' + (idx + 1)).slice(0, 31);
-        }
-        usedNames[sheetName.toLowerCase()] = true;
+        var sheetName = BRIDGE.uniqueSheetName(usedNames, sheetSnap.name, 'Sheet' + (idx + 1));
         var norm = BRIDGE.normalizeSheet(sheetSnap, snap.styles);
         outNames.push(sheetName);
         outSheets[sheetName] = BRIDGE.normalizedToWorksheet(norm, XLSX);
@@ -2291,9 +2481,10 @@
     refreshAttachmentLists().then(function () {
       if (!state.editor) renderHome();
     });
-    // Warm the engine (cache load or first download) while the user is
-    // still on the home screen; editor opens await the same promise.
-    ensureEngine().catch(function () { /* surfaced when an editor opens */ });
+    // Warm the engine from the local cache while the user is still on the
+    // home screen. This never downloads — the one-time ~12 MB download only
+    // starts after the user explicitly consents on the engine screen.
+    ensureEngineFromCache();
   }
 
   if (document.readyState === 'loading') {

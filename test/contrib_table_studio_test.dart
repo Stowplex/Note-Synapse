@@ -135,15 +135,16 @@ void main() {
       final paths = RegExp(r"path: '").allMatches(bridge);
       expect(shaPins.length, paths.length);
       expect(shaPins.length, greaterThanOrEqualTo(20));
-      // The downloader refuses unverifiable or mismatching payloads.
+      // The downloader refuses unverifiable or mismatching payloads, and a
+      // host without download/verify support is refused up front.
       expect(source, contains("crypto.digest('sha256'"));
       expect(source, contains('checksum mismatch'));
-      expect(source, contains('cannot verify downloads'));
+      expect(source, contains('engineHostReady'));
       // And no other proxyFetch call sites exist in the app.
       expect(
-        'proxyFetch'.allMatches(source).length,
+        'Synapse.proxyFetch('.allMatches(source).length,
         1,
-        reason: 'proxyFetch must only be used by the engine downloader',
+        reason: 'proxyFetch must only be called by the engine downloader',
       );
     });
 
@@ -200,9 +201,11 @@ void main() {
       expect(source, contains("xls: { mode: 'workbook-ro' }"));
       expect(source, contains("xlsm: { mode: 'workbook-ro' }"));
       expect(source, contains('Save copy'));
-      // Formula flattening (markdown/CSV targets) is disclosed and confirmed
-      // before it happens.
-      expect(source, contains('Formulas become values'));
+      // Formula/merge flattening (markdown/CSV targets) is disclosed and
+      // confirmed before it happens.
+      expect(source, contains('Sheet features become plain cells'));
+      // Number formats are only preserved if SheetJS is told to read them.
+      expect(source, contains('cellNF: true'));
       // Oversized inputs are refused instead of truncated, with the size
       // ceilings enforced BEFORE any rows-x-cols amplification.
       expect(source, contains('MAX_ATTACHMENT_BYTES'));

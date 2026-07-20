@@ -596,6 +596,51 @@ check('num empty', bridge.stableNumber(''), null);
 }
 
 // ---------------------------------------------------------------------
+// uniqueSheetName — dedup must never emit a colliding name
+// ---------------------------------------------------------------------
+{
+  const used = {};
+  check('dedupe first', bridge.uniqueSheetName(used, 'A~3', 'S1'), 'A~3');
+  check('dedupe plain', bridge.uniqueSheetName(used, 'A', 'S2'), 'A');
+  // The reviewer counter-example: naive "~idx" suffixing emits A~3 twice.
+  check('dedupe collision walks on', bridge.uniqueSheetName(used, 'A', 'S3'), 'A~2');
+  check('dedupe case-insensitive', bridge.uniqueSheetName(used, 'a', 'S4'), 'a~4');
+  const used2 = {};
+  const long = 'x'.repeat(40);
+  const first = bridge.uniqueSheetName(used2, long, 'S');
+  const second = bridge.uniqueSheetName(used2, long, 'S');
+  ok('dedupe caps at 31', first.length === 31 && second.length <= 31 && first !== second);
+  check('dedupe sanitizes', bridge.uniqueSheetName({}, 'a[b]:c*d?e/f\\g', 'S'), 'a b  c d e f g');
+  check('dedupe empty falls back', bridge.uniqueSheetName({}, '   ', 'Sheet7'), 'Sheet7');
+}
+
+// ---------------------------------------------------------------------
+// formula cells: a recalculated cached value is NOT an edit
+// ---------------------------------------------------------------------
+{
+  const styles = {};
+  const noValue = { cellData: { 0: { 0: { f: '=A2*2' } } } };
+  const withValue = { cellData: { 0: { 0: { f: '=A2*2', v: 10, t: 2 } } } };
+  const otherFormula = { cellData: { 0: { 0: { f: '=A2*3', v: 10, t: 2 } } } };
+  const n1 = bridge.normalizeSheet(noValue, styles);
+  const n2 = bridge.normalizeSheet(withValue, styles);
+  ok('formula recalc not dirty', bridge.normalizedEqual(n1, n2));
+  ok('formula change dirty', !bridge.normalizedEqual(n2, bridge.normalizeSheet(otherFormula, styles)));
+}
+
+// ---------------------------------------------------------------------
+// snapshotToGrid reports merges (they cannot survive md/CSV saves)
+// ---------------------------------------------------------------------
+{
+  const sheet = {
+    cellData: { 0: { 0: { v: 'a' } } },
+    mergeData: [{ startRow: 0, startColumn: 0, endRow: 1, endColumn: 1 }],
+  };
+  ok('merges reported', bridge.snapshotToGrid(sheet, {}, {}).hasMerges === true);
+  ok('no merges reported', bridge.snapshotToGrid({ cellData: {} }, {}, {}).hasMerges === false);
+}
+
+// ---------------------------------------------------------------------
 // mutation classification
 // ---------------------------------------------------------------------
 for (const id of [

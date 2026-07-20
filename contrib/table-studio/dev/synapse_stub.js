@@ -52,6 +52,9 @@
         ['Gadget', 7],
       ]);
       sales.B2.f = '21*2';
+      // A date-formatted cell: the editor must round-trip its number format.
+      sales.C2 = { t: 'n', v: 45123, z: 'yyyy-mm-dd' };
+      sales['!ref'] = 'A1:C3';
       XLSX.utils.book_append_sheet(wb, sales, 'Sales');
       var info = XLSX.utils.aoa_to_sheet([['Notes'], ['keep me']]);
       XLSX.utils.book_append_sheet(wb, info, 'Info');

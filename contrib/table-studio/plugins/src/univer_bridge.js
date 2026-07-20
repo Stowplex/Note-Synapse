@@ -242,6 +242,7 @@
         if (c > maxC) maxC = c;
       });
     });
+    var hasMerges = !!(sheetSnap.mergeData && sheetSnap.mergeData.length > 0);
     var rows = Math.max(minRows, maxR + 1);
     var cols = Math.max(minCols, maxC + 1);
     var grid = [];
@@ -260,7 +261,34 @@
       var st = resolveStyle(headerRow[c2] && headerRow[c2].s, styles);
       aligns.push((st && HT_TO_ALIGN[st.ht]) || null);
     }
-    return { grid: grid, aligns: aligns, hasFormula: hasFormula, rows: rows, cols: cols };
+    return {
+      grid: grid,
+      aligns: aligns,
+      hasFormula: hasFormula,
+      hasMerges: hasMerges,
+      rows: rows,
+      cols: cols,
+    };
+  }
+
+  /**
+   * Returns `name` made Excel-safe and unique against `used` (a lowercased
+   * map mutated in place). Deduplication retries until the candidate is
+   * genuinely free — "A~2" colliding with an existing sheet named "A~2"
+   * moves on to "A~3" instead of silently overwriting a sheet.
+   */
+  function uniqueSheetName(used, name, fallback) {
+    var base = String(name == null ? '' : name).replace(/[\[\]:*?\/\\]/g, ' ').trim();
+    if (!base) base = fallback || 'Sheet';
+    base = base.slice(0, 31);
+    var candidate = base;
+    var i = 2;
+    while (used[candidate.toLowerCase()]) {
+      var suffix = '~' + i++;
+      candidate = base.slice(0, 31 - suffix.length) + suffix;
+    }
+    used[candidate.toLowerCase()] = true;
+    return candidate;
   }
 
   // ---------------------------------------------------------------------
@@ -406,7 +434,14 @@
 
   function entriesEqual(a, b) {
     if (!a || !b) return !a === !b;
-    return a.v === b.v && a.f === b.f && a.z === b.z && a.b === b.b;
+    if (a.f || b.f) {
+      // Formula cells compare by formula + format only. The cached value is
+      // recomputed by every engine that opens the file (and by Univer right
+      // after load), so treating a fresher cached v as an edit would flag
+      // untouched files dirty and patch cells the user never touched.
+      return a.f === b.f && a.z === b.z;
+    }
+    return a.v === b.v && a.z === b.z && a.b === b.b;
   }
 
   function normalizedEqual(a, b) {
@@ -575,6 +610,7 @@
     richText: richText,
     gridToSheetData: gridToSheetData,
     snapshotToGrid: snapshotToGrid,
+    uniqueSheetName: uniqueSheetName,
     worksheetToSheetData: worksheetToSheetData,
     normalizeSheet: normalizeSheet,
     normalizedEqual: normalizedEqual,
