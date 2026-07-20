@@ -125,12 +125,21 @@
           });
           (mod.attachments.added || []).forEach(function (a) {
             var name = a.fileName || 'file.bin';
-            var id = 'att-' + attSeq++;
-            var path = '/stub/attachments/' + id + '-' + name;
+            var seq = attSeq++;
+            var id = 'att-' + seq;
+            // Mirror the real host: every stored file is renamed to
+            // "<stem>_<uuid>.<ext>" by generateUniqueFileName.
+            var dot = name.lastIndexOf('.');
+            var stem = dot >= 0 ? name.slice(0, dot) : name;
+            var ext = dot >= 0 ? name.slice(dot) : '';
+            var fakeUuid =
+              '00000000-0000-4000-8000-' + String(seq).padStart(12, '0');
+            var stored = stem + '_' + fakeUuid + ext;
+            var path = '/stub/attachments/' + stored;
             var data = a.data || '';
             var b64 = data.indexOf(',') >= 0 ? data.slice(data.indexOf(',') + 1) : data;
             files[path] = function () { return b64; };
-            attachments.push({ id: id, path: path, fileName: name, mimeType: 'application/octet-stream' });
+            attachments.push({ id: id, path: path, fileName: stored, mimeType: 'application/octet-stream' });
           });
         }
       });

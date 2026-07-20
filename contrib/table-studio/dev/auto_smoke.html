@@ -107,6 +107,22 @@
     log('csv content saved', text.indexOf('"Green apples, tart"') >= 0, JSON.stringify(text));
     log('csv fidelity', text.indexOf('"Pears, ripe"') >= 0 && text.slice(-1) === '\n', '');
 
+    // Second save must not accrete uuid suffixes (payload keeps the
+    // ORIGINAL name) and must remove the previous stored copy.
+    var cell2 = qa(doc, 'table.grid tbody tr')[2].cells[1];
+    tap(cell2);
+    await sleep(50);
+    in2 = q(doc, '#cell-input');
+    in2.value = 'Ripe pears';
+    in2.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(50);
+    tap(q(doc, '#save-btn'));
+    await sleep(400);
+    var atts1b = (await win.Synapse.exportNotes(['note-1'])).notes[0].attachments;
+    var csvs = atts1b.filter(function (a) { return /\.csv$/.test(a.fileName); });
+    log('csv no duplicate copies', csvs.length === 1, JSON.stringify(csvs.map(function (a) { return a.fileName; })));
+    log('csv name stable', /^list_[0-9a-f-]{36}\.csv$/.test(csvs[0].fileName), csvs[0].fileName);
+
     // --- open XLSX attachment (multi-sheet workbook with a formula)
     tap(qa(doc, '.topbar .icon-btn')[0]);
     await sleep(150);
@@ -130,7 +146,7 @@
     tap(q(doc, '#save-btn'));
     await sleep(500);
     var atts2 = (await win.Synapse.exportNotes(['note-1'])).notes[0].attachments;
-    var savedX = atts2.filter(function (a) { return a.fileName === 'book.xlsx'; });
+    var savedX = atts2.filter(function (a) { return a.fileName.indexOf('book') === 0 && /\.xlsx$/.test(a.fileName); });
     var readX = await win.Synapse.readAttachment(savedX[savedX.length - 1].path);
     var wb2 = win.XLSX.read(readX.data, { type: 'base64' });
     var sales = wb2.Sheets.Sales;

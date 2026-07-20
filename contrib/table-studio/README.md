@@ -30,6 +30,17 @@ carries in a fluid, touch-first spreadsheet:
 - Workbooks with formulas show a warning before saving flattens them to
   values; oversized files are refused instead of half-loaded.
 
+## Known limits
+
+- Attachments over 15 MB, sheets over ~200k cells / 512 columns, and
+  non-UTF-8 text files are refused up front rather than opened lossily.
+- On very large notes (multi-megabyte bodies) the pre-save fresh-content
+  read can fail on Android's cursor limits; the save then aborts with an
+  error instead of risking a stale overwrite.
+- `.xlsx`/`.ods` saves keep untouched cells (formulas, types, formats)
+  intact; formulas in cells you edit become plain values, and inserting or
+  deleting rows/columns rewrites that sheet as values.
+
 ## Install
 
 Open `plugins/Table_Studio.yaml` with Note Synapse (share/open it on your

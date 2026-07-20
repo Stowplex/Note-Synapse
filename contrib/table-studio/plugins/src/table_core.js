@@ -118,11 +118,14 @@
   }
 
   /**
-   * Converts editable plain text back into a markdown-safe cell — the exact
-   * inverse of decodeMdCell. Backslashes directly before a pipe are doubled
-   * so a cell ending in a backslash can never turn the escaped pipe back
-   * into a separator; other backslashes (markdown escapes like \*) are left
-   * untouched.
+   * Converts editable plain text back into a markdown-safe cell.
+   * Backslashes directly before a pipe are doubled so a cell ending in a
+   * backslash can never turn the escaped pipe back into a separator; other
+   * backslashes (markdown escapes like \*) are left untouched.
+   *
+   * Inverse of decodeMdCell up to GFM's own equivalences: a literal
+   * '<br>' typed by the user reads back as a newline (both render as a
+   * line break) and cell-edge whitespace is trimmed (GFM ignores it).
    */
   function encodeMdCell(text) {
     return String(text == null ? '' : text)
@@ -525,15 +528,17 @@
     var needsQuote = new RegExp('["\r\n' + (delim === '\t' ? '\\t' : delim) + ']');
 
     var out = rows.slice();
-    if (arities) {
-      // Drop trailing all-empty rows that were appended in the editor.
-      while (
-        out.length > 1 &&
-        (out.length > arities.length || arities[out.length - 1] === -1) &&
-        rowIsEmpty(out[out.length - 1])
-      ) {
-        out.pop();
-      }
+    // Drop trailing all-empty rows that were appended in the editor. Rows
+    // with a recorded arity are original file content (e.g. deliberate
+    // blank lines) and are kept; without arity information all trailing
+    // empties go, so Enter-navigation can never accrete delimiter-only
+    // lines.
+    while (
+      out.length > 1 &&
+      rowIsEmpty(out[out.length - 1]) &&
+      (!arities || out.length > arities.length || arities[out.length - 1] === -1)
+    ) {
+      out.pop();
     }
 
     var lines = out.map(function (row, i) {
@@ -619,11 +624,18 @@
     return isFinite(n) && String(n) === s;
   }
 
+  /** Returns a copy of the grid without its trailing all-empty rows. */
+  function trimTrailingEmptyRows(grid) {
+    var out = grid.slice();
+    while (out.length > 1 && rowIsEmpty(out[out.length - 1])) {
+      out.pop();
+    }
+    return out;
+  }
+
   return {
-    hasUnescapedPipe: hasUnescapedPipe,
     splitPipeRow: splitPipeRow,
     isDelimiterRow: isDelimiterRow,
-    parseAlign: parseAlign,
     decodeMdCell: decodeMdCell,
     encodeMdCell: encodeMdCell,
     scanTables: scanTables,
@@ -634,6 +646,7 @@
     normalizeGrid: normalizeGrid,
     colLabel: colLabel,
     looksNumeric: looksNumeric,
-    displayWidth: displayWidth,
+    rowIsEmpty: rowIsEmpty,
+    trimTrailingEmptyRows: trimTrailingEmptyRows,
   };
 });

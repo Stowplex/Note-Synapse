@@ -683,7 +683,6 @@
     alignLeft: ['M4 6h16', 'M4 12h10', 'M4 18h14'],
     alignCenter: ['M4 6h16', 'M7 12h10', 'M5 18h14'],
     alignRight: ['M4 6h16', 'M10 12h10', 'M6 18h14'],
-    copy: ['M9 9h11a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1z', 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'],
   };
 
   function toast(msg) {
@@ -854,7 +853,15 @@
     return btoa(out);
   }
   function decodeUtf8(bytes) {
-    return new TextDecoder('utf-8').decode(bytes);
+    // fatal:true — a lossy decode would silently rewrite every non-UTF-8
+    // character as U+FFFD when the file is saved back.
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch (e) {
+      throw new Error(
+        'This file is not UTF-8 encoded. Editing it here would corrupt its characters, so it was not opened.'
+      );
+    }
   }
   function encodeUtf8(text) {
     return new TextEncoder().encode(text);
@@ -922,13 +929,17 @@
       });
   }
 
+  /** Resolves true on success, false on failure (never rejects). */
   function refreshAttachmentLists() {
     var ids = state.notes.map(function (n) { return n.id; });
-    if (ids.length === 0) return Promise.resolve();
+    if (ids.length === 0) return Promise.resolve(true);
     return window.Synapse
       .exportNotes(ids, { includeSubNotesAndLinkedNotes: false, includeAttachmentList: true })
       .then(function (res) {
-        if (!res || !res.success || !Array.isArray(res.notes)) return;
+        if (!res || !res.success || !Array.isArray(res.notes)) {
+          state.attachmentsError = true;
+          return false;
+        }
         res.notes.forEach(function (exp) {
           var note = findNote(exp.id);
           if (note && Array.isArray(exp.attachments)) {
@@ -936,8 +947,13 @@
           }
         });
         state.attachmentsLoaded = true;
+        state.attachmentsError = false;
+        return true;
       })
-      .catch(function () {});
+      .catch(function () {
+        state.attachmentsError = true;
+        return false;
+      });
   }
 
   function findNote(id) {
@@ -974,10 +990,21 @@
   // ------------------------------------------------------------------
   var SIZE_LIMITS = { maxCols: MAX_COLS, maxCells: MAX_CELLS };
 
+  /** Memoized markdown scan — re-parses only when the content changed. */
+  function tablesOf(note) {
+    if (!note.scanCache || note.scanCache.content !== note.content) {
+      note.scanCache = {
+        content: note.content,
+        tables: CORE.scanTables(note.content, SIZE_LIMITS),
+      };
+    }
+    return note.scanCache.tables;
+  }
+
   function buildSources() {
     state.sources = [];
     state.notes.forEach(function (note) {
-      var tables = CORE.scanTables(note.content, SIZE_LIMITS);
+      var tables = tablesOf(note);
       tables.forEach(function (t, idx) {
         state.sources.push({
           kind: 'block',
@@ -1032,13 +1059,19 @@
       if (s.kind === 'block') blockCount++;
       else fileCount++;
     });
+    var attachmentHint = '';
+    if (state.attachmentsError) {
+      attachmentHint = ' — attachments unavailable, tap refresh';
+    } else if (!state.attachmentsLoaded) {
+      attachmentHint = ' (loading attachments…)';
+    }
     titles.appendChild(
       el(
         'div',
         'subtitle',
         blockCount + (blockCount === 1 ? ' table' : ' tables') + ' · ' +
           fileCount + (fileCount === 1 ? ' sheet file' : ' sheet files') +
-          (state.attachmentsLoaded ? '' : ' (loading attachments…)')
+          attachmentHint
       )
     );
     bar.appendChild(titles);
@@ -1049,7 +1082,7 @@
     bar.appendChild(refreshBtn);
     screen.appendChild(bar);
 
-    if (state.sources.length === 0 && state.attachmentsLoaded) {
+    if (state.sources.length === 0 && (state.attachmentsLoaded || state.attachmentsError)) {
       var empty = el('div', 'empty-state');
       empty.appendChild(svgIcon(ICONS.grid));
       empty.appendChild(el('div', 'big', 'No tables here yet'));
@@ -1162,9 +1195,10 @@
     });
     Promise.all(contentFetches)
       .then(refreshAttachmentLists)
-      .then(function () {
+      .then(function (ok) {
         unbusy();
         renderHome();
+        if (ok === false) toast('Could not load attachments');
       })
       .catch(function () {
         unbusy();
@@ -1261,7 +1295,7 @@
         ed.note = res.note;
         ed.isNew = true;
         ed.format = 'text';
-        ed.fileName = name;
+        ed.saveName = name;
         ed.title = name;
         ed.meta = {
           delim: extOf(name) === 'tsv' ? '\t' : ',',
@@ -1307,7 +1341,7 @@
         ed.note = src.note;
         ed.att = src.att;
         ed.ext = src.ext;
-        ed.fileName = src.att.fileName;
+        ed.saveName = src.att.fileName;
         ed.title = src.att.fileName;
         ed.isNew = false;
 
@@ -1337,8 +1371,10 @@
             var ref = wb.Sheets[name] && wb.Sheets[name]['!ref'];
             if (!ref) return;
             var range = XLSX.utils.decode_range(ref);
-            var sheetRows = range.e.r - range.s.r + 1;
-            var sheetCols = range.e.c - range.s.c + 1;
+            // Measured from A1, because sheet_to_json below is forced to
+            // expand from A1 — a far-offset !ref must not sneak past.
+            var sheetRows = range.e.r + 1;
+            var sheetCols = range.e.c + 1;
             if (sheetCols > MAX_COLS) {
               throw new Error('This workbook is too wide to edit here.');
             }
@@ -1739,7 +1775,7 @@
     if (ed.readonly) return;
     var grid = activeGrid();
     if (!ed.editSnapTaken) {
-      pushUndo();
+      pushUndoCell(ed.sel.r, ed.sel.c);
       ed.editSnapTaken = true;
     }
     grid[ed.sel.r][ed.sel.c] = e.target.value;
@@ -1829,6 +1865,27 @@
     ed.redoStack = [];
     updateUndoButtons();
   }
+  /**
+   * Cheap undo entry for a single-cell edit — avoids a full-grid deep copy
+   * on every first keystroke. Structural ops still take full snapshots, so
+   * a cell record is always replayed against the geometry it was recorded
+   * in (tab switches clear the stacks, so the active sheet always matches).
+   */
+  function pushUndoCell(r, c) {
+    var ed = state.editor;
+    ed.undoStack.push({ type: 'cell', r: r, c: c, value: activeGrid()[r][c] });
+    if (ed.undoStack.length > UNDO_LIMIT) ed.undoStack.shift();
+    ed.redoStack = [];
+    updateUndoButtons();
+  }
+  function applyCellRecord(entry, intoStack) {
+    var ed = state.editor;
+    var grid = activeGrid();
+    if (entry.r >= grid.length || entry.c >= grid[0].length) return;
+    intoStack.push({ type: 'cell', r: entry.r, c: entry.c, value: grid[entry.r][entry.c] });
+    grid[entry.r][entry.c] = entry.value;
+    ed.sel = { r: entry.r, c: entry.c };
+  }
   function updateUndoButtons() {
     var ed = state.editor;
     var u = document.getElementById('undo-btn');
@@ -1839,8 +1896,13 @@
   function doUndo() {
     var ed = state.editor;
     if (ed.undoStack.length === 0) return;
-    ed.redoStack.push(snapshot());
-    restore(ed.undoStack.pop());
+    var entry = ed.undoStack.pop();
+    if (entry.type === 'cell') {
+      applyCellRecord(entry, ed.redoStack);
+    } else {
+      ed.redoStack.push(snapshot());
+      restore(entry);
+    }
     ed.editSnapTaken = false;
     markSheetDirty();
     refreshGridDom();
@@ -1849,8 +1911,13 @@
   function doRedo() {
     var ed = state.editor;
     if (ed.redoStack.length === 0) return;
-    ed.undoStack.push(snapshot());
-    restore(ed.redoStack.pop());
+    var entry = ed.redoStack.pop();
+    if (entry.type === 'cell') {
+      applyCellRecord(entry, ed.undoStack);
+    } else {
+      ed.undoStack.push(snapshot());
+      restore(entry);
+    }
     ed.editSnapTaken = false;
     markSheetDirty();
     refreshGridDom();
@@ -2023,16 +2090,32 @@
     if (saveBtn) saveBtn.disabled = true;
     busy('Saving…');
 
+    // Serialization can throw synchronously (e.g. SheetJS refuses cells
+    // over 32,767 chars); it must never leave the busy overlay stuck.
     var task;
-    if (ed.kind === 'block') {
-      task = ed.isNew ? saveNewBlock(ed) : saveExistingBlock(ed);
-    } else {
-      task = saveFile(ed);
+    try {
+      if (ed.kind === 'block') {
+        task = ed.isNew ? saveNewBlock(ed) : saveExistingBlock(ed);
+      } else {
+        task = saveFile(ed);
+      }
+    } catch (e) {
+      task = Promise.reject(e);
     }
     task
       .then(function (result) {
         state.saving = false;
         unbusy();
+        if (result && result.noop) {
+          ed.dirty = false;
+          if (ed.sheets) {
+            ed.sheets.forEach(function (s) { s.dirty = false; });
+          }
+          var noopBtn = document.getElementById('save-btn');
+          if (noopBtn) noopBtn.disabled = !canSave();
+          toast('No changes to save');
+          return;
+        }
         if (result && result.reopen) {
           // Saved, but the stored file could not be re-identified; further
           // saves from this editor could act on stale paths.
@@ -2146,26 +2229,34 @@
     var block = CORE.serializeTable(ed.grid, ed.aligns, '', eol);
     var text = eol + block;
     return appendNoteContent(ed.note.id, text).then(function () {
-      // Mirror the host's append ("content" + "\n" + text) locally.
-      var newContent = ed.note.content + '\n' + text;
-      ed.note.content = newContent;
-      ed.contentAtOpen = newContent;
-      ed.isNew = false;
-      ed.raw = block;
-      var lines = newContent.split('\n');
-      var blockLines = block.split('\n').length;
-      ed.endLine = lines.length;
-      ed.startLine = ed.endLine - blockLines;
-      ed.title = 'Table ' + CORE.scanTables(newContent).length;
-      var h1 = appEl.querySelector('.topbar h1');
-      if (h1) h1.textContent = ed.title;
+      // Prefer re-reading the stored content so our local copy can never
+      // drift from the host's append semantics; fall back to mirroring
+      // the host's "content" + "\n" + text when the read fails.
+      return fetchNoteContent(ed.note.id).then(function (fresh) {
+        var newContent =
+          typeof fresh === 'string' && fresh.indexOf(block) >= 0
+            ? fresh
+            : ed.note.content + '\n' + text;
+        ed.note.content = newContent;
+        ed.contentAtOpen = newContent;
+        ed.isNew = false;
+        ed.raw = block;
+        // Our freshly appended block is the last occurrence.
+        var idx = newContent.lastIndexOf(block);
+        ed.startLine = lineOfOffset(newContent, idx);
+        ed.endLine = ed.startLine + block.split('\n').length;
+        ed.title = 'Table ' + tablesOf(ed.note).length;
+        var h1 = appEl.querySelector('.topbar h1');
+        if (h1) h1.textContent = ed.title;
+      });
     });
   }
 
-  function csvMimeFor(name) {
-    return extOf(name) === 'tsv' || extOf(name) === 'tab'
-      ? 'text/tab-separated-values'
-      : 'text/csv';
+  function mimeFor(ext, bookType) {
+    if (ext === 'tsv' || ext === 'tab') return 'text/tab-separated-values';
+    if (ext === 'csv') return 'text/csv';
+    if (bookType === 'ods') return 'application/vnd.oasis.opendocument.spreadsheet';
+    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   }
 
   /** Converts a display string to the value stored in a worksheet cell. */
@@ -2173,25 +2264,29 @@
     return CORE.looksNumeric(v) ? Number(v) : v;
   }
 
-  function trimTrailingEmptyRows(grid) {
-    var out = grid.slice();
-    while (out.length > 1 && out[out.length - 1].every(function (c) { return c === ''; })) {
-      out.pop();
-    }
-    return out;
+  function rebuiltWorksheet(sheet) {
+    var typed = CORE.trimTrailingEmptyRows(sheet.grid).map(function (row) {
+      return row.map(typedCellValue);
+    });
+    return XLSX.utils.aoa_to_sheet(typed);
   }
 
   /**
-   * Applies the grid's edits to the worksheet cell by cell against the
-   * loaded baseline. Untouched cells — their formulas, types, and number
-   * formats — are never rewritten. Idempotent, so a failed upload can
-   * simply retry.
+   * Returns a copy of the worksheet with the grid's edits applied cell by
+   * cell against the loaded baseline (copy-on-write: the original ws object
+   * is never mutated, so a failed upload leaves the workbook pristine).
+   * Untouched cells — their formulas, types, and number formats — are
+   * carried through unchanged.
    */
-  function patchWorksheet(ws, sheet) {
+  function patchedWorksheetCopy(ws, sheet) {
+    var copy = Object.assign({}, ws);
     var grid = sheet.grid;
     var orig = sheet.original || [];
+    var changed = false;
     var maxR = -1;
     var maxC = -1;
+    var minR = Infinity;
+    var minC = Infinity;
     var rowCount = Math.max(grid.length, orig.length);
     for (var r = 0; r < rowCount; r++) {
       var newRow = grid[r] || [];
@@ -2201,27 +2296,44 @@
         var nv = newRow[c] == null ? '' : newRow[c];
         var ov = oldRow[c] == null ? '' : oldRow[c];
         if (nv === ov) continue;
+        changed = true;
         var addr = XLSX.utils.encode_cell({ r: r, c: c });
         if (nv === '') {
-          delete ws[addr];
+          delete copy[addr];
         } else {
           var val = typedCellValue(nv);
-          ws[addr] = typeof val === 'number' ? { t: 'n', v: val } : { t: 's', v: val };
+          copy[addr] = typeof val === 'number' ? { t: 'n', v: val } : { t: 's', v: val };
           maxR = Math.max(maxR, r);
           maxC = Math.max(maxC, c);
+          minR = Math.min(minR, r);
+          minC = Math.min(minC, c);
         }
       }
     }
     if (maxR >= 0) {
-      var ref = ws['!ref']
-        ? XLSX.utils.decode_range(ws['!ref'])
-        : { s: { r: 0, c: 0 }, e: { r: 0, c: 0 } };
+      // Grow !ref at BOTH ends: the grid is A1-anchored, so an edit can
+      // land before a non-A1 range start — a cell outside !ref would be
+      // silently dropped by the writer.
+      var ref = copy['!ref']
+        ? XLSX.utils.decode_range(copy['!ref'])
+        : { s: { r: minR, c: minC }, e: { r: maxR, c: maxC } };
+      ref.s.r = Math.min(ref.s.r, minR);
+      ref.s.c = Math.min(ref.s.c, minC);
       ref.e.r = Math.max(ref.e.r, maxR);
       ref.e.c = Math.max(ref.e.c, maxC);
-      ws['!ref'] = XLSX.utils.encode_range(ref);
+      copy['!ref'] = XLSX.utils.encode_range(ref);
     }
+    return { ws: copy, changed: changed };
   }
 
+  /**
+   * Serializes the editor's file. Returns null when nothing actually
+   * changed (e.g. an edit was typed and reverted). For workbooks the
+   * result carries a commit() that must be called only after a successful
+   * upload — it adopts the candidate worksheets and re-baselines
+   * sheet.original so later reverts diff correctly against what is now
+   * stored.
+   */
   function serializeEditorFile(ed) {
     if (ed.format === 'text') {
       var sheet0 = ed.sheets[0];
@@ -2235,47 +2347,80 @@
       var text = CORE.serializeDelimited(sheet0.grid, meta);
       return {
         base64: bytesToB64(encodeUtf8(text)),
-        mime: csvMimeFor(ed.fileName),
+        mime: mimeFor(extOf(ed.saveName)),
+        commit: function () {},
       };
     }
-    // Workbook: cell-patch edited sheets in place; only a sheet whose
-    // row/column structure changed is rebuilt wholesale.
     var wb = ed.wb;
+    var candidates = [];
     ed.sheets.forEach(function (sheet) {
       if (!sheet.dirty) return;
       if (sheet.structured || !wb.Sheets[sheet.name]) {
-        var typed = trimTrailingEmptyRows(sheet.grid).map(function (row) {
-          return row.map(typedCellValue);
-        });
-        wb.Sheets[sheet.name] = XLSX.utils.aoa_to_sheet(typed);
+        candidates.push({ sheet: sheet, ws: rebuiltWorksheet(sheet) });
       } else {
-        patchWorksheet(wb.Sheets[sheet.name], sheet);
+        var res = patchedWorksheetCopy(wb.Sheets[sheet.name], sheet);
+        if (res.changed) candidates.push({ sheet: sheet, ws: res.ws });
       }
     });
-    var b64 = XLSX.write(wb, { bookType: ed.bookType, type: 'base64' });
+    if (candidates.length === 0) {
+      return null;
+    }
+    // Swap the candidates in only for the write, so the in-memory workbook
+    // stays pristine unless the upload later succeeds.
+    var previous = candidates.map(function (c) {
+      return { name: c.sheet.name, ws: wb.Sheets[c.sheet.name] };
+    });
+    candidates.forEach(function (c) {
+      wb.Sheets[c.sheet.name] = c.ws;
+    });
+    var b64;
+    try {
+      b64 = XLSX.write(wb, { bookType: ed.bookType, type: 'base64' });
+    } finally {
+      previous.forEach(function (p) {
+        wb.Sheets[p.name] = p.ws;
+      });
+    }
     return {
       base64: b64,
-      mime:
-        ed.bookType === 'ods'
-          ? 'application/vnd.oasis.opendocument.spreadsheet'
-          : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      mime: mimeFor(extOf(ed.saveName), ed.bookType),
+      commit: function () {
+        candidates.forEach(function (c) {
+          wb.Sheets[c.sheet.name] = c.ws;
+          c.sheet.original = deepCopyGrid(c.sheet.grid);
+          c.sheet.structured = false;
+        });
+      },
     };
+  }
+
+  /** RegExp-escapes a literal string. */
+  function escapeRe(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   function saveFile(ed) {
     var out = serializeEditorFile(ed);
+    if (out === null) {
+      return Promise.resolve({ noop: true });
+    }
     var payload = {
       type: 'base64',
       data: 'data:' + out.mime + ';base64,' + out.base64,
-      fileName: ed.fileName,
+      // Always the ORIGINAL name: the store appends a uuid on every save,
+      // so feeding back the stored name would grow it without bound.
+      fileName: ed.saveName,
     };
     var modification = { attachments: { added: [payload], removed: [] } };
     if (!ed.isNew && ed.att) {
-      // The stored path may be relative ("attachments/x.csv") or absolute;
-      // include both spellings so the stale entry is removed either way.
       var removed = [ed.att.path];
-      var rel = 'attachments/' + baseName(ed.att.path);
-      if (removed.indexOf(rel) === -1) removed.push(rel);
+      // Only guess the relative spelling when the file actually lives in
+      // the attachments folder — for a legacy absolute path elsewhere the
+      // guess could name a DIFFERENT attachment with the same basename.
+      if (/\/attachments\/[^/]+$/.test(ed.att.path)) {
+        var rel = 'attachments/' + baseName(ed.att.path);
+        if (removed.indexOf(rel) === -1) removed.push(rel);
+      }
       modification.attachments.removed = removed;
     }
     var prevIds = {};
@@ -2286,21 +2431,25 @@
       .updateNotes([{ id: ed.note.id, modification: modification }])
       .then(interpretUpdateResult)
       .then(function () {
+        out.commit();
         return refreshAttachmentLists();
       })
       .then(function () {
+        var ext = extOf(ed.saveName);
+        var stem = ed.saveName.slice(0, ed.saveName.length - ext.length - 1);
+        // The host stores our upload as "<stem>_<uuid>.<ext>"; accept an
+        // exact name too in case renaming ever stops.
+        var namePattern = new RegExp(
+          '^' + escapeRe(stem) + '_[0-9a-f-]{36}\\.' + escapeRe(ext) + '$',
+          'i'
+        );
         var fresh = (ed.note.attachments || []).filter(function (a) {
-          return !prevIds[a.id] && extOf(a.fileName) === extOf(ed.fileName);
+          return !prevIds[a.id] &&
+            (a.fileName === ed.saveName || namePattern.test(a.fileName));
         });
-        // The store may rename the file to keep names unique; prefer an
-        // exact name match among the new entries.
-        var exact = fresh.filter(function (a) {
-          return a.fileName === ed.fileName;
-        });
-        var picked = exact.length > 0 ? exact[exact.length - 1] : fresh[fresh.length - 1];
+        var picked = fresh[fresh.length - 1];
         if (picked) {
           ed.att = picked;
-          ed.fileName = picked.fileName;
           ed.title = picked.fileName;
           ed.isNew = false;
           var h1 = appEl.querySelector('.topbar h1');
@@ -2319,22 +2468,28 @@
     if (!ed || state.saving) return;
     state.saving = true;
     busy('Saving copy…');
-    var copyWb = XLSX.utils.book_new();
-    var usedNames = {};
-    ed.sheets.forEach(function (sheet, idx) {
-      var typed = trimTrailingEmptyRows(sheet.grid).map(function (row) {
-        return row.map(typedCellValue);
+    var b64;
+    var name;
+    try {
+      var copyWb = XLSX.utils.book_new();
+      var usedNames = {};
+      ed.sheets.forEach(function (sheet, idx) {
+        // Excel caps sheet names at 31 chars; keep truncated names unique.
+        var sheetName = sheet.name.slice(0, 31);
+        if (usedNames[sheetName]) {
+          sheetName = sheetName.slice(0, 27) + '~' + (idx + 1);
+        }
+        usedNames[sheetName] = true;
+        XLSX.utils.book_append_sheet(copyWb, rebuiltWorksheet(sheet), sheetName);
       });
-      // Excel caps sheet names at 31 chars; keep truncated names unique.
-      var name = sheet.name.slice(0, 31);
-      if (usedNames[name]) {
-        name = name.slice(0, 27) + '~' + (idx + 1);
-      }
-      usedNames[name] = true;
-      XLSX.utils.book_append_sheet(copyWb, XLSX.utils.aoa_to_sheet(typed), name);
-    });
-    var b64 = XLSX.write(copyWb, { bookType: 'xlsx', type: 'base64' });
-    var name = ed.fileName.replace(/\.[a-z0-9]+$/i, '') + '.xlsx';
+      b64 = XLSX.write(copyWb, { bookType: 'xlsx', type: 'base64' });
+      name = ed.saveName.replace(/\.[a-z0-9]+$/i, '') + '.xlsx';
+    } catch (e) {
+      state.saving = false;
+      unbusy();
+      infoDialog('Save failed', String(e && e.message ? e.message : e));
+      return;
+    }
     window.Synapse
       .updateNotes([
         {
@@ -2344,7 +2499,7 @@
               added: [
                 {
                   type: 'base64',
-                  data: 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + b64,
+                  data: 'data:' + mimeFor('xlsx', 'xlsx') + ';base64,' + b64,
                   fileName: name,
                 },
               ],

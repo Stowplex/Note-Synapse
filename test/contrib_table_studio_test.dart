@@ -139,13 +139,17 @@ void main() {
       // A failed fresh-content read aborts the save instead of falling back
       // to a stale snapshot that would clobber concurrent edits.
       expect(source, contains('strict: true'));
-      // Workbook saves patch only edited cells so untouched formulas,
-      // types, and formats survive.
-      expect(source, contains('function patchWorksheet'));
+      // Workbook saves patch only edited cells (copy-on-write, committed
+      // only after a successful upload) so untouched formulas, types, and
+      // formats survive and a failed upload leaves the workbook pristine.
+      expect(source, contains('function patchedWorksheetCopy'));
+      expect(source, contains('out.commit()'));
       // CSV fidelity metadata survives the round trip.
       expect(core, contains('trailingNewline'));
       expect(core, contains('hadBom'));
       expect(core, contains('arities'));
+      // Non-UTF-8 files are refused, never decoded lossily.
+      expect(source, contains('fatal: true'));
       // Tables inside fenced code blocks are ignored by the scanner.
       expect(core, contains('FENCE_RE'));
     });
