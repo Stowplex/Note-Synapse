@@ -1085,10 +1085,17 @@
     if (state.sources.length === 0 && (state.attachmentsLoaded || state.attachmentsError)) {
       var empty = el('div', 'empty-state');
       empty.appendChild(svgIcon(ICONS.grid));
-      empty.appendChild(el('div', 'big', 'No tables here yet'));
-      empty.appendChild(
-        el('div', null, 'This note has no markdown tables or spreadsheet attachments. Create one to get started.')
-      );
+      if (state.attachmentsError) {
+        empty.appendChild(el('div', 'big', 'Attachments unavailable'));
+        empty.appendChild(
+          el('div', null, 'The attachment list could not be loaded, and this note has no markdown tables. Tap refresh to try again.')
+        );
+      } else {
+        empty.appendChild(el('div', 'big', 'No tables here yet'));
+        empty.appendChild(
+          el('div', null, 'This note has no markdown tables or spreadsheet attachments. Create one to get started.')
+        );
+      }
       var actions = el('div', 'actions');
       var newTableBtn = el('button', 'pill-btn');
       newTableBtn.appendChild(svgIcon(ICONS.plus));
@@ -2107,9 +2114,11 @@
         state.saving = false;
         unbusy();
         if (result && result.noop) {
-          ed.dirty = false;
-          if (ed.sheets) {
-            ed.sheets.forEach(function (s) { s.dirty = false; });
+          if ((ed.editGen || 0) === genAtStart) {
+            ed.dirty = false;
+            if (ed.sheets) {
+              ed.sheets.forEach(function (s) { s.dirty = false; });
+            }
           }
           var noopBtn = document.getElementById('save-btn');
           if (noopBtn) noopBtn.disabled = !canSave();
@@ -2233,8 +2242,11 @@
       // drift from the host's append semantics; fall back to mirroring
       // the host's "content" + "\n" + text when the read fails.
       return fetchNoteContent(ed.note.id).then(function (fresh) {
+        // Accept the re-read only when it visibly contains our append at
+        // the end — a stale snapshot that merely contains an identical
+        // table elsewhere would poison contentAtOpen.
         var newContent =
-          typeof fresh === 'string' && fresh.indexOf(block) >= 0
+          typeof fresh === 'string' && fresh.endsWith(block)
             ? fresh
             : ed.note.content + '\n' + text;
         ed.note.content = newContent;
@@ -2355,11 +2367,19 @@
     var candidates = [];
     ed.sheets.forEach(function (sheet) {
       if (!sheet.dirty) return;
+      var entry = null;
       if (sheet.structured || !wb.Sheets[sheet.name]) {
-        candidates.push({ sheet: sheet, ws: rebuiltWorksheet(sheet) });
+        entry = { sheet: sheet, ws: rebuiltWorksheet(sheet) };
       } else {
         var res = patchedWorksheetCopy(wb.Sheets[sheet.name], sheet);
-        if (res.changed) candidates.push({ sheet: sheet, ws: res.ws });
+        if (res.changed) entry = { sheet: sheet, ws: res.ws };
+      }
+      if (entry) {
+        // The commit baseline must be the grid AS SERIALIZED — an edit
+        // typed while the upload is in flight must still diff against
+        // what was actually stored, not be absorbed into the baseline.
+        entry.baseline = deepCopyGrid(sheet.grid);
+        candidates.push(entry);
       }
     });
     if (candidates.length === 0) {
@@ -2387,7 +2407,7 @@
       commit: function () {
         candidates.forEach(function (c) {
           wb.Sheets[c.sheet.name] = c.ws;
-          c.sheet.original = deepCopyGrid(c.sheet.grid);
+          c.sheet.original = c.baseline;
           c.sheet.structured = false;
         });
       },
