@@ -14,6 +14,11 @@ inside the plugin sandbox, using only the public Synapse API:
 - **On-screen controls** — a full DOS keyboard overlay (sticky modifiers,
   quick-type bar) and a virtual gamepad (d-pad + mappable A/B/C buttons) for
   touch play.
+- **Game saves that stick** — anything the game writes to `C:` (RPG save
+  games, configs, high scores) is diffed against the game zip and stored on
+  the note as a `dos-saves-*.zip` attachment (via the 💾 button, a 60-second
+  change-detecting autosave, and on eject), then restored automatically the
+  next time the game boots.
 - **Capture back to the note** — snapshot the current frame at any time; the
   PNG is attached to the note and appended inline to the note body together
   with an optional comment (`Synapse.updateNotes` granular append). You can
@@ -68,6 +73,22 @@ inside the plugin sandbox, using only the public Synapse API:
    Supported embed params: `autoboot` (skip the launcher when possible),
    `exe` (program to run, e.g. `exe=KEEN1.EXE`), `zip` (attachment file name
    to use when the note has several zips).
+
+## Game saves
+
+Save inside the game as you normally would (e.g. the RPG's own *Save Game*
+menu). DOS Station notices files that changed on `C:` compared to the game
+zip and writes just that diff to the note as a `dos-saves-<game>-<stamp>.zip`
+attachment — on the next boot the diff is unpacked on top of the game files
+before DOS starts, so the game finds its save files where it left them.
+
+- Saving happens on the 💾 HUD button, every 60 seconds when something
+  actually changed, when the app is backgrounded, and on eject (⏏).
+- Each save replaces the previous `dos-saves` attachment for that game zip;
+  notes with several game zips keep independent saves per zip.
+- Deleting the `dos-saves-*.zip` attachment resets the game to a fresh
+  install; moving it (with the game zip) to another device restores progress
+  there.
 
 ## Folder layout
 

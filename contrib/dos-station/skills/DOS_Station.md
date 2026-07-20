@@ -60,6 +60,11 @@ zip as the DOS `C:` drive and boots a DOSBox emulator, configured by a fenced
 - The first run downloads the emulator engine (~2 MB); afterwards it works
   offline. If the user reports a hash/download error, they should retry on a
   network connection.
+- Game progress persists: files the game writes to `C:` (RPG save games,
+  configs, high scores) are stored on the note as a `dos-saves-*.zip`
+  attachment (updated by the 💾 button, a 60-second autosave, and eject) and
+  restored automatically on the next boot. Tell users of save-capable games
+  to save inside the game as usual.
 
 ## What you should NOT do
 
@@ -68,3 +73,5 @@ zip as the DOS `C:` drive and boots a DOSBox emulator, configured by a fenced
 - Don't create more than one ` ```dosbox ` block; only the first is used.
 - Don't remove `dos-capture-*.png` attachments when editing a note unless the
   user asks — the inline images in capture sections reference them.
+- Don't remove or rename `dos-saves-*.zip` attachments — they hold the user's
+  game saves; deleting one erases their progress.

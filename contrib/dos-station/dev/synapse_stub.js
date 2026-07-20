@@ -45,10 +45,26 @@
     attachmentPaths: ['attachments/testgame.zip'],
   };
 
-  // Simulates the app's uuid-renaming of stored attachments.
+  // Simulates the app's uuid-renaming of stored attachments. Attachments the
+  // plugin adds (frame captures, dos-saves zips) carry their base64 payload
+  // and persist in localStorage so save/restore survives a page reload.
+  const STUB_ATTS_KEY = 'dos-station-stub-attachments';
   const storedAttachments = [
     { id: 'att-1', path: 'attachments/testgame.zip', fileName: 'testgame.zip', mimeType: 'application/zip' },
   ];
+  try {
+    for (const a of JSON.parse(localStorage.getItem(STUB_ATTS_KEY) || '[]')) {
+      storedAttachments.push(a);
+    }
+  } catch (_) {}
+  const syncNoteAttachments = () => {
+    fakeNote.attachmentPaths = storedAttachments.map((a) => a.path);
+    try {
+      localStorage.setItem(STUB_ATTS_KEY,
+        JSON.stringify(storedAttachments.filter((a) => a.data)));
+    } catch (e) { hlog('stub attachment persist failed: ' + e.message); }
+  };
+  syncNoteAttachments();
 
   window.Synapse = {
     Notes: [fakeNote],
@@ -115,11 +131,15 @@
 
     async readAttachment(path) {
       hlog('readAttachment ' + path);
-      if (!/testgame\.zip$/.test(path)) return { success: false, error: 'not found' };
-      const r = await fetch('testgame.zip');
-      if (!r.ok) return { success: false, error: 'HTTP ' + r.status };
-      const buf = new Uint8Array(await r.arrayBuffer());
-      return { success: true, data: u8ToB64(buf), mimeType: 'application/zip' };
+      if (/testgame\.zip$/.test(path)) {
+        const r = await fetch('testgame.zip');
+        if (!r.ok) return { success: false, error: 'HTTP ' + r.status };
+        const buf = new Uint8Array(await r.arrayBuffer());
+        return { success: true, data: u8ToB64(buf), mimeType: 'application/zip' };
+      }
+      const hit = storedAttachments.find((a) => a.path === path && a.data);
+      if (hit) return { success: true, data: hit.data, mimeType: hit.mimeType };
+      return { success: false, error: 'not found' };
     },
 
     async exportNotes(ids) {
@@ -145,19 +165,33 @@
         typeof v === 'string' && v.length > 120 ? v.slice(0, 90) + '…[' + v.length + ' chars]' : v, 2));
       const n = notes && notes[0];
       const mod = n && n.modification;
+      if (mod && mod.attachments && mod.attachments.removed) {
+        for (const path of mod.attachments.removed) {
+          const i = storedAttachments.findIndex((a) => a.path === path);
+          if (i >= 0) {
+            hlog('  -> removed ' + path);
+            storedAttachments.splice(i, 1);
+          }
+        }
+        syncNoteAttachments();
+      }
       if (mod && mod.attachments && mod.attachments.added) {
         for (const a of mod.attachments.added) {
           const base = (a.fileName || 'file.bin').replace(/\.([^.]+)$/, '');
           const ext = (a.fileName || '').split('.').pop();
           const unique = base + '_' + Math.random().toString(16).slice(2, 10) + '.' + ext;
+          const raw = String(a.data || '');
           storedAttachments.push({
             id: 'att-' + storedAttachments.length,
             path: 'attachments/' + unique,
             fileName: a.fileName,
-            mimeType: 'image/png',
+            mimeType: ext === 'zip' ? 'application/zip' : 'image/png',
+            // keep the payload so readAttachment can serve it back
+            data: raw.includes(',') ? raw.split(',').pop() : raw,
           });
           hlog('  -> stored as attachments/' + unique);
         }
+        syncNoteAttachments();
       }
       if (mod && mod.content && mod.content.action === 'append') {
         fakeNote.content += mod.content.text;
