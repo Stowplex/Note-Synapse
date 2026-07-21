@@ -158,6 +158,27 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
           as bool);
 
   @override
+  _i9.Future<void> refreshNotesFromDb(Set<String>? noteIds) =>
+      (super.noSuchMethod(
+            Invocation.method(#refreshNotesFromDb, [noteIds]),
+            returnValue: _i9.Future<void>.value(),
+            returnValueForMissingStub: _i9.Future<void>.value(),
+          )
+          as _i9.Future<void>);
+
+  @override
+  void scheduleReload() => super.noSuchMethod(
+    Invocation.method(#scheduleReload, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void dispose() => super.noSuchMethod(
+    Invocation.method(#dispose, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
   _i9.Future<void> loadData() =>
       (super.noSuchMethod(
             Invocation.method(#loadData, []),
@@ -357,6 +378,12 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
             returnValue: <String>[],
           )
           as List<String>);
+
+  @override
+  void notifyListeners() => super.noSuchMethod(
+    Invocation.method(#notifyListeners, []),
+    returnValueForMissingStub: null,
+  );
 
   @override
   _i9.Future<void> refreshTags() =>
@@ -924,18 +951,6 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
   @override
   void removeListener(_i2.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#removeListener, [listener]),
-    returnValueForMissingStub: null,
-  );
-
-  @override
-  void dispose() => super.noSuchMethod(
-    Invocation.method(#dispose, []),
-    returnValueForMissingStub: null,
-  );
-
-  @override
-  void notifyListeners() => super.noSuchMethod(
-    Invocation.method(#notifyListeners, []),
     returnValueForMissingStub: null,
   );
 }

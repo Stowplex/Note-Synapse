@@ -15,7 +15,7 @@ import 'package:note_synapse/models/attachment.dart' as _i10;
 import 'package:note_synapse/models/conversation.dart' as _i16;
 import 'package:note_synapse/models/conversation_attachment.dart' as _i17;
 import 'package:note_synapse/models/filter.dart' as _i13;
-import 'package:note_synapse/models/mcp_endpoint.dart' as _i4;
+import 'package:note_synapse/models/mcp_endpoint.dart' as _i5;
 import 'package:note_synapse/models/model_config.dart' as _i22;
 import 'package:note_synapse/models/note.dart' as _i7;
 import 'package:note_synapse/models/note_annotation.dart' as _i9;
@@ -24,8 +24,8 @@ import 'package:note_synapse/models/tag.dart' as _i11;
 import 'package:note_synapse/models/user_app.dart' as _i14;
 import 'package:note_synapse/models/workflow_binding_row.dart' as _i18;
 import 'package:note_synapse/services/agent_service.dart' as _i19;
-import 'package:note_synapse/services/context_manager_service.dart' as _i3;
-import 'package:note_synapse/services/database_service.dart' as _i5;
+import 'package:note_synapse/services/context_manager_service.dart' as _i4;
+import 'package:note_synapse/services/database_service.dart' as _i3;
 import 'package:note_synapse/services/mcp_service.dart' as _i27;
 import 'package:note_synapse/services/skill_service.dart' as _i26;
 import 'package:note_synapse/services/tag_workflow_service.dart' as _i24;
@@ -52,26 +52,32 @@ class _FakeDatabase_0 extends _i1.SmartFake implements _i2.Database {
     : super(parent, parentInvocation);
 }
 
-class _FakeContextManagerService_1 extends _i1.SmartFake
-    implements _i3.ContextManagerService {
-  _FakeContextManagerService_1(Object parent, Invocation parentInvocation)
+class _FakeRawWriteResult_1 extends _i1.SmartFake
+    implements _i3.RawWriteResult {
+  _FakeRawWriteResult_1(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeMcpEndpoint_2 extends _i1.SmartFake implements _i4.McpEndpoint {
-  _FakeMcpEndpoint_2(Object parent, Invocation parentInvocation)
+class _FakeContextManagerService_2 extends _i1.SmartFake
+    implements _i4.ContextManagerService {
+  _FakeContextManagerService_2(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeMcpToolsCache_3 extends _i1.SmartFake implements _i4.McpToolsCache {
-  _FakeMcpToolsCache_3(Object parent, Invocation parentInvocation)
+class _FakeMcpEndpoint_3 extends _i1.SmartFake implements _i5.McpEndpoint {
+  _FakeMcpEndpoint_3(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeMcpToolsCache_4 extends _i1.SmartFake implements _i5.McpToolsCache {
+  _FakeMcpToolsCache_4(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
 /// A class which mocks [DatabaseService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockDatabaseService extends _i1.Mock implements _i5.DatabaseService {
+class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
   MockDatabaseService() {
     _i1.throwOnMissingStub(this);
   }
@@ -1494,6 +1500,25 @@ class MockDatabaseService extends _i1.Mock implements _i5.DatabaseService {
           as _i6.Future<List<Map<String, dynamic>>>);
 
   @override
+  void markSchemaChangedForCapture() => super.noSuchMethod(
+    Invocation.method(#markSchemaChangedForCapture, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i6.Future<_i3.RawWriteResult> runRawWriteWithChangeCapture(String? sql) =>
+      (super.noSuchMethod(
+            Invocation.method(#runRawWriteWithChangeCapture, [sql]),
+            returnValue: _i6.Future<_i3.RawWriteResult>.value(
+              _FakeRawWriteResult_1(
+                this,
+                Invocation.method(#runRawWriteWithChangeCapture, [sql]),
+              ),
+            ),
+          )
+          as _i6.Future<_i3.RawWriteResult>);
+
+  @override
   _i6.Future<List<_i7.Note>> searchNotes(String? query) =>
       (super.noSuchMethod(
             Invocation.method(#searchNotes, [query]),
@@ -1615,15 +1640,15 @@ class MockAgentService extends _i1.Mock implements _i19.AgentService {
           as bool);
 
   @override
-  _i3.ContextManagerService get contextManager =>
+  _i4.ContextManagerService get contextManager =>
       (super.noSuchMethod(
             Invocation.getter(#contextManager),
-            returnValue: _FakeContextManagerService_1(
+            returnValue: _FakeContextManagerService_2(
               this,
               Invocation.getter(#contextManager),
             ),
           )
-          as _i3.ContextManagerService);
+          as _i4.ContextManagerService);
 
   @override
   List<String> get globalContextNoteIds =>
@@ -1642,12 +1667,12 @@ class MockAgentService extends _i1.Mock implements _i19.AgentService {
           as List<_i20.AgentTask>);
 
   @override
-  Map<String, List<_i4.McpTool>> get externalTools =>
+  Map<String, List<_i5.McpTool>> get externalTools =>
       (super.noSuchMethod(
             Invocation.getter(#externalTools),
-            returnValue: <String, List<_i4.McpTool>>{},
+            returnValue: <String, List<_i5.McpTool>>{},
           )
-          as Map<String, List<_i4.McpTool>>);
+          as Map<String, List<_i5.McpTool>>);
 
   @override
   List<_i21.NativeTool> get enabledNativeTools =>
@@ -1689,7 +1714,7 @@ class MockAgentService extends _i1.Mock implements _i19.AgentService {
   );
 
   @override
-  set externalToolsForTest(Map<String, List<_i4.McpTool>>? tools) =>
+  set externalToolsForTest(Map<String, List<_i5.McpTool>>? tools) =>
       super.noSuchMethod(
         Invocation.setter(#externalToolsForTest, tools),
         returnValueForMissingStub: null,
@@ -1813,7 +1838,7 @@ class MockAgentService extends _i1.Mock implements _i19.AgentService {
   @override
   _i6.Future<List<_i20.AgentTask>> generatePlan(
     String? objective, {
-    Map<String, List<_i4.McpTool>>? activeTools = const {},
+    Map<String, List<_i5.McpTool>>? activeTools = const {},
     _i19.ToolExecutor? executeTool,
     String? context,
     List<_i23.PlatformFile>? contextAttachments = const [],
@@ -1859,7 +1884,7 @@ class MockAgentService extends _i1.Mock implements _i19.AgentService {
   @override
   _i6.Future<void> startObjective(
     String? objective, {
-    Map<String, List<_i4.McpTool>>? activeTools = const {},
+    Map<String, List<_i5.McpTool>>? activeTools = const {},
     _i19.ToolExecutor? executeTool,
     String? context,
     List<_i23.PlatformFile>? contextAttachments = const [],
@@ -2106,22 +2131,22 @@ class MockMcpService extends _i1.Mock implements _i27.McpService {
   }
 
   @override
-  _i6.Future<List<_i4.McpEndpoint>> getEndpoints() =>
+  _i6.Future<List<_i5.McpEndpoint>> getEndpoints() =>
       (super.noSuchMethod(
             Invocation.method(#getEndpoints, []),
-            returnValue: _i6.Future<List<_i4.McpEndpoint>>.value(
-              <_i4.McpEndpoint>[],
+            returnValue: _i6.Future<List<_i5.McpEndpoint>>.value(
+              <_i5.McpEndpoint>[],
             ),
           )
-          as _i6.Future<List<_i4.McpEndpoint>>);
+          as _i6.Future<List<_i5.McpEndpoint>>);
 
   @override
-  _i6.Future<_i4.McpEndpoint> addEndpoint({
+  _i6.Future<_i5.McpEndpoint> addEndpoint({
     required String? name,
     required String? baseUrl,
-    required _i4.McpTransportType? transportType,
-    _i4.McpAuthType? authType = _i4.McpAuthType.token,
-    _i4.OAuthConfig? oauthConfig,
+    required _i5.McpTransportType? transportType,
+    _i5.McpAuthType? authType = _i5.McpAuthType.token,
+    _i5.OAuthConfig? oauthConfig,
     String? bearerToken,
     Map<String, String>? additionalHeaders = const {},
   }) =>
@@ -2135,8 +2160,8 @@ class MockMcpService extends _i1.Mock implements _i27.McpService {
               #bearerToken: bearerToken,
               #additionalHeaders: additionalHeaders,
             }),
-            returnValue: _i6.Future<_i4.McpEndpoint>.value(
-              _FakeMcpEndpoint_2(
+            returnValue: _i6.Future<_i5.McpEndpoint>.value(
+              _FakeMcpEndpoint_3(
                 this,
                 Invocation.method(#addEndpoint, [], {
                   #name: name,
@@ -2150,16 +2175,16 @@ class MockMcpService extends _i1.Mock implements _i27.McpService {
               ),
             ),
           )
-          as _i6.Future<_i4.McpEndpoint>);
+          as _i6.Future<_i5.McpEndpoint>);
 
   @override
   _i6.Future<void> updateEndpoint({
     required String? id,
     String? name,
     String? baseUrl,
-    _i4.McpTransportType? transportType,
-    _i4.McpAuthType? authType,
-    _i4.OAuthConfig? oauthConfig,
+    _i5.McpTransportType? transportType,
+    _i5.McpAuthType? authType,
+    _i5.OAuthConfig? oauthConfig,
     String? bearerToken,
     Map<String, String>? additionalHeaders,
   }) =>
@@ -2197,25 +2222,25 @@ class MockMcpService extends _i1.Mock implements _i27.McpService {
           as _i6.Future<String?>);
 
   @override
-  _i6.Future<_i4.McpToolsCache?> getCachedTools(String? endpointId) =>
+  _i6.Future<_i5.McpToolsCache?> getCachedTools(String? endpointId) =>
       (super.noSuchMethod(
             Invocation.method(#getCachedTools, [endpointId]),
-            returnValue: _i6.Future<_i4.McpToolsCache?>.value(),
+            returnValue: _i6.Future<_i5.McpToolsCache?>.value(),
           )
-          as _i6.Future<_i4.McpToolsCache?>);
+          as _i6.Future<_i5.McpToolsCache?>);
 
   @override
-  _i6.Future<_i4.McpToolsCache> refreshTools(String? endpointId) =>
+  _i6.Future<_i5.McpToolsCache> refreshTools(String? endpointId) =>
       (super.noSuchMethod(
             Invocation.method(#refreshTools, [endpointId]),
-            returnValue: _i6.Future<_i4.McpToolsCache>.value(
-              _FakeMcpToolsCache_3(
+            returnValue: _i6.Future<_i5.McpToolsCache>.value(
+              _FakeMcpToolsCache_4(
                 this,
                 Invocation.method(#refreshTools, [endpointId]),
               ),
             ),
           )
-          as _i6.Future<_i4.McpToolsCache>);
+          as _i6.Future<_i5.McpToolsCache>);
 
   @override
   _i6.Future<String> callTool({

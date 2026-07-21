@@ -10,7 +10,7 @@ import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i8;
 import 'package:note_synapse/models/app_revision.dart' as _i15;
 import 'package:note_synapse/models/attachment.dart' as _i10;
-import 'package:note_synapse/models/context_node.dart' as _i3;
+import 'package:note_synapse/models/context_node.dart' as _i4;
 import 'package:note_synapse/models/conversation.dart' as _i16;
 import 'package:note_synapse/models/conversation_attachment.dart' as _i17;
 import 'package:note_synapse/models/dedup_rule.dart' as _i24;
@@ -23,13 +23,13 @@ import 'package:note_synapse/models/note.dart' as _i7;
 import 'package:note_synapse/models/note_annotation.dart' as _i9;
 import 'package:note_synapse/models/relationship.dart' as _i12;
 import 'package:note_synapse/models/tag.dart' as _i11;
-import 'package:note_synapse/models/task_result_storage.dart' as _i4;
+import 'package:note_synapse/models/task_result_storage.dart' as _i5;
 import 'package:note_synapse/models/user_app.dart' as _i14;
 import 'package:note_synapse/models/workflow_binding_row.dart' as _i18;
 import 'package:note_synapse/providers/app_provider.dart' as _i20;
 import 'package:note_synapse/services/ai_service.dart' as _i19;
 import 'package:note_synapse/services/context_manager_service.dart' as _i29;
-import 'package:note_synapse/services/database_service.dart' as _i5;
+import 'package:note_synapse/services/database_service.dart' as _i3;
 import 'package:note_synapse/services/model_selector.dart' as _i25;
 import 'package:note_synapse/services/prompts/prompt_models.dart' as _i21;
 import 'package:sqflite/sqflite.dart' as _i2;
@@ -54,21 +54,27 @@ class _FakeDatabase_0 extends _i1.SmartFake implements _i2.Database {
     : super(parent, parentInvocation);
 }
 
-class _FakeContextNode_1 extends _i1.SmartFake implements _i3.ContextNode {
-  _FakeContextNode_1(Object parent, Invocation parentInvocation)
+class _FakeRawWriteResult_1 extends _i1.SmartFake
+    implements _i3.RawWriteResult {
+  _FakeRawWriteResult_1(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeTaskResultStorage_2 extends _i1.SmartFake
-    implements _i4.TaskResultStorage {
-  _FakeTaskResultStorage_2(Object parent, Invocation parentInvocation)
+class _FakeContextNode_2 extends _i1.SmartFake implements _i4.ContextNode {
+  _FakeContextNode_2(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeTaskResultStorage_3 extends _i1.SmartFake
+    implements _i5.TaskResultStorage {
+  _FakeTaskResultStorage_3(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
 /// A class which mocks [DatabaseService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockDatabaseService extends _i1.Mock implements _i5.DatabaseService {
+class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
   MockDatabaseService() {
     _i1.throwOnMissingStub(this);
   }
@@ -1491,6 +1497,25 @@ class MockDatabaseService extends _i1.Mock implements _i5.DatabaseService {
           as _i6.Future<List<Map<String, dynamic>>>);
 
   @override
+  void markSchemaChangedForCapture() => super.noSuchMethod(
+    Invocation.method(#markSchemaChangedForCapture, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i6.Future<_i3.RawWriteResult> runRawWriteWithChangeCapture(String? sql) =>
+      (super.noSuchMethod(
+            Invocation.method(#runRawWriteWithChangeCapture, [sql]),
+            returnValue: _i6.Future<_i3.RawWriteResult>.value(
+              _FakeRawWriteResult_1(
+                this,
+                Invocation.method(#runRawWriteWithChangeCapture, [sql]),
+              ),
+            ),
+          )
+          as _i6.Future<_i3.RawWriteResult>);
+
+  @override
   _i6.Future<List<_i7.Note>> searchNotes(String? query) =>
       (super.noSuchMethod(
             Invocation.method(#searchNotes, [query]),
@@ -2261,7 +2286,7 @@ class MockContextManagerService extends _i1.Mock
           as _i6.Future<int>);
 
   @override
-  _i6.Future<_i3.ContextNode> createRootContext({
+  _i6.Future<_i4.ContextNode> createRootContext({
     required String? objective,
     List<String>? allowedTools = const [],
     int? maxTokens,
@@ -2272,8 +2297,8 @@ class MockContextManagerService extends _i1.Mock
               #allowedTools: allowedTools,
               #maxTokens: maxTokens,
             }),
-            returnValue: _i6.Future<_i3.ContextNode>.value(
-              _FakeContextNode_1(
+            returnValue: _i6.Future<_i4.ContextNode>.value(
+              _FakeContextNode_2(
                 this,
                 Invocation.method(#createRootContext, [], {
                   #objective: objective,
@@ -2283,11 +2308,11 @@ class MockContextManagerService extends _i1.Mock
               ),
             ),
           )
-          as _i6.Future<_i3.ContextNode>);
+          as _i6.Future<_i4.ContextNode>);
 
   @override
-  _i3.ContextNode createChildContext({
-    required _i3.ContextNode? parent,
+  _i4.ContextNode createChildContext({
+    required _i4.ContextNode? parent,
     required String? objective,
     List<String>? allowedTools,
   }) =>
@@ -2297,7 +2322,7 @@ class MockContextManagerService extends _i1.Mock
               #objective: objective,
               #allowedTools: allowedTools,
             }),
-            returnValue: _FakeContextNode_1(
+            returnValue: _FakeContextNode_2(
               this,
               Invocation.method(#createChildContext, [], {
                 #parent: parent,
@@ -2306,17 +2331,17 @@ class MockContextManagerService extends _i1.Mock
               }),
             ),
           )
-          as _i3.ContextNode);
+          as _i4.ContextNode);
 
   @override
-  void setActiveContext(_i3.ContextNode? context) => super.noSuchMethod(
+  void setActiveContext(_i4.ContextNode? context) => super.noSuchMethod(
     Invocation.method(#setActiveContext, [context]),
     returnValueForMissingStub: null,
   );
 
   @override
   String buildContextForNode(
-    _i3.ContextNode? node, {
+    _i4.ContextNode? node, {
     int? tocThreshold = 1000,
   }) =>
       (super.noSuchMethod(
@@ -2337,7 +2362,7 @@ class MockContextManagerService extends _i1.Mock
           as String);
 
   @override
-  String buildContextForSubtask(_i3.ContextNode? node) =>
+  String buildContextForSubtask(_i4.ContextNode? node) =>
       (super.noSuchMethod(
             Invocation.method(#buildContextForSubtask, [node]),
             returnValue: _i8.dummyValue<String>(
@@ -2349,7 +2374,7 @@ class MockContextManagerService extends _i1.Mock
 
   @override
   String buildContextForResearchTask(
-    _i3.ContextNode? node, {
+    _i4.ContextNode? node, {
     List<String>? dependencyResults = const [],
     List<_i29.DependencyInfo>? structuredDependencies = const [],
   }) =>
@@ -2377,7 +2402,7 @@ class MockContextManagerService extends _i1.Mock
           as String);
 
   @override
-  _i6.Future<void> compactNodeContext(_i3.ContextNode? node) =>
+  _i6.Future<void> compactNodeContext(_i4.ContextNode? node) =>
       (super.noSuchMethod(
             Invocation.method(#compactNodeContext, [node]),
             returnValue: _i6.Future<void>.value(),
@@ -2387,7 +2412,7 @@ class MockContextManagerService extends _i1.Mock
 
   @override
   _i6.Future<String> generateFinalSummary(
-    _i3.ContextNode? node, {
+    _i4.ContextNode? node, {
     List<String>? consumingTaskDescriptions = const [],
     _i26.ModelConfig? modelOverride,
   }) =>
@@ -2423,14 +2448,14 @@ class MockContextManagerService extends _i1.Mock
   );
 
   @override
-  void markContextFailed(_i3.ContextNode? node, String? error) =>
+  void markContextFailed(_i4.ContextNode? node, String? error) =>
       super.noSuchMethod(
         Invocation.method(#markContextFailed, [node, error]),
         returnValueForMissingStub: null,
       );
 
   @override
-  _i6.Future<void> checkAndCompact(_i3.ContextNode? node) =>
+  _i6.Future<void> checkAndCompact(_i4.ContextNode? node) =>
       (super.noSuchMethod(
             Invocation.method(#checkAndCompact, [node]),
             returnValue: _i6.Future<void>.value(),
@@ -2446,7 +2471,7 @@ class MockContextManagerService extends _i1.Mock
 
   @override
   String buildSynthesisContext(
-    _i3.ContextNode? node, {
+    _i4.ContextNode? node, {
     List<_i29.DependencyInfo>? structuredDependencies = const [],
   }) =>
       (super.noSuchMethod(
@@ -2473,9 +2498,9 @@ class MockContextManagerService extends _i1.Mock
   );
 
   @override
-  _i3.ContextNode? getContext(String? id) =>
+  _i4.ContextNode? getContext(String? id) =>
       (super.noSuchMethod(Invocation.method(#getContext, [id]))
-          as _i3.ContextNode?);
+          as _i4.ContextNode?);
 
   @override
   void importSnapshot(Map<String, dynamic>? snapshot) => super.noSuchMethod(
@@ -2484,17 +2509,17 @@ class MockContextManagerService extends _i1.Mock
   );
 
   @override
-  _i4.TaskResultStorage generateTocFromResult(
+  _i5.TaskResultStorage generateTocFromResult(
     String? taskId,
     String? goal,
     String? result,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#generateTocFromResult, [taskId, goal, result]),
-            returnValue: _FakeTaskResultStorage_2(
+            returnValue: _FakeTaskResultStorage_3(
               this,
               Invocation.method(#generateTocFromResult, [taskId, goal, result]),
             ),
           )
-          as _i4.TaskResultStorage);
+          as _i5.TaskResultStorage);
 }

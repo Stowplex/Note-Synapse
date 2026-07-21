@@ -418,6 +418,8 @@ String _describeSqlQueryType(SqlQueryType queryType) {
   switch (queryType) {
     case SqlQueryType.insert:
       return 'INSERT (add data)';
+    case SqlQueryType.replace:
+      return 'REPLACE (add or overwrite data)';
     case SqlQueryType.update:
       return 'UPDATE (modify data)';
     case SqlQueryType.delete:

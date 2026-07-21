@@ -12,13 +12,13 @@ import 'package:note_synapse/models/attachment.dart' as _i8;
 import 'package:note_synapse/models/conversation.dart' as _i14;
 import 'package:note_synapse/models/conversation_attachment.dart' as _i15;
 import 'package:note_synapse/models/filter.dart' as _i11;
-import 'package:note_synapse/models/note.dart' as _i3;
+import 'package:note_synapse/models/note.dart' as _i4;
 import 'package:note_synapse/models/note_annotation.dart' as _i7;
 import 'package:note_synapse/models/relationship.dart' as _i10;
 import 'package:note_synapse/models/tag.dart' as _i9;
 import 'package:note_synapse/models/user_app.dart' as _i12;
 import 'package:note_synapse/models/workflow_binding_row.dart' as _i16;
-import 'package:note_synapse/services/database_service.dart' as _i4;
+import 'package:note_synapse/services/database_service.dart' as _i3;
 import 'package:note_synapse/services/note_modification_service.dart' as _i17;
 import 'package:sqflite/sqflite.dart' as _i2;
 
@@ -42,15 +42,21 @@ class _FakeDatabase_0 extends _i1.SmartFake implements _i2.Database {
     : super(parent, parentInvocation);
 }
 
-class _FakeNote_1 extends _i1.SmartFake implements _i3.Note {
-  _FakeNote_1(Object parent, Invocation parentInvocation)
+class _FakeRawWriteResult_1 extends _i1.SmartFake
+    implements _i3.RawWriteResult {
+  _FakeRawWriteResult_1(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeNote_2 extends _i1.SmartFake implements _i4.Note {
+  _FakeNote_2(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
 /// A class which mocks [DatabaseService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockDatabaseService extends _i1.Mock implements _i4.DatabaseService {
+class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
   MockDatabaseService() {
     _i1.throwOnMissingStub(this);
   }
@@ -89,7 +95,7 @@ class MockDatabaseService extends _i1.Mock implements _i4.DatabaseService {
           as _i5.Future<List<String>>);
 
   @override
-  _i5.Future<String> insertNote(_i3.Note? note) =>
+  _i5.Future<String> insertNote(_i4.Note? note) =>
       (super.noSuchMethod(
             Invocation.method(#insertNote, [note]),
             returnValue: _i5.Future<String>.value(
@@ -102,12 +108,12 @@ class MockDatabaseService extends _i1.Mock implements _i4.DatabaseService {
           as _i5.Future<String>);
 
   @override
-  _i5.Future<List<_i3.Note>> getAllNotes() =>
+  _i5.Future<List<_i4.Note>> getAllNotes() =>
       (super.noSuchMethod(
             Invocation.method(#getAllNotes, []),
-            returnValue: _i5.Future<List<_i3.Note>>.value(<_i3.Note>[]),
+            returnValue: _i5.Future<List<_i4.Note>>.value(<_i4.Note>[]),
           )
-          as _i5.Future<List<_i3.Note>>);
+          as _i5.Future<List<_i4.Note>>);
 
   @override
   _i5.Future<void> cleanupInvalidNoteReferences() =>
@@ -119,57 +125,57 @@ class MockDatabaseService extends _i1.Mock implements _i4.DatabaseService {
           as _i5.Future<void>);
 
   @override
-  _i5.Future<List<_i3.Note>> getNotesByArchiveStatus({bool? isArchived}) =>
+  _i5.Future<List<_i4.Note>> getNotesByArchiveStatus({bool? isArchived}) =>
       (super.noSuchMethod(
             Invocation.method(#getNotesByArchiveStatus, [], {
               #isArchived: isArchived,
             }),
-            returnValue: _i5.Future<List<_i3.Note>>.value(<_i3.Note>[]),
+            returnValue: _i5.Future<List<_i4.Note>>.value(<_i4.Note>[]),
           )
-          as _i5.Future<List<_i3.Note>>);
+          as _i5.Future<List<_i4.Note>>);
 
   @override
-  _i5.Future<List<_i3.Note>> getPinnedNotes() =>
+  _i5.Future<List<_i4.Note>> getPinnedNotes() =>
       (super.noSuchMethod(
             Invocation.method(#getPinnedNotes, []),
-            returnValue: _i5.Future<List<_i3.Note>>.value(<_i3.Note>[]),
+            returnValue: _i5.Future<List<_i4.Note>>.value(<_i4.Note>[]),
           )
-          as _i5.Future<List<_i3.Note>>);
+          as _i5.Future<List<_i4.Note>>);
 
   @override
-  _i5.Future<List<_i3.Note>> getArchivedNotes() =>
+  _i5.Future<List<_i4.Note>> getArchivedNotes() =>
       (super.noSuchMethod(
             Invocation.method(#getArchivedNotes, []),
-            returnValue: _i5.Future<List<_i3.Note>>.value(<_i3.Note>[]),
+            returnValue: _i5.Future<List<_i4.Note>>.value(<_i4.Note>[]),
           )
-          as _i5.Future<List<_i3.Note>>);
+          as _i5.Future<List<_i4.Note>>);
 
   @override
-  _i5.Future<_i3.Note?> getNote(String? id) =>
+  _i5.Future<_i4.Note?> getNote(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getNote, [id]),
-            returnValue: _i5.Future<_i3.Note?>.value(),
+            returnValue: _i5.Future<_i4.Note?>.value(),
           )
-          as _i5.Future<_i3.Note?>);
+          as _i5.Future<_i4.Note?>);
 
   @override
-  _i5.Future<List<_i3.Note>> getNotesByIds(List<String>? noteIds) =>
+  _i5.Future<List<_i4.Note>> getNotesByIds(List<String>? noteIds) =>
       (super.noSuchMethod(
             Invocation.method(#getNotesByIds, [noteIds]),
-            returnValue: _i5.Future<List<_i3.Note>>.value(<_i3.Note>[]),
+            returnValue: _i5.Future<List<_i4.Note>>.value(<_i4.Note>[]),
           )
-          as _i5.Future<List<_i3.Note>>);
+          as _i5.Future<List<_i4.Note>>);
 
   @override
-  _i5.Future<List<_i3.Note>> getNotesByTag(String? tagName) =>
+  _i5.Future<List<_i4.Note>> getNotesByTag(String? tagName) =>
       (super.noSuchMethod(
             Invocation.method(#getNotesByTag, [tagName]),
-            returnValue: _i5.Future<List<_i3.Note>>.value(<_i3.Note>[]),
+            returnValue: _i5.Future<List<_i4.Note>>.value(<_i4.Note>[]),
           )
-          as _i5.Future<List<_i3.Note>>);
+          as _i5.Future<List<_i4.Note>>);
 
   @override
-  _i5.Future<void> updateNote(_i3.Note? note) =>
+  _i5.Future<void> updateNote(_i4.Note? note) =>
       (super.noSuchMethod(
             Invocation.method(#updateNote, [note]),
             returnValue: _i5.Future<void>.value(),
@@ -322,7 +328,7 @@ class MockDatabaseService extends _i1.Mock implements _i4.DatabaseService {
           as _i5.Future<void>);
 
   @override
-  _i5.Future<String> insertSubNote(_i3.SubNote? subNote, String? noteId) =>
+  _i5.Future<String> insertSubNote(_i4.SubNote? subNote, String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#insertSubNote, [subNote, noteId]),
             returnValue: _i5.Future<String>.value(
@@ -335,12 +341,12 @@ class MockDatabaseService extends _i1.Mock implements _i4.DatabaseService {
           as _i5.Future<String>);
 
   @override
-  _i5.Future<List<_i3.SubNote>> getSubNotes(String? noteId) =>
+  _i5.Future<List<_i4.SubNote>> getSubNotes(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#getSubNotes, [noteId]),
-            returnValue: _i5.Future<List<_i3.SubNote>>.value(<_i3.SubNote>[]),
+            returnValue: _i5.Future<List<_i4.SubNote>>.value(<_i4.SubNote>[]),
           )
-          as _i5.Future<List<_i3.SubNote>>);
+          as _i5.Future<List<_i4.SubNote>>);
 
   @override
   _i5.Future<String> insertTag(_i9.Tag? tag) =>
@@ -1449,15 +1455,15 @@ class MockDatabaseService extends _i1.Mock implements _i4.DatabaseService {
           as _i5.Future<Map<String, List<String>>>);
 
   @override
-  _i5.Future<List<_i3.Note>> searchNotesFTS(
+  _i5.Future<List<_i4.Note>> searchNotesFTS(
     String? query, {
     List<String>? tags,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#searchNotesFTS, [query], {#tags: tags}),
-            returnValue: _i5.Future<List<_i3.Note>>.value(<_i3.Note>[]),
+            returnValue: _i5.Future<List<_i4.Note>>.value(<_i4.Note>[]),
           )
-          as _i5.Future<List<_i3.Note>>);
+          as _i5.Future<List<_i4.Note>>);
 
   @override
   _i5.Future<List<Map<String, dynamic>>> runRawQuery(
@@ -1473,12 +1479,31 @@ class MockDatabaseService extends _i1.Mock implements _i4.DatabaseService {
           as _i5.Future<List<Map<String, dynamic>>>);
 
   @override
-  _i5.Future<List<_i3.Note>> searchNotes(String? query) =>
+  void markSchemaChangedForCapture() => super.noSuchMethod(
+    Invocation.method(#markSchemaChangedForCapture, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i5.Future<_i3.RawWriteResult> runRawWriteWithChangeCapture(String? sql) =>
+      (super.noSuchMethod(
+            Invocation.method(#runRawWriteWithChangeCapture, [sql]),
+            returnValue: _i5.Future<_i3.RawWriteResult>.value(
+              _FakeRawWriteResult_1(
+                this,
+                Invocation.method(#runRawWriteWithChangeCapture, [sql]),
+              ),
+            ),
+          )
+          as _i5.Future<_i3.RawWriteResult>);
+
+  @override
+  _i5.Future<List<_i4.Note>> searchNotes(String? query) =>
       (super.noSuchMethod(
             Invocation.method(#searchNotes, [query]),
-            returnValue: _i5.Future<List<_i3.Note>>.value(<_i3.Note>[]),
+            returnValue: _i5.Future<List<_i4.Note>>.value(<_i4.Note>[]),
           )
-          as _i5.Future<List<_i3.Note>>);
+          as _i5.Future<List<_i4.Note>>);
 
   @override
   _i5.Future<String?> getTagExtractionPrompt(String? tagId) =>
@@ -1498,12 +1523,12 @@ class MockDatabaseService extends _i1.Mock implements _i4.DatabaseService {
           as _i5.Future<void>);
 
   @override
-  _i5.Future<_i3.Note?> getNoteById(String? id) =>
+  _i5.Future<_i4.Note?> getNoteById(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getNoteById, [id]),
-            returnValue: _i5.Future<_i3.Note?>.value(),
+            returnValue: _i5.Future<_i4.Note?>.value(),
           )
-          as _i5.Future<_i3.Note?>);
+          as _i5.Future<_i4.Note?>);
 
   @override
   _i5.Future<_i16.WorkflowBindingRow?> getExactWorkflowBinding(
@@ -1574,50 +1599,50 @@ class MockNoteModificationService extends _i1.Mock
   }
 
   @override
-  _i5.Future<_i3.Note> applyModifications(
+  _i5.Future<_i4.Note> applyModifications(
     String? noteId,
     Map<String, dynamic>? modifications,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#applyModifications, [noteId, modifications]),
-            returnValue: _i5.Future<_i3.Note>.value(
-              _FakeNote_1(
+            returnValue: _i5.Future<_i4.Note>.value(
+              _FakeNote_2(
                 this,
                 Invocation.method(#applyModifications, [noteId, modifications]),
               ),
             ),
           )
-          as _i5.Future<_i3.Note>);
+          as _i5.Future<_i4.Note>);
 
   @override
-  _i5.Future<List<_i3.Note>> applyBatchModifications(
+  _i5.Future<List<_i4.Note>> applyBatchModifications(
     List<Map<String, dynamic>>? updates,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#applyBatchModifications, [updates]),
-            returnValue: _i5.Future<List<_i3.Note>>.value(<_i3.Note>[]),
+            returnValue: _i5.Future<List<_i4.Note>>.value(<_i4.Note>[]),
           )
-          as _i5.Future<List<_i3.Note>>);
+          as _i5.Future<List<_i4.Note>>);
 
   @override
-  _i5.Future<_i3.Note> buildNote(Map<String, dynamic>? data) =>
+  _i5.Future<_i4.Note> buildNote(Map<String, dynamic>? data) =>
       (super.noSuchMethod(
             Invocation.method(#buildNote, [data]),
-            returnValue: _i5.Future<_i3.Note>.value(
-              _FakeNote_1(this, Invocation.method(#buildNote, [data])),
+            returnValue: _i5.Future<_i4.Note>.value(
+              _FakeNote_2(this, Invocation.method(#buildNote, [data])),
             ),
           )
-          as _i5.Future<_i3.Note>);
+          as _i5.Future<_i4.Note>);
 
   @override
-  _i5.Future<_i3.Note> createNote(Map<String, dynamic>? data) =>
+  _i5.Future<_i4.Note> createNote(Map<String, dynamic>? data) =>
       (super.noSuchMethod(
             Invocation.method(#createNote, [data]),
-            returnValue: _i5.Future<_i3.Note>.value(
-              _FakeNote_1(this, Invocation.method(#createNote, [data])),
+            returnValue: _i5.Future<_i4.Note>.value(
+              _FakeNote_2(this, Invocation.method(#createNote, [data])),
             ),
           )
-          as _i5.Future<_i3.Note>);
+          as _i5.Future<_i4.Note>);
 
   @override
   _i5.Future<String> processAttachment(dynamic attachment) =>

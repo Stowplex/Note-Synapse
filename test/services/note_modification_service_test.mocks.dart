@@ -42,6 +42,12 @@ class _FakeDatabase_0 extends _i1.SmartFake implements _i2.Database {
     : super(parent, parentInvocation);
 }
 
+class _FakeRawWriteResult_1 extends _i1.SmartFake
+    implements _i3.RawWriteResult {
+  _FakeRawWriteResult_1(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
 /// A class which mocks [DatabaseService].
 ///
 /// See the documentation for Mockito's code generation for more information.
@@ -1466,6 +1472,25 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
             ),
           )
           as _i4.Future<List<Map<String, dynamic>>>);
+
+  @override
+  void markSchemaChangedForCapture() => super.noSuchMethod(
+    Invocation.method(#markSchemaChangedForCapture, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i4.Future<_i3.RawWriteResult> runRawWriteWithChangeCapture(String? sql) =>
+      (super.noSuchMethod(
+            Invocation.method(#runRawWriteWithChangeCapture, [sql]),
+            returnValue: _i4.Future<_i3.RawWriteResult>.value(
+              _FakeRawWriteResult_1(
+                this,
+                Invocation.method(#runRawWriteWithChangeCapture, [sql]),
+              ),
+            ),
+          )
+          as _i4.Future<_i3.RawWriteResult>);
 
   @override
   _i4.Future<List<_i5.Note>> searchNotes(String? query) =>
