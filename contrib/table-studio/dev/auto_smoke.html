@@ -7,7 +7,7 @@
 </head>
 <body>
 <div id="results">RUNNING</div>
-<iframe id="frame" style="width:400px;height:800px"></iframe>
+<iframe id="frame" style="width:420px;height:800px"></iframe>
 <script>
   var out = [];
   function log(name, pass, detail) {
@@ -16,6 +16,18 @@
   }
   function sleep(ms) {
     return new Promise(function (r) { setTimeout(r, ms); });
+  }
+  async function waitFor(fn, timeoutMs, label) {
+    var start = Date.now();
+    for (;;) {
+      var v;
+      try { v = fn(); } catch (e) { v = null; }
+      if (v) return v;
+      if (Date.now() - start > timeoutMs) {
+        throw new Error('timeout waiting for ' + label);
+      }
+      await sleep(120);
+    }
   }
   function q(doc, sel) { return doc.querySelector(sel); }
   function qa(doc, sel) { return Array.prototype.slice.call(doc.querySelectorAll(sel)); }
@@ -29,6 +41,8 @@
   ]).then(async function (parts) {
     var html = parts[0]
       .replace('<script src="src/table_core.js">', '<script src="../plugins/src/table_core.js">')
+      .replace('<script src="src/univer_bridge.js">', '<script src="../plugins/src/univer_bridge.js">')
+      .replace('<script src="vendor/fflate-0.8.2.min.js">', '<script src="../plugins/vendor/fflate-0.8.2.min.js">')
       .replace('<script src="vendor/xlsx-0.20.3.full.min.js">', '<script src="../plugins/vendor/xlsx-0.20.3.full.min.js">');
     var inject = '<script>' + parts[1] + '<' + '/script>';
     html = html.replace('<div id="app">', inject + '<div id="app">');
@@ -44,129 +58,224 @@
     var cards = qa(doc, '.card');
     log('home cards', cards.length === 4, 'found ' + cards.length);
 
-    // --- open Table 1 (markdown block)
-    tap(cards[0]);
-    await sleep(150);
-    log('editor grid', !!q(doc, 'table.grid'), '');
-    var tds = qa(doc, 'table.grid td');
-    log('grid cells', tds.length === 9, 'found ' + tds.length);
+    async function openAndWaitForSheet(card, label) {
+      tap(card);
+      // First open shows the consent gate, then the download screen; the
+      // editor is up once Univer has painted a canvas into the host.
+      var consentTapped = false;
+      await waitFor(function () {
+        if (!consentTapped) {
+          var dl = qa(doc, '.pill-btn').filter(function (b) {
+            return b.textContent.indexOf('Download') === 0;
+          })[0];
+          if (dl) { consentTapped = true; tap(dl); return null; }
+        }
+        return q(doc, '#univer-host canvas');
+      }, 120000, label + ' univer canvas');
+      await waitFor(function () {
+        var d = win.__TS_DEBUG;
+        return d && d.univerAPI && d.univerAPI.getActiveWorkbook();
+      }, 30000, label + ' workbook');
+      await sleep(800); // let load-time mutations & recalc settle
+      return win.__TS_DEBUG;
+    }
 
-    // --- select body cell and edit it via the edit bar
-    var target = qa(doc, 'table.grid tbody tr')[1].cells[1]; // row 1, col A ("Milk")
-    tap(target);
-    await sleep(50);
-    var input = q(doc, '#cell-input');
-    log('cell loaded into editor', input.value === 'Milk', JSON.stringify(input.value));
-    input.value = 'Whole milk';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    await sleep(50);
-    log('save enabled', !q(doc, '#save-btn').disabled, '');
+    function activeSheet(dbg) {
+      return dbg.univerAPI.getActiveWorkbook().getActiveSheet();
+    }
+    async function saveAndWaitToast(text) {
+      q(doc, '#toast').textContent = ''; // clear any stale toast first
+      tap(q(doc, '#save-btn'));
+      await waitFor(function () {
+        return q(doc, '#toast').textContent === (text || 'Saved') &&
+          q(doc, '#toast').classList.contains('show');
+      }, 30000, 'toast ' + (text || 'Saved'));
+    }
 
-    // --- save and verify the note content was rewritten correctly
-    tap(q(doc, '#save-btn'));
-    await sleep(300);
+    // ============================================================
+    // Markdown table
+    // ============================================================
+    var dbg = await openAndWaitForSheet(cards[0], 'block');
+    var snap0 = dbg.univerAPI.getActiveWorkbook().save();
+    var s0 = snap0.sheets[Object.keys(snap0.sheets)[0]];
+    log('block header loaded', s0.cellData[0][0].v === 'Item', JSON.stringify(s0.cellData[0][0]));
+    log('block escape decoded', s0.cellData[1][2].v === 'oat | soy', JSON.stringify(s0.cellData[1][2]));
+    log('block right-align style', (function () {
+      var st = s0.cellData[0][1] && s0.cellData[0][1].s;
+      var resolved = typeof st === 'string' ? snap0.styles[st] : st;
+      return resolved && resolved.ht === 3;
+    })(), '');
+
+    activeSheet(dbg).getRange(1, 0).setValue('Whole milk');
+    await sleep(400);
+    await saveAndWaitToast('Saved');
     var content = (await win.Synapse.runQuery('SELECT content')).data[0].content;
     log('save rewrote cell', content.indexOf('Whole milk') >= 0, '');
     log('save kept escape', content.indexOf('oat \\| soy') >= 0, '');
     log('save kept fence', content.indexOf('| not | a table |') >= 0, '');
     log('save kept second table', content.indexOf('| Co-op |') >= 0, '');
+    log('save kept alignment row', content.indexOf('--:') >= 0, '');
     log('no dup table', content.split('| Eggs').length === 2, '');
 
-    // --- undo stack: structural op then undo
-    var undoBtn = q(doc, '#undo-btn');
-    log('undo idle', undoBtn.disabled === false || undoBtn.disabled === true, '');
-
-    // --- back to home
+    // --- back home (no discard prompt after a clean save)
     tap(qa(doc, '.topbar .icon-btn')[0]);
-    await sleep(150);
-    log('back home', qa(doc, '.card').length === 4, '');
-
-    // --- open CSV attachment
-    var fileCard = qa(doc, '.card')[2];
-    tap(fileCard);
     await sleep(300);
-    var grid2 = q(doc, 'table.grid');
-    log('csv opens', !!grid2, '');
-    var cell = qa(doc, 'table.grid tbody tr')[1].cells[1];
-    log('csv quoted cell', cell.textContent === 'Apples', JSON.stringify(cell.textContent));
-    tap(cell);
-    await sleep(50);
-    var in2 = q(doc, '#cell-input');
-    in2.value = 'Green apples, tart';
-    in2.dispatchEvent(new Event('input', { bubbles: true }));
-    await sleep(50);
-    tap(q(doc, '#save-btn'));
-    await sleep(400);
-    log('csv saved toast', q(doc, '#toast').textContent === 'Saved', q(doc, '#toast').textContent);
+    log('back home clean', qa(doc, '.card').length === 4 && !q(doc, '.backdrop'), '');
 
-    // stub renames the file on save; verify new file content via Synapse stub
+    // ============================================================
+    // CSV attachment
+    // ============================================================
+    var csvCard = qa(doc, '.card').filter(function (c) {
+      var n = c.querySelector('.name');
+      return n && n.textContent === 'list.csv';
+    })[0];
+    dbg = await openAndWaitForSheet(csvCard, 'csv');
+    var snapC = dbg.univerAPI.getActiveWorkbook().save();
+    var sC = snapC.sheets[Object.keys(snapC.sheets)[0]];
+    log('csv quoted cell', sC.cellData[2][0].v === 'Pears, ripe', JSON.stringify(sC.cellData[2][0]));
+    log('csv number typed', sC.cellData[1][1].v === 4 && sC.cellData[1][1].t === 2, JSON.stringify(sC.cellData[1][1]));
+    log('csv unstable decimal stays text', sC.cellData[2][2].v === '3.10', JSON.stringify(sC.cellData[2][2]));
+
+    // Saving with no edits must be a noop, not a re-upload.
+    q(doc, '#toast').textContent = '';
+    tap(q(doc, '#save-btn'));
+    await waitFor(function () {
+      return q(doc, '#toast').textContent === 'No changes to save';
+    }, 20000, 'csv noop toast');
+    var attsNoop = (await win.Synapse.exportNotes(['note-1'])).notes[0].attachments;
+    log('csv noop save does not re-upload',
+      attsNoop.filter(function (a) { return /\.csv$/.test(a.fileName); })[0].fileName === 'list.csv', '');
+
+    activeSheet(dbg).getRange(1, 0).setValue('Green apples, tart');
+    await sleep(400);
+    await saveAndWaitToast('Saved');
     var atts = (await win.Synapse.exportNotes(['note-1'])).notes[0].attachments;
     var last = atts[atts.length - 1];
     var read = await win.Synapse.readAttachment(last.path);
     var text = atob(read.data);
     log('csv content saved', text.indexOf('"Green apples, tart"') >= 0, JSON.stringify(text));
-    log('csv fidelity', text.indexOf('"Pears, ripe"') >= 0 && text.slice(-1) === '\n', '');
+    log('csv fidelity', text.indexOf('"Pears, ripe"') >= 0 && text.indexOf('3.10') >= 0 && text.slice(-1) === '\n', JSON.stringify(text));
 
-    // Second save must not accrete uuid suffixes (payload keeps the
-    // ORIGINAL name) and must remove the previous stored copy.
-    var cell2 = qa(doc, 'table.grid tbody tr')[2].cells[1];
-    tap(cell2);
-    await sleep(50);
-    in2 = q(doc, '#cell-input');
-    in2.value = 'Ripe pears';
-    in2.dispatchEvent(new Event('input', { bubbles: true }));
-    await sleep(50);
-    tap(q(doc, '#save-btn'));
+    // Second save must not accrete uuid suffixes and must replace the copy.
+    activeSheet(dbg).getRange(2, 0).setValue('Ripe pears');
     await sleep(400);
+    await saveAndWaitToast('Saved');
     var atts1b = (await win.Synapse.exportNotes(['note-1'])).notes[0].attachments;
     var csvs = atts1b.filter(function (a) { return /\.csv$/.test(a.fileName); });
     log('csv no duplicate copies', csvs.length === 1, JSON.stringify(csvs.map(function (a) { return a.fileName; })));
     log('csv name stable', /^list_[0-9a-f-]{36}\.csv$/.test(csvs[0].fileName), csvs[0].fileName);
 
-    // --- open XLSX attachment (multi-sheet workbook with a formula)
+    // Formula in a CSV: saving flattens to the computed value after confirm.
+    activeSheet(dbg).getRange(3, 1).setValue('=2*3');
+    await sleep(600);
+    q(doc, '#toast').textContent = ''; // clear any stale toast first
+    tap(q(doc, '#save-btn'));
+    var okBtn = await waitFor(function () {
+      return q(doc, '.dialog .dlg-btn.primary');
+    }, 15000, 'flatten dialog');
+    tap(okBtn);
+    await waitFor(function () {
+      return q(doc, '#toast').textContent === 'Saved';
+    }, 30000, 'csv formula save');
+    var atts1c = (await win.Synapse.exportNotes(['note-1'])).notes[0].attachments;
+    var csv2 = atts1c.filter(function (a) { return /\.csv$/.test(a.fileName); })[0];
+    var text2 = atob((await win.Synapse.readAttachment(csv2.path)).data);
+    log('csv formula flattened', text2.indexOf('6') >= 0 && text2.indexOf('=2*3') < 0, JSON.stringify(text2));
+
+    // ============================================================
+    // XLSX attachment (multi-sheet, live formula, patch-preserving save)
+    // ============================================================
     tap(qa(doc, '.topbar .icon-btn')[0]);
-    await sleep(150);
+    await sleep(300);
     var xlsxCard = qa(doc, '.card').filter(function (c) {
       var n = c.querySelector('.name');
       return n && n.textContent === 'book.xlsx';
     })[0];
-    tap(xlsxCard);
+    dbg = await openAndWaitForSheet(xlsxCard, 'xlsx');
+    var wbX = dbg.univerAPI.getActiveWorkbook();
+    var snapX = wbX.save();
+    log('xlsx two sheets', (snapX.sheetOrder || []).length === 2, JSON.stringify(snapX.sheetOrder));
+    var salesSnap = snapX.sheets[snapX.sheetOrder[0]];
+    log('xlsx formula live', salesSnap.cellData[1][1].f === '=21*2' && salesSnap.cellData[1][1].v === 42,
+      JSON.stringify(salesSnap.cellData[1][1]));
+
+    activeSheet(dbg).getRange(1, 0).setValue('Widget X');
     await sleep(400);
-    log('xlsx opens', !!q(doc, 'table.grid'), '');
-    log('xlsx tabs', qa(doc, '.tab').length === 2, 'found ' + qa(doc, '.tab').length);
-    log('xlsx formula banner', !!q(doc, '.banner'), '');
-    var xcell = qa(doc, 'table.grid tbody tr')[1].cells[1];
-    log('xlsx cell', xcell.textContent === 'Widget', JSON.stringify(xcell.textContent));
-    tap(xcell);
-    await sleep(50);
-    var in3 = q(doc, '#cell-input');
-    in3.value = 'Widget X';
-    in3.dispatchEvent(new Event('input', { bubbles: true }));
-    await sleep(50);
-    tap(q(doc, '#save-btn'));
-    await sleep(500);
+    await saveAndWaitToast('Saved');
     var atts2 = (await win.Synapse.exportNotes(['note-1'])).notes[0].attachments;
-    var savedX = atts2.filter(function (a) { return a.fileName.indexOf('book') === 0 && /\.xlsx$/.test(a.fileName); });
+    var savedX = atts2.filter(function (a) { return /^book.*\.xlsx$/.test(a.fileName); });
     var readX = await win.Synapse.readAttachment(savedX[savedX.length - 1].path);
     var wb2 = win.XLSX.read(readX.data, { type: 'base64' });
     var sales = wb2.Sheets.Sales;
     log('xlsx edited cell saved', sales.A2 && sales.A2.v === 'Widget X', JSON.stringify(sales.A2 && sales.A2.v));
-    log('xlsx number kept numeric', sales.B2 && sales.B2.t === 'n' && sales.B2.v === 42, JSON.stringify(sales.B2 && sales.B2.v));
     log('xlsx untouched formula preserved', sales.B2 && sales.B2.f === '21*2', JSON.stringify(sales.B2 && sales.B2.f));
+    log('xlsx number kept numeric', sales.B2 && sales.B2.t === 'n', JSON.stringify(sales.B2 && sales.B2.t));
     var info = wb2.Sheets.Info;
     log('xlsx untouched sheet kept', info && info.A2 && info.A2.v === 'keep me', '');
+    // Number formats must survive a save (requires the cellNF read).
+    var wb2nf = win.XLSX.read(readX.data, { type: 'base64', cellNF: true });
+    var c2 = wb2nf.Sheets.Sales.C2;
+    log('xlsx number format preserved', c2 && c2.z === 'yyyy-mm-dd', JSON.stringify(c2 && c2.z));
+    // The sheet bar (footer) must be present for workbooks…
+    var sheetBarLeaves = qa(doc, '*').filter(function (n2) {
+      return n2.children.length === 0 && n2.textContent.trim() === 'Info' && !n2.closest('.topbar');
+    });
+    log('xlsx sheet bar shown', sheetBarLeaves.length > 0, 'found ' + sheetBarLeaves.length);
 
-    // --- new table flow
+    // Structural edit: insert a row, save, expect a full rewrite that keeps
+    // formulas at their shifted positions.
+    var fsheet = activeSheet(dbg);
+    var inserted = false;
+    try {
+      if (typeof fsheet.insertRowBefore === 'function') { fsheet.insertRowBefore(1); inserted = true; }
+      else if (typeof fsheet.insertRows === 'function') { fsheet.insertRows(1, 1); inserted = true; }
+    } catch (e) { /* facade shape changed */ }
+    log('xlsx structural insert supported', inserted, '');
+    if (inserted) {
+      await sleep(600);
+      await saveAndWaitToast('Saved');
+      var atts3 = (await win.Synapse.exportNotes(['note-1'])).notes[0].attachments;
+      var savedX2 = atts3.filter(function (a) { return /^book.*\.xlsx$/.test(a.fileName); });
+      var wb3 = win.XLSX.read((await win.Synapse.readAttachment(savedX2[savedX2.length - 1].path)).data, { type: 'base64', cellNF: true });
+      var sales3 = wb3.Sheets.Sales;
+      log('xlsx row shifted', sales3.A3 && sales3.A3.v === 'Widget X', JSON.stringify(sales3.A3 && sales3.A3.v));
+      log('xlsx formula survived shift', sales3.B3 && /21\*2/.test(sales3.B3.f || ''), JSON.stringify(sales3.B3 && sales3.B3.f));
+      log('xlsx format survived shift', sales3.C3 && sales3.C3.z === 'yyyy-mm-dd', JSON.stringify(sales3.C3 && sales3.C3.z));
+    }
+
+    // ============================================================
+    // New table flow
+    // ============================================================
     tap(qa(doc, '.topbar .icon-btn')[0]);
-    await sleep(150);
-    var ghost = qa(doc, '.ghost-btn')[0];
-    tap(ghost);
-    await sleep(150);
-    log('new table editor', !!q(doc, 'table.grid'), '');
-    tap(q(doc, '#save-btn'));
     await sleep(300);
+    tap(qa(doc, '.ghost-btn')[0]);
+    dbg = await openAndWaitForSheet({ dispatchEvent: function () {} }, 'new table');
+    await saveAndWaitToast('Saved');
     var content2 = (await win.Synapse.runQuery('SELECT content')).data[0].content;
     log('new table appended', content2.indexOf('| Column 1 | Column 2 | Column 3 |') >= 0, '');
+
+    // Sheet bar hidden for single-sheet sources: the block editor's sheet
+    // is named after the table, and that name must not appear outside the
+    // topbar (positive control: 'Info' IS found in the xlsx editor above).
+    var blockTabLeaves = qa(doc, '*').filter(function (n2) {
+      return n2.children.length === 0 && /^(New table|Table \d+)$/.test(n2.textContent.trim()) && !n2.closest('.topbar');
+    });
+    log('block sheet bar hidden', blockTabLeaves.length === 0, 'found ' + blockTabLeaves.length);
+
+    // ============================================================
+    // Mobile UI (forced): the swapped mobile plugins must boot and edit.
+    // ============================================================
+    tap(qa(doc, '.topbar .icon-btn')[0]);
+    await sleep(300);
+    win.__TS_FORCE_MOBILE = true;
+    dbg = await openAndWaitForSheet(qa(doc, '.card')[0], 'mobile block');
+    activeSheet(dbg).getRange(1, 1).setValue(99);
+    await sleep(500);
+    var snapM = dbg.univerAPI.getActiveWorkbook().save();
+    var sM = snapM.sheets[Object.keys(snapM.sheets)[0]];
+    log('mobile ui boots and edits', !!q(doc, '#univer-host canvas') && sM.cellData[1][1].v === 99,
+      JSON.stringify(sM.cellData[1][1]));
+    win.__TS_FORCE_MOBILE = false;
 
     out.push('DONE');
     document.getElementById('results').textContent = out.join('\n');

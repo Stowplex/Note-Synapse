@@ -22,8 +22,6 @@
     --warn: #b45309;
     --warn-soft: rgba(180, 83, 9, 0.12);
     --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 4px 14px rgba(16, 24, 40, 0.06);
-    --sel-cell: rgba(79, 110, 247, 0.16);
-    --sel-line: rgba(79, 110, 247, 0.07);
     --radius: 14px;
   }
   @media (prefers-color-scheme: dark) {
@@ -44,8 +42,6 @@
       --warn: #fbbf24;
       --warn-soft: rgba(251, 191, 36, 0.14);
       --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-      --sel-cell: rgba(125, 144, 255, 0.22);
-      --sel-line: rgba(125, 144, 255, 0.09);
     }
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -270,184 +266,26 @@
   .banner svg { width: 16px; height: 16px; flex: none; }
   .banner .grow { flex: 1; min-width: 0; }
   .banner .banner-action { font-weight: 700; color: inherit; text-decoration: underline; flex: none; }
-  .tabs {
-    display: flex;
-    gap: 8px;
-    padding: 10px 14px 4px;
-    overflow-x: auto;
-    background: var(--bg);
-    flex: none;
-    scrollbar-width: none;
-  }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tab {
-    flex: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--muted);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    padding: 7px 14px;
-    border-radius: 999px;
-    max-width: 180px;
-    transition: transform 0.1s ease;
-  }
-  .tab:active { transform: scale(0.95); }
-  .tab .tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tab.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
-  .tab .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
-  .grid-wrap {
-    flex: 1;
-    overflow: auto;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    padding-bottom: 10px;
-    background: var(--bg);
-  }
-  table.grid { border-collapse: separate; border-spacing: 0; user-select: none; -webkit-user-select: none; }
-  table.grid th, table.grid td {
-    border-right: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
-    font-weight: 400;
-    text-align: left;
-    vertical-align: top;
-  }
-  table.grid td {
-    min-width: 92px;
-    max-width: 230px;
-    padding: 8px 10px;
-    font-size: 13.5px;
-    line-height: 1.35;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  table.grid td .clamp {
-    display: -webkit-box;
-    -webkit-line-clamp: 4;
-    -webkit-box-orient: vertical;
+  .univer-wrap { flex: 1; min-height: 0; position: relative; background: var(--surface); }
+  #univer-host { position: absolute; inset: 0; }
+
+  /* ---------- engine gate ---------- */
+  .engine-progress {
+    width: min(320px, 78vw);
+    height: 8px;
+    border-radius: 4px;
+    background: var(--surface-2);
     overflow: hidden;
-    min-height: 18px;
-    pointer-events: none;
+    margin-top: 8px;
   }
-  table.grid th.col-head, table.grid th.corner {
-    position: sticky;
-    top: 0;
-    z-index: 3;
-    background: var(--surface-2);
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--muted);
-    text-align: center;
-    padding: 7px 6px;
-    min-width: 92px;
-  }
-  table.grid th.row-head, table.grid th.corner {
-    position: sticky;
-    left: 0;
-    min-width: 40px;
-    width: 40px;
-    background: var(--surface-2);
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--muted);
-    text-align: center;
-    padding: 8px 4px;
-  }
-  table.grid th.row-head { z-index: 2; }
-  table.grid th.corner { z-index: 4; }
-  table.grid tr.md-header td { background: var(--surface-2); font-weight: 700; }
-  table.grid td.sel-line, table.grid tr.md-header td.sel-line { background: var(--sel-line); }
-  table.grid td.sel {
-    background: var(--sel-cell);
-    box-shadow: inset 0 0 0 2px var(--accent);
-    border-radius: 2px;
-  }
-  table.grid th.head-sel { color: var(--accent); background: var(--accent-soft); }
-  table.grid td.align-center { text-align: center; }
-  table.grid td.align-right { text-align: right; }
-  .more-rows {
-    margin: 10px 14px;
-    padding: 10px;
-    width: calc(100% - 28px);
-    border-radius: 12px;
-    background: var(--surface);
-    border: 1px dashed var(--border);
-    color: var(--accent);
-    font-weight: 600;
-    font-size: 13px;
-  }
-  .bottom-dock {
-    flex: none;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-  .toolbar { display: flex; align-items: center; padding: 4px 8px 0; gap: 2px; }
-  .toolbar .spacer { flex: 1; }
-  .tool-btn {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-    min-width: 52px;
-    padding: 7px 6px 5px;
-    border-radius: 10px;
-    color: var(--text);
-    transition: background 0.15s ease, transform 0.1s ease;
-  }
-  .tool-btn:active { background: var(--surface-2); transform: scale(0.94); }
-  .tool-btn svg { width: 19px; height: 19px; }
-  .tool-btn .lbl { font-size: 10px; color: var(--muted); font-weight: 600; }
-  .edit-row { display: flex; align-items: flex-end; gap: 8px; padding: 7px 12px 9px; }
-  .cell-ref {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--accent);
-    background: var(--accent-soft);
-    border-radius: 8px;
-    padding: 8px 9px;
-    min-width: 42px;
-    text-align: center;
-    flex: none;
-    margin-bottom: 1px;
-  }
-  .edit-row textarea {
-    flex: 1;
-    resize: none;
-    border: 1px solid var(--border);
-    background: var(--bg);
-    color: var(--text);
-    border-radius: 11px;
-    font: inherit;
-    font-size: 14px;
-    line-height: 1.35;
-    padding: 8px 12px;
-    max-height: 76px;
-    outline: none;
-    -webkit-user-select: text;
-    user-select: text;
-  }
-  .edit-row textarea:focus { border-color: var(--accent); }
-  .edit-row .commit {
-    width: 38px;
-    height: 38px;
-    border-radius: 11px;
+  .engine-progress .fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 4px;
     background: var(--accent);
-    color: var(--accent-ink);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: none;
-    margin-bottom: 1px;
+    transition: width 0.2s ease;
   }
-  .edit-row .commit svg { width: 18px; height: 18px; }
-  .ro-note { padding: 10px 14px 12px; font-size: 12.5px; color: var(--muted); text-align: center; }
+  .engine-detail { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 16px; }
 
   /* ---------- overlays ---------- */
   .backdrop {
@@ -595,11 +433,14 @@
   </div>
 
   <script src="src/table_core.js"></script>
+  <script src="src/univer_bridge.js"></script>
+  <script src="vendor/fflate-0.8.2.min.js"></script>
   <script src="vendor/xlsx-0.20.3.full.min.js"></script>
   <script>
 'use strict';
 (function () {
   var CORE = window.TableCore;
+  var BRIDGE = window.UniverBridge;
 
   // ------------------------------------------------------------------
   // Limits & format policy
@@ -607,8 +448,11 @@
   var MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
   var MAX_CELLS = 200000;
   var MAX_COLS = 512;
-  var ROW_CHUNK = 250;
-  var UNDO_LIMIT = 80;
+  // Extra empty rows/columns offered around the data for fluid entry.
+  var ROW_MARGIN = 40;
+  var COL_MARGIN = 8;
+  var MIN_ROWS = 60;
+  var MIN_COLS = 26;
 
   // ext -> how we handle it. 'text' = CSV-style, 'workbook' = SheetJS
   // read/write, 'workbook-ro' = SheetJS read-only (saving would risk losing
@@ -669,20 +513,12 @@
   var ICONS = {
     back: 'M15 18l-6-6 6-6',
     check: 'M20 6L9 17l-5-5',
-    close: 'M18 6L6 18M6 6l12 12',
     plus: 'M12 5v14M5 12h14',
-    undo: ['M3 7v6h6', 'M21 17a9 9 0 0 0-15-6.7L3 13'],
-    redo: ['M21 7v6h-6', 'M3 17a9 9 0 0 1 15-6.7L21 13'],
-    trash: ['M3 6h18', 'M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2', 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6', 'M10 11v6M14 11v6'],
     grid: ['M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M3 10h18', 'M10 3v18'],
     file: ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6'],
     refresh: ['M23 4v6h-6', 'M1 20v-6h6', 'M3.5 9a9 9 0 0 1 14.9-3.4L23 10', 'M1 14l4.6 4.4A9 9 0 0 0 20.5 15'],
     alert: ['M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z', 'M12 9v4', 'M12 17h.01'],
-    rowPlus: ['M3 5h18v5H3z', 'M12 14v6', 'M9 17h6'],
-    colPlus: ['M3 3h5v18H3z', 'M14 12h6', 'M17 9v6'],
-    alignLeft: ['M4 6h16', 'M4 12h10', 'M4 18h14'],
-    alignCenter: ['M4 6h16', 'M7 12h10', 'M5 18h14'],
-    alignRight: ['M4 6h16', 'M10 12h10', 'M6 18h14'],
+    download: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'M7 10l5 5 5-5', 'M12 15V3'],
   };
 
   function toast(msg) {
@@ -835,7 +671,7 @@
   }
 
   // ------------------------------------------------------------------
-  // Bytes / base64 / utf8
+  // Bytes / base64 / utf8 / gzip
   // ------------------------------------------------------------------
   function b64ToBytes(b64) {
     var clean = b64.indexOf(',') >= 0 ? b64.slice(b64.indexOf(',') + 1) : b64;
@@ -866,6 +702,12 @@
   function encodeUtf8(text) {
     return new TextEncoder().encode(text);
   }
+  function gzipTextToB64(text) {
+    return bytesToB64(fflate.gzipSync(fflate.strToU8(text)));
+  }
+  function gunzipB64ToText(b64) {
+    return fflate.strFromU8(fflate.gunzipSync(b64ToBytes(b64)));
+  }
   function extOf(name) {
     var m = /\.([a-z0-9]+)$/i.exec(String(name || ''));
     return m ? m[1].toLowerCase() : '';
@@ -877,6 +719,11 @@
   }
   function sqlQuote(s) {
     return "'" + String(s).replace(/'/g, "''") + "'";
+  }
+  function fmtSize(bytes) {
+    if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+    if (bytes >= 1024) return Math.round(bytes / 1024) + ' KB';
+    return bytes + ' B';
   }
 
   // ------------------------------------------------------------------
@@ -986,6 +833,234 @@
   }
 
   // ------------------------------------------------------------------
+  // Univer engine: download once (sha256-pinned, mirrored), gzip into
+  // app state, inject from cache on every later launch.
+  // ------------------------------------------------------------------
+  var engine = {
+    status: 'idle', // idle | downloading | ready | error
+    cachePromise: null,
+    downloadPromise: null,
+    error: null,
+    progressCb: null, // set by the engine screen while it is visible
+    doneBytes: 0,
+    totalBytes: BRIDGE.engineTotalBytes(),
+    detail: '',
+    fileCache: {}, // name -> text, survives a failed run so retries resume
+    injected: false,
+    cancelRequested: false,
+  };
+
+  function engineProgress(detail) {
+    engine.detail = detail;
+    if (engine.progressCb) engine.progressCb();
+  }
+
+  /** Everything the downloader needs from the host, checked up front. */
+  function engineHostReady() {
+    var s = window.Synapse;
+    return !!(
+      s &&
+      typeof s.proxyFetch === 'function' &&
+      typeof s.loadAppState === 'function' &&
+      typeof s.storeAppState === 'function' &&
+      s.crypto &&
+      typeof s.crypto.digest === 'function'
+    );
+  }
+
+  function cancelledError() {
+    var e = new Error('Download cancelled.');
+    e.cancelled = true;
+    return e;
+  }
+
+  /** Resolves the lowercase sha256 hex of base64 bytes; rejects on failure. */
+  function digestB64(b64) {
+    return window.Synapse.crypto.digest('sha256', { base64: b64 }).then(function (r) {
+      if (!r || r.success !== true || typeof r.hex !== 'string') {
+        throw new Error('checksum service failed');
+      }
+      return r.hex.toLowerCase();
+    });
+  }
+
+  function fetchEngineFile(file) {
+    if (engine.cancelRequested) return Promise.reject(cancelledError());
+    if (engine.fileCache[file.name]) {
+      engine.doneBytes += file.bytes;
+      return Promise.resolve(engine.fileCache[file.name]);
+    }
+    var urls = BRIDGE.engineUrls(file);
+    var attempt = function (i) {
+      if (engine.cancelRequested) return Promise.reject(cancelledError());
+      if (i >= urls.length) {
+        return Promise.reject(new Error('Could not download ' + file.name + ' from any mirror.'));
+      }
+      engineProgress(file.name + ' — ' + new URL(urls[i]).host);
+      return window.Synapse.proxyFetch(urls[i], { responseMode: 'binary' })
+        .then(function (r) {
+          if (!r || r.status !== 'success' || !r.content || typeof r.content.data !== 'string') {
+            throw new Error((r && (r.error || 'no response')) || 'no response');
+          }
+          // proxyFetch reports transport success even for HTTP errors; a 404
+          // page must fail here, not as a confusing "checksum mismatch".
+          if (typeof r.statusCode === 'number' && (r.statusCode < 200 || r.statusCode >= 300)) {
+            throw new Error('HTTP ' + r.statusCode);
+          }
+          var b64 = r.content.data;
+          return digestB64(b64).then(function (hex) {
+            if (hex !== file.sha256) {
+              throw new Error('checksum mismatch');
+            }
+            var text = new TextDecoder().decode(b64ToBytes(b64));
+            engine.fileCache[file.name] = text;
+            engine.doneBytes += file.bytes;
+            engineProgress(file.name + ' ✓');
+            return text;
+          });
+        })
+        .catch(function (e) {
+          if (e && e.cancelled) throw e;
+          return attempt(i + 1); // any mirror failure moves to the next mirror
+        });
+    };
+    return attempt(0);
+  }
+
+  function loadCachedEngine() {
+    return window.Synapse.loadAppState().then(function (r) {
+      var st = r && r.success && r.data ? r.data : null;
+      var cached = st && st.univerEngine;
+      if (cached && cached.version === BRIDGE.ENGINE.version && cached.js && cached.css) {
+        return { js: gunzipB64ToText(cached.js), css: gunzipB64ToText(cached.css) };
+      }
+      return null;
+    }).catch(function () { return null; });
+  }
+
+  function storeEngine(jsText, cssText) {
+    return window.Synapse.loadAppState()
+      .then(function (r) {
+        var st = (r && r.success && r.data) || {};
+        st.univerEngine = {
+          version: BRIDGE.ENGINE.version,
+          js: gzipTextToB64(jsText),
+          css: gzipTextToB64(cssText),
+        };
+        return window.Synapse.storeAppState(st);
+      })
+      .catch(function () { /* cache miss next launch, not fatal */ });
+  }
+
+  function injectEngine(payload) {
+    if (engine.injected) return;
+    var style = document.createElement('style');
+    style.textContent = payload.css;
+    document.head.appendChild(style);
+    // Guard against a partially-run previous injection: re-executing the
+    // bundle would redeclare its globals and throw.
+    if (!window.UniverPresets) {
+      var script = document.createElement('script');
+      script.textContent = payload.js;
+      document.head.appendChild(script);
+    }
+    if (!window.UniverPresets || !window.UniverCore || !window.UniverPresetSheetsCore) {
+      throw new Error('The spreadsheet engine failed to initialize.');
+    }
+    engine.injected = true;
+  }
+
+  /**
+   * Cache-only readiness: resolves true when the engine booted from the
+   * local cache, false when a download would be needed. Never downloads,
+   * never rejects.
+   */
+  function ensureEngineFromCache() {
+    if (engine.status === 'ready') return Promise.resolve(true);
+    if (engine.cachePromise) return engine.cachePromise;
+    engine.cachePromise = Promise.resolve()
+      .then(function () {
+        var s = window.Synapse;
+        if (!s || typeof s.loadAppState !== 'function') return null;
+        return loadCachedEngine();
+      })
+      .then(function (cached) {
+        engine.cachePromise = null;
+        if (!cached) return false;
+        injectEngine(cached);
+        engine.status = 'ready';
+        engine.doneBytes = engine.totalBytes;
+        return true;
+      })
+      .catch(function () {
+        engine.cachePromise = null;
+        return false;
+      });
+    return engine.cachePromise;
+  }
+
+  /**
+   * The full download → verify → cache → inject pipeline. Only ever called
+   * after the user explicitly consented to the download. Rejects with
+   * `.cancelled` when the user backed out mid-download (partial files are
+   * kept in memory so a retry resumes).
+   */
+  function downloadAndReadyEngine() {
+    if (engine.status === 'ready') return Promise.resolve();
+    if (engine.downloadPromise) return engine.downloadPromise;
+    engine.cancelRequested = false;
+    engine.status = 'downloading';
+    engine.error = null;
+    engine.doneBytes = 0;
+    engine.downloadPromise = Promise.resolve()
+      .then(function () {
+        if (!engineHostReady()) {
+          throw new Error(
+            'This version of Note Synapse cannot set up the spreadsheet engine (missing download/verify support). Please update the app.'
+          );
+        }
+        var jsParts = [];
+        var cssParts = [];
+        var chain = Promise.resolve();
+        BRIDGE.ENGINE.js.forEach(function (file) {
+          chain = chain.then(function () {
+            return fetchEngineFile(file).then(function (t) { jsParts.push(t); });
+          });
+        });
+        BRIDGE.ENGINE.css.forEach(function (file) {
+          chain = chain.then(function () {
+            return fetchEngineFile(file).then(function (t) { cssParts.push(t); });
+          });
+        });
+        return chain.then(function () {
+          var payload = { js: jsParts.join('\n;\n'), css: cssParts.join('\n') };
+          engineProgress('Caching for offline use…');
+          return storeEngine(payload.js, payload.css).then(function () {
+            engine.fileCache = {};
+            return payload;
+          });
+        });
+      })
+      .then(function (payload) {
+        engineProgress('Starting engine…');
+        injectEngine(payload);
+        engine.status = 'ready';
+        engine.downloadPromise = null;
+      })
+      .catch(function (e) {
+        engine.downloadPromise = null;
+        if (e && e.cancelled) {
+          engine.status = 'idle';
+        } else {
+          engine.status = 'error';
+          engine.error = String((e && e.message) || e);
+        }
+        throw e;
+      });
+    return engine.downloadPromise;
+  }
+
+  // ------------------------------------------------------------------
   // Sources
   // ------------------------------------------------------------------
   var SIZE_LIMITS = { maxCols: MAX_COLS, maxCells: MAX_CELLS };
@@ -1043,6 +1118,7 @@
   }
 
   function renderHome() {
+    engine.progressCb = null;
     buildSources();
     clearChildren(appEl);
     var screen = el('div', 'screen');
@@ -1224,6 +1300,160 @@
   }
 
   // ------------------------------------------------------------------
+  // Engine screen — shown while the editor waits for Univer
+  // ------------------------------------------------------------------
+  function engineTopbar(screen, title, onCancel) {
+    var bar = el('div', 'topbar');
+    var backBtn = el('button', 'icon-btn');
+    backBtn.setAttribute('aria-label', 'Back');
+    backBtn.appendChild(svgIcon(ICONS.back));
+    backBtn.addEventListener('click', onCancel);
+    bar.appendChild(backBtn);
+    var titles = el('div', 'titles');
+    titles.appendChild(el('h1', null, title));
+    titles.appendChild(el('div', 'subtitle', 'Spreadsheet engine setup'));
+    bar.appendChild(titles);
+    screen.appendChild(bar);
+  }
+
+  /** One-time consent: nothing is downloaded until the user says so. */
+  function renderEngineConsent(title, onDownload, onCancel) {
+    clearChildren(appEl);
+    var screen = el('div', 'screen');
+    engineTopbar(screen, title, onCancel);
+    var gate = el('div', 'gate');
+    gate.appendChild(svgIcon(ICONS.download));
+    gate.appendChild(el('div', 'big', 'One-time engine download'));
+    gate.appendChild(
+      el('div', null,
+        'Editing uses the Univer spreadsheet engine — a one-time ' +
+        fmtSize(engine.totalBytes) + ' download from jsdelivr/unpkg. Every file is ' +
+        'verified against a pinned checksum and cached, so later launches work offline.')
+    );
+    var actions = el('div', 'empty-state actions');
+    actions.style.flex = 'none';
+    actions.style.padding = '0';
+    var dlBtn = el('button', 'pill-btn');
+    dlBtn.appendChild(svgIcon(ICONS.download));
+    dlBtn.appendChild(el('span', null, 'Download ' + fmtSize(engine.totalBytes)));
+    dlBtn.addEventListener('click', onDownload);
+    var backBtn = el('button', 'ghost-btn', 'Not now');
+    backBtn.addEventListener('click', onCancel);
+    actions.appendChild(dlBtn);
+    actions.appendChild(backBtn);
+    gate.appendChild(actions);
+    screen.appendChild(gate);
+    appEl.appendChild(screen);
+  }
+
+  function renderEngineScreen(title, onCancel) {
+    clearChildren(appEl);
+    var screen = el('div', 'screen');
+    engineTopbar(screen, title, onCancel);
+
+    var gate = el('div', 'gate');
+    gate.appendChild(svgIcon(ICONS.download));
+    gate.appendChild(el('div', 'big', 'Setting up the spreadsheet'));
+    gate.appendChild(
+      el('div', null,
+        'Downloading and verifying the Univer engine (' +
+        fmtSize(engine.totalBytes) + ' one-time, cached for offline use). Back cancels the download.')
+    );
+    var progress = el('div', 'engine-progress');
+    var fill = el('div', 'fill');
+    progress.appendChild(fill);
+    gate.appendChild(progress);
+    var detail = el('div', 'engine-detail');
+    gate.appendChild(detail);
+    screen.appendChild(gate);
+    appEl.appendChild(screen);
+
+    engine.progressCb = function () {
+      var pct = engine.totalBytes > 0
+        ? Math.min(100, Math.round((engine.doneBytes / engine.totalBytes) * 100))
+        : 0;
+      fill.style.width = pct + '%';
+      detail.textContent = engine.detail;
+    };
+    engine.progressCb();
+  }
+
+  function renderEngineError(title, message, retry, cancel) {
+    clearChildren(appEl);
+    var screen = el('div', 'screen');
+    var gate = el('div', 'gate');
+    gate.appendChild(svgIcon(ICONS.alert));
+    gate.appendChild(el('div', 'big', title));
+    gate.appendChild(el('div', null, message));
+    var actions = el('div', 'empty-state actions');
+    actions.style.flex = 'none';
+    actions.style.padding = '0';
+    var retryBtn = el('button', 'pill-btn', 'Try again');
+    retryBtn.addEventListener('click', retry);
+    var backBtn = el('button', 'ghost-btn', 'Back');
+    backBtn.addEventListener('click', cancel);
+    actions.appendChild(retryBtn);
+    actions.appendChild(backBtn);
+    gate.appendChild(actions);
+    screen.appendChild(gate);
+    appEl.appendChild(screen);
+  }
+
+  // Invalidates in-flight editor opens when the screen has moved on.
+  var openToken = 0;
+
+  /**
+   * Runs `proceed` once the Univer engine is ready. Boots silently from
+   * the cache when possible; otherwise asks for download consent first,
+   * then shows progress (Back cancels the download; partial files are
+   * kept so a retry resumes).
+   */
+  function withEngine(title, proceed) {
+    var token = ++openToken;
+    var cancel = function () {
+      openToken++;
+      engine.cancelRequested = true;
+      engine.progressCb = null;
+      renderHome();
+    };
+    var startDownload = function () {
+      renderEngineScreen(title, cancel);
+      downloadAndReadyEngine()
+        .then(function () {
+          if (token !== openToken) return;
+          engine.progressCb = null;
+          proceed();
+        })
+        .catch(function (e) {
+          if (token !== openToken) return;
+          engine.progressCb = null;
+          if (e && e.cancelled) {
+            renderHome();
+            return;
+          }
+          renderEngineError(
+            'Engine unavailable',
+            engine.error || 'The spreadsheet engine could not be set up. Check your connection and try again.',
+            startDownload,
+            cancel
+          );
+        });
+    };
+    busy('Preparing spreadsheet…');
+    ensureEngineFromCache().then(function (ready) {
+      unbusy();
+      if (token !== openToken) return;
+      if (ready) {
+        proceed();
+        return;
+      }
+      // A download already running (previous consent) skips re-asking.
+      if (engine.downloadPromise) startDownload();
+      else renderEngineConsent(title, startDownload, cancel);
+    });
+  }
+
+  // ------------------------------------------------------------------
   // Editor state factory
   // ------------------------------------------------------------------
   function deepCopyGrid(grid) {
@@ -1232,31 +1462,50 @@
 
   function baseEditor() {
     return {
-      dirty: false,
-      undoStack: [],
-      redoStack: [],
-      sel: { r: 0, c: 0 },
-      renderRows: ROW_CHUNK,
-      editSnapTaken: false,
+      isNew: false,
       readonly: false,
+      structural: {}, // sheetId -> true once a structural mutation touched it
+      allStructural: false,
+      editGen: 0,
+      dirtyHint: false,
     };
   }
 
+  /** Excel-safe sheet name (also fine for Univer): strip []:*?/\ and cap at 31. */
+  function safeSheetName(name, fallback) {
+    var n = String(name == null ? '' : name).replace(/[\[\]:*?\/\\]/g, ' ').trim();
+    if (!n) n = fallback || 'Sheet';
+    return n.slice(0, 31);
+  }
+
+  function sheetDims(rows, cols) {
+    return {
+      rowCount: Math.min(Math.max(rows + ROW_MARGIN, MIN_ROWS), 5000),
+      columnCount: Math.min(Math.max(cols + COL_MARGIN, MIN_COLS), MAX_COLS),
+    };
+  }
+
+  // ------------------------------------------------------------------
+  // Editor opens
+  // ------------------------------------------------------------------
   function openBlockEditor(src) {
     var ed = baseEditor();
     ed.kind = 'block';
     ed.note = src.note;
     ed.title = src.title;
-    ed.isNew = false;
     ed.raw = src.table.raw;
     ed.indent = src.table.indent;
     ed.contentAtOpen = src.note.content;
     ed.startLine = src.table.startLine;
     ed.endLine = src.table.endLine;
-    ed.aligns = src.table.aligns.slice();
-    ed.grid = deepCopyGrid(src.table.grid);
-    state.editor = ed;
-    renderEditor();
+    var data = BRIDGE.gridToSheetData(src.table.grid, { headerRow: true, aligns: src.table.aligns });
+    ed.sheetId = 'ts-s0';
+    ed.sheets = [sheetEntryFromData(ed.sheetId, ed.title, data)];
+    ed.styles = data.styles;
+    // Baseline for dirty/noop detection: what an unchanged sheet would
+    // serialize to (eol-normalized; the real eol is chosen at save time).
+    ed.baseBlockText = CORE.serializeTable(src.table.grid, src.table.aligns, ed.indent, '\n');
+    openEditor(ed);
   }
 
   function startNewBlock(note) {
@@ -1269,15 +1518,17 @@
       ed.title = 'New table';
       ed.isNew = true;
       ed.indent = '';
-      ed.aligns = [null, null, null];
-      ed.grid = [
+      var grid = [
         ['Column 1', 'Column 2', 'Column 3'],
         ['', '', ''],
         ['', '', ''],
       ];
-      ed.dirty = true;
-      state.editor = ed;
-      renderEditor();
+      var data = BRIDGE.gridToSheetData(grid, { headerRow: true, aligns: [null, null, null] });
+      ed.sheetId = 'ts-s0';
+      ed.sheets = [sheetEntryFromData(ed.sheetId, ed.title, data)];
+      ed.styles = data.styles;
+      ed.baseBlockText = null; // new: always dirty until first save
+      openEditor(ed);
     });
   }
 
@@ -1310,24 +1561,28 @@
           hadBom: false,
           trailingNewline: true,
         };
-        ed.sheets = [{ name: name, grid: [['', '', ''], ['', '', ''], ['', '', '']], dirty: true }];
-        ed.active = 0;
-        ed.dirty = true;
-        state.editor = ed;
-        renderEditor();
+        var data = BRIDGE.gridToSheetData([['', '', ''], ['', '', ''], ['', '', '']], {});
+        ed.sheetId = 'ts-s0';
+        ed.sheets = [sheetEntryFromData(ed.sheetId, safeSheetName(name, 'Sheet1'), data)];
+        ed.styles = data.styles;
+        ed.origRows = 3;
+        ed.origCols = 3;
+        ed.baseText = null; // new: always dirty until first save
+        openEditor(ed);
       });
   }
 
-  function totalCells(grids) {
-    var n = 0;
-    grids.forEach(function (g) {
-      n += g.length * (g[0] ? g[0].length : 0);
-    });
-    return n;
+  function sheetEntryFromData(id, name, data) {
+    var dims = sheetDims(data.rows, data.cols);
+    return {
+      id: id,
+      name: safeSheetName(name, id),
+      rowCount: dims.rowCount,
+      columnCount: dims.columnCount,
+      cellData: data.cellData,
+      mergeData: data.mergeData || [],
+    };
   }
-
-  // Invalidates in-flight editor opens when the screen has moved on.
-  var openToken = 0;
 
   function openFileEditor(src) {
     var token = ++openToken;
@@ -1350,7 +1605,6 @@
         ed.ext = src.ext;
         ed.saveName = src.att.fileName;
         ed.title = src.att.fileName;
-        ed.isNew = false;
 
         if (src.mode === 'text') {
           var bytes = b64ToBytes(res.data);
@@ -1359,27 +1613,32 @@
           var parsed = CORE.parseDelimited(text, delim, SIZE_LIMITS);
           ed.format = 'text';
           ed.meta = parsed;
-          ed.sheets = [{
-            name: src.att.fileName,
-            grid: parsed.rows,
-            arities: parsed.arities,
-            dirty: false,
-          }];
-          ed.active = 0;
+          ed.origRows = parsed.rows.length;
+          ed.origCols = parsed.rows[0] ? parsed.rows[0].length : 0;
+          // Baseline for dirty/noop detection: the file exactly as stored.
+          ed.baseText = text;
+          var data = BRIDGE.gridToSheetData(parsed.rows, {});
+          ed.sheetId = 'ts-s0';
+          ed.sheets = [sheetEntryFromData(ed.sheetId, safeSheetName(src.att.fileName, 'Sheet1'), data)];
+          ed.styles = data.styles;
         } else {
           if (typeof window.XLSX === 'undefined') {
             throw new Error('The spreadsheet engine failed to load.');
           }
-          var wb = XLSX.read(res.data, { type: 'base64', cellStyles: false });
-          // Refuse oversized declared ranges BEFORE sheet_to_json expands
-          // them into rows x cols arrays of empty cells.
+          // cellNF is required: without it SheetJS never populates cell.z,
+          // every number format in the workbook (dates, currency) would be
+          // silently wiped on the first save.
+          var wb = XLSX.read(res.data, {
+            type: 'base64',
+            cellStyles: false,
+            cellNF: true,
+          });
+          // Refuse oversized declared ranges BEFORE expanding them.
           var declaredCells = 0;
           wb.SheetNames.forEach(function (name) {
             var ref = wb.Sheets[name] && wb.Sheets[name]['!ref'];
             if (!ref) return;
             var range = XLSX.utils.decode_range(ref);
-            // Measured from A1, because sheet_to_json below is forced to
-            // expand from A1 — a far-offset !ref must not sneak past.
             var sheetRows = range.e.r + 1;
             var sheetCols = range.e.c + 1;
             if (sheetCols > MAX_COLS) {
@@ -1390,69 +1649,33 @@
           if (declaredCells > MAX_CELLS) {
             throw new Error('This workbook is too large to edit here.');
           }
-          var sheets = [];
-          var hasFormulas = false;
-          wb.SheetNames.forEach(function (name) {
-            var ws = wb.Sheets[name];
-            var aoa;
-            if (ws && ws['!ref']) {
-              // Force the range to start at A1 so aoa[r][c] always maps to
-              // spreadsheet cell (r, c) — required for cell-level patching
-              // at save time.
-              var range = XLSX.utils.decode_range(ws['!ref']);
-              aoa = XLSX.utils.sheet_to_json(ws, {
-                header: 1,
-                raw: false,
-                defval: '',
-                range: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: range.e }),
-              });
-            } else {
-              aoa = [['']];
-            }
-            if (aoa.length === 0) aoa = [['']];
-            aoa = aoa.map(function (row) {
-              return row.map(function (v) { return v == null ? '' : String(v); });
-            });
-            CORE.normalizeGrid(aoa);
-            if (!hasFormulas) {
-              for (var key in ws) {
-                if (key[0] !== '!' && ws[key] && ws[key].f) {
-                  hasFormulas = true;
-                  break;
-                }
-              }
-            }
-            sheets.push({
-              name: name,
-              grid: aoa,
-              // Baseline for cell-diff patching: untouched cells are never
-              // rewritten, preserving their formulas/types/formats.
-              original: deepCopyGrid(aoa),
-              structured: false,
-              dirty: false,
-            });
-          });
-          if (sheets.length === 0) {
-            sheets.push({ name: 'Sheet1', grid: [['']], original: [['']], structured: false, dirty: false });
-          }
-          if (totalCells(sheets.map(function (s) { return s.grid; })) > MAX_CELLS) {
-            throw new Error('This workbook is too large to edit here.');
-          }
-          for (var i = 0; i < sheets.length; i++) {
-            if (sheets[i].grid[0].length > MAX_COLS) {
-              throw new Error('This workbook is too wide to edit here.');
-            }
-          }
           ed.format = 'workbook';
           ed.wb = wb;
           ed.bookType = src.mode === 'workbook' ? FORMATS[src.ext].bookType : 'xlsx';
           ed.readonly = src.mode === 'workbook-ro';
-          ed.hasFormulas = hasFormulas;
-          ed.sheets = sheets;
-          ed.active = 0;
+          ed.styles = {};
+          ed.sheets = [];
+          ed.sheetMeta = []; // [{id, origName, univerName}]
+          var usedNames = {};
+          wb.SheetNames.forEach(function (name, idx) {
+            var id = 'ts-s' + idx;
+            var data = BRIDGE.worksheetToSheetData(wb.Sheets[name], XLSX, id + '-');
+            Object.keys(data.numfmts).forEach(function (k) {
+              ed.styles[k] = data.numfmts[k];
+            });
+            var univerName = BRIDGE.uniqueSheetName(usedNames, name, 'Sheet' + (idx + 1));
+            ed.sheets.push(sheetEntryFromData(id, univerName, data));
+            ed.sheetMeta.push({ id: id, origName: name, univerName: univerName });
+          });
+          if (ed.sheets.length === 0) {
+            var empty = BRIDGE.gridToSheetData([['']], {});
+            ed.sheetId = 'ts-s0';
+            ed.sheets.push(sheetEntryFromData('ts-s0', 'Sheet1', empty));
+            ed.sheetMeta.push({ id: 'ts-s0', origName: 'Sheet1', univerName: 'Sheet1' });
+          }
+          ed.baseNorms = baseNormsOf(ed);
         }
-        state.editor = ed;
-        renderEditor();
+        openEditor(ed);
       })
       .catch(function (e) {
         unbusy();
@@ -1460,26 +1683,151 @@
       });
   }
 
-  // ------------------------------------------------------------------
-  // Editor rendering
-  // ------------------------------------------------------------------
-  function activeGrid() {
-    var ed = state.editor;
-    return ed.kind === 'block' ? ed.grid : ed.sheets[ed.active].grid;
+  function baseNormsOf(ed) {
+    var norms = {};
+    ed.sheets.forEach(function (sh) {
+      norms[sh.id] = BRIDGE.normalizeSheet(sh, ed.styles);
+    });
+    return norms;
   }
-  function markSheetDirty() {
-    var ed = state.editor;
-    ed.dirty = true;
-    // Edit generation: lets an async save detect edits that landed while it
-    // was in flight, so they are never silently marked clean.
-    ed.editGen = (ed.editGen || 0) + 1;
-    if (ed.sheets) ed.sheets[ed.active].dirty = true;
-    var save = document.getElementById('save-btn');
-    if (save) save.disabled = !canSave();
+
+  // ------------------------------------------------------------------
+  // Univer lifecycle
+  // ------------------------------------------------------------------
+  var univerInst = null; // { univer, univerAPI, disposables: [] }
+
+  function disposeUniver() {
+    if (!univerInst) return;
+    univerInst.disposables.forEach(function (d) {
+      try { d.dispose(); } catch (e) { /* already gone */ }
+    });
+    try { univerInst.univer.dispose(); } catch (e) { /* already gone */ }
+    univerInst = null;
   }
-  function canSave() {
-    var ed = state.editor;
-    return !!ed && ed.dirty && !ed.readonly && !state.saving;
+
+  /** Touch-first devices get Univer's dedicated mobile UI. */
+  function wantsMobileUi() {
+    if (window.__TS_FORCE_MOBILE != null) return !!window.__TS_FORCE_MOBILE;
+    return (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window;
+  }
+
+  /**
+   * The core preset hardcodes the desktop UI plugins; on touch devices we
+   * swap in UniverMobileUIPlugin / UniverSheetsMobileUIPlugin (same config,
+   * validated against the pinned 0.25.1 bundle) for a mobile-friendly
+   * spreadsheet interface.
+   */
+  function corePresetFor(ed) {
+    var preset = window.UniverPresetSheetsCore.UniverSheetsCorePreset({
+      container: 'univer-host',
+      // Markdown tables and CSVs are single-sheet documents — the sheet
+      // bar would only offer sheets that can never be saved.
+      footer: ed.format === 'workbook',
+    });
+    var UI = window.UniverUi;
+    var SUI = window.UniverSheetsUi;
+    if (wantsMobileUi() && UI && UI.UniverMobileUIPlugin && SUI && SUI.UniverSheetsMobileUIPlugin) {
+      preset.plugins = preset.plugins.map(function (entry) {
+        var plugin = Array.isArray(entry) ? entry[0] : entry;
+        var cfg = Array.isArray(entry) ? entry[1] : undefined;
+        if (plugin === UI.UniverUIPlugin) return [UI.UniverMobileUIPlugin, cfg];
+        if (plugin === SUI.UniverSheetsUIPlugin) return [SUI.UniverSheetsMobileUIPlugin, cfg];
+        return entry;
+      });
+    }
+    return preset;
+  }
+
+  function bootUniver(ed) {
+    disposeUniver();
+    var P = window.UniverPresets;
+    var C = window.UniverCore;
+    var inst = P.createUniver({
+      locale: C.LocaleType.EN_US,
+      locales: {
+        [C.LocaleType.EN_US]: C.merge(
+          {},
+          window.UniverPresetSheetsCoreEnUS,
+          window.UniverPresetSheetsSortEnUS,
+          window.UniverPresetSheetsFilterEnUS,
+          window.UniverPresetSheetsHyperLinkEnUS,
+          window.UniverPresetSheetsDataValidationEnUS,
+          window.UniverPresetSheetsConditionalFormattingEnUS
+        ),
+      },
+      darkMode: window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches,
+      presets: [
+        corePresetFor(ed),
+        window.UniverPresetSheetsSort.UniverSheetsSortPreset(),
+        window.UniverPresetSheetsFilter.UniverSheetsFilterPreset(),
+        window.UniverPresetSheetsHyperLink.UniverSheetsHyperLinkPreset(),
+        window.UniverPresetSheetsDataValidation.UniverSheetsDataValidationPreset(),
+        window.UniverPresetSheetsConditionalFormatting.UniverSheetsConditionalFormattingPreset(),
+      ],
+    });
+    univerInst = { univer: inst.univer, univerAPI: inst.univerAPI, disposables: [] };
+
+    var sheets = {};
+    var order = [];
+    ed.sheets.forEach(function (sh) {
+      sheets[sh.id] = sh;
+      order.push(sh.id);
+    });
+    var wb = inst.univerAPI.createWorkbook({
+      name: ed.title || 'Table Studio',
+      sheets: sheets,
+      styles: ed.styles || {},
+      sheetOrder: order,
+    });
+    ed.unitId = wb.getId();
+
+    // Mutations serve two purposes: a cheap dirty hint (authoritative
+    // dirty-ness is a normalized snapshot compare at save/close time) and
+    // structural classification, which switches a sheet from cell-diff
+    // patching to a full rewrite. Univer emits load/recalc mutations too,
+    // so false positives here are fine — a false "dirty" ends as a
+    // "No changes to save" noop.
+    var disposable = inst.univerAPI.addEvent(inst.univerAPI.Event.CommandExecuted, function (cmd) {
+      if (!cmd || cmd.type !== 2) return; // mutations only
+      var params = cmd.params || {};
+      if (params.unitId && ed.unitId && params.unitId !== ed.unitId) return;
+      ed.dirtyHint = true;
+      ed.editGen++;
+      if (BRIDGE.isStructuralMutation(cmd.id)) {
+        if (params.subUnitId) {
+          ed.structural[params.subUnitId] = true;
+        } else {
+          ed.allStructural = true;
+        }
+      }
+    });
+    univerInst.disposables.push(disposable);
+    // Debug/test handle for the dev harness (same trust model as the app —
+    // anything with page access already has the full Synapse bridge).
+    window.__TS_DEBUG = { univerAPI: inst.univerAPI, editor: ed };
+    return wb;
+  }
+
+  function workbookFacade() {
+    if (!univerInst) return null;
+    return univerInst.univerAPI.getActiveWorkbook();
+  }
+
+  /** Current snapshot { sheets, styles, sheetOrder } or null. */
+  function snapshotNow() {
+    var wb = workbookFacade();
+    if (!wb) return null;
+    return wb.save();
+  }
+
+  // ------------------------------------------------------------------
+  // Editor screen
+  // ------------------------------------------------------------------
+  function openEditor(ed) {
+    withEngine(ed.title, function () {
+      state.editor = ed;
+      renderEditor();
+    });
   }
 
   function renderEditor() {
@@ -1487,7 +1835,6 @@
     clearChildren(appEl);
     var screen = el('div', 'screen');
 
-    // --- top bar
     var bar = el('div', 'topbar');
     var backBtn = el('button', 'icon-btn');
     backBtn.setAttribute('aria-label', 'Back');
@@ -1496,585 +1843,58 @@
     bar.appendChild(backBtn);
     var titles = el('div', 'titles');
     titles.appendChild(el('h1', null, ed.title));
-    titles.appendChild(el('div', 'subtitle', ed.note.title || 'Untitled note'));
+    var sub;
+    if (ed.kind === 'block') {
+      sub = 'Markdown table · ' + (ed.note.title || 'Untitled note');
+    } else {
+      sub = ed.ext ? ed.ext.toUpperCase() + ' · ' + (ed.note.title || 'Untitled note') : (ed.note.title || 'Untitled note');
+    }
+    titles.appendChild(el('div', 'subtitle', sub));
     bar.appendChild(titles);
-    var saveBtn = el('button', 'pill-btn');
-    saveBtn.id = 'save-btn';
-    saveBtn.appendChild(svgIcon(ICONS.check));
-    saveBtn.appendChild(el('span', null, 'Save'));
-    saveBtn.disabled = !canSave();
-    saveBtn.addEventListener('click', saveEditor);
-    bar.appendChild(saveBtn);
+    if (ed.readonly) {
+      var copyBtn = el('button', 'pill-btn');
+      copyBtn.appendChild(el('span', null, 'Save copy'));
+      copyBtn.addEventListener('click', saveReadonlyCopy);
+      bar.appendChild(copyBtn);
+    } else {
+      var saveBtn = el('button', 'pill-btn');
+      saveBtn.id = 'save-btn';
+      saveBtn.appendChild(svgIcon(ICONS.check));
+      saveBtn.appendChild(el('span', null, 'Save'));
+      saveBtn.addEventListener('click', saveEditor);
+      bar.appendChild(saveBtn);
+    }
     screen.appendChild(bar);
 
-    // --- banners
     if (ed.readonly) {
-      var roBanner = el('div', 'banner');
-      roBanner.appendChild(svgIcon(ICONS.alert));
-      roBanner.appendChild(
-        el('div', 'grow', '.' + ed.ext + ' files open read-only so macros and legacy formatting are never damaged.')
-      );
-      var copyBtn = el('button', 'banner-action', 'Save copy as .xlsx');
-      copyBtn.addEventListener('click', saveReadonlyCopy);
-      roBanner.appendChild(copyBtn);
-      screen.appendChild(roBanner);
-    } else if (ed.format === 'workbook' && ed.hasFormulas) {
-      var fBanner = el('div', 'banner');
-      fBanner.appendChild(svgIcon(ICONS.alert));
-      fBanner.appendChild(
-        el('div', 'grow', 'This workbook contains formulas. Untouched cells are kept intact, but edited formulas become plain values, and row/column changes rewrite the whole sheet.')
-      );
-      screen.appendChild(fBanner);
+      var banner = el('div', 'banner');
+      banner.appendChild(svgIcon(ICONS.alert));
+      var grow = el('div', 'grow',
+        '.' + ed.ext + ' files open read-only so macros and legacy formatting stay intact. Use "Save copy" to keep edits as .xlsx.');
+      banner.appendChild(grow);
+      screen.appendChild(banner);
     }
 
-    // --- sheet tabs
-    if (ed.sheets && ed.sheets.length > 1) {
-      var tabs = el('div', 'tabs');
-      ed.sheets.forEach(function (sheet, i) {
-        var tab = el('button', 'tab' + (i === ed.active ? ' active' : ''));
-        var nm = el('span', 'tab-name', sheet.name);
-        tab.appendChild(nm);
-        if (sheet.dirty) tab.appendChild(el('span', 'dot'));
-        tab.addEventListener('click', function () {
-          if (ed.active === i) return;
-          ed.active = i;
-          ed.sel = { r: 0, c: 0 };
-          ed.renderRows = ROW_CHUNK;
-          ed.editSnapTaken = false;
-          ed.undoStack = [];
-          ed.redoStack = [];
-          renderEditor();
-        });
-        tabs.appendChild(tab);
-      });
-      screen.appendChild(tabs);
-    }
-
-    // --- grid
-    var wrap = el('div', 'grid-wrap');
-    wrap.id = 'grid-wrap';
-    wrap.appendChild(buildGridTable());
+    var wrap = el('div', 'univer-wrap');
+    var host = el('div');
+    host.id = 'univer-host';
+    wrap.appendChild(host);
     screen.appendChild(wrap);
-
-    // --- bottom dock
-    var dock = el('div', 'bottom-dock');
-    if (ed.readonly) {
-      dock.appendChild(el('div', 'ro-note', 'Browsing only — use “Save copy as .xlsx” to edit a copy.'));
-    } else {
-      var toolbar = el('div', 'toolbar');
-      function tool(iconName, label, handler, id) {
-        var b = el('button', 'tool-btn');
-        if (id) b.id = id;
-        b.appendChild(svgIcon(ICONS[iconName]));
-        b.appendChild(el('span', 'lbl', label));
-        b.addEventListener('click', handler);
-        toolbar.appendChild(b);
-        return b;
-      }
-      tool('undo', 'Undo', doUndo, 'undo-btn').disabled = ed.undoStack.length === 0;
-      tool('redo', 'Redo', doRedo, 'redo-btn').disabled = ed.redoStack.length === 0;
-      toolbar.appendChild(el('span', 'spacer'));
-      tool('rowPlus', 'Row', insertMenu.bind(null, 'row'));
-      tool('colPlus', 'Column', insertMenu.bind(null, 'col'));
-      if (ed.kind === 'block') tool('alignCenter', 'Align', alignMenu);
-      tool('trash', 'Delete', deleteMenu);
-      dock.appendChild(toolbar);
-
-      var editRow = el('div', 'edit-row');
-      var ref = el('div', 'cell-ref', 'A1');
-      ref.id = 'cell-ref';
-      editRow.appendChild(ref);
-      var input = el('textarea');
-      input.id = 'cell-input';
-      input.rows = 1;
-      input.placeholder = 'Cell value';
-      input.setAttribute('autocapitalize', 'off');
-      input.setAttribute('autocomplete', 'off');
-      input.addEventListener('input', onCellInput);
-      input.addEventListener('keydown', onCellKeydown);
-      editRow.appendChild(input);
-      var commit = el('button', 'commit');
-      commit.setAttribute('aria-label', 'Done');
-      commit.appendChild(svgIcon(ICONS.check));
-      commit.addEventListener('click', function () {
-        input.blur();
-      });
-      editRow.appendChild(commit);
-      dock.appendChild(editRow);
-    }
-    screen.appendChild(dock);
-
     appEl.appendChild(screen);
-    applySelection(false);
-  }
 
-  function buildGridTable() {
-    var ed = state.editor;
-    var grid = activeGrid();
-    var isBlock = ed.kind === 'block';
-    var frag = document.createDocumentFragment();
-    var table = el('table', 'grid');
-    table.id = 'grid-table';
-
-    var thead = el('thead');
-    var headRow = el('tr');
-    headRow.appendChild(el('th', 'corner', ''));
-    for (var c = 0; c < grid[0].length; c++) {
-      var th = el('th', 'col-head', CORE.colLabel(c));
-      th.dataset.c = String(c);
-      headRow.appendChild(th);
-    }
-    thead.appendChild(headRow);
-    table.appendChild(thead);
-
-    var tbody = el('tbody');
-    var limit = Math.min(grid.length, ed.renderRows);
-    for (var r = 0; r < limit; r++) {
-      var tr = el('tr');
-      if (isBlock && r === 0) tr.className = 'md-header';
-      var rowLabel = isBlock ? (r === 0 ? 'H' : String(r)) : String(r + 1);
-      var rh = el('th', 'row-head', rowLabel);
-      rh.dataset.r = String(r);
-      tr.appendChild(rh);
-      for (var cc = 0; cc < grid[0].length; cc++) {
-        var td = el('td');
-        var alignCls = alignClass(cc);
-        if (alignCls) td.className = alignCls;
-        td.dataset.r = String(r);
-        td.dataset.c = String(cc);
-        var span = el('span', 'clamp', grid[r][cc]);
-        td.appendChild(span);
-        tr.appendChild(td);
-      }
-      tbody.appendChild(tr);
-    }
-    table.appendChild(tbody);
-    table.addEventListener('click', onGridTap);
-    frag.appendChild(table);
-
-    if (grid.length > limit) {
-      var more = el('button', 'more-rows', 'Show ' + Math.min(ROW_CHUNK, grid.length - limit) + ' more rows (' + (grid.length - limit) + ' hidden)');
-      more.addEventListener('click', function () {
-        ed.renderRows += ROW_CHUNK;
-        var wrap = document.getElementById('grid-wrap');
-        var top = wrap ? wrap.scrollTop : 0;
-        var left = wrap ? wrap.scrollLeft : 0;
-        refreshGridDom();
-        var wrap2 = document.getElementById('grid-wrap');
-        if (wrap2) {
-          wrap2.scrollTop = top;
-          wrap2.scrollLeft = left;
-        }
-      });
-      frag.appendChild(more);
-    }
-    return frag;
-  }
-
-  function alignClass(c) {
-    var ed = state.editor;
-    if (ed.kind !== 'block') return '';
-    var a = ed.aligns[c];
-    if (a === 'center') return 'align-center';
-    if (a === 'right') return 'align-right';
-    return '';
-  }
-
-  function refreshGridDom() {
-    var wrap = document.getElementById('grid-wrap');
-    if (!wrap) return;
-    clearChildren(wrap);
-    wrap.appendChild(buildGridTable());
-    applySelection(false);
-  }
-
-  // ------------------------------------------------------------------
-  // Selection & editing
-  // ------------------------------------------------------------------
-  function cellRefLabel() {
-    var ed = state.editor;
-    var isBlock = ed.kind === 'block';
-    var rowLabel = isBlock
-      ? ed.sel.r === 0
-        ? 'H'
-        : String(ed.sel.r)
-      : String(ed.sel.r + 1);
-    return CORE.colLabel(ed.sel.c) + rowLabel;
-  }
-
-  function applySelection(focusInput) {
-    var ed = state.editor;
-    var grid = activeGrid();
-    ed.sel.r = Math.min(Math.max(0, ed.sel.r), grid.length - 1);
-    ed.sel.c = Math.min(Math.max(0, ed.sel.c), grid[0].length - 1);
-
-    var table = document.getElementById('grid-table');
-    if (table) {
-      var prev = table.querySelectorAll('.sel, .sel-line, .head-sel');
-      for (var i = 0; i < prev.length; i++) {
-        prev[i].classList.remove('sel');
-        prev[i].classList.remove('sel-line');
-        prev[i].classList.remove('head-sel');
-      }
-      var rows = table.tBodies[0] ? table.tBodies[0].rows : [];
-      if (ed.sel.r < rows.length) {
-        var rowEl = rows[ed.sel.r];
-        for (var j = 1; j < rowEl.cells.length; j++) rowEl.cells[j].classList.add('sel-line');
-        rowEl.cells[0].classList.add('head-sel');
-        var td = rowEl.cells[ed.sel.c + 1];
-        if (td) {
-          td.classList.remove('sel-line');
-          td.classList.add('sel');
-        }
-      }
-      for (var k = 0; k < rows.length; k++) {
-        var colTd = rows[k].cells[ed.sel.c + 1];
-        if (colTd && !colTd.classList.contains('sel')) colTd.classList.add('sel-line');
-      }
-      var headCells = table.tHead.rows[0].cells;
-      if (headCells[ed.sel.c + 1]) headCells[ed.sel.c + 1].classList.add('head-sel');
-    }
-
-    var refEl = document.getElementById('cell-ref');
-    if (refEl) refEl.textContent = cellRefLabel();
-    var input = document.getElementById('cell-input');
-    if (input) {
-      input.value = grid[ed.sel.r][ed.sel.c];
-      autoGrow(input);
-      if (focusInput) input.focus();
+    try {
+      bootUniver(ed);
+    } catch (e) {
+      disposeUniver();
+      state.editor = null;
+      renderHome();
+      infoDialog('Could not open', String((e && e.message) || e));
     }
   }
 
-  function onGridTap(e) {
-    var ed = state.editor;
-    var target = e.target;
-    while (target && target !== e.currentTarget && !target.dataset.r && !target.dataset.c) {
-      target = target.parentElement;
-    }
-    if (!target || target === e.currentTarget) return;
-    if (target.tagName === 'TH') {
-      // Row/column header: select first cell of that line.
-      if (target.classList.contains('row-head')) {
-        ed.sel.r = parseInt(target.dataset.r, 10);
-      } else if (target.classList.contains('col-head')) {
-        ed.sel.c = parseInt(target.dataset.c, 10);
-      }
-      ed.editSnapTaken = false;
-      applySelection(false);
-      return;
-    }
-    var r = parseInt(target.dataset.r, 10);
-    var c = parseInt(target.dataset.c, 10);
-    if (isNaN(r) || isNaN(c)) return;
-    var again = ed.sel.r === r && ed.sel.c === c;
-    ed.sel = { r: r, c: c };
-    ed.editSnapTaken = false;
-    applySelection(again && !ed.readonly);
-  }
-
-  function autoGrow(textarea) {
-    textarea.style.height = 'auto';
-    textarea.style.height = Math.min(76, textarea.scrollHeight) + 'px';
-  }
-
-  function onCellInput(e) {
-    var ed = state.editor;
-    if (ed.readonly) return;
-    var grid = activeGrid();
-    if (!ed.editSnapTaken) {
-      pushUndoCell(ed.sel.r, ed.sel.c);
-      ed.editSnapTaken = true;
-    }
-    grid[ed.sel.r][ed.sel.c] = e.target.value;
-    markSheetDirty();
-    autoGrow(e.target);
-    var table = document.getElementById('grid-table');
-    if (table && table.tBodies[0] && ed.sel.r < table.tBodies[0].rows.length) {
-      var td = table.tBodies[0].rows[ed.sel.r].cells[ed.sel.c + 1];
-      if (td && td.firstChild) td.firstChild.textContent = e.target.value;
-    }
-  }
-
-  function onCellKeydown(e) {
-    if (e.key !== 'Enter' || e.shiftKey) return;
-    e.preventDefault();
-    var ed = state.editor;
-    if (ed.readonly) return;
-    var grid = activeGrid();
-    var needRefresh = false;
-    if (ed.sel.r >= grid.length - 1) {
-      // Fluid entry: Enter on the last row appends a fresh row. The sheet
-      // only becomes dirty once something is actually typed into it, so
-      // walking down a sheet never triggers a rewrite on save.
-      pushUndo();
-      grid.push(new Array(grid[0].length).fill(''));
-      needRefresh = true;
-    }
-    ed.sel.r += 1;
-    ed.editSnapTaken = false;
-    if (ed.sel.r >= ed.renderRows) {
-      // Never move the selection into the unrendered (windowed) region —
-      // the user must always see the cell they are editing.
-      ed.renderRows += ROW_CHUNK;
-      needRefresh = true;
-    }
-    if (needRefresh) refreshGridDom();
-    applySelection(true);
-    scrollSelectionIntoView();
-  }
-
-  function scrollSelectionIntoView() {
-    var ed = state.editor;
-    var table = document.getElementById('grid-table');
-    if (!table || !table.tBodies[0]) return;
-    var rows = table.tBodies[0].rows;
-    if (ed.sel.r < rows.length) {
-      var td = rows[ed.sel.r].cells[ed.sel.c + 1];
-      if (td && td.scrollIntoView) {
-        td.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-      }
-    }
-  }
-
-  // ------------------------------------------------------------------
-  // Undo / redo
-  // ------------------------------------------------------------------
-  function snapshot() {
-    var ed = state.editor;
-    var sheet = ed.sheets ? ed.sheets[ed.active] : null;
-    return {
-      grid: deepCopyGrid(activeGrid()),
-      aligns: ed.aligns ? ed.aligns.slice() : null,
-      sel: { r: ed.sel.r, c: ed.sel.c },
-      sheetIndex: ed.sheets ? ed.active : -1,
-      arities: sheet && sheet.arities ? sheet.arities.slice() : null,
-      structured: sheet ? sheet.structured === true : false,
-    };
-  }
-  function restore(snap) {
-    var ed = state.editor;
-    if (ed.sheets && snap.sheetIndex >= 0) {
-      ed.active = snap.sheetIndex;
-      var sheet = ed.sheets[ed.active];
-      sheet.grid = deepCopyGrid(snap.grid);
-      sheet.arities = snap.arities ? snap.arities.slice() : null;
-      sheet.structured = snap.structured;
-    } else {
-      ed.grid = deepCopyGrid(snap.grid);
-    }
-    if (snap.aligns) ed.aligns = snap.aligns.slice();
-    ed.sel = { r: snap.sel.r, c: snap.sel.c };
-  }
-  function pushUndo() {
-    var ed = state.editor;
-    ed.undoStack.push(snapshot());
-    if (ed.undoStack.length > UNDO_LIMIT) ed.undoStack.shift();
-    ed.redoStack = [];
-    updateUndoButtons();
-  }
-  /**
-   * Cheap undo entry for a single-cell edit — avoids a full-grid deep copy
-   * on every first keystroke. Structural ops still take full snapshots, so
-   * a cell record is always replayed against the geometry it was recorded
-   * in (tab switches clear the stacks, so the active sheet always matches).
-   */
-  function pushUndoCell(r, c) {
-    var ed = state.editor;
-    ed.undoStack.push({ type: 'cell', r: r, c: c, value: activeGrid()[r][c] });
-    if (ed.undoStack.length > UNDO_LIMIT) ed.undoStack.shift();
-    ed.redoStack = [];
-    updateUndoButtons();
-  }
-  function applyCellRecord(entry, intoStack) {
-    var ed = state.editor;
-    var grid = activeGrid();
-    if (entry.r >= grid.length || entry.c >= grid[0].length) return;
-    intoStack.push({ type: 'cell', r: entry.r, c: entry.c, value: grid[entry.r][entry.c] });
-    grid[entry.r][entry.c] = entry.value;
-    ed.sel = { r: entry.r, c: entry.c };
-  }
-  function updateUndoButtons() {
-    var ed = state.editor;
-    var u = document.getElementById('undo-btn');
-    var r = document.getElementById('redo-btn');
-    if (u) u.disabled = ed.undoStack.length === 0;
-    if (r) r.disabled = ed.redoStack.length === 0;
-  }
-  function doUndo() {
-    var ed = state.editor;
-    if (ed.undoStack.length === 0) return;
-    var entry = ed.undoStack.pop();
-    if (entry.type === 'cell') {
-      applyCellRecord(entry, ed.redoStack);
-    } else {
-      ed.redoStack.push(snapshot());
-      restore(entry);
-    }
-    ed.editSnapTaken = false;
-    markSheetDirty();
-    refreshGridDom();
-    updateUndoButtons();
-  }
-  function doRedo() {
-    var ed = state.editor;
-    if (ed.redoStack.length === 0) return;
-    var entry = ed.redoStack.pop();
-    if (entry.type === 'cell') {
-      applyCellRecord(entry, ed.undoStack);
-    } else {
-      ed.undoStack.push(snapshot());
-      restore(entry);
-    }
-    ed.editSnapTaken = false;
-    markSheetDirty();
-    refreshGridDom();
-    updateUndoButtons();
-  }
-
-  // ------------------------------------------------------------------
-  // Structure operations
-  // ------------------------------------------------------------------
-  function insertMenu(kind) {
-    var ed = state.editor;
-    var items;
-    if (kind === 'row') {
-      items = [
-        { label: 'Insert row above', icon: 'rowPlus', value: 'above' },
-        { label: 'Insert row below', icon: 'rowPlus', value: 'below' },
-      ];
-    } else {
-      items = [
-        { label: 'Insert column left', icon: 'colPlus', value: 'left' },
-        { label: 'Insert column right', icon: 'colPlus', value: 'right' },
-      ];
-    }
-    menuSheet(null, items).then(function (v) {
-      if (!v || state.editor !== ed) return;
-      var grid = activeGrid();
-      pushUndo();
-      if (kind === 'row') {
-        var at = v === 'above' ? ed.sel.r : ed.sel.r + 1;
-        // A markdown table's header row must stay row 0.
-        if (ed.kind === 'block' && at === 0) at = 1;
-        grid.splice(at, 0, new Array(grid[0].length).fill(''));
-        noteRowChange('insert', at);
-        ed.sel.r = at;
-      } else {
-        var atC = v === 'left' ? ed.sel.c : ed.sel.c + 1;
-        for (var r = 0; r < grid.length; r++) grid[r].splice(atC, 0, '');
-        if (ed.aligns) ed.aligns.splice(atC, 0, null);
-        noteColumnChange();
-        ed.sel.c = atC;
-      }
-      ed.editSnapTaken = false;
-      markSheetDirty();
-      refreshGridDom();
-    });
-  }
-
-  /** Bookkeeping for row insert/delete on the active sheet. */
-  function noteRowChange(op, at) {
-    var ed = state.editor;
-    var sheet = ed.sheets ? ed.sheets[ed.active] : null;
-    if (!sheet) return;
-    if (sheet.arities) {
-      // -1 marks a row with no original arity (serialize at full width).
-      if (op === 'insert') sheet.arities.splice(at, 0, -1);
-      else sheet.arities.splice(at, 1);
-    }
-    noteSheetRestructured(sheet);
-  }
-
-  /** Bookkeeping for column insert/delete on the active sheet. */
-  function noteColumnChange() {
-    var ed = state.editor;
-    var sheet = ed.sheets ? ed.sheets[ed.active] : null;
-    if (!sheet) return;
-    // Original per-row arities no longer describe these columns.
-    sheet.arities = null;
-    noteSheetRestructured(sheet);
-  }
-
-  function noteSheetRestructured(sheet) {
-    var ed = state.editor;
-    if (ed.format !== 'workbook' || sheet.structured) return;
-    sheet.structured = true;
-    toast('Row/column changes rewrite this sheet on save');
-  }
-
-  function canDeleteRowNow() {
-    var ed = state.editor;
-    var grid = activeGrid();
-    // The markdown header row must stay; any grid keeps at least one row.
-    return ed.kind === 'block' ? ed.sel.r > 0 : grid.length > 1;
-  }
-
-  function deleteMenu() {
-    var ed = state.editor;
-    var grid = activeGrid();
-    var isBlock = ed.kind === 'block';
-    var rowLabel = isBlock ? (ed.sel.r === 0 ? 'header row' : 'row ' + ed.sel.r) : 'row ' + (ed.sel.r + 1);
-    var items = [];
-    if (canDeleteRowNow()) {
-      items.push({ label: 'Delete ' + rowLabel, icon: 'trash', value: 'row', danger: true });
-    }
-    if (grid[0].length > 1) {
-      items.push({ label: 'Delete column ' + CORE.colLabel(ed.sel.c), icon: 'trash', value: 'col', danger: true });
-    }
-    items.push({ label: 'Clear cell', icon: 'close', value: 'clear' });
-    menuSheet(null, items).then(function (v) {
-      if (!v || state.editor !== ed) return;
-      // Re-validate against the CURRENT grid — it may have changed while
-      // the menu was open.
-      var g = activeGrid();
-      if (v === 'row') {
-        if (!canDeleteRowNow()) return;
-        pushUndo();
-        g.splice(ed.sel.r, 1);
-        noteRowChange('delete', ed.sel.r);
-        ed.sel.r = Math.min(ed.sel.r, g.length - 1);
-      } else if (v === 'col') {
-        if (g[0].length <= 1) return;
-        pushUndo();
-        for (var r = 0; r < g.length; r++) g[r].splice(ed.sel.c, 1);
-        if (ed.aligns) ed.aligns.splice(ed.sel.c, 1);
-        noteColumnChange();
-        ed.sel.c = Math.min(ed.sel.c, g[0].length - 1);
-      } else if (v === 'clear') {
-        pushUndo();
-        g[ed.sel.r][ed.sel.c] = '';
-      }
-      ed.editSnapTaken = false;
-      markSheetDirty();
-      refreshGridDom();
-    });
-  }
-
-  function alignMenu() {
-    var ed = state.editor;
-    var current = ed.aligns[ed.sel.c] || 'default';
-    var items = [
-      { label: 'Default', icon: 'alignLeft', value: 'default', on: current === 'default' },
-      { label: 'Left', icon: 'alignLeft', value: 'left', on: current === 'left' },
-      { label: 'Center', icon: 'alignCenter', value: 'center', on: current === 'center' },
-      { label: 'Right', icon: 'alignRight', value: 'right', on: current === 'right' },
-    ];
-    menuSheet('Column ' + CORE.colLabel(ed.sel.c) + ' alignment', items).then(function (v) {
-      if (!v || v === current || state.editor !== ed) return;
-      pushUndo();
-      ed.aligns[ed.sel.c] = v === 'default' ? null : v;
-      ed.editSnapTaken = false;
-      markSheetDirty();
-      refreshGridDom();
-    });
-  }
-
-  // ------------------------------------------------------------------
-  // Saving
-  // ------------------------------------------------------------------
   function requestClose() {
     var ed = state.editor;
-    if (ed && ed.dirty && !ed.readonly) {
+    if (ed && !ed.readonly && isActuallyDirty(ed)) {
       confirmDialog('Discard changes?', 'Your unsaved edits to “' + ed.title + '” will be lost.', 'Discard', true).then(function (yes) {
         if (yes) closeEditor();
       });
@@ -2084,77 +1904,189 @@
   }
   function closeEditor() {
     openToken++;
+    disposeUniver();
     state.editor = null;
     renderHome();
   }
 
-  function saveEditor() {
-    if (!canSave()) return;
-    var ed = state.editor;
-    state.saving = true;
-    var genAtStart = ed.editGen || 0;
-    var saveBtn = document.getElementById('save-btn');
-    if (saveBtn) saveBtn.disabled = true;
-    busy('Saving…');
+  /**
+   * The CSV serialization of a grid, keeping the original ragged-row
+   * arities only while the sheet still has its original shape.
+   */
+  function csvTextOf(ed, grid, shapeChanged) {
+    return CORE.serializeDelimited(grid, {
+      delim: ed.meta.delim,
+      lineEnding: ed.meta.lineEnding,
+      hadBom: ed.meta.hadBom,
+      trailingNewline: ed.meta.trailingNewline,
+      arities: shapeChanged ? null : ed.meta.arities,
+    });
+  }
 
-    // Serialization can throw synchronously (e.g. SheetJS refuses cells
-    // over 32,767 chars); it must never leave the busy overlay stuck.
-    var task;
-    try {
+  function csvShapeChanged(ed, grid) {
+    return (
+      ed.allStructural ||
+      !!ed.structural[ed.sheetId] ||
+      grid.length !== ed.origRows ||
+      (grid[0] || []).length !== ed.origCols
+    );
+  }
+
+  /**
+   * Authoritative dirty check against the load baseline. Markdown/CSV
+   * compare their would-be serialization (so alignment changes count and
+   * an undone edit counts as clean); workbooks compare per-sheet
+   * normalized data plus sheet order and names.
+   */
+  function isActuallyDirty(ed) {
+    if (ed.isNew) return true;
+    if (!ed.dirtyHint) return false;
+    var snap = snapshotNow();
+    if (!snap) return false;
+    if (ed.kind === 'block' || ed.format === 'text') {
+      var sheetSnap = snap.sheets[ed.sheetId];
+      if (!sheetSnap) return true;
+      var r = BRIDGE.snapshotToGrid(sheetSnap, snap.styles, { minRows: 1, minCols: 1 });
       if (ed.kind === 'block') {
-        task = ed.isNew ? saveNewBlock(ed) : saveExistingBlock(ed);
-      } else {
-        task = saveFile(ed);
+        if (ed.baseBlockText == null) return true;
+        return CORE.serializeTable(r.grid, r.aligns, ed.indent, '\n') !== ed.baseBlockText;
       }
-    } catch (e) {
-      task = Promise.reject(e);
+      if (ed.baseText == null) return true;
+      return csvTextOf(ed, r.grid, csvShapeChanged(ed, r.grid)) !== ed.baseText;
     }
-    task
-      .then(function (result) {
-        state.saving = false;
-        unbusy();
-        if (result && result.noop) {
-          if ((ed.editGen || 0) === genAtStart) {
-            ed.dirty = false;
-            if (ed.sheets) {
-              ed.sheets.forEach(function (s) { s.dirty = false; });
-            }
-          }
-          var noopBtn = document.getElementById('save-btn');
-          if (noopBtn) noopBtn.disabled = !canSave();
+    if (!ed.baseNorms) return true;
+    var metaList = ed.sheetMeta || [];
+    var order = (snap.sheetOrder || []).filter(function (id) { return snap.sheets[id]; });
+    // Sheets added, removed, or reordered are changes on their own.
+    if (order.length !== metaList.length) return true;
+    for (var i = 0; i < metaList.length; i++) {
+      if (order[i] !== metaList[i].id) return true;
+      var sheetSnap2 = snap.sheets[order[i]];
+      // A rename the user typed in the sheet bar counts as dirty.
+      if (sheetSnap2.name !== metaList[i].univerName) return true;
+      var cur = BRIDGE.normalizeSheet(sheetSnap2, snap.styles);
+      if (!BRIDGE.normalizedEqual(ed.baseNorms[order[i]], cur)) return true;
+    }
+    return false;
+  }
+
+  // ------------------------------------------------------------------
+  // Saving
+  // ------------------------------------------------------------------
+  function saveEditor() {
+    var ed = state.editor;
+    if (!ed || state.saving || ed.readonly) return;
+    var snap = snapshotNow();
+    if (!snap) {
+      infoDialog('Save failed', 'The spreadsheet is not available.');
+      return;
+    }
+    var proceed;
+    if (ed.kind === 'block' || ed.format === 'text') {
+      var sheetSnap = snap.sheets[ed.sheetId];
+      if (!sheetSnap) {
+        infoDialog('Save failed', 'The sheet holding this table no longer exists.');
+        return;
+      }
+      var result = BRIDGE.snapshotToGrid(sheetSnap, snap.styles, { minRows: 1, minCols: 1 });
+      if (result.cols > MAX_COLS || result.rows * result.cols > MAX_CELLS) {
+        infoDialog('Save failed', 'The table has grown too large to save here.');
+        return;
+      }
+      // Noop early-out: an unchanged (or changed-and-reverted) sheet must
+      // not rewrite the note / re-upload the attachment.
+      if (!ed.isNew) {
+        var unchanged = ed.kind === 'block'
+          ? ed.baseBlockText != null &&
+            CORE.serializeTable(result.grid, result.aligns, ed.indent, '\n') === ed.baseBlockText
+          : ed.baseText != null &&
+            csvTextOf(ed, result.grid, csvShapeChanged(ed, result.grid)) === ed.baseText;
+        if (unchanged) {
+          ed.dirtyHint = false;
           toast('No changes to save');
           return;
         }
-        if (result && result.reopen) {
-          // Saved, but the stored file could not be re-identified; further
-          // saves from this editor could act on stale paths.
-          infoDialog(
-            'Saved',
-            'The file was saved, but it must be reopened from the list before further edits.'
-          ).then(function () {
-            closeEditor();
-            refreshAll();
-          });
-          return;
-        }
-        // Only mark clean if no edits landed while the save was in flight.
-        if ((ed.editGen || 0) === genAtStart) {
-          ed.dirty = false;
-          if (ed.sheets) {
-            ed.sheets.forEach(function (s) { s.dirty = false; });
-          }
-        }
-        var btn = document.getElementById('save-btn');
-        if (btn) btn.disabled = !canSave();
-        toast('Saved');
-      })
-      .catch(function (e) {
-        state.saving = false;
-        unbusy();
-        var btn = document.getElementById('save-btn');
-        if (btn) btn.disabled = !canSave();
-        infoDialog('Save failed', String(e && e.message ? e.message : e));
+      }
+      // These formats cannot hold formulas or merged cells — disclose what
+      // saving will do to them before it happens.
+      var lossy = [];
+      if (result.hasFormula) lossy.push('formulas are stored as their current values');
+      if (result.hasMerges) lossy.push('merged cells are split back into single cells');
+      var confirmLossy = lossy.length > 0
+        ? confirmDialog(
+            'Sheet features become plain cells',
+            (ed.kind === 'block' ? 'Markdown tables' : 'CSV files') +
+              ' cannot hold these, so on save ' + lossy.join(' and ') + '.',
+            'Save'
+          )
+        : Promise.resolve(true);
+      proceed = confirmLossy.then(function (ok) {
+        if (!ok) return null;
+        return { grid: result.grid, aligns: result.aligns, snap: snap };
       });
+    } else {
+      proceed = Promise.resolve({ snap: snap });
+    }
+
+    proceed.then(function (input) {
+      if (!input) return;
+      state.saving = true;
+      var genAtStart = ed.editGen;
+      var saveBtn = document.getElementById('save-btn');
+      if (saveBtn) saveBtn.disabled = true;
+      busy('Saving…');
+
+      // Serialization can throw synchronously (e.g. SheetJS refuses cells
+      // over 32,767 chars); it must never leave the busy overlay stuck.
+      var task;
+      try {
+        if (ed.kind === 'block') {
+          task = ed.isNew ? saveNewBlock(ed, input) : saveExistingBlock(ed, input);
+        } else {
+          task = saveFile(ed, input);
+        }
+      } catch (e) {
+        task = Promise.reject(e);
+      }
+      task
+        .then(function (result) {
+          state.saving = false;
+          unbusy();
+          var btn = document.getElementById('save-btn');
+          if (btn) btn.disabled = false;
+          if (result && result.noop) {
+            if (ed.editGen === genAtStart) ed.dirtyHint = false;
+            toast('No changes to save');
+            return;
+          }
+          if (result && result.reopen) {
+            // Saved, but the stored file could not be re-identified; further
+            // saves from this editor could act on stale paths.
+            infoDialog(
+              'Saved',
+              'The file was saved, but it must be reopened from the list before further edits.'
+            ).then(function () {
+              closeEditor();
+              refreshAll();
+            });
+            return;
+          }
+          // Only mark clean if no edits landed while the save was in flight.
+          if (ed.editGen === genAtStart) {
+            ed.dirtyHint = false;
+            ed.structural = {};
+            ed.allStructural = false;
+          }
+          toast('Saved');
+        })
+        .catch(function (e) {
+          state.saving = false;
+          unbusy();
+          var btn = document.getElementById('save-btn');
+          if (btn) btn.disabled = false;
+          infoDialog('Save failed', String(e && e.message ? e.message : e));
+        });
+    });
   }
 
   /** Counts lines before a character offset. */
@@ -2208,7 +2140,7 @@
     return content.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
   }
 
-  function saveExistingBlock(ed) {
+  function saveExistingBlock(ed, input) {
     return fetchNoteContent(ed.note.id, { strict: true }).then(function (content) {
       if (typeof content !== 'string') {
         throw new Error('Could not load the current note content.');
@@ -2218,7 +2150,7 @@
         throw new Error('The note changed since this table was opened and the original table could not be found. Go back, refresh, and reopen the table.');
       }
       var eol = eolOf(content);
-      var block = CORE.serializeTable(ed.grid, ed.aligns, ed.indent, eol);
+      var block = CORE.serializeTable(input.grid, input.aligns, ed.indent, eol);
       // In a CRLF note the char after the block is '\n'; the block's last
       // line must carry the matching '\r'.
       var glue = eol === '\r\n' && loc.after.charCodeAt(0) === 10 ? '\r' : '';
@@ -2229,13 +2161,14 @@
         ed.raw = block + glue;
         ed.startLine = lineOfOffset(newContent, loc.before.length);
         ed.endLine = ed.startLine + block.split('\n').length;
+        ed.baseBlockText = CORE.serializeTable(input.grid, input.aligns, ed.indent, '\n');
       });
     });
   }
 
-  function saveNewBlock(ed) {
+  function saveNewBlock(ed, input) {
     var eol = eolOf(ed.note.content);
-    var block = CORE.serializeTable(ed.grid, ed.aligns, '', eol);
+    var block = CORE.serializeTable(input.grid, input.aligns, '', eol);
     var text = eol + block;
     return appendNoteContent(ed.note.id, text).then(function () {
       // Prefer re-reading the stored content so our local copy can never
@@ -2260,6 +2193,7 @@
         ed.title = 'Table ' + tablesOf(ed.note).length;
         var h1 = appEl.querySelector('.topbar h1');
         if (h1) h1.textContent = ed.title;
+        ed.baseBlockText = CORE.serializeTable(input.grid, input.aligns, ed.indent, '\n');
       });
     });
   }
@@ -2271,145 +2205,103 @@
     return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   }
 
-  /** Converts a display string to the value stored in a worksheet cell. */
-  function typedCellValue(v) {
-    return CORE.looksNumeric(v) ? Number(v) : v;
-  }
-
-  function rebuiltWorksheet(sheet) {
-    var typed = CORE.trimTrailingEmptyRows(sheet.grid).map(function (row) {
-      return row.map(typedCellValue);
-    });
-    return XLSX.utils.aoa_to_sheet(typed);
-  }
-
   /**
-   * Returns a copy of the worksheet with the grid's edits applied cell by
-   * cell against the loaded baseline (copy-on-write: the original ws object
-   * is never mutated, so a failed upload leaves the workbook pristine).
-   * Untouched cells — their formulas, types, and number formats — are
-   * carried through unchanged.
+   * Serializes the editor's file from the given snapshot. Returns null when
+   * nothing actually changed. The result carries a commit() that must be
+   * called only after a successful upload — it re-baselines so later saves
+   * diff against what is now stored.
    */
-  function patchedWorksheetCopy(ws, sheet) {
-    var copy = Object.assign({}, ws);
-    var grid = sheet.grid;
-    var orig = sheet.original || [];
-    var changed = false;
-    var maxR = -1;
-    var maxC = -1;
-    var minR = Infinity;
-    var minC = Infinity;
-    var rowCount = Math.max(grid.length, orig.length);
-    for (var r = 0; r < rowCount; r++) {
-      var newRow = grid[r] || [];
-      var oldRow = orig[r] || [];
-      var colCount = Math.max(newRow.length, oldRow.length);
-      for (var c = 0; c < colCount; c++) {
-        var nv = newRow[c] == null ? '' : newRow[c];
-        var ov = oldRow[c] == null ? '' : oldRow[c];
-        if (nv === ov) continue;
-        changed = true;
-        var addr = XLSX.utils.encode_cell({ r: r, c: c });
-        if (nv === '') {
-          delete copy[addr];
-        } else {
-          var val = typedCellValue(nv);
-          copy[addr] = typeof val === 'number' ? { t: 'n', v: val } : { t: 's', v: val };
-          maxR = Math.max(maxR, r);
-          maxC = Math.max(maxC, c);
-          minR = Math.min(minR, r);
-          minC = Math.min(minC, c);
-        }
-      }
-    }
-    if (maxR >= 0) {
-      // Grow !ref at BOTH ends: the grid is A1-anchored, so an edit can
-      // land before a non-A1 range start — a cell outside !ref would be
-      // silently dropped by the writer.
-      var ref = copy['!ref']
-        ? XLSX.utils.decode_range(copy['!ref'])
-        : { s: { r: minR, c: minC }, e: { r: maxR, c: maxC } };
-      ref.s.r = Math.min(ref.s.r, minR);
-      ref.s.c = Math.min(ref.s.c, minC);
-      ref.e.r = Math.max(ref.e.r, maxR);
-      ref.e.c = Math.max(ref.e.c, maxC);
-      copy['!ref'] = XLSX.utils.encode_range(ref);
-    }
-    return { ws: copy, changed: changed };
-  }
-
-  /**
-   * Serializes the editor's file. Returns null when nothing actually
-   * changed (e.g. an edit was typed and reverted). For workbooks the
-   * result carries a commit() that must be called only after a successful
-   * upload — it adopts the candidate worksheets and re-baselines
-   * sheet.original so later reverts diff correctly against what is now
-   * stored.
-   */
-  function serializeEditorFile(ed) {
+  function serializeEditorFile(ed, snap) {
     if (ed.format === 'text') {
-      var sheet0 = ed.sheets[0];
-      var meta = {
-        delim: ed.meta.delim,
-        lineEnding: ed.meta.lineEnding,
-        hadBom: ed.meta.hadBom,
-        trailingNewline: ed.meta.trailingNewline,
-        arities: sheet0.arities,
-      };
-      var text = CORE.serializeDelimited(sheet0.grid, meta);
+      var sheetSnap = snap.sheets[ed.sheetId];
+      var result = BRIDGE.snapshotToGrid(sheetSnap, snap.styles, { minRows: 1, minCols: 1 });
+      var grid = result.grid;
+      // Ragged-row arities only survive while the sheet keeps its original
+      // shape — after inserts/deletes/moves the per-row map no longer lines
+      // up with the file's rows.
+      var shapeChanged = csvShapeChanged(ed, grid);
+      var text = csvTextOf(ed, grid, shapeChanged);
       return {
         base64: bytesToB64(encodeUtf8(text)),
         mime: mimeFor(extOf(ed.saveName)),
-        commit: function () {},
+        commit: function () {
+          ed.origRows = grid.length;
+          ed.origCols = (grid[0] || []).length;
+          if (shapeChanged) ed.meta.arities = null;
+          ed.baseText = text;
+        },
       };
     }
-    var wb = ed.wb;
-    var candidates = [];
-    ed.sheets.forEach(function (sheet) {
-      if (!sheet.dirty) return;
-      var entry = null;
-      if (sheet.structured || !wb.Sheets[sheet.name]) {
-        entry = { sheet: sheet, ws: rebuiltWorksheet(sheet) };
+
+    // Workbook: carry untouched sheets byte-identical, patch or rebuild the
+    // rest, honor sheets the user added/removed/renamed/reordered in Univer.
+    var order = snap.sheetOrder || [];
+    if (order.length === 0) {
+      throw new Error('The workbook has no sheets left to save.');
+    }
+    var metaById = {};
+    (ed.sheetMeta || []).forEach(function (m) { metaById[m.id] = m; });
+    // A pure reorder produces no per-sheet diff but must still be written.
+    var liveOrder = order.filter(function (id) { return snap.sheets[id]; });
+    var origOrder = (ed.sheetMeta || []).map(function (m) { return m.id; });
+    var outNames = [];
+    var outSheets = {};
+    var usedNames = {};
+    var changed = liveOrder.join('\n') !== origOrder.join('\n');
+    var newMeta = [];
+    var newNorms = {};
+    var totalCells = 0;
+    order.forEach(function (sheetId, idx) {
+      var sheetSnap = snap.sheets[sheetId];
+      if (!sheetSnap) return;
+      var cur = BRIDGE.normalizeSheet(sheetSnap, snap.styles);
+      totalCells += Object.keys(cur.cells).length;
+      if (totalCells > MAX_CELLS) {
+        throw new Error('The workbook has grown too large to save here.');
+      }
+      var meta = metaById[sheetId];
+      var base = meta && ed.baseNorms ? ed.baseNorms[sheetId] : null;
+      // Output name: what the sheet is called in Univer now (Excel-safe,
+      // deduped) — renames flow through to the file.
+      var name = BRIDGE.uniqueSheetName(usedNames, sheetSnap.name, 'Sheet' + (idx + 1));
+      var origWs = meta ? ed.wb.Sheets[meta.origName] : null;
+      var ws;
+      if (meta && base && origWs && BRIDGE.normalizedEqual(base, cur)) {
+        ws = origWs; // untouched — carried through with all its fidelity
+        if (name !== meta.origName) changed = true;
+      } else if (meta && base && origWs && !ed.allStructural && !ed.structural[sheetId]) {
+        var patched = BRIDGE.patchWorksheet(origWs, base, cur, XLSX);
+        ws = patched.ws;
+        if (patched.changed || name !== meta.origName) changed = true;
       } else {
-        var res = patchedWorksheetCopy(wb.Sheets[sheet.name], sheet);
-        if (res.changed) entry = { sheet: sheet, ws: res.ws };
+        ws = BRIDGE.normalizedToWorksheet(cur, XLSX);
+        changed = true;
       }
-      if (entry) {
-        // The commit baseline must be the grid AS SERIALIZED — an edit
-        // typed while the upload is in flight must still diff against
-        // what was actually stored, not be absorbed into the baseline.
-        entry.baseline = deepCopyGrid(sheet.grid);
-        candidates.push(entry);
-      }
+      outNames.push(name);
+      outSheets[name] = ws;
+      // univerName must stay the RAW Univer name (not the sanitized output
+      // name) — the post-save dirty check compares against snapshot names.
+      newMeta.push({ id: sheetId, origName: name, univerName: sheetSnap.name });
+      newNorms[sheetId] = cur;
     });
-    if (candidates.length === 0) {
-      return null;
+    if (outNames.length === 0) {
+      throw new Error('The workbook has no sheets left to save.');
     }
-    // Swap the candidates in only for the write, so the in-memory workbook
-    // stays pristine unless the upload later succeeds.
-    var previous = candidates.map(function (c) {
-      return { name: c.sheet.name, ws: wb.Sheets[c.sheet.name] };
-    });
-    candidates.forEach(function (c) {
-      wb.Sheets[c.sheet.name] = c.ws;
-    });
-    var b64;
-    try {
-      b64 = XLSX.write(wb, { bookType: ed.bookType, type: 'base64' });
-    } finally {
-      previous.forEach(function (p) {
-        wb.Sheets[p.name] = p.ws;
-      });
-    }
+    // A sheet removed in Univer must count as a change even if the rest
+    // is untouched.
+    if ((ed.sheetMeta || []).length !== outNames.length) changed = true;
+    if (!changed) return null;
+
+    var writeWb = { SheetNames: outNames, Sheets: outSheets };
+    if (ed.wb.Workbook) writeWb.Workbook = ed.wb.Workbook;
+    var b64 = XLSX.write(writeWb, { bookType: ed.bookType, type: 'base64' });
     return {
       base64: b64,
       mime: mimeFor(extOf(ed.saveName), ed.bookType),
       commit: function () {
-        candidates.forEach(function (c) {
-          wb.Sheets[c.sheet.name] = c.ws;
-          c.sheet.original = c.baseline;
-          c.sheet.structured = false;
-        });
+        ed.wb = writeWb;
+        ed.sheetMeta = newMeta;
+        ed.baseNorms = newNorms;
       },
     };
   }
@@ -2419,8 +2311,8 @@
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  function saveFile(ed) {
-    var out = serializeEditorFile(ed);
+  function saveFile(ed, input) {
+    var out = serializeEditorFile(ed, input.snap);
     if (out === null) {
       return Promise.resolve({ noop: true });
     }
@@ -2486,23 +2378,31 @@
   function saveReadonlyCopy() {
     var ed = state.editor;
     if (!ed || state.saving) return;
+    var snap = snapshotNow();
+    if (!snap) {
+      infoDialog('Save failed', 'The spreadsheet is not available.');
+      return;
+    }
     state.saving = true;
     busy('Saving copy…');
     var b64;
     var name;
     try {
-      var copyWb = XLSX.utils.book_new();
+      var outNames = [];
+      var outSheets = {};
       var usedNames = {};
-      ed.sheets.forEach(function (sheet, idx) {
-        // Excel caps sheet names at 31 chars; keep truncated names unique.
-        var sheetName = sheet.name.slice(0, 31);
-        if (usedNames[sheetName]) {
-          sheetName = sheetName.slice(0, 27) + '~' + (idx + 1);
-        }
-        usedNames[sheetName] = true;
-        XLSX.utils.book_append_sheet(copyWb, rebuiltWorksheet(sheet), sheetName);
+      (snap.sheetOrder || []).forEach(function (sheetId, idx) {
+        var sheetSnap = snap.sheets[sheetId];
+        if (!sheetSnap) return;
+        var sheetName = BRIDGE.uniqueSheetName(usedNames, sheetSnap.name, 'Sheet' + (idx + 1));
+        var norm = BRIDGE.normalizeSheet(sheetSnap, snap.styles);
+        outNames.push(sheetName);
+        outSheets[sheetName] = BRIDGE.normalizedToWorksheet(norm, XLSX);
       });
-      b64 = XLSX.write(copyWb, { bookType: 'xlsx', type: 'base64' });
+      if (outNames.length === 0) {
+        throw new Error('There are no sheets to save.');
+      }
+      b64 = XLSX.write({ SheetNames: outNames, Sheets: outSheets }, { bookType: 'xlsx', type: 'base64' });
       name = ed.saveName.replace(/\.[a-z0-9]+$/i, '') + '.xlsx';
     } catch (e) {
       state.saving = false;
@@ -2548,7 +2448,7 @@
   // Boot
   // ------------------------------------------------------------------
   function init() {
-    if (!CORE) {
+    if (!CORE || !BRIDGE || typeof fflate === 'undefined') {
       renderGate('Something went wrong', 'The table engine failed to load.');
       return;
     }
@@ -2583,6 +2483,10 @@
     refreshAttachmentLists().then(function () {
       if (!state.editor) renderHome();
     });
+    // Warm the engine from the local cache while the user is still on the
+    // home screen. This never downloads — the one-time ~12 MB download only
+    // starts after the user explicitly consents on the engine screen.
+    ensureEngineFromCache();
   }
 
   if (document.readyState === 'loading') {

@@ -12,7 +12,8 @@
 </style>
 </head>
 <body>
-<p>Serve this folder over HTTP (e.g. <code>python3 -m http.server</code> from contrib/table-studio) and open /dev/harness.html.</p>
+<p>Serve this folder over HTTP (e.g. <code>python3 -m http.server</code> from contrib/table-studio) and open /dev/harness.html.
+Run <code>dev/fetch_univer_mirror.sh</code> once to serve the Univer engine locally; without it the stub falls back to the real CDN.</p>
 <div class="frame-holder"><iframe id="frame"></iframe></div>
 <script>
   // Loads the plugin source, injects the Synapse stub before it boots, and
@@ -25,6 +26,8 @@
     var stub = parts[1];
     html = html
       .replace('<script src="src/table_core.js">', '<script src="../plugins/src/table_core.js">')
+      .replace('<script src="src/univer_bridge.js">', '<script src="../plugins/src/univer_bridge.js">')
+      .replace('<script src="vendor/fflate-0.8.2.min.js">', '<script src="../plugins/vendor/fflate-0.8.2.min.js">')
       .replace('<script src="vendor/xlsx-0.20.3.full.min.js">', '<script src="../plugins/vendor/xlsx-0.20.3.full.min.js">');
     var inject = '<script>' + stub + '<' + '/script>';
     html = html.replace('<div id="app">', inject + '<div id="app">');

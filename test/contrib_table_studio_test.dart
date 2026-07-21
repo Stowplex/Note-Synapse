@@ -9,13 +9,18 @@ void main() {
   const contribRoot = 'contrib/table-studio';
   const pluginRoot = '$contribRoot/plugins';
   const yamlPath = '$pluginRoot/Table_Studio.yaml';
+  const starterYamlPath = 'assets/starter/apps/Table_Studio.yaml';
   const sourcePath = '$pluginRoot/table_studio.html';
   const corePath = '$pluginRoot/src/table_core.js';
+  const bridgePath = '$pluginRoot/src/univer_bridge.js';
+  const fflatePath = '$pluginRoot/vendor/fflate-0.8.2.min.js';
   const vendorPath = '$pluginRoot/vendor/xlsx-0.20.3.full.min.js';
 
   group('Table Studio contrib app', () {
     late String source;
     late String core;
+    late String bridge;
+    late String fflate;
     late String vendor;
     late String embeddedHtml;
     late YamlMap manifest;
@@ -28,6 +33,8 @@ void main() {
     setUpAll(() {
       source = File(sourcePath).readAsStringSync();
       core = File(corePath).readAsStringSync();
+      bridge = File(bridgePath).readAsStringSync();
+      fflate = File(fflatePath).readAsStringSync();
       vendor = File(vendorPath).readAsStringSync();
       manifest = loadYaml(File(yamlPath).readAsStringSync()) as YamlMap;
       embeddedHtml = utf8.decode(base64Decode(manifest['code'] as String));
@@ -44,12 +51,20 @@ void main() {
     });
 
     test(
-      'installable YAML exactly matches source with core and SheetJS inline',
+      'installable YAML exactly matches source with all modules inline',
       () {
         final expected = source
             .replaceFirst(
               '  <script src="src/table_core.js"></script>',
               inlined(core),
+            )
+            .replaceFirst(
+              '  <script src="src/univer_bridge.js"></script>',
+              inlined(bridge),
+            )
+            .replaceFirst(
+              '  <script src="vendor/fflate-0.8.2.min.js"></script>',
+              inlined(fflate),
             )
             .replaceFirst(
               '  <script src="vendor/xlsx-0.20.3.full.min.js"></script>',
@@ -64,10 +79,20 @@ void main() {
           ).hasMatch(embeddedHtml),
           isFalse,
           reason:
-              'The installable app must not require a CDN or local sidecar.',
+              'The installable app must boot without a CDN or local sidecar '
+              '(the Univer engine is fetched at runtime, sha256-pinned).',
         );
       },
     );
+
+    test('bundled starter app is the same build', () {
+      expect(
+        File(starterYamlPath).readAsStringSync(),
+        File(yamlPath).readAsStringSync(),
+        reason: 'assets/starter/apps/Table_Studio.yaml must be regenerated '
+            '(plugins/build.sh, then copy) whenever the plugin changes.',
+      );
+    });
 
     test('vendors the reviewed SheetJS CE 0.20.3 distribution', () {
       expect(
@@ -78,8 +103,53 @@ void main() {
       expect(File('$contribRoot/LICENSE').existsSync(), isTrue);
     });
 
+    test('vendors the reviewed fflate 0.8.2 distribution', () {
+      expect(
+        sha256.convert(File(fflatePath).readAsBytesSync()).toString(),
+        'c3b34f2e9f5e74d4d7d64e01cac7a0c01954c6c406414d42185c7b53d6875ddf',
+      );
+      expect(File('$pluginRoot/vendor/LICENSE.fflate').existsSync(), isTrue);
+    });
+
+    test('engine downloads are pinned to public npm mirrors by sha256', () {
+      // The only network the app touches is the Univer engine download; it
+      // must go to the two well-known npm CDNs and be content-addressed.
+      expect(
+        bridge,
+        contains("'https://cdn.jsdelivr.net/npm/'"),
+      );
+      expect(bridge, contains("'https://unpkg.com/'"));
+      final mirrors = RegExp(r"https?://[^'\s]+").allMatches(bridge).map(
+            (m) => m.group(0)!,
+          );
+      for (final url in mirrors) {
+        expect(
+          url.startsWith('https://cdn.jsdelivr.net/npm/') ||
+              url.startsWith('https://unpkg.com/'),
+          isTrue,
+          reason: 'Unexpected engine host: $url',
+        );
+      }
+      // Every manifest entry carries a 64-hex sha256 pin.
+      final shaPins = RegExp(r"sha256: '([0-9a-f]{64})'").allMatches(bridge);
+      final paths = RegExp(r"path: '").allMatches(bridge);
+      expect(shaPins.length, paths.length);
+      expect(shaPins.length, greaterThanOrEqualTo(20));
+      // The downloader refuses unverifiable or mismatching payloads, and a
+      // host without download/verify support is refused up front.
+      expect(source, contains("crypto.digest('sha256'"));
+      expect(source, contains('checksum mismatch'));
+      expect(source, contains('engineHostReady'));
+      // And no other proxyFetch call sites exist in the app.
+      expect(
+        'Synapse.proxyFetch('.allMatches(source).length,
+        1,
+        reason: 'proxyFetch must only be called by the engine downloader',
+      );
+    });
+
     test('uses only the required local Synapse capabilities', () {
-      final appCode = '$source\n$core';
+      final appCode = '$source\n$core\n$bridge';
       for (final requiredApi in [
         'Synapse.Notes',
         '.exportNotes(',
@@ -88,12 +158,14 @@ void main() {
         // Used for a fresh read of note content right before saving, so a
         // note edited elsewhere since launch is not clobbered.
         '.runQuery(',
+        // Engine cache (download once, then offline).
+        '.loadAppState(',
+        '.storeAppState(',
       ]) {
         expect(appCode, contains(requiredApi), reason: 'Missing $requiredApi');
       }
 
       for (final forbiddenCapability in [
-        'proxyFetch',
         'originFetch',
         'chatAI',
         'deleteNotes',
@@ -101,6 +173,7 @@ void main() {
         'downloadFile',
         'requestLogin',
         'getCookies',
+        'session: true',
         'document.cookie',
         'localStorage.',
         'innerHTML',
@@ -127,9 +200,12 @@ void main() {
       // Legacy Excel formats are never rewritten in place.
       expect(source, contains("xls: { mode: 'workbook-ro' }"));
       expect(source, contains("xlsm: { mode: 'workbook-ro' }"));
-      expect(source, contains('Save copy as .xlsx'));
-      // Formula flattening is disclosed before it happens.
-      expect(source, contains('formulas become plain values'));
+      expect(source, contains('Save copy'));
+      // Formula/merge flattening (markdown/CSV targets) is disclosed and
+      // confirmed before it happens.
+      expect(source, contains('Sheet features become plain cells'));
+      // Number formats are only preserved if SheetJS is told to read them.
+      expect(source, contains('cellNF: true'));
       // Oversized inputs are refused instead of truncated, with the size
       // ceilings enforced BEFORE any rows-x-cols amplification.
       expect(source, contains('MAX_ATTACHMENT_BYTES'));
@@ -139,15 +215,22 @@ void main() {
       // A failed fresh-content read aborts the save instead of falling back
       // to a stale snapshot that would clobber concurrent edits.
       expect(source, contains('strict: true'));
-      // Workbook saves patch only edited cells (copy-on-write, committed
-      // only after a successful upload) so untouched formulas, types, and
-      // formats survive and a failed upload leaves the workbook pristine.
-      expect(source, contains('function patchedWorksheetCopy'));
+      // Workbook saves: untouched sheets are carried byte-identical, and
+      // sheets without structural edits are cell-diff patched (copy-on-write,
+      // committed only after a successful upload) so untouched formulas,
+      // types and formats survive.
+      expect(bridge, contains('function patchWorksheet'));
+      expect(bridge, contains('function normalizedToWorksheet'));
       expect(source, contains('out.commit()'));
+      expect(source, contains('isStructuralMutation'));
+      // Downloaded engine bytes are verified before they execute.
+      expect(source, contains('checksum mismatch'));
       // CSV fidelity metadata survives the round trip.
       expect(core, contains('trailingNewline'));
       expect(core, contains('hadBom'));
       expect(core, contains('arities'));
+      // Numeric coercion never changes a cell's spelling on save.
+      expect(bridge, contains('function stableNumber'));
       // Non-UTF-8 files are refused, never decoded lossily.
       expect(source, contains('fatal: true'));
       // Tables inside fenced code blocks are ignored by the scanner.
