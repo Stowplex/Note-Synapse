@@ -2279,7 +2279,9 @@
       }
       outNames.push(name);
       outSheets[name] = ws;
-      newMeta.push({ id: sheetId, origName: name, univerName: name });
+      // univerName must stay the RAW Univer name (not the sanitized output
+      // name) — the post-save dirty check compares against snapshot names.
+      newMeta.push({ id: sheetId, origName: name, univerName: sheetSnap.name });
       newNorms[sheetId] = cur;
     });
     if (outNames.length === 0) {

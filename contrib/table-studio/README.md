@@ -83,6 +83,9 @@ prints fresh ready-to-paste manifest entries (paths, sizes, sha256) for
   but are not persisted into the saved files.
 - ODS output is limited by SheetJS's ODS writer (formulas may be dropped
   there; xlsx keeps them).
+- A CSV that ends in extra blank lines keeps them only while the file is
+  saved without other shape changes; a save after row inserts/deletes
+  drops trailing blank lines (cell data is never affected).
 - On very large notes (multi-megabyte bodies) the pre-save fresh-content
   read can fail on Android's cursor limits; the save then aborts with an
   error instead of risking a stale overwrite.
