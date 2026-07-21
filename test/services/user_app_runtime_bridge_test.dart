@@ -31,6 +31,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import 'user_app_runtime_bridge_test.mocks.dart';
+import 'package:note_synapse/utils/file_utils.dart';
 
 /// In-memory [SessionStorageBackend] so [WebSessionService] is deterministic in
 /// tests. Seed [data] with `web_session_<domain>` entries to simulate a login.
@@ -87,6 +88,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     tempDir = await Directory.systemTemp.createTemp();
     PathProviderPlatform.instance = MockPathProviderPlatform(tempDir.path);
+    FileUtils.resetDocumentsPathCache();
 
     mockAppProvider = MockAppProvider();
     mockUserAppService = MockUserAppService();

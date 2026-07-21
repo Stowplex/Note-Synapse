@@ -88,8 +88,6 @@ class _NotesScreenState extends State<NotesScreen> {
 
         // Refresh
         context.read<AppProvider>().loadData();
-        context.read<AppProvider>().loadData();
-        // _loadTags(); removed
       }
     } catch (e) {
       if (!mounted) return;
@@ -308,8 +306,6 @@ class _NotesScreenState extends State<NotesScreen> {
               icon: const Icon(Icons.refresh),
               onPressed: () {
                 context.read<AppProvider>().loadData();
-                context.read<AppProvider>().loadData();
-                // _loadTags(); removed
               },
             ),
             PopupMenuButton<String>(

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/services/share_service.dart';
+import 'package:note_synapse/utils/file_utils.dart';
 import 'package:path_provider/path_provider.dart';
 // ignore: depend_on_referenced_packages
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -64,6 +65,7 @@ void main() {
       appDocPath: rootDir.path,
       tempPath: rootDir.path,
     );
+    FileUtils.resetDocumentsPathCache();
   });
 
   tearDown(() async {

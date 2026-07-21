@@ -31,6 +31,10 @@ class AppProvider extends ChangeNotifier {
   final Map<String, List<AppRevision>> _appRevisions =
       {}; // Cache revisions by appId
   bool _isLoading = false;
+  bool _hasLoadedOnce = false;
+  bool _reloadRequested = false;
+  Future<void>? _loadDataInFlight;
+  List<String>? _availableTagsCache;
   int _dataVersion = 0;
   String? _error;
   bool _isDarkMode = false;
@@ -59,8 +63,34 @@ class AppProvider extends ChangeNotifier {
   String? get currentMultiFunctionAppId => _currentMultiFunctionAppId;
   bool get isHierarchyEnabled => _isHierarchyEnabled;
 
-  Future<void> loadData() async {
-    _setLoading(true);
+  Future<void> loadData() {
+    // Coalesce concurrent callers onto the in-flight load instead of
+    // re-running the full (expensive) load. A caller arriving mid-flight may
+    // have just written to the database, and the in-flight pass may have read
+    // before that write — so request one more full pass; all waiters resolve
+    // only after it, guaranteeing every caller observes data written before
+    // its call.
+    if (_loadDataInFlight != null) {
+      _reloadRequested = true;
+      return _loadDataInFlight!;
+    }
+    _loadDataInFlight = () async {
+      do {
+        _reloadRequested = false;
+        await _doLoadData();
+      } while (_reloadRequested);
+    }().whenComplete(() {
+      _loadDataInFlight = null;
+    });
+    return _loadDataInFlight!;
+  }
+
+  Future<void> _doLoadData() async {
+    if (!_hasLoadedOnce) {
+      // Blank the notes region behind a spinner only on the first load;
+      // refreshes update data in place.
+      _setLoading(true);
+    }
     try {
       LoggerService.info('Starting loadData');
       _notes = await _databaseService.getAllNotes();
@@ -85,13 +115,15 @@ class AppProvider extends ChangeNotifier {
       await _loadOnboardingStatus();
 
       _error = null;
+      _hasLoadedOnce = true;
       LoggerService.info('loadData completed successfully');
       _dataVersion++;
-      notifyListeners(); // Notify listeners that data has been updated
     } catch (e) {
       _error = 'Error loading data: ${e.toString()}';
       LoggerService.error('Error in loadData: $e', error: e);
     } finally {
+      // No-op flip on refreshes; always notifies so every pass ends with
+      // listeners seeing the final state (data or _error).
       _setLoading(false);
     }
   }
@@ -404,11 +436,21 @@ class AppProvider extends ChangeNotifier {
   }
 
   List<String> getAllAvailableTags() {
+    // Cached because this scans all notes and is called multiple times per
+    // build; invalidated in notifyListeners on any state change.
+    final cached = _availableTagsCache;
+    if (cached != null) return cached;
     final allTags = <String>{};
     for (final note in _notes) {
       allTags.addAll(note.tags);
     }
-    return allTags.toList()..sort();
+    return _availableTagsCache = List.unmodifiable(allTags.toList()..sort());
+  }
+
+  @override
+  void notifyListeners() {
+    _availableTagsCache = null;
+    super.notifyListeners();
   }
 
   Future<void> refreshTags() async {

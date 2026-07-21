@@ -10,6 +10,7 @@ import 'package:note_synapse/services/share_service.dart';
 import 'package:note_synapse/services/import_service.dart';
 import 'package:note_synapse/models/note.dart';
 import 'package:note_synapse/services/logger_service.dart';
+import 'package:note_synapse/utils/file_utils.dart';
 
 // Reuse existing mocks
 import 'share_service_test.mocks.dart';
@@ -44,6 +45,7 @@ void main() {
     l10n = AppLocalizationsEn();
     tempDir = await Directory.systemTemp.createTemp();
     PathProviderPlatform.instance = MockPathProviderPlatform(tempDir.path);
+    FileUtils.resetDocumentsPathCache();
     log.clear();
     importedNotes = [];
 

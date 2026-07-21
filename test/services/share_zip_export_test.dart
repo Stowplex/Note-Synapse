@@ -12,6 +12,7 @@ import 'package:archive/archive_io.dart';
 
 // Reuse existing mocks
 import 'share_service_test.mocks.dart';
+import 'package:note_synapse/utils/file_utils.dart';
 
 class MockPathProviderPlatform extends PathProviderPlatform {
   final String tempPath;
@@ -42,6 +43,7 @@ void main() {
     l10n = AppLocalizationsEn();
     tempDir = await Directory.systemTemp.createTemp();
     PathProviderPlatform.instance = MockPathProviderPlatform(tempDir.path);
+    FileUtils.resetDocumentsPathCache();
     log.clear();
 
     // Mock FilePicker channel

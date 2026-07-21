@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+import '../utils/file_utils.dart';
 
 /// Represents an attachment for conversation messages
 class ConversationAttachment {
@@ -48,14 +48,8 @@ class ConversationAttachment {
   }
 
   /// Gets the absolute file path for file operations
-  Future<String> getAbsolutePath() async {
-    if (isRelativePath) {
-      final appDir = await getApplicationDocumentsDirectory();
-      return '${appDir.path}/$filePath';
-    } else {
-      // Legacy absolute path - return as is
-      return filePath;
-    }
+  Future<String> getAbsolutePath() {
+    return FileUtils.getFullFilePath(filePath, isRelativePath);
   }
 
   /// Checks if the file exists
