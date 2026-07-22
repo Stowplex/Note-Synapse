@@ -12,8 +12,9 @@ inside the plugin sandbox, using only the public Synapse API:
 - **Config from the note** — put a fenced ` ```dosbox ` block in the note to
   control the emulator (any `dosbox.conf` sections, including `[autoexec]`).
 - **On-screen controls** — a full DOS keyboard overlay (sticky modifiers,
-  quick-type bar) and a virtual gamepad (d-pad + mappable A/B/C buttons) for
-  touch play.
+  quick-type bar) and a virtual gamepad (analog d-pad with four discrete
+  direction buttons for arrow-key games, plus mappable A/B/C buttons) for
+  touch play. The keyboard docks below the picture so it never covers the game.
 - **Game saves that stick** — anything the game writes to `C:` (RPG save
   games, configs, high scores) is diffed against the game zip and stored on
   the note as a `dos-saves-*.zip` attachment (via the 💾 button, a 60-second
