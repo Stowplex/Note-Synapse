@@ -682,6 +682,7 @@
       touch-action: none;
       user-select: none;
       -webkit-user-select: none;
+      -webkit-touch-callout: none;
     }
 
     .dpad-zone {
@@ -713,6 +714,7 @@
       touch-action: none;
       user-select: none;
       -webkit-user-select: none;
+      -webkit-touch-callout: none;
     }
 
     .control-button.pressed,
@@ -2539,6 +2541,11 @@
 
         bind() {
           for (const button of this.buttons) {
+            // Android WebView's native long-click recognizer is driven by touch
+            // events, even though gameplay itself uses pointer events.
+            button.addEventListener("touchstart", (event) => event.preventDefault(), {
+              passive: false,
+            });
             button.addEventListener("pointerdown", (event) => this.onPointerDown(event));
             button.addEventListener("pointermove", (event) => this.onPointerMove(event));
             button.addEventListener("pointerup", (event) => this.onPointerEnd(event));
