@@ -3,8 +3,12 @@
      Param format: a string of SQL query to execute (SELECT, INSERT, UPDATE, DELETE, etc.)
      Response format: {success: boolean, data: array, truncated?: boolean, totalRows?: number, error?: string}
      Notes:
-       * Read-only queries (SELECT, PRAGMA) execute immediately
-       * Write operations (INSERT, UPDATE, DELETE, CREATE, DROP, ALTER) require user approval
+       * Read-only queries execute immediately: SELECT, bare PRAGMAs (e.g. PRAGMA user_version),
+         and inspection PRAGMAs with arguments (table_info, table_list, index_list,
+         foreign_key_list, integrity_check, ...)
+       * Write operations (INSERT, UPDATE, DELETE, REPLACE, CREATE, DROP, ALTER, and PRAGMA
+         assignments like `PRAGMA x = y`) require user approval — avoid settings PRAGMAs
+         unless the user's task genuinely needs them
        * Users can choose to "Allow for this session" to skip approval for subsequent write queries
        * IMPORTANT: Results are capped at 100 rows. When a query produces more, `data` contains
          only the first 100 rows, `truncated` is true, and `totalRows` is the full row count.

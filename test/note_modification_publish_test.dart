@@ -161,6 +161,61 @@ void main() {
     });
   });
 
+  group('persistence safety', () {
+    test('applyModifications preserves notes.metadata (markers)', () async {
+      final note = await insertNote();
+      await db.updateNoteMetadata(note.id, {'markers': [{'id': 'm1'}]});
+
+      await service.applyModifications(note.id, {
+        'content': {'action': 'append', 'text': 'more'},
+      });
+
+      final metadata = await db.getNoteMetadata(note.id);
+      expect(metadata?['markers'], isNotEmpty,
+          reason: 'modifications must not wipe marker metadata');
+    });
+
+    test('DatabaseService.updateNote on a deleted note creates no orphan '
+        'child rows', () async {
+      final note = await insertNote(tags: ['orphan-tag']);
+      await db.deleteNote(note.id);
+
+      await db.updateNote(note);
+
+      final rawDb = await db.database;
+      expect(
+        await rawDb.query('notes', where: 'id = ?', whereArgs: [note.id]),
+        isEmpty,
+      );
+      expect(
+        await rawDb.query('note_tags', where: 'noteId = ?', whereArgs: [note.id]),
+        isEmpty,
+        reason: 'no child rows may be re-created for a deleted note',
+      );
+      expect(
+        await rawDb.query('subnotes', where: 'noteId = ?', whereArgs: [note.id]),
+        isEmpty,
+      );
+    });
+
+    test('applyModifications on a concurrently-deleted note throws and '
+        'publishes nothing', () async {
+      final note = await insertNote();
+      await db.deleteNote(note.id);
+      await notifier.waitForIdle();
+      events.clear();
+
+      await expectLater(
+        service.applyModifications(note.id, {
+          'content': {'action': 'append', 'text': 'x'},
+        }),
+        throwsA(anything),
+      );
+      await notifier.waitForIdle();
+      expect(events, isEmpty);
+    });
+  });
+
   group('applyBatchModifications', () {
     test('publishes one merged event for all updated notes', () async {
       final now = DateTime.now();

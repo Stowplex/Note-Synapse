@@ -1,21 +1,15 @@
 import 'package:note_synapse/models/attachment.dart';
 import 'package:note_synapse/models/in_note_marker.dart';
-import 'package:note_synapse/services/data_change_notifier.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/logger_service.dart';
-import 'package:note_synapse/services/service_locator.dart';
 
+// data-change-exempt: this service only writes notes.metadata /
+// attachments.metadata (markers), and metadata is never loaded into cached
+// Note objects (_mapToNote skips it), so a DataChangeNotifier publish would
+// trigger a full note refetch with zero cache benefit.
 class NoteMarkerService {
   final DatabaseService _db;
   NoteMarkerService(this._db);
-
-  /// Marker writes touch notes.metadata via DatabaseService directly, and
-  /// cached Note objects carry metadata — publish so the provider cache
-  /// refreshes the affected note.
-  void _publishNoteChanged(String noteId) {
-    if (!getIt.isRegistered<DataChangeNotifier>()) return;
-    getIt<DataChangeNotifier>().publish(DataChangeEvent(noteIds: {noteId}));
-  }
 
   // ── Attachment markers (PDF / image) ────────────────────────────────────
 
@@ -79,7 +73,6 @@ class NoteMarkerService {
       markers.add(marker.toJson());
       metadata['markers'] = markers;
       await _db.updateNoteMetadata(noteId, metadata);
-      _publishNoteChanged(noteId);
     } catch (e) {
       LoggerService.warning('Failed to save note marker: $e');
     }
@@ -106,7 +99,6 @@ class NoteMarkerService {
         ..removeWhere((m) => (m as Map<String, dynamic>)['id'] == markerId);
       metadata['markers'] = markers;
       await _db.updateNoteMetadata(noteId, metadata);
-      _publishNoteChanged(noteId);
     } catch (e) {
       LoggerService.warning('Failed to delete note marker: $e');
     }
@@ -152,7 +144,6 @@ class NoteMarkerService {
           final newMeta = Map<String, dynamic>.from(metadata ?? {});
           newMeta['markers'] = markers;
           await _db.updateNoteMetadata(note.id, newMeta);
-          _publishNoteChanged(note.id);
           return;
         }
       }

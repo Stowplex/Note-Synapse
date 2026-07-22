@@ -104,18 +104,14 @@ class SqlQueryService {
     this._databaseService, {
     this.onWriteApprovalRequest,
     DataChangeNotifier? changeNotifier,
-  }) : _changeNotifier =
-           changeNotifier ??
-           (getIt.isRegistered<DataChangeNotifier>()
-               ? getIt<DataChangeNotifier>()
-               : null);
+  }) : _changeNotifier = changeNotifier ?? DataChangeNotifier.shared();
 
   final DatabaseService _databaseService;
 
   /// Receives post-write change events (from the DB change journal for DML,
   /// or a bulk event for statements the journal cannot observe). Publication
   /// is enqueue-only and never affects the query result.
-  final DataChangeNotifier? _changeNotifier;
+  final DataChangeNotifier _changeNotifier;
 
   /// Callback to request user approval for write operations.
   WriteApprovalCallback? onWriteApprovalRequest;
@@ -293,7 +289,12 @@ class SqlQueryService {
   }
 
   /// Get a human-readable description of the query type.
-  String getQueryTypeDescription(SqlQueryType queryType) {
+  String getQueryTypeDescription(SqlQueryType queryType) =>
+      describeQueryType(queryType);
+
+  /// Static so UI code (e.g. approval dialogs) reuses the same strings
+  /// without duplicating this switch per call site.
+  static String describeQueryType(SqlQueryType queryType) {
     switch (queryType) {
       case SqlQueryType.select:
         return 'SELECT (read data)';
@@ -408,7 +409,7 @@ class SqlQueryService {
           // triggers (a DROP TABLE takes its triggers with it) and
           // invalidate broadly.
           _databaseService.markSchemaChangedForCapture();
-          _changeNotifier?.publish(const DataChangeEvent(bulk: true));
+          _changeNotifier.publish(const DataChangeEvent(bulk: true));
         }
       }
       final duration = DateTime.now().difference(startTime);
@@ -447,18 +448,24 @@ class SqlQueryService {
     }
   }
 
+  /// A targeted refresh above this many notes costs more than a reload (and
+  /// risks the SQL variable limit on older Android SQLite), all while
+  /// holding the provider cache lock — degrade to bulk instead.
+  static const int maxTargetedRefreshIds = 200;
+
   /// Publishes the journal-observed changes of a captured DML write. When
   /// capture was degraded (trigger install failed, e.g. after DDL dropped a
   /// monitored table) the journal may have missed writes, so fall back to a
-  /// bulk invalidation instead of trusting it.
+  /// bulk invalidation instead of trusting it. Very large id sets also
+  /// degrade to bulk — one debounced reload beats refetching thousands of
+  /// notes one batch at a time.
   void _publishCapturedChanges(RawWriteResult capture) {
-    final notifier = _changeNotifier;
-    if (notifier == null) return;
-    if (!capture.captureComplete) {
-      notifier.publish(const DataChangeEvent(bulk: true));
+    if (!capture.captureComplete ||
+        capture.changedNoteIds.length > maxTargetedRefreshIds) {
+      _changeNotifier.publish(const DataChangeEvent(bulk: true));
       return;
     }
-    notifier.publish(
+    _changeNotifier.publish(
       DataChangeEvent(
         noteIds: capture.changedNoteIds,
         tagsChanged: capture.tagsChanged,

@@ -142,8 +142,8 @@ Please refer to the attached PDF for detailed user manual.''';
     Set<String> noteIds, {
     bool tagsChanged = false,
   }) {
-    if (noteIds.isEmpty || !getIt.isRegistered<DataChangeNotifier>()) return;
-    getIt<DataChangeNotifier>().publish(
+    if (noteIds.isEmpty) return;
+    DataChangeNotifier.shared().publish(
       DataChangeEvent(noteIds: noteIds, tagsChanged: tagsChanged),
     );
   }
@@ -300,24 +300,24 @@ Please refer to the attached PDF for detailed user manual.''';
       final assetKey = skill['filePath'] as String;
       final content = await rootBundle.loadString(assetKey);
       final now = DateTime.now();
-      await databaseService.insertNote(
-        Note(
-          id: 'starter-skill-$skillRef',
-          title: skill['name'] as String,
-          content: content,
-          type: NoteType.note,
-          createdAt: now,
-          updatedAt: now,
-          pinned: false,
-          isArchived: false,
-          tags: const [SkillService.agentSkillTag, 'starter-skill'],
-          attachmentPaths: const [],
-          subNotes: const [],
-        ),
+      final skillNote = Note(
+        id: 'starter-skill-$skillRef',
+        title: skill['name'] as String,
+        content: content,
+        type: NoteType.note,
+        createdAt: now,
+        updatedAt: now,
+        pinned: false,
+        isArchived: false,
+        tags: const [SkillService.agentSkillTag, 'starter-skill'],
+        attachmentPaths: const [],
+        subNotes: const [],
       );
+      await databaseService.insertNote(skillNote);
       existingRefs.add(skillRef);
       installed++;
-      installedIds.add('starter-skill-$skillRef');
+      // Publish the id of the note actually inserted, not a rebuilt literal.
+      installedIds.add(skillNote.id);
     }
     _publishNotesChanged(installedIds, tagsChanged: installedIds.isNotEmpty);
     return installed;

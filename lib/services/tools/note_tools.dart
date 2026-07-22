@@ -1249,8 +1249,8 @@ class DeleteNoteTool implements NativeTool {
     // NoteModificationService or AppProvider), so it must publish its own
     // invalidation — only the ids that actually got deleted. Publish is
     // enqueue-only and cannot affect the tool result.
-    if (deletedIds.isNotEmpty && getIt.isRegistered<DataChangeNotifier>()) {
-      getIt<DataChangeNotifier>().publish(
+    if (deletedIds.isNotEmpty) {
+      DataChangeNotifier.shared().publish(
         DataChangeEvent(noteIds: deletedIds.toSet()),
       );
     }

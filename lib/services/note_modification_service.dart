@@ -14,21 +14,16 @@ import 'tag_workflow_service.dart';
 
 class NoteModificationService {
   final DatabaseService _db;
-  final DataChangeNotifier? _changeNotifier;
+  final DataChangeNotifier _changeNotifier;
   final Uuid _uuid = const Uuid();
 
   /// Creates a NoteModificationService.
   ///
   /// [db] - The database service for persistence operations.
   /// [changeNotifier] - Receives post-commit change events so UI caches can
-  /// refresh. Falls back to the GetIt registration; null (e.g. in tests
-  /// without a registration) disables publication.
+  /// refresh. Defaults to the process-wide shared notifier.
   NoteModificationService(this._db, {DataChangeNotifier? changeNotifier})
-    : _changeNotifier =
-          changeNotifier ??
-          (getIt.isRegistered<DataChangeNotifier>()
-              ? getIt<DataChangeNotifier>()
-              : null);
+    : _changeNotifier = changeNotifier ?? DataChangeNotifier.shared();
 
   /// Publishes a post-commit change event. Enqueue-only by contract
   /// ([DataChangeNotifier.publish] never throws), so calling this can never
@@ -38,7 +33,7 @@ class NoteModificationService {
     bool tagsChanged = false,
     Set<String> relationshipNoteIds = const {},
   }) {
-    _changeNotifier?.publish(
+    _changeNotifier.publish(
       DataChangeEvent(
         noteIds: noteIds,
         tagsChanged: tagsChanged,
@@ -300,17 +295,14 @@ class NoteModificationService {
   /// Creates and persists a new note. For UI-aware insertion, use buildNote + AppProvider.addNote.
   Future<Note> createNote(Map<String, dynamic> data) async {
     final note = await buildNote(data);
+    await _db.insertNote(note);
     // Publication is guarded rather than transactional here: insertNote owns
     // attachment-path conversion and cannot run against a transaction
-    // executor. Track what committed and publish exactly that, even when a
-    // later relationship insert throws — the note insert has already
-    // committed and must not stay invisible to the UI.
-    var noteInserted = false;
+    // executor. Reaching the try below means the note insert committed, so
+    // the finally publishes it even when a later relationship insert throws
+    // — a committed note must not stay invisible to the UI.
     final linkedEndpoints = <String>{};
     try {
-      await _db.insertNote(note);
-      noteInserted = true;
-
       // If there are links (relationships)
       if (data.containsKey('link')) {
         final links = (data['link'] as List?) ?? [];
@@ -337,15 +329,13 @@ class NoteModificationService {
 
       return note;
     } finally {
-      if (noteInserted) {
-        _publishChange(
-          noteIds: {note.id},
-          tagsChanged: note.tags.isNotEmpty,
-          relationshipNoteIds: linkedEndpoints.isEmpty
-              ? const {}
-              : {note.id, ...linkedEndpoints},
-        );
-      }
+      _publishChange(
+        noteIds: {note.id},
+        tagsChanged: note.tags.isNotEmpty,
+        relationshipNoteIds: linkedEndpoints.isEmpty
+            ? const {}
+            : {note.id, ...linkedEndpoints},
+      );
     }
   }
 
@@ -538,8 +528,22 @@ class NoteModificationService {
     json.remove('subNotes');
     json.remove('tags');
     json.remove('attachmentPaths');
+    // Note objects loaded from the database never carry metadata (markers
+    // etc. are written only via updateNoteMetadata), so writing toJson()'s
+    // null here would wipe the column on every modification.
+    json.remove('metadata');
 
-    await db.update('notes', json, where: 'id = ?', whereArgs: [note.id]);
+    final updatedRows = await db.update(
+      'notes',
+      json,
+      where: 'id = ?',
+      whereArgs: [note.id],
+    );
+    if (updatedRows == 0) {
+      // Note deleted between the read and this write; creating child rows
+      // for a nonexistent note would orphan them.
+      throw Exception('Note no longer exists: ${note.id}');
+    }
 
     await db.delete('subnotes', where: 'noteId = ?', whereArgs: [note.id]);
     for (final subNote in note.subNotes) {

@@ -237,16 +237,14 @@ Content: ${note.content}
                 {'relation': 'derived_from', 'target': note.id},
               ],
             };
-            final newNote = await modService.createNote(newNoteData);
-            await appProvider.addNote(newNote);
+            // createNote persists AND publishes the change event that
+            // refreshes the UI cache. The previous appProvider.addNote here
+            // re-inserted the same primary key, threw, and dumped every
+            // immutable-note ingestion into the summary-prepend fallback.
+            await modService.createNote(newNoteData);
           } else {
-            // applyModifications writes to DB
-            final updatedNote = await modService.applyModifications(
-              note.id,
-              json,
-            );
-            // Update AppProvider to reflect changes in UI (redundant DB write but safe)
-            await appProvider.updateNote(updatedNote);
+            // applyModifications writes to DB and publishes the UI refresh.
+            await modService.applyModifications(note.id, json);
           }
         } else {
           throw const FormatException();

@@ -87,6 +87,65 @@ void main() {
       }
     });
 
+    test('UPDATE that rewrites the primary key captures BOTH ids', () async {
+      await insertNoteRow('old-id');
+      await notifier.waitForIdle();
+      events.clear();
+
+      await run("UPDATE notes SET id = 'new-id' WHERE id = 'old-id'");
+      await notifier.waitForIdle();
+
+      expect(merged().noteIds, {'old-id', 'new-id'},
+          reason: 'the old cached entry must be removed, not ghosted');
+    });
+
+    test('ordinary app writes do not grow the journal (trigger gate)',
+        () async {
+      // A captured write installs the triggers...
+      await insertNoteRow('n1');
+      // ...then a plain app-layer write happens outside any capture txn.
+      final rawDb = await db.database;
+      await rawDb.insert('notes', {
+        'id': 'app-write',
+        'title': 't',
+        'content': 'c',
+        'type': 'note',
+        'createdAt': 1,
+        'updatedAt': 1,
+      });
+
+      final journalRows = await rawDb.query('_synapse_change_journal');
+      expect(journalRows, isEmpty,
+          reason: 'gated triggers must journal nothing between captures');
+    });
+
+    test('DML touching more notes than the targeted cap publishes bulk',
+        () async {
+      final n = SqlQueryService.maxTargetedRefreshIds + 20;
+      final rawDb = await db.database;
+      final batch = rawDb.batch();
+      for (var i = 0; i < n; i++) {
+        batch.insert('notes', {
+          'id': 'bulk-$i',
+          'title': 't',
+          'content': 'c',
+          'type': 'note',
+          'createdAt': 1,
+          'updatedAt': 1,
+        });
+      }
+      await batch.commit(noResult: true);
+      await notifier.waitForIdle();
+      events.clear();
+
+      await run("UPDATE notes SET title = 'renamed'");
+      await notifier.waitForIdle();
+
+      expect(merged().bulk, isTrue,
+          reason: 'huge id sets degrade to one debounced reload');
+      expect(merged().noteIds, isEmpty);
+    });
+
     test('REPLACE INTO notes is captured precisely', () async {
       await insertNoteRow('n1');
       // Drain any pending events from setup statements before clearing, so

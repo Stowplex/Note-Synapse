@@ -74,6 +74,17 @@ void main() {
         throwsA(isA<Exception>()
             .having((e) => e.toString(), 'message', contains('immutable'))),
       );
+
+      // The binding check must be consulted with the note's OWN tags, and
+      // rejection must happen before any persistence.
+      final consultedTags =
+          verify(mockTagWorkflow.hasImmutableBinding(captureAny))
+              .captured
+              .single as List<String>;
+      expect(consultedTags, containsAll(immutableNote.tags));
+      final stored = await db.getNote('source-1');
+      expect(stored!.content, 'Original content.',
+          reason: 'a rejected modification must not persist anything');
     });
 
     test('rejects title modification when tag has immutable binding',

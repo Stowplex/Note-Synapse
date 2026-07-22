@@ -27,11 +27,7 @@ class AppProvider extends ChangeNotifier {
     DatabaseService? databaseService,
     DataChangeNotifier? changeNotifier,
   }) : _databaseService = databaseService ?? DatabaseService(),
-       _changeNotifier =
-           changeNotifier ??
-           (getIt.isRegistered<DataChangeNotifier>()
-               ? getIt<DataChangeNotifier>()
-               : DataChangeNotifier()) {
+       _changeNotifier = changeNotifier ?? DataChangeNotifier.shared() {
     _changeSubscription = _changeNotifier.addListener(_onDataChanged);
   }
 
@@ -94,13 +90,26 @@ class AppProvider extends ChangeNotifier {
   ///
   /// Error-resilient: the queue tail always completes; an action's error is
   /// returned only to its own caller and never poisons later actions.
+  static const _cacheLockZoneKey = #appProviderCacheLock;
+
   Future<T> _withCacheLock<T>(Future<T> Function() action) {
+    // Debug-mode tripwire for the non-reentrancy rule: a locked action that
+    // awaits another locked method would deadlock silently in release; in
+    // debug/tests it fails loudly instead.
+    assert(
+      Zone.current[_cacheLockZoneKey] != true,
+      'Re-entrant _withCacheLock call: a locked AppProvider method must not '
+      'invoke another locked method (this would deadlock).',
+    );
     final prev = _lockTail;
     final release = Completer<void>();
     _lockTail = release.future;
     return prev.then((_) async {
       try {
-        return await action();
+        return await runZoned(
+          action,
+          zoneValues: {_cacheLockZoneKey: true},
+        );
       } finally {
         release.complete();
       }
@@ -122,31 +131,40 @@ class AppProvider extends ChangeNotifier {
 
   /// Applies a targeted change event under the cache lock: one lock
   /// acquisition, one notification, one cache-snapshot boundary per event.
+  /// The three independent fetches run concurrently to shorten the locked
+  /// window; each failure is isolated and logged.
   Future<void> _applyChangesLocked(DataChangeEvent event) async {
     var cacheTouched = false;
-    if (event.noteIds.isNotEmpty) {
-      await _refreshNotesLocked(event.noteIds);
-      cacheTouched = true;
-    }
-    if (event.tagsChanged) {
-      try {
-        _tags = await _databaseService.getAllTags();
-        cacheTouched = true;
-      } catch (e) {
-        LoggerService.error('Error refreshing tags for $event: $e', error: e);
-      }
-    }
-    if (event.filtersChanged) {
-      try {
-        _filters = await _databaseService.getAllFilters();
-        cacheTouched = true;
-      } catch (e) {
-        LoggerService.error(
-          'Error refreshing filters for $event: $e',
-          error: e,
-        );
-      }
-    }
+    await Future.wait([
+      if (event.noteIds.isNotEmpty)
+        _refreshNotesLocked(event.noteIds).then((_) => cacheTouched = true),
+      if (event.tagsChanged)
+        _databaseService
+            .getAllTags()
+            .then((tags) {
+              _tags = tags;
+              cacheTouched = true;
+            })
+            .catchError((Object e) {
+              LoggerService.error(
+                'Error refreshing tags for $event: $e',
+                error: e,
+              );
+            }),
+      if (event.filtersChanged)
+        _databaseService
+            .getAllFilters()
+            .then((filters) {
+              _filters = filters;
+              cacheTouched = true;
+            })
+            .catchError((Object e) {
+              LoggerService.error(
+                'Error refreshing filters for $event: $e',
+                error: e,
+              );
+            }),
+    ]);
     // Relationship changes carry no cache to patch (relationships are read
     // from the DB on demand) but dependent UI still needs a rebuild signal.
     if (cacheTouched || event.relationshipNoteIds.isNotEmpty) {

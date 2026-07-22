@@ -37,77 +37,16 @@ void main() {
   });
 
   // applyModifications persists through db.transaction, so tests that reach
-  // persistence stub mockDb.database with a real in-memory database carrying
-  // the note-domain schema (same pattern as the batch test below).
+  // persistence stub mockDb.database with a real in-memory database. Built
+  // from DatabaseService.getSchema() — the production DDL — so this can
+  // never drift from the real table definitions.
   Future<Database> openRawNotesDb() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
     final raw = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
-    await raw.execute('''
-        CREATE TABLE notes (
-          id TEXT PRIMARY KEY,
-          title TEXT NOT NULL,
-          content TEXT NOT NULL,
-          type TEXT NOT NULL,
-          createdAt INTEGER NOT NULL,
-          updatedAt INTEGER NOT NULL,
-          scheduledAt TEXT,
-          completeBy TEXT,
-          status TEXT,
-          completionPercentage REAL,
-          pinned INTEGER NOT NULL DEFAULT 0,
-          isArchived INTEGER NOT NULL DEFAULT 0,
-          recurrenceRule TEXT,
-          metadata TEXT
-        )
-      ''');
-    await raw.execute('''
-        CREATE TABLE subnotes (
-          id TEXT PRIMARY KEY,
-          noteId TEXT NOT NULL,
-          name TEXT NOT NULL,
-          content TEXT NOT NULL,
-          createdAt INTEGER NOT NULL,
-          isCompleted INTEGER NOT NULL DEFAULT 0
-        )
-      ''');
-    await raw.execute('''
-        CREATE TABLE tags (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL UNIQUE,
-          color TEXT,
-          createdAt INTEGER NOT NULL,
-          usageCount INTEGER NOT NULL DEFAULT 0
-        )
-      ''');
-    await raw.execute('''
-        CREATE TABLE note_tags (
-          noteId TEXT NOT NULL,
-          tagId TEXT NOT NULL,
-          PRIMARY KEY (noteId, tagId)
-        )
-      ''');
-    await raw.execute('''
-        CREATE TABLE attachments (
-          id TEXT PRIMARY KEY,
-          noteId TEXT NOT NULL,
-          filePath TEXT NOT NULL,
-          fileName TEXT NOT NULL,
-          fileType TEXT NOT NULL,
-          isRelativePath INTEGER NOT NULL DEFAULT 0,
-          createdAt INTEGER NOT NULL,
-          includeInAIContext INTEGER NOT NULL DEFAULT 1
-        )
-      ''');
-    await raw.execute('''
-        CREATE TABLE relationships (
-          id TEXT PRIMARY KEY,
-          fromNoteId TEXT NOT NULL,
-          toNoteId TEXT NOT NULL,
-          type TEXT NOT NULL,
-          createdAt INTEGER NOT NULL
-        )
-      ''');
+    for (final statement in DatabaseService.getSchema()) {
+      await raw.execute(statement);
+    }
     return raw;
   }
 

@@ -62,6 +62,23 @@ class RawWriteResult {
   final bool captureComplete;
 }
 
+/// Result of installing the TEMP capture objects on one connection.
+/// Immutable and connection-keyed so per-call reads never race with
+/// close()/reopen resetting mutable service fields.
+class _CaptureState {
+  const _CaptureState(this.db, {required this.journalReady, required this.complete});
+
+  final Database db;
+
+  /// The TEMP journal + gate tables exist; capture transactions may
+  /// reference them.
+  final bool journalReady;
+
+  /// Every monitored table's trigger group installed; the journal can be
+  /// trusted. False ⇒ callers must invalidate broadly.
+  final bool complete;
+}
+
 class DatabaseService {
   final String? _databaseNameOverride;
 
@@ -1961,8 +1978,26 @@ class DatabaseService {
     json.remove('subNotes');
     json.remove('tags');
     json.remove('attachmentPaths');
+    // Note objects loaded from the database never carry metadata (markers
+    // etc. are written only via updateNoteMetadata), so writing
+    // toJson()'s null here would wipe the column on every save.
+    json.remove('metadata');
 
-    await db.update('notes', json, where: 'id = ?', whereArgs: [note.id]);
+    final updatedRows = await db.update(
+      'notes',
+      json,
+      where: 'id = ?',
+      whereArgs: [note.id],
+    );
+    if (updatedRows == 0) {
+      // The note row is gone (e.g. deleted concurrently by a plugin/agent).
+      // Re-inserting subnotes/tags/attachments below would create orphan
+      // child rows for a nonexistent note.
+      LoggerService.warning(
+        'updateNote skipped: note ${note.id} no longer exists',
+      );
+      return;
+    }
 
     // Update subnotes
     await db.delete('subnotes', where: 'noteId = ?', whereArgs: [note.id]);
@@ -2941,11 +2976,11 @@ class DatabaseService {
     final db = await database;
     await db.close();
     _database = null;
-    // TEMP capture objects died with the connection; drop the stale key so
-    // the next captured write reinstalls them on the new connection.
-    _captureReadyFor = null;
-    _captureComplete = false;
-    _captureJournalReady = false;
+    // TEMP capture objects died with the connection; drop the stale state so
+    // the next captured write reinstalls them on the new connection. (An
+    // in-flight install for the old connection is left to finish — its
+    // result is discarded because it is keyed to the closed Database.)
+    _captureState = null;
   }
 
   // Helper method to convert string to TaskStatus
@@ -5113,14 +5148,15 @@ class DatabaseService {
   // ===========================================================================
 
   static const String _changeJournal = '_synapse_change_journal';
+  static const String _captureActiveFlag = '_synapse_capture_active';
 
-  /// Connection the TEMP capture objects were installed on. TEMP objects die
-  /// with their connection, so installation is keyed to the [Database]
-  /// instance and re-runs after close()/reopen (incl. recovery/import).
-  Database? _captureReadyFor;
-  Future<bool>? _captureInstalling;
-  bool _captureComplete = false;
-  bool _captureJournalReady = false;
+  /// Committed capture-install state, keyed to the connection it was
+  /// installed on. TEMP objects die with their connection, so a state whose
+  /// [_CaptureState.db] is not the live connection is stale and triggers a
+  /// reinstall (after close()/reopen, incl. recovery/import).
+  _CaptureState? _captureState;
+  Future<_CaptureState>? _captureInstalling;
+  Database? _captureInstallingFor;
   bool _captureReverifyRequested = false;
 
   /// Ask for the capture trigger set to be re-verified before the next
@@ -5138,11 +5174,19 @@ class DatabaseService {
   /// the tag (cached notes embed tag names, so a rename/delete must refresh
   /// them). BEFORE DELETE on tags so the note_tags join rows still exist
   /// regardless of cascade behavior.
+  ///
+  /// Every trigger is gated on a row existing in the TEMP active-flag table,
+  /// which only [runRawWriteWithChangeCapture] sets inside its transaction.
+  /// Ordinary app writes therefore pay one EXISTS check on an empty TEMP
+  /// table and journal nothing — without the gate, the journal would grow
+  /// unboundedly between captured writes.
   static List<String> _captureTriggerStatements(String table) {
     const journal = _changeJournal;
     String trigger(String name, String timing, String body) =>
         'CREATE TEMP TRIGGER IF NOT EXISTS _syn_cap_$name '
-        '$timing ON $table BEGIN $body END';
+        '$timing ON $table '
+        'WHEN EXISTS (SELECT 1 FROM $_captureActiveFlag) '
+        'BEGIN $body END';
     String note(String ref) =>
         "INSERT INTO $journal(kind, note_id) VALUES ('notes', $ref);";
     String relationship(String ref) =>
@@ -5159,7 +5203,13 @@ class DatabaseService {
       case 'notes':
         return [
           trigger('notes_ai', 'AFTER INSERT', note('NEW.id')),
-          trigger('notes_au', 'AFTER UPDATE', note('NEW.id')),
+          // Both sides: an UPDATE that rewrites the primary key must remove
+          // the old cached entry as well as upsert the new one.
+          trigger(
+            'notes_au',
+            'AFTER UPDATE',
+            '${note('OLD.id')} ${note('NEW.id')}',
+          ),
           trigger('notes_ad', 'AFTER DELETE', note('OLD.id')),
         ];
       case 'subnotes':
@@ -5219,7 +5269,9 @@ class DatabaseService {
           trigger('filters_ad', 'AFTER DELETE', domain('filters')),
         ];
       default:
-        return const [];
+        // A table listed in _capturedTables without a trigger spec would be
+        // silently uncaptured — fail loudly instead.
+        throw ArgumentError('No capture trigger spec for table "$table"');
     }
   }
 
@@ -5233,22 +5285,23 @@ class DatabaseService {
     'filters',
   ];
 
-  Future<bool> _installCaptureObjects(Database db) async {
+  Future<_CaptureState> _installCaptureObjects(Database db) async {
     try {
       await db.execute(
         'CREATE TEMP TABLE IF NOT EXISTS $_changeJournal'
         '(kind TEXT NOT NULL, note_id TEXT)',
       );
-      _captureJournalReady = true;
+      await db.execute(
+        'CREATE TEMP TABLE IF NOT EXISTS $_captureActiveFlag(flag INTEGER)',
+      );
     } catch (e) {
-      // Without the journal table nothing can be captured (and the triggers
-      // would fail every write), so bail out entirely.
-      _captureJournalReady = false;
+      // Without the journal nothing can be captured (and the triggers would
+      // reference a missing table), so bail out entirely.
       LoggerService.error(
-        '[ChangeCapture] Failed to create journal table: $e',
+        '[ChangeCapture] Failed to create journal tables: $e',
         error: e,
       );
-      return false;
+      return _CaptureState(db, journalReady: false, complete: false);
     }
 
     var complete = true;
@@ -5268,33 +5321,47 @@ class DatabaseService {
         );
       }
     }
-    return complete;
+    return _CaptureState(db, journalReady: true, complete: complete);
   }
 
-  /// Ensures TEMP capture objects exist on [db]. Guarded by an in-flight
-  /// future so concurrent first writers share one installation; the future
-  /// is always cleared (in `whenComplete`) so a failed install never poisons
-  /// later attempts.
-  Future<bool> _ensureCaptureReady(Database db) {
-    if (identical(_captureReadyFor, db) && !_captureReverifyRequested) {
-      return Future.value(_captureComplete);
+  /// Ensures TEMP capture objects exist on [db] and returns the resulting
+  /// state. The in-flight future is keyed to the connection, so a caller on
+  /// a NEW connection never receives an install running against a closed
+  /// one; the committed [_captureState] is only published while [db] is
+  /// still the live connection, so late continuations cannot re-poison state
+  /// after close(). The in-flight slot is always cleared, so a failed
+  /// install never blocks retries.
+  Future<_CaptureState> _ensureCaptureReady(Database db) {
+    final state = _captureState;
+    if (state != null &&
+        identical(state.db, db) &&
+        !_captureReverifyRequested) {
+      return Future.value(state);
     }
-    final inFlight = _captureInstalling;
-    if (inFlight != null) return inFlight;
+    if (_captureInstalling != null && identical(_captureInstallingFor, db)) {
+      return _captureInstalling!;
+    }
 
+    _captureInstallingFor = db;
     final install = () async {
       _captureReverifyRequested = false;
+      _CaptureState result;
       try {
-        _captureComplete = await _installCaptureObjects(db);
-        _captureReadyFor = db;
+        result = await _installCaptureObjects(db);
       } catch (e) {
-        _captureComplete = false;
         LoggerService.error('[ChangeCapture] Install failed: $e', error: e);
+        result = _CaptureState(db, journalReady: false, complete: false);
       }
-      return _captureComplete;
+      if (identical(_database, db)) {
+        _captureState = result;
+      }
+      return result;
     }();
     _captureInstalling = install.whenComplete(() {
-      _captureInstalling = null;
+      if (identical(_captureInstallingFor, db)) {
+        _captureInstalling = null;
+        _captureInstallingFor = null;
+      }
     });
     return _captureInstalling!;
   }
@@ -5309,9 +5376,9 @@ class DatabaseService {
   /// expected to use [runRawQuery] for those and invalidate broadly.
   Future<RawWriteResult> runRawWriteWithChangeCapture(String sql) async {
     final db = await database;
-    final captureComplete = await _ensureCaptureReady(db);
+    final capture = await _ensureCaptureReady(db);
 
-    if (!_captureJournalReady) {
+    if (!capture.journalReady) {
       // No journal at all: execute plainly and report degraded capture.
       final rows = await db.rawQuery(sql);
       return RawWriteResult(rows: rows, captureComplete: false);
@@ -5324,10 +5391,11 @@ class DatabaseService {
     late final List<Map<String, dynamic>> rows;
 
     await db.transaction((txn) async {
-      // Clear both before and after: pollution from interleaved app writes
-      // is harmless (refresh is idempotent) but there is no reason to keep
-      // stale rows around.
+      // Arm the trigger gate for exactly this statement; without a flag row
+      // the TEMP triggers are inert, so ordinary app writes never journal.
+      // A rollback removes the flag row with everything else.
       await txn.delete(_changeJournal);
+      await txn.insert(_captureActiveFlag, {'flag': 1});
       rows = await txn.rawQuery(sql);
       final journal = await txn.query(_changeJournal);
       for (final row in journal) {
@@ -5343,6 +5411,7 @@ class DatabaseService {
           filtersChanged = true;
         }
       }
+      await txn.delete(_captureActiveFlag);
       await txn.delete(_changeJournal);
     });
 
@@ -5352,7 +5421,7 @@ class DatabaseService {
       relationshipNoteIds: relationshipNoteIds,
       tagsChanged: tagsChanged,
       filtersChanged: filtersChanged,
-      captureComplete: captureComplete,
+      captureComplete: capture.complete,
     );
   }
 

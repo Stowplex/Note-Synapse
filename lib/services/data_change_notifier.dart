@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'logger_service.dart';
+import 'service_locator.dart';
 
 /// A single change notification describing what data-layer state changed.
 ///
@@ -94,6 +95,20 @@ class DataChangeSubscription {
 /// - Events published during a dispatch are merged and delivered in the next
 ///   batch.
 class DataChangeNotifier {
+  /// The process-wide notifier. Registers one in GetIt if absent rather than
+  /// returning a private instance: publishers and subscribers both resolve
+  /// through here, so a private fallback would silently connect a subscriber
+  /// to a notifier no writer publishes to (stale UI with no error) — the
+  /// exact bug class this service exists to fix.
+  static DataChangeNotifier shared() {
+    if (!getIt.isRegistered<DataChangeNotifier>()) {
+      getIt.registerLazySingleton<DataChangeNotifier>(
+        () => DataChangeNotifier(),
+      );
+    }
+    return getIt<DataChangeNotifier>();
+  }
+
   final List<DataChangeSubscription> _listeners = [];
 
   DataChangeEvent? _pending;
@@ -126,41 +141,37 @@ class DataChangeNotifier {
   }
 
   Future<void> _drain() async {
-    try {
-      while (_pending != null) {
-        final event = _pending!;
-        _pending = null;
-        for (final subscription in List.of(_listeners)) {
-          // Skip listeners cancelled mid-batch.
-          if (!_listeners.contains(subscription)) continue;
-          final watchdog = Timer(slowDispatchThreshold, () {
-            LoggerService.warning(
-              '[DataChangeNotifier] Listener still running after '
-              '${slowDispatchThreshold.inSeconds}s for $event — listeners '
-              'must terminate; the event queue is blocked until it does.',
-            );
-          });
-          try {
-            await subscription._listener(event);
-          } catch (e) {
-            LoggerService.error(
-              '[DataChangeNotifier] Listener failed for $event: $e',
-              error: e,
-            );
-          } finally {
-            watchdog.cancel();
-          }
+    // No try/finally needed: a publish() during a listener await lands in
+    // _pending BEFORE the while condition re-checks (single-threaded event
+    // loop, no interleaving point between the check failing and returning),
+    // and the loop body cannot throw — each listener call is individually
+    // caught.
+    while (_pending != null) {
+      final event = _pending!;
+      _pending = null;
+      for (final subscription in List.of(_listeners)) {
+        // Skip listeners cancelled mid-batch.
+        if (!_listeners.contains(subscription)) continue;
+        final watchdog = Timer(slowDispatchThreshold, () {
+          LoggerService.warning(
+            '[DataChangeNotifier] Listener still running after '
+            '${slowDispatchThreshold.inSeconds}s for $event — listeners '
+            'must terminate; the event queue is blocked until it does.',
+          );
+        });
+        try {
+          await subscription._listener(event);
+        } catch (e) {
+          LoggerService.error(
+            '[DataChangeNotifier] Listener failed for $event: $e',
+            error: e,
+          );
+        } finally {
+          watchdog.cancel();
         }
       }
-    } finally {
-      _draining = false;
-      // A publish() that raced the end of the loop saw _draining == true and
-      // did not schedule a drain; pick its event up here.
-      if (_pending != null) {
-        _draining = true;
-        scheduleMicrotask(_drain);
-      }
     }
+    _draining = false;
   }
 
   /// Completes when the queue is fully idle (no pending event, no dispatch in
