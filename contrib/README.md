@@ -56,3 +56,7 @@ contrib/
 - **nes-arcade / Neon Cartridge** — play a `.nes` ROM attached to a selected
   note with phone-ready controls, rapid-fire/rapid-jump buttons, quick saves,
   and annotated screenshots saved back to the note.
+- **table-studio** — edit the tables in your notes with a fluid touch
+  spreadsheet: markdown pipe tables in the note body as well as
+  `.csv`/`.tsv`/`.xlsx`/`.ods` attachments, with undo, column alignment,
+  multi-sheet tabs, and read-only safety for legacy `.xls`/`.xlsm` files.

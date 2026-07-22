@@ -1,0 +1,2500 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Table Studio</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #eef0f4;
+    --text: #191c22;
+    --muted: #6b7280;
+    --border: #e2e5ea;
+    --accent: #4f6ef7;
+    --accent-soft: rgba(79, 110, 247, 0.12);
+    --accent-ink: #ffffff;
+    --danger: #dc2626;
+    --danger-soft: rgba(220, 38, 38, 0.1);
+    --good: #059669;
+    --good-soft: rgba(5, 150, 105, 0.12);
+    --warn: #b45309;
+    --warn-soft: rgba(180, 83, 9, 0.12);
+    --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 4px 14px rgba(16, 24, 40, 0.06);
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1013;
+      --surface: #171a20;
+      --surface-2: #1f232c;
+      --text: #e8eaf0;
+      --muted: #8b93a5;
+      --border: #262b36;
+      --accent: #7d90ff;
+      --accent-soft: rgba(125, 144, 255, 0.16);
+      --accent-ink: #10131c;
+      --danger: #f87171;
+      --danger-soft: rgba(248, 113, 113, 0.14);
+      --good: #34d399;
+      --good-soft: rgba(52, 211, 153, 0.14);
+      --warn: #fbbf24;
+      --warn-soft: rgba(251, 191, 36, 0.14);
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 15px;
+    touch-action: manipulation;
+    overscroll-behavior: none;
+  }
+  body { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
+  #app { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button:disabled { opacity: 0.38; cursor: default; }
+  .screen { flex: 1; display: flex; flex-direction: column; min-height: 0; animation: screen-in 0.22s ease; }
+  @keyframes screen-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* ---------- top bars ---------- */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 14px 10px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex: none;
+  }
+  .topbar .titles { flex: 1; min-width: 0; }
+  .topbar h1 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .topbar .subtitle {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
+  }
+  .icon-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
+    flex: none;
+    transition: background 0.15s ease, transform 0.1s ease;
+  }
+  .icon-btn:active { background: var(--surface-2); transform: scale(0.94); }
+  .icon-btn svg { width: 21px; height: 21px; }
+  .pill-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 16px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 600;
+    font-size: 14px;
+    flex: none;
+    transition: transform 0.1s ease, opacity 0.15s ease;
+  }
+  .pill-btn:active { transform: scale(0.96); }
+  .pill-btn svg { width: 16px; height: 16px; }
+  .app-mark {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--accent), #9f7bff);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    flex: none;
+  }
+  .app-mark svg { width: 20px; height: 20px; }
+
+  /* ---------- home ---------- */
+  .home-scroll { flex: 1; overflow-y: auto; padding: 14px 14px calc(env(safe-area-inset-bottom, 0px) + 24px); }
+  .note-group { margin-bottom: 22px; }
+  .note-group-head { display: flex; align-items: center; gap: 8px; margin: 0 2px 10px; }
+  .note-group-head .name {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ghost-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 999px;
+    padding: 6px 11px;
+    flex: none;
+    transition: transform 0.1s ease;
+  }
+  .ghost-btn:active { transform: scale(0.95); }
+  .ghost-btn svg { width: 14px; height: 14px; }
+  .card {
+    width: 100%;
+    text-align: left;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 13px 14px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: transform 0.12s ease;
+  }
+  .card:active { transform: scale(0.985); }
+  .card .body { flex: 1; min-width: 0; }
+  .card .name {
+    font-weight: 600;
+    font-size: 14.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card .meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+  .chip {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    border-radius: 6px;
+    padding: 2.5px 7px;
+  }
+  .chip.md { background: var(--accent-soft); color: var(--accent); }
+  .chip.csv { background: var(--good-soft); color: var(--good); }
+  .chip.xlsx { background: var(--good-soft); color: var(--good); }
+  .chip.ro { background: var(--warn-soft); color: var(--warn); }
+  .card .dims { font-size: 12px; color: var(--muted); }
+  .file-badge {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    background: var(--surface-2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    flex: none;
+  }
+  .file-badge svg { width: 20px; height: 20px; }
+  .preview {
+    border-collapse: collapse;
+    flex: none;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .preview td {
+    border: 1px solid var(--border);
+    font-size: 9px;
+    color: var(--muted);
+    padding: 2px 5px;
+    max-width: 44px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    height: 13px;
+  }
+  .preview tr:first-child td { background: var(--surface-2); font-weight: 700; color: var(--text); }
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: var(--muted);
+    padding: 40px 30px;
+    gap: 8px;
+  }
+  .empty-state svg { width: 46px; height: 46px; opacity: 0.5; margin-bottom: 6px; }
+  .empty-state .big { font-size: 16px; font-weight: 700; color: var(--text); }
+  .empty-state .actions { display: flex; gap: 10px; margin-top: 16px; }
+
+  /* ---------- editor ---------- */
+  .banner {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 12.5px;
+    padding: 9px 14px;
+    background: var(--warn-soft);
+    color: var(--warn);
+    flex: none;
+  }
+  .banner svg { width: 16px; height: 16px; flex: none; }
+  .banner .grow { flex: 1; min-width: 0; }
+  .banner .banner-action { font-weight: 700; color: inherit; text-decoration: underline; flex: none; }
+  .univer-wrap { flex: 1; min-height: 0; position: relative; background: var(--surface); }
+  #univer-host { position: absolute; inset: 0; }
+
+  /* ---------- engine gate ---------- */
+  .engine-progress {
+    width: min(320px, 78vw);
+    height: 8px;
+    border-radius: 4px;
+    background: var(--surface-2);
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .engine-progress .fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 4px;
+    background: var(--accent);
+    transition: width 0.2s ease;
+  }
+  .engine-detail { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 16px; }
+
+  /* ---------- overlays ---------- */
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 12, 18, 0.45);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 50;
+    animation: fade-in 0.18s ease;
+  }
+  .backdrop.center { align-items: center; padding: 24px; }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  .dialog {
+    background: var(--surface);
+    border-radius: 18px;
+    padding: 20px 18px 14px;
+    width: 100%;
+    max-width: 340px;
+    box-shadow: var(--shadow);
+    animation: pop-in 0.2s ease;
+  }
+  @keyframes pop-in { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: none; } }
+  .dialog h2 { margin: 0 0 6px; font-size: 16px; }
+  .dialog p { margin: 0 0 14px; font-size: 13.5px; color: var(--muted); line-height: 1.45; word-break: break-word; }
+  .dialog input {
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    border-radius: 11px;
+    font: inherit;
+    padding: 10px 12px;
+    outline: none;
+    margin-bottom: 14px;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  .dialog input:focus { border-color: var(--accent); }
+  .dialog .row { display: flex; gap: 8px; justify-content: flex-end; }
+  .dlg-btn { font-weight: 600; font-size: 14px; padding: 9px 15px; border-radius: 11px; transition: transform 0.1s ease; }
+  .dlg-btn:active { transform: scale(0.95); }
+  .dlg-btn.plain { color: var(--muted); }
+  .dlg-btn.primary { background: var(--accent); color: var(--accent-ink); }
+  .dlg-btn.danger { background: var(--danger); color: #fff; }
+  .sheet {
+    background: var(--surface);
+    border-radius: 18px 18px 0 0;
+    width: 100%;
+    max-width: 480px;
+    padding: 8px 10px calc(env(safe-area-inset-bottom, 0px) + 10px);
+    animation: sheet-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+  @keyframes sheet-in { from { transform: translateY(40%); opacity: 0.5; } to { transform: none; opacity: 1; } }
+  .sheet .handle { width: 36px; height: 4px; border-radius: 2px; background: var(--border); margin: 4px auto 10px; }
+  .sheet .sheet-title { font-size: 12px; font-weight: 700; color: var(--muted); padding: 2px 12px 8px; }
+  .sheet-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    text-align: left;
+    padding: 13px 12px;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 500;
+    transition: background 0.12s ease;
+  }
+  .sheet-item:active { background: var(--surface-2); }
+  .sheet-item svg { width: 19px; height: 19px; color: var(--muted); flex: none; }
+  .sheet-item.danger, .sheet-item.danger svg { color: var(--danger); }
+  .sheet-item.on { color: var(--accent); font-weight: 700; }
+  .sheet-item.on svg { color: var(--accent); }
+  #toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
+    transform: translateX(-50%) translateY(16px);
+    background: var(--text);
+    color: var(--bg);
+    font-size: 13.5px;
+    font-weight: 600;
+    padding: 10px 18px;
+    border-radius: 999px;
+    box-shadow: var(--shadow);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 60;
+    max-width: 86vw;
+    text-align: center;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #busy {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 12, 18, 0.35);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 70;
+  }
+  #busy.show { display: flex; }
+  #busy .box {
+    background: var(--surface);
+    border-radius: 16px;
+    padding: 20px 26px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    box-shadow: var(--shadow);
+  }
+  #busy .label { font-size: 13.5px; font-weight: 600; color: var(--muted); }
+  .spinner {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 3px solid var(--surface-2);
+    border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .gate {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px 32px;
+    gap: 10px;
+    color: var(--muted);
+  }
+  .gate svg { width: 48px; height: 48px; opacity: 0.5; }
+  .gate .big { font-size: 17px; font-weight: 700; color: var(--text); }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="toast" role="status"></div>
+  <div id="busy" aria-hidden="true">
+    <div class="box"><div class="spinner"></div><div class="label" id="busy-label">Working…</div></div>
+  </div>
+
+  <script src="src/table_core.js"></script>
+  <script src="src/univer_bridge.js"></script>
+  <script src="vendor/fflate-0.8.2.min.js"></script>
+  <script src="vendor/xlsx-0.20.3.full.min.js"></script>
+  <script>
+'use strict';
+(function () {
+  var CORE = window.TableCore;
+  var BRIDGE = window.UniverBridge;
+
+  // ------------------------------------------------------------------
+  // Limits & format policy
+  // ------------------------------------------------------------------
+  var MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
+  var MAX_CELLS = 200000;
+  var MAX_COLS = 512;
+  // Extra empty rows/columns offered around the data for fluid entry.
+  var ROW_MARGIN = 40;
+  var COL_MARGIN = 8;
+  var MIN_ROWS = 60;
+  var MIN_COLS = 26;
+
+  // ext -> how we handle it. 'text' = CSV-style, 'workbook' = SheetJS
+  // read/write, 'workbook-ro' = SheetJS read-only (saving would risk losing
+  // macros / legacy fidelity, so we only offer "save a copy as .xlsx").
+  var FORMATS = {
+    csv: { mode: 'text' },
+    tsv: { mode: 'text' },
+    tab: { mode: 'text' },
+    xlsx: { mode: 'workbook', bookType: 'xlsx' },
+    ods: { mode: 'workbook', bookType: 'ods' },
+    xls: { mode: 'workbook-ro' },
+    xlsm: { mode: 'workbook-ro' },
+  };
+
+  var state = {
+    notes: [], // { id, title, content, attachments: [{id, path, fileName, mimeType}] }
+    sources: [],
+    editor: null,
+    saving: false,
+    attachmentsLoaded: false,
+  };
+
+  var appEl = document.getElementById('app');
+  var toastEl = document.getElementById('toast');
+  var busyEl = document.getElementById('busy');
+  var busyLabelEl = document.getElementById('busy-label');
+  var toastTimer = null;
+
+  // ------------------------------------------------------------------
+  // Tiny DOM + SVG helpers — all content is set via textContent, so note
+  // data can never be interpreted as markup.
+  // ------------------------------------------------------------------
+  function el(tag, cls, text) {
+    var node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+  function clearChildren(node) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  function svgIcon(paths) {
+    var svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    (Array.isArray(paths) ? paths : [paths]).forEach(function (d) {
+      var p = document.createElementNS(SVG_NS, 'path');
+      p.setAttribute('d', d);
+      svg.appendChild(p);
+    });
+    return svg;
+  }
+  var ICONS = {
+    back: 'M15 18l-6-6 6-6',
+    check: 'M20 6L9 17l-5-5',
+    plus: 'M12 5v14M5 12h14',
+    grid: ['M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M3 10h18', 'M10 3v18'],
+    file: ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6'],
+    refresh: ['M23 4v6h-6', 'M1 20v-6h6', 'M3.5 9a9 9 0 0 1 14.9-3.4L23 10', 'M1 14l4.6 4.4A9 9 0 0 0 20.5 15'],
+    alert: ['M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z', 'M12 9v4', 'M12 17h.01'],
+    download: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'M7 10l5 5 5-5', 'M12 15V3'],
+  };
+
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () {
+      toastEl.classList.remove('show');
+    }, 2400);
+  }
+  function busy(label) {
+    busyLabelEl.textContent = label || 'Working…';
+    busyEl.classList.add('show');
+  }
+  function unbusy() {
+    busyEl.classList.remove('show');
+  }
+
+  // ------------------------------------------------------------------
+  // Dialogs (promise-based, no native alert/confirm)
+  // ------------------------------------------------------------------
+  function openBackdrop(centered) {
+    // Reentrancy guard: assistive-tech or simultaneous taps can activate a
+    // second control while a modal is open; never stack modals.
+    if (document.querySelector('.backdrop')) {
+      return null;
+    }
+    var bd = el('div', 'backdrop' + (centered ? ' center' : ''));
+    document.body.appendChild(bd);
+    return bd;
+  }
+  function confirmDialog(title, message, confirmLabel, danger) {
+    return new Promise(function (resolve) {
+      var bd = openBackdrop(true);
+      if (!bd) {
+        resolve(false);
+        return;
+      }
+      var dlg = el('div', 'dialog');
+      dlg.appendChild(el('h2', null, title));
+      if (message) dlg.appendChild(el('p', null, message));
+      var row = el('div', 'row');
+      var cancel = el('button', 'dlg-btn plain', 'Cancel');
+      var okBtn = el('button', 'dlg-btn ' + (danger ? 'danger' : 'primary'), confirmLabel || 'OK');
+      row.appendChild(cancel);
+      row.appendChild(okBtn);
+      dlg.appendChild(row);
+      bd.appendChild(dlg);
+      function done(v) {
+        bd.remove();
+        resolve(v);
+      }
+      cancel.addEventListener('click', function () { done(false); });
+      okBtn.addEventListener('click', function () { done(true); });
+      bd.addEventListener('click', function (e) {
+        if (e.target === bd) done(false);
+      });
+    });
+  }
+  function infoDialog(title, message) {
+    return new Promise(function (resolve) {
+      var bd = openBackdrop(true);
+      if (!bd) {
+        resolve();
+        return;
+      }
+      var dlg = el('div', 'dialog');
+      dlg.appendChild(el('h2', null, title));
+      if (message) dlg.appendChild(el('p', null, message));
+      var row = el('div', 'row');
+      var okBtn = el('button', 'dlg-btn primary', 'OK');
+      row.appendChild(okBtn);
+      dlg.appendChild(row);
+      bd.appendChild(dlg);
+      function done() {
+        bd.remove();
+        resolve();
+      }
+      okBtn.addEventListener('click', done);
+      bd.addEventListener('click', function (e) {
+        if (e.target === bd) done();
+      });
+    });
+  }
+  function promptDialog(title, message, initial, placeholder) {
+    return new Promise(function (resolve) {
+      var bd = openBackdrop(true);
+      if (!bd) {
+        resolve(null);
+        return;
+      }
+      var dlg = el('div', 'dialog');
+      dlg.appendChild(el('h2', null, title));
+      if (message) dlg.appendChild(el('p', null, message));
+      var input = el('input');
+      input.value = initial || '';
+      if (placeholder) input.placeholder = placeholder;
+      dlg.appendChild(input);
+      var row = el('div', 'row');
+      var cancel = el('button', 'dlg-btn plain', 'Cancel');
+      var okBtn = el('button', 'dlg-btn primary', 'Create');
+      row.appendChild(cancel);
+      row.appendChild(okBtn);
+      dlg.appendChild(row);
+      bd.appendChild(dlg);
+      function done(v) {
+        bd.remove();
+        resolve(v);
+      }
+      cancel.addEventListener('click', function () { done(null); });
+      okBtn.addEventListener('click', function () { done(input.value); });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') done(input.value);
+      });
+      bd.addEventListener('click', function (e) {
+        if (e.target === bd) done(null);
+      });
+      setTimeout(function () { input.focus(); }, 60);
+    });
+  }
+  // items: [{label, icon, value, danger, on}]
+  function menuSheet(title, items) {
+    return new Promise(function (resolve) {
+      var bd = openBackdrop(false);
+      if (!bd) {
+        resolve(null);
+        return;
+      }
+      var sheet = el('div', 'sheet');
+      sheet.appendChild(el('div', 'handle'));
+      if (title) sheet.appendChild(el('div', 'sheet-title', title));
+      items.forEach(function (item) {
+        var btn = el('button', 'sheet-item' + (item.danger ? ' danger' : '') + (item.on ? ' on' : ''));
+        if (item.icon) btn.appendChild(svgIcon(ICONS[item.icon]));
+        btn.appendChild(el('span', null, item.label));
+        btn.addEventListener('click', function () {
+          bd.remove();
+          resolve(item.value);
+        });
+        sheet.appendChild(btn);
+      });
+      bd.appendChild(sheet);
+      bd.addEventListener('click', function (e) {
+        if (e.target === bd) {
+          bd.remove();
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // Bytes / base64 / utf8 / gzip
+  // ------------------------------------------------------------------
+  function b64ToBytes(b64) {
+    var clean = b64.indexOf(',') >= 0 ? b64.slice(b64.indexOf(',') + 1) : b64;
+    var bin = atob(clean);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+  function bytesToB64(bytes) {
+    var out = '';
+    var CHUNK = 0x8000;
+    for (var i = 0; i < bytes.length; i += CHUNK) {
+      out += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(out);
+  }
+  function decodeUtf8(bytes) {
+    // fatal:true — a lossy decode would silently rewrite every non-UTF-8
+    // character as U+FFFD when the file is saved back.
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch (e) {
+      throw new Error(
+        'This file is not UTF-8 encoded. Editing it here would corrupt its characters, so it was not opened.'
+      );
+    }
+  }
+  function encodeUtf8(text) {
+    return new TextEncoder().encode(text);
+  }
+  function gzipTextToB64(text) {
+    return bytesToB64(fflate.gzipSync(fflate.strToU8(text)));
+  }
+  function gunzipB64ToText(b64) {
+    return fflate.strFromU8(fflate.gunzipSync(b64ToBytes(b64)));
+  }
+  function extOf(name) {
+    var m = /\.([a-z0-9]+)$/i.exec(String(name || ''));
+    return m ? m[1].toLowerCase() : '';
+  }
+  function baseName(path) {
+    var s = String(path || '');
+    var i = s.lastIndexOf('/');
+    return i >= 0 ? s.slice(i + 1) : s;
+  }
+  function sqlQuote(s) {
+    return "'" + String(s).replace(/'/g, "''") + "'";
+  }
+  function fmtSize(bytes) {
+    if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+    if (bytes >= 1024) return Math.round(bytes / 1024) + ' KB';
+    return bytes + ' B';
+  }
+
+  // ------------------------------------------------------------------
+  // Synapse access
+  // ------------------------------------------------------------------
+  function synapseReady() {
+    var s = window.Synapse;
+    return !!(
+      s &&
+      typeof s.updateNotes === 'function' &&
+      typeof s.readAttachment === 'function' &&
+      typeof s.exportNotes === 'function'
+    );
+  }
+
+  /**
+   * Freshest raw markdown for a note.
+   *
+   * In strict mode (the save path) a failing runQuery ABORTS instead of
+   * falling back to the launch snapshot — replacing the note with stale
+   * content would silently destroy edits made outside the plugin. The
+   * snapshot fallback is only used for display refreshes, or when the host
+   * has no runQuery at all (nothing fresher exists to read).
+   */
+  function fetchNoteContent(noteId, opts) {
+    var strict = !!(opts && opts.strict);
+    var local = findNote(noteId);
+    var fallback = local ? local.content : null;
+    var s = window.Synapse;
+    if (!s || typeof s.runQuery !== 'function') {
+      return Promise.resolve(fallback);
+    }
+    return s
+      .runQuery('SELECT content FROM notes WHERE id = ' + sqlQuote(noteId) + ' LIMIT 1')
+      .then(function (res) {
+        if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+          var c = res.data[0].content;
+          if (typeof c === 'string') return c;
+        }
+        if (strict) {
+          throw new Error('Could not read the current note content. Please try again.');
+        }
+        return fallback;
+      })
+      .catch(function (e) {
+        if (strict) {
+          throw e instanceof Error ? e : new Error(String(e));
+        }
+        return fallback;
+      });
+  }
+
+  /** Resolves true on success, false on failure (never rejects). */
+  function refreshAttachmentLists() {
+    var ids = state.notes.map(function (n) { return n.id; });
+    if (ids.length === 0) return Promise.resolve(true);
+    return window.Synapse
+      .exportNotes(ids, { includeSubNotesAndLinkedNotes: false, includeAttachmentList: true })
+      .then(function (res) {
+        if (!res || !res.success || !Array.isArray(res.notes)) {
+          state.attachmentsError = true;
+          return false;
+        }
+        res.notes.forEach(function (exp) {
+          var note = findNote(exp.id);
+          if (note && Array.isArray(exp.attachments)) {
+            note.attachments = exp.attachments;
+          }
+        });
+        state.attachmentsLoaded = true;
+        state.attachmentsError = false;
+        return true;
+      })
+      .catch(function () {
+        state.attachmentsError = true;
+        return false;
+      });
+  }
+
+  function findNote(id) {
+    for (var i = 0; i < state.notes.length; i++) {
+      if (state.notes[i].id === id) return state.notes[i];
+    }
+    return null;
+  }
+
+  function updateNoteContent(noteId, newContent) {
+    return window.Synapse
+      .updateNotes([
+        { id: noteId, modification: { content: { action: 'replace', text: newContent } } },
+      ])
+      .then(interpretUpdateResult);
+  }
+  function appendNoteContent(noteId, text) {
+    return window.Synapse
+      .updateNotes([
+        { id: noteId, modification: { content: { action: 'append', text: text } } },
+      ])
+      .then(interpretUpdateResult);
+  }
+  function interpretUpdateResult(res) {
+    if (!res || res.success !== true || !(res.updatedCount > 0)) {
+      var err = (res && res.error) || 'The update was not applied.';
+      throw new Error(err);
+    }
+    return res;
+  }
+
+  // ------------------------------------------------------------------
+  // Univer engine: download once (sha256-pinned, mirrored), gzip into
+  // app state, inject from cache on every later launch.
+  // ------------------------------------------------------------------
+  var engine = {
+    status: 'idle', // idle | downloading | ready | error
+    cachePromise: null,
+    downloadPromise: null,
+    error: null,
+    progressCb: null, // set by the engine screen while it is visible
+    doneBytes: 0,
+    totalBytes: BRIDGE.engineTotalBytes(),
+    detail: '',
+    fileCache: {}, // name -> text, survives a failed run so retries resume
+    injected: false,
+    cancelRequested: false,
+  };
+
+  function engineProgress(detail) {
+    engine.detail = detail;
+    if (engine.progressCb) engine.progressCb();
+  }
+
+  /** Everything the downloader needs from the host, checked up front. */
+  function engineHostReady() {
+    var s = window.Synapse;
+    return !!(
+      s &&
+      typeof s.proxyFetch === 'function' &&
+      typeof s.loadAppState === 'function' &&
+      typeof s.storeAppState === 'function' &&
+      s.crypto &&
+      typeof s.crypto.digest === 'function'
+    );
+  }
+
+  function cancelledError() {
+    var e = new Error('Download cancelled.');
+    e.cancelled = true;
+    return e;
+  }
+
+  /** Resolves the lowercase sha256 hex of base64 bytes; rejects on failure. */
+  function digestB64(b64) {
+    return window.Synapse.crypto.digest('sha256', { base64: b64 }).then(function (r) {
+      if (!r || r.success !== true || typeof r.hex !== 'string') {
+        throw new Error('checksum service failed');
+      }
+      return r.hex.toLowerCase();
+    });
+  }
+
+  function fetchEngineFile(file) {
+    if (engine.cancelRequested) return Promise.reject(cancelledError());
+    if (engine.fileCache[file.name]) {
+      engine.doneBytes += file.bytes;
+      return Promise.resolve(engine.fileCache[file.name]);
+    }
+    var urls = BRIDGE.engineUrls(file);
+    var attempt = function (i) {
+      if (engine.cancelRequested) return Promise.reject(cancelledError());
+      if (i >= urls.length) {
+        return Promise.reject(new Error('Could not download ' + file.name + ' from any mirror.'));
+      }
+      engineProgress(file.name + ' — ' + new URL(urls[i]).host);
+      return window.Synapse.proxyFetch(urls[i], { responseMode: 'binary' })
+        .then(function (r) {
+          if (!r || r.status !== 'success' || !r.content || typeof r.content.data !== 'string') {
+            throw new Error((r && (r.error || 'no response')) || 'no response');
+          }
+          // proxyFetch reports transport success even for HTTP errors; a 404
+          // page must fail here, not as a confusing "checksum mismatch".
+          if (typeof r.statusCode === 'number' && (r.statusCode < 200 || r.statusCode >= 300)) {
+            throw new Error('HTTP ' + r.statusCode);
+          }
+          var b64 = r.content.data;
+          return digestB64(b64).then(function (hex) {
+            if (hex !== file.sha256) {
+              throw new Error('checksum mismatch');
+            }
+            var text = new TextDecoder().decode(b64ToBytes(b64));
+            engine.fileCache[file.name] = text;
+            engine.doneBytes += file.bytes;
+            engineProgress(file.name + ' ✓');
+            return text;
+          });
+        })
+        .catch(function (e) {
+          if (e && e.cancelled) throw e;
+          return attempt(i + 1); // any mirror failure moves to the next mirror
+        });
+    };
+    return attempt(0);
+  }
+
+  function loadCachedEngine() {
+    return window.Synapse.loadAppState().then(function (r) {
+      var st = r && r.success && r.data ? r.data : null;
+      var cached = st && st.univerEngine;
+      if (cached && cached.version === BRIDGE.ENGINE.version && cached.js && cached.css) {
+        return { js: gunzipB64ToText(cached.js), css: gunzipB64ToText(cached.css) };
+      }
+      return null;
+    }).catch(function () { return null; });
+  }
+
+  function storeEngine(jsText, cssText) {
+    return window.Synapse.loadAppState()
+      .then(function (r) {
+        var st = (r && r.success && r.data) || {};
+        st.univerEngine = {
+          version: BRIDGE.ENGINE.version,
+          js: gzipTextToB64(jsText),
+          css: gzipTextToB64(cssText),
+        };
+        return window.Synapse.storeAppState(st);
+      })
+      .catch(function () { /* cache miss next launch, not fatal */ });
+  }
+
+  function injectEngine(payload) {
+    if (engine.injected) return;
+    var style = document.createElement('style');
+    style.textContent = payload.css;
+    document.head.appendChild(style);
+    // Guard against a partially-run previous injection: re-executing the
+    // bundle would redeclare its globals and throw.
+    if (!window.UniverPresets) {
+      var script = document.createElement('script');
+      script.textContent = payload.js;
+      document.head.appendChild(script);
+    }
+    if (!window.UniverPresets || !window.UniverCore || !window.UniverPresetSheetsCore) {
+      throw new Error('The spreadsheet engine failed to initialize.');
+    }
+    engine.injected = true;
+  }
+
+  /**
+   * Cache-only readiness: resolves true when the engine booted from the
+   * local cache, false when a download would be needed. Never downloads,
+   * never rejects.
+   */
+  function ensureEngineFromCache() {
+    if (engine.status === 'ready') return Promise.resolve(true);
+    if (engine.cachePromise) return engine.cachePromise;
+    engine.cachePromise = Promise.resolve()
+      .then(function () {
+        var s = window.Synapse;
+        if (!s || typeof s.loadAppState !== 'function') return null;
+        return loadCachedEngine();
+      })
+      .then(function (cached) {
+        engine.cachePromise = null;
+        if (!cached) return false;
+        injectEngine(cached);
+        engine.status = 'ready';
+        engine.doneBytes = engine.totalBytes;
+        return true;
+      })
+      .catch(function () {
+        engine.cachePromise = null;
+        return false;
+      });
+    return engine.cachePromise;
+  }
+
+  /**
+   * The full download → verify → cache → inject pipeline. Only ever called
+   * after the user explicitly consented to the download. Rejects with
+   * `.cancelled` when the user backed out mid-download (partial files are
+   * kept in memory so a retry resumes).
+   */
+  function downloadAndReadyEngine() {
+    if (engine.status === 'ready') return Promise.resolve();
+    if (engine.downloadPromise) return engine.downloadPromise;
+    engine.cancelRequested = false;
+    engine.status = 'downloading';
+    engine.error = null;
+    engine.doneBytes = 0;
+    engine.downloadPromise = Promise.resolve()
+      .then(function () {
+        if (!engineHostReady()) {
+          throw new Error(
+            'This version of Note Synapse cannot set up the spreadsheet engine (missing download/verify support). Please update the app.'
+          );
+        }
+        var jsParts = [];
+        var cssParts = [];
+        var chain = Promise.resolve();
+        BRIDGE.ENGINE.js.forEach(function (file) {
+          chain = chain.then(function () {
+            return fetchEngineFile(file).then(function (t) { jsParts.push(t); });
+          });
+        });
+        BRIDGE.ENGINE.css.forEach(function (file) {
+          chain = chain.then(function () {
+            return fetchEngineFile(file).then(function (t) { cssParts.push(t); });
+          });
+        });
+        return chain.then(function () {
+          var payload = { js: jsParts.join('\n;\n'), css: cssParts.join('\n') };
+          engineProgress('Caching for offline use…');
+          return storeEngine(payload.js, payload.css).then(function () {
+            engine.fileCache = {};
+            return payload;
+          });
+        });
+      })
+      .then(function (payload) {
+        engineProgress('Starting engine…');
+        injectEngine(payload);
+        engine.status = 'ready';
+        engine.downloadPromise = null;
+      })
+      .catch(function (e) {
+        engine.downloadPromise = null;
+        if (e && e.cancelled) {
+          engine.status = 'idle';
+        } else {
+          engine.status = 'error';
+          engine.error = String((e && e.message) || e);
+        }
+        throw e;
+      });
+    return engine.downloadPromise;
+  }
+
+  // ------------------------------------------------------------------
+  // Sources
+  // ------------------------------------------------------------------
+  var SIZE_LIMITS = { maxCols: MAX_COLS, maxCells: MAX_CELLS };
+
+  /** Memoized markdown scan — re-parses only when the content changed. */
+  function tablesOf(note) {
+    if (!note.scanCache || note.scanCache.content !== note.content) {
+      note.scanCache = {
+        content: note.content,
+        tables: CORE.scanTables(note.content, SIZE_LIMITS),
+      };
+    }
+    return note.scanCache.tables;
+  }
+
+  function buildSources() {
+    state.sources = [];
+    state.notes.forEach(function (note) {
+      var tables = tablesOf(note);
+      tables.forEach(function (t, idx) {
+        state.sources.push({
+          kind: 'block',
+          note: note,
+          table: t,
+          title: 'Table ' + (idx + 1),
+        });
+      });
+      (note.attachments || []).forEach(function (att) {
+        var ext = extOf(att.fileName);
+        if (FORMATS[ext]) {
+          state.sources.push({
+            kind: 'file',
+            note: note,
+            att: att,
+            ext: ext,
+            mode: FORMATS[ext].mode,
+          });
+        }
+      });
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // Home screen
+  // ------------------------------------------------------------------
+  function renderGate(big, small) {
+    clearChildren(appEl);
+    var screen = el('div', 'screen');
+    var gate = el('div', 'gate');
+    gate.appendChild(svgIcon(ICONS.grid));
+    gate.appendChild(el('div', 'big', big));
+    gate.appendChild(el('div', null, small));
+    screen.appendChild(gate);
+    appEl.appendChild(screen);
+  }
+
+  function renderHome() {
+    engine.progressCb = null;
+    buildSources();
+    clearChildren(appEl);
+    var screen = el('div', 'screen');
+
+    var bar = el('div', 'topbar');
+    var mark = el('div', 'app-mark');
+    mark.appendChild(svgIcon(ICONS.grid));
+    bar.appendChild(mark);
+    var titles = el('div', 'titles');
+    titles.appendChild(el('h1', null, 'Table Studio'));
+    var blockCount = 0;
+    var fileCount = 0;
+    state.sources.forEach(function (s) {
+      if (s.kind === 'block') blockCount++;
+      else fileCount++;
+    });
+    var attachmentHint = '';
+    if (state.attachmentsError) {
+      attachmentHint = ' — attachments unavailable, tap refresh';
+    } else if (!state.attachmentsLoaded) {
+      attachmentHint = ' (loading attachments…)';
+    }
+    titles.appendChild(
+      el(
+        'div',
+        'subtitle',
+        blockCount + (blockCount === 1 ? ' table' : ' tables') + ' · ' +
+          fileCount + (fileCount === 1 ? ' sheet file' : ' sheet files') +
+          attachmentHint
+      )
+    );
+    bar.appendChild(titles);
+    var refreshBtn = el('button', 'icon-btn');
+    refreshBtn.setAttribute('aria-label', 'Refresh');
+    refreshBtn.appendChild(svgIcon(ICONS.refresh));
+    refreshBtn.addEventListener('click', refreshAll);
+    bar.appendChild(refreshBtn);
+    screen.appendChild(bar);
+
+    if (state.sources.length === 0 && (state.attachmentsLoaded || state.attachmentsError)) {
+      var empty = el('div', 'empty-state');
+      empty.appendChild(svgIcon(ICONS.grid));
+      if (state.attachmentsError) {
+        empty.appendChild(el('div', 'big', 'Attachments unavailable'));
+        empty.appendChild(
+          el('div', null, 'The attachment list could not be loaded, and this note has no markdown tables. Tap refresh to try again.')
+        );
+      } else {
+        empty.appendChild(el('div', 'big', 'No tables here yet'));
+        empty.appendChild(
+          el('div', null, 'This note has no markdown tables or spreadsheet attachments. Create one to get started.')
+        );
+      }
+      var actions = el('div', 'actions');
+      var newTableBtn = el('button', 'pill-btn');
+      newTableBtn.appendChild(svgIcon(ICONS.plus));
+      newTableBtn.appendChild(el('span', null, 'New table'));
+      newTableBtn.addEventListener('click', function () { startNewBlock(null); });
+      var newCsvBtn = el('button', 'pill-btn');
+      newCsvBtn.appendChild(svgIcon(ICONS.plus));
+      newCsvBtn.appendChild(el('span', null, 'New CSV'));
+      newCsvBtn.addEventListener('click', function () { startNewCsv(null); });
+      actions.appendChild(newTableBtn);
+      actions.appendChild(newCsvBtn);
+      empty.appendChild(actions);
+      screen.appendChild(empty);
+      appEl.appendChild(screen);
+      return;
+    }
+
+    var scroll = el('div', 'home-scroll');
+    state.notes.forEach(function (note) {
+      var group = el('div', 'note-group');
+      var head = el('div', 'note-group-head');
+      head.appendChild(el('div', 'name', note.title || 'Untitled note'));
+      var addTable = el('button', 'ghost-btn');
+      addTable.appendChild(svgIcon(ICONS.plus));
+      addTable.appendChild(el('span', null, 'Table'));
+      addTable.addEventListener('click', function () { startNewBlock(note); });
+      head.appendChild(addTable);
+      var addCsv = el('button', 'ghost-btn');
+      addCsv.appendChild(svgIcon(ICONS.plus));
+      addCsv.appendChild(el('span', null, 'CSV'));
+      addCsv.addEventListener('click', function () { startNewCsv(note); });
+      head.appendChild(addCsv);
+      group.appendChild(head);
+
+      var any = false;
+      state.sources.forEach(function (src) {
+        if (src.note !== note) return;
+        any = true;
+        group.appendChild(src.kind === 'block' ? blockCard(src) : fileCard(src));
+      });
+      if (!any) {
+        var none = el('div', 'card');
+        none.appendChild(el('div', 'dims', 'No tables in this note yet.'));
+        group.appendChild(none);
+      }
+      scroll.appendChild(group);
+    });
+    screen.appendChild(scroll);
+    appEl.appendChild(screen);
+  }
+
+  function blockCard(src) {
+    var card = el('button', 'card');
+    var preview = el('table', 'preview');
+    var grid = src.table.grid;
+    var pr = Math.min(3, grid.length);
+    var pc = Math.min(4, grid[0].length);
+    for (var r = 0; r < pr; r++) {
+      var tr = el('tr');
+      for (var c = 0; c < pc; c++) {
+        tr.appendChild(el('td', null, (grid[r][c] || '').split('\n')[0]));
+      }
+      preview.appendChild(tr);
+    }
+    card.appendChild(preview);
+    var body = el('div', 'body');
+    body.appendChild(el('div', 'name', src.title));
+    var meta = el('div', 'meta');
+    meta.appendChild(el('span', 'chip md', 'MARKDOWN'));
+    meta.appendChild(
+      el('span', 'dims', grid.length + ' × ' + grid[0].length)
+    );
+    body.appendChild(meta);
+    card.appendChild(body);
+    card.addEventListener('click', function () { openBlockEditor(src); });
+    return card;
+  }
+
+  function fileCard(src) {
+    var card = el('button', 'card');
+    var badge = el('div', 'file-badge');
+    badge.appendChild(svgIcon(ICONS.file));
+    card.appendChild(badge);
+    var body = el('div', 'body');
+    body.appendChild(el('div', 'name', src.att.fileName));
+    var meta = el('div', 'meta');
+    meta.appendChild(el('span', 'chip ' + (src.mode === 'text' ? 'csv' : 'xlsx'), src.ext.toUpperCase()));
+    if (src.mode === 'workbook-ro') {
+      meta.appendChild(el('span', 'chip ro', 'READ-ONLY'));
+    }
+    meta.appendChild(el('span', 'dims', 'Attachment'));
+    body.appendChild(meta);
+    card.appendChild(body);
+    card.addEventListener('click', function () { openFileEditor(src); });
+    return card;
+  }
+
+  function refreshAll() {
+    busy('Refreshing…');
+    var contentFetches = state.notes.map(function (note) {
+      return fetchNoteContent(note.id).then(function (c) {
+        if (typeof c === 'string') note.content = c;
+      });
+    });
+    Promise.all(contentFetches)
+      .then(refreshAttachmentLists)
+      .then(function (ok) {
+        unbusy();
+        renderHome();
+        if (ok === false) toast('Could not load attachments');
+      })
+      .catch(function () {
+        unbusy();
+        renderHome();
+      });
+  }
+
+  function chooseNote() {
+    if (state.notes.length === 1) return Promise.resolve(state.notes[0]);
+    return menuSheet(
+      'Which note?',
+      state.notes.map(function (n) {
+        return { label: n.title || 'Untitled note', icon: 'file', value: n };
+      })
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // Engine screen — shown while the editor waits for Univer
+  // ------------------------------------------------------------------
+  function engineTopbar(screen, title, onCancel) {
+    var bar = el('div', 'topbar');
+    var backBtn = el('button', 'icon-btn');
+    backBtn.setAttribute('aria-label', 'Back');
+    backBtn.appendChild(svgIcon(ICONS.back));
+    backBtn.addEventListener('click', onCancel);
+    bar.appendChild(backBtn);
+    var titles = el('div', 'titles');
+    titles.appendChild(el('h1', null, title));
+    titles.appendChild(el('div', 'subtitle', 'Spreadsheet engine setup'));
+    bar.appendChild(titles);
+    screen.appendChild(bar);
+  }
+
+  /** One-time consent: nothing is downloaded until the user says so. */
+  function renderEngineConsent(title, onDownload, onCancel) {
+    clearChildren(appEl);
+    var screen = el('div', 'screen');
+    engineTopbar(screen, title, onCancel);
+    var gate = el('div', 'gate');
+    gate.appendChild(svgIcon(ICONS.download));
+    gate.appendChild(el('div', 'big', 'One-time engine download'));
+    gate.appendChild(
+      el('div', null,
+        'Editing uses the Univer spreadsheet engine — a one-time ' +
+        fmtSize(engine.totalBytes) + ' download from jsdelivr/unpkg. Every file is ' +
+        'verified against a pinned checksum and cached, so later launches work offline.')
+    );
+    var actions = el('div', 'empty-state actions');
+    actions.style.flex = 'none';
+    actions.style.padding = '0';
+    var dlBtn = el('button', 'pill-btn');
+    dlBtn.appendChild(svgIcon(ICONS.download));
+    dlBtn.appendChild(el('span', null, 'Download ' + fmtSize(engine.totalBytes)));
+    dlBtn.addEventListener('click', onDownload);
+    var backBtn = el('button', 'ghost-btn', 'Not now');
+    backBtn.addEventListener('click', onCancel);
+    actions.appendChild(dlBtn);
+    actions.appendChild(backBtn);
+    gate.appendChild(actions);
+    screen.appendChild(gate);
+    appEl.appendChild(screen);
+  }
+
+  function renderEngineScreen(title, onCancel) {
+    clearChildren(appEl);
+    var screen = el('div', 'screen');
+    engineTopbar(screen, title, onCancel);
+
+    var gate = el('div', 'gate');
+    gate.appendChild(svgIcon(ICONS.download));
+    gate.appendChild(el('div', 'big', 'Setting up the spreadsheet'));
+    gate.appendChild(
+      el('div', null,
+        'Downloading and verifying the Univer engine (' +
+        fmtSize(engine.totalBytes) + ' one-time, cached for offline use). Back cancels the download.')
+    );
+    var progress = el('div', 'engine-progress');
+    var fill = el('div', 'fill');
+    progress.appendChild(fill);
+    gate.appendChild(progress);
+    var detail = el('div', 'engine-detail');
+    gate.appendChild(detail);
+    screen.appendChild(gate);
+    appEl.appendChild(screen);
+
+    engine.progressCb = function () {
+      var pct = engine.totalBytes > 0
+        ? Math.min(100, Math.round((engine.doneBytes / engine.totalBytes) * 100))
+        : 0;
+      fill.style.width = pct + '%';
+      detail.textContent = engine.detail;
+    };
+    engine.progressCb();
+  }
+
+  function renderEngineError(title, message, retry, cancel) {
+    clearChildren(appEl);
+    var screen = el('div', 'screen');
+    var gate = el('div', 'gate');
+    gate.appendChild(svgIcon(ICONS.alert));
+    gate.appendChild(el('div', 'big', title));
+    gate.appendChild(el('div', null, message));
+    var actions = el('div', 'empty-state actions');
+    actions.style.flex = 'none';
+    actions.style.padding = '0';
+    var retryBtn = el('button', 'pill-btn', 'Try again');
+    retryBtn.addEventListener('click', retry);
+    var backBtn = el('button', 'ghost-btn', 'Back');
+    backBtn.addEventListener('click', cancel);
+    actions.appendChild(retryBtn);
+    actions.appendChild(backBtn);
+    gate.appendChild(actions);
+    screen.appendChild(gate);
+    appEl.appendChild(screen);
+  }
+
+  // Invalidates in-flight editor opens when the screen has moved on.
+  var openToken = 0;
+
+  /**
+   * Runs `proceed` once the Univer engine is ready. Boots silently from
+   * the cache when possible; otherwise asks for download consent first,
+   * then shows progress (Back cancels the download; partial files are
+   * kept so a retry resumes).
+   */
+  function withEngine(title, proceed) {
+    var token = ++openToken;
+    var cancel = function () {
+      openToken++;
+      engine.cancelRequested = true;
+      engine.progressCb = null;
+      renderHome();
+    };
+    var startDownload = function () {
+      renderEngineScreen(title, cancel);
+      downloadAndReadyEngine()
+        .then(function () {
+          if (token !== openToken) return;
+          engine.progressCb = null;
+          proceed();
+        })
+        .catch(function (e) {
+          if (token !== openToken) return;
+          engine.progressCb = null;
+          if (e && e.cancelled) {
+            renderHome();
+            return;
+          }
+          renderEngineError(
+            'Engine unavailable',
+            engine.error || 'The spreadsheet engine could not be set up. Check your connection and try again.',
+            startDownload,
+            cancel
+          );
+        });
+    };
+    busy('Preparing spreadsheet…');
+    ensureEngineFromCache().then(function (ready) {
+      unbusy();
+      if (token !== openToken) return;
+      if (ready) {
+        proceed();
+        return;
+      }
+      // A download already running (previous consent) skips re-asking.
+      if (engine.downloadPromise) startDownload();
+      else renderEngineConsent(title, startDownload, cancel);
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // Editor state factory
+  // ------------------------------------------------------------------
+  function deepCopyGrid(grid) {
+    return grid.map(function (r) { return r.slice(); });
+  }
+
+  function baseEditor() {
+    return {
+      isNew: false,
+      readonly: false,
+      structural: {}, // sheetId -> true once a structural mutation touched it
+      allStructural: false,
+      editGen: 0,
+      dirtyHint: false,
+    };
+  }
+
+  /** Excel-safe sheet name (also fine for Univer): strip []:*?/\ and cap at 31. */
+  function safeSheetName(name, fallback) {
+    var n = String(name == null ? '' : name).replace(/[\[\]:*?\/\\]/g, ' ').trim();
+    if (!n) n = fallback || 'Sheet';
+    return n.slice(0, 31);
+  }
+
+  function sheetDims(rows, cols) {
+    return {
+      rowCount: Math.min(Math.max(rows + ROW_MARGIN, MIN_ROWS), 5000),
+      columnCount: Math.min(Math.max(cols + COL_MARGIN, MIN_COLS), MAX_COLS),
+    };
+  }
+
+  // ------------------------------------------------------------------
+  // Editor opens
+  // ------------------------------------------------------------------
+  function openBlockEditor(src) {
+    var ed = baseEditor();
+    ed.kind = 'block';
+    ed.note = src.note;
+    ed.title = src.title;
+    ed.raw = src.table.raw;
+    ed.indent = src.table.indent;
+    ed.contentAtOpen = src.note.content;
+    ed.startLine = src.table.startLine;
+    ed.endLine = src.table.endLine;
+    var data = BRIDGE.gridToSheetData(src.table.grid, { headerRow: true, aligns: src.table.aligns });
+    ed.sheetId = 'ts-s0';
+    ed.sheets = [sheetEntryFromData(ed.sheetId, ed.title, data)];
+    ed.styles = data.styles;
+    // Baseline for dirty/noop detection: what an unchanged sheet would
+    // serialize to (eol-normalized; the real eol is chosen at save time).
+    ed.baseBlockText = CORE.serializeTable(src.table.grid, src.table.aligns, ed.indent, '\n');
+    openEditor(ed);
+  }
+
+  function startNewBlock(note) {
+    var pick = note ? Promise.resolve(note) : chooseNote();
+    pick.then(function (n) {
+      if (!n) return;
+      var ed = baseEditor();
+      ed.kind = 'block';
+      ed.note = n;
+      ed.title = 'New table';
+      ed.isNew = true;
+      ed.indent = '';
+      var grid = [
+        ['Column 1', 'Column 2', 'Column 3'],
+        ['', '', ''],
+        ['', '', ''],
+      ];
+      var data = BRIDGE.gridToSheetData(grid, { headerRow: true, aligns: [null, null, null] });
+      ed.sheetId = 'ts-s0';
+      ed.sheets = [sheetEntryFromData(ed.sheetId, ed.title, data)];
+      ed.styles = data.styles;
+      ed.baseBlockText = null; // new: always dirty until first save
+      openEditor(ed);
+    });
+  }
+
+  function startNewCsv(note) {
+    var pick = note ? Promise.resolve(note) : chooseNote();
+    pick
+      .then(function (n) {
+        if (!n) return null;
+        return promptDialog('New CSV attachment', 'File name for the new sheet.', 'sheet.csv').then(function (name) {
+          return name === null ? null : { note: n, name: name };
+        });
+      })
+      .then(function (res) {
+        if (!res) return;
+        var name = res.name.trim() || 'sheet.csv';
+        name = name.replace(/[\\/:*?"<>|]/g, '_');
+        if (!/\.(csv|tsv)$/i.test(name)) name += '.csv';
+        // ".csv" alone would be an extension-only dotfile.
+        if (/^\.(csv|tsv)$/i.test(name)) name = 'sheet' + name;
+        var ed = baseEditor();
+        ed.kind = 'file';
+        ed.note = res.note;
+        ed.isNew = true;
+        ed.format = 'text';
+        ed.saveName = name;
+        ed.title = name;
+        ed.meta = {
+          delim: extOf(name) === 'tsv' ? '\t' : ',',
+          lineEnding: '\n',
+          hadBom: false,
+          trailingNewline: true,
+        };
+        var data = BRIDGE.gridToSheetData([['', '', ''], ['', '', ''], ['', '', '']], {});
+        ed.sheetId = 'ts-s0';
+        ed.sheets = [sheetEntryFromData(ed.sheetId, safeSheetName(name, 'Sheet1'), data)];
+        ed.styles = data.styles;
+        ed.origRows = 3;
+        ed.origCols = 3;
+        ed.baseText = null; // new: always dirty until first save
+        openEditor(ed);
+      });
+  }
+
+  function sheetEntryFromData(id, name, data) {
+    var dims = sheetDims(data.rows, data.cols);
+    return {
+      id: id,
+      name: safeSheetName(name, id),
+      rowCount: dims.rowCount,
+      columnCount: dims.columnCount,
+      cellData: data.cellData,
+      mergeData: data.mergeData || [],
+    };
+  }
+
+  function openFileEditor(src) {
+    var token = ++openToken;
+    busy('Opening ' + src.att.fileName + '…');
+    window.Synapse.readAttachment(src.att.path)
+      .then(function (res) {
+        unbusy();
+        if (token !== openToken) return;
+        if (!res || !res.success || typeof res.data !== 'string') {
+          throw new Error((res && res.error) || 'Could not read the attachment.');
+        }
+        // base64 is ~4/3 of the byte size; quick pre-check before decoding.
+        if (res.data.length > (MAX_ATTACHMENT_BYTES / 3) * 4 + 4) {
+          throw new Error('This file is too large to edit here (limit ' + Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024) + ' MB).');
+        }
+        var ed = baseEditor();
+        ed.kind = 'file';
+        ed.note = src.note;
+        ed.att = src.att;
+        ed.ext = src.ext;
+        ed.saveName = src.att.fileName;
+        ed.title = src.att.fileName;
+
+        if (src.mode === 'text') {
+          var bytes = b64ToBytes(res.data);
+          var text = decodeUtf8(bytes);
+          var delim = CORE.sniffDelimiter(text, src.ext);
+          var parsed = CORE.parseDelimited(text, delim, SIZE_LIMITS);
+          ed.format = 'text';
+          ed.meta = parsed;
+          ed.origRows = parsed.rows.length;
+          ed.origCols = parsed.rows[0] ? parsed.rows[0].length : 0;
+          // Baseline for dirty/noop detection: the file exactly as stored.
+          ed.baseText = text;
+          var data = BRIDGE.gridToSheetData(parsed.rows, {});
+          ed.sheetId = 'ts-s0';
+          ed.sheets = [sheetEntryFromData(ed.sheetId, safeSheetName(src.att.fileName, 'Sheet1'), data)];
+          ed.styles = data.styles;
+        } else {
+          if (typeof window.XLSX === 'undefined') {
+            throw new Error('The spreadsheet engine failed to load.');
+          }
+          // cellNF is required: without it SheetJS never populates cell.z,
+          // every number format in the workbook (dates, currency) would be
+          // silently wiped on the first save.
+          var wb = XLSX.read(res.data, {
+            type: 'base64',
+            cellStyles: false,
+            cellNF: true,
+          });
+          // Refuse oversized declared ranges BEFORE expanding them.
+          var declaredCells = 0;
+          wb.SheetNames.forEach(function (name) {
+            var ref = wb.Sheets[name] && wb.Sheets[name]['!ref'];
+            if (!ref) return;
+            var range = XLSX.utils.decode_range(ref);
+            var sheetRows = range.e.r + 1;
+            var sheetCols = range.e.c + 1;
+            if (sheetCols > MAX_COLS) {
+              throw new Error('This workbook is too wide to edit here.');
+            }
+            declaredCells += sheetRows * sheetCols;
+          });
+          if (declaredCells > MAX_CELLS) {
+            throw new Error('This workbook is too large to edit here.');
+          }
+          ed.format = 'workbook';
+          ed.wb = wb;
+          ed.bookType = src.mode === 'workbook' ? FORMATS[src.ext].bookType : 'xlsx';
+          ed.readonly = src.mode === 'workbook-ro';
+          ed.styles = {};
+          ed.sheets = [];
+          ed.sheetMeta = []; // [{id, origName, univerName}]
+          var usedNames = {};
+          wb.SheetNames.forEach(function (name, idx) {
+            var id = 'ts-s' + idx;
+            var data = BRIDGE.worksheetToSheetData(wb.Sheets[name], XLSX, id + '-');
+            Object.keys(data.numfmts).forEach(function (k) {
+              ed.styles[k] = data.numfmts[k];
+            });
+            var univerName = BRIDGE.uniqueSheetName(usedNames, name, 'Sheet' + (idx + 1));
+            ed.sheets.push(sheetEntryFromData(id, univerName, data));
+            ed.sheetMeta.push({ id: id, origName: name, univerName: univerName });
+          });
+          if (ed.sheets.length === 0) {
+            var empty = BRIDGE.gridToSheetData([['']], {});
+            ed.sheetId = 'ts-s0';
+            ed.sheets.push(sheetEntryFromData('ts-s0', 'Sheet1', empty));
+            ed.sheetMeta.push({ id: 'ts-s0', origName: 'Sheet1', univerName: 'Sheet1' });
+          }
+          ed.baseNorms = baseNormsOf(ed);
+        }
+        openEditor(ed);
+      })
+      .catch(function (e) {
+        unbusy();
+        infoDialog('Could not open', String(e && e.message ? e.message : e));
+      });
+  }
+
+  function baseNormsOf(ed) {
+    var norms = {};
+    ed.sheets.forEach(function (sh) {
+      norms[sh.id] = BRIDGE.normalizeSheet(sh, ed.styles);
+    });
+    return norms;
+  }
+
+  // ------------------------------------------------------------------
+  // Univer lifecycle
+  // ------------------------------------------------------------------
+  var univerInst = null; // { univer, univerAPI, disposables: [] }
+
+  function disposeUniver() {
+    if (!univerInst) return;
+    univerInst.disposables.forEach(function (d) {
+      try { d.dispose(); } catch (e) { /* already gone */ }
+    });
+    try { univerInst.univer.dispose(); } catch (e) { /* already gone */ }
+    univerInst = null;
+  }
+
+  /** Touch-first devices get Univer's dedicated mobile UI. */
+  function wantsMobileUi() {
+    if (window.__TS_FORCE_MOBILE != null) return !!window.__TS_FORCE_MOBILE;
+    return (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window;
+  }
+
+  /**
+   * The core preset hardcodes the desktop UI plugins; on touch devices we
+   * swap in UniverMobileUIPlugin / UniverSheetsMobileUIPlugin (same config,
+   * validated against the pinned 0.25.1 bundle) for a mobile-friendly
+   * spreadsheet interface.
+   */
+  function corePresetFor(ed) {
+    var preset = window.UniverPresetSheetsCore.UniverSheetsCorePreset({
+      container: 'univer-host',
+      // Markdown tables and CSVs are single-sheet documents — the sheet
+      // bar would only offer sheets that can never be saved.
+      footer: ed.format === 'workbook',
+    });
+    var UI = window.UniverUi;
+    var SUI = window.UniverSheetsUi;
+    if (wantsMobileUi() && UI && UI.UniverMobileUIPlugin && SUI && SUI.UniverSheetsMobileUIPlugin) {
+      preset.plugins = preset.plugins.map(function (entry) {
+        var plugin = Array.isArray(entry) ? entry[0] : entry;
+        var cfg = Array.isArray(entry) ? entry[1] : undefined;
+        if (plugin === UI.UniverUIPlugin) return [UI.UniverMobileUIPlugin, cfg];
+        if (plugin === SUI.UniverSheetsUIPlugin) return [SUI.UniverSheetsMobileUIPlugin, cfg];
+        return entry;
+      });
+    }
+    return preset;
+  }
+
+  function bootUniver(ed) {
+    disposeUniver();
+    var P = window.UniverPresets;
+    var C = window.UniverCore;
+    var inst = P.createUniver({
+      locale: C.LocaleType.EN_US,
+      locales: {
+        [C.LocaleType.EN_US]: C.merge(
+          {},
+          window.UniverPresetSheetsCoreEnUS,
+          window.UniverPresetSheetsSortEnUS,
+          window.UniverPresetSheetsFilterEnUS,
+          window.UniverPresetSheetsHyperLinkEnUS,
+          window.UniverPresetSheetsDataValidationEnUS,
+          window.UniverPresetSheetsConditionalFormattingEnUS
+        ),
+      },
+      darkMode: window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches,
+      presets: [
+        corePresetFor(ed),
+        window.UniverPresetSheetsSort.UniverSheetsSortPreset(),
+        window.UniverPresetSheetsFilter.UniverSheetsFilterPreset(),
+        window.UniverPresetSheetsHyperLink.UniverSheetsHyperLinkPreset(),
+        window.UniverPresetSheetsDataValidation.UniverSheetsDataValidationPreset(),
+        window.UniverPresetSheetsConditionalFormatting.UniverSheetsConditionalFormattingPreset(),
+      ],
+    });
+    univerInst = { univer: inst.univer, univerAPI: inst.univerAPI, disposables: [] };
+
+    var sheets = {};
+    var order = [];
+    ed.sheets.forEach(function (sh) {
+      sheets[sh.id] = sh;
+      order.push(sh.id);
+    });
+    var wb = inst.univerAPI.createWorkbook({
+      name: ed.title || 'Table Studio',
+      sheets: sheets,
+      styles: ed.styles || {},
+      sheetOrder: order,
+    });
+    ed.unitId = wb.getId();
+
+    // Mutations serve two purposes: a cheap dirty hint (authoritative
+    // dirty-ness is a normalized snapshot compare at save/close time) and
+    // structural classification, which switches a sheet from cell-diff
+    // patching to a full rewrite. Univer emits load/recalc mutations too,
+    // so false positives here are fine — a false "dirty" ends as a
+    // "No changes to save" noop.
+    var disposable = inst.univerAPI.addEvent(inst.univerAPI.Event.CommandExecuted, function (cmd) {
+      if (!cmd || cmd.type !== 2) return; // mutations only
+      var params = cmd.params || {};
+      if (params.unitId && ed.unitId && params.unitId !== ed.unitId) return;
+      ed.dirtyHint = true;
+      ed.editGen++;
+      if (BRIDGE.isStructuralMutation(cmd.id)) {
+        if (params.subUnitId) {
+          ed.structural[params.subUnitId] = true;
+        } else {
+          ed.allStructural = true;
+        }
+      }
+    });
+    univerInst.disposables.push(disposable);
+    // Debug/test handle for the dev harness (same trust model as the app —
+    // anything with page access already has the full Synapse bridge).
+    window.__TS_DEBUG = { univerAPI: inst.univerAPI, editor: ed };
+    return wb;
+  }
+
+  function workbookFacade() {
+    if (!univerInst) return null;
+    return univerInst.univerAPI.getActiveWorkbook();
+  }
+
+  /** Current snapshot { sheets, styles, sheetOrder } or null. */
+  function snapshotNow() {
+    var wb = workbookFacade();
+    if (!wb) return null;
+    return wb.save();
+  }
+
+  // ------------------------------------------------------------------
+  // Editor screen
+  // ------------------------------------------------------------------
+  function openEditor(ed) {
+    withEngine(ed.title, function () {
+      state.editor = ed;
+      renderEditor();
+    });
+  }
+
+  function renderEditor() {
+    var ed = state.editor;
+    clearChildren(appEl);
+    var screen = el('div', 'screen');
+
+    var bar = el('div', 'topbar');
+    var backBtn = el('button', 'icon-btn');
+    backBtn.setAttribute('aria-label', 'Back');
+    backBtn.appendChild(svgIcon(ICONS.back));
+    backBtn.addEventListener('click', requestClose);
+    bar.appendChild(backBtn);
+    var titles = el('div', 'titles');
+    titles.appendChild(el('h1', null, ed.title));
+    var sub;
+    if (ed.kind === 'block') {
+      sub = 'Markdown table · ' + (ed.note.title || 'Untitled note');
+    } else {
+      sub = ed.ext ? ed.ext.toUpperCase() + ' · ' + (ed.note.title || 'Untitled note') : (ed.note.title || 'Untitled note');
+    }
+    titles.appendChild(el('div', 'subtitle', sub));
+    bar.appendChild(titles);
+    if (ed.readonly) {
+      var copyBtn = el('button', 'pill-btn');
+      copyBtn.appendChild(el('span', null, 'Save copy'));
+      copyBtn.addEventListener('click', saveReadonlyCopy);
+      bar.appendChild(copyBtn);
+    } else {
+      var saveBtn = el('button', 'pill-btn');
+      saveBtn.id = 'save-btn';
+      saveBtn.appendChild(svgIcon(ICONS.check));
+      saveBtn.appendChild(el('span', null, 'Save'));
+      saveBtn.addEventListener('click', saveEditor);
+      bar.appendChild(saveBtn);
+    }
+    screen.appendChild(bar);
+
+    if (ed.readonly) {
+      var banner = el('div', 'banner');
+      banner.appendChild(svgIcon(ICONS.alert));
+      var grow = el('div', 'grow',
+        '.' + ed.ext + ' files open read-only so macros and legacy formatting stay intact. Use "Save copy" to keep edits as .xlsx.');
+      banner.appendChild(grow);
+      screen.appendChild(banner);
+    }
+
+    var wrap = el('div', 'univer-wrap');
+    var host = el('div');
+    host.id = 'univer-host';
+    wrap.appendChild(host);
+    screen.appendChild(wrap);
+    appEl.appendChild(screen);
+
+    try {
+      bootUniver(ed);
+    } catch (e) {
+      disposeUniver();
+      state.editor = null;
+      renderHome();
+      infoDialog('Could not open', String((e && e.message) || e));
+    }
+  }
+
+  function requestClose() {
+    var ed = state.editor;
+    if (ed && !ed.readonly && isActuallyDirty(ed)) {
+      confirmDialog('Discard changes?', 'Your unsaved edits to “' + ed.title + '” will be lost.', 'Discard', true).then(function (yes) {
+        if (yes) closeEditor();
+      });
+    } else {
+      closeEditor();
+    }
+  }
+  function closeEditor() {
+    openToken++;
+    disposeUniver();
+    state.editor = null;
+    renderHome();
+  }
+
+  /**
+   * The CSV serialization of a grid, keeping the original ragged-row
+   * arities only while the sheet still has its original shape.
+   */
+  function csvTextOf(ed, grid, shapeChanged) {
+    return CORE.serializeDelimited(grid, {
+      delim: ed.meta.delim,
+      lineEnding: ed.meta.lineEnding,
+      hadBom: ed.meta.hadBom,
+      trailingNewline: ed.meta.trailingNewline,
+      arities: shapeChanged ? null : ed.meta.arities,
+    });
+  }
+
+  function csvShapeChanged(ed, grid) {
+    return (
+      ed.allStructural ||
+      !!ed.structural[ed.sheetId] ||
+      grid.length !== ed.origRows ||
+      (grid[0] || []).length !== ed.origCols
+    );
+  }
+
+  /**
+   * Authoritative dirty check against the load baseline. Markdown/CSV
+   * compare their would-be serialization (so alignment changes count and
+   * an undone edit counts as clean); workbooks compare per-sheet
+   * normalized data plus sheet order and names.
+   */
+  function isActuallyDirty(ed) {
+    if (ed.isNew) return true;
+    if (!ed.dirtyHint) return false;
+    var snap = snapshotNow();
+    if (!snap) return false;
+    if (ed.kind === 'block' || ed.format === 'text') {
+      var sheetSnap = snap.sheets[ed.sheetId];
+      if (!sheetSnap) return true;
+      var r = BRIDGE.snapshotToGrid(sheetSnap, snap.styles, { minRows: 1, minCols: 1 });
+      if (ed.kind === 'block') {
+        if (ed.baseBlockText == null) return true;
+        return CORE.serializeTable(r.grid, r.aligns, ed.indent, '\n') !== ed.baseBlockText;
+      }
+      if (ed.baseText == null) return true;
+      return csvTextOf(ed, r.grid, csvShapeChanged(ed, r.grid)) !== ed.baseText;
+    }
+    if (!ed.baseNorms) return true;
+    var metaList = ed.sheetMeta || [];
+    var order = (snap.sheetOrder || []).filter(function (id) { return snap.sheets[id]; });
+    // Sheets added, removed, or reordered are changes on their own.
+    if (order.length !== metaList.length) return true;
+    for (var i = 0; i < metaList.length; i++) {
+      if (order[i] !== metaList[i].id) return true;
+      var sheetSnap2 = snap.sheets[order[i]];
+      // A rename the user typed in the sheet bar counts as dirty.
+      if (sheetSnap2.name !== metaList[i].univerName) return true;
+      var cur = BRIDGE.normalizeSheet(sheetSnap2, snap.styles);
+      if (!BRIDGE.normalizedEqual(ed.baseNorms[order[i]], cur)) return true;
+    }
+    return false;
+  }
+
+  // ------------------------------------------------------------------
+  // Saving
+  // ------------------------------------------------------------------
+  function saveEditor() {
+    var ed = state.editor;
+    if (!ed || state.saving || ed.readonly) return;
+    var snap = snapshotNow();
+    if (!snap) {
+      infoDialog('Save failed', 'The spreadsheet is not available.');
+      return;
+    }
+    var proceed;
+    if (ed.kind === 'block' || ed.format === 'text') {
+      var sheetSnap = snap.sheets[ed.sheetId];
+      if (!sheetSnap) {
+        infoDialog('Save failed', 'The sheet holding this table no longer exists.');
+        return;
+      }
+      var result = BRIDGE.snapshotToGrid(sheetSnap, snap.styles, { minRows: 1, minCols: 1 });
+      if (result.cols > MAX_COLS || result.rows * result.cols > MAX_CELLS) {
+        infoDialog('Save failed', 'The table has grown too large to save here.');
+        return;
+      }
+      // Noop early-out: an unchanged (or changed-and-reverted) sheet must
+      // not rewrite the note / re-upload the attachment.
+      if (!ed.isNew) {
+        var unchanged = ed.kind === 'block'
+          ? ed.baseBlockText != null &&
+            CORE.serializeTable(result.grid, result.aligns, ed.indent, '\n') === ed.baseBlockText
+          : ed.baseText != null &&
+            csvTextOf(ed, result.grid, csvShapeChanged(ed, result.grid)) === ed.baseText;
+        if (unchanged) {
+          ed.dirtyHint = false;
+          toast('No changes to save');
+          return;
+        }
+      }
+      // These formats cannot hold formulas or merged cells — disclose what
+      // saving will do to them before it happens.
+      var lossy = [];
+      if (result.hasFormula) lossy.push('formulas are stored as their current values');
+      if (result.hasMerges) lossy.push('merged cells are split back into single cells');
+      var confirmLossy = lossy.length > 0
+        ? confirmDialog(
+            'Sheet features become plain cells',
+            (ed.kind === 'block' ? 'Markdown tables' : 'CSV files') +
+              ' cannot hold these, so on save ' + lossy.join(' and ') + '.',
+            'Save'
+          )
+        : Promise.resolve(true);
+      proceed = confirmLossy.then(function (ok) {
+        if (!ok) return null;
+        return { grid: result.grid, aligns: result.aligns, snap: snap };
+      });
+    } else {
+      proceed = Promise.resolve({ snap: snap });
+    }
+
+    proceed.then(function (input) {
+      if (!input) return;
+      state.saving = true;
+      var genAtStart = ed.editGen;
+      var saveBtn = document.getElementById('save-btn');
+      if (saveBtn) saveBtn.disabled = true;
+      busy('Saving…');
+
+      // Serialization can throw synchronously (e.g. SheetJS refuses cells
+      // over 32,767 chars); it must never leave the busy overlay stuck.
+      var task;
+      try {
+        if (ed.kind === 'block') {
+          task = ed.isNew ? saveNewBlock(ed, input) : saveExistingBlock(ed, input);
+        } else {
+          task = saveFile(ed, input);
+        }
+      } catch (e) {
+        task = Promise.reject(e);
+      }
+      task
+        .then(function (result) {
+          state.saving = false;
+          unbusy();
+          var btn = document.getElementById('save-btn');
+          if (btn) btn.disabled = false;
+          if (result && result.noop) {
+            if (ed.editGen === genAtStart) ed.dirtyHint = false;
+            toast('No changes to save');
+            return;
+          }
+          if (result && result.reopen) {
+            // Saved, but the stored file could not be re-identified; further
+            // saves from this editor could act on stale paths.
+            infoDialog(
+              'Saved',
+              'The file was saved, but it must be reopened from the list before further edits.'
+            ).then(function () {
+              closeEditor();
+              refreshAll();
+            });
+            return;
+          }
+          // Only mark clean if no edits landed while the save was in flight.
+          if (ed.editGen === genAtStart) {
+            ed.dirtyHint = false;
+            ed.structural = {};
+            ed.allStructural = false;
+          }
+          toast('Saved');
+        })
+        .catch(function (e) {
+          state.saving = false;
+          unbusy();
+          var btn = document.getElementById('save-btn');
+          if (btn) btn.disabled = false;
+          infoDialog('Save failed', String(e && e.message ? e.message : e));
+        });
+    });
+  }
+
+  /** Counts lines before a character offset. */
+  function lineOfOffset(text, offset) {
+    var n = 0;
+    for (var i = 0; i < offset; i++) {
+      if (text.charCodeAt(i) === 10) n++;
+    }
+    return n;
+  }
+
+  function locateBlock(content, ed) {
+    // 1. Position-stable: content unchanged since we opened the editor.
+    if (content === ed.contentAtOpen) {
+      var lines = content.split('\n');
+      var before = lines.slice(0, ed.startLine).join('\n');
+      var after = lines.slice(ed.endLine).join('\n');
+      return {
+        before: ed.startLine > 0 ? before + '\n' : '',
+        after: ed.endLine < lines.length ? '\n' + after : '',
+      };
+    }
+    // 2. The exact original block text still appears exactly once, aligned
+    // to line boundaries (a mid-line match would glue text onto the table).
+    var found = -1;
+    var count = 0;
+    var from = 0;
+    while (count < 2) {
+      var idx = content.indexOf(ed.raw, from);
+      if (idx < 0) break;
+      var end = idx + ed.raw.length;
+      var startsLine = idx === 0 || content.charCodeAt(idx - 1) === 10;
+      var endsLine = end === content.length || content.charCodeAt(end) === 10;
+      if (startsLine && endsLine) {
+        count++;
+        found = idx;
+      }
+      from = idx + 1;
+    }
+    if (count === 1) {
+      return {
+        before: content.slice(0, found),
+        after: content.slice(found + ed.raw.length),
+      };
+    }
+    return null;
+  }
+
+  /** The dominant line ending of the surrounding note content. */
+  function eolOf(content) {
+    return content.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
+  }
+
+  function saveExistingBlock(ed, input) {
+    return fetchNoteContent(ed.note.id, { strict: true }).then(function (content) {
+      if (typeof content !== 'string') {
+        throw new Error('Could not load the current note content.');
+      }
+      var loc = locateBlock(content, ed);
+      if (!loc) {
+        throw new Error('The note changed since this table was opened and the original table could not be found. Go back, refresh, and reopen the table.');
+      }
+      var eol = eolOf(content);
+      var block = CORE.serializeTable(input.grid, input.aligns, ed.indent, eol);
+      // In a CRLF note the char after the block is '\n'; the block's last
+      // line must carry the matching '\r'.
+      var glue = eol === '\r\n' && loc.after.charCodeAt(0) === 10 ? '\r' : '';
+      var newContent = loc.before + block + glue + loc.after;
+      return updateNoteContent(ed.note.id, newContent).then(function () {
+        ed.note.content = newContent;
+        ed.contentAtOpen = newContent;
+        ed.raw = block + glue;
+        ed.startLine = lineOfOffset(newContent, loc.before.length);
+        ed.endLine = ed.startLine + block.split('\n').length;
+        ed.baseBlockText = CORE.serializeTable(input.grid, input.aligns, ed.indent, '\n');
+      });
+    });
+  }
+
+  function saveNewBlock(ed, input) {
+    var eol = eolOf(ed.note.content);
+    var block = CORE.serializeTable(input.grid, input.aligns, '', eol);
+    var text = eol + block;
+    return appendNoteContent(ed.note.id, text).then(function () {
+      // Prefer re-reading the stored content so our local copy can never
+      // drift from the host's append semantics; fall back to mirroring
+      // the host's "content" + "\n" + text when the read fails.
+      return fetchNoteContent(ed.note.id).then(function (fresh) {
+        // Accept the re-read only when it visibly contains our append at
+        // the end — a stale snapshot that merely contains an identical
+        // table elsewhere would poison contentAtOpen.
+        var newContent =
+          typeof fresh === 'string' && fresh.endsWith(block)
+            ? fresh
+            : ed.note.content + '\n' + text;
+        ed.note.content = newContent;
+        ed.contentAtOpen = newContent;
+        ed.isNew = false;
+        ed.raw = block;
+        // Our freshly appended block is the last occurrence.
+        var idx = newContent.lastIndexOf(block);
+        ed.startLine = lineOfOffset(newContent, idx);
+        ed.endLine = ed.startLine + block.split('\n').length;
+        ed.title = 'Table ' + tablesOf(ed.note).length;
+        var h1 = appEl.querySelector('.topbar h1');
+        if (h1) h1.textContent = ed.title;
+        ed.baseBlockText = CORE.serializeTable(input.grid, input.aligns, ed.indent, '\n');
+      });
+    });
+  }
+
+  function mimeFor(ext, bookType) {
+    if (ext === 'tsv' || ext === 'tab') return 'text/tab-separated-values';
+    if (ext === 'csv') return 'text/csv';
+    if (bookType === 'ods') return 'application/vnd.oasis.opendocument.spreadsheet';
+    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  }
+
+  /**
+   * Serializes the editor's file from the given snapshot. Returns null when
+   * nothing actually changed. The result carries a commit() that must be
+   * called only after a successful upload — it re-baselines so later saves
+   * diff against what is now stored.
+   */
+  function serializeEditorFile(ed, snap) {
+    if (ed.format === 'text') {
+      var sheetSnap = snap.sheets[ed.sheetId];
+      var result = BRIDGE.snapshotToGrid(sheetSnap, snap.styles, { minRows: 1, minCols: 1 });
+      var grid = result.grid;
+      // Ragged-row arities only survive while the sheet keeps its original
+      // shape — after inserts/deletes/moves the per-row map no longer lines
+      // up with the file's rows.
+      var shapeChanged = csvShapeChanged(ed, grid);
+      var text = csvTextOf(ed, grid, shapeChanged);
+      return {
+        base64: bytesToB64(encodeUtf8(text)),
+        mime: mimeFor(extOf(ed.saveName)),
+        commit: function () {
+          ed.origRows = grid.length;
+          ed.origCols = (grid[0] || []).length;
+          if (shapeChanged) ed.meta.arities = null;
+          ed.baseText = text;
+        },
+      };
+    }
+
+    // Workbook: carry untouched sheets byte-identical, patch or rebuild the
+    // rest, honor sheets the user added/removed/renamed/reordered in Univer.
+    var order = snap.sheetOrder || [];
+    if (order.length === 0) {
+      throw new Error('The workbook has no sheets left to save.');
+    }
+    var metaById = {};
+    (ed.sheetMeta || []).forEach(function (m) { metaById[m.id] = m; });
+    // A pure reorder produces no per-sheet diff but must still be written.
+    var liveOrder = order.filter(function (id) { return snap.sheets[id]; });
+    var origOrder = (ed.sheetMeta || []).map(function (m) { return m.id; });
+    var outNames = [];
+    var outSheets = {};
+    var usedNames = {};
+    var changed = liveOrder.join('\n') !== origOrder.join('\n');
+    var newMeta = [];
+    var newNorms = {};
+    var totalCells = 0;
+    order.forEach(function (sheetId, idx) {
+      var sheetSnap = snap.sheets[sheetId];
+      if (!sheetSnap) return;
+      var cur = BRIDGE.normalizeSheet(sheetSnap, snap.styles);
+      totalCells += Object.keys(cur.cells).length;
+      if (totalCells > MAX_CELLS) {
+        throw new Error('The workbook has grown too large to save here.');
+      }
+      var meta = metaById[sheetId];
+      var base = meta && ed.baseNorms ? ed.baseNorms[sheetId] : null;
+      // Output name: what the sheet is called in Univer now (Excel-safe,
+      // deduped) — renames flow through to the file.
+      var name = BRIDGE.uniqueSheetName(usedNames, sheetSnap.name, 'Sheet' + (idx + 1));
+      var origWs = meta ? ed.wb.Sheets[meta.origName] : null;
+      var ws;
+      if (meta && base && origWs && BRIDGE.normalizedEqual(base, cur)) {
+        ws = origWs; // untouched — carried through with all its fidelity
+        if (name !== meta.origName) changed = true;
+      } else if (meta && base && origWs && !ed.allStructural && !ed.structural[sheetId]) {
+        var patched = BRIDGE.patchWorksheet(origWs, base, cur, XLSX);
+        ws = patched.ws;
+        if (patched.changed || name !== meta.origName) changed = true;
+      } else {
+        ws = BRIDGE.normalizedToWorksheet(cur, XLSX);
+        changed = true;
+      }
+      outNames.push(name);
+      outSheets[name] = ws;
+      // univerName must stay the RAW Univer name (not the sanitized output
+      // name) — the post-save dirty check compares against snapshot names.
+      newMeta.push({ id: sheetId, origName: name, univerName: sheetSnap.name });
+      newNorms[sheetId] = cur;
+    });
+    if (outNames.length === 0) {
+      throw new Error('The workbook has no sheets left to save.');
+    }
+    // A sheet removed in Univer must count as a change even if the rest
+    // is untouched.
+    if ((ed.sheetMeta || []).length !== outNames.length) changed = true;
+    if (!changed) return null;
+
+    var writeWb = { SheetNames: outNames, Sheets: outSheets };
+    if (ed.wb.Workbook) writeWb.Workbook = ed.wb.Workbook;
+    var b64 = XLSX.write(writeWb, { bookType: ed.bookType, type: 'base64' });
+    return {
+      base64: b64,
+      mime: mimeFor(extOf(ed.saveName), ed.bookType),
+      commit: function () {
+        ed.wb = writeWb;
+        ed.sheetMeta = newMeta;
+        ed.baseNorms = newNorms;
+      },
+    };
+  }
+
+  /** RegExp-escapes a literal string. */
+  function escapeRe(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function saveFile(ed, input) {
+    var out = serializeEditorFile(ed, input.snap);
+    if (out === null) {
+      return Promise.resolve({ noop: true });
+    }
+    var payload = {
+      type: 'base64',
+      data: 'data:' + out.mime + ';base64,' + out.base64,
+      // Always the ORIGINAL name: the store appends a uuid on every save,
+      // so feeding back the stored name would grow it without bound.
+      fileName: ed.saveName,
+    };
+    var modification = { attachments: { added: [payload], removed: [] } };
+    if (!ed.isNew && ed.att) {
+      var removed = [ed.att.path];
+      // Only guess the relative spelling when the file actually lives in
+      // the attachments folder — for a legacy absolute path elsewhere the
+      // guess could name a DIFFERENT attachment with the same basename.
+      if (/\/attachments\/[^/]+$/.test(ed.att.path)) {
+        var rel = 'attachments/' + baseName(ed.att.path);
+        if (removed.indexOf(rel) === -1) removed.push(rel);
+      }
+      modification.attachments.removed = removed;
+    }
+    var prevIds = {};
+    (ed.note.attachments || []).forEach(function (a) {
+      prevIds[a.id] = true;
+    });
+    return window.Synapse
+      .updateNotes([{ id: ed.note.id, modification: modification }])
+      .then(interpretUpdateResult)
+      .then(function () {
+        out.commit();
+        return refreshAttachmentLists();
+      })
+      .then(function () {
+        var ext = extOf(ed.saveName);
+        var stem = ed.saveName.slice(0, ed.saveName.length - ext.length - 1);
+        // The host stores our upload as "<stem>_<uuid>.<ext>"; accept an
+        // exact name too in case renaming ever stops.
+        var namePattern = new RegExp(
+          '^' + escapeRe(stem) + '_[0-9a-f-]{36}\\.' + escapeRe(ext) + '$',
+          'i'
+        );
+        var fresh = (ed.note.attachments || []).filter(function (a) {
+          return !prevIds[a.id] &&
+            (a.fileName === ed.saveName || namePattern.test(a.fileName));
+        });
+        var picked = fresh[fresh.length - 1];
+        if (picked) {
+          ed.att = picked;
+          ed.title = picked.fileName;
+          ed.isNew = false;
+          var h1 = appEl.querySelector('.topbar h1');
+          if (h1) h1.textContent = ed.title;
+          return {};
+        }
+        // Refresh failed or the new file was not found: the save DID apply,
+        // but this editor no longer knows the stored path. Force a reopen
+        // so a later save can't remove a stale path or add a duplicate.
+        return { reopen: true };
+      });
+  }
+
+  function saveReadonlyCopy() {
+    var ed = state.editor;
+    if (!ed || state.saving) return;
+    var snap = snapshotNow();
+    if (!snap) {
+      infoDialog('Save failed', 'The spreadsheet is not available.');
+      return;
+    }
+    state.saving = true;
+    busy('Saving copy…');
+    var b64;
+    var name;
+    try {
+      var outNames = [];
+      var outSheets = {};
+      var usedNames = {};
+      (snap.sheetOrder || []).forEach(function (sheetId, idx) {
+        var sheetSnap = snap.sheets[sheetId];
+        if (!sheetSnap) return;
+        var sheetName = BRIDGE.uniqueSheetName(usedNames, sheetSnap.name, 'Sheet' + (idx + 1));
+        var norm = BRIDGE.normalizeSheet(sheetSnap, snap.styles);
+        outNames.push(sheetName);
+        outSheets[sheetName] = BRIDGE.normalizedToWorksheet(norm, XLSX);
+      });
+      if (outNames.length === 0) {
+        throw new Error('There are no sheets to save.');
+      }
+      b64 = XLSX.write({ SheetNames: outNames, Sheets: outSheets }, { bookType: 'xlsx', type: 'base64' });
+      name = ed.saveName.replace(/\.[a-z0-9]+$/i, '') + '.xlsx';
+    } catch (e) {
+      state.saving = false;
+      unbusy();
+      infoDialog('Save failed', String(e && e.message ? e.message : e));
+      return;
+    }
+    window.Synapse
+      .updateNotes([
+        {
+          id: ed.note.id,
+          modification: {
+            attachments: {
+              added: [
+                {
+                  type: 'base64',
+                  data: 'data:' + mimeFor('xlsx', 'xlsx') + ';base64,' + b64,
+                  fileName: name,
+                },
+              ],
+              removed: [],
+            },
+          },
+        },
+      ])
+      .then(interpretUpdateResult)
+      .then(function () {
+        return refreshAttachmentLists();
+      })
+      .then(function () {
+        state.saving = false;
+        unbusy();
+        toast('Copy saved as ' + name);
+      })
+      .catch(function (e) {
+        state.saving = false;
+        unbusy();
+        infoDialog('Save failed', String(e && e.message ? e.message : e));
+      });
+  }
+
+  // ------------------------------------------------------------------
+  // Boot
+  // ------------------------------------------------------------------
+  function init() {
+    if (!CORE || !BRIDGE || typeof fflate === 'undefined') {
+      renderGate('Something went wrong', 'The table engine failed to load.');
+      return;
+    }
+    if (!synapseReady()) {
+      renderGate(
+        'Open inside Note Synapse',
+        'Table Studio is a note action. Select a note in Note Synapse and launch it from the app menu.'
+      );
+      return;
+    }
+    var notes = window.Synapse.Notes;
+    if (typeof notes === 'string') {
+      try {
+        notes = JSON.parse(notes);
+      } catch (e) {
+        notes = [];
+      }
+    }
+    if (!Array.isArray(notes) || notes.length === 0) {
+      renderGate('No note selected', 'Launch Table Studio on one or more notes to edit their tables.');
+      return;
+    }
+    state.notes = notes.map(function (n) {
+      return {
+        id: String(n.id),
+        title: n.title || 'Untitled note',
+        content: typeof n.content === 'string' ? n.content : '',
+        attachments: [],
+      };
+    });
+    renderHome();
+    refreshAttachmentLists().then(function () {
+      if (!state.editor) renderHome();
+    });
+    // Warm the engine from the local cache while the user is still on the
+    // home screen. This never downloads — the one-time ~12 MB download only
+    // starts after the user explicitly consents on the engine screen.
+    ensureEngineFromCache();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+  </script>
+</body>
+</html>
