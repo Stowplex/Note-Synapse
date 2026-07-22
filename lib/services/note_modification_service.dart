@@ -3,6 +3,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 import '../models/note.dart';
 import '../models/relationship.dart';
+import 'data_change_notifier.dart';
 import 'database_service.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
@@ -13,12 +14,58 @@ import 'tag_workflow_service.dart';
 
 class NoteModificationService {
   final DatabaseService _db;
+  final DataChangeNotifier _changeNotifier;
   final Uuid _uuid = const Uuid();
 
   /// Creates a NoteModificationService.
   ///
   /// [db] - The database service for persistence operations.
-  NoteModificationService(this._db);
+  /// [changeNotifier] - Receives post-commit change events so UI caches can
+  /// refresh. Defaults to the process-wide shared notifier.
+  NoteModificationService(this._db, {DataChangeNotifier? changeNotifier})
+    : _changeNotifier = changeNotifier ?? DataChangeNotifier.shared();
+
+  /// Publishes a post-commit change event. Enqueue-only by contract
+  /// ([DataChangeNotifier.publish] never throws), so calling this can never
+  /// turn a committed write into an apparent failure.
+  void _publishChange({
+    Set<String> noteIds = const {},
+    bool tagsChanged = false,
+    Set<String> relationshipNoteIds = const {},
+  }) {
+    _changeNotifier.publish(
+      DataChangeEvent(
+        noteIds: noteIds,
+        tagsChanged: tagsChanged,
+        relationshipNoteIds: relationshipNoteIds,
+      ),
+    );
+  }
+
+  /// Every note id whose relationships the given `link` payload touches:
+  /// the note itself plus all added/removed targets. Computed BEFORE the
+  /// modification is applied so removal endpoints are not lost.
+  static Set<String> _linkEndpoints(String noteId, dynamic linkData) {
+    if (linkData == null) return const {};
+    final endpoints = <String>{noteId};
+    List<dynamic> added = const [];
+    List<dynamic> removed = const [];
+    if (linkData is List) {
+      added = linkData;
+    } else if (linkData is Map<String, dynamic>) {
+      added = (linkData['added'] as List?) ?? const [];
+      removed = (linkData['removed'] as List?) ?? const [];
+    }
+    for (final link in added) {
+      if (link is Map<String, dynamic> && link['target'] is String) {
+        endpoints.add(link['target'] as String);
+      }
+    }
+    for (final target in removed) {
+      if (target is String) endpoints.add(target);
+    }
+    return endpoints.length == 1 ? const {} : endpoints;
+  }
 
   /// Known modification fields that must be JSON objects (not bare strings or
   /// arrays), paired with a hint describing their correct shape. The agent
@@ -76,8 +123,25 @@ class NoteModificationService {
 
     await _enforceImmutableBinding(note, modifications);
     final updatedNote = _buildUpdatedNote(note, modifications);
-    await _db.updateNote(updatedNote);
-    await _applyLinkModifications(updatedNote.id, modifications['link']);
+    final linkEndpoints = _linkEndpoints(noteId, modifications['link']);
+
+    // Note persistence and link changes commit atomically so a link failure
+    // cannot leave a committed-but-unpublished note update behind.
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      await _persistNote(txn, updatedNote);
+      await _applyLinkModifications(
+        updatedNote.id,
+        modifications['link'],
+        txn: txn,
+      );
+    });
+
+    _publishChange(
+      noteIds: {noteId},
+      tagsChanged: modifications.containsKey('tags'),
+      relationshipNoteIds: linkEndpoints,
+    );
     return updatedNote;
   }
 
@@ -128,6 +192,17 @@ class NoteModificationService {
         );
       }
     });
+
+    _publishChange(
+      noteIds: {for (final update in prepared) update.updated.id},
+      tagsChanged: prepared.any(
+        (update) => update.modification.containsKey('tags'),
+      ),
+      relationshipNoteIds: {
+        for (final update in prepared)
+          ..._linkEndpoints(update.updated.id, update.modification['link']),
+      },
+    );
 
     return prepared.map((update) => update.updated).toList();
   }
@@ -221,31 +296,47 @@ class NoteModificationService {
   Future<Note> createNote(Map<String, dynamic> data) async {
     final note = await buildNote(data);
     await _db.insertNote(note);
+    // Publication is guarded rather than transactional here: insertNote owns
+    // attachment-path conversion and cannot run against a transaction
+    // executor. Reaching the try below means the note insert committed, so
+    // the finally publishes it even when a later relationship insert throws
+    // — a committed note must not stay invisible to the UI.
+    final linkedEndpoints = <String>{};
+    try {
+      // If there are links (relationships)
+      if (data.containsKey('link')) {
+        final links = (data['link'] as List?) ?? [];
+        for (final link in links) {
+          if (link is Map<String, dynamic>) {
+            final relationType = link['relation'] as String? ?? 'related';
+            final targetId = link['target'] as String?;
 
-    // If there are links (relationships)
-    if (data.containsKey('link')) {
-      final links = (data['link'] as List?) ?? [];
-      for (final link in links) {
-        if (link is Map<String, dynamic>) {
-          final relationType = link['relation'] as String? ?? 'related';
-          final targetId = link['target'] as String?;
-
-          if (targetId != null) {
-            await _db.insertRelationship(
-              Relationship(
-                id: _uuid.v4(),
-                fromNoteId: note.id,
-                toNoteId: targetId,
-                type: relationType,
-                createdAt: DateTime.now(),
-              ),
-            );
+            if (targetId != null) {
+              await _db.insertRelationship(
+                Relationship(
+                  id: _uuid.v4(),
+                  fromNoteId: note.id,
+                  toNoteId: targetId,
+                  type: relationType,
+                  createdAt: DateTime.now(),
+                ),
+              );
+              linkedEndpoints.add(targetId);
+            }
           }
         }
       }
-    }
 
-    return note;
+      return note;
+    } finally {
+      _publishChange(
+        noteIds: {note.id},
+        tagsChanged: note.tags.isNotEmpty,
+        relationshipNoteIds: linkedEndpoints.isEmpty
+            ? const {}
+            : {note.id, ...linkedEndpoints},
+      );
+    }
   }
 
   Future<void> _enforceImmutableBinding(
@@ -437,8 +528,22 @@ class NoteModificationService {
     json.remove('subNotes');
     json.remove('tags');
     json.remove('attachmentPaths');
+    // Note objects loaded from the database never carry metadata (markers
+    // etc. are written only via updateNoteMetadata), so writing toJson()'s
+    // null here would wipe the column on every modification.
+    json.remove('metadata');
 
-    await db.update('notes', json, where: 'id = ?', whereArgs: [note.id]);
+    final updatedRows = await db.update(
+      'notes',
+      json,
+      where: 'id = ?',
+      whereArgs: [note.id],
+    );
+    if (updatedRows == 0) {
+      // Note deleted between the read and this write; creating child rows
+      // for a nonexistent note would orphan them.
+      throw Exception('Note no longer exists: ${note.id}');
+    }
 
     await db.delete('subnotes', where: 'noteId = ?', whereArgs: [note.id]);
     for (final subNote in note.subNotes) {

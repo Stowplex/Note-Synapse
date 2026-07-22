@@ -416,34 +416,12 @@ class _UserAppWebViewState extends State<UserAppWebView> {
 
 String _describeSqlQueryType(SqlQueryType queryType) {
   switch (queryType) {
-    case SqlQueryType.insert:
-      return 'INSERT (add data)';
-    case SqlQueryType.update:
-      return 'UPDATE (modify data)';
-    case SqlQueryType.delete:
-      return 'DELETE (remove data)';
-    case SqlQueryType.createTable:
-      return 'CREATE TABLE';
-    case SqlQueryType.createIndex:
-      return 'CREATE INDEX';
-    case SqlQueryType.createTrigger:
-      return 'CREATE TRIGGER';
-    case SqlQueryType.createView:
-      return 'CREATE VIEW';
-    case SqlQueryType.dropTable:
-      return 'DROP TABLE';
-    case SqlQueryType.dropIndex:
-      return 'DROP INDEX';
-    case SqlQueryType.dropTrigger:
-      return 'DROP TRIGGER';
-    case SqlQueryType.dropView:
-      return 'DROP VIEW';
-    case SqlQueryType.alterTable:
-      return 'ALTER TABLE';
     case SqlQueryType.select:
     case SqlQueryType.pragma:
     case SqlQueryType.other:
       return 'SQL';
+    default:
+      return SqlQueryService.describeQueryType(queryType);
   }
 }
 

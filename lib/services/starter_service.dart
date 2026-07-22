@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:yaml/yaml.dart';
 import '../models/note.dart';
+import 'data_change_notifier.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
 import 'service_locator.dart';
@@ -132,6 +133,19 @@ Please refer to the attached PDF for detailed user manual.''';
       await databaseService.insertNote(note);
       LoggerService.info('Installed User Manual version $version');
     }
+    _publishNotesChanged({note.id}, tagsChanged: true);
+  }
+
+  /// This service writes through DatabaseService directly, so it publishes
+  /// its own change events to keep already-loaded UI caches fresh.
+  static void _publishNotesChanged(
+    Set<String> noteIds, {
+    bool tagsChanged = false,
+  }) {
+    if (noteIds.isEmpty) return;
+    DataChangeNotifier.shared().publish(
+      DataChangeEvent(noteIds: noteIds, tagsChanged: tagsChanged),
+    );
   }
 
   /// Copy PDF from assets to attachments directory
@@ -278,6 +292,7 @@ Please refer to the attached PDF for detailed user manual.''';
         .map((meta) => meta.skillRef)
         .toSet();
     var installed = 0;
+    final installedIds = <String>{};
     for (final skill in await getStarterSkills()) {
       final skillRef = skill['skillRef'] as String;
       if (skillRefs != null && !skillRefs.contains(skillRef)) continue;
@@ -285,24 +300,26 @@ Please refer to the attached PDF for detailed user manual.''';
       final assetKey = skill['filePath'] as String;
       final content = await rootBundle.loadString(assetKey);
       final now = DateTime.now();
-      await databaseService.insertNote(
-        Note(
-          id: 'starter-skill-$skillRef',
-          title: skill['name'] as String,
-          content: content,
-          type: NoteType.note,
-          createdAt: now,
-          updatedAt: now,
-          pinned: false,
-          isArchived: false,
-          tags: const [SkillService.agentSkillTag, 'starter-skill'],
-          attachmentPaths: const [],
-          subNotes: const [],
-        ),
+      final skillNote = Note(
+        id: 'starter-skill-$skillRef',
+        title: skill['name'] as String,
+        content: content,
+        type: NoteType.note,
+        createdAt: now,
+        updatedAt: now,
+        pinned: false,
+        isArchived: false,
+        tags: const [SkillService.agentSkillTag, 'starter-skill'],
+        attachmentPaths: const [],
+        subNotes: const [],
       );
+      await databaseService.insertNote(skillNote);
       existingRefs.add(skillRef);
       installed++;
+      // Publish the id of the note actually inserted, not a rebuilt literal.
+      installedIds.add(skillNote.id);
     }
+    _publishNotesChanged(installedIds, tagsChanged: installedIds.isNotEmpty);
     return installed;
   }
 }

@@ -36,6 +36,38 @@ void main() {
     await resetForTesting();
   });
 
+  // applyModifications persists through db.transaction, so tests that reach
+  // persistence stub mockDb.database with a real in-memory database. Built
+  // from DatabaseService.getSchema() — the production DDL — so this can
+  // never drift from the real table definitions.
+  Future<Database> openRawNotesDb() async {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    final raw = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+    for (final statement in DatabaseService.getSchema()) {
+      await raw.execute(statement);
+    }
+    return raw;
+  }
+
+  Future<void> seedRawNote(Note note) async {
+    await rawDb!.insert('notes', {
+      'id': note.id,
+      'title': note.title,
+      'content': note.content,
+      'type': 'note',
+      'createdAt': note.createdAt.millisecondsSinceEpoch,
+      'updatedAt': note.updatedAt.millisecondsSinceEpoch,
+      'pinned': 0,
+      'isArchived': 0,
+    });
+  }
+
+  Future<String> rawNoteContent(String id) async {
+    final rows = await rawDb!.query('notes', where: 'id = ?', whereArgs: [id]);
+    return rows.single['content'] as String;
+  }
+
   group('NoteModificationService', () {
     test('applyModifications fetches note from database', () async {
       final note = Note(
@@ -47,8 +79,10 @@ void main() {
         updatedAt: DateTime.now(),
       );
 
+      rawDb = await openRawNotesDb();
+      await seedRawNote(note);
       when(mockDb.getNoteById('test-id')).thenAnswer((_) async => note);
-      when(mockDb.updateNote(any)).thenAnswer((_) async {});
+      when(mockDb.database).thenAnswer((_) async => rawDb!);
 
       await service.applyModifications('test-id', {});
 
@@ -119,16 +153,17 @@ void main() {
         updatedAt: DateTime.now(),
       );
 
+      rawDb = await openRawNotesDb();
+      await seedRawNote(note);
       when(mockDb.getNoteById('test-id')).thenAnswer((_) async => note);
-      when(mockDb.updateNote(any)).thenAnswer((_) async {});
+      when(mockDb.database).thenAnswer((_) async => rawDb!);
 
-      await service.applyModifications('test-id', {
+      final result = await service.applyModifications('test-id', {
         'content': {'action': 'append', 'text': ' appended'},
       });
 
-      final captured =
-          verify(mockDb.updateNote(captureAny)).captured.single as Note;
-      expect(captured.content, 'Original\n appended');
+      expect(result.content, 'Original\n appended');
+      expect(await rawNoteContent('test-id'), 'Original\n appended');
     });
 
     test('applyModifications can append within a markdown section', () async {
@@ -141,10 +176,12 @@ void main() {
         updatedAt: DateTime.now(),
       );
 
+      rawDb = await openRawNotesDb();
+      await seedRawNote(note);
       when(mockDb.getNoteById('test-id')).thenAnswer((_) async => note);
-      when(mockDb.updateNote(any)).thenAnswer((_) async {});
+      when(mockDb.database).thenAnswer((_) async => rawDb!);
 
-      await service.applyModifications('test-id', {
+      final result = await service.applyModifications('test-id', {
         'content': {
           'action': 'append',
           'section': '## Entities',
@@ -153,13 +190,15 @@ void main() {
         },
       });
 
-      final captured =
-          verify(mockDb.updateNote(captureAny)).captured.single as Note;
       expect(
-        captured.content,
+        result.content,
         contains('## Entities\n- Existing\n\n- Added entity'),
       );
-      expect(captured.content, contains('## Topics\n- Topic'));
+      expect(result.content, contains('## Topics\n- Topic'));
+      expect(
+        await rawNoteContent('test-id'),
+        contains('## Entities\n- Existing\n\n- Added entity'),
+      );
     });
 
     test('applyModifications throws when section does not exist', () async {

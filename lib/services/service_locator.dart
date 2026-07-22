@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 import '../providers/app_provider.dart';
+import 'data_change_notifier.dart';
 import 'database_service.dart';
 import 'note_modification_service.dart';
 import 'content_ingestion_service.dart';
@@ -66,6 +67,14 @@ void setupServiceLocator() {
     getIt.registerLazySingleton<DatabaseService>(() => DatabaseService());
   }
 
+  // Must be registered before AppProvider and the services that publish to
+  // it (NoteModificationService, SqlQueryService): data-layer writers
+  // publish change events here and AppProvider subscribes to refresh the UI
+  // caches.
+  if (!getIt.isRegistered<DataChangeNotifier>()) {
+    getIt.registerLazySingleton<DataChangeNotifier>(() => DataChangeNotifier());
+  }
+
   if (!getIt.isRegistered<McpService>()) {
     getIt.registerLazySingleton<McpService>(() => McpService());
   }
@@ -104,7 +113,10 @@ void setupServiceLocator() {
   // ============================================================
   if (!getIt.isRegistered<NoteModificationService>()) {
     getIt.registerLazySingleton<NoteModificationService>(
-      () => NoteModificationService(getIt<DatabaseService>()),
+      () => NoteModificationService(
+        getIt<DatabaseService>(),
+        changeNotifier: getIt<DataChangeNotifier>(),
+      ),
     );
   }
 
@@ -180,7 +192,10 @@ void setupServiceLocator() {
 
   if (!getIt.isRegistered<SqlQueryService>()) {
     getIt.registerLazySingleton<SqlQueryService>(
-      () => SqlQueryService(getIt<DatabaseService>()),
+      () => SqlQueryService(
+        getIt<DatabaseService>(),
+        changeNotifier: getIt<DataChangeNotifier>(),
+      ),
     );
   }
 

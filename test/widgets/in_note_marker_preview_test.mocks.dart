@@ -10,10 +10,10 @@ import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i9;
 import 'package:note_synapse/models/app_revision.dart' as _i16;
 import 'package:note_synapse/models/attachment.dart' as _i11;
-import 'package:note_synapse/models/conversation.dart' as _i4;
+import 'package:note_synapse/models/conversation.dart' as _i5;
 import 'package:note_synapse/models/conversation_attachment.dart' as _i17;
 import 'package:note_synapse/models/conversation_branch_summary.dart' as _i23;
-import 'package:note_synapse/models/conversation_context.dart' as _i5;
+import 'package:note_synapse/models/conversation_context.dart' as _i6;
 import 'package:note_synapse/models/filter.dart' as _i14;
 import 'package:note_synapse/models/mcp_endpoint.dart' as _i21;
 import 'package:note_synapse/models/model_config.dart' as _i27;
@@ -26,11 +26,11 @@ import 'package:note_synapse/models/user_app.dart' as _i15;
 import 'package:note_synapse/models/workflow_binding_row.dart' as _i18;
 import 'package:note_synapse/services/ai_tool_service.dart' as _i22;
 import 'package:note_synapse/services/conversation_service.dart' as _i19;
-import 'package:note_synapse/services/database_service.dart' as _i6;
+import 'package:note_synapse/services/database_service.dart' as _i3;
 import 'package:note_synapse/services/fork_service.dart' as _i24;
 import 'package:note_synapse/services/model_storage_service.dart' as _i26;
 import 'package:note_synapse/services/skill_service.dart' as _i20;
-import 'package:note_synapse/services/tools/load_skill_tool.dart' as _i3;
+import 'package:note_synapse/services/tools/load_skill_tool.dart' as _i4;
 import 'package:sqflite/sqflite.dart' as _i2;
 
 // ignore_for_file: type=lint
@@ -53,32 +53,38 @@ class _FakeDatabase_0 extends _i1.SmartFake implements _i2.Database {
     : super(parent, parentInvocation);
 }
 
-class _FakeLoadSkillTool_1 extends _i1.SmartFake implements _i3.LoadSkillTool {
-  _FakeLoadSkillTool_1(Object parent, Invocation parentInvocation)
+class _FakeRawWriteResult_1 extends _i1.SmartFake
+    implements _i3.RawWriteResult {
+  _FakeRawWriteResult_1(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeConversation_2 extends _i1.SmartFake implements _i4.Conversation {
-  _FakeConversation_2(Object parent, Invocation parentInvocation)
+class _FakeLoadSkillTool_2 extends _i1.SmartFake implements _i4.LoadSkillTool {
+  _FakeLoadSkillTool_2(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeForkContextSelection_3 extends _i1.SmartFake
-    implements _i5.ForkContextSelection {
-  _FakeForkContextSelection_3(Object parent, Invocation parentInvocation)
+class _FakeConversation_3 extends _i1.SmartFake implements _i5.Conversation {
+  _FakeConversation_3(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeConversationMessage_4 extends _i1.SmartFake
-    implements _i4.ConversationMessage {
-  _FakeConversationMessage_4(Object parent, Invocation parentInvocation)
+class _FakeForkContextSelection_4 extends _i1.SmartFake
+    implements _i6.ForkContextSelection {
+  _FakeForkContextSelection_4(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeConversationMessage_5 extends _i1.SmartFake
+    implements _i5.ConversationMessage {
+  _FakeConversationMessage_5(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
 /// A class which mocks [DatabaseService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
+class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
   MockDatabaseService() {
     _i1.throwOnMissingStub(this);
   }
@@ -936,7 +942,7 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i7.Future<Map<String, dynamic>?>);
 
   @override
-  _i7.Future<String> insertConversation(_i4.Conversation? conversation) =>
+  _i7.Future<String> insertConversation(_i5.Conversation? conversation) =>
       (super.noSuchMethod(
             Invocation.method(#insertConversation, [conversation]),
             returnValue: _i7.Future<String>.value(
@@ -949,7 +955,7 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i7.Future<String>);
 
   @override
-  _i7.Future<List<_i4.Conversation>> getAllConversations({
+  _i7.Future<List<_i5.Conversation>> getAllConversations({
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
@@ -962,36 +968,36 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               #tagNames: tagNames,
               #includeEmpty: includeEmpty,
             }),
-            returnValue: _i7.Future<List<_i4.Conversation>>.value(
-              <_i4.Conversation>[],
+            returnValue: _i7.Future<List<_i5.Conversation>>.value(
+              <_i5.Conversation>[],
             ),
           )
-          as _i7.Future<List<_i4.Conversation>>);
+          as _i7.Future<List<_i5.Conversation>>);
 
   @override
-  _i7.Future<List<_i4.ConversationMessage>> getConversationPreviewMessages(
+  _i7.Future<List<_i5.ConversationMessage>> getConversationPreviewMessages(
     String? conversationId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationPreviewMessages, [
               conversationId,
             ]),
-            returnValue: _i7.Future<List<_i4.ConversationMessage>>.value(
-              <_i4.ConversationMessage>[],
+            returnValue: _i7.Future<List<_i5.ConversationMessage>>.value(
+              <_i5.ConversationMessage>[],
             ),
           )
-          as _i7.Future<List<_i4.ConversationMessage>>);
+          as _i7.Future<List<_i5.ConversationMessage>>);
 
   @override
-  _i7.Future<_i4.Conversation?> getConversation(String? id) =>
+  _i7.Future<_i5.Conversation?> getConversation(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getConversation, [id]),
-            returnValue: _i7.Future<_i4.Conversation?>.value(),
+            returnValue: _i7.Future<_i5.Conversation?>.value(),
           )
-          as _i7.Future<_i4.Conversation?>);
+          as _i7.Future<_i5.Conversation?>);
 
   @override
-  _i7.Future<void> updateConversation(_i4.Conversation? conversation) =>
+  _i7.Future<void> updateConversation(_i5.Conversation? conversation) =>
       (super.noSuchMethod(
             Invocation.method(#updateConversation, [conversation]),
             returnValue: _i7.Future<void>.value(),
@@ -1010,7 +1016,7 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
 
   @override
   _i7.Future<String> insertConversationMessage(
-    _i4.ConversationMessage? message,
+    _i5.ConversationMessage? message,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#insertConversationMessage, [message]),
@@ -1024,28 +1030,28 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i7.Future<String>);
 
   @override
-  _i7.Future<List<_i4.ConversationMessage>> getConversationMessages(
+  _i7.Future<List<_i5.ConversationMessage>> getConversationMessages(
     String? conversationId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationMessages, [conversationId]),
-            returnValue: _i7.Future<List<_i4.ConversationMessage>>.value(
-              <_i4.ConversationMessage>[],
+            returnValue: _i7.Future<List<_i5.ConversationMessage>>.value(
+              <_i5.ConversationMessage>[],
             ),
           )
-          as _i7.Future<List<_i4.ConversationMessage>>);
+          as _i7.Future<List<_i5.ConversationMessage>>);
 
   @override
-  _i7.Future<_i4.ConversationMessage?> getConversationMessage(String? id) =>
+  _i7.Future<_i5.ConversationMessage?> getConversationMessage(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationMessage, [id]),
-            returnValue: _i7.Future<_i4.ConversationMessage?>.value(),
+            returnValue: _i7.Future<_i5.ConversationMessage?>.value(),
           )
-          as _i7.Future<_i4.ConversationMessage?>);
+          as _i7.Future<_i5.ConversationMessage?>);
 
   @override
   _i7.Future<void> updateConversationMessage(
-    _i4.ConversationMessage? message,
+    _i5.ConversationMessage? message,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#updateConversationMessage, [message]),
@@ -1453,16 +1459,16 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i7.Future<String?>);
 
   @override
-  _i7.Future<List<_i4.ConversationMessage>> getMessagesForConversations(
+  _i7.Future<List<_i5.ConversationMessage>> getMessagesForConversations(
     List<String>? conversationIds,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getMessagesForConversations, [conversationIds]),
-            returnValue: _i7.Future<List<_i4.ConversationMessage>>.value(
-              <_i4.ConversationMessage>[],
+            returnValue: _i7.Future<List<_i5.ConversationMessage>>.value(
+              <_i5.ConversationMessage>[],
             ),
           )
-          as _i7.Future<List<_i4.ConversationMessage>>);
+          as _i7.Future<List<_i5.ConversationMessage>>);
 
   @override
   _i7.Future<Map<String, List<String>>> getConversationIdsForMessages(
@@ -1499,6 +1505,25 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
             ),
           )
           as _i7.Future<List<Map<String, dynamic>>>);
+
+  @override
+  void markSchemaChangedForCapture() => super.noSuchMethod(
+    Invocation.method(#markSchemaChangedForCapture, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i7.Future<_i3.RawWriteResult> runRawWriteWithChangeCapture(String? sql) =>
+      (super.noSuchMethod(
+            Invocation.method(#runRawWriteWithChangeCapture, [sql]),
+            returnValue: _i7.Future<_i3.RawWriteResult>.value(
+              _FakeRawWriteResult_1(
+                this,
+                Invocation.method(#runRawWriteWithChangeCapture, [sql]),
+              ),
+            ),
+          )
+          as _i7.Future<_i3.RawWriteResult>);
 
   @override
   _i7.Future<List<_i8.Note>> searchNotes(String? query) =>
@@ -1655,15 +1680,15 @@ class MockConversationService extends _i1.Mock
           as Set<String>);
 
   @override
-  _i3.LoadSkillTool get loadSkillTool =>
+  _i4.LoadSkillTool get loadSkillTool =>
       (super.noSuchMethod(
             Invocation.getter(#loadSkillTool),
-            returnValue: _FakeLoadSkillTool_1(
+            returnValue: _FakeLoadSkillTool_2(
               this,
               Invocation.getter(#loadSkillTool),
             ),
           )
-          as _i3.LoadSkillTool);
+          as _i4.LoadSkillTool);
 
   @override
   _i7.Future<void> enableSkills() =>
@@ -1690,7 +1715,7 @@ class MockConversationService extends _i1.Mock
           as _i7.Future<void>);
 
   @override
-  _i7.Future<_i4.Conversation> createConversation({
+  _i7.Future<_i5.Conversation> createConversation({
     required String? title,
     List<String>? noteIds = const [],
   }) =>
@@ -1699,8 +1724,8 @@ class MockConversationService extends _i1.Mock
               #title: title,
               #noteIds: noteIds,
             }),
-            returnValue: _i7.Future<_i4.Conversation>.value(
-              _FakeConversation_2(
+            returnValue: _i7.Future<_i5.Conversation>.value(
+              _FakeConversation_3(
                 this,
                 Invocation.method(#createConversation, [], {
                   #title: title,
@@ -1709,10 +1734,10 @@ class MockConversationService extends _i1.Mock
               ),
             ),
           )
-          as _i7.Future<_i4.Conversation>);
+          as _i7.Future<_i5.Conversation>);
 
   @override
-  _i7.Future<_i4.Conversation> forkConversation({
+  _i7.Future<_i5.Conversation> forkConversation({
     required String? originalConversationId,
     required String? forkFromMessageId,
     required String? newTitle,
@@ -1723,8 +1748,8 @@ class MockConversationService extends _i1.Mock
               #forkFromMessageId: forkFromMessageId,
               #newTitle: newTitle,
             }),
-            returnValue: _i7.Future<_i4.Conversation>.value(
-              _FakeConversation_2(
+            returnValue: _i7.Future<_i5.Conversation>.value(
+              _FakeConversation_3(
                 this,
                 Invocation.method(#forkConversation, [], {
                   #originalConversationId: originalConversationId,
@@ -1734,18 +1759,18 @@ class MockConversationService extends _i1.Mock
               ),
             ),
           )
-          as _i7.Future<_i4.Conversation>);
+          as _i7.Future<_i5.Conversation>);
 
   @override
-  _i7.Future<_i5.ForkContextSelection> prepareForkContextSelection(
+  _i7.Future<_i6.ForkContextSelection> prepareForkContextSelection(
     String? forkFromMessageId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#prepareForkContextSelection, [
               forkFromMessageId,
             ]),
-            returnValue: _i7.Future<_i5.ForkContextSelection>.value(
-              _FakeForkContextSelection_3(
+            returnValue: _i7.Future<_i6.ForkContextSelection>.value(
+              _FakeForkContextSelection_4(
                 this,
                 Invocation.method(#prepareForkContextSelection, [
                   forkFromMessageId,
@@ -1753,12 +1778,12 @@ class MockConversationService extends _i1.Mock
               ),
             ),
           )
-          as _i7.Future<_i5.ForkContextSelection>);
+          as _i7.Future<_i6.ForkContextSelection>);
 
   @override
-  _i7.Future<_i4.Conversation> forkConversationWithContext({
+  _i7.Future<_i5.Conversation> forkConversationWithContext({
     required String? forkFromMessageId,
-    required _i5.ConversationContext? selectedContext,
+    required _i6.ConversationContext? selectedContext,
     required String? newTitle,
   }) =>
       (super.noSuchMethod(
@@ -1767,8 +1792,8 @@ class MockConversationService extends _i1.Mock
               #selectedContext: selectedContext,
               #newTitle: newTitle,
             }),
-            returnValue: _i7.Future<_i4.Conversation>.value(
-              _FakeConversation_2(
+            returnValue: _i7.Future<_i5.Conversation>.value(
+              _FakeConversation_3(
                 this,
                 Invocation.method(#forkConversationWithContext, [], {
                   #forkFromMessageId: forkFromMessageId,
@@ -1778,10 +1803,10 @@ class MockConversationService extends _i1.Mock
               ),
             ),
           )
-          as _i7.Future<_i4.Conversation>);
+          as _i7.Future<_i5.Conversation>);
 
   @override
-  _i7.Future<_i4.ConversationMessage> addUserMessage({
+  _i7.Future<_i5.ConversationMessage> addUserMessage({
     required String? conversationId,
     required String? content,
     List<String>? attachmentPaths = const [],
@@ -1792,8 +1817,8 @@ class MockConversationService extends _i1.Mock
               #content: content,
               #attachmentPaths: attachmentPaths,
             }),
-            returnValue: _i7.Future<_i4.ConversationMessage>.value(
-              _FakeConversationMessage_4(
+            returnValue: _i7.Future<_i5.ConversationMessage>.value(
+              _FakeConversationMessage_5(
                 this,
                 Invocation.method(#addUserMessage, [], {
                   #conversationId: conversationId,
@@ -1803,10 +1828,10 @@ class MockConversationService extends _i1.Mock
               ),
             ),
           )
-          as _i7.Future<_i4.ConversationMessage>);
+          as _i7.Future<_i5.ConversationMessage>);
 
   @override
-  _i7.Future<_i4.ConversationMessage> addAIResponse({
+  _i7.Future<_i5.ConversationMessage> addAIResponse({
     required String? conversationId,
     required String? content,
     String? modelUsed,
@@ -1819,8 +1844,8 @@ class MockConversationService extends _i1.Mock
               #modelUsed: modelUsed,
               #metadata: metadata,
             }),
-            returnValue: _i7.Future<_i4.ConversationMessage>.value(
-              _FakeConversationMessage_4(
+            returnValue: _i7.Future<_i5.ConversationMessage>.value(
+              _FakeConversationMessage_5(
                 this,
                 Invocation.method(#addAIResponse, [], {
                   #conversationId: conversationId,
@@ -1831,11 +1856,11 @@ class MockConversationService extends _i1.Mock
               ),
             ),
           )
-          as _i7.Future<_i4.ConversationMessage>);
+          as _i7.Future<_i5.ConversationMessage>);
 
   @override
   _i7.Future<void> updateConversationMessage(
-    _i4.ConversationMessage? message,
+    _i5.ConversationMessage? message,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#updateConversationMessage, [message]),
@@ -1845,7 +1870,7 @@ class MockConversationService extends _i1.Mock
           as _i7.Future<void>);
 
   @override
-  _i7.Future<List<_i4.Conversation>> getAllConversations({
+  _i7.Future<List<_i5.Conversation>> getAllConversations({
     Duration? maxAge,
     List<String>? tagNames,
     List<String>? conversationIds,
@@ -1858,33 +1883,33 @@ class MockConversationService extends _i1.Mock
               #conversationIds: conversationIds,
               #includeEmpty: includeEmpty,
             }),
-            returnValue: _i7.Future<List<_i4.Conversation>>.value(
-              <_i4.Conversation>[],
+            returnValue: _i7.Future<List<_i5.Conversation>>.value(
+              <_i5.Conversation>[],
             ),
           )
-          as _i7.Future<List<_i4.Conversation>>);
+          as _i7.Future<List<_i5.Conversation>>);
 
   @override
-  _i7.Future<List<_i4.ConversationMessage>> getConversationPreviewMessages(
+  _i7.Future<List<_i5.ConversationMessage>> getConversationPreviewMessages(
     String? conversationId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationPreviewMessages, [
               conversationId,
             ]),
-            returnValue: _i7.Future<List<_i4.ConversationMessage>>.value(
-              <_i4.ConversationMessage>[],
+            returnValue: _i7.Future<List<_i5.ConversationMessage>>.value(
+              <_i5.ConversationMessage>[],
             ),
           )
-          as _i7.Future<List<_i4.ConversationMessage>>);
+          as _i7.Future<List<_i5.ConversationMessage>>);
 
   @override
-  _i7.Future<_i4.Conversation?> getConversation(String? conversationId) =>
+  _i7.Future<_i5.Conversation?> getConversation(String? conversationId) =>
       (super.noSuchMethod(
             Invocation.method(#getConversation, [conversationId]),
-            returnValue: _i7.Future<_i4.Conversation?>.value(),
+            returnValue: _i7.Future<_i5.Conversation?>.value(),
           )
-          as _i7.Future<_i4.Conversation?>);
+          as _i7.Future<_i5.Conversation?>);
 
   @override
   _i7.Future<void> renameConversation({
@@ -1902,16 +1927,16 @@ class MockConversationService extends _i1.Mock
           as _i7.Future<void>);
 
   @override
-  _i7.Future<List<_i4.ConversationMessage>> getConversationMessages(
+  _i7.Future<List<_i5.ConversationMessage>> getConversationMessages(
     String? conversationId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationMessages, [conversationId]),
-            returnValue: _i7.Future<List<_i4.ConversationMessage>>.value(
-              <_i4.ConversationMessage>[],
+            returnValue: _i7.Future<List<_i5.ConversationMessage>>.value(
+              <_i5.ConversationMessage>[],
             ),
           )
-          as _i7.Future<List<_i4.ConversationMessage>>);
+          as _i7.Future<List<_i5.ConversationMessage>>);
 
   @override
   _i7.Future<_i19.ConversationWithMessages?> getConversationWithMessages(
@@ -1953,7 +1978,7 @@ class MockConversationService extends _i1.Mock
           as _i7.Future<void>);
 
   @override
-  _i7.Future<_i4.ConversationTree?> getConversationTree({
+  _i7.Future<_i5.ConversationTree?> getConversationTree({
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
@@ -1964,12 +1989,12 @@ class MockConversationService extends _i1.Mock
               #conversationIds: conversationIds,
               #tagNames: tagNames,
             }),
-            returnValue: _i7.Future<_i4.ConversationTree?>.value(),
+            returnValue: _i7.Future<_i5.ConversationTree?>.value(),
           )
-          as _i7.Future<_i4.ConversationTree?>);
+          as _i7.Future<_i5.ConversationTree?>);
 
   @override
-  _i7.Future<_i4.ConversationTree?> refreshConversationTree({
+  _i7.Future<_i5.ConversationTree?> refreshConversationTree({
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
@@ -1980,9 +2005,9 @@ class MockConversationService extends _i1.Mock
               #conversationIds: conversationIds,
               #tagNames: tagNames,
             }),
-            returnValue: _i7.Future<_i4.ConversationTree?>.value(),
+            returnValue: _i7.Future<_i5.ConversationTree?>.value(),
           )
-          as _i7.Future<_i4.ConversationTree?>);
+          as _i7.Future<_i5.ConversationTree?>);
 
   @override
   _i7.Future<void> deleteConversation(String? conversationId) =>
@@ -2013,7 +2038,7 @@ class MockConversationService extends _i1.Mock
 
   @override
   _i7.Future<List<String>> getMessageIdsFromTreeNode(
-    _i4.ConversationTreeNode? node,
+    _i5.ConversationTreeNode? node,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getMessageIdsFromTreeNode, [node]),
@@ -2030,7 +2055,7 @@ class MockConversationService extends _i1.Mock
           as _i7.Future<List<String>>);
 
   @override
-  _i7.Future<_i4.Conversation> createConversationFromSelectedNodes({
+  _i7.Future<_i5.Conversation> createConversationFromSelectedNodes({
     required List<String>? selectedNodeIds,
     required String? title,
   }) =>
@@ -2039,8 +2064,8 @@ class MockConversationService extends _i1.Mock
               #selectedNodeIds: selectedNodeIds,
               #title: title,
             }),
-            returnValue: _i7.Future<_i4.Conversation>.value(
-              _FakeConversation_2(
+            returnValue: _i7.Future<_i5.Conversation>.value(
+              _FakeConversation_3(
                 this,
                 Invocation.method(#createConversationFromSelectedNodes, [], {
                   #selectedNodeIds: selectedNodeIds,
@@ -2049,12 +2074,12 @@ class MockConversationService extends _i1.Mock
               ),
             ),
           )
-          as _i7.Future<_i4.Conversation>);
+          as _i7.Future<_i5.Conversation>);
 
   @override
   _i7.Future<List<_i19.ConversationInteractionSnippet>>
   buildInteractionSnippets({
-    _i4.ConversationTree? existingTree,
+    _i5.ConversationTree? existingTree,
     required List<String>? nodeIds,
   }) =>
       (super.noSuchMethod(
@@ -2198,14 +2223,14 @@ class MockConversationService extends _i1.Mock
           as _i7.Future<void>);
 
   @override
-  _i7.Future<_i4.ConversationMessage?> getConversationMessage(
+  _i7.Future<_i5.ConversationMessage?> getConversationMessage(
     String? messageId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationMessage, [messageId]),
-            returnValue: _i7.Future<_i4.ConversationMessage?>.value(),
+            returnValue: _i7.Future<_i5.ConversationMessage?>.value(),
           )
-          as _i7.Future<_i4.ConversationMessage?>);
+          as _i7.Future<_i5.ConversationMessage?>);
 
   @override
   _i7.Future<List<_i23.ConversationBranchSummary>> getChildBranches(
@@ -2249,7 +2274,7 @@ class MockForkService extends _i1.Mock implements _i24.ForkService {
           as _i7.Stream<String>);
 
   @override
-  _i7.Future<_i4.Conversation?> forkFromMessageInContext({
+  _i7.Future<_i5.Conversation?> forkFromMessageInContext({
     required String? forkFromMessageId,
     required String? sourceConversationId,
     required String? suggestedTitle,
@@ -2260,12 +2285,12 @@ class MockForkService extends _i1.Mock implements _i24.ForkService {
               #sourceConversationId: sourceConversationId,
               #suggestedTitle: suggestedTitle,
             }),
-            returnValue: _i7.Future<_i4.Conversation?>.value(),
+            returnValue: _i7.Future<_i5.Conversation?>.value(),
           )
-          as _i7.Future<_i4.Conversation?>);
+          as _i7.Future<_i5.Conversation?>);
 
   @override
-  _i7.Future<_i4.Conversation?> forkFromMessage({
+  _i7.Future<_i5.Conversation?> forkFromMessage({
     required _i25.BuildContext? context,
     required String? forkFromMessageId,
     String? suggestedTitle,
@@ -2276,12 +2301,12 @@ class MockForkService extends _i1.Mock implements _i24.ForkService {
               #forkFromMessageId: forkFromMessageId,
               #suggestedTitle: suggestedTitle,
             }),
-            returnValue: _i7.Future<_i4.Conversation?>.value(),
+            returnValue: _i7.Future<_i5.Conversation?>.value(),
           )
-          as _i7.Future<_i4.Conversation?>);
+          as _i7.Future<_i5.Conversation?>);
 
   @override
-  _i7.Future<_i4.Conversation?> quickFork({
+  _i7.Future<_i5.Conversation?> quickFork({
     required String? forkFromMessageId,
     required String? newTitle,
   }) =>
@@ -2290,9 +2315,9 @@ class MockForkService extends _i1.Mock implements _i24.ForkService {
               #forkFromMessageId: forkFromMessageId,
               #newTitle: newTitle,
             }),
-            returnValue: _i7.Future<_i4.Conversation?>.value(),
+            returnValue: _i7.Future<_i5.Conversation?>.value(),
           )
-          as _i7.Future<_i4.Conversation?>);
+          as _i7.Future<_i5.Conversation?>);
 }
 
 /// A class which mocks [ModelStorageService].

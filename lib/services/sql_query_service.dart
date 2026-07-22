@@ -1,7 +1,9 @@
 import 'package:sqlparser/sqlparser.dart';
 
+import 'data_change_notifier.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
+import 'service_locator.dart';
 
 /// Callback type for requesting write operation approval.
 /// Returns true if the user approves the write operation.
@@ -18,6 +20,7 @@ enum SqlQueryType {
   insert,
   update,
   delete,
+  replace,
   createTable,
   createIndex,
   createTrigger,
@@ -97,9 +100,18 @@ class SqlQueryResult {
 /// - Session-level approval for write operations
 /// - Unified query execution with proper error handling
 class SqlQueryService {
-  SqlQueryService(this._databaseService, {this.onWriteApprovalRequest});
+  SqlQueryService(
+    this._databaseService, {
+    this.onWriteApprovalRequest,
+    DataChangeNotifier? changeNotifier,
+  }) : _changeNotifier = changeNotifier ?? DataChangeNotifier.shared();
 
   final DatabaseService _databaseService;
+
+  /// Receives post-write change events (from the DB change journal for DML,
+  /// or a bulk event for statements the journal cannot observe). Publication
+  /// is enqueue-only and never affects the query result.
+  final DataChangeNotifier _changeNotifier;
 
   /// Callback to request user approval for write operations.
   WriteApprovalCallback? onWriteApprovalRequest;
@@ -133,9 +145,61 @@ class SqlQueryService {
   /// we treat it as non-read-only since we don't know what the query does.
   bool isReadOnlyQuery(String sql) {
     final queryType = getQueryType(sql);
-    // Only SELECT and PRAGMA are definitively read-only
-    // 'other' is treated as non-read-only for safety
-    return queryType == SqlQueryType.select || queryType == SqlQueryType.pragma;
+    // Only SELECT and read-only PRAGMA forms are definitively read-only;
+    // 'other' is treated as non-read-only for safety.
+    if (queryType == SqlQueryType.select) return true;
+    if (queryType == SqlQueryType.pragma) return _isReadOnlyPragma(sql);
+    return false;
+  }
+
+  /// Whether [queryType] is DML that can (and should) run inside the change
+  /// capture transaction. Everything else non-read-only — DDL, writable
+  /// PRAGMAs, VACUUM, ATTACH, unparseable statements — must execute directly:
+  /// some of those cannot run inside a transaction at all, and none of them
+  /// fire the capture triggers anyway (only DML does).
+  bool isCapturableDml(SqlQueryType queryType) {
+    return queryType == SqlQueryType.insert ||
+        queryType == SqlQueryType.update ||
+        queryType == SqlQueryType.delete ||
+        queryType == SqlQueryType.replace;
+  }
+
+  /// Read-only PRAGMAs that take a `(...)` argument (inspection forms).
+  /// Conservative heuristic: any PRAGMA outside this list that carries an
+  /// argument (`=` or `(...)`) is treated as a write — safe but may cost an
+  /// unnecessary approval/reload; bare PRAGMAs stay read-only.
+  static const Set<String> _readOnlyPragmasWithArgs = {
+    'table_info',
+    'table_xinfo',
+    'index_info',
+    'index_list',
+    'index_xinfo',
+    'foreign_key_list',
+    'foreign_key_check',
+    'function_list',
+    'collation_list',
+    'database_list',
+    'compile_options',
+    'freelist_count',
+    'page_count',
+    'integrity_check',
+    'quick_check',
+    'pragma_list',
+    'table_list',
+  };
+
+  bool _isReadOnlyPragma(String sql) {
+    final match = RegExp(
+      r'^\s*PRAGMA\s+(?:[\w"]+\s*\.\s*)?(\w+)\s*(.*)$',
+      caseSensitive: false,
+      dotAll: true,
+    ).firstMatch(sql.trim());
+    if (match == null) return false;
+    final name = match.group(1)!.toLowerCase();
+    final rest = match.group(2)!.trim().replaceAll(RegExp(r';\s*$'), '');
+    if (rest.isEmpty) return true; // bare PRAGMA: query form
+    if (rest.startsWith('(')) return _readOnlyPragmasWithArgs.contains(name);
+    return false; // '=' assignment or anything unexpected: treat as write
   }
 
   /// Detect the type of SQL query.
@@ -191,6 +255,10 @@ class SqlQueryService {
       return SqlQueryType.select;
     } else if (upperSql.startsWith('INSERT')) {
       return SqlQueryType.insert;
+    } else if (upperSql.startsWith('REPLACE')) {
+      // REPLACE INTO is delete-plus-insert DML; classify it so it takes the
+      // change-capture path instead of degrading to a bulk reload.
+      return SqlQueryType.replace;
     } else if (upperSql.startsWith('UPDATE')) {
       return SqlQueryType.update;
     } else if (upperSql.startsWith('DELETE')) {
@@ -221,12 +289,19 @@ class SqlQueryService {
   }
 
   /// Get a human-readable description of the query type.
-  String getQueryTypeDescription(SqlQueryType queryType) {
+  String getQueryTypeDescription(SqlQueryType queryType) =>
+      describeQueryType(queryType);
+
+  /// Static so UI code (e.g. approval dialogs) reuses the same strings
+  /// without duplicating this switch per call site.
+  static String describeQueryType(SqlQueryType queryType) {
     switch (queryType) {
       case SqlQueryType.select:
         return 'SELECT (read data)';
       case SqlQueryType.insert:
         return 'INSERT (add data)';
+      case SqlQueryType.replace:
+        return 'REPLACE (add or overwrite data)';
       case SqlQueryType.update:
         return 'UPDATE (modify data)';
       case SqlQueryType.delete:
@@ -316,7 +391,27 @@ class SqlQueryService {
     // Execute the query
     try {
       final startTime = DateTime.now();
-      final results = await _databaseService.runRawQuery(sql);
+      List<Map<String, dynamic>> results;
+      if (!isReadOnly && isCapturableDml(queryType)) {
+        // DML runs inside the change-capture transaction; the journal
+        // reports exactly which note-domain rows were touched (including by
+        // persistent triggers) so the UI can refresh precisely.
+        final capture = await _databaseService.runRawWriteWithChangeCapture(
+          sql,
+        );
+        results = capture.rows;
+        _publishCapturedChanges(capture);
+      } else {
+        results = await _databaseService.runRawQuery(sql);
+        if (!isReadOnly) {
+          // DDL / VACUUM / writable PRAGMA / unparseable: cannot run in the
+          // capture transaction and the journal cannot observe it. Re-verify
+          // triggers (a DROP TABLE takes its triggers with it) and
+          // invalidate broadly.
+          _databaseService.markSchemaChangedForCapture();
+          _changeNotifier.publish(const DataChangeEvent(bulk: true));
+        }
+      }
       final duration = DateTime.now().difference(startTime);
 
       LoggerService.debug(
@@ -351,5 +446,32 @@ class SqlQueryService {
         isReadOnly: isReadOnly,
       );
     }
+  }
+
+  /// A targeted refresh above this many notes costs more than a reload (and
+  /// risks the SQL variable limit on older Android SQLite), all while
+  /// holding the provider cache lock — degrade to bulk instead.
+  static const int maxTargetedRefreshIds = 200;
+
+  /// Publishes the journal-observed changes of a captured DML write. When
+  /// capture was degraded (trigger install failed, e.g. after DDL dropped a
+  /// monitored table) the journal may have missed writes, so fall back to a
+  /// bulk invalidation instead of trusting it. Very large id sets also
+  /// degrade to bulk — one debounced reload beats refetching thousands of
+  /// notes one batch at a time.
+  void _publishCapturedChanges(RawWriteResult capture) {
+    if (!capture.captureComplete ||
+        capture.changedNoteIds.length > maxTargetedRefreshIds) {
+      _changeNotifier.publish(const DataChangeEvent(bulk: true));
+      return;
+    }
+    _changeNotifier.publish(
+      DataChangeEvent(
+        noteIds: capture.changedNoteIds,
+        tagsChanged: capture.tagsChanged,
+        filtersChanged: capture.filtersChanged,
+        relationshipNoteIds: capture.relationshipNoteIds,
+      ),
+    );
   }
 }

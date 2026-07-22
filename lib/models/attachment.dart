@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
+
+import '../utils/file_utils.dart';
 
 /// Configuration for PDF AI context range
 class PdfAiContextConfig {
@@ -170,14 +171,8 @@ class Attachment {
   }
 
   /// Gets the absolute file path for file operations
-  Future<String> getAbsolutePath() async {
-    if (isRelativePath) {
-      final appDir = await getApplicationDocumentsDirectory();
-      return '${appDir.path}/$filePath';
-    } else {
-      // Legacy absolute path - return as is
-      return filePath;
-    }
+  Future<String> getAbsolutePath() {
+    return FileUtils.getFullFilePath(filePath, isRelativePath);
   }
 
   /// Checks if the file exists

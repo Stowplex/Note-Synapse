@@ -36,6 +36,49 @@ class MigrationStep {
   const MigrationStep({required this.description, required this.execute});
 }
 
+/// Result of [DatabaseService.runRawWriteWithChangeCapture]: the statement's
+/// rows plus which note-domain data the write (including any persistent
+/// triggers it fired) actually touched, as observed by the TEMP change
+/// journal.
+class RawWriteResult {
+  const RawWriteResult({
+    required this.rows,
+    this.changedNoteIds = const {},
+    this.relationshipNoteIds = const {},
+    this.tagsChanged = false,
+    this.filtersChanged = false,
+    required this.captureComplete,
+  });
+
+  final List<Map<String, dynamic>> rows;
+  final Set<String> changedNoteIds;
+  final Set<String> relationshipNoteIds;
+  final bool tagsChanged;
+  final bool filtersChanged;
+
+  /// False when the capture trigger set could not be (fully) installed — the
+  /// journal may have missed writes and callers should invalidate broadly.
+  /// Returned per execution so callers never race on mutable service state.
+  final bool captureComplete;
+}
+
+/// Result of installing the TEMP capture objects on one connection.
+/// Immutable and connection-keyed so per-call reads never race with
+/// close()/reopen resetting mutable service fields.
+class _CaptureState {
+  const _CaptureState(this.db, {required this.journalReady, required this.complete});
+
+  final Database db;
+
+  /// The TEMP journal + gate tables exist; capture transactions may
+  /// reference them.
+  final bool journalReady;
+
+  /// Every monitored table's trigger group installed; the journal can be
+  /// trusted. False ⇒ callers must invalidate broadly.
+  final bool complete;
+}
+
 class DatabaseService {
   final String? _databaseNameOverride;
 
@@ -1935,8 +1978,26 @@ class DatabaseService {
     json.remove('subNotes');
     json.remove('tags');
     json.remove('attachmentPaths');
+    // Note objects loaded from the database never carry metadata (markers
+    // etc. are written only via updateNoteMetadata), so writing
+    // toJson()'s null here would wipe the column on every save.
+    json.remove('metadata');
 
-    await db.update('notes', json, where: 'id = ?', whereArgs: [note.id]);
+    final updatedRows = await db.update(
+      'notes',
+      json,
+      where: 'id = ?',
+      whereArgs: [note.id],
+    );
+    if (updatedRows == 0) {
+      // The note row is gone (e.g. deleted concurrently by a plugin/agent).
+      // Re-inserting subnotes/tags/attachments below would create orphan
+      // child rows for a nonexistent note.
+      LoggerService.warning(
+        'updateNote skipped: note ${note.id} no longer exists',
+      );
+      return;
+    }
 
     // Update subnotes
     await db.delete('subnotes', where: 'noteId = ?', whereArgs: [note.id]);
@@ -2915,6 +2976,11 @@ class DatabaseService {
     final db = await database;
     await db.close();
     _database = null;
+    // TEMP capture objects died with the connection; drop the stale state so
+    // the next captured write reinstalls them on the new connection. (An
+    // in-flight install for the old connection is left to finish — its
+    // result is discarded because it is keyed to the closed Database.)
+    _captureState = null;
   }
 
   // Helper method to convert string to TaskStatus
@@ -5069,6 +5135,294 @@ class DatabaseService {
   ]) async {
     final db = await database;
     return await db.rawQuery(query, arguments);
+  }
+
+  // ===========================================================================
+  // Raw-write change capture
+  //
+  // TEMP triggers journal which note-domain rows a raw DML statement touched
+  // (including rows written indirectly by persistent triggers), so UI caches
+  // can be invalidated precisely. TEMP objects are connection-local and never
+  // persisted: no schema change, invisible to recovery/backup and to other
+  // connections. Design: .claude/plans/user-app-bridge-ui-refresh-fix.md
+  // ===========================================================================
+
+  static const String _changeJournal = '_synapse_change_journal';
+  static const String _captureActiveFlag = '_synapse_capture_active';
+
+  /// Committed capture-install state, keyed to the connection it was
+  /// installed on. TEMP objects die with their connection, so a state whose
+  /// [_CaptureState.db] is not the live connection is stale and triggers a
+  /// reinstall (after close()/reopen, incl. recovery/import).
+  _CaptureState? _captureState;
+  Future<_CaptureState>? _captureInstalling;
+  Database? _captureInstallingFor;
+  bool _captureReverifyRequested = false;
+
+  /// Ask for the capture trigger set to be re-verified before the next
+  /// captured write. Call after schema-altering SQL: a dropped table takes
+  /// its triggers with it, and `IF NOT EXISTS` makes re-install idempotent
+  /// for survivors.
+  void markSchemaChangedForCapture() {
+    _captureReverifyRequested = true;
+  }
+
+  /// The TEMP trigger statements for one monitored table. Kinds: 'notes'
+  /// rows carry the affected note id; 'relationships' rows carry an endpoint
+  /// note id; 'tags'/'filters' rows are domain markers (note_id NULL) —
+  /// except tag UPDATE/DELETE, which additionally journal every note bearing
+  /// the tag (cached notes embed tag names, so a rename/delete must refresh
+  /// them). BEFORE DELETE on tags so the note_tags join rows still exist
+  /// regardless of cascade behavior.
+  ///
+  /// Every trigger is gated on a row existing in the TEMP active-flag table,
+  /// which only [runRawWriteWithChangeCapture] sets inside its transaction.
+  /// Ordinary app writes therefore pay one EXISTS check on an empty TEMP
+  /// table and journal nothing — without the gate, the journal would grow
+  /// unboundedly between captured writes.
+  static List<String> _captureTriggerStatements(String table) {
+    const journal = _changeJournal;
+    String trigger(String name, String timing, String body) =>
+        'CREATE TEMP TRIGGER IF NOT EXISTS _syn_cap_$name '
+        '$timing ON $table '
+        'WHEN EXISTS (SELECT 1 FROM $_captureActiveFlag) '
+        'BEGIN $body END';
+    String note(String ref) =>
+        "INSERT INTO $journal(kind, note_id) VALUES ('notes', $ref);";
+    String relationship(String ref) =>
+        "INSERT INTO $journal(kind, note_id) VALUES ('relationships', $ref);";
+    String domain(String kind) =>
+        "INSERT INTO $journal(kind, note_id) VALUES ('$kind', NULL);";
+    // Every note currently carrying the tag; used before the association
+    // rows are removed.
+    String notesWithTag(String tagRef) =>
+        "INSERT INTO $journal(kind, note_id) "
+        "SELECT 'notes', noteId FROM note_tags WHERE tagId = $tagRef;";
+
+    switch (table) {
+      case 'notes':
+        return [
+          trigger('notes_ai', 'AFTER INSERT', note('NEW.id')),
+          // Both sides: an UPDATE that rewrites the primary key must remove
+          // the old cached entry as well as upsert the new one.
+          trigger(
+            'notes_au',
+            'AFTER UPDATE',
+            '${note('OLD.id')} ${note('NEW.id')}',
+          ),
+          trigger('notes_ad', 'AFTER DELETE', note('OLD.id')),
+        ];
+      case 'subnotes':
+      case 'note_tags':
+      case 'attachments':
+        // UPDATE records both sides so association moves refresh both notes.
+        return [
+          trigger('${table}_ai', 'AFTER INSERT', note('NEW.noteId')),
+          trigger(
+            '${table}_au',
+            'AFTER UPDATE',
+            '${note('OLD.noteId')} ${note('NEW.noteId')}',
+          ),
+          trigger('${table}_ad', 'AFTER DELETE', note('OLD.noteId')),
+        ];
+      case 'relationships':
+        return [
+          trigger(
+            'relationships_ai',
+            'AFTER INSERT',
+            '${relationship('NEW.fromNoteId')} '
+                '${relationship('NEW.toNoteId')}',
+          ),
+          trigger(
+            'relationships_au',
+            'AFTER UPDATE',
+            '${relationship('OLD.fromNoteId')} '
+                '${relationship('OLD.toNoteId')} '
+                '${relationship('NEW.fromNoteId')} '
+                '${relationship('NEW.toNoteId')}',
+          ),
+          trigger(
+            'relationships_ad',
+            'AFTER DELETE',
+            '${relationship('OLD.fromNoteId')} '
+                '${relationship('OLD.toNoteId')}',
+          ),
+        ];
+      case 'tags':
+        return [
+          trigger('tags_ai', 'AFTER INSERT', domain('tags')),
+          trigger(
+            'tags_au',
+            'AFTER UPDATE',
+            '${domain('tags')} ${notesWithTag('OLD.id')}',
+          ),
+          trigger(
+            'tags_bd',
+            'BEFORE DELETE',
+            '${domain('tags')} ${notesWithTag('OLD.id')}',
+          ),
+        ];
+      case 'filters':
+        return [
+          trigger('filters_ai', 'AFTER INSERT', domain('filters')),
+          trigger('filters_au', 'AFTER UPDATE', domain('filters')),
+          trigger('filters_ad', 'AFTER DELETE', domain('filters')),
+        ];
+      default:
+        // A table listed in _capturedTables without a trigger spec would be
+        // silently uncaptured — fail loudly instead.
+        throw ArgumentError('No capture trigger spec for table "$table"');
+    }
+  }
+
+  static const List<String> _capturedTables = [
+    'notes',
+    'subnotes',
+    'note_tags',
+    'attachments',
+    'relationships',
+    'tags',
+    'filters',
+  ];
+
+  Future<_CaptureState> _installCaptureObjects(Database db) async {
+    try {
+      await db.execute(
+        'CREATE TEMP TABLE IF NOT EXISTS $_changeJournal'
+        '(kind TEXT NOT NULL, note_id TEXT)',
+      );
+      await db.execute(
+        'CREATE TEMP TABLE IF NOT EXISTS $_captureActiveFlag(flag INTEGER)',
+      );
+    } catch (e) {
+      // Without the journal nothing can be captured (and the triggers would
+      // reference a missing table), so bail out entirely.
+      LoggerService.error(
+        '[ChangeCapture] Failed to create journal tables: $e',
+        error: e,
+      );
+      return _CaptureState(db, journalReady: false, complete: false);
+    }
+
+    var complete = true;
+    for (final table in _capturedTables) {
+      try {
+        for (final statement in _captureTriggerStatements(table)) {
+          await db.execute(statement);
+        }
+      } catch (e) {
+        // Per-table isolation: a dropped/renamed core table must not block
+        // writes to unrelated tables. Degraded capture is reported to the
+        // caller per execution via RawWriteResult.captureComplete.
+        complete = false;
+        LoggerService.warning(
+          '[ChangeCapture] Trigger install failed for "$table" '
+          '(capture degraded): $e',
+        );
+      }
+    }
+    return _CaptureState(db, journalReady: true, complete: complete);
+  }
+
+  /// Ensures TEMP capture objects exist on [db] and returns the resulting
+  /// state. The in-flight future is keyed to the connection, so a caller on
+  /// a NEW connection never receives an install running against a closed
+  /// one; the committed [_captureState] is only published while [db] is
+  /// still the live connection, so late continuations cannot re-poison state
+  /// after close(). The in-flight slot is always cleared, so a failed
+  /// install never blocks retries.
+  Future<_CaptureState> _ensureCaptureReady(Database db) {
+    final state = _captureState;
+    if (state != null &&
+        identical(state.db, db) &&
+        !_captureReverifyRequested) {
+      return Future.value(state);
+    }
+    if (_captureInstalling != null && identical(_captureInstallingFor, db)) {
+      return _captureInstalling!;
+    }
+
+    _captureInstallingFor = db;
+    final install = () async {
+      _captureReverifyRequested = false;
+      _CaptureState result;
+      try {
+        result = await _installCaptureObjects(db);
+      } catch (e) {
+        LoggerService.error('[ChangeCapture] Install failed: $e', error: e);
+        result = _CaptureState(db, journalReady: false, complete: false);
+      }
+      if (identical(_database, db)) {
+        _captureState = result;
+      }
+      return result;
+    }();
+    _captureInstalling = install.whenComplete(() {
+      if (identical(_captureInstallingFor, db)) {
+        _captureInstalling = null;
+        _captureInstallingFor = null;
+      }
+    });
+    return _captureInstalling!;
+  }
+
+  /// Executes a single raw DML statement, journaling which note-domain rows
+  /// it touched (including writes performed by persistent triggers it fires).
+  ///
+  /// The statement runs through the transaction executor — never the plain
+  /// database handle — because re-entering [database] inside a transaction
+  /// deadlocks sqflite. Statements that cannot run inside a transaction
+  /// (VACUUM, ATTACH, some PRAGMAs) must NOT be routed here; callers are
+  /// expected to use [runRawQuery] for those and invalidate broadly.
+  Future<RawWriteResult> runRawWriteWithChangeCapture(String sql) async {
+    final db = await database;
+    final capture = await _ensureCaptureReady(db);
+
+    if (!capture.journalReady) {
+      // No journal at all: execute plainly and report degraded capture.
+      final rows = await db.rawQuery(sql);
+      return RawWriteResult(rows: rows, captureComplete: false);
+    }
+
+    final changedNoteIds = <String>{};
+    final relationshipNoteIds = <String>{};
+    var tagsChanged = false;
+    var filtersChanged = false;
+    late final List<Map<String, dynamic>> rows;
+
+    await db.transaction((txn) async {
+      // Arm the trigger gate for exactly this statement; without a flag row
+      // the TEMP triggers are inert, so ordinary app writes never journal.
+      // A rollback removes the flag row with everything else.
+      await txn.delete(_changeJournal);
+      await txn.insert(_captureActiveFlag, {'flag': 1});
+      rows = await txn.rawQuery(sql);
+      final journal = await txn.query(_changeJournal);
+      for (final row in journal) {
+        final kind = row['kind'] as String?;
+        final noteId = row['note_id'] as String?;
+        if (kind == 'notes' && noteId != null) {
+          changedNoteIds.add(noteId);
+        } else if (kind == 'relationships' && noteId != null) {
+          relationshipNoteIds.add(noteId);
+        } else if (kind == 'tags') {
+          tagsChanged = true;
+        } else if (kind == 'filters') {
+          filtersChanged = true;
+        }
+      }
+      await txn.delete(_captureActiveFlag);
+      await txn.delete(_changeJournal);
+    });
+
+    return RawWriteResult(
+      rows: rows,
+      changedNoteIds: changedNoteIds,
+      relationshipNoteIds: relationshipNoteIds,
+      tagsChanged: tagsChanged,
+      filtersChanged: filtersChanged,
+      captureComplete: capture.complete,
+    );
   }
 
   /// Fallback search using LIKE

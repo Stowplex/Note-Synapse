@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfrx/pdfrx.dart';
 import '../approval_service.dart';
+import '../data_change_notifier.dart';
 import '../database_service.dart';
 import '../note_modification_service.dart';
 import '../logger_service.dart';
@@ -1242,6 +1243,16 @@ class DeleteNoteTool implements NativeTool {
       } catch (e) {
         failedIds[noteId] = e.toString();
       }
+    }
+
+    // This tool deletes via DatabaseService directly (not through
+    // NoteModificationService or AppProvider), so it must publish its own
+    // invalidation — only the ids that actually got deleted. Publish is
+    // enqueue-only and cannot affect the tool result.
+    if (deletedIds.isNotEmpty) {
+      DataChangeNotifier.shared().publish(
+        DataChangeEvent(noteIds: deletedIds.toSet()),
+      );
     }
 
     if (deletedIds.isEmpty && failedIds.isNotEmpty) {

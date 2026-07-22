@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +11,7 @@ import '../models/filter.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import '../models/model_config.dart';
+import '../services/data_change_notifier.dart';
 import '../services/database_service.dart';
 import '../services/ai_service.dart';
 import '../services/user_app_service.dart';
@@ -20,7 +23,23 @@ import '../services/tag_image_service.dart';
 import '../models/generation_context.dart';
 
 class AppProvider extends ChangeNotifier {
-  final DatabaseService _databaseService = DatabaseService();
+  AppProvider({
+    DatabaseService? databaseService,
+    DataChangeNotifier? changeNotifier,
+  }) : _databaseService = databaseService ?? DatabaseService(),
+       _changeNotifier = changeNotifier ?? DataChangeNotifier.shared() {
+    _changeSubscription = _changeNotifier.addListener(_onDataChanged);
+  }
+
+  final DatabaseService _databaseService;
+  final DataChangeNotifier _changeNotifier;
+  late final DataChangeSubscription _changeSubscription;
+
+  /// Tail of the cache-mutation queue (see [_withCacheLock]). The tail future
+  /// never carries an error; each action's failure goes to its own caller.
+  Future<void> _lockTail = Future.value();
+  Timer? _reloadTimer;
+
   ConversationService get _conversationService => getIt<ConversationService>();
   UserAppService get _userAppService => getIt<UserAppService>();
 
@@ -31,6 +50,10 @@ class AppProvider extends ChangeNotifier {
   final Map<String, List<AppRevision>> _appRevisions =
       {}; // Cache revisions by appId
   bool _isLoading = false;
+  bool _hasLoadedOnce = false;
+  bool _reloadRequested = false;
+  Future<void>? _loadDataInFlight;
+  List<String>? _availableTagsCache;
   int _dataVersion = 0;
   String? _error;
   bool _isDarkMode = false;
@@ -59,8 +82,196 @@ class AppProvider extends ChangeNotifier {
   String? get currentMultiFunctionAppId => _currentMultiFunctionAppId;
   bool get isHierarchyEnabled => _isHierarchyEnabled;
 
-  Future<void> loadData() async {
-    _setLoading(true);
+  /// Serializes every cache mutation (`_notes`/`_tags`/`_filters`), including
+  /// full reloads, so an older DB read can never overwrite newer cache state.
+  ///
+  /// NON-REENTRANT: a locked method must never call another locked method, or
+  /// it deadlocks. Provider-internal cross-calls must target unlocked helpers.
+  ///
+  /// Error-resilient: the queue tail always completes; an action's error is
+  /// returned only to its own caller and never poisons later actions.
+  static const _cacheLockZoneKey = #appProviderCacheLock;
+
+  Future<T> _withCacheLock<T>(Future<T> Function() action) {
+    // Debug-mode tripwire for the non-reentrancy rule: a locked action that
+    // awaits another locked method would deadlock silently in release; in
+    // debug/tests it fails loudly instead.
+    assert(
+      Zone.current[_cacheLockZoneKey] != true,
+      'Re-entrant _withCacheLock call: a locked AppProvider method must not '
+      'invoke another locked method (this would deadlock).',
+    );
+    final prev = _lockTail;
+    final release = Completer<void>();
+    _lockTail = release.future;
+    return prev.then((_) async {
+      try {
+        return await runZoned(
+          action,
+          zoneValues: {_cacheLockZoneKey: true},
+        );
+      } finally {
+        release.complete();
+      }
+    });
+  }
+
+  /// Entry point for [DataChangeNotifier] events published by data-layer
+  /// writers (plugin bridge SQL, NoteModificationService, agent tools).
+  Future<void> _onDataChanged(DataChangeEvent event) async {
+    if (event.bulk) {
+      // Unknown scope supersedes targeted work in this merged batch; one
+      // debounced full reload covers everything. Ordering safety comes from
+      // the cache lock, not from timing.
+      scheduleReload();
+      return;
+    }
+    await _withCacheLock(() => _applyChangesLocked(event));
+  }
+
+  /// Applies a targeted change event under the cache lock: one lock
+  /// acquisition, one notification, one cache-snapshot boundary per event.
+  /// The three independent fetches run concurrently to shorten the locked
+  /// window; each failure is isolated and logged.
+  Future<void> _applyChangesLocked(DataChangeEvent event) async {
+    var cacheTouched = false;
+    await Future.wait([
+      if (event.noteIds.isNotEmpty)
+        _refreshNotesLocked(event.noteIds).then((_) => cacheTouched = true),
+      if (event.tagsChanged)
+        _databaseService
+            .getAllTags()
+            .then((tags) {
+              _tags = tags;
+              cacheTouched = true;
+            })
+            .catchError((Object e) {
+              LoggerService.error(
+                'Error refreshing tags for $event: $e',
+                error: e,
+              );
+            }),
+      if (event.filtersChanged)
+        _databaseService
+            .getAllFilters()
+            .then((filters) {
+              _filters = filters;
+              cacheTouched = true;
+            })
+            .catchError((Object e) {
+              LoggerService.error(
+                'Error refreshing filters for $event: $e',
+                error: e,
+              );
+            }),
+    ]);
+    // Relationship changes carry no cache to patch (relationships are read
+    // from the DB on demand) but dependent UI still needs a rebuild signal.
+    if (cacheTouched || event.relationshipNoteIds.isNotEmpty) {
+      _dataVersion++;
+      notifyListeners();
+    }
+  }
+
+  /// Re-fetches [noteIds] from the database and upserts them into `_notes`;
+  /// ids missing from the DB are removed (deleted). Caller must hold the
+  /// cache lock and is responsible for bumping `_dataVersion` and notifying.
+  Future<void> _refreshNotesLocked(Set<String> noteIds) async {
+    var fetched = <Note>[];
+    // Ids whose fetch failed: unknown state, so leave any cached copy alone
+    // rather than misreading a fetch error as a deletion.
+    final failed = <String>{};
+    try {
+      fetched = await _databaseService.getNotesByIds(noteIds.toList());
+    } catch (e) {
+      LoggerService.error(
+        'Batch note refresh failed, falling back to per-id fetch: $e',
+        error: e,
+      );
+      for (final id in noteIds) {
+        try {
+          final note = await _databaseService.getNote(id);
+          if (note != null) fetched.add(note);
+        } catch (e2) {
+          failed.add(id);
+          LoggerService.error('Error refreshing note $id: $e2', error: e2);
+        }
+      }
+    }
+
+    final found = {for (final note in fetched) note.id: note};
+    for (final id in noteIds) {
+      final note = found[id];
+      if (note != null) {
+        final index = _notes.indexWhere((n) => n.id == id);
+        if (index != -1) {
+          _notes[index] = note;
+        } else {
+          _notes.add(note);
+        }
+      } else if (!failed.contains(id)) {
+        _notes.removeWhere((n) => n.id == id);
+      }
+    }
+  }
+
+  /// Public targeted refresh: re-fetch [noteIds] and upsert/remove them in
+  /// the cache with a single notification.
+  Future<void> refreshNotesFromDb(Set<String> noteIds) {
+    if (noteIds.isEmpty) return Future.value();
+    return _withCacheLock(() async {
+      await _refreshNotesLocked(noteIds);
+      _dataVersion++;
+      notifyListeners();
+    });
+  }
+
+  /// Debounced full reload for changes of unknown scope. Coalesces bursts
+  /// into one [loadData] pass.
+  void scheduleReload() {
+    if (_reloadTimer?.isActive ?? false) return;
+    _reloadTimer = Timer(const Duration(milliseconds: 500), () {
+      loadData().catchError((Object e) {
+        LoggerService.error('Scheduled reload failed: $e', error: e);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _reloadTimer?.cancel();
+    _changeSubscription.cancel();
+    super.dispose();
+  }
+
+  Future<void> loadData() {
+    // Coalesce concurrent callers onto the in-flight load instead of
+    // re-running the full (expensive) load. A caller arriving mid-flight may
+    // have just written to the database, and the in-flight pass may have read
+    // before that write — so request one more full pass; all waiters resolve
+    // only after it, guaranteeing every caller observes data written before
+    // its call.
+    if (_loadDataInFlight != null) {
+      _reloadRequested = true;
+      return _loadDataInFlight!;
+    }
+    _loadDataInFlight = () async {
+      do {
+        _reloadRequested = false;
+        await _doLoadData();
+      } while (_reloadRequested);
+    }().whenComplete(() {
+      _loadDataInFlight = null;
+    });
+    return _loadDataInFlight!;
+  }
+
+  Future<void> _doLoadData() => _withCacheLock(() async {
+    if (!_hasLoadedOnce) {
+      // Blank the notes region behind a spinner only on the first load;
+      // refreshes update data in place.
+      _setLoading(true);
+    }
     try {
       LoggerService.info('Starting loadData');
       _notes = await _databaseService.getAllNotes();
@@ -85,23 +296,26 @@ class AppProvider extends ChangeNotifier {
       await _loadOnboardingStatus();
 
       _error = null;
+      _hasLoadedOnce = true;
       LoggerService.info('loadData completed successfully');
       _dataVersion++;
-      notifyListeners(); // Notify listeners that data has been updated
     } catch (e) {
       _error = 'Error loading data: ${e.toString()}';
       LoggerService.error('Error in loadData: $e', error: e);
     } finally {
+      // No-op flip on refreshes; always notifies so every pass ends with
+      // listeners seeing the final state (data or _error).
       _setLoading(false);
     }
-  }
+  });
 
   void updateModelConfig(ModelConfig newConfig) {
     _modelConfig = newConfig;
     notifyListeners();
   }
 
-  Future<void> addNote(Note note, {bool fromShare = false}) async {
+  Future<void> addNote(Note note, {bool fromShare = false}) =>
+      _withCacheLock(() async {
     try {
       await _databaseService.insertNote(note);
 
@@ -122,9 +336,9 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
       rethrow; // Rethrow the error so the calling code can handle it
     }
-  }
+  });
 
-  Future<void> updateNote(Note note) async {
+  Future<void> updateNote(Note note) => _withCacheLock(() async {
     try {
       await _databaseService.updateNote(note);
 
@@ -134,9 +348,14 @@ class AppProvider extends ChangeNotifier {
         final noteIndex = _notes.indexWhere((n) => n.id == note.id);
         if (noteIndex != -1) {
           _notes[noteIndex] = updatedNote;
-          _dataVersion++;
-          notifyListeners();
+        } else {
+          // Note exists in the DB but not in the cache (e.g. created by a
+          // plugin/agent write): upsert instead of silently dropping the
+          // update on the floor.
+          _notes.add(updatedNote);
         }
+        _dataVersion++;
+        notifyListeners();
       }
 
       _error = null; // Clear any previous errors
@@ -145,9 +364,10 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
       rethrow; // Rethrow the error so the calling code can handle it
     }
-  }
+  });
 
-  Future<void> updateNoteContent(String noteId, String newContent) async {
+  Future<void> updateNoteContent(String noteId, String newContent) =>
+      _withCacheLock(() async {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
@@ -168,9 +388,10 @@ class AppProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
-  }
+  });
 
-  Future<void> updateTaskStatus(String noteId, TaskStatus status) async {
+  Future<void> updateTaskStatus(String noteId, TaskStatus status) =>
+      _withCacheLock(() async {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
@@ -194,9 +415,9 @@ class AppProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
-  }
+  });
 
-  Future<void> toggleNotePin(String noteId) async {
+  Future<void> toggleNotePin(String noteId) => _withCacheLock(() async {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
@@ -217,9 +438,9 @@ class AppProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
-  }
+  });
 
-  Future<void> deleteNote(String noteId) async {
+  Future<void> deleteNote(String noteId) => _withCacheLock(() async {
     try {
       await _databaseService.deleteNote(noteId);
 
@@ -234,7 +455,7 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
       rethrow; // Rethrow the error so the calling code can handle it
     }
-  }
+  });
 
   Future<void> addRelationship(Relationship relationship) async {
     try {
@@ -352,22 +573,26 @@ class AppProvider extends ChangeNotifier {
         return newNotes;
       }
 
-      // Save all new notes and reload them from database
-      final List<Note> addedNotes = [];
-      for (final note in newNotes) {
-        await _databaseService.insertNote(note);
-        final addedNote = await _databaseService.getNote(note.id);
-        if (addedNote != null) {
-          addedNotes.add(addedNote);
+      // Only persistence runs under the cache lock; the AI generation above
+      // is slow and must not block other cache mutations.
+      return await _withCacheLock(() async {
+        // Save all new notes and reload them from database
+        final List<Note> addedNotes = [];
+        for (final note in newNotes) {
+          await _databaseService.insertNote(note);
+          final addedNote = await _databaseService.getNote(note.id);
+          if (addedNote != null) {
+            addedNotes.add(addedNote);
+          }
         }
-      }
 
-      // Add to local state with properly converted paths
-      _notes.addAll(addedNotes);
-      _dataVersion++;
-      notifyListeners();
+        // Add to local state with properly converted paths
+        _notes.addAll(addedNotes);
+        _dataVersion++;
+        notifyListeners();
 
-      return addedNotes;
+        return addedNotes;
+      });
     } catch (e) {
       _error = e.toString();
       notifyListeners();
@@ -379,7 +604,8 @@ class AppProvider extends ChangeNotifier {
     return _notes.where((note) => note.tags.contains(tagName)).toList();
   }
 
-  Future<void> addTagToNote(String noteId, String tagName) async {
+  Future<void> addTagToNote(String noteId, String tagName) =>
+      _withCacheLock(() async {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
@@ -401,20 +627,30 @@ class AppProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
-  }
+  });
 
   List<String> getAllAvailableTags() {
+    // Cached because this scans all notes and is called multiple times per
+    // build; invalidated in notifyListeners on any state change.
+    final cached = _availableTagsCache;
+    if (cached != null) return cached;
     final allTags = <String>{};
     for (final note in _notes) {
       allTags.addAll(note.tags);
     }
-    return allTags.toList()..sort();
+    return _availableTagsCache = List.unmodifiable(allTags.toList()..sort());
   }
 
-  Future<void> refreshTags() async {
+  @override
+  void notifyListeners() {
+    _availableTagsCache = null;
+    super.notifyListeners();
+  }
+
+  Future<void> refreshTags() => _withCacheLock(() async {
     _tags = await _databaseService.getAllTags();
     notifyListeners();
-  }
+  });
 
   // --- Agent / AI Features ---
 
@@ -429,7 +665,7 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> deleteTag(String tagName) async {
+  Future<void> deleteTag(String tagName) => _withCacheLock(() async {
     try {
       // Clean up tag image file before deleting the tag
       final tagImageService = getIt<TagImageService>();
@@ -463,9 +699,10 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
       rethrow;
     }
-  }
+  });
 
-  Future<void> replaceTag(String oldTagName, String newTagName) async {
+  Future<void> replaceTag(String oldTagName, String newTagName) =>
+      _withCacheLock(() async {
     try {
       // Migrate image from old tag to new tag if new tag has no image
       final tagImageService = getIt<TagImageService>();
@@ -506,7 +743,7 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
       rethrow;
     }
-  }
+  });
 
   List<Note> getTasksForDate(DateTime date) {
     final dateStr =
@@ -675,15 +912,17 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> clearAllData() async {
+  Future<void> clearAllData() => _withCacheLock(() async {
     _setLoading(true);
     try {
       // Clear all data from the database
       await _databaseService.clearAllData();
 
-      // Reset local state
+      // Reset local state. The DB clear wipes notes, tags, AND filters
+      // (user apps are untouched), so reset all three caches.
       _notes = [];
       _tags = [];
+      _filters = [];
       _error = null;
 
       // Reset theme to default (light mode)
@@ -698,10 +937,11 @@ class AppProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
-  }
+  });
 
   // SubNote management methods
-  Future<void> addSubNoteToNote(String noteId, SubNote subNote) async {
+  Future<void> addSubNoteToNote(String noteId, SubNote subNote) =>
+      _withCacheLock(() async {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
@@ -720,12 +960,12 @@ class AppProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
-  }
+  });
 
   Future<void> updateSubNoteInNote(
     String noteId,
     SubNote updatedSubNote,
-  ) async {
+  ) => _withCacheLock(() async {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
@@ -747,9 +987,10 @@ class AppProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
-  }
+  });
 
-  Future<void> deleteSubNoteFromNote(String noteId, String subNoteId) async {
+  Future<void> deleteSubNoteFromNote(String noteId, String subNoteId) =>
+      _withCacheLock(() async {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
@@ -771,9 +1012,10 @@ class AppProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
-  }
+  });
 
-  Future<void> toggleSubNoteCompletion(String noteId, String subNoteId) async {
+  Future<void> toggleSubNoteCompletion(String noteId, String subNoteId) =>
+      _withCacheLock(() async {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
@@ -798,9 +1040,10 @@ class AppProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
-  }
+  });
 
-  Future<void> removeTagFromNote(String noteId, String tagName) async {
+  Future<void> removeTagFromNote(String noteId, String tagName) =>
+      _withCacheLock(() async {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
@@ -822,13 +1065,13 @@ class AppProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
-  }
+  });
 
   Future<void> batchUpdateTags(
     List<String> noteIds,
     List<String> tagsToAdd,
     List<String> tagsToRemove,
-  ) async {
+  ) => _withCacheLock(() async {
     try {
       bool hasChanges = false;
 
@@ -874,10 +1117,11 @@ class AppProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
-  }
+  });
 
   // Upsert subnote - either add new or update existing
-  Future<void> upsertSubNoteInNote(String noteId, SubNote subNote) async {
+  Future<void> upsertSubNoteInNote(String noteId, SubNote subNote) =>
+      _withCacheLock(() async {
     try {
       final noteIndex = _notes.indexWhere((note) => note.id == noteId);
       if (noteIndex == -1) return;
@@ -909,14 +1153,14 @@ class AppProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
-  }
+  });
 
   // Reparent subnote from one note to another
   Future<void> reparentSubNote(
     String fromNoteId,
     String toNoteId,
     SubNote subNote,
-  ) async {
+  ) => _withCacheLock(() async {
     try {
       // Find source and destination notes
       final fromNoteIndex = _notes.indexWhere((note) => note.id == fromNoteId);
@@ -956,10 +1200,10 @@ class AppProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
-  }
+  });
 
   // Filter management methods
-  Future<void> addFilter(Filter filter) async {
+  Future<void> addFilter(Filter filter) => _withCacheLock(() async {
     try {
       await _databaseService.insertFilter(filter);
       _filters.add(filter);
@@ -970,9 +1214,9 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
       rethrow;
     }
-  }
+  });
 
-  Future<void> updateFilter(Filter filter) async {
+  Future<void> updateFilter(Filter filter) => _withCacheLock(() async {
     try {
       await _databaseService.updateFilter(filter);
       final filterIndex = _filters.indexWhere((f) => f.id == filter.id);
@@ -986,9 +1230,9 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
       rethrow;
     }
-  }
+  });
 
-  Future<void> deleteFilter(String filterId) async {
+  Future<void> deleteFilter(String filterId) => _withCacheLock(() async {
     try {
       await _databaseService.deleteFilter(filterId);
       _filters.removeWhere((filter) => filter.id == filterId);
@@ -999,7 +1243,7 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
       rethrow;
     }
-  }
+  });
 
   List<Note> getFilteredNotes(Filter filter) {
     List<Note> filteredNotes = _notes;
@@ -1500,7 +1744,7 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> toggleFilterPin(String filterId) async {
+  Future<void> toggleFilterPin(String filterId) => _withCacheLock(() async {
     try {
       final filterIndex = _filters.indexWhere((f) => f.id == filterId);
       if (filterIndex == -1) return;
@@ -1518,5 +1762,5 @@ class AppProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
-  }
+  });
 }

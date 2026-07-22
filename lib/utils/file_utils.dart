@@ -104,8 +104,9 @@ class FileUtils {
   /// Gets the app's private storage directory for attachments
   /// This directory is persistent and won't be cleared by the system
   static Future<Directory> getPrivateStorageDirectory() async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final attachmentsDir = Directory('${appDir.path}/attachments');
+    final attachmentsDir = Directory(
+      '${await _getAppDocumentsPath()}/attachments',
+    );
     if (!await attachmentsDir.exists()) {
       await attachmentsDir.create(recursive: true);
     }
@@ -193,6 +194,19 @@ class FileUtils {
     throw FileSystemException('File data unavailable', file.name);
   }
 
+  // Cached to avoid a platform-channel round-trip per call (path resolution
+  // runs once per attachment when loading all notes at startup). Stable for
+  // the process lifetime on Android/iOS.
+  static String? _appDocumentsPath;
+
+  static Future<String> _getAppDocumentsPath() async =>
+      _appDocumentsPath ??= (await getApplicationDocumentsDirectory()).path;
+
+  /// Clears the cached documents path so tests that re-mock path_provider
+  /// per test case get fresh resolution.
+  @visibleForTesting
+  static void resetDocumentsPathCache() => _appDocumentsPath = null;
+
   /// Constructs the full file path from a relative path stored in the database
   /// [relativePath] - The relative path stored in the database
   /// [isRelativePath] - Whether the path is relative to app's private storage
@@ -202,8 +216,7 @@ class FileUtils {
     bool isRelativePath,
   ) async {
     if (isRelativePath) {
-      final appDir = await getApplicationDocumentsDirectory();
-      return '${appDir.path}/$filePath';
+      return '${await _getAppDocumentsPath()}/$filePath';
     } else {
       // Legacy absolute path - return as is
       return filePath;
@@ -228,8 +241,7 @@ class FileUtils {
   /// Returns the relative path if successful, or null if the path is not within the app's documents directory
   static Future<String?> getRelativePath(String absolutePath) async {
     try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final appDirPath = appDir.path;
+      final appDirPath = await _getAppDocumentsPath();
 
       if (absolutePath.startsWith(appDirPath)) {
         // Remove the app dir path and the leading separator if present

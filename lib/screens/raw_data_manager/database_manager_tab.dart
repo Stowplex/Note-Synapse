@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:path/path.dart' as path;
 import 'package:note_synapse/l10n/app_localizations.dart';
+import '../../services/data_change_notifier.dart';
 import '../../services/database_service.dart';
 import '../../services/ai_service.dart';
 import '../../services/service_locator.dart';
@@ -155,6 +156,9 @@ class _DatabaseManagerTabState extends State<DatabaseManagerTab> {
         });
       } else {
         final count = await _rawDb!.rawUpdate(query);
+        // This tab writes on a raw handle, bypassing the change-capture
+        // journal — invalidate broadly so AppProvider caches don't go stale.
+        DataChangeNotifier.shared().publish(const DataChangeEvent(bulk: true));
         setState(() {
           _statusMessage = l10n.updateExecutedMessage(count);
         });

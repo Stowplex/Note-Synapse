@@ -3,6 +3,10 @@ import 'package:note_synapse/models/in_note_marker.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/logger_service.dart';
 
+// data-change-exempt: this service only writes notes.metadata /
+// attachments.metadata (markers), and metadata is never loaded into cached
+// Note objects (_mapToNote skips it), so a DataChangeNotifier publish would
+// trigger a full note refetch with zero cache benefit.
 class NoteMarkerService {
   final DatabaseService _db;
   NoteMarkerService(this._db);

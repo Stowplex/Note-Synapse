@@ -9,6 +9,7 @@ import 'package:note_synapse/services/conversation_ai_engine.dart';
 import 'package:note_synapse/services/conversation_prompt_builder.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/prompts/prompt_models.dart';
+import 'package:note_synapse/utils/file_utils.dart';
 
 class _MockPathProviderPlatform extends PathProviderPlatform {
   _MockPathProviderPlatform(this.appDocPath);
@@ -475,6 +476,7 @@ void main() {
         'conversation_prompt_builder_',
       );
       PathProviderPlatform.instance = _MockPathProviderPlatform(tempDir.path);
+      FileUtils.resetDocumentsPathCache();
       builder = ConversationPromptBuilder(DatabaseService());
     });
 

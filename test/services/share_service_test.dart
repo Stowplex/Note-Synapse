@@ -17,6 +17,7 @@ import 'package:note_synapse/models/note.dart';
 
 @GenerateMocks([AppProvider])
 import 'share_service_test.mocks.dart';
+import 'package:note_synapse/utils/file_utils.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -225,6 +226,7 @@ void main() {
     setUp(() async {
       tempDir = await Directory.systemTemp.createTemp();
       PathProviderPlatform.instance = MockPathProviderPlatform(tempDir.path);
+      FileUtils.resetDocumentsPathCache();
 
       const MethodChannel filePickerChannel = MethodChannel(
         'miguelruivo.flutter.plugins.filepicker',

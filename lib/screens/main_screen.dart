@@ -52,9 +52,8 @@ class _MainScreenState extends State<MainScreen> {
     super.initState();
     _audioService = AudioRecordingService();
     _setupAudioListeners();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AppProvider>().loadData();
-    });
+    // Data is already loaded by AppWrapper._initializeApp before MainScreen
+    // is shown; do not reload here.
   }
 
   @override

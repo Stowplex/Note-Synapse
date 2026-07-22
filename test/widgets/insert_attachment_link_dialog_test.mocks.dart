@@ -4,12 +4,12 @@
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i7;
-import 'dart:ui' as _i3;
+import 'dart:ui' as _i4;
 
 import 'package:file_picker/file_picker.dart' as _i20;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i9;
-import 'package:note_synapse/models/app_revision.dart' as _i4;
+import 'package:note_synapse/models/app_revision.dart' as _i5;
 import 'package:note_synapse/models/attachment.dart' as _i11;
 import 'package:note_synapse/models/conversation.dart' as _i15;
 import 'package:note_synapse/models/conversation_attachment.dart' as _i16;
@@ -20,10 +20,10 @@ import 'package:note_synapse/models/note.dart' as _i8;
 import 'package:note_synapse/models/note_annotation.dart' as _i10;
 import 'package:note_synapse/models/relationship.dart' as _i13;
 import 'package:note_synapse/models/tag.dart' as _i12;
-import 'package:note_synapse/models/user_app.dart' as _i5;
+import 'package:note_synapse/models/user_app.dart' as _i6;
 import 'package:note_synapse/models/workflow_binding_row.dart' as _i17;
 import 'package:note_synapse/providers/app_provider.dart' as _i18;
-import 'package:note_synapse/services/database_service.dart' as _i6;
+import 'package:note_synapse/services/database_service.dart' as _i3;
 import 'package:sqflite/sqflite.dart' as _i2;
 
 // ignore_for_file: type=lint
@@ -46,25 +46,31 @@ class _FakeDatabase_0 extends _i1.SmartFake implements _i2.Database {
     : super(parent, parentInvocation);
 }
 
-class _FakeLocale_1 extends _i1.SmartFake implements _i3.Locale {
-  _FakeLocale_1(Object parent, Invocation parentInvocation)
+class _FakeRawWriteResult_1 extends _i1.SmartFake
+    implements _i3.RawWriteResult {
+  _FakeRawWriteResult_1(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeAppRevision_2 extends _i1.SmartFake implements _i4.AppRevision {
-  _FakeAppRevision_2(Object parent, Invocation parentInvocation)
+class _FakeLocale_2 extends _i1.SmartFake implements _i4.Locale {
+  _FakeLocale_2(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeUserApp_3 extends _i1.SmartFake implements _i5.UserApp {
-  _FakeUserApp_3(Object parent, Invocation parentInvocation)
+class _FakeAppRevision_3 extends _i1.SmartFake implements _i5.AppRevision {
+  _FakeAppRevision_3(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeUserApp_4 extends _i1.SmartFake implements _i6.UserApp {
+  _FakeUserApp_4(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
 /// A class which mocks [DatabaseService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
+class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
   MockDatabaseService() {
     _i1.throwOnMissingStub(this);
   }
@@ -668,7 +674,7 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i7.Future<List<Map<String, dynamic>>>);
 
   @override
-  _i7.Future<String> insertUserApp(_i5.UserApp? app) =>
+  _i7.Future<String> insertUserApp(_i6.UserApp? app) =>
       (super.noSuchMethod(
             Invocation.method(#insertUserApp, [app]),
             returnValue: _i7.Future<String>.value(
@@ -681,31 +687,31 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i7.Future<String>);
 
   @override
-  _i7.Future<List<_i5.UserApp>> getAllUserApps() =>
+  _i7.Future<List<_i6.UserApp>> getAllUserApps() =>
       (super.noSuchMethod(
             Invocation.method(#getAllUserApps, []),
-            returnValue: _i7.Future<List<_i5.UserApp>>.value(<_i5.UserApp>[]),
+            returnValue: _i7.Future<List<_i6.UserApp>>.value(<_i6.UserApp>[]),
           )
-          as _i7.Future<List<_i5.UserApp>>);
+          as _i7.Future<List<_i6.UserApp>>);
 
   @override
-  _i7.Future<_i5.UserApp?> getUserApp(String? id) =>
+  _i7.Future<_i6.UserApp?> getUserApp(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getUserApp, [id]),
-            returnValue: _i7.Future<_i5.UserApp?>.value(),
+            returnValue: _i7.Future<_i6.UserApp?>.value(),
           )
-          as _i7.Future<_i5.UserApp?>);
+          as _i7.Future<_i6.UserApp?>);
 
   @override
-  _i7.Future<_i5.UserApp?> getUserAppByUuid(String? uuid) =>
+  _i7.Future<_i6.UserApp?> getUserAppByUuid(String? uuid) =>
       (super.noSuchMethod(
             Invocation.method(#getUserAppByUuid, [uuid]),
-            returnValue: _i7.Future<_i5.UserApp?>.value(),
+            returnValue: _i7.Future<_i6.UserApp?>.value(),
           )
-          as _i7.Future<_i5.UserApp?>);
+          as _i7.Future<_i6.UserApp?>);
 
   @override
-  _i7.Future<void> updateUserApp(_i5.UserApp? app) =>
+  _i7.Future<void> updateUserApp(_i6.UserApp? app) =>
       (super.noSuchMethod(
             Invocation.method(#updateUserApp, [app]),
             returnValue: _i7.Future<void>.value(),
@@ -743,7 +749,7 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i7.Future<Map<String, dynamic>?>);
 
   @override
-  _i7.Future<String> insertAppRevision(_i4.AppRevision? revision) =>
+  _i7.Future<String> insertAppRevision(_i5.AppRevision? revision) =>
       (super.noSuchMethod(
             Invocation.method(#insertAppRevision, [revision]),
             returnValue: _i7.Future<String>.value(
@@ -756,22 +762,22 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i7.Future<String>);
 
   @override
-  _i7.Future<List<_i4.AppRevision>> getAppRevisions(String? appId) =>
+  _i7.Future<List<_i5.AppRevision>> getAppRevisions(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#getAppRevisions, [appId]),
-            returnValue: _i7.Future<List<_i4.AppRevision>>.value(
-              <_i4.AppRevision>[],
+            returnValue: _i7.Future<List<_i5.AppRevision>>.value(
+              <_i5.AppRevision>[],
             ),
           )
-          as _i7.Future<List<_i4.AppRevision>>);
+          as _i7.Future<List<_i5.AppRevision>>);
 
   @override
-  _i7.Future<_i4.AppRevision?> getAppRevision(String? id) =>
+  _i7.Future<_i5.AppRevision?> getAppRevision(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getAppRevision, [id]),
-            returnValue: _i7.Future<_i4.AppRevision?>.value(),
+            returnValue: _i7.Future<_i5.AppRevision?>.value(),
           )
-          as _i7.Future<_i4.AppRevision?>);
+          as _i7.Future<_i5.AppRevision?>);
 
   @override
   _i7.Future<void> deleteAppRevision(String? id) =>
@@ -800,12 +806,12 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i7.Future<int>);
 
   @override
-  _i7.Future<_i4.AppRevision?> getLatestAppRevision(String? appId) =>
+  _i7.Future<_i5.AppRevision?> getLatestAppRevision(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#getLatestAppRevision, [appId]),
-            returnValue: _i7.Future<_i4.AppRevision?>.value(),
+            returnValue: _i7.Future<_i5.AppRevision?>.value(),
           )
-          as _i7.Future<_i4.AppRevision?>);
+          as _i7.Future<_i5.AppRevision?>);
 
   @override
   _i7.Future<int> insertUserAppLibrary({
@@ -1487,6 +1493,25 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i7.Future<List<Map<String, dynamic>>>);
 
   @override
+  void markSchemaChangedForCapture() => super.noSuchMethod(
+    Invocation.method(#markSchemaChangedForCapture, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i7.Future<_i3.RawWriteResult> runRawWriteWithChangeCapture(String? sql) =>
+      (super.noSuchMethod(
+            Invocation.method(#runRawWriteWithChangeCapture, [sql]),
+            returnValue: _i7.Future<_i3.RawWriteResult>.value(
+              _FakeRawWriteResult_1(
+                this,
+                Invocation.method(#runRawWriteWithChangeCapture, [sql]),
+              ),
+            ),
+          )
+          as _i7.Future<_i3.RawWriteResult>);
+
+  @override
   _i7.Future<List<_i8.Note>> searchNotes(String? query) =>
       (super.noSuchMethod(
             Invocation.method(#searchNotes, [query]),
@@ -1621,20 +1646,20 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as List<_i14.Filter>);
 
   @override
-  List<_i5.UserApp> get userApps =>
+  List<_i6.UserApp> get userApps =>
       (super.noSuchMethod(
             Invocation.getter(#userApps),
-            returnValue: <_i5.UserApp>[],
+            returnValue: <_i6.UserApp>[],
           )
-          as List<_i5.UserApp>);
+          as List<_i6.UserApp>);
 
   @override
-  Map<String, List<_i4.AppRevision>> get appRevisions =>
+  Map<String, List<_i5.AppRevision>> get appRevisions =>
       (super.noSuchMethod(
             Invocation.getter(#appRevisions),
-            returnValue: <String, List<_i4.AppRevision>>{},
+            returnValue: <String, List<_i5.AppRevision>>{},
           )
-          as Map<String, List<_i4.AppRevision>>);
+          as Map<String, List<_i5.AppRevision>>);
 
   @override
   bool get isLoading =>
@@ -1652,12 +1677,12 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as bool);
 
   @override
-  _i3.Locale get locale =>
+  _i4.Locale get locale =>
       (super.noSuchMethod(
             Invocation.getter(#locale),
-            returnValue: _FakeLocale_1(this, Invocation.getter(#locale)),
+            returnValue: _FakeLocale_2(this, Invocation.getter(#locale)),
           )
-          as _i3.Locale);
+          as _i4.Locale);
 
   @override
   List<String> get multiFunctionApps =>
@@ -1685,6 +1710,27 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
   bool get hasListeners =>
       (super.noSuchMethod(Invocation.getter(#hasListeners), returnValue: false)
           as bool);
+
+  @override
+  _i7.Future<void> refreshNotesFromDb(Set<String>? noteIds) =>
+      (super.noSuchMethod(
+            Invocation.method(#refreshNotesFromDb, [noteIds]),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
+          )
+          as _i7.Future<void>);
+
+  @override
+  void scheduleReload() => super.noSuchMethod(
+    Invocation.method(#scheduleReload, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void dispose() => super.noSuchMethod(
+    Invocation.method(#dispose, []),
+    returnValueForMissingStub: null,
+  );
 
   @override
   _i7.Future<void> loadData() =>
@@ -1888,6 +1934,12 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as List<String>);
 
   @override
+  void notifyListeners() => super.noSuchMethod(
+    Invocation.method(#notifyListeners, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
   _i7.Future<void> refreshTags() =>
       (super.noSuchMethod(
             Invocation.method(#refreshTags, []),
@@ -1977,7 +2029,7 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as _i7.Future<void>);
 
   @override
-  void changeLanguage(_i3.Locale? locale) => super.noSuchMethod(
+  void changeLanguage(_i4.Locale? locale) => super.noSuchMethod(
     Invocation.method(#changeLanguage, [locale]),
     returnValueForMissingStub: null,
   );
@@ -2142,7 +2194,7 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as List<_i8.Note>);
 
   @override
-  _i7.Future<void> addUserApp(_i5.UserApp? app) =>
+  _i7.Future<void> addUserApp(_i6.UserApp? app) =>
       (super.noSuchMethod(
             Invocation.method(#addUserApp, [app]),
             returnValue: _i7.Future<void>.value(),
@@ -2160,7 +2212,7 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as _i7.Future<void>);
 
   @override
-  _i7.Future<void> updateUserApp(_i5.UserApp? app) =>
+  _i7.Future<void> updateUserApp(_i6.UserApp? app) =>
       (super.noSuchMethod(
             Invocation.method(#updateUserApp, [app]),
             returnValue: _i7.Future<void>.value(),
@@ -2169,8 +2221,8 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as _i7.Future<void>);
 
   @override
-  _i7.Future<_i4.AppRevision> saveManualCodeEdit({
-    required _i5.UserApp? originalApp,
+  _i7.Future<_i5.AppRevision> saveManualCodeEdit({
+    required _i6.UserApp? originalApp,
     required String? newCode,
     List<String>? attachmentPaths,
   }) =>
@@ -2180,8 +2232,8 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               #newCode: newCode,
               #attachmentPaths: attachmentPaths,
             }),
-            returnValue: _i7.Future<_i4.AppRevision>.value(
-              _FakeAppRevision_2(
+            returnValue: _i7.Future<_i5.AppRevision>.value(
+              _FakeAppRevision_3(
                 this,
                 Invocation.method(#saveManualCodeEdit, [], {
                   #originalApp: originalApp,
@@ -2191,7 +2243,7 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               ),
             ),
           )
-          as _i7.Future<_i4.AppRevision>);
+          as _i7.Future<_i5.AppRevision>);
 
   @override
   _i7.Future<void> deleteUserApp(String? appId) =>
@@ -2203,14 +2255,14 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as _i7.Future<void>);
 
   @override
-  _i7.Future<_i5.UserApp> createUserApp({
+  _i7.Future<_i6.UserApp> createUserApp({
     required String? name,
     required String? description,
     required List<String>? steps,
-    _i5.UserAppType? type = _i5.UserAppType.normal,
+    _i6.UserAppType? type = _i6.UserAppType.normal,
     List<String>? attachmentPaths,
     List<_i8.Note>? contextNotes,
-    List<_i5.UserAppLibraryInfo>? libraries,
+    List<_i6.UserAppLibraryInfo>? libraries,
     _i21.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
@@ -2224,8 +2276,8 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               #libraries: libraries,
               #generationContext: generationContext,
             }),
-            returnValue: _i7.Future<_i5.UserApp>.value(
-              _FakeUserApp_3(
+            returnValue: _i7.Future<_i6.UserApp>.value(
+              _FakeUserApp_4(
                 this,
                 Invocation.method(#createUserApp, [], {
                   #name: name,
@@ -2240,15 +2292,15 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               ),
             ),
           )
-          as _i7.Future<_i5.UserApp>);
+          as _i7.Future<_i6.UserApp>);
 
   @override
-  _i7.Future<_i4.AppRevision> editUserApp({
-    required _i5.UserApp? originalApp,
+  _i7.Future<_i5.AppRevision> editUserApp({
+    required _i6.UserApp? originalApp,
     required String? editSuggestion,
     List<String>? attachmentPaths,
     List<_i8.Note>? contextNotes,
-    List<_i5.UserAppLibraryInfo>? libraries,
+    List<_i6.UserAppLibraryInfo>? libraries,
     _i21.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
@@ -2260,8 +2312,8 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               #libraries: libraries,
               #generationContext: generationContext,
             }),
-            returnValue: _i7.Future<_i4.AppRevision>.value(
-              _FakeAppRevision_2(
+            returnValue: _i7.Future<_i5.AppRevision>.value(
+              _FakeAppRevision_3(
                 this,
                 Invocation.method(#editUserApp, [], {
                   #originalApp: originalApp,
@@ -2274,7 +2326,7 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               ),
             ),
           )
-          as _i7.Future<_i4.AppRevision>);
+          as _i7.Future<_i5.AppRevision>);
 
   @override
   _i7.Future<Map<String, dynamic>?> getAppState(String? appId) =>
@@ -2294,22 +2346,22 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as _i7.Future<void>);
 
   @override
-  _i7.Future<List<_i4.AppRevision>> getAppRevisions(String? appId) =>
+  _i7.Future<List<_i5.AppRevision>> getAppRevisions(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#getAppRevisions, [appId]),
-            returnValue: _i7.Future<List<_i4.AppRevision>>.value(
-              <_i4.AppRevision>[],
+            returnValue: _i7.Future<List<_i5.AppRevision>>.value(
+              <_i5.AppRevision>[],
             ),
           )
-          as _i7.Future<List<_i4.AppRevision>>);
+          as _i7.Future<List<_i5.AppRevision>>);
 
   @override
-  _i7.Future<_i4.AppRevision?> getAppRevision(String? revisionId) =>
+  _i7.Future<_i5.AppRevision?> getAppRevision(String? revisionId) =>
       (super.noSuchMethod(
             Invocation.method(#getAppRevision, [revisionId]),
-            returnValue: _i7.Future<_i4.AppRevision?>.value(),
+            returnValue: _i7.Future<_i5.AppRevision?>.value(),
           )
-          as _i7.Future<_i4.AppRevision?>);
+          as _i7.Future<_i5.AppRevision?>);
 
   @override
   _i7.Future<void> deleteAppRevision(String? revisionId) =>
@@ -2345,17 +2397,17 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
   );
 
   @override
-  _i7.Future<_i4.AppRevision> createInitialRevision(String? appId) =>
+  _i7.Future<_i5.AppRevision> createInitialRevision(String? appId) =>
       (super.noSuchMethod(
             Invocation.method(#createInitialRevision, [appId]),
-            returnValue: _i7.Future<_i4.AppRevision>.value(
-              _FakeAppRevision_2(
+            returnValue: _i7.Future<_i5.AppRevision>.value(
+              _FakeAppRevision_3(
                 this,
                 Invocation.method(#createInitialRevision, [appId]),
               ),
             ),
           )
-          as _i7.Future<_i4.AppRevision>);
+          as _i7.Future<_i5.AppRevision>);
 
   @override
   bool isWebViewSupported() =>
@@ -2445,26 +2497,14 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as _i7.Future<void>);
 
   @override
-  void addListener(_i3.VoidCallback? listener) => super.noSuchMethod(
+  void addListener(_i4.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#addListener, [listener]),
     returnValueForMissingStub: null,
   );
 
   @override
-  void removeListener(_i3.VoidCallback? listener) => super.noSuchMethod(
+  void removeListener(_i4.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#removeListener, [listener]),
-    returnValueForMissingStub: null,
-  );
-
-  @override
-  void dispose() => super.noSuchMethod(
-    Invocation.method(#dispose, []),
-    returnValueForMissingStub: null,
-  );
-
-  @override
-  void notifyListeners() => super.noSuchMethod(
-    Invocation.method(#notifyListeners, []),
     returnValueForMissingStub: null,
   );
 }

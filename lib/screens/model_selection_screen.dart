@@ -70,11 +70,19 @@ class _ModelSelectionScreenState extends State<ModelSelectionScreen> {
 
         // We might want to ensure it's active if it's not
         final activeModel = await getIt<ModelStorageService>().getActiveModel();
+        var effectiveModel = activeModel;
         if (activeModel?.type != _selectedModel) {
           final modelToActivate = models.firstWhere(
             (m) => m.type == _selectedModel,
           );
           await getIt<ModelStorageService>().activateModel(modelToActivate.id);
+          effectiveModel = modelToActivate;
+        }
+
+        // MainScreen no longer reloads on mount, so sync the provider's
+        // in-memory model config with what was just activated.
+        if (mounted && effectiveModel != null) {
+          context.read<AppProvider>().updateModelConfig(effectiveModel);
         }
 
         if (mounted) {
