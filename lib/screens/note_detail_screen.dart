@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
@@ -47,6 +48,7 @@ import '../services/database_service.dart';
 import '../services/conversation_service.dart';
 import '../services/media_attachment_service.dart';
 import '../services/content_ingestion_service.dart';
+import '../services/block_note_scope_service.dart';
 import '../services/service_locator.dart';
 import '../services/skill_service.dart';
 import '../models/conversation.dart';
@@ -85,6 +87,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   bool _hasChanges = false;
   bool _hasBeenSaved = false; // Track if note has been saved to database
   Timer? _autoSaveTimer;
+
+  /// Transient block-note scope handed to a Note Action App, if one is open.
+  /// Owned by this screen: see [_handleNoteActionAppSelection].
+  String? _activeBlockScopeId;
   DateTime? _scheduledAt;
   DateTime? _completeBy;
 
@@ -248,6 +254,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     _codeController.dispose();
     _codeFocusNode.dispose();
     _dismissCountPopup();
+    _releaseBlockScope();
     _viewingScrollController.dispose();
     // Reset audio state but don't dispose the service (it's a singleton)
     _audioService?.resetState();
@@ -672,6 +679,106 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     _clearSelection();
   }
 
+  /// Opens a Note Action App on the current block selection.
+  ///
+  /// The selected blocks are handed to the app as a transient "block note"
+  /// (see [BlockNoteScopeService]) whose writes are spliced back over the same
+  /// range of this note.
+  Future<void> _handleNoteActionAppSelection() async {
+    if (_selectedBlockIndices.isEmpty) return;
+    final l10n = AppLocalizations.of(context)!;
+
+    final sortedIndices = _selectedBlockIndices.toList()..sort();
+    final blocks = sortedIndices.map((i) => _parsedBlocks[i]).toList();
+
+    // A pending autosave would rebuild the note from a stale controller and
+    // clobber whatever the plugin writes, so drop it first (same reason
+    // _updateNoteContent cancels it).
+    _autoSaveTimer?.cancel();
+
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
+    final currentNote = appProvider.notes.firstWhere(
+      (n) => n.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+
+    final spanStart = blocks
+        .map((b) => b.startOffset)
+        .reduce((a, b) => a < b ? a : b);
+    final spanEnd = blocks
+        .map((b) => b.endOffset)
+        .reduce((a, b) => a > b ? a : b);
+
+    // Block offsets are parsed against the chips-stripped markdown while this
+    // splices into the raw content, so verify the span really covers the
+    // selection before handing it to a plugin. Failing loudly beats corrupting
+    // the note.
+    if (spanStart < 0 ||
+        spanEnd > currentNote.content.length ||
+        spanEnd <= spanStart) {
+      _showBlockScopeUnavailable(l10n);
+      return;
+    }
+    // The plugin gets this text and rewrites this range, so the offsets must
+    // provably still describe the selection. See
+    // MarkdownBlockTracker.offsetsMatchContent for why weaker checks don't work.
+    if (!MarkdownBlockTracker.offsetsMatchContent(
+      currentNote.content,
+      blocks,
+    )) {
+      _showBlockScopeUnavailable(l10n);
+      return;
+    }
+
+    final blockText = currentNote.content.substring(spanStart, spanEnd);
+
+    final scopeService = getIt<BlockNoteScopeService>();
+
+    // Scope lifetime is owned by THIS screen, not by the pushed route.
+    // NoteActionAppSelectionScreen pushReplacement's to the plugin screen, and
+    // pushReplacement completes the replaced route's future immediately — so
+    // closing the scope when that future resolves would close it before the
+    // plugin ever loads. This screen stays alive underneath the plugin for the
+    // whole run, so dispose() is the correct place to release it.
+    _releaseBlockScope();
+
+    final scope = scopeService.open(
+      parent: currentNote,
+      spanStart: spanStart,
+      spanEnd: spanEnd,
+      text: blockText,
+    );
+    _activeBlockScopeId = scope.tempNoteId;
+
+    _clearSelection();
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => NoteActionAppSelectionScreen(
+          selectedNotes: [scopeService.asNote(scope)],
+        ),
+      ),
+    );
+  }
+
+  /// Releases the transient block scope, if any. Safe to call repeatedly.
+  void _releaseBlockScope() {
+    final id = _activeBlockScopeId;
+    if (id == null) return;
+    _activeBlockScopeId = null;
+    if (getIt.isRegistered<BlockNoteScopeService>()) {
+      getIt<BlockNoteScopeService>().close(id);
+    }
+  }
+
+  void _showBlockScopeUnavailable(AppLocalizations l10n) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.blockSelectionOutOfSync)));
+    _clearSelection();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -752,7 +859,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   IconButton(
                     icon: const Icon(Icons.apps),
                     onPressed: _openNoteActionApps,
-                    tooltip: 'Run Note Action App',
+                    // Same action as the block toolbar's button, so it must not
+                    // stay English while that one is translated.
+                    tooltip: l10n.runNoteActionAppOnSelection,
                   ),
                   IconButton(
                     icon: const Icon(Icons.chrome_reader_mode),
@@ -1539,13 +1648,20 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           ),
           if (_isSelectionMode && _selectionMenuPosition != null)
             Positioned(
+              // math.max guards the upper limit: on a narrow phone
+              // width - menuWidth is negative, and clamp() throws
+              // ArgumentError when lowerLimit > upperLimit.
               left: (_selectionMenuPosition!.dx - 150).clamp(
                 0.0,
-                MediaQuery.of(context).size.width - 320,
-              ), // Center-ish logic needs refinement
+                math.max(
+                  0.0,
+                  MediaQuery.of(context).size.width -
+                      BlockSelectionMenu.estimatedWidth,
+                ),
+              ),
               top: (_selectionMenuPosition!.dy - 60).clamp(
                 0.0,
-                MediaQuery.of(context).size.height - 100,
+                math.max(0.0, MediaQuery.of(context).size.height - 100),
               ),
               child: BlockSelectionMenu(
                 onExpandAbove: _expandSelectionAbove,
@@ -1554,6 +1670,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 onContractBelow: _contractSelectionBelow,
                 onEdit: () => _handleEditSelection(),
                 onAIEdit: () => _handleAIEditSelection(),
+                onNoteActionApp: () => _handleNoteActionAppSelection(),
                 onDelete: () => _handleDeleteSelection(),
                 onExit: _clearSelection,
                 canExpandAbove:

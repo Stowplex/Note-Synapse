@@ -183,10 +183,50 @@
       Response format: {success: boolean, savedCount?: number, error?: string}
     - Synapse.updateNotes(notes: array) - Update existing notes in the database (REQUIRES USER APPROVAL)
       Param format: array of objects. Each object MUST contain an 'id' field.
+      Response format: {success, updatedCount, errors?}
+      IMPORTANT: success:true only means the call ran. Individual entries can
+      still be refused, so ALWAYS check updatedCount, and surface 'errors' (an
+      array of messages, present only when something was refused) to the user.
+      A write can legitimately be refused - e.g. the target block moved or was
+      deleted, a referenced temporary file no longer exists, or the note has an
+      immutable workflow tag.
       
       MODES OF OPERATION:
       1. Full Replacement Mode: Include any properties from saveNotes to replace existing values.
       2. Granular Modification Mode: Include a 'modification' object for precise add/remove/append operations.
+
+      OPERATING ON A BLOCK: if the target note has isBlockScope (see
+      Synapse.Notes), the update applies to that block's range inside the
+      parent note instead of a whole note. This is the way to render something
+      from a block and insert the result next to it, for example turning a
+      ```mermaid fenced block into an image while keeping the code.
+      Use action 'replace' with `your output + the original block text`, NOT
+      'prepend': prepend is not idempotent, so running the app twice stacks a
+      second image and leaves the first one attached to the note forever.
+         const block = Synapse.Notes[0];
+         // Drop only YOUR OWN previous output (match your own alt text - never
+         // strip any leading image, or you delete the user's content).
+         const original = block.content.replace(
+           /^(?:\s*!\[mermaid\]\([^)]*\)\s*)+/, '');
+         await Synapse.updateNotes([{
+           id: block.id,
+           modification: { content: { action: 'replace',
+                                     text: `![mermaid](${uri})\n\n${original}` } }
+         }]);
+      A block-scoped update is CONTENT-ONLY. title, tags, attachments, link,
+      subnote and task fields are ignored (with a warning) when the target is a
+      block — the user approved changing that block, not the whole note. To
+      change the note itself, target parentNoteId in a separate entry, which
+      prompts for the real note.
+
+      ONLY for a block-scoped update, any synapsetemp:/// URI you embed in the
+      content (e.g. from Synapse.saveTemp) is promoted to a permanent attachment
+      on the PARENT note automatically, so the image keeps working after the
+      temp cache is cleared; you do not need to add it to 'attachments'.
+      IMPORTANT: this does NOT happen for a whole-note update. Embedding a
+      synapsetemp:/// image in a whole note leaves it unpromoted, and it breaks
+      permanently once the OS purges its cache — so do image-producing writes
+      through a block scope.
       
       Properties for Full Replacement Mode:
          * id: string (required) - ID of the note to update
@@ -578,6 +618,27 @@
    - Synapse.Notes (array, read-only) - The notes the app was launched with.
      Each entry is an object with id, title, content, tags, createdAt, updatedAt,
      isTask, status, pinned, isArchived, and attachmentPaths.
+
+     BLOCK SCOPE: when the user launched the app on a selected block of a note
+     rather than on whole notes, the entry additionally has:
+       * isBlockScope: true
+       * parentNoteId: string - the id of the note the block was taken from
+     In that case `content` is ONLY the selected block's markdown and `id` is a
+     transient id that exists just for this app session. Treat the entry as an
+     ordinary note: reading `content` and calling Synapse.updateNotes with that
+     `id` both work, and every write is applied back over that block's range in
+     the parent note. `title`, `tags` and `attachmentPaths` are inherited from
+     the parent note, so Synapse.readAttachment works unchanged.
+     Notes:
+       * A block-scoped write is CONTENT-ONLY: title, tags, attachments, link,
+         subnote and task fields are ignored with a warning. Target parentNoteId
+         in a separate entry to change the note itself.
+       * Content modifications with a 'section' are rejected for a block; use
+         action append/prepend/replace instead.
+       * Synapse.deleteNotes with a transient block id removes just that block,
+         never the parent note.
+       * Do NOT persist a transient id or pass it to Synapse.runQuery - it has
+         no database row. Use parentNoteId when you need to query the real note.
 
    - Synapse.Params (object, read-only) - Parameters passed in when the app is
      embedded inline in markdown. Populated from the query string of the

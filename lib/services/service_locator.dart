@@ -4,6 +4,7 @@ import '../providers/app_provider.dart';
 import 'data_change_notifier.dart';
 import 'database_service.dart';
 import 'note_modification_service.dart';
+import 'block_note_scope_service.dart';
 import 'content_ingestion_service.dart';
 import 'conversation_service.dart';
 import 'user_app_service.dart';
@@ -114,6 +115,15 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<NoteModificationService>()) {
     getIt.registerLazySingleton<NoteModificationService>(
       () => NoteModificationService(
+        getIt<DatabaseService>(),
+        changeNotifier: getIt<DataChangeNotifier>(),
+      ),
+    );
+  }
+
+  if (!getIt.isRegistered<BlockNoteScopeService>()) {
+    getIt.registerLazySingleton<BlockNoteScopeService>(
+      () => BlockNoteScopeService(
         getIt<DatabaseService>(),
         changeNotifier: getIt<DataChangeNotifier>(),
       ),

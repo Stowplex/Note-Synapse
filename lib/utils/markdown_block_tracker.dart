@@ -399,6 +399,33 @@ class MarkdownBlockTracker {
 
     return content.substring(0, start) + newContent + content.substring(end);
   }
+
+  /// True when every block in [blocks] still slices its own text out of
+  /// [content] at its recorded offsets.
+  ///
+  /// Callers that hand a block's text to something which then rewrites that
+  /// range MUST check this first. Block offsets are parsed from the
+  /// chips-stripped markdown (see `BlockMarkdownBody`), so a note containing a
+  /// ```chips fence shifts every later offset relative to the raw
+  /// `note.content` this is spliced into.
+  ///
+  /// Weaker checks are useless here: the tracker emits a zero-width block with
+  /// EMPTY content for every blank line, so `contains` / `startsWith` /
+  /// `endsWith` all pass vacuously on a shifted window.
+  static bool offsetsMatchContent(String content, List<MarkdownBlock> blocks) {
+    for (final block in blocks) {
+      if (block.startOffset < 0 ||
+          block.endOffset > content.length ||
+          block.endOffset < block.startOffset) {
+        return false;
+      }
+      if (content.substring(block.startOffset, block.endOffset) !=
+          block.content) {
+        return false;
+      }
+    }
+    return true;
+  }
 }
 
 /// Syntax for block LaTeX: \[ ... \]

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../services/approval_service.dart';
 
 /// Reusable approval dialog for SQL writes and note modifications.
@@ -72,13 +73,27 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.request.description),
+            // Capped: `description` embeds the app's own name, which comes
+            // verbatim from an imported YAML. Left unbounded, a name padded
+            // with newlines pushes the scope notice below the fold while the
+            // Approve button stays put (it lives in `actions`, outside the
+            // scroll view).
+            Text(
+              widget.request.description,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
             if (widget.request.type == ApprovalType.noteModification) ...[
               const SizedBox(height: 4),
               _isBatchModification
                   ? _buildNoteIdsDisplay(colorScheme)
                   : _buildNoteIdDisplay(colorScheme),
             ],
+            // ABOVE the details body on purpose. The body echoes
+            // plugin-controlled text, so rendering the scope notice after it let
+            // a plugin pad a field with newlines and push this line far below
+            // the Approve button while showing its own forged reassurance.
+            ..._buildScopeNotice(colorScheme),
             if (widget.request.type == ApprovalType.noteDeletion) ...[
               const SizedBox(height: 4),
               _buildNoteIdsDisplay(colorScheme),
@@ -160,6 +175,10 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
                 ),
               ],
             ),
+            // Capped for the same reason as the description above: a long or
+            // newline-padded title must not be able to scroll the scope notice
+            // out of view.
+            maxLines: 2,
           ),
           if (snippet != null) ...[
             const SizedBox(height: 4),
@@ -230,6 +249,9 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
                                 ),
                               ],
                             ),
+                            // Capped so a padded title cannot scroll the scope
+                            // notice out of view.
+                            maxLines: 2,
                           ),
                           if (note['snippet'] != null)
                             Padding(
@@ -277,7 +299,6 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
           modification as Map<String, dynamic>,
         );
       }
-
       String displayText = widget.request.formattedDetails;
       if (modification != null) {
         displayText = _formatModification(modification);
@@ -416,6 +437,68 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
     );
   }
 
+  /// Localized: this is the one string in this dialog that the user must
+  /// understand to give informed consent, so it is not left hardcoded English
+  /// like the rest of the file. Falls back to English when no Localizations are
+  /// in scope (e.g. a bare widget test).
+  /// The scope notice, rendered directly under the dialog description so no
+  /// amount of plugin-supplied text can push it out of view.
+  ///
+  /// Batches get it too: otherwise adding one extra entry hides a whole-note
+  /// rewrite behind what reads as a block edit.
+  List<Widget> _buildScopeNotice(ColorScheme colorScheme) {
+    final details = widget.request.details;
+    final modification = details is Map ? details['modification'] : details;
+    final notice = _scopeNotice(modification);
+    if (notice == null) return const [];
+
+    final isWholeNote =
+        modification is Map &&
+        modification[ApprovalRequest.scopeWholeNoteKey] == true;
+    final color = isWholeNote
+        ? colorScheme.error
+        : colorScheme.onSurfaceVariant;
+    return [
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          Icon(
+            isWholeNote ? Icons.warning_amber_rounded : Icons.crop_free,
+            size: 16,
+            color: color,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              notice,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: color,
+                fontWeight: isWholeNote ? FontWeight.bold : null,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ];
+  }
+
+  String? _scopeNotice(dynamic modification) {
+    if (modification is! Map) return null;
+    final l10n = AppLocalizations.of(context);
+    // Whole-note is checked FIRST so that if both keys are somehow present the
+    // user sees the WIDER scope, never the reassuring one. Defence in depth:
+    // the bridge already strips plugin-supplied `__` keys.
+    if (modification[ApprovalRequest.scopeWholeNoteKey] == true) {
+      return l10n?.approvalScopeWholeNote ??
+          'Applies to the ENTIRE note, not just the selected block.';
+    }
+    if (modification[ApprovalRequest.scopeBlockKey] == true) {
+      return l10n?.approvalScopeBlockOnly ??
+          'Applies to the selected block only.';
+    }
+    return null;
+  }
+
   String _formatModification(dynamic modification) {
     if (modification is! Map) return modification.toString();
 
@@ -423,17 +506,34 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
     final map = modification;
 
     map.forEach((key, value) {
+      // Internal scope hints are surfaced separately, not as note fields.
+      if (key is String && key.startsWith('__')) {
+        return;
+      }
       if (key == 'title') {
-        buffer.writeln('• Set Title: "$value"');
+        buffer.writeln('• Set Title: "${_truncate(value?.toString() ?? '')}"');
       } else if (key == 'content') {
         if (value is Map && value['action'] == 'append') {
           buffer.writeln(
             '• Append Content: "${_truncate(value['text']?.toString() ?? '')}"',
           );
+        } else if (value is Map && value['action'] == 'prepend') {
+          buffer.writeln(
+            '• Insert Before: "${_truncate(value['text']?.toString() ?? '')}"',
+          );
+        } else if (value is Map && value['action'] == 'replace') {
+          final text = value['text']?.toString() ?? '';
+          // A block delete arrives as replace-with-empty; rendering the raw map
+          // ('{action: replace, text: }') is unreadable at a consent surface.
+          buffer.writeln(
+            text.isEmpty
+                ? '• Delete the selected content'
+                : '• Replace Content With: "${_truncate(text)}"',
+          );
         } else if (value is String) {
           buffer.writeln('• Set Content: "${_truncate(value)}"');
         } else {
-          buffer.writeln('• Content: $value');
+          buffer.writeln('• Content: ${_truncate(value.toString())}');
         }
       } else if (key == 'tags') {
         if (value is Map) {
@@ -457,7 +557,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
       } else if (key == 'isArchived') {
         buffer.writeln('• ${value == true ? "Archive" : "Unarchive"} Note');
       } else {
-        buffer.writeln('• Set $key: $value');
+        buffer.writeln('• Set $key: ${_truncate(value?.toString() ?? '')}');
       }
     });
 

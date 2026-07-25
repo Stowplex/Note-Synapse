@@ -448,6 +448,20 @@ class NoteModificationService {
       );
     }
 
+    return applyWholeContentAction(currentContent, action, text);
+  }
+
+  /// Applies an `append` / `prepend` / `replace` content action to a whole
+  /// piece of content.
+  ///
+  /// Shared with [BlockNoteScopeService]-backed writes so that plugin edits to
+  /// a transient block note behave exactly like the note-level equivalents.
+  /// Section-scoped modifications are handled by the caller, not here.
+  static String applyWholeContentAction(
+    String currentContent,
+    String action,
+    String text,
+  ) {
     switch (action) {
       case 'append':
         return '$currentContent\n$text';

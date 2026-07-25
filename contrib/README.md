@@ -60,3 +60,7 @@ contrib/
   spreadsheet: markdown pipe tables in the note body as well as
   `.csv`/`.tsv`/`.xlsx`/`.ods` attachments, with undo, column alignment,
   multi-sheet tabs, and read-only safety for legacy `.xls`/`.xlsm` files.
+- **mermaid-block-renderer** — render the Mermaid diagram in a selected note
+  block into an image and insert it above the diagram source, keeping the code
+  fence editable. Unlike the others this one *is* bundled as a starter app; the
+  folder holds the readable source of that bundled build.
