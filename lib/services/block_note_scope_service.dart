@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
@@ -152,10 +151,12 @@ class BlockNoteScopeService {
   /// Returns the scope for [noteId], or null when [noteId] is an ordinary note.
   BlockNoteScope? lookup(String noteId) => _scopes[noteId];
 
-  /// True when any scope is open. Used by tests to assert that scopes are
-  /// released; production code looks up specific ids via [lookup].
-  @visibleForTesting
+  /// True when any scope is open. Cheap guard so hot paths (e.g. every
+  /// `Synapse.runQuery`) can skip block-scope work entirely.
   bool get hasOpenScopes => _scopes.isNotEmpty;
+
+  /// The transient ids currently open.
+  Iterable<String> get openIds => _scopes.keys;
 
   void close(String tempNoteId) {
     if (_scopes.remove(tempNoteId) != null) {

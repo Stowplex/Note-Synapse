@@ -1584,6 +1584,116 @@ void main() {
       verify(mockAppProvider.deleteNote('some-real-note')).called(1);
     });
 
+    test('runQuery re-reads a block like a note (the Table Studio save path)', () async {
+      // Table Studio (and any careful plugin) re-reads the note's current
+      // content with SQL before writing, and ABORTS if it gets no rows, so it
+      // never writes stale content. A transient id has no row, so without this
+      // the whole save fails with "Could not read the current note content".
+      when(
+        mockSqlQueryService.getQueryType(any),
+      ).thenReturn(SqlQueryType.select);
+      when(mockSqlQueryService.isReadOnlyQuery(any)).thenReturn(true);
+      when(
+        mockSqlQueryService.executeQuery(
+          any,
+          requireApprovalForWrites: anyNamed('requireApprovalForWrites'),
+          allowWriteOperations: anyNamed('allowWriteOperations'),
+        ),
+      ).thenAnswer(
+        (_) async => SqlQueryResult(
+          success: true,
+          data: [
+            {'id': parentId, 'content': storedParent.content},
+          ],
+        ),
+      );
+
+      final result = await jsHandlers['runQuery']!([
+        "SELECT content FROM notes WHERE id = '${scope.tempNoteId}' LIMIT 1",
+      ]);
+
+      expect(result['success'], isTrue);
+      final rows = result['data'] as List;
+      expect(rows, hasLength(1));
+      // It must see the BLOCK's text, not the whole parent note — otherwise it
+      // would write the entire note back into the block's range.
+      expect(rows.first['content'], blockText);
+      expect(rows.first['id'], scope.tempNoteId);
+
+      // The query the DB actually ran was rewritten to the real note id.
+      final ranSql =
+          verify(
+                mockSqlQueryService.executeQuery(
+                  captureAny,
+                  requireApprovalForWrites: anyNamed('requireApprovalForWrites'),
+                  allowWriteOperations: anyNamed('allowWriteOperations'),
+                ),
+              ).captured.last
+              as String;
+      expect(ranSql, contains(parentId));
+      expect(ranSql, isNot(contains(scope.tempNoteId)));
+    });
+
+    test('SQL writes against a block id are refused with guidance', () async {
+      when(
+        mockSqlQueryService.getQueryType(any),
+      ).thenReturn(SqlQueryType.update);
+      when(mockSqlQueryService.isReadOnlyQuery(any)).thenReturn(false);
+
+      final result = await jsHandlers['runQuery']!([
+        "UPDATE notes SET content = 'x' WHERE id = '${scope.tempNoteId}'",
+      ]);
+
+      // Rewriting this to the parent would write the block's text over the
+      // WHOLE note, so it must be refused rather than redirected.
+      expect(result['success'], isFalse);
+      expect(result['error'], contains('Synapse.updateNotes'));
+      verifyNever(
+        mockSqlQueryService.executeQuery(
+          any,
+          requireApprovalForWrites: anyNamed('requireApprovalForWrites'),
+          allowWriteOperations: anyNamed('allowWriteOperations'),
+        ),
+      );
+    });
+
+    test('runQuery is untouched when no block scope is open', () async {
+      scopeService.close(scope.tempNoteId);
+      when(
+        mockSqlQueryService.getQueryType(any),
+      ).thenReturn(SqlQueryType.select);
+      when(mockSqlQueryService.isReadOnlyQuery(any)).thenReturn(true);
+      when(
+        mockSqlQueryService.executeQuery(
+          any,
+          requireApprovalForWrites: anyNamed('requireApprovalForWrites'),
+          allowWriteOperations: anyNamed('allowWriteOperations'),
+        ),
+      ).thenAnswer(
+        (_) async => SqlQueryResult(
+          success: true,
+          data: [
+            {'id': parentId, 'content': 'untouched'},
+          ],
+        ),
+      );
+
+      const sql = "SELECT content FROM notes WHERE id = 'parent-note'";
+      final result = await jsHandlers['runQuery']!([sql]);
+
+      expect((result['data'] as List).first['content'], 'untouched');
+      final ranSql =
+          verify(
+                mockSqlQueryService.executeQuery(
+                  captureAny,
+                  requireApprovalForWrites: anyNamed('requireApprovalForWrites'),
+                  allowWriteOperations: anyNamed('allowWriteOperations'),
+                ),
+              ).captured.last
+              as String;
+      expect(ranSql, sql);
+    });
+
     test('openNote on a block navigates to the parent note', () async {
       Note? opened;
       final navBridge = UserAppRuntimeBridge(

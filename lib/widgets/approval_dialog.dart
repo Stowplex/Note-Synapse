@@ -52,6 +52,9 @@ class ApprovalDialog extends StatefulWidget {
 class _ApprovalDialogState extends State<ApprovalDialog> {
   bool _allowForSession = false;
 
+  /// Whether the details box is expanded past [_collapsedDetailsHeight].
+  bool _detailsExpanded = false;
+
   bool get _isBatchModification {
     final details = widget.request.details;
     if (details is! Map) {
@@ -294,9 +297,48 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
       final modification = details is Map ? details['modification'] : details;
 
       if (modification is Map && modification['isBatch'] == true) {
-        return _buildBatchModificationDisplay(
-          colorScheme,
-          modification as Map<String, dynamic>,
+        // Bounded and expandable for the same reason as the single-note body:
+        // 20 entries of plugin text must not be able to push the notice or the
+        // Approve button out of view, but the user must still be able to read
+        // all of it.
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: _detailsExpanded
+                    ? double.infinity
+                    : _collapsedDetailsHeight,
+              ),
+              child: SingleChildScrollView(
+                child: _buildBatchModificationDisplay(
+                  colorScheme,
+                  modification as Map<String, dynamic>,
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () =>
+                    setState(() => _detailsExpanded = !_detailsExpanded),
+                icon: Icon(
+                  _detailsExpanded ? Icons.unfold_less : Icons.unfold_more,
+                  size: 16,
+                ),
+                label: Text(
+                  _detailsExpanded ? 'Show less' : 'Show full change',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  foregroundColor: colorScheme.primary,
+                ),
+              ),
+            ),
+          ],
         );
       }
       String displayText = widget.request.formattedDetails;
@@ -313,7 +355,64 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
     return _buildTextContainer(widget.request.formattedDetails, colorScheme);
   }
 
+  /// Height the details box occupies before the user expands it.
+  ///
+  /// Bounding the box — rather than truncating the text — is what keeps the
+  /// scope notice and the Approve button in view no matter how much text a
+  /// plugin sends, while still letting the user read the WHOLE change by
+  /// scrolling inside the box or expanding it.
+  static const double _collapsedDetailsHeight = 180;
+
   Widget _buildTextContainer(String text, ColorScheme colorScheme) {
+    final capped = _capForRendering(text);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: _detailsExpanded
+                ? double.infinity
+                : _collapsedDetailsHeight,
+          ),
+          child: SingleChildScrollView(
+            child: _buildTextBody(capped, colorScheme),
+          ),
+        ),
+        _buildExpandToggle(capped, colorScheme),
+      ],
+    );
+  }
+
+  /// Shown only when the text does not fit collapsed, so simple approvals stay
+  /// uncluttered.
+  Widget _buildExpandToggle(String text, ColorScheme colorScheme) {
+    // Cheap proxy for "taller than the collapsed box": either many lines or a
+    // lot of characters.
+    final lines = text.split('\n').length;
+    if (lines <= 8 && text.length <= 400) return const SizedBox.shrink();
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: () => setState(() => _detailsExpanded = !_detailsExpanded),
+        icon: Icon(
+          _detailsExpanded ? Icons.unfold_less : Icons.unfold_more,
+          size: 16,
+        ),
+        label: Text(
+          _detailsExpanded ? 'Show less' : 'Show full change',
+          style: const TextStyle(fontSize: 12),
+        ),
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          minimumSize: const Size(0, 32),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          foregroundColor: colorScheme.primary,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextBody(String text, ColorScheme colorScheme) {
     return Container(
       width: double.maxFinite,
       padding: const EdgeInsets.all(8),
@@ -511,15 +610,15 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
         return;
       }
       if (key == 'title') {
-        buffer.writeln('• Set Title: "${_truncate(value?.toString() ?? '')}"');
+        buffer.writeln('• Set Title: "${value?.toString() ?? ''}"');
       } else if (key == 'content') {
         if (value is Map && value['action'] == 'append') {
           buffer.writeln(
-            '• Append Content: "${_truncate(value['text']?.toString() ?? '')}"',
+            '• Append Content: "${value['text']?.toString() ?? ''}"',
           );
         } else if (value is Map && value['action'] == 'prepend') {
           buffer.writeln(
-            '• Insert Before: "${_truncate(value['text']?.toString() ?? '')}"',
+            '• Insert Before: "${value['text']?.toString() ?? ''}"',
           );
         } else if (value is Map && value['action'] == 'replace') {
           final text = value['text']?.toString() ?? '';
@@ -528,12 +627,12 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
           buffer.writeln(
             text.isEmpty
                 ? '• Delete the selected content'
-                : '• Replace Content With: "${_truncate(text)}"',
+                : '• Replace Content With: "$text"',
           );
         } else if (value is String) {
-          buffer.writeln('• Set Content: "${_truncate(value)}"');
+          buffer.writeln('• Set Content: "$value"');
         } else {
-          buffer.writeln('• Content: ${_truncate(value.toString())}');
+          buffer.writeln('• Content: ${value.toString()}');
         }
       } else if (key == 'tags') {
         if (value is Map) {
@@ -557,7 +656,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
       } else if (key == 'isArchived') {
         buffer.writeln('• ${value == true ? "Archive" : "Unarchive"} Note');
       } else {
-        buffer.writeln('• Set $key: ${_truncate(value?.toString() ?? '')}');
+        buffer.writeln('• Set $key: ${value?.toString() ?? ''}');
       }
     });
 
@@ -565,10 +664,14 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
     return buffer.toString().trim();
   }
 
-  String _truncate(String text, {int length = 100}) {
-    // Replace newlines with spaces for compact display
-    final cleanText = text.replaceAll('\n', ' ');
-    if (cleanText.length <= length) return cleanText;
-    return '${cleanText.substring(0, length)}...';
-  }
+  /// Upper bound on rendered detail text.
+  ///
+  /// Not a consent measure — the scope notice sits above this text and the box
+  /// is height-bounded, so long values cannot hide anything. This only stops a
+  /// pathological payload (a multi-megabyte note body) from stalling layout.
+  static const int _maxDetailChars = 20000;
+
+  String _capForRendering(String text) => text.length <= _maxDetailChars
+      ? text
+      : '${text.substring(0, _maxDetailChars)}\n… (truncated for display)';
 }

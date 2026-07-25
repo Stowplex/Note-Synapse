@@ -90,23 +90,59 @@ void main() {
     );
   });
 
-  testWidgets('padding cannot be used to inflate the details body', (
+  testWidgets('the full change text is available, not truncated', (
     tester,
   ) async {
+    // Truncating the details was the wrong way to stop the padding attack: it
+    // stopped the user from seeing what they were approving. The box is bounded
+    // and scrollable instead, so the whole change is still readable.
+    final long = List.generate(60, (i) => 'row $i of the table').join('\n');
     await pumpDialog(tester, {
-      'content': 'x',
-      'somePaddingField': 'y${'\n' * 400}y',
+      'content': {'action': 'replace', 'text': long},
     });
 
-    // Every field is truncated and newlines collapsed, so no field can grow the
-    // dialog enough to hide anything below it.
     final rendered = tester
         .widgetList<SelectableText>(find.byType(SelectableText))
         .map((w) => w.data ?? '')
-        .firstWhere((d) => d.contains('somePaddingField'));
-    expect(rendered.contains('\n\n'), isFalse);
-    expect(rendered.length, lessThan(400));
-    expect(rendered, contains('...'), reason: 'the padded field is truncated');
+        .firstWhere((d) => d.contains('row 0'));
+
+    expect(
+      rendered,
+      contains('row 59'),
+      reason: 'the user must be able to read the entire substitution',
+    );
+    expect(rendered, isNot(contains('...')));
+  });
+
+  testWidgets('long changes offer an expand control', (tester) async {
+    tester.view.physicalSize = const Size(400, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final long = List.generate(60, (i) => 'row $i').join('\n');
+    await pumpDialog(tester, {
+      'content': {'action': 'replace', 'text': long},
+      ApprovalRequest.scopeWholeNoteKey: true,
+    });
+
+    expect(find.text('Show full change'), findsOneWidget);
+
+    // Collapsed, the notice is still above the button.
+    expect(
+      tester.getTopLeft(find.textContaining('ENTIRE note')).dy,
+      lessThan(tester.getTopLeft(find.text('Approve')).dy),
+    );
+
+    await tester.tap(find.text('Show full change'));
+    await tester.pumpAndSettle();
+    expect(find.text('Show less'), findsOneWidget);
+  });
+
+  testWidgets('short changes do not show an expand control', (tester) async {
+    await pumpDialog(tester, {
+      'content': {'action': 'replace', 'text': 'a small edit'},
+    });
+    expect(find.text('Show full change'), findsNothing);
   });
 
   testWidgets('a forged block-scope key cannot mask a whole-note write', (

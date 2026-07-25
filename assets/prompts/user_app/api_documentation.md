@@ -637,8 +637,14 @@
          action append/prepend/replace instead.
        * Synapse.deleteNotes with a transient block id removes just that block,
          never the parent note.
-       * Do NOT persist a transient id or pass it to Synapse.runQuery - it has
-         no database row. Use parentNoteId when you need to query the real note.
+       * Synapse.runQuery works with a transient id for READS: a
+         `SELECT ... FROM notes WHERE id = '<transient id>'` is served from the
+         parent row with `content` replaced by the block's text, so a plugin
+         that re-reads the note before writing keeps working unchanged.
+         SQL WRITES against a transient id are refused - use
+         Synapse.updateNotes, which applies the change to the right part of the
+         parent note.
+       * Do NOT persist a transient id: it is valid only for this app session.
 
    - Synapse.Params (object, read-only) - Parameters passed in when the app is
      embedded inline in markdown. Populated from the query string of the

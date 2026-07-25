@@ -29,8 +29,10 @@
  that block's markdown, and its "id" is transient (no database row).
  Synapse.updateNotes with that id writes back over exactly that block in the
  parent note, and attachmentPaths/readAttachment resolve against the parent
- note. Use parentNoteId if you need the full note (e.g. with Synapse.runQuery).
- Never store the transient id.
+ note. Synapse.runQuery also accepts the transient id for reads (a SELECT on it
+ returns the block's text as `content`), so re-reading before a write works;
+ SQL writes against it are refused - use Synapse.updateNotes. Use parentNoteId
+ when you genuinely want the whole note. Never store the transient id.
  A block-scoped write is CONTENT-ONLY: title/tags/attachments/link/subnote are
  ignored. Target parentNoteId in a separate entry to change the note itself.
  Images: a synapsetemp:/// URI embedded in BLOCK content is promoted to a

@@ -431,12 +431,32 @@ class UserAppRuntimeBridge {
       callback: (args) async {
         final startTime = DateTime.now();
         try {
-          final sql = args.first as String;
-          LoggerService.debug('[Synapse.runQuery] Called with SQL: $sql');
+          final requestedSql = args.first as String;
+          LoggerService.debug(
+            '[Synapse.runQuery] Called with SQL: $requestedSql',
+          );
 
           // Detect query type using SqlQueryService
-          final queryType = _sqlQueryService.getQueryType(sql);
-          final isReadOnly = _sqlQueryService.isReadOnlyQuery(sql);
+          final queryType = _sqlQueryService.getQueryType(requestedSql);
+          final isReadOnly = _sqlQueryService.isReadOnlyQuery(requestedSql);
+
+          // A transient block-note id has no database row, so a plugin that
+          // re-reads its note with SQL before writing (good practice, and what
+          // Table Studio does) would otherwise get zero rows and abort. Serve
+          // those reads from the parent row with the block's own values patched
+          // in, so a block scope behaves like a note here too.
+          final scopedIds = _blockScopeIdsIn(requestedSql);
+          if (scopedIds.isNotEmpty && !isReadOnly) {
+            return {
+              'success': false,
+              'error':
+                  'This note id refers to a selected block, which has no '
+                  'database row, so it cannot be written with SQL. Use '
+                  'Synapse.updateNotes with this id instead - the host applies '
+                  'the change to the right part of the parent note.',
+            };
+          }
+          final sql = _rewriteBlockScopeIds(requestedSql, scopedIds);
 
           LoggerService.debug(
             '[Synapse.runQuery] Query type: ${_sqlQueryService.getQueryTypeDescription(queryType)}, read-only: $isReadOnly',
@@ -485,7 +505,7 @@ class UserAppRuntimeBridge {
             );
             return {
               'success': true,
-              'data': result.data ?? [],
+              'data': _patchBlockScopeRows(result.data ?? [], scopedIds),
               if (result.truncated) 'truncated': true,
               if (result.truncated && result.totalRows != null)
                 'totalRows': result.totalRows,
@@ -1795,9 +1815,13 @@ class UserAppRuntimeBridge {
           return {
             'success': true,
             'updatedCount': outcome.updatedCount,
-            // Additive: existing apps ignore it, but a refused write is no
-            // longer indistinguishable from a successful no-op.
+            // Additive: existing apps ignore these, but a refused write is no
+            // longer indistinguishable from a successful no-op. `error` is the
+            // singular form existing plugins already read (Table Studio's
+            // interpretUpdateResult, for one), so they surface the reason
+            // without any change.
             if (outcome.errors.isNotEmpty) 'errors': outcome.errors,
+            if (outcome.errors.isNotEmpty) 'error': outcome.errors.first,
           };
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
@@ -2086,6 +2110,58 @@ class UserAppRuntimeBridge {
     final scope = _blockScopeFor(noteId);
     if (scope != null) return _databaseService.getNote(scope.parentNoteId);
     return _databaseService.getNote(noteId);
+  }
+
+  /// Open block-scope ids that appear literally in [sql].
+  ///
+  /// Ids are v4 UUIDs, so a coincidental match is not a practical concern, and
+  /// the scan is skipped entirely when no scope is open.
+  List<String> _blockScopeIdsIn(String sql) {
+    final scopes = _blockScopes;
+    if (scopes == null || !scopes.hasOpenScopes) return const [];
+    return scopes.openIds.where(sql.contains).toList();
+  }
+
+  /// Replaces each transient id in [sql] with its parent note id, so the query
+  /// runs against a row that actually exists.
+  String _rewriteBlockScopeIds(String sql, List<String> scopedIds) {
+    var rewritten = sql;
+    for (final id in scopedIds) {
+      final parentId = _realNoteId(id);
+      if (parentId != id) rewritten = rewritten.replaceAll(id, parentId);
+    }
+    return rewritten;
+  }
+
+  /// Patches rows that came back from a rewritten query so the plugin sees the
+  /// BLOCK, not the whole parent note: `content` becomes the block text and
+  /// `id` goes back to the transient id it asked about.
+  ///
+  /// Only touches rows whose `id` is the parent of a scope named in the original
+  /// query, so unrelated rows in a multi-note query are left alone.
+  List<Map<String, dynamic>> _patchBlockScopeRows(
+    List<Map<String, dynamic>> rows,
+    List<String> scopedIds,
+  ) {
+    if (scopedIds.isEmpty || rows.isEmpty) return rows;
+    final scopes = _blockScopes;
+    if (scopes == null) return rows;
+
+    final byParent = <String, BlockNoteScope>{};
+    for (final id in scopedIds) {
+      final scope = scopes.lookup(id);
+      if (scope != null) byParent[scope.parentNoteId] = scope;
+    }
+    if (byParent.isEmpty) return rows;
+
+    return rows.map((row) {
+      final scope = byParent[row['id']?.toString()];
+      if (scope == null) return row;
+      final patched = Map<String, dynamic>.from(row);
+      if (patched.containsKey('id')) patched['id'] = scope.tempNoteId;
+      if (patched.containsKey('content')) patched['content'] = scope.text;
+      return patched;
+    }).toList();
   }
 
   /// Maps a transient block-note id to the real note it belongs to, leaving
