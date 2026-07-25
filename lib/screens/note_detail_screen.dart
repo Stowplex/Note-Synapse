@@ -550,8 +550,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Future<void> _handleEditSelection() async {
     if (_selectedBlockIndices.isEmpty) return;
 
-    final sortedIndices = _selectedBlockIndices.toList()..sort();
-    final blocksToEdit = sortedIndices.map((i) => _parsedBlocks[i]).toList();
+    final blocksToEdit = _selectedBlocksFor(_currentNote);
+    if (blocksToEdit == null) {
+      _showBlockScopeUnavailable(AppLocalizations.of(context)!);
+      return;
+    }
 
     // Consolidate content
     final tracker = MarkdownBlockTracker();
@@ -597,8 +600,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     if (_selectedBlockIndices.isEmpty) return;
     final l10n = AppLocalizations.of(context)!;
 
-    final sortedIndices = _selectedBlockIndices.toList()..sort();
-    final blocksToDelete = sortedIndices.map((i) => _parsedBlocks[i]).toList();
+    final blocksToDelete = _selectedBlocksFor(_currentNote);
+    if (blocksToDelete == null) {
+      _showBlockScopeUnavailable(l10n);
+      return;
+    }
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -638,8 +644,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Future<void> _handleAIEditSelection() async {
     if (_selectedBlockIndices.isEmpty) return;
 
-    final sortedIndices = _selectedBlockIndices.toList()..sort();
-    final blocksToEdit = sortedIndices.map((i) => _parsedBlocks[i]).toList();
+    final blocksToEdit = _selectedBlocksFor(_currentNote);
+    if (blocksToEdit == null) {
+      _showBlockScopeUnavailable(AppLocalizations.of(context)!);
+      return;
+    }
     final originalContent = blocksToEdit.map((b) => b.content).join('\n\n');
 
     // Show prompt dialog — loading/error handled inline within the dialog
@@ -688,19 +697,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     if (_selectedBlockIndices.isEmpty) return;
     final l10n = AppLocalizations.of(context)!;
 
-    final sortedIndices = _selectedBlockIndices.toList()..sort();
-    final blocks = sortedIndices.map((i) => _parsedBlocks[i]).toList();
-
     // A pending autosave would rebuild the note from a stale controller and
     // clobber whatever the plugin writes, so drop it first (same reason
     // _updateNoteContent cancels it).
     _autoSaveTimer?.cancel();
 
-    final appProvider = Provider.of<AppProvider>(context, listen: false);
-    final currentNote = appProvider.notes.firstWhere(
-      (n) => n.id == widget.note.id,
-      orElse: () => widget.note,
-    );
+    final currentNote = _currentNote;
+    // The plugin gets this text and rewrites this range, so the offsets must
+    // provably still describe the selection.
+    final blocks = _selectedBlocksFor(currentNote);
+    if (blocks == null) {
+      _showBlockScopeUnavailable(l10n);
+      return;
+    }
 
     final spanStart = blocks
         .map((b) => b.startOffset)
@@ -709,23 +718,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         .map((b) => b.endOffset)
         .reduce((a, b) => a > b ? a : b);
 
-    // Block offsets are parsed against the chips-stripped markdown while this
-    // splices into the raw content, so verify the span really covers the
-    // selection before handing it to a plugin. Failing loudly beats corrupting
-    // the note.
-    if (spanStart < 0 ||
-        spanEnd > currentNote.content.length ||
-        spanEnd <= spanStart) {
-      _showBlockScopeUnavailable(l10n);
-      return;
-    }
-    // The plugin gets this text and rewrites this range, so the offsets must
-    // provably still describe the selection. See
-    // MarkdownBlockTracker.offsetsMatchContent for why weaker checks don't work.
-    if (!MarkdownBlockTracker.offsetsMatchContent(
-      currentNote.content,
-      blocks,
-    )) {
+    // A selection of only blank-line blocks has nothing to hand a plugin.
+    if (spanEnd <= spanStart) {
       _showBlockScopeUnavailable(l10n);
       return;
     }
@@ -760,6 +754,29 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       ),
     );
   }
+
+  /// The selected blocks, or null when their offsets no longer describe the
+  /// note and splicing with them would rewrite the wrong characters.
+  ///
+  /// Block offsets are translated out of the chips-stripped coordinate space by
+  /// `BlockMarkdownBody`, so this should always hold; it is kept as a cheap
+  /// backstop because every caller below edits the note by raw character range.
+  List<MarkdownBlock>? _selectedBlocksFor(Note note) {
+    if (_selectedBlockIndices.isEmpty) return null;
+    final sorted = _selectedBlockIndices.toList()..sort();
+    if (sorted.last >= _parsedBlocks.length) return null;
+    final blocks = sorted.map((i) => _parsedBlocks[i]).toList();
+    if (!MarkdownBlockTracker.offsetsMatchContent(note.content, blocks)) {
+      return null;
+    }
+    return blocks;
+  }
+
+  /// Freshest copy of this note from the provider.
+  Note get _currentNote => Provider.of<AppProvider>(
+    context,
+    listen: false,
+  ).notes.firstWhere((n) => n.id == widget.note.id, orElse: () => widget.note);
 
   /// Releases the transient block scope, if any. Safe to call repeatedly.
   void _releaseBlockScope() {
