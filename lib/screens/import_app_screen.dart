@@ -62,6 +62,9 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
   }
 
   Future<void> _importApp() async {
+    // Captured before the async work so the post-import refresh still runs
+    // if this screen is disposed mid-import.
+    final appProvider = context.read<AppProvider>();
     try {
       setState(() {
         _currentStatus = AppLocalizations.of(context)!.readingYamlFile;
@@ -174,9 +177,15 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
         _progressSteps.add('✓ Dependencies downloaded and stored');
       });
 
-      // Refresh the app provider
-      final appProvider = context.read<AppProvider>();
-      await appProvider.loadData();
+      // Refresh only what the import touched: the user apps list and the
+      // imported app's revision cache. Without refreshAppRevisions, the
+      // provider's revision cache stays stale and the new revision is
+      // invisible until restart. A full loadData() is unnecessary here and
+      // can take several seconds.
+      if (_importedApp != null) {
+        await appProvider.refreshAppRevisions(_importedApp!.id);
+      }
+      await appProvider.refreshUserApps();
 
       setState(() {
         _currentStatus = AppLocalizations.of(

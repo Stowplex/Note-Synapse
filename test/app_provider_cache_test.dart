@@ -5,6 +5,7 @@ import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:note_synapse/models/app_revision.dart';
 import 'package:note_synapse/models/filter.dart';
 import 'package:note_synapse/models/note.dart';
 import 'package:note_synapse/models/tag.dart';
@@ -28,6 +29,18 @@ Note buildNote(String id, {String title = 'title', List<String> tags = const []}
     createdAt: now,
     updatedAt: now,
     tags: tags,
+  );
+}
+
+AppRevision buildRevision(String appId, int number) {
+  return AppRevision(
+    id: '${appId}_rev_$number',
+    appId: appId,
+    revisionNumber: number,
+    revisionTimestamp: DateTime.now(),
+    userPrompt: 'prompt',
+    aiResponse: 'response',
+    appCode: 'code',
   );
 }
 
@@ -248,6 +261,40 @@ void main() {
       expect(provider.notes, isEmpty);
       expect(provider.tags, isEmpty);
       expect(provider.filters, isEmpty);
+    });
+  });
+
+  group('app revisions cache', () {
+    test('getAppRevisions serves the cache without re-querying', () async {
+      when(mockUserAppService.getAppRevisions('app1'))
+          .thenAnswer((_) async => [buildRevision('app1', 1)]);
+
+      await provider.getAppRevisions('app1');
+      await provider.getAppRevisions('app1');
+
+      verify(mockUserAppService.getAppRevisions('app1')).called(1);
+    });
+
+    test('refreshAppRevisions replaces a stale cached list and notifies',
+        () async {
+      when(mockUserAppService.getAppRevisions('app1'))
+          .thenAnswer((_) async => [buildRevision('app1', 1)]);
+      await provider.getAppRevisions('app1');
+
+      // A new revision lands in the database (e.g. via app import).
+      when(mockUserAppService.getAppRevisions('app1')).thenAnswer(
+        (_) async => [buildRevision('app1', 1), buildRevision('app1', 2)],
+      );
+      var notifications = 0;
+      provider.addListener(() => notifications++);
+
+      await provider.refreshAppRevisions('app1');
+
+      expect(
+        provider.appRevisions['app1']!.map((r) => r.revisionNumber),
+        [1, 2],
+      );
+      expect(notifications, 1);
     });
   });
 
