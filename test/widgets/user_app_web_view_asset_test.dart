@@ -1,8 +1,10 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/widgets/user_app_web_view.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('resolveSynapseAssetRelativePath', () {
     test('preserves legacy host-only asset URLs', () {
       expect(
@@ -12,30 +14,35 @@ void main() {
     });
 
     test('supports nested asset paths', () {
+      const rawUrl = 'synapse://mathlive/fonts/KaTeX_Main-Regular.woff2';
       expect(
-        resolveSynapseAssetRelativePath(
-          Uri.parse('synapse://mathlive/fonts/KaTeX_Main-Regular.woff2'),
-        ),
+        resolveSynapseAssetRelativePath(Uri.parse(rawUrl), rawUrl: rawUrl),
         'mathlive/fonts/KaTeX_Main-Regular.woff2',
       );
     });
 
     test('rejects traversal and encoded path separators', () {
+      const traversalUrl = 'synapse://mathlive/%2e%2e/private.js';
       expect(
         resolveSynapseAssetRelativePath(
-          Uri.parse('synapse://mathlive/%2e%2e/private.js'),
+          Uri.parse(traversalUrl),
+          rawUrl: traversalUrl,
         ),
         isNull,
       );
+      const encodedSlashUrl = 'synapse://mathlive/fonts%2Fprivate.woff2';
       expect(
         resolveSynapseAssetRelativePath(
-          Uri.parse('synapse://mathlive/fonts%2Fprivate.woff2'),
+          Uri.parse(encodedSlashUrl),
+          rawUrl: encodedSlashUrl,
         ),
         isNull,
       );
+      const encodedBackslashUrl = 'synapse://mathlive/fonts%5Cprivate.woff2';
       expect(
         resolveSynapseAssetRelativePath(
-          Uri.parse('synapse://mathlive/fonts%5Cprivate.woff2'),
+          Uri.parse(encodedBackslashUrl),
+          rawUrl: encodedBackslashUrl,
         ),
         isNull,
       );

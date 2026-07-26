@@ -378,7 +378,10 @@ class _UserAppWebViewState extends State<UserAppWebView> {
   }
 
   Future<CustomSchemeResponse?> _handleSynapseScheme(WebUri url) async {
-    final relativePath = resolveSynapseAssetRelativePath(url.uriValue);
+    final relativePath = resolveSynapseAssetRelativePath(
+      url.uriValue,
+      rawUrl: url.rawValue,
+    );
     if (relativePath == null) {
       LoggerService.warning('Rejected invalid synapse asset URL: $url');
       return CustomSchemeResponse(
@@ -428,11 +431,15 @@ class _UserAppWebViewState extends State<UserAppWebView> {
 /// Legacy URLs store the filename in the host (`synapse://mermaid.min.js`).
 /// Formula Studio also needs nested paths for local fonts, such as
 /// `synapse://mathlive/fonts/KaTeX_Main-Regular.woff2`.
-String? resolveSynapseAssetRelativePath(Uri url) {
+///
+/// Pass [rawUrl] when it is available so encoded traversal segments can be
+/// rejected before Dart's URI parser normalizes them.
+String? resolveSynapseAssetRelativePath(Uri url, {String? rawUrl}) {
   if (url.scheme.toLowerCase() != 'synapse' ||
       url.host.isEmpty ||
       url.userInfo.isNotEmpty ||
-      url.hasPort) {
+      url.hasPort ||
+      (rawUrl != null && _hasUnsafeRawSynapsePath(rawUrl))) {
     return null;
   }
 
@@ -449,6 +456,45 @@ String? resolveSynapseAssetRelativePath(Uri url) {
     return null;
   }
   return segments.join('/');
+}
+
+bool _hasUnsafeRawSynapsePath(String rawUrl) {
+  final authorityStart = rawUrl.indexOf('://');
+  if (authorityStart < 0) return true;
+
+  var pathStart = -1;
+  for (var index = authorityStart + 3; index < rawUrl.length; index++) {
+    final character = rawUrl[index];
+    if (character == '/' || character == '?' || character == '#') {
+      if (character == '/') pathStart = index;
+      break;
+    }
+  }
+  if (pathStart == -1) return false;
+
+  var pathEnd = rawUrl.length;
+  for (final delimiter in ['?', '#']) {
+    final index = rawUrl.indexOf(delimiter, pathStart);
+    if (index >= 0 && index < pathEnd) pathEnd = index;
+  }
+
+  for (final rawSegment
+      in rawUrl.substring(pathStart + 1, pathEnd).split('/')) {
+    late final String segment;
+    try {
+      segment = Uri.decodeComponent(rawSegment);
+    } on FormatException {
+      return true;
+    }
+    if (segment == '.' ||
+        segment == '..' ||
+        segment.contains('/') ||
+        segment.contains('\\') ||
+        segment.contains('\u0000')) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /// MIME type returned for a local User App dependency.
