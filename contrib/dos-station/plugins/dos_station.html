@@ -461,6 +461,7 @@ const state = {
   fileStats: { total: 0, drift: 0, missing: 0, shadowed: 0, bad: 0 },
   panelEdit: null,       // {type:'code'|'att', key, name, textMode} — open name editor
   panelArm: null,        // {key, timer} — button awaiting a confirming second tap
+  panelNew: null,        // classifyNewFiles rows, computed on panel open / refresh only
   filesWasPaused: false,
   filesTimer: null,
   needDirRefresh: false,
@@ -939,6 +940,72 @@ function setDosFilesOpt(opts, key, value) {
   if (value === true) kept.push(key);
   else if (value !== null && value !== undefined && value !== false) kept.push(key + '=' + value);
   return kept;
+}
+
+/* --------------------------------------------- files DOS created on C: --
+ * The reverse direction: a snapshot diff entry that no import record claims is
+ * a file DOS made (or a game file DOS changed), and can be offered back to the
+ * note. Classification is pure over the diff so the panel logic stays testable. */
+
+/** Above this a text file still becomes a code block, but only after a second tap. */
+const CODE_WARN_BYTES = 64 * 1024;
+
+/**
+ * Rows for snapshot `changed` entries not spoken for by any import record.
+ *
+ * `linkedPaths` must cover every import record — active or broken — because
+ * promoting over a conflicted/invalid record would mint a second provider for
+ * the same DOS path. Caps arrive as arguments: the byte limits live outside
+ * this region. Rows deliberately do not keep the `data` reference — the
+ * snapshot can hold megabytes and rows outlive it in the panel.
+ */
+function classifyNewFiles(changed, linkedPaths, caps) {
+  const out = [];
+  for (const f of changed || []) {
+    const chk = dosPathCheck(f.name);
+    const key = chk.ok ? chk.path : String(f.name).toUpperCase();
+    if (linkedPaths && linkedPaths.has(key)) continue;
+    const size = f.data ? f.data.length : 0;
+    const binary = looksBinary(f.data);
+    const canCode = chk.ok && !binary && size <= caps.code;
+    const canAtt = chk.ok && size <= caps.att;
+    let reason = '';
+    if (!chk.ok) reason = chk.reason;
+    else if (!canAtt) reason = 'larger than ' + (caps.att >> 20) + ' MB';
+    out.push({
+      name: f.name,
+      dosPath: chk.ok ? chk.path : null,
+      size, binary,
+      canCode,
+      codeWarn: canCode && size > CODE_WARN_BYTES,
+      canAtt,
+      reason,
+    });
+  }
+  out.sort((x, y) => (x.name < y.name ? -1 : x.name > y.name ? 1 : 0));
+  return out;
+}
+
+/**
+ * A brand-new fence (opener + body + closer), LF-ended. replaceFence widens an
+ * existing block's marker past any ``` run in the body; this is the same guard
+ * for a fence that does not exist yet.
+ */
+function composeFenceBlock(info, body) {
+  const marker = '`'.repeat(fenceMarkerLen(body, '`', 3));
+  // A backtick or newline in the info string would stop the opener being a
+  // fence at all — same reasoning as setInfoAttr.
+  const safeInfo = String(info == null ? '' : info).replace(/[`\r\n]/g, '');
+  const lines = body === '' ? [] : String(body).replace(/\r\n?/g, '\n').split('\n');
+  return marker + safeInfo + '\n' + lines.map((l) => l + '\n').join('') + marker + '\n';
+}
+
+/** Info-string language for a DOS file promoted to a code block. */
+function langForDosPath(path) {
+  const seg = String(path == null ? '' : path).split('/').pop();
+  const dot = seg.lastIndexOf('.');
+  const ext = dot >= 0 ? seg.slice(dot + 1).toUpperCase() : '';
+  return { BAS: 'basic', C: 'c', H: 'c', PAS: 'pascal', ASM: 'asm', BAT: 'bat', INI: 'ini' }[ext] || '';
 }
 
 /* ==== core:end ========================================================== */
@@ -2966,17 +3033,7 @@ async function pushBackImport(rec) {
     // "text" would have the next mount decode them as UTF-8 and mangle them.
     const payload = rec.textMode
       ? new TextEncoder().encode(fromDosBytes(bytes)) : bytes;
-    const r = await Synapse.updateNotes([{
-      id: state.attachNoteId,
-      modification: { attachments: { added: [{ type: 'base64', data: u8ToB64(payload), fileName }] } },
-    }]);
-    if (!r || !r.success || !r.updatedCount) {
-      throw new Error((r && r.error) || 'the attachment was declined');
-    }
-    // The host renames stored files, so ask what it actually called this one.
-    await refreshAttachments();
-    const stored = state.attachments.find((a) => a.name === fileName);
-    const version = stored ? stored.name : fileName;
+    const version = await storeNoteAttachment(fileName, payload);
     try {
       await writeWithMutator((content) => mutateDosFiles(content, (recs) => {
         const hit = recs.find((x) => x.kind === 'entry' && x.dosPath === rec.dosPath);
@@ -3009,6 +3066,102 @@ async function pushBackImport(rec) {
   refreshImportStatus();
   guestRefreshDirCache();
   toast('↑ ' + rec.dosPath + ' saved to the note');
+}
+
+/** Attaches bytes to the real note and returns the name the host stored them under. */
+async function storeNoteAttachment(fileName, payload) {
+  const r = await Synapse.updateNotes([{
+    id: state.attachNoteId,
+    modification: { attachments: { added: [{ type: 'base64', data: u8ToB64(payload), fileName }] } },
+  }]);
+  if (!r || !r.success || !r.updatedCount) {
+    throw new Error((r && r.error) || 'the attachment was declined');
+  }
+  // The host renames stored files, so ask what it actually called this one.
+  await refreshAttachments();
+  const stored = state.attachments.find((a) => a.name === fileName);
+  return stored ? stored.name : fileName;
+}
+
+/* ============================== files DOS created, offered back to the note
+ * The one place that walks the whole guest FS for the panel. Called on panel
+ * open and on the explicit refresh button only — never from the 4s poll. */
+function refreshPanelNew() {
+  const snap = snapshotChanges();
+  if (!snap) { state.panelNew = null; return; }
+  // Every record counts, broken ones included: promoting over a conflicted or
+  // invalid record would mint a second provider for the same DOS path.
+  const linked = new Set(state.imports.map((r) => r.dosPath));
+  state.panelNew = classifyNewFiles(snap.changed, linked,
+    { code: MAX_CODE_BYTES, att: MAX_ATT_BYTES });
+  refreshImportStatus(snap);
+}
+
+/**
+ * Links a file DOS created (or changed) into the note, as a code block or as a
+ * new attachment. Afterwards it is an ordinary import: it shows up in the
+ * "ON C: FROM THIS NOTE" section with drift tracking and sync actions.
+ */
+async function promoteToNote(row, mode) {
+  // Read C: right now — the row was classified when the panel opened.
+  const bytes = guestReadFile(row.name);
+  if (!bytes) throw new Error(row.name + ' is not on C: any more');
+  const dosPath = requireDosPath(row.name);
+
+  if (mode === 'code') {
+    if (looksBinary(bytes)) {
+      throw new Error(dosPath + ' is not text — add it as an attachment instead');
+    }
+    if (bytes.length > MAX_CODE_BYTES) {
+      throw new Error(dosPath + ' is larger than ' + fmtSize(MAX_CODE_BYTES) +
+        ' — add it as an attachment instead');
+    }
+    // An appended fence right after an unclosed one would be swallowed into its
+    // body — the same tail-eating trap replaceFence refuses.
+    const fences = scanFences(state.noteContent);
+    if (fences.length && !fenceIsClosed(fences[fences.length - 1])) {
+      throw new Error('the ' + scopeWord().toLowerCase() +
+        ' ends inside an unclosed code block — close the ``` first');
+    }
+    const info = setInfoAttr(langForDosPath(dosPath), IMPORT_ATTR, dosPath);
+    await appendNoteContent('\n' + composeFenceBlock(info, fromDosBytes(bytes)));
+    await refreshImports();
+    placeImport(dosPath);
+  } else {
+    if (bytes.length > MAX_ATT_BYTES) {
+      throw new Error(dosPath + ' is larger than ' + fmtSize(MAX_ATT_BYTES));
+    }
+    if (!state.attachNamesResolved) {
+      throw new Error('the attachment list could not be read — reopen DOS Station and try again');
+    }
+    // Attach under a human name derived from the DOS one; on a clash fall back
+    // to the versioned-name idiom so an existing attachment is never shadowed.
+    let fileName = dosPath.split('/').pop().toLowerCase();
+    if (state.attachments.some((a) => String(a.name).toLowerCase() === fileName)) {
+      const dot = fileName.lastIndexOf('.');
+      const stem = dot > 0 ? fileName.slice(0, dot) : fileName;
+      const ext = dot > 0 ? fileName.slice(dot) : '';
+      fileName = stem + '-' + Date.now() + ext;
+    }
+    const stored = await storeNoteAttachment(fileName, bytes);
+    // The new attachment is itself the source, so the dos-files entry needs no
+    // v= pointer. Byte copy, not `text`: the file holds exactly what DOS wrote.
+    await importAttachment({ name: stored }, dosPath, false);
+  }
+
+  // The DOS path is normalized to upper case, so a file that lived on C: under
+  // another case is now there twice — drop the original and record the delete,
+  // or an older saves zip would resurrect it.
+  if (row.name !== dosPath) {
+    guestUnlink(row.name);
+    baselineDelete(row.name);
+    if (state.pendingDeletes) state.pendingDeletes.add(row.name);
+  }
+  // The stored saves zip still carries this file; once the note owns it, a
+  // stale saved copy must not shadow the note copy on the next mount.
+  state.savesDirty = true;
+  state.lastSaveSig = null;
+  toast(dosPath + ' added to the ' + scopeWord().toLowerCase());
 }
 
 /* ------------------------------------------------------------ rendering -- */
@@ -3135,7 +3288,64 @@ function renderFilesPanel(host, rerender) {
     if (!state.contentWritable) rm.disabled = true;
   }
 
-  /* ---- 2. other code blocks in the note ---- */
+  /* ---- 2. files DOS created or changed, not spoken for by the note ---- */
+  const sec = add('div', 'filesec', 'NEW / CHANGED ON C:');
+  const refresh = document.createElement('button');
+  refresh.className = 'btn small';
+  refresh.textContent = '↻ REFRESH';
+  refresh.style.marginLeft = '8px';
+  refresh.onclick = panelAction(rerender, () => refreshPanelNew());
+  sec.appendChild(refresh);
+  if (state.panelNew === null) {
+    add('div', 'fhint', 'Start the emulator to see files DOS creates.');
+  } else {
+    // Filter against the live import list rather than re-walking the FS: a row
+    // promoted (or linked via the sections below) while the panel is open
+    // simply vanishes here and shows up under section 1.
+    const linkedNow = new Set(state.imports.map((r) => r.dosPath));
+    const rows = state.panelNew.filter((r) =>
+      !linkedNow.has(r.dosPath || String(r.name).toUpperCase()));
+    if (!rows.length) add('div', 'fhint', 'Nothing new — C: matches the ' +
+      scopeWord().toLowerCase() + ' and the game disk.');
+    const MAX_NEW_ROWS = 200;
+    for (const nf of rows.slice(0, MAX_NEW_ROWS)) {
+      const row = add('div', 'frow');
+      const name = document.createElement('div');
+      name.className = 'fname';
+      name.textContent = nf.name.replace(/\//g, '\\');
+      row.appendChild(name);
+
+      const acts = document.createElement('div');
+      acts.className = 'facts';
+      row.appendChild(acts);
+
+      const meta = document.createElement('div');
+      meta.className = 'fmeta';
+      meta.textContent = fmtSize(nf.size) + ' · ' + (nf.binary ? 'binary' : 'text') +
+        (nf.reason ? ' · ' + nf.reason : '');
+      row.appendChild(meta);
+
+      if (nf.canCode) {
+        // Above the warn size a huge block lands in the note, so it takes a
+        // confirming second tap; below it a plain button is enough.
+        const run = panelAction(rerender, () => promoteToNote(nf, 'code'));
+        const b = nf.codeWarn
+          ? armedButton(acts, '+ CODE BLOCK', 'promote-code:' + nf.name, run)
+          : button(acts, 'primary', '+ CODE BLOCK', run);
+        if (!state.contentWritable) b.disabled = true;
+      }
+      if (nf.canAtt) {
+        const b = button(acts, nf.canCode ? '' : 'primary', '+ ATTACHMENT',
+          panelAction(rerender, () => promoteToNote(nf, 'att')));
+        if (!state.contentWritable || !state.attachNamesResolved) b.disabled = true;
+      }
+    }
+    if (rows.length > MAX_NEW_ROWS) {
+      add('div', 'fhint', '… and ' + (rows.length - MAX_NEW_ROWS) + ' more');
+    }
+  }
+
+  /* ---- 3. other code blocks in the note ---- */
   const used = new Set(state.imports.filter((r) => r.kind === 'code').map((r) => r.dosPath));
   const free = scanFences(state.noteContent).filter((f) => {
     if (!isImportableFence(state.noteContent, f)) return false;
@@ -3178,7 +3388,7 @@ function renderFilesPanel(host, rerender) {
     }
   }
 
-  /* ---- 3. attachments ---- */
+  /* ---- 4. attachments ---- */
   const usedSrc = new Set(state.imports.filter((r) => r.kind === 'att').map((r) => r.srcName.toLowerCase()));
   const cand = state.attachments.filter((a) =>
     !isSavesAttachment(a) &&
@@ -3297,6 +3507,9 @@ function openFiles() {
   clearPanelArm();
   state.filesWasPaused = state.paused;
   if (state.live && !state.paused) pauseToggle(true);
+  // The one whole-FS walk. The panel is modal and the emulator paused, so the
+  // list cannot go stale underneath it; the 4s poll below never re-walks.
+  refreshPanelNew();
   const draw = () => renderFilesPanel($('filesBody'), draw);
   draw();
   $('filesWrap').classList.add('show');
@@ -3318,6 +3531,7 @@ function closeFiles() {
   state.filesTimer = null;
   setPanelEdit(null);
   clearPanelArm();
+  state.panelNew = null;
   $('filesWrap').classList.remove('show');
   if (!state.filesWasPaused && state.paused) pauseToggle(false);
   guestRefreshDirCache();

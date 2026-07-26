@@ -84,7 +84,10 @@ the note — a BASIC listing, a batch file, a config file a game reads.
 Attachments are copied to `C:` only when the user picks them in the app's 📁
 files panel, which records the choice in a ` ```dos-files ` block. Read that
 block if you need to know what is on the drive; leave its `| v=…` options alone
-(the app uses them to track saved-back versions).
+(the app uses them to track saved-back versions). The same panel also lists
+files DOS itself created or changed, and can link one back into the note as a
+`dos-name` code block or a `dos-files` attachment — so such blocks/entries may
+appear without the user ever typing them.
 
 ## While playing
 
