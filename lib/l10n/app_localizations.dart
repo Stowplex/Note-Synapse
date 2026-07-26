@@ -9017,8 +9017,14 @@ abstract class AppLocalizations {
   /// No description provided for @deleteLoginConfirm.
   ///
   /// In en, this message translates to:
-  /// **'Delete the saved login for {domain}? Clipping pages on this site will no longer be authenticated.'**
+  /// **'Delete the saved login for {domain}? Clipping pages on this site will no longer be authenticated, and any apps you gave access to this login will lose it.'**
   String deleteLoginConfirm(String domain);
+
+  /// No description provided for @deleteLoginFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not delete this login. Please try again.'**
+  String get deleteLoginFailed;
 
   /// No description provided for @webLoginSecurityNote.
   ///

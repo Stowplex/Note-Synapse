@@ -4953,8 +4953,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String deleteLoginConfirm(String domain) {
-    return '删除已保存的 $domain 登录？此站点的页面剪藏将不再使用登录状态。';
+    return '删除已保存的 $domain 登录？此站点的页面剪藏将不再使用登录状态，已获授权使用此登录的应用也将失去访问权限。';
   }
+
+  @override
+  String get deleteLoginFailed => '无法删除此登录，请重试。';
 
   @override
   String get webLoginSecurityNote => '在此平台上，已保存的登录未经操作系统级加密存储。请仅在受信任的设备上保存登录。';

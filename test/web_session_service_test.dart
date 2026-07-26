@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:note_synapse/services/app_domain_grant_service.dart';
 import 'package:note_synapse/services/web_session_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// In-memory [SessionStorageBackend] for tests.
 class _FakeStorage implements SessionStorageBackend {
@@ -48,6 +50,10 @@ class _FakeCookieGateway implements CookieGateway {
 }
 
 void main() {
+  // SharedPreferences (used by AppDomainGrantService in the delete tests)
+  // needs the binding.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('WebSessionCookie serialization', () {
     test('round-trips through JSON', () {
       const cookie = WebSessionCookie(
@@ -206,6 +212,9 @@ void main() {
     late WebSessionService service;
 
     setUp(() {
+      // deleteSession cascades into AppDomainGrantService, which is backed by
+      // SharedPreferences even when this group does not assert on grants.
+      SharedPreferences.setMockInitialValues({});
       storage = _FakeStorage();
       cookies = _FakeCookieGateway();
       service = WebSessionService(cookieGateway: cookies, storage: storage);
@@ -247,6 +256,31 @@ void main() {
       expect(await service.listDomains(), isEmpty);
       expect(await service.getSession('example.com'), isNull);
       expect(cookies.deleted, contains('https://example.com'));
+    });
+
+    test('deleteSession revokes app grants for that domain', () async {
+      final grants = AppDomainGrantService(
+        prefs: await SharedPreferences.getInstance(),
+      );
+      await grants.grant('app1', 'example.com');
+      await grants.grant('app1', 'other.com');
+      final scoped = WebSessionService(
+        cookieGateway: cookies,
+        storage: storage,
+        grantService: grants,
+      );
+      cookies.available['https://example.com'] = const [
+        WebSessionCookie(name: 'sid', value: 'xyz'),
+      ];
+      await scoped.saveSessionFromUrl('https://example.com');
+
+      await scoped.deleteSession('example.com');
+
+      // A grant must not outlive the credential it was granted against, or
+      // re-adding the login would silently re-arm the app.
+      expect(await grants.isGranted('app1', 'example.com'), false);
+      // Grants on unrelated domains survive.
+      expect(await grants.isGranted('app1', 'other.com'), true);
     });
 
     test('listDomains returns sorted domains', () async {

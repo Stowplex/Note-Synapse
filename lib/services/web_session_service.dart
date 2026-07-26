@@ -7,6 +7,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart' hide AndroidOpti
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'app_domain_grant_service.dart';
 import 'logger_service.dart';
 
 /// A single persisted cookie belonging to a saved web login session.
@@ -267,12 +268,21 @@ class _SecureSessionStorageBackend implements SessionStorageBackend {
 /// only ever be sent to a host that domain/path-matches it regardless of what
 /// sits in the shared cookie store.
 class WebSessionService {
-  WebSessionService({CookieGateway? cookieGateway, SessionStorageBackend? storage})
-    : _cookies = cookieGateway ?? _InAppWebViewCookieGateway(),
-      _storage = storage ?? _SecureSessionStorageBackend();
+  WebSessionService({
+    CookieGateway? cookieGateway,
+    SessionStorageBackend? storage,
+    AppDomainGrantService? grantService,
+  }) : _cookies = cookieGateway ?? _InAppWebViewCookieGateway(),
+       _storage = storage ?? _SecureSessionStorageBackend(),
+       _grantService = grantService ?? AppDomainGrantService();
 
   final CookieGateway _cookies;
   final SessionStorageBackend _storage;
+
+  /// Deleting a session revokes the app grants held against it, so this is
+  /// defaulted rather than left null: the cascade must not depend on a caller
+  /// remembering to wire it.
+  final AppDomainGrantService _grantService;
 
   static const _sessionPrefix = 'web_session_';
   static const _indexKey = 'web_session_index';
@@ -484,6 +494,14 @@ class WebSessionService {
   Future<void> deleteSession(String domain) async {
     // Read before deleting so we know the captured host for host-only cookies.
     final session = await getSession(domain);
+
+    // Drop app grants first, and let a failure abort the delete. A grant must
+    // never outlive the credential it was granted against: if the session were
+    // removed while a grant survived, the grant would have no row in Web Logins
+    // to be revoked from and would silently re-arm when the login was re-added.
+    // Failing here leaves the session in place, which keeps that row — and so
+    // the grant — visible and revokable, and the user can retry the delete.
+    await _grantService.revokeAllForDomain(domain);
 
     await _storage.delete('$_sessionPrefix$domain');
     await _removeFromIndex(domain);

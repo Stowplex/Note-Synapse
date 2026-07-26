@@ -22,7 +22,7 @@
 -   **[MCP Tools](guides/ai/mcp.md)**: Connect Note Synapse to external tools.
 
 ## Productivity
--   **[Web Clipper](guides/productivity/web_clipper.md)**: Saving knowledge from the web.
+-   **[Web Clipper](guides/productivity/web_clipper.md)**: Saving knowledge from the web, including sites that need a login.
 -   **[World Capture](guides/productivity/world_capture.md)**: Turn videos, photo sequences, and screen recordings into clean page notes.
 -   **[Calendar & Tasks](guides/productivity/calendar.md)**: Scheduling and task management.
 -   **[Multi-Function Tab](guides/productivity/multi_function_tab.md)**: Custom default views.
