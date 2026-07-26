@@ -2248,12 +2248,13 @@
     }
   },
   "deleteLogin": "Delete login",
-  "deleteLoginConfirm": "Delete the saved login for {domain}? Clipping pages on this site will no longer be authenticated.",
+  "deleteLoginConfirm": "Delete the saved login for {domain}? Clipping pages on this site will no longer be authenticated, and any apps you gave access to this login will lose it.",
   "@deleteLoginConfirm": {
     "placeholders": {
       "domain": {"type": "String"}
     }
   },
+  "deleteLoginFailed": "Could not delete this login. Please try again.",
   "webLoginSecurityNote": "On this platform, saved logins are stored without OS-level encryption. Only save logins on a device you trust.",
   "webLoginCaptureFailed": "Could not capture a login session. Make sure you are signed in before saving. This feature is unavailable on the web build.",
   "requestDesktopSite": "Request desktop site",

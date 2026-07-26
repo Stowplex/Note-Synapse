@@ -50,6 +50,35 @@ class _MemoryStorage implements SessionStorageBackend {
   Future<void> delete(String key) async => data.remove(key);
 }
 
+/// Seeds a saved login for [domain] into [storage].
+///
+/// Grant-gated paths resolve the session first and short-circuit when there is
+/// none, so a test that wants to exercise the grant gate must seed one.
+void _seedSession(_MemoryStorage storage, String domain) {
+  storage.data['web_session_$domain'] = jsonEncode({
+    'domain': domain,
+    'savedUrl': 'https://$domain/',
+    'savedAt': DateTime.now().toIso8601String(),
+    'cookies': [
+      {'name': 'sid', 'value': 'xyz', 'domain': domain},
+    ],
+  });
+  storage.data['web_session_index'] = jsonEncode([domain]);
+}
+
+/// [CookieGateway] whose live jar holds a cookie for every URL, modelling a
+/// site the user signed into without ever saving a login.
+class _LiveCookieGateway implements CookieGateway {
+  @override
+  Future<List<WebSessionCookie>> getCookies(String url) async => const [
+    WebSessionCookie(name: 'sid', value: 'live-secret'),
+  ];
+  @override
+  Future<void> setCookie(String url, WebSessionCookie cookie) async {}
+  @override
+  Future<void> deleteCookies(String url) async {}
+}
+
 /// [CookieGateway] that records restores and returns nothing.
 class _NoopCookieGateway implements CookieGateway {
   @override
@@ -474,12 +503,30 @@ void main() {
       test(
         'session:true without a grant and no approval UI is denied',
         () async {
+          _seedSession(sessionStorage, 'example.com');
           // Permission is checked before any network request is made.
           final result = await jsHandlers['proxyFetch']!([
             {'url': 'https://example.com/api', 'session': true},
           ]);
           expect(result['status'], 'error');
           expect(result['error'], 'permission_required');
+        },
+      );
+
+      test(
+        'session:true with no saved login sends the request unauthenticated',
+        () async {
+          // With no login there is nothing to grant access to, so the request
+          // proceeds as it would have anyway rather than recording a grant the
+          // user could never see or revoke in Web Logins.
+          final result = await jsHandlers['proxyFetch']!([
+            {'url': 'https://example.com/api', 'session': true},
+          ]);
+          expect(result['status'], isNot('error'));
+          expect(
+            await grantService.isGranted('test-uuid', 'example.com'),
+            isFalse,
+          );
         },
       );
 
@@ -505,12 +552,43 @@ void main() {
       test(
         'downloadFile without a grant and no approval UI is denied',
         () async {
+          _seedSession(sessionStorage, 'example.com');
           // Permission is checked before any network request is made.
           final result = await jsHandlers['downloadFile']!([
             {'url': 'https://example.com/file.m4a'},
           ]);
           expect(result['status'], 'error');
           expect(result['error'], 'permission_required');
+        },
+      );
+
+      test(
+        'downloadFile with no saved login records no grant and sends no cookies',
+        () async {
+          // downloadFile reads the LIVE cookie jar, which holds cookies for a
+          // site the user signed into without saving a login. Skipping the
+          // grant must therefore also skip the cookies, or this becomes an
+          // ungated authenticated fetch.
+          getIt.unregister<WebSessionService>();
+          getIt.registerSingleton<WebSessionService>(
+            WebSessionService(
+              cookieGateway: _LiveCookieGateway(),
+              storage: sessionStorage,
+              grantService: grantService,
+            ),
+          );
+          MockHttpHeaders.setNames.clear();
+
+          final result = await jsHandlers['downloadFile']!([
+            {'url': 'https://example.com/file.m4a'},
+          ]);
+
+          expect(result['error'], isNot('permission_required'));
+          expect(
+            await grantService.isGranted('test-uuid', 'example.com'),
+            isFalse,
+          );
+          expect(MockHttpHeaders.setNames, isNot(contains('cookie')));
         },
       );
 
@@ -553,6 +631,7 @@ void main() {
       test(
         'getCookies without a grant and no approval UI requires permission',
         () async {
+          _seedSession(sessionStorage, 'example.com');
           final result = await jsHandlers['sessionGetCookies']!([
             'example.com',
           ]);
@@ -561,16 +640,50 @@ void main() {
         },
       );
 
+      test('getCookies returns no_session when nothing is saved', () async {
+        final result = await jsHandlers['sessionGetCookies']!(['example.com']);
+        expect(result['success'], isFalse);
+        expect(result['error'], 'no_session');
+      });
+
       test(
-        'getCookies returns no_session once granted but nothing saved',
+        'getCookies does not prompt or record a grant when no session exists',
         () async {
-          await grantService.grant('test-uuid', 'example.com');
+          // Approving access to a login that does not exist would leave a
+          // grant with no row in Web Logins to revoke it from, which would
+          // then re-arm silently if the user later saved that login.
+          var prompted = false;
+          final approvingBridge = UserAppRuntimeBridge(
+            app: UserApp(
+              id: 'test-app',
+              uuid: 'test-uuid',
+              name: 'Test App',
+              description: '',
+              steps: const [],
+              htmlContent: '',
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ),
+            appProvider: mockAppProvider,
+            revisionNumber: 1,
+            isInteractive: true,
+            onSessionAccessApprovalRequest: (_, _) async {
+              prompted = true;
+              return true;
+            },
+          );
+          approvingBridge.registerJavaScriptHandlers(mockWebViewController);
+
           final result = await jsHandlers['sessionGetCookies']!([
             'example.com',
           ]);
-          // Grant passes; there is simply no stored session in this test.
-          expect(result['success'], isFalse);
+
           expect(result['error'], 'no_session');
+          expect(prompted, isFalse);
+          expect(
+            await grantService.isGranted('test-uuid', 'example.com'),
+            isFalse,
+          );
         },
       );
 
@@ -1887,8 +2000,14 @@ class MockHttpClientResponse extends Fake implements HttpClientResponse {
 }
 
 class MockHttpHeaders extends Fake implements HttpHeaders {
+  /// Header names set on outgoing requests, so a test can assert what was
+  /// (and was not) sent. Cleared per test.
+  static final Set<String> setNames = {};
+
   @override
-  void set(String name, Object value, {bool preserveHeaderCase = false}) {}
+  void set(String name, Object value, {bool preserveHeaderCase = false}) {
+    setNames.add(name.toLowerCase());
+  }
 
   @override
   String? value(String name) => null;

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../l10n/app_localizations.dart';
 import '../../services/app_domain_grant_service.dart';
 import '../../services/database_service.dart';
+import '../../services/logger_service.dart';
 import '../../services/service_locator.dart';
 import '../../services/web_session_service.dart';
 import 'web_login_browser_screen.dart';
@@ -117,7 +118,23 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
       ),
     );
     if (confirmed == true) {
-      await _service.deleteSession(domain);
+      try {
+        await _service.deleteSession(domain);
+      } catch (e) {
+        // The delete is aborted rather than half-applied (see
+        // WebSessionService.deleteSession), so the login is still here and
+        // still revokable. Tell the user instead of failing silently.
+        LoggerService.warning('Failed to delete login for $domain: $e');
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.deleteLoginFailed)));
+        // Grants are revoked before the session is removed, so a failure part
+        // way through leaves the row showing stale "Apps with access" entries.
+        _refresh();
+        return;
+      }
+      if (!mounted) return;
       _refresh();
     }
   }

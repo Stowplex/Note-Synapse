@@ -5,6 +5,12 @@ LaTeX formulas in Note Synapse notes. It uses the locally packaged MathLive
 math field and Cortex Compute Engine; editing and all supported calculations
 work without a network connection.
 
+![edit](media/formula-studio-type.png)
+
+![calculate](media/formula-studio-solve.png)
+
+![save](media/formula-studio-save.png)
+
 ## User flow
 
 - Launch on a selected formula or paragraph to edit formulas in that block.

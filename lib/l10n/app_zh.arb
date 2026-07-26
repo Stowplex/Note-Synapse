@@ -2167,7 +2167,7 @@
     }
   },
   "deleteLogin": "删除登录",
-  "deleteLoginConfirm": "删除已保存的 {domain} 登录？此站点的页面剪藏将不再使用登录状态。",
+  "deleteLoginConfirm": "删除已保存的 {domain} 登录？此站点的页面剪藏将不再使用登录状态，已获授权使用此登录的应用也将失去访问权限。",
   "@deleteLoginConfirm": {
     "placeholders": {
       "domain": {
@@ -2175,6 +2175,7 @@
       }
     }
   },
+  "deleteLoginFailed": "无法删除此登录，请重试。",
   "webLoginSecurityNote": "在此平台上，已保存的登录未经操作系统级加密存储。请仅在受信任的设备上保存登录。",
   "webLoginCaptureFailed": "无法捕获登录会话。请确保在保存前已登录。此功能在网页版中不可用。",
   "requestDesktopSite": "请求桌面版网站",

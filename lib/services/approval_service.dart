@@ -173,7 +173,8 @@ class ApprovalRequest {
       warningMessage:
           'The app will be able to make requests as you on $domain and any of '
           'its subdomains, and to read that login’s cookies. Access lasts '
-          'until you remove the saved $domain login in Web Logins settings.',
+          'until you revoke it in Web Logins settings, delete the saved '
+          '$domain login, or uninstall the app.',
     );
   }
 }

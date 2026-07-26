@@ -1105,26 +1105,29 @@ class UserAppRuntimeBridge {
           }
           final domain = WebSessionService.domainKeyFor(input);
 
+          // Resolve the session BEFORE the grant: approving access to a login
+          // that does not exist would record a grant with no row in Web Logins
+          // to revoke it from, which would then silently re-arm if the user
+          // later saved a login for this domain.
+          if (await _webSessionService.getSession(domain) == null) {
+            return {'success': false, 'error': 'no_session', 'domain': domain};
+          }
+
           // Reading raw cookie values is sensitive: gate on a per-app+domain
-          // grant, prompting the user for approval the first time.
-          var granted = await _appDomainGrantService.isGranted(
-            app.uuid,
-            domain,
-          );
-          if (!granted) {
-            final callback = onSessionAccessApprovalRequest;
-            if (callback == null) {
-              return {'success': false, 'error': 'permission_required'};
-            }
-            granted = await callback(this, domain);
-            if (granted) {
-              await _appDomainGrantService.grant(app.uuid, domain);
-            }
+          // grant, prompting the user for approval the first time. Shared with
+          // proxyFetch/downloadFile so a grant is only ever written in one
+          // place.
+          final granted = await _ensureDomainGrant(domain);
+          if (granted == null) {
+            return {'success': false, 'error': 'permission_required'};
           }
           if (!granted) {
             return {'success': false, 'error': 'permission_denied'};
           }
 
+          // Re-read after approval rather than reuse the pre-prompt snapshot,
+          // so a login deleted or re-saved while the dialog was open cannot
+          // hand back stale cookie values.
           final session = await _webSessionService.getSession(domain);
           if (session == null || session.liveCookies.isEmpty) {
             return {'success': false, 'error': 'no_session', 'domain': domain};
@@ -1170,14 +1173,25 @@ class UserAppRuntimeBridge {
 
           // Same grant as session use — downloading with the user's live login
           // acts as them on that site.
-          final granted = await _ensureDomainGrant(
-            WebSessionService.domainKeyFor(urlRaw),
-          );
-          if (granted == null) {
-            return {'status': 'error', 'error': 'permission_required'};
-          }
-          if (!granted) {
-            return {'status': 'error', 'error': 'permission_denied'};
+          //
+          // With no saved login there is nothing to grant access to, so no
+          // grant is recorded (one the user could never see or revoke). This
+          // download then runs UNAUTHENTICATED: unlike proxyFetch, the hop loop
+          // below reads the *live* cookie jar, which can hold cookies for a
+          // site the user signed into without saving a login. Attaching those
+          // without an approved grant would be an ungated authenticated fetch,
+          // so `authorized` gates the cookie attachment, not just the prompt.
+          final downloadDomain = WebSessionService.domainKeyFor(urlRaw);
+          final authorized =
+              await _webSessionService.getSession(downloadDomain) != null;
+          if (authorized) {
+            final granted = await _ensureDomainGrant(downloadDomain);
+            if (granted == null) {
+              return {'status': 'error', 'error': 'permission_required'};
+            }
+            if (!granted) {
+              return {'status': 'error', 'error': 'permission_denied'};
+            }
           }
 
           final extraHeaders = <String, String>{};
@@ -1210,11 +1224,16 @@ class UserAppRuntimeBridge {
               'sec-fetch-user': '?1',
               ...extraHeaders,
             };
-            final hopCookies = await _webSessionService.liveCookieHeaderFor(
-              currentUri.toString(),
-            );
-            if (hopCookies.isNotEmpty) {
-              hopHeaders['cookie'] = hopCookies;
+            // Only when a grant was approved above: without one this must stay
+            // an unauthenticated fetch, and the live jar would otherwise supply
+            // cookies for sites the user never saved a login for.
+            if (authorized) {
+              final hopCookies = await _webSessionService.liveCookieHeaderFor(
+                currentUri.toString(),
+              );
+              if (hopCookies.isNotEmpty) {
+                hopHeaders['cookie'] = hopCookies;
+              }
             }
             hopHeaders.forEach((k, v) {
               try {
@@ -2419,24 +2438,46 @@ class UserAppRuntimeBridge {
     if (await _appDomainGrantService.isGranted(app.uuid, domain)) {
       return true;
     }
+    // Never record a grant against a login that does not exist. The Web Logins
+    // screen lists grants under their saved login, so such a grant would have
+    // no row to be revoked from, and would silently re-arm the app if the user
+    // later saved a login for this domain. This is the single place a grant is
+    // written, so guarding here holds for every caller.
+    if (await _webSessionService.getSession(domain) == null) {
+      return null;
+    }
     final callback = onSessionAccessApprovalRequest;
     if (callback == null) {
       return null;
     }
     final granted = await callback(this, domain);
-    if (granted) {
-      await _appDomainGrantService.grant(app.uuid, domain);
+    if (!granted) {
+      return false;
     }
-    return granted;
+    // Approval is an unbounded await. If the login was deleted while the
+    // prompt was open its grants have already been revoked, so writing one now
+    // would recreate the very grant this guards against.
+    if (await _webSessionService.getSession(domain) == null) {
+      return null;
+    }
+    await _appDomainGrantService.grant(app.uuid, domain);
+    return true;
   }
 
   Future<Map<String, dynamic>?> _applySessionCookies(
     String url,
     Map<String, String> headers,
   ) async {
-    final granted = await _ensureDomainGrant(
-      WebSessionService.domainKeyFor(url),
-    );
+    final domain = WebSessionService.domainKeyFor(url);
+    // No saved login for this domain: send the request unauthenticated, as it
+    // would have gone out anyway, rather than prompt for and record a grant
+    // against a credential that does not exist. Returning before the cookie
+    // merge also means no cookie can be attached without a grant even if a
+    // login is saved concurrently.
+    if (await _webSessionService.getSession(domain) == null) {
+      return null;
+    }
+    final granted = await _ensureDomainGrant(domain);
     if (granted == null) {
       return {'status': 'error', 'error': 'permission_required'};
     }

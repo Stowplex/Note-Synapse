@@ -54,6 +54,42 @@ void main() {
     expect(await service.isGranted('app2', 'google.com'), true);
   });
 
+  test('revokeAllForDomain clears that domain for every app only', () async {
+    await service.grant('app1', 'google.com');
+    await service.grant('app1', 'notion.so');
+    await service.grant('app2', 'google.com');
+
+    await service.revokeAllForDomain('google.com');
+
+    expect(await service.appsForDomain('google.com'), isEmpty);
+    // Other domains held by the same apps are untouched.
+    expect(await service.isGranted('app1', 'notion.so'), true);
+    expect(await service.domainsForApp('app2'), isEmpty);
+  });
+
+  test('revokeAllForDomain is a no-op for unknown or empty domain', () async {
+    await service.grant('app1', 'google.com');
+
+    await service.revokeAllForDomain('unknown.com');
+    await service.revokeAllForDomain('');
+
+    expect(await service.isGranted('app1', 'google.com'), true);
+  });
+
+  test('revokeAllForDomain is written through to the store', () async {
+    await service.grant('app1', 'google.com');
+    await service.grant('app2', 'google.com');
+    await service.revokeAllForDomain('google.com');
+
+    // Assert on the persisted bytes: a second service instance shares the same
+    // cached SharedPreferences, so reloading one would pass even if _write
+    // never ran.
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('app_domain_grants');
+    expect(raw, isNotNull);
+    expect(raw, isNot(contains('google.com')));
+  });
+
   test('domainsForApp and appsForDomain return sorted results', () async {
     await service.grant('app1', 'notion.so');
     await service.grant('app1', 'google.com');

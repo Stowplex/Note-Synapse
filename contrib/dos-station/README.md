@@ -39,6 +39,10 @@ inside the plugin sandbox, using only the public Synapse API:
 
 ![add-to-note](media/dos-station-add-to-note.png)
 
+![keyboard](media/dos-station-show.png)
+
+![ask-ai](media/dos-station-chatai.png)
+
 ## Installing
 
 1. Open `plugins/DOS_Station.yaml` with Note Synapse (share/open it on your
@@ -83,6 +87,8 @@ inside the plugin sandbox, using only the public Synapse API:
 
 The 📁 button (in the launcher and in the player HUD) shows everything the note
 puts on `C:`, and lets you add or remove it.
+
+![files](media/dos-station-file.png)
 
 ### Code blocks
 

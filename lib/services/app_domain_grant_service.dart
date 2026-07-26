@@ -95,6 +95,35 @@ class AppDomainGrantService {
     }
   }
 
+  /// Removes every app's grant for [domain] (e.g. when the saved login for
+  /// that domain is deleted).
+  ///
+  /// A grant is permission to act as the user on a specific credential, so it
+  /// must not outlive that credential. Without this, deleting a saved login
+  /// would leave the grant in place *and* invisible — the Web Logins screen
+  /// lists grants under their saved login, so a grant whose login is gone has
+  /// no row to be revoked from — and re-adding the login later would silently
+  /// re-arm the app with no fresh approval prompt.
+  Future<void> revokeAllForDomain(String domain) async {
+    if (domain.isEmpty) {
+      return;
+    }
+    final grants = await _read();
+    var changed = false;
+    for (final domains in grants.values) {
+      if (domains.remove(domain)) {
+        changed = true;
+      }
+    }
+    if (changed) {
+      // _write drops apps left with no domains, so the store stays tidy.
+      await _write(grants);
+      LoggerService.info(
+        'AppDomainGrantService: revoked all grants for $domain',
+      );
+    }
+  }
+
   /// The registrable domains [appUuid] is currently granted, sorted.
   Future<List<String>> domainsForApp(String appUuid) async {
     final grants = await _read();

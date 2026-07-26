@@ -80,13 +80,17 @@ void setupServiceLocator() {
     getIt.registerLazySingleton<McpService>(() => McpService());
   }
 
-  if (!getIt.isRegistered<WebSessionService>()) {
-    getIt.registerLazySingleton<WebSessionService>(() => WebSessionService());
-  }
-
   if (!getIt.isRegistered<AppDomainGrantService>()) {
     getIt.registerLazySingleton<AppDomainGrantService>(
       () => AppDomainGrantService(),
+    );
+  }
+
+  // Depends on AppDomainGrantService (registered just above): deleting a
+  // session must also revoke any app grants against that domain.
+  if (!getIt.isRegistered<WebSessionService>()) {
+    getIt.registerLazySingleton<WebSessionService>(
+      () => WebSessionService(grantService: getIt<AppDomainGrantService>()),
     );
   }
 

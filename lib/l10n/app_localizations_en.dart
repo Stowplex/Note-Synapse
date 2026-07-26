@@ -5211,8 +5211,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String deleteLoginConfirm(String domain) {
-    return 'Delete the saved login for $domain? Clipping pages on this site will no longer be authenticated.';
+    return 'Delete the saved login for $domain? Clipping pages on this site will no longer be authenticated, and any apps you gave access to this login will lose it.';
   }
+
+  @override
+  String get deleteLoginFailed =>
+      'Could not delete this login. Please try again.';
 
   @override
   String get webLoginSecurityNote =>
