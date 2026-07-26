@@ -23,8 +23,7 @@ import '../screens/note_selection_dialog.dart';
 import 'approval_dialog.dart';
 import 'tag_selection_dialog.dart';
 
-typedef UserAppOpenNote =
-    Future<void> Function(Note note, bool replaceWindow);
+typedef UserAppOpenNote = Future<void> Function(Note note, bool replaceWindow);
 typedef UserAppOpenConversations =
     Future<void> Function(List<Note> notes, bool immersiveMode);
 typedef UserAppOpenAIActions = Future<void> Function(List<Note> notes);
@@ -253,7 +252,8 @@ class _UserAppWebViewState extends State<UserAppWebView> {
       },
       onPickNotes: (source, options) async {
         if (!mounted) return null;
-        final preselected = (options['preselectedIds'] as List?)
+        final preselected =
+            (options['preselectedIds'] as List?)
                 ?.map((e) => e.toString())
                 .toList() ??
             const <String>[];
@@ -266,10 +266,10 @@ class _UserAppWebViewState extends State<UserAppWebView> {
             title: options['title'] as String?,
             singleSelection: options['multiSelect'] == false,
             initialSelectedNoteIds: preselected,
-            initialTags:
-                (initialTag != null && initialTag.isNotEmpty) ? [initialTag] : null,
-            onNotesSelected: (notes) =>
-                Navigator.of(dialogContext).pop(notes),
+            initialTags: (initialTag != null && initialTag.isNotEmpty)
+                ? [initialTag]
+                : null,
+            onNotesSelected: (notes) => Navigator.of(dialogContext).pop(notes),
           ),
         );
         if (selected == null) {
@@ -281,7 +281,8 @@ class _UserAppWebViewState extends State<UserAppWebView> {
       },
       onPickTags: (source, options) async {
         if (!mounted) return null;
-        final preselected = (options['preselectedTags'] as List?)
+        final preselected =
+            (options['preselectedTags'] as List?)
                 ?.map((e) => e.toString())
                 .toList() ??
             const <String>[];
@@ -309,9 +310,7 @@ class _UserAppWebViewState extends State<UserAppWebView> {
     final htmlData = widget.revision.appCode;
 
     return InAppWebView(
-      key: ValueKey(
-        '${widget.app.id}:${widget.revision.revisionNumber}',
-      ),
+      key: ValueKey('${widget.app.id}:${widget.revision.revisionNumber}'),
       initialData: InAppWebViewInitialData(
         data: htmlData,
         mimeType: 'text/html',
@@ -379,39 +378,90 @@ class _UserAppWebViewState extends State<UserAppWebView> {
   }
 
   Future<CustomSchemeResponse?> _handleSynapseScheme(WebUri url) async {
-    final fileName = url.host;
+    final relativePath = resolveSynapseAssetRelativePath(url.uriValue);
+    if (relativePath == null) {
+      LoggerService.warning('Rejected invalid synapse asset URL: $url');
+      return CustomSchemeResponse(
+        contentType: 'text/plain',
+        data: Uint8List.fromList(
+          utf8.encode('/* Invalid synapse asset URL */'),
+        ),
+      );
+    }
+
     final service = GlobalLibraryService();
-    final customPath = await service.resolveLibraryPath(fileName);
+    final customPath = await service.resolveLibraryPath(relativePath);
 
     if (customPath != null) {
       final file = File(customPath);
       if (await file.exists()) {
         final data = await file.readAsBytes();
-        final contentType = fileName.endsWith('.css')
-            ? 'text/css'
-            : 'application/javascript';
-        return CustomSchemeResponse(contentType: contentType, data: data);
+        return CustomSchemeResponse(
+          contentType: synapseAssetContentType(relativePath),
+          data: data,
+        );
       }
     }
 
     try {
-      final data = await rootBundle.loadString('assets/scripts/$fileName');
+      final data = await rootBundle.load('assets/scripts/$relativePath');
       return CustomSchemeResponse(
-        contentType: 'text/plain',
-        data: Uint8List.fromList(utf8.encode(data)),
+        contentType: synapseAssetContentType(relativePath),
+        data: data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
       );
     } catch (_) {
       LoggerService.warning(
-        'Failed to load asset: assets/scripts/$fileName',
+        'Failed to load asset: assets/scripts/$relativePath',
       );
       return CustomSchemeResponse(
         contentType: 'text/plain',
         data: Uint8List.fromList(
-          utf8.encode('/* Asset not found: $fileName */'),
+          utf8.encode('/* Asset not found: $relativePath */'),
         ),
       );
     }
   }
+}
+
+/// Resolves a `synapse://` URL to a path below `assets/scripts/`.
+///
+/// Legacy URLs store the filename in the host (`synapse://mermaid.min.js`).
+/// Formula Studio also needs nested paths for local fonts, such as
+/// `synapse://mathlive/fonts/KaTeX_Main-Regular.woff2`.
+String? resolveSynapseAssetRelativePath(Uri url) {
+  if (url.scheme.toLowerCase() != 'synapse' ||
+      url.host.isEmpty ||
+      url.userInfo.isNotEmpty ||
+      url.hasPort) {
+    return null;
+  }
+
+  final segments = <String>[url.host, ...url.pathSegments];
+  if (segments.any(
+    (segment) =>
+        segment.isEmpty ||
+        segment == '.' ||
+        segment == '..' ||
+        segment.contains('/') ||
+        segment.contains('\\') ||
+        segment.contains('\u0000'),
+  )) {
+    return null;
+  }
+  return segments.join('/');
+}
+
+/// MIME type returned for a local User App dependency.
+String synapseAssetContentType(String path) {
+  final lower = path.toLowerCase();
+  if (lower.endsWith('.js') || lower.endsWith('.mjs')) {
+    return 'application/javascript';
+  }
+  if (lower.endsWith('.css')) return 'text/css';
+  if (lower.endsWith('.woff2')) return 'font/woff2';
+  if (lower.endsWith('.wasm')) return 'application/wasm';
+  if (lower.endsWith('.json')) return 'application/json';
+  return 'application/octet-stream';
 }
 
 String _describeSqlQueryType(SqlQueryType queryType) {

@@ -252,6 +252,9 @@ flutter:
     - assets/scripts/mermaid.min.js
     - assets/scripts/d3.min.js
     - assets/scripts/svg.pan-zoom.min.js
+    - assets/scripts/mathlive/
+    - assets/scripts/mathlive/fonts/
+    - assets/scripts/compute-engine/
     - assets/libraries.yaml
     - assets/model_presets/
     - assets/starter/

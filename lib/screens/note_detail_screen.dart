@@ -718,8 +718,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         .map((b) => b.endOffset)
         .reduce((a, b) => a > b ? a : b);
 
-    // A selection of only blank-line blocks has nothing to hand a plugin.
-    if (spanEnd <= spanStart) {
+    // A malformed backwards span is unsafe. A zero-width span is valid: Note
+    // Actions such as Formula Studio use a selected blank block as an anchored
+    // insertion point.
+    if (spanEnd < spanStart) {
       _showBlockScopeUnavailable(l10n);
       return;
     }
