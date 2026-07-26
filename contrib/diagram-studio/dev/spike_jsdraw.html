@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>js-draw spike</title>
+  <script src="../plugins/vendor/js-draw-1.33.0.styles.js"></script>
+  <script src="../plugins/vendor/js-draw-1.33.0.bundle.js"></script>
+</head>
+<body>
+  <!--
+    Spike (b) from the plan: does the vendored js-draw bundle boot offline, and
+    does loadFromSVG() accept its own toSVG() output losslessly?
+
+    Run: node dev/run_jsdraw_spike.mjs
+  -->
+  <div id="editor" style="width:600px;height:400px"></div>
+  <pre id="result">running</pre>
+  <script>
+    (async function () {
+      const out = [];
+      function say(k, v) { out.push(k + '=' + v); }
+
+      try {
+        say('bundleLoaded', typeof jsdraw !== 'undefined');
+        say('stylesLoaded', typeof jsdrawStyles !== 'undefined');
+        say('styleTagInjected', document.querySelectorAll('style').length > 0);
+
+        const Editor = jsdraw.Editor;
+        say('hasEditor', typeof Editor === 'function');
+
+        const editor = new Editor(document.getElementById('editor'));
+        say('constructed', !!editor);
+
+        // A toolbar is what makes this usable on a phone; confirm it exists
+        // and report its control count so the 360px check has something real.
+        const toolbar = editor.addToolbar();
+        say('hasToolbar', !!toolbar);
+        say('toolbarButtons', document.querySelectorAll('.toolbar-button, .toolbar-element button').length);
+
+        // Draw a stroke programmatically via the command API.
+        const { Path, Color4 } = jsdraw;
+        const stroke = jsdraw.pathToRenderable
+          ? new jsdraw.Stroke([
+              jsdraw.pathToRenderable(Path.fromString('M0,0 L100,100 L200,0'), {
+                fill: Color4.transparent,
+                stroke: { width: 4, color: Color4.ofRGB(1, 0, 0) },
+              }),
+            ])
+          : null;
+        say('builtStroke', !!stroke);
+        if (stroke) {
+          await editor.dispatch(editor.image.addComponent(stroke));
+        }
+        say('componentCount', editor.image.getAllComponents().length);
+
+        // Round trip.
+        const svg1 = editor.toSVG().outerHTML;
+        say('svgLength', svg1.length);
+        say('svgIsSvg', svg1.slice(0, 4) === '<svg');
+
+        const editor2 = new Editor(document.createElement('div'));
+        await editor2.loadFromSVG(svg1);
+        say('reloadedComponentCount', editor2.image.getAllComponents().length);
+
+        const svg2 = editor2.toSVG().outerHTML;
+        say('roundTripStable', svg1.length > 0 && Math.abs(svg2.length - svg1.length) < svg1.length * 0.1);
+
+        // Component COUNT is not a fair comparison: loading materialises the
+        // background as its own component. What matters is that the user's
+        // stroke geometry survives, so compare the actual path data.
+        const paths = (svg) => (svg.match(/ d="([^"]+)"/g) || []).map((s) => s.slice(4, -1));
+        const p1 = paths(svg1);
+        const p2 = paths(svg2);
+        say('svg1PathCount', p1.length);
+        say('svg2PathCount', p2.length);
+        say('strokeGeometryPreserved', p1.length > 0 && p1.every((d) => p2.indexOf(d) !== -1));
+
+        // Third pass: a round trip must converge, not drift on every save.
+        const editor3 = new Editor(document.createElement('div'));
+        await editor3.loadFromSVG(svg2);
+        say('thirdPassIdentical', editor3.toSVG().outerHTML === svg2);
+      } catch (e) {
+        say('ERROR', (e && e.message) || String(e));
+      }
+
+      document.getElementById('result').textContent = 'SPIKE:' + out.join(';');
+    })();
+  </script>
+</body>
+</html>
