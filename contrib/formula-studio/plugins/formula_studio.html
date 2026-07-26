@@ -229,6 +229,40 @@
       --contains-highlight-background-color: transparent;
     }
     math-field.inline-mode { font-size: clamp(1.2rem, 4.5vw, 1.7rem); }
+    .symbol-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-top: 10px;
+    }
+    .symbol-toolbar-label {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 620;
+    }
+    .symbol-button {
+      min-width: 54px;
+      min-height: 44px;
+      padding: 5px 12px;
+      background: var(--surface-2);
+      color: var(--ink);
+      border-color: var(--border);
+    }
+    .fraction-template {
+      display: inline-grid;
+      grid-template-rows: 1fr 1fr;
+      min-width: 20px;
+      text-align: center;
+      font-family: "Times New Roman", serif;
+      font-size: 0.88rem;
+      font-weight: 500;
+      line-height: 1.05;
+    }
+    .fraction-template span:first-child {
+      padding: 0 4px 2px;
+      border-bottom: 1px solid currentColor;
+    }
+    .fraction-template span:last-child { padding-top: 2px; }
     #latexSource {
       width: 100%;
       min-height: 156px;
@@ -417,6 +451,26 @@
             <math-field id="formulaField" aria-label="Visual math formula editor"></math-field>
           </div>
           <textarea id="latexSource" class="hidden" spellcheck="false" aria-label="LaTeX source"></textarea>
+          <div
+            class="symbol-toolbar"
+            role="group"
+            data-i18n-aria-label="templates"
+            aria-label="Formula templates"
+          >
+            <span class="symbol-toolbar-label" data-i18n="templates">Templates</span>
+            <button
+              id="fractionButton"
+              class="symbol-button"
+              type="button"
+              data-template="\frac{#0}{#?}"
+              data-i18n-aria-label="insertFraction"
+              aria-label="Insert fraction"
+            >
+              <span class="fraction-template" aria-hidden="true">
+                <span>a</span><span>b</span>
+              </span>
+            </button>
+          </div>
           <p class="hint" data-i18n="editorHint">Type naturally or use the math keyboard.</p>
           <div id="legacyNotice" class="notice hidden" role="note" data-i18n="legacyNotice"></div>
           <div id="pendingBelow" class="notice pending-row hidden" role="note">

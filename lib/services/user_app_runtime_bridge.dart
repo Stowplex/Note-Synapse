@@ -2137,8 +2137,15 @@ class UserAppRuntimeBridge {
   /// BLOCK, not the whole parent note: `content` becomes the block text and
   /// `id` goes back to the transient id it asked about.
   ///
-  /// Only touches rows whose `id` is the parent of a scope named in the original
-  /// query, so unrelated rows in a multi-note query are left alone.
+  /// A careful app commonly selects only `content`, so the returned row may not
+  /// contain an `id` at all. When exactly one scope produced exactly one such
+  /// row, it is still safe to patch it. Without that case the app receives the
+  /// entire parent note and may write that content back into the selected
+  /// block, duplicating the note.
+  ///
+  /// Rows with an `id` are patched only when it is the parent of a scope named
+  /// in the original query, so unrelated rows in a multi-note query remain
+  /// untouched.
   List<Map<String, dynamic>> _patchBlockScopeRows(
     List<Map<String, dynamic>> rows,
     List<String> scopedIds,
@@ -2154,8 +2161,13 @@ class UserAppRuntimeBridge {
     }
     if (byParent.isEmpty) return rows;
 
+    final soleScope = scopedIds.length == 1 && rows.length == 1
+        ? scopes.lookup(scopedIds.single)
+        : null;
+
     return rows.map((row) {
-      final scope = byParent[row['id']?.toString()];
+      final rowId = row['id']?.toString();
+      final scope = rowId == null ? soleScope : byParent[rowId];
       if (scope == null) return row;
       final patched = Map<String, dynamic>.from(row);
       if (patched.containsKey('id')) patched['id'] = scope.tempNoteId;

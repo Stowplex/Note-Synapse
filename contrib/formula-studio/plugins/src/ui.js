@@ -56,6 +56,15 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-i18n]'), function (node) {
       node.textContent = t(node.getAttribute('data-i18n'));
     });
+    Array.prototype.forEach.call(
+      document.querySelectorAll('[data-i18n-aria-label]'),
+      function (node) {
+        node.setAttribute(
+          'aria-label',
+          t(node.getAttribute('data-i18n-aria-label'))
+        );
+      }
+    );
   }
 
   function showScreen(id) {
@@ -258,6 +267,18 @@
     state.draft = String(value == null ? '' : value);
     updateDirty();
     scheduleInspect();
+  }
+
+  function insertVisualTemplate(template) {
+    setEditorMode('visual');
+    var field = $('formulaField');
+    field.insert(template, {
+      insertionMode: 'replaceSelection',
+      selectionMode: 'placeholder',
+    });
+    $('latexSource').value = field.value;
+    setDraft(field.value);
+    field.focus();
   }
 
   function updateDirty() {
@@ -528,6 +549,9 @@
       button.addEventListener('click', function () {
         setKind(button.getAttribute('data-kind'), true);
       });
+    });
+    $('fractionButton').addEventListener('click', function () {
+      insertVisualTemplate($('fractionButton').getAttribute('data-template'));
     });
     Array.prototype.forEach.call($('actionGrid').querySelectorAll('[data-action]'), function (button) {
       button.addEventListener('click', function () {

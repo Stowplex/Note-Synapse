@@ -107,6 +107,14 @@ void main() {
     expect(embeddedHtml, isNot(contains('data-action="plot"')));
   });
 
+  test('visual editor includes a fraction template button', () {
+    expect(embeddedHtml, contains('id="fractionButton"'));
+    expect(embeddedHtml, contains(r'data-template="\frac{#0}{#?}"'));
+    expect(embeddedHtml, contains('insertVisualTemplate'));
+    expect(embeddedHtml, contains("insertFraction: 'Insert fraction'"));
+    expect(embeddedHtml, contains("insertFraction: '插入分数'"));
+  });
+
   test('English and Simplified Chinese strings ship in the app', () {
     expect(embeddedHtml, contains('Formula Studio'));
     expect(embeddedHtml, contains('公式工作室'));

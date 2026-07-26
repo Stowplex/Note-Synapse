@@ -171,6 +171,14 @@ await scenario(
   }],
   async (page) => {
     await page.locator('#editorScreen:not(.hidden)').waitFor();
+    await page.locator('#fractionButton').click();
+    const fraction = await page.locator('#formulaField').evaluate((field) => field.value);
+    if (!fraction.includes('\\frac')) {
+      throw new Error(`fraction template was not inserted: ${fraction}`);
+    }
+    if (await page.locator('#saveButton').isDisabled()) {
+      throw new Error('fraction template did not make the draft saveable');
+    }
     await page.locator('#formulaField').evaluate((field) => {
       field.value = 'a^2+b^2=c^2';
       field.dispatchEvent(new Event('input', { bubbles: true }));
