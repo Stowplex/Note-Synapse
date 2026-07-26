@@ -11,6 +11,10 @@ inside the plugin sandbox, using only the public Synapse API:
   the DOS `C:` drive.
 - **Config from the note** — put a fenced ` ```dosbox ` block in the note to
   control the emulator (any `dosbox.conf` sections, including `[autoexec]`).
+- **Files from the note** — a code block tagged `{dos-name="HELLO.BAS"}` lands
+  on `C:` automatically; other code blocks and attachments can be added from
+  the 📁 files panel, and anything DOS changes can be saved back to the note.
+  A note with files but no game zip still boots, to a bare `C:\>` prompt.
 - **On-screen controls** — a full DOS keyboard overlay (sticky modifiers,
   quick-type bar) and a virtual gamepad (analog d-pad with four discrete
   direction buttons for arrow-key games, plus mappable A/B/C buttons) for
@@ -75,6 +79,96 @@ inside the plugin sandbox, using only the public Synapse API:
    `exe` (program to run, e.g. `exe=KEEN1.EXE`), `zip` (attachment file name
    to use when the note has several zips).
 
+## Files from the note
+
+The 📁 button (in the launcher and in the player HUD) shows everything the note
+puts on `C:`, and lets you add or remove it.
+
+### Code blocks
+
+Tag a fenced block's info string with `dos-name` and it is written to `C:` every
+time the note is mounted — no clicking required:
+
+````markdown
+```basic {dos-name="HELLO.BAS"}
+10 PRINT "HELLO WORLD!"
+20 GOTO 10
+```
+````
+
+The attribute is inert to the renderer (the block still highlights as BASIC), and
+you never have to type it by hand: pick any code block in the 📁 panel, give it a
+name, and DOS Station writes the attribute into that fence for you.
+
+- **Names** are DOS 8.3, uppercased, subdirectories allowed:
+  `hello.bas` → `C:\HELLO.BAS`, `src/main.bas` → `C:\SRC\MAIN.BAS`. Anything
+  illegal is rejected in the panel with the reason. The block must be closed —
+  a stray unclosed ` ``` ` swallows the rest of the note, so DOS Station will
+  not import from it or write back into it.
+- **Text is converted**, since DOS does not read UTF-8: line endings become
+  CRLF and characters are transcoded to code page 437 (so box-drawing and
+  accented characters survive; anything CP437 cannot represent becomes `?`, and
+  the panel warns first). The exact reverse happens on the way back.
+
+### Attachments
+
+Attachments are **never** copied automatically — pick them in the 📁 panel. Your
+choices are recorded in the note as a ` ```dos-files ` block, so they travel with
+it:
+
+````markdown
+```dos-files
+# DOS Station — attachments copied to C:. Managed by the app.
+attachment: levels.dat -> LEVELS.DAT
+attachment: readme.md -> DOCS\READ.TXT | text
+```
+````
+
+`-> NAME` is optional (a DOS name is derived from the file name otherwise), and
+`| text` asks for the CP437 + CRLF conversion instead of a byte-for-byte copy.
+The app also manages a `| v=…` option — leave that one alone; see below.
+
+### When DOS changes an imported file
+
+The autosave keeps it like any other file on `C:`, and the 📁 button grows an
+amber badge to say `C:` no longer matches the note. In the panel each file shows
+what happened and what you can do:
+
+| State | Meaning | Actions |
+| --- | --- | --- |
+| *(clean)* | `C:` and the note agree | `✕ REMOVE` (drops it from the note and from `C:`) |
+| `CHANGED IN DOS` | DOS edited it this session | `↑ TO NOTE`, `↻ FROM NOTE`, `✕ UNLINK` |
+| `SAVED COPY IN USE` | a saved copy replaced the note's at boot | same |
+| `NOT ON C:` | deleted inside DOS | `↻ RESTORE`, `✕ UNLINK` |
+
+**A saved copy always wins over the note copy at boot.** The note only seeds a
+file the saves do not have, so work you did inside DOS is never silently
+overwritten — the badge tells you the two have drifted, and `↑ TO NOTE` is how
+you reconcile them.
+
+`↑ TO NOTE` behaves differently by source, and neither one destroys anything:
+
+- a **code block** is rewritten where it stands, keeping its `dos-name`;
+- an **attachment** is saved as a *new* file (`levels-<stamp>.dat`) and the
+  `dos-files` entry starts pointing at it via `| v=…`. Your original attachment
+  is never modified or deleted.
+
+Each of these changes the note, so the app asks for your approval the first time
+in a session (pushing an attachment back asks twice: once to attach the file,
+once to point the note at it).
+
+`↻ FROM NOTE` throws away the DOS-side changes and re-copies the note's version;
+it needs a second tap to confirm. Files added or removed while DOSBox is running
+appear on `C:` immediately (DOS Station refreshes DOSBox's directory cache for
+you) — though a program that already has the file open will not notice until it
+reopens it.
+
+### A note with no game
+
+If a note has `dos-name` blocks or a `dos-files` list but no `.zip`, DOS Station
+boots a bare `C:\>` prompt holding just those files. That is the quick way to try
+a `.bat`, a BASIC listing, or a config file without packaging anything.
+
 ## Game saves
 
 Save inside the game as you normally would (e.g. the RPG's own *Save Game*
@@ -98,6 +192,24 @@ before DOS starts, so the game finds its save files where it left them.
 - `plugins/DOS_Station.yaml` — the installable user app.
 - `skills/DOS_Station.md` — optional assistant skill.
 - `dev/` — a browser test harness with a stubbed Synapse API (not installed).
+
+## Developing
+
+```bash
+# Pure-logic tests (CP437, the fence scanner, DOS names, the dos-files grammar).
+# These slice the `core:begin`/`core:end` region out of the HTML and run it in Node.
+node dev/run_core_tests.mjs
+
+# Full UI, in a browser, against a stubbed Synapse:
+python3 -m http.server 8471     # from this directory
+open http://localhost:8471/dev/test_harness.html
+# ?scenario=zipless | block | readonly, and ?reset=1 to clear the stub's storage
+
+./plugins/build.sh              # regenerate the installable YAML after any HTML edit
+```
+
+`test/contrib_dos_station_test.dart` (in the app repo) checks that the YAML was
+rebuilt and that the pure core stayed pure.
 
 ## Licensing
 

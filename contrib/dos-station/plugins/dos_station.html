@@ -228,6 +228,42 @@
   }
   .modal .row{display:flex; gap:8px;}
   .modal .row .btn{flex:1;}
+
+  /* ---- files panel ------------------------------------------------------ */
+  #btnFiles{position:relative;}
+  .badge{
+    position:absolute; top:-5px; right:-5px; min-width:15px; height:15px; padding:0 3px;
+    border-radius:8px; background:var(--ph-dim); color:#03150a; border:1px solid var(--bg);
+    font-size:.6rem; line-height:15px; text-align:center; font-weight:700;
+  }
+  .badge.warn{background:var(--amber); color:#241500;}
+  .badge.hidden{display:none;}
+  .filesec{font-size:.7rem; letter-spacing:.1em; color:var(--muted); margin:10px 0 4px;}
+  .frow{
+    display:flex; flex-wrap:wrap; align-items:center; gap:6px;
+    padding:7px 0; border-bottom:1px dashed var(--line);
+  }
+  .fname{flex:1; min-width:40%; color:var(--ph); font-size:.82rem; word-break:break-all;}
+  .fmeta{width:100%; color:var(--muted); font-size:.7rem;}
+  .facts{display:flex; gap:5px; flex:none;}
+  .fedit{display:flex; gap:5px; width:100%; align-items:center;}
+  .fedit input{
+    flex:1; min-width:0; background:#0b1016; color:var(--ph); border:1px solid var(--line);
+    border-radius:5px; font:inherit; font-size:.82rem; padding:.4em .55em;
+    -webkit-user-select:text; user-select:text; text-transform:uppercase;
+  }
+  .fedit label{display:flex; align-items:center; gap:3px; font-size:.7rem; color:var(--muted);}
+  .fhint{width:100%; font-size:.68rem; color:var(--muted);}
+  .fhint.bad{color:var(--red);}
+  .tag.red{border-color:#7a1d1d; color:#ff8a8a;}
+  .fnote{
+    font-size:.7rem; color:var(--muted); line-height:1.45;
+    border-top:1px dashed var(--line); margin-top:10px; padding-top:8px;
+  }
+  .fbanner{
+    background:#2b0d0d; border:1px solid #7a1d1d; color:#ffb2b2;
+    border-radius:6px; padding:.5em .6em; font-size:.75rem;
+  }
   #aiOut{
     display:none; background:#0b1016; border:1px dashed var(--ph-dim); border-radius:6px;
     padding:.6em; font-size:.85rem; white-space:pre-wrap; color:var(--txt);
@@ -273,6 +309,7 @@
     <button class="hudbtn" id="btnTty" title="Console">≣</button>
     <button class="hudbtn" id="btnKb" title="Keyboard">⌨</button>
     <button class="hudbtn" id="btnPad" title="Gamepad">🎮</button>
+    <button class="hudbtn" id="btnFiles" title="Note files on C:">📁<span class="badge hidden" id="filesBadge"></span></button>
     <button class="hudbtn" id="btnSave" title="Save game files to note">💾</button>
     <button class="hudbtn" id="btnShot" title="Capture frame">📸</button>
     <button class="hudbtn" id="btnPause" title="Pause">⏸</button>
@@ -317,6 +354,17 @@
     </div>
     <div class="row">
       <button class="btn" id="btnCloseCap">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= FILES MODAL ======================= -->
+<div class="modal-wrap" id="filesWrap">
+  <div class="modal">
+    <h2 style="font-size:.95rem;">📁 NOTE FILES → C:</h2>
+    <div id="filesBody"></div>
+    <div class="row">
+      <button class="btn" id="btnCloseFiles">Close</button>
     </div>
   </div>
 </div>
@@ -376,10 +424,15 @@ const $ = (id) => document.getElementById(id);
 const state = {
   appState: {},          // persisted via Synapse.storeAppState (includes engine cache)
   engine: null,          // {glueText, wasmU8} in-memory
-  noteId: null,
+  noteId: null,          // id for CONTENT reads/writes — the block's id in block scope
+  attachNoteId: null,    // id for ATTACHMENT writes — always a real note id
+  blockScope: false,     // wording only; the ids above carry the behaviour
   noteTitle: '',
-  noteContent: '',
-  attachments: [],       // [{path, name}]
+  noteContent: '',       // RAW markdown; rendered markdown is never written back
+  contentWritable: false,
+  noteWriteBusy: false,
+  attachments: [],       // [{path, name}] — name is the human one once resolved
+  attachNamesResolved: false,
   zip: null,             // chosen zip {path, name}
   files: [],             // [{name, data:Uint8Array}] mounted at /dos
   userConf: null,        // {head, autoexec[]|null} parsed from ```dosbox block
@@ -396,6 +449,21 @@ const state = {
   lastSaveSig: null,     // signature of the last persisted save diff
   saveBusy: false,
   autoSaveTimer: null,
+
+  /* ---- note files on C: (see "note imports" below) ---- */
+  imports: [],           // import records derived from the note
+  attBytes: null,        // Map attCacheKey -> Uint8Array: attachment read cache
+  importIssues: [],      // [{level:'warn'|'err', text}] shown in the files panel
+  savesShadowed: null,   // Set(dosPath): a saved copy won over the note copy at mount
+  overriddenZipNames: null, // Set(dosPath): a note file replaced one from the zip
+  pendingDeletes: null,  // Set(dosPath): force into the next saves-zip meta.deleted
+  savesDirty: false,     // the baseline moved under the saves zip; it must be rewritten
+  fileStats: { total: 0, drift: 0, missing: 0, shadowed: 0, bad: 0 },
+  panelEdit: null,       // {type:'code'|'att', key, name, textMode} — open name editor
+  panelArm: null,        // {key, timer} — button awaiting a confirming second tap
+  filesWasPaused: false,
+  filesTimer: null,
+  needDirRefresh: false,
 };
 
 /* ---------------------------------------------------------------- utils */
@@ -429,6 +497,451 @@ function fmtSize(n) {
 function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
+/* ==== core:begin ==========================================================
+ * Pure helpers with no DOM, Synapse or emulator dependency. `dev/run_core_tests.mjs`
+ * slices this region out of the HTML and runs it in Node, so nothing between the
+ * markers may touch `state`, `document` or `Synapse`.
+ * ======================================================================== */
+
+/* ------------------------------------------------- code page 437 + CRLF --
+ * DOS reads CP437, not UTF-8, and terminates lines with CRLF. Note text is
+ * converted on the way to C: and back on the way to the note. The transform is
+ * deliberately normalizing rather than byte-exact (mixed line endings collapse
+ * to CRLF); since both sides of every drift comparison run through toDosBytes,
+ * normalization can never itself register as a change. */
+const CP437_HI = String.fromCharCode(
+  /* 80 ÇüéâäàåçêëèïîìÄÅ */ 0xC7,0xFC,0xE9,0xE2,0xE4,0xE0,0xE5,0xE7,0xEA,0xEB,0xE8,0xEF,0xEE,0xEC,0xC4,0xC5,
+  /* 90 ÉæÆôöòûùÿÖÜ¢£¥₧ƒ */ 0xC9,0xE6,0xC6,0xF4,0xF6,0xF2,0xFB,0xF9,0xFF,0xD6,0xDC,0xA2,0xA3,0xA5,0x20A7,0x192,
+  /* a0 áíóúñÑªº¿⌐¬½¼¡«» */ 0xE1,0xED,0xF3,0xFA,0xF1,0xD1,0xAA,0xBA,0xBF,0x2310,0xAC,0xBD,0xBC,0xA1,0xAB,0xBB,
+  /* b0 ░▒▓│┤╡╢╖╕╣║╗╝╜╛┐ */ 0x2591,0x2592,0x2593,0x2502,0x2524,0x2561,0x2562,0x2556,0x2555,0x2563,0x2551,0x2557,0x255D,0x255C,0x255B,0x2510,
+  /* c0 └┴┬├─┼╞╟╚╔╩╦╠═╬╧ */ 0x2514,0x2534,0x252C,0x251C,0x2500,0x253C,0x255E,0x255F,0x255A,0x2554,0x2569,0x2566,0x2560,0x2550,0x256C,0x2567,
+  /* d0 ╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀ */ 0x2568,0x2564,0x2565,0x2559,0x2558,0x2552,0x2553,0x256B,0x256A,0x2518,0x250C,0x2588,0x2584,0x258C,0x2590,0x2580,
+  /* e0 αßΓπΣσµτΦΘΩδ∞φε∩ */ 0x3B1,0xDF,0x393,0x3C0,0x3A3,0x3C3,0xB5,0x3C4,0x3A6,0x398,0x3A9,0x3B4,0x221E,0x3C6,0x3B5,0x2229,
+  /* f0 ≡±≥≤⌠⌡÷≈°∙·√ⁿ²■   */ 0x2261,0xB1,0x2265,0x2264,0x2320,0x2321,0xF7,0x2248,0xB0,0x2219,0xB7,0x221A,0x207F,0xB2,0x25A0,0xA0);
+
+const CP437_REV = (() => {
+  const m = new Map();
+  for (let i = 0; i < CP437_HI.length; i++) m.set(CP437_HI[i], 128 + i);
+  return m;
+})();
+
+function cp437Encode(str) {
+  const s = String(str == null ? '' : str);
+  const out = [];
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 0x80) { out.push(c); continue; }
+    // A surrogate pair is one character and becomes one '?'.
+    if (c >= 0xD800 && c <= 0xDBFF && i + 1 < s.length) { i++; out.push(0x3F); continue; }
+    const hit = CP437_REV.get(s[i]);
+    out.push(hit === undefined ? 0x3F : hit);
+  }
+  return new Uint8Array(out);
+}
+
+function cp437Decode(u8) {
+  let s = '';
+  for (let i = 0; i < u8.length; i++) {
+    const b = u8[i];
+    s += b < 0x80 ? String.fromCharCode(b) : CP437_HI[b - 128];
+  }
+  return s;
+}
+
+/** Counts characters that CP437 cannot represent, so the UI can warn first. */
+function cp437Unmappable(str) {
+  let n = 0;
+  const s = String(str == null ? '' : str);
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 0x80) continue;
+    if (c >= 0xD800 && c <= 0xDBFF && i + 1 < s.length) { i++; n++; continue; }
+    if (!CP437_REV.has(s[i])) n++;
+  }
+  return n;
+}
+
+function toDosBytes(text) {
+  let s = String(text == null ? '' : text).replace(/\r\n?|\n/g, '\r\n');
+  if (s && !s.endsWith('\r\n')) s += '\r\n';
+  return cp437Encode(s);
+}
+
+function fromDosBytes(u8) {
+  let end = u8.length;
+  if (end && u8[end - 1] === 0x1A) end--;      // a lone DOS EOF marker
+  let s = cp437Decode(u8.subarray(0, end)).replace(/\r\n?/g, '\n');
+  if (s.endsWith('\n')) s = s.slice(0, -1);
+  return s;
+}
+
+/** True when bytes are not plausibly text — refuses a text push-back. */
+function looksBinary(u8) {
+  if (!u8 || !u8.length) return false;
+  // A trailing ^Z is how DOS marks end-of-text; fromDosBytes drops it, so it must
+  // not count against the file here — in a short file one byte clears 5% on its own.
+  let len = u8.length;
+  if (u8[len - 1] === 0x1A) len--;
+  if (!len) return false;
+  let ctrl = 0;
+  const n = Math.min(len, 8192);
+  for (let i = 0; i < n; i++) {
+    const b = u8[i];
+    if (b === 0) return true;
+    if ((b >= 1 && b <= 8) || (b >= 14 && b <= 31)) ctrl++;
+  }
+  return ctrl / n > 0.05;
+}
+
+/* ------------------------------------------------------- markdown fences --
+ * A CommonMark-ish fence scanner with character offsets, so every write back
+ * into the note is an exact splice and nothing around it can move. Ported from
+ * contrib/diagram-studio/plugins/src/blocks.js. */
+
+/** Lines with char offsets. Handles \n and \r\n; a final unterminated line still counts. */
+function indexLines(content) {
+  const src = String(content == null ? '' : content);
+  const lines = [];
+  let i = 0;
+  let start = 0;
+  while (i < src.length) {
+    const ch = src.charAt(i);
+    if (ch === '\n') {
+      lines.push({ text: src.slice(start, i), start, end: i, next: i + 1 });
+      i += 1;
+      start = i;
+    } else if (ch === '\r') {
+      const stop = i;
+      i += src.charAt(i + 1) === '\n' ? 2 : 1;
+      lines.push({ text: src.slice(start, stop), start, end: stop, next: i });
+      start = i;
+    } else {
+      i += 1;
+    }
+  }
+  // A trailing line with no terminator, or the single empty line of empty
+  // content. Content ending in "\n" must NOT gain a phantom extra line.
+  if (start < src.length || lines.length === 0) {
+    lines.push({ text: src.slice(start), start, end: src.length, next: src.length });
+  }
+  return lines;
+}
+
+/* At most 3 leading spaces, at least 3 of ` or ~. For backtick fences the info
+ * string may not contain a backtick (```a`b is a paragraph, not a fence). */
+function parseFenceOpen(line) {
+  const m = /^([ ]{0,3})(`{3,}|~{3,})(.*)$/.exec(line);
+  if (!m) return null;
+  const info = m[3].trim();
+  if (m[2].charAt(0) === '`' && info.indexOf('`') !== -1) return null;
+  return { indent: m[1].length, char: m[2].charAt(0), len: m[2].length, info };
+}
+
+function isFenceClose(line, open) {
+  const m = /^([ ]{0,3})(`{3,}|~{3,})[ \t]*$/.exec(line);
+  if (!m) return false;
+  return m[2].charAt(0) === open.char && m[2].length >= open.len;
+}
+
+function stripIndent(text, amount) {
+  let i = 0;
+  while (i < amount && (text.charAt(i) === ' ' || text.charAt(i) === '\t')) i++;
+  return text.slice(i);
+}
+
+/**
+ * Every fenced block in `content`, with char offsets. A fence left unterminated
+ * at end of content still counts (that is what the user sees rendered), and
+ * scanning resumes past a block's closer so nested fences are never re-entered.
+ */
+function scanFences(content) {
+  const src = String(content == null ? '' : content);
+  const lines = indexLines(src);
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const open = parseFenceOpen(lines[i].text);
+    if (!open) continue;
+    let closeLine = null;
+    for (let j = i + 1; j < lines.length; j++) {
+      if (isFenceClose(lines[j].text, open)) { closeLine = j; break; }
+    }
+    const lastLine = closeLine === null ? lines.length - 1 : closeLine;
+    out.push({
+      idx: out.length,
+      indent: open.indent, char: open.char, len: open.len, info: open.info,
+      openLine: i, closeLine, lastLine,
+      bodyStartLine: i + 1,
+      bodyEndLine: closeLine === null ? lines.length - 1 : closeLine - 1,
+      infoStart: lines[i].start + open.indent + open.len,
+      infoEnd: lines[i].end,
+      bodyStart: lines[i].next,
+      bodyEnd: closeLine === null ? src.length : lines[closeLine].start,
+      blockStart: lines[i].start,
+      blockEnd: lines[lastLine].next,
+    });
+    i = lastLine;
+  }
+  return out;
+}
+
+/** The block's text, with the opener's indent stripped and line endings normalized. */
+function fenceBody(content, f) {
+  const raw = String(content).slice(f.bodyStart, f.bodyEnd).replace(/\r\n?/g, '\n');
+  let body = raw.endsWith('\n') ? raw.slice(0, -1) : raw;
+  if (f.indent) body = body.split('\n').map((l) => stripIndent(l, f.indent)).join('\n');
+  return body;
+}
+
+/* The shortest marker that safely encloses `body`: a body line that itself opens
+ * with a run of the fence character would otherwise close the block early and
+ * shred the rest of the note. */
+function fenceMarkerLen(body, char, min) {
+  const re = char === '`' ? /^[ ]{0,3}(`{3,})/ : /^[ ]{0,3}(~{3,})/;
+  let need = min;
+  for (const line of String(body == null ? '' : body).split('\n')) {
+    const m = re.exec(line);
+    if (m && m[1].length + 1 > need) need = m[1].length + 1;
+  }
+  return need;
+}
+
+/** True when a fence was actually closed, rather than running to end of note. */
+function fenceIsClosed(f) { return f.closeLine !== null; }
+
+/**
+ * Rebuilds one fence (opener + body + closer) as a single splice. Everything
+ * outside [blockStart, blockEnd) is byte-identical to the input.
+ *
+ * Refuses an unterminated fence. A stray ``` in a note makes scanFences report
+ * a block running to end of content — the whole tail of the note is nominally
+ * its "body" — so splicing it would replace all of that with the new body and
+ * silently delete everything after the typo.
+ */
+function replaceFence(content, f, patch) {
+  if (!fenceIsClosed(f)) {
+    throw new Error('refusing to rewrite an unclosed code block — ' +
+      'close the ``` in the note first');
+  }
+  const src = String(content);
+  const info = patch && patch.info !== undefined ? patch.info : f.info;
+  const body = patch && patch.body !== undefined ? patch.body : fenceBody(src, f);
+  const pad = ' '.repeat(f.indent);
+  const marker = f.char.repeat(fenceMarkerLen(body, f.char, f.len));
+  // Re-emit the block in whatever line ending it already used, so a note
+  // authored with CRLF does not come back with one LF-ended block in it.
+  const nl = src.slice(f.blockStart, f.blockEnd).includes('\r\n') ? '\r\n' : '\n';
+  const lines = body === '' ? [] : String(body).replace(/\r\n?/g, '\n').split('\n');
+  let out = pad + marker + (info || '') + nl;
+  for (const l of lines) out += (l === '' ? '' : pad) + l + nl;
+  out += pad + marker + nl;
+  // Do not invent a trailing newline the note did not have.
+  if (f.blockEnd >= src.length && !/\n$/.test(src)) out = out.slice(0, -nl.length);
+  return src.slice(0, f.blockStart) + out + src.slice(f.blockEnd);
+}
+
+/* --------------------------------------------------- fence info strings --
+ * `basic {dos-name="HELLO.BAS"}`. The host renderer truncates the info string
+ * at the first of [\s:{(] when picking a highlighter, so the braces are inert
+ * for rendering (interactive_checkbox_markdown.dart, _normalizeLanguage). */
+function parseInfoAttrs(info) {
+  const src = String(info == null ? '' : info);
+  const m = /\{([^}\n]*)\}\s*$/.exec(src);
+  const head = (m ? src.slice(0, m.index) : src).trim();
+  const attrs = [];
+  if (m) {
+    const re = /([A-Za-z_][\w.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s}]+))|(\S+)/g;
+    let t;
+    while ((t = re.exec(m[1])) !== null) {
+      if (t[1] !== undefined) {
+        const v = t[2] !== undefined ? t[2] : (t[3] !== undefined ? t[3] : t[4]);
+        attrs.push({ key: t[1], value: v, raw: t[0] });
+      } else {
+        attrs.push({ key: null, value: null, raw: t[5] });   // preserved verbatim
+      }
+    }
+  }
+  return { lang: head.split(/\s+/)[0] || '', head, attrs, hasBrace: !!m };
+}
+
+function infoAttr(info, key) {
+  const hit = parseInfoAttrs(info).attrs.find((a) => a.key === key);
+  return hit ? hit.value : null;
+}
+
+/** Adds, replaces or (value === null) removes one attribute; everything else survives. */
+function setInfoAttr(info, key, value) {
+  const p = parseInfoAttrs(info);
+  const drop = value === null || value === undefined;
+  // A backtick would end the info string of a ``` fence (parseFenceOpen rejects
+  // one), turning the opener into ordinary text and the closer into an opener.
+  const token = drop ? '' : key + '="' + String(value).replace(/["}\n`]/g, '') + '"';
+  const parts = [];
+  let done = false;
+  for (const a of p.attrs) {
+    if (a.key === key) {
+      if (done) continue;                      // collapse duplicates
+      done = true;
+      if (!drop) parts.push(token);
+    } else parts.push(a.raw);
+  }
+  if (!done && !drop) parts.push(token);
+  if (!parts.length) return p.head;
+  return (p.head ? p.head + ' ' : '') + '{' + parts.join(' ') + '}';
+}
+
+/* --------------------------------------------------------- DOS file names
+ * DOS also allows a backtick in a file name, but the name has to live inside a
+ * fence's info string (`{dos-name="..."}`), and a backtick there stops the line
+ * being a fence at all — the opener becomes prose and the closer becomes an
+ * opener. The rule is therefore "what survives a round-trip", not "everything
+ * DOS would accept". */
+const DOS_CHARS = 'A-Z0-9!#$%&\'()\\-@^_{}~';
+const DOS_SEG_RE = new RegExp('^[' + DOS_CHARS + ']{1,8}(\\.[' + DOS_CHARS + ']{1,3})?$');
+const DOS_DEVICES = /^(CON|PRN|AUX|NUL|CLOCK\$|COM[1-9]|LPT[1-9])$/;
+const DOS_MAX_SEGS = 8;
+const DOS_MAX_LEN = 64;
+
+/** The one traversal guard, shared by the saves overlay and every import. */
+function safeRelName(name) {
+  const n = String(name || '');
+  return !!n && !n.startsWith('/') && !/^[A-Za-z]:/.test(n) &&
+    !n.split('/').includes('..');
+}
+
+/** Normalizes and validates a DOS path. Returns {ok, path, reason}. */
+function dosPathCheck(raw) {
+  let s = String(raw == null ? '' : raw).trim().replace(/\\/g, '/').replace(/\/{2,}/g, '/');
+  while (s.endsWith('/')) s = s.slice(0, -1);
+  s = s.toUpperCase();
+  if (!s) return { ok: false, path: '', reason: 'name is empty' };
+  if (!safeRelName(s)) return { ok: false, path: s, reason: 'must be a plain relative name (no drive, no "..")' };
+  if (s.length > DOS_MAX_LEN) return { ok: false, path: s, reason: 'path longer than ' + DOS_MAX_LEN + ' characters' };
+  const segs = s.split('/');
+  if (segs.length > DOS_MAX_SEGS) return { ok: false, path: s, reason: 'more than ' + DOS_MAX_SEGS + ' directory levels' };
+  for (const seg of segs) {
+    if (!seg) return { ok: false, path: s, reason: 'empty directory name' };
+    const dots = seg.split('.');
+    const stem = dots[0];
+    if (!DOS_SEG_RE.test(seg)) {
+      // Say which rule it broke — the panel puts this straight under the input.
+      if (dots.length > 2) return { ok: false, path: s, reason: '"' + seg + '" has more than one dot' };
+      if (stem.length > 8) return { ok: false, path: s, reason: '"' + stem + '" is longer than 8 characters' };
+      if (!stem.length) return { ok: false, path: s, reason: '"' + seg + '" has no name before the dot' };
+      if ((dots[1] || '').length > 3) return { ok: false, path: s, reason: '".' + dots[1] + '" is longer than 3 characters' };
+      const bad = seg.split('').find((c) => c !== '.' && !DOS_SEG_RE.test(c));
+      return { ok: false, path: s, reason: '"' + bad + '" is not a legal DOS character' };
+    }
+    if (DOS_DEVICES.test(stem)) {
+      return { ok: false, path: s, reason: stem + ' is a reserved device name' };
+    }
+  }
+  return { ok: true, path: s, reason: '' };
+}
+
+/** Best-effort 8.3 name for a source file, de-duplicated against `taken`. */
+function dosifyName(src, taken) {
+  const base = String(src == null ? '' : src).split('/').pop().split('\\').pop();
+  const dot = base.lastIndexOf('.');
+  const legal = new RegExp('[^' + DOS_CHARS + ']', 'g');
+  const clean = (s, n) => s.toUpperCase().replace(legal, '_').slice(0, n);
+  // Trailing separators are legal but read as truncation damage — trim them.
+  let stem = clean(dot > 0 ? base.slice(0, dot) : base, 8).replace(/[-_~]+$/, '') || 'FILE';
+  const ext = dot > 0 ? clean(base.slice(dot + 1), 3) : '';
+  const have = taken instanceof Set ? taken : new Set(taken || []);
+  const join = (st) => st + (ext ? '.' + ext : '');
+  if (!have.has(join(stem))) return join(stem);
+  for (let i = 1; i <= 9; i++) {
+    const alt = stem.slice(0, 6) + '~' + i;
+    if (!have.has(join(alt))) return join(alt);
+  }
+  return join(stem.slice(0, 6) + '~9');
+}
+
+/* ------------------------------------------------------ the dos-files fence
+ * One entry per line, comments and unknown text preserved verbatim:
+ *
+ *   attachment: levels.dat -> LEVELS.DAT | text | v=levels-123_ab.dat
+ *
+ * The source is the attachment's human file name, not its stored path: the host
+ * rewrites paths when it re-stores a file, but file names survive. `v=` names the
+ * newest pushed-back version, which is read instead of the original. */
+const DOS_FILES_LANG = 'dos-files';
+
+function parseDosFilesLine(text) {
+  const m = /^\s*attachment\s*:\s*(.*)$/i.exec(text);
+  if (!m) return null;
+  let rest = m[1];
+  let src = null;
+  if (rest.charAt(0) === '"') {
+    const e = rest.indexOf('"', 1);
+    if (e < 0) return null;
+    src = rest.slice(1, e);
+    rest = rest.slice(e + 1);
+  }
+  const bar = rest.indexOf('|');
+  const mid = bar >= 0 ? rest.slice(0, bar) : rest;
+  const opts = [];
+  if (bar >= 0) {
+    for (const o of rest.slice(bar + 1).split('|')) {
+      const t = o.trim();
+      if (t) opts.push(t);
+    }
+  }
+  let dosPath = null;
+  const arrow = mid.indexOf('->');
+  if (arrow >= 0) {
+    dosPath = mid.slice(arrow + 2).trim() || null;
+    if (src === null) src = mid.slice(0, arrow).trim();
+  } else if (src === null) {
+    src = mid.trim();
+  }
+  if (!src) return null;
+  return { src, dosPath, opts };
+}
+
+function formatDosFilesLine(e) {
+  const quote = /["|]|->/.test(e.src);
+  let s = 'attachment: ' + (quote ? '"' + e.src.replace(/"/g, '') + '"' : e.src);
+  if (e.dosPath) s += ' -> ' + e.dosPath;
+  for (const o of e.opts || []) s += ' | ' + o;
+  return s;
+}
+
+/** Splits a dos-files body into per-line records; unparseable lines are kept as-is. */
+function parseDosFilesBody(body) {
+  const out = [];
+  const lines = String(body == null ? '' : body).split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const text = lines[i];
+    const e = /^\s*#/.test(text) ? null : parseDosFilesLine(text);
+    if (e) out.push({ kind: 'entry', line: i, text, src: e.src, dosPath: e.dosPath, opts: e.opts });
+    else out.push({ kind: 'raw', line: i, text, bad: !!text.trim() && !/^\s*#/.test(text) });
+  }
+  return out;
+}
+
+function formatDosFilesBody(records) {
+  return records.map((r) => (r.kind === 'entry' ? formatDosFilesLine(r) : r.text)).join('\n');
+}
+
+function dosFilesOpt(opts, key) {
+  for (const o of opts || []) {
+    if (o === key) return true;
+    const m = new RegExp('^' + key + '\\s*=\\s*(.*)$').exec(o);
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+
+function setDosFilesOpt(opts, key, value) {
+  const kept = (opts || []).filter((o) => o !== key && !new RegExp('^' + key + '\\s*=').test(o));
+  if (value === true) kept.push(key);
+  else if (value !== null && value !== undefined && value !== false) kept.push(key + '=' + value);
+  return kept;
+}
+
+/* ==== core:end ========================================================== */
 
 let toastTimer = null;
 function toast(msg, isErr) {
@@ -569,20 +1082,61 @@ async function ensureEngine() {
 /* ------------------------------------------------------- note handling */
 function baseName(p) { return String(p).split('/').pop(); }
 
+/* Reads the note's RAW markdown straight from the database.
+ *
+ * exportNotes returns *rendered* markdown (sub-notes and linked notes inlined),
+ * which must never be written back — doing so would paste other notes into this
+ * one. runQuery is the only source of the real column. Returns null on any
+ * failure, and callers treat null before a whole-body replace as "abort": a note
+ * too large for the query has to fail loudly rather than be overwritten with a
+ * stale copy. */
+async function readRawNoteContent() {
+  if (!state.noteId || !window.Synapse || !Synapse.runQuery) return null;
+  try {
+    const sql = "SELECT content FROM notes WHERE id = '" +
+      String(state.noteId).replace(/'/g, "''") + "'";
+    const r = await Synapse.runQuery(sql);
+    const row = r && r.success && r.data && r.data[0];
+    if (!row || typeof row.content !== 'string') return null;
+    return row.content;
+  } catch (e) {
+    logErr('readRawNoteContent', e);
+    return null;
+  }
+}
+
 async function resolveLaunchNote() {
   const notes = (window.Synapse && Synapse.Notes) || [];
-  if (notes.length) {
-    // Prefer a selected note that actually has a .zip attachment.
-    const withZip = notes.find((n) =>
-      (n.attachmentPaths || []).some((p) => /\.zip$/i.test(p)));
-    const n = withZip || notes[0];
-    state.noteId = n.id;
-    state.noteTitle = n.title || 'Untitled note';
-    state.noteContent = n.content || '';
-    state.attachments = (n.attachmentPaths || []).map((p) => ({ path: p, name: baseName(p) }));
-    return true;
+  if (!notes.length) return false;
+  // Prefer a selected note that actually has a .zip attachment.
+  const withZip = notes.find((n) =>
+    (n.attachmentPaths || []).some((p) => /\.zip$/i.test(p)));
+  const n = withZip || notes[0];
+  // Launched on a selected block, `id` is a transient id standing for just that
+  // block, and the host keeps it that way throughout: a SELECT of `content`
+  // comes back as the block's text, and a content replace rewrites only that
+  // region. So content operations use this id and simply see a smaller
+  // document — nothing downstream needs to know the difference. Attachments are
+  // the exception: they belong to the note, and the host refuses attachment
+  // changes on a block id, so those go to the parent.
+  state.blockScope = !!n.isBlockScope;
+  state.noteId = n.id;
+  state.attachNoteId = n.parentNoteId || n.id;
+  state.noteTitle = n.title || 'Untitled note';
+  state.noteContent = n.content || '';
+  state.attachments = (n.attachmentPaths || []).map((p) => ({ path: p, name: baseName(p) }));
+  // Every write re-reads the raw text first and aborts if it cannot, so probe it
+  // once here: the panel should say up front that it cannot change the note
+  // rather than letting the user discover it one failed action at a time.
+  const raw = await readRawNoteContent();
+  if (raw !== null) {
+    state.noteContent = raw;
+    state.contentWritable = true;
+  } else {
+    state.contentWritable = false;
+    ttyLog('  NOTE TEXT NOT READABLE — FILE IMPORTS ARE READ-ONLY');
   }
-  return false;
+  return true;
 }
 
 async function loadNoteById(noteId) {
@@ -592,16 +1146,401 @@ async function loadNoteById(noteId) {
   }
   const n = r.notes[0];
   state.noteId = n.id;
+  state.attachNoteId = n.id;
+  state.blockScope = false;
   state.noteTitle = n.title || 'Untitled note';
-  state.noteContent = n.markdown || '';
   state.attachments = (n.attachments || []).map((a) => ({
     path: a.path, name: a.fileName || baseName(a.path),
   }));
+  state.attachNamesResolved = true;
+  // exportNotes gives rendered markdown; only the raw column may be written back.
+  const raw = await readRawNoteContent();
+  if (raw !== null) {
+    state.noteContent = raw;
+    state.contentWritable = true;
+  } else {
+    state.noteContent = n.markdown || '';
+    state.contentWritable = false;
+  }
+}
+
+/**
+ * Re-reads the attachment list, which is also the only source of each file's
+ * *human* name: Synapse.Notes gives stored paths, whose base name carries the
+ * host's `<stem>_<uuid>` suffix, and that uuid is re-minted whenever the file is
+ * saved again. A dos-files entry has to name the human file so it still resolves
+ * after the note DB is exported and restored on another device.
+ *
+ * This is the one call that deliberately names the parent note in block scope —
+ * attachments belong to the note, not to the selected block. It is read-only.
+ */
+async function refreshAttachments() {
+  try {
+    const exp = await Synapse.exportNotes([state.attachNoteId],
+      { includeSubNotesAndLinkedNotes: false });
+    const n = exp && exp.success && exp.notes && exp.notes[0];
+    if (!n) return false;
+    state.attachments = (n.attachments || []).map((a) => ({
+      path: a.path, name: a.fileName || baseName(a.path),
+    }));
+    state.attachNamesResolved = true;
+    return true;
+  } catch (e) {
+    logErr('refreshAttachments', e);
+    return false;
+  }
+}
+
+/**
+ * Replaces the whole note body with `next`, which the caller built by splicing
+ * `expected`.
+ *
+ * A whole-body replace is the only granular write the host offers, so a stale
+ * base would silently revert edits the user made elsewhere in the note while the
+ * panel was open. Guard order matters: re-read, relocate the splice against the
+ * fresh text when it moved, then refuse anything that looks like a scanner bug.
+ * `relocate(fresh)` returns the rebuilt content, or null when the anchor is gone.
+ */
+async function writeNoteContent(next, expected, relocate) {
+  if (!state.contentWritable) {
+    throw new Error('this note\'s text is not writable from here');
+  }
+  if (state.noteWriteBusy) throw new Error('another note write is still running');
+  state.noteWriteBusy = true;
+  try {
+    const fresh = await readRawNoteContent();
+    if (fresh === null) throw new Error('could not re-read the note — nothing was written');
+    let text = next;
+    // In block scope this re-read reflects plugin writes but not a concurrent
+    // user edit inside the block, so `fresh === expected` can be stale there.
+    // Nothing is corrupted when it is: the host re-locates the block by its text
+    // and refuses the write outright if it has moved.
+    if (fresh !== expected) {
+      text = relocate ? relocate(fresh) : null;
+      if (text === null || text === undefined) {
+        throw new Error('the note changed since this panel opened — close and reopen it');
+      }
+    }
+    // A splice can only ever add or remove a bounded amount of text. Anything
+    // else means the scanner mislocated the block, and the note must not pay.
+    if (!text || text.length < fresh.length * 0.5) {
+      throw new Error('refusing to write: the result would lose half the note');
+    }
+    // No legitimate splice loses a block: replaceFence rebuilds one in place and
+    // widens its markers rather than letting a body break out of it, and
+    // setInfoAttr only ever touches the opener's info string. A drop means the
+    // scanner and the writer disagree about where the block was.
+    if (scanFences(text).length < scanFences(fresh).length) {
+      throw new Error('refusing to write: the result would lose code blocks');
+    }
+    const r = await Synapse.updateNotes([{
+      id: state.noteId,
+      modification: { content: { action: 'replace', text } },
+    }]);
+    if (!r || !r.success || !r.updatedCount) {
+      throw new Error((r && r.error) || 'the note update was declined');
+    }
+    state.noteContent = text;
+    return text;
+  } finally {
+    state.noteWriteBusy = false;
+  }
+}
+
+/** Appends to the note body. Race-free (the host appends to whatever is stored). */
+async function appendNoteContent(text) {
+  if (!state.contentWritable) {
+    throw new Error('this note\'s text is not writable from here');
+  }
+  const r = await Synapse.updateNotes([{
+    id: state.noteId,
+    modification: { content: { action: 'append', text } },
+  }]);
+  if (!r || !r.success || !r.updatedCount) {
+    throw new Error((r && r.error) || 'the note update was declined');
+  }
+  const fresh = await readRawNoteContent();
+  if (fresh !== null) state.noteContent = fresh;
+  else state.noteContent += '\n' + text;
+  return state.noteContent;
 }
 
 function zipAttachments() {
   return state.attachments.filter((a) =>
     (/\.zip$/i.test(a.name) || /\.zip$/i.test(a.path)) && !isSavesAttachment(a));
+}
+
+/* =====================================================================
+ *  Note imports — files the note puts on C:
+ *
+ *  Two kinds, both recorded in the note itself so nothing depends on app
+ *  state surviving:
+ *
+ *    code  a fenced block carrying {dos-name="HELLO.BAS"} in its info string.
+ *          Text, so it is transcoded to CP437 + CRLF in both directions.
+ *    att   an entry in the ```dos-files fence naming one of the note's
+ *          attachments. Copied verbatim unless the entry says `| text`.
+ *
+ *  Attachments are never imported automatically — only what the user picked.
+ * =================================================================== */
+const IMPORT_ATTR = 'dos-name';
+/* Launched on a selected block, everything the plugin can see is that block —
+ * say so rather than claiming to show the whole note. */
+function scopeWord() { return state.blockScope ? 'BLOCK' : 'NOTE'; }
+/* Fences that are configuration or another plugin's payload, never a file. */
+const SKIP_LANGS = /^(dosbox|dos-files|synapse-[\w-]+|chips)$/i;
+const MAX_CODE_BYTES = 512 * 1024;
+const MAX_ATT_BYTES = 8 * 1024 * 1024;
+const MAX_IMPORT_BYTES = 24 * 1024 * 1024;
+
+/** The dos-files fence in the current note content, or null. */
+function dosFilesFence(content) {
+  return scanFences(content == null ? state.noteContent : content)
+    .find((f) => parseInfoAttrs(f.info).lang.toLowerCase() === DOS_FILES_LANG) || null;
+}
+
+/** Matches a dos-files source name against the note's attachments. */
+function resolveAttachment(src) {
+  const want = String(src || '').toLowerCase();
+  if (!want) return null;
+  const atts = state.attachments;
+  const dot = want.lastIndexOf('.');
+  const stem = dot > 0 ? want.slice(0, dot) : want;
+  const ext = dot > 0 ? want.slice(dot) : '';
+  // The host stores a file as `<stem>_<uuid>.<ext>`, so a name that never made it
+  // through exportNotes can still be matched — but only in that exact shape. A
+  // plain prefix test would let "r.md" resolve to "recording_<uuid>.wav" and put
+  // a completely unrelated file on C:.
+  const stored = new RegExp('^' + stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
+    '_[0-9a-f-]+' + ext.replace(/\./g, '\\.') + '$', 'i');
+  return atts.find((a) => String(a.name).toLowerCase() === want)
+    || atts.find((a) => baseName(a.path).toLowerCase() === want)
+    || atts.find((a) => stored.test(baseName(a.path)))
+    || null;
+}
+
+/**
+ * Derives the import records from the note text. Pure with respect to the note:
+ * no bytes are read and nothing is written. Invalid records are kept (with a
+ * reason) so the panel can explain why a file is not on C:.
+ */
+function deriveImports() {
+  const content = state.noteContent || '';
+  const fences = scanFences(content);
+  const issues = [];
+  const recs = [];
+  const seen = new Map();
+
+  const claim = (rec) => {
+    const prev = seen.get(rec.dosPath);
+    if (rec.status === 'ok' && prev) {
+      rec.status = 'conflict';
+      rec.reason = 'another block or attachment already provides ' + rec.dosPath;
+    } else if (rec.status === 'ok') {
+      seen.set(rec.dosPath, rec);
+    }
+    recs.push(rec);
+  };
+
+  for (const f of fences) {
+    const info = parseInfoAttrs(f.info);
+    const name = infoAttr(f.info, IMPORT_ATTR);
+    if (name === null) continue;
+    if (SKIP_LANGS.test(info.lang)) {
+      issues.push({ level: 'warn', text: '```' + info.lang + ' blocks cannot be imported — ignoring its ' + IMPORT_ATTR });
+      continue;
+    }
+    if (!fenceIsClosed(f)) {
+      // Its "body" is the whole rest of the note, so importing it would put the
+      // note's tail on C: and any push-back would splice that tail back over it.
+      issues.push({ level: 'err', text: '"' + name + '" is in a code block that is never closed — close the ``` first' });
+      continue;
+    }
+    const body = fenceBody(content, f);
+    const chk = dosPathCheck(name);
+    const rec = {
+      kind: 'code', dosPath: chk.path || String(name).toUpperCase(),
+      lang: info.lang, fenceIdx: f.idx, bodyText: body,
+      data: null, size: 0, status: 'ok', reason: '',
+      unmappable: cp437Unmappable(body),
+    };
+    if (!chk.ok) { rec.status = 'invalid'; rec.reason = chk.reason; }
+    else if (body.length > MAX_CODE_BYTES) {
+      rec.status = 'invalid';
+      rec.reason = 'block is larger than ' + fmtSize(MAX_CODE_BYTES);
+    }
+    claim(rec);
+  }
+
+  const df = dosFilesFence(content);
+  if (df) {
+    const others = fences.filter((f) =>
+      parseInfoAttrs(f.info).lang.toLowerCase() === DOS_FILES_LANG && f.idx !== df.idx);
+    if (others.length) {
+      issues.push({ level: 'warn', text: 'more than one ```dos-files block — only the first is used' });
+    }
+    for (const e of parseDosFilesBody(fenceBody(content, df))) {
+      if (e.kind !== 'entry') {
+        if (e.bad) issues.push({ level: 'warn', text: 'dos-files: cannot read "' + e.text.trim() + '"' });
+        continue;
+      }
+      const version = dosFilesOpt(e.opts, 'v');
+      const att = resolveAttachment(typeof version === 'string' ? version : e.src)
+        || resolveAttachment(e.src);
+      const chk = dosPathCheck(e.dosPath || dosifyName(e.src, []));
+      const rec = {
+        kind: 'att', dosPath: chk.path || String(e.dosPath || e.src).toUpperCase(),
+        srcName: e.src, version: typeof version === 'string' ? version : null,
+        textMode: dosFilesOpt(e.opts, 'text') === true,
+        line: e.line, opts: e.opts, attPath: att ? att.path : null,
+        attName: att ? att.name : null,
+        data: null, size: 0, status: 'ok', reason: '',
+      };
+      if (!chk.ok) { rec.status = 'invalid'; rec.reason = chk.reason; }
+      else if (!att) { rec.status = 'unresolved'; rec.reason = 'no attachment named "' + e.src + '" on this note'; }
+      claim(rec);
+    }
+  }
+
+  state.imports = recs;
+  state.importIssues = issues;
+  return recs;
+}
+
+/* The stored file plus how it is decoded — `| text` changes the bytes, so the
+ * same attachment read two ways is two cache entries. */
+function attCacheKey(rec) { return rec.attPath + (rec.textMode ? '|text' : ''); }
+
+/** Loads the bytes each import contributes. Failures downgrade one record only. */
+async function loadImportBytes() {
+  let total = 0;
+  // Every panel action re-derives the imports, and an attachment read crosses the
+  // bridge base64-encoded. Cache by the exact file we read, so clicking around the
+  // panel does not re-fetch megabytes that cannot have changed underneath us.
+  const cache = state.attBytes || (state.attBytes = new Map());
+  for (const rec of state.imports) {
+    if (rec.status !== 'ok') { rec.data = null; rec.size = 0; continue; }
+    try {
+      if (rec.kind === 'code') {
+        rec.data = toDosBytes(rec.bodyText);
+      } else if (cache.has(attCacheKey(rec))) {
+        rec.data = cache.get(attCacheKey(rec));
+      } else {
+        const r = await Synapse.readAttachment(rec.attPath);
+        if (!r || !r.success || !r.data) throw new Error((r && r.error) || 'readAttachment failed');
+        let u8 = b64ToU8(r.data);
+        if (u8.length > MAX_ATT_BYTES) {
+          rec.status = 'invalid';
+          rec.reason = 'attachment is larger than ' + fmtSize(MAX_ATT_BYTES);
+          rec.data = null;
+          continue;
+        }
+        if (rec.textMode) u8 = toDosBytes(new TextDecoder().decode(u8));
+        cache.set(attCacheKey(rec), u8);
+        rec.data = u8;
+      }
+      if (total + rec.data.length > MAX_IMPORT_BYTES) {
+        rec.status = 'invalid';
+        rec.reason = 'note imports exceed ' + fmtSize(MAX_IMPORT_BYTES) + ' in total';
+        rec.data = null;
+        continue;
+      }
+      total += rec.data.length;
+      rec.size = rec.data.length;
+    } catch (e) {
+      logErr('import ' + rec.dosPath, e);
+      rec.status = rec.kind === 'att' ? 'unresolved' : 'invalid';
+      rec.reason = (e && e.message) || 'could not be read';
+      rec.data = null;
+    }
+  }
+  return state.imports;
+}
+
+async function refreshImports() {
+  deriveImports();
+  await loadImportBytes();
+  return state.imports;
+}
+
+function activeImports() {
+  return state.imports.filter((r) => r.data && r.status !== 'invalid' && r.status !== 'conflict');
+}
+
+/* The baseline only exists once something has been mounted; panel actions may
+ * run against a launcher screen that has, so keep the writes total. */
+function baselineSet(name, data) { if (state.zipBaseline) state.zipBaseline.set(name, data); }
+function baselineDelete(name) { if (state.zipBaseline) state.zipBaseline.delete(name); }
+
+/** Every DOS path currently spoken for, for name de-duplication in the panel. */
+function takenDosPaths() {
+  const set = new Set(state.imports.map((r) => r.dosPath));
+  for (const f of state.files || []) set.add(String(f.name).toUpperCase());
+  return set;
+}
+
+/**
+ * Re-derives each import's live status against C:, and with it the badge.
+ * Mutates `rec.status` on every import and prunes `savesShadowed`, then returns
+ * the tallies — the panel and the badge both read what it wrote.
+ *
+ * Pass a snapshotChanges() result when one is already at hand (the autosave walks
+ * the whole FS every 60s anyway) and this costs nothing. Without one it reads
+ * only the handful of imported files — the panel must never walk the guest FS.
+ */
+function refreshImportStatus(snap) {
+  const changed = snap ? new Set(snap.changed.map((f) => f.name)) : null;
+  const gone = snap ? new Set(snap.deleted) : null;
+  const st = { total: 0, drift: 0, missing: 0, shadowed: 0, bad: 0 };
+  for (const rec of state.imports) {
+    if (rec.status === 'invalid' || rec.status === 'conflict' || rec.status === 'unresolved') {
+      st.bad++;
+      continue;
+    }
+    st.total++;
+    let status = 'ok';
+    if (changed) {
+      if (gone.has(rec.dosPath)) status = 'missing';
+      else if (changed.has(rec.dosPath)) status = 'drift';
+    } else {
+      const cur = guestReadFile(rec.dosPath);
+      if (!cur) status = 'missing';
+      else if (!rec.data || !bytesEqual(cur, rec.data)) status = 'drift';
+    }
+    // A saved copy that replaced the note's at mount is a more specific
+    // explanation of the same drift; it clears once the two agree again.
+    if (state.savesShadowed) {
+      if (status === 'drift' && state.savesShadowed.has(rec.dosPath)) status = 'shadowed';
+      else if (status === 'ok') state.savesShadowed.delete(rec.dosPath);
+    }
+    rec.status = status;
+    if (status === 'drift') st.drift++;
+    else if (status === 'missing') st.missing++;
+    else if (status === 'shadowed') st.shadowed++;
+  }
+  state.fileStats = st;
+  refreshFilesBadge();
+  return st;
+}
+
+function fileStatsOff() {
+  const s = state.fileStats;
+  return s.drift + s.missing + s.shadowed + s.bad + state.importIssues.length;
+}
+
+function refreshFilesBadge() {
+  const badge = $('filesBadge');
+  if (!badge) return;
+  const off = fileStatsOff();
+  badge.textContent = off ? String(off) : (state.fileStats.total || '');
+  badge.className = off ? 'badge warn' : (state.fileStats.total ? 'badge' : 'badge hidden');
+  const btn = $('btnFiles');
+  if (btn) {
+    btn.classList.toggle('active', off > 0);
+    btn.title = off
+      ? 'Note files on C: — ' + off + ' need attention'
+      : 'Note files on C: (' + state.fileStats.total + ')';
+  }
 }
 
 /* ------------------------------------------------------- zip mounting */
@@ -634,12 +1573,79 @@ async function mountZip(att) {
     if (tops.size !== 1 || !files.every((f) => f.name.includes('/'))) break;
     files = files.map((f) => ({ name: f.name.split('/').slice(1).join('/'), data: f.data }));
   }
+  await finishMount(files);
+}
+
+/* Boots with no game zip at all: C: holds only what the note contributes. */
+async function mountNoteOnly() {
+  state.zip = null;
+  ttyLog('NO GAME DISK — BUILDING C: FROM THE NOTE ...');
+  await finishMount([]);
+}
+
+/**
+ * Merges the note's imports into the files about to be mounted.
+ *
+ * Imports also join `zipBaseline`, and that is the whole conflict model:
+ * snapshotChanges() treats anything absent from the baseline as changed, so an
+ * unbaselined import would be copied into the very first autosave verbatim and
+ * — since a saved copy always wins — would shadow the note's copy forever,
+ * leaving later edits to the code block with no way to reach C:. Baselined, an
+ * import only enters the saves zip once DOS has actually modified it, which is
+ * exactly the state the drift badge exists to advertise.
+ */
+function applyImports(files) {
+  const map = new Map(files.map((f) => [f.name, f]));
+  state.overriddenZipNames = new Set();
+  for (const rec of activeImports()) {
+    // The note naming a file is an explicit instruction; it outranks the zip.
+    // Match the way DOS does — case-insensitively. Import paths are uppercased
+    // and zip entries keep their own case, so an exact-string check would leave
+    // `hello.bas` and `HELLO.BAS` both on /dos and let DOSBox pick one at random.
+    for (const existing of map.keys()) {
+      if (existing !== rec.dosPath && existing.toUpperCase() === rec.dosPath) {
+        map.delete(existing);
+        baselineDelete(existing);
+        state.overriddenZipNames.add(rec.dosPath);
+      }
+    }
+    if (map.has(rec.dosPath)) state.overriddenZipNames.add(rec.dosPath);
+    map.set(rec.dosPath, { name: rec.dosPath, data: rec.data });
+    baselineSet(rec.dosPath, rec.data);
+  }
+  return Array.from(map.values());
+}
+
+/* Shared tail of every mount: zip → note → saves, in that order. */
+async function finishMount(files) {
   state.zipBaseline = new Map(files.map((f) => [f.name, f.data]));
   state.lastSaveSig = null;
+  state.pendingDeletes = new Set();
+  state.savesDirty = false;
+
+  files = applyImports(files);
+  const seeded = new Map(files.map((f) => [f.name, f.data]));
+  const n = activeImports().length;
+  if (n) ttyLog('  NOTE FILES: ' + n + ' COPIED TO C:\\');
+
   files = await restoreSaves(files);
+
+  // A saved copy wins, but the user has to be told when it silently replaced
+  // what the note says the file should contain.
+  state.savesShadowed = new Set();
+  const provided = new Set(activeImports().map((r) => r.dosPath));
+  for (const f of files) {
+    const was = seeded.get(f.name);
+    if (provided.has(f.name) && was && !bytesEqual(was, f.data)) state.savesShadowed.add(f.name);
+  }
+  if (state.savesShadowed.size) {
+    ttyLog('  ' + state.savesShadowed.size + ' NOTE FILE(S) OVERRIDDEN BY SAVED CHANGES');
+  }
+
   state.files = files;
   ttyLog('  MOUNTED ' + files.length + ' FILES AT C:\\');
   scanExecutables();
+  refreshImportStatus();
 }
 
 function scanExecutables() {
@@ -676,6 +1682,14 @@ function savesSlug(zipName) {
     .replace(/[^a-z0-9]/g, '').slice(0, 24);
   return s || 'disk';
 }
+/* Which saves attachment this session owns. A note booted with no game disk
+ * still accumulates saves, keyed by the note instead of the zip; the result is
+ * alphanumeric either way, so isSavesFor/savesStamp are unaffected. Keyed on the
+ * real note id — a block id is minted fresh every session. */
+function savesKey() {
+  if (state.zip) return savesSlug(state.zip.name);
+  return 'note' + fnv1a(new TextEncoder().encode(String(state.attachNoteId || '')));
+}
 function isSavesAttachment(a) {
   return /(^|\/)dos-saves-/i.test(a.name) || /(^|\/)dos-saves-/i.test(a.path);
 }
@@ -696,14 +1710,13 @@ function saveSig(snap) {
   const c = snap.changed.map((f) => f.name + ':' + f.data.length + ':' + fnv1a(f.data)).sort();
   return c.join(',') + '|' + snap.deleted.slice().sort().join(',');
 }
-function safeRelName(name) {
-  return name && !name.startsWith('/') && !name.split('/').includes('..');
-}
+/* safeRelName lives in the core block — the saves overlay and the note imports
+ * must accept exactly the same names. */
 
 /* Overlay the newest saves attachment for this game zip onto the files
  * about to be mounted. Returns the (possibly patched) file list. */
 async function restoreSaves(files) {
-  const slug = savesSlug(state.zip.name);
+  const slug = savesKey();
   const cands = state.attachments.filter((a) => isSavesFor(a, slug))
     .sort((a, b) => savesStamp(b) - savesStamp(a));
   for (const att of cands) {
@@ -723,13 +1736,19 @@ async function restoreSaves(files) {
         if (!safeRelName(name)) continue;
         over.push({ name, data: entries[raw] });
       }
-      if (meta && meta.game && meta.game !== state.zip.name) {
+      if (meta && meta.game && meta.game !== (state.zip ? state.zip.name : null)) {
         ttyLog('  SAVES "' + att.name + '" belong to ' + meta.game + ' — skipped');
         continue;
       }
       const map = new Map(files.map((f) => [f.name, f]));
       for (const o of over) map.set(o.name, o);
-      const deleted = ((meta && meta.deleted) || []).filter(safeRelName);
+      // A deletion recorded in an old save must not outrank the note. Removing an
+      // import writes its name into meta.deleted; putting the same {dos-name} back
+      // in the note would otherwise be undone here on every boot, for good — the
+      // file stays absent, so it keeps looking "deleted" and keeps being recorded.
+      const provided = new Set(activeImports().map((r) => r.dosPath));
+      const deleted = ((meta && meta.deleted) || [])
+        .filter(safeRelName).filter((d) => !provided.has(d));
       for (const d of deleted) map.delete(d);
       state.lastSaveSig = saveSig({ changed: over, deleted });
       ttyLog('  SAVES RESTORED: ' + over.length + ' file' + (over.length === 1 ? '' : 's') +
@@ -743,20 +1762,113 @@ async function restoreSaves(files) {
   return files;
 }
 
+/* ------------------------------------------------------- live guest FS ----
+ * Files normally reach C: through Module.preRun (writeGuestFS). The files panel
+ * needs to add and remove them while DOSBox is already running, which MEMFS
+ * allows — but DOSBox caches the directory listing of a mounted local drive, so
+ * a new file stays invisible to DIR until the cache is refreshed. Ctrl+F4 is
+ * DOSBox's "update cached directory information" shortcut. */
+function guestFS() {
+  return (state.module && state.module.FS) || null;
+}
+
+/* Reads a MEMFS file without the copy FS.readFile makes. */
+function readNode(FS, p) {
+  const node = FS.lookupPath(p).node;
+  if (node && node.contents && node.contents.subarray) {
+    return node.contents.subarray(0,
+      node.usedBytes !== undefined ? node.usedBytes : node.contents.length);
+  }
+  return FS.readFile(p);
+}
+
+/* Records that failed validation keep the name the user typed, and the panel
+ * still shows them — so re-check here rather than trusting the caller. Without
+ * it a `../` name reaches MEMFS and reads or writes outside /dos. */
+function guestPath(dosPath) {
+  return safeRelName(dosPath) ? '/dos/' + dosPath : null;
+}
+
+/** Current bytes of a file on C:, from the live FS if booted, else the mount list. */
+function guestReadFile(dosPath) {
+  const p = guestPath(dosPath);
+  if (!p) return null;
+  const FS = guestFS();
+  if (FS) {
+    try { return new Uint8Array(readNode(FS, p)); } catch (_) { return null; }
+  }
+  const hit = (state.files || []).find((f) => f.name === dosPath);
+  return hit ? hit.data : null;
+}
+
+/* Mirrors into state.files so a re-boot and the next snapshot agree with C:. */
+function mirrorFile(dosPath, data) {
+  const list = state.files || (state.files = []);
+  const hit = list.find((f) => f.name === dosPath);
+  if (data === null) {
+    const i = list.indexOf(hit);
+    if (i >= 0) list.splice(i, 1);
+  } else if (hit) hit.data = data;
+  else list.push({ name: dosPath, data });
+}
+
+/** Writes a file to C:. Returns true when it landed in the running emulator. */
+function guestWriteFile(dosPath, data) {
+  const p = guestPath(dosPath);
+  if (!p) return false;
+  mirrorFile(dosPath, data);
+  const FS = guestFS();
+  if (!FS) return false;
+  try {
+    const parts = dosPath.split('/');
+    parts.pop();
+    let dir = '/dos';
+    for (const part of parts) {
+      dir += '/' + part;
+      try { if (!FS.analyzePath(dir).exists) FS.mkdir(dir); } catch (_) { /* already there */ }
+    }
+    FS.writeFile(p, data, { encoding: 'binary' });
+    state.needDirRefresh = true;
+    return true;
+  } catch (e) {
+    logErr('guestWriteFile ' + dosPath, e);
+    return false;
+  }
+}
+
+function guestUnlink(dosPath) {
+  const p = guestPath(dosPath);
+  if (!p) return false;
+  mirrorFile(dosPath, null);
+  const FS = guestFS();
+  if (!FS) return false;
+  try {
+    FS.unlink(p);
+    state.needDirRefresh = true;
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/* Ctrl+F4. A paused emulator never processes the keystroke, so the request is
+ * held and flushed on resume / when the panel closes. */
+function guestRefreshDirCache() {
+  if (!state.needDirRefresh) return;
+  if (!state.live || state.paused) return;
+  // Ctrl+F4 also swaps mounted disk images; leave it alone when the user mounted one.
+  const ae = (state.userConf && state.userConf.autoexec) || [];
+  if (ae.some((l) => /^\s*imgmount\s/i.test(l))) { state.needDirRefresh = false; return; }
+  state.needDirRefresh = false;
+  tapKey(115, [17]);
+}
+
 /* Walk the live guest FS and diff /dos against the pristine game zip. */
 function snapshotChanges() {
-  const FS = state.module && state.module.FS;
+  const FS = guestFS();
   if (!FS || !state.zipBaseline) return null;
   const seen = new Set();
   const changed = [];
-  const readNode = (p) => {
-    const node = FS.lookupPath(p).node;
-    if (node && node.contents && node.contents.subarray) {
-      return node.contents.subarray(0,
-        node.usedBytes !== undefined ? node.usedBytes : node.contents.length);
-    }
-    return FS.readFile(p);
-  };
   const walk = (dir) => {
     for (const name of FS.readdir(dir)) {
       if (name === '.' || name === '..') continue;
@@ -768,7 +1880,7 @@ function snapshotChanges() {
       const rel = p.slice('/dos/'.length);
       seen.add(rel);
       let data;
-      try { data = readNode(p); } catch (e) { logErr('snapshot read ' + p, e); continue; }
+      try { data = readNode(FS, p); } catch (e) { logErr('snapshot read ' + p, e); continue; }
       const base = state.zipBaseline.get(rel);
       if (!base || !bytesEqual(base, data)) {
         changed.push({ name: rel, data: new Uint8Array(data) });
@@ -778,23 +1890,36 @@ function snapshotChanges() {
   try { walk('/dos'); } catch (e) { logErr('snapshot walk', e); return null; }
   const deleted = [];
   for (const name of state.zipBaseline.keys()) if (!seen.has(name)) deleted.push(name);
+  // A file the panel removed is gone from the baseline too, so the diff cannot
+  // see it — record it explicitly or an older saves zip would resurrect it.
+  for (const name of state.pendingDeletes || []) {
+    if (!seen.has(name) && !deleted.includes(name)) deleted.push(name);
+  }
   return { changed, deleted };
 }
 
 async function saveGameState(auto) {
   if (state.saveBusy) return;
-  if (!state.live || !state.noteId || !state.zip) {
+  if (!state.live || !state.attachNoteId) {
     if (!auto) toast('Nothing to save yet', true);
     return;
   }
   const snap = snapshotChanges();
   if (!snap) { if (!auto) toast('Guest filesystem unavailable', true); return; }
-  if (!snap.changed.length && !snap.deleted.length) {
+  const slug = savesKey();
+  const oldPaths = state.attachments.filter((a) => isSavesFor(a, slug)).map((a) => a.path);
+  // `savesDirty` means the baseline moved under the stored saves zip — a file was
+  // pushed back to the note or re-imported, so it dropped out of the diff. The zip
+  // still holds the old copy and, since a saved copy always wins, it would shadow
+  // the note again on the next boot. It has to be rewritten (or dropped) even
+  // though there is nothing "new" to save.
+  const mustRewrite = state.savesDirty && oldPaths.length > 0;
+  if (!snap.changed.length && !snap.deleted.length && !mustRewrite) {
     if (!auto) toast('No changes on C: to save');
     return;
   }
   const sig = saveSig(snap);
-  if (sig === state.lastSaveSig) { if (!auto) toast('Already saved ✓'); return; }
+  if (sig === state.lastSaveSig && !mustRewrite) { if (!auto) toast('Already saved ✓'); return; }
   const total = snap.changed.reduce((s, f) => s + f.data.length, 0);
   if (auto && total > 8 * 1024 * 1024) {
     log('autosave skipped: changed payload ' + fmtSize(total));
@@ -802,42 +1927,49 @@ async function saveGameState(auto) {
   }
   state.saveBusy = true;
   try {
-    const zobj = {};
-    for (const f of snap.changed) zobj[f.name] = f.data;
-    zobj[SAVES_META_DIR + 'meta.json'] = fflate.strToU8(JSON.stringify({
-      v: 1,
-      game: state.zip.name,
-      savedAt: new Date().toISOString(),
-      deleted: snap.deleted,
-    }));
-    const zipU8 = fflate.zipSync(zobj, { level: 6 });
-    const slug = savesSlug(state.zip.name);
-    const fileName = 'dos-saves-' + slug + '-' + Date.now() + '.zip';
-    const oldPaths = state.attachments.filter((a) => isSavesFor(a, slug)).map((a) => a.path);
-    const r = await Synapse.updateNotes([{
-      id: state.noteId,
-      modification: {
+    const empty = !snap.changed.length && !snap.deleted.length;
+    let modification;
+    let zipU8 = null;
+    if (empty) {
+      // Nothing differs from the note any more — drop the stale saves zip.
+      modification = { attachments: { removed: oldPaths } };
+    } else {
+      const zobj = {};
+      for (const f of snap.changed) zobj[f.name] = f.data;
+      // `game` and `deleted` are read back by restoreSaves; `note` and `savedAt`
+      // are there for a human opening the zip to work out where it came from.
+      zobj[SAVES_META_DIR + 'meta.json'] = fflate.strToU8(JSON.stringify({
+        v: 1,
+        game: state.zip ? state.zip.name : null,
+        note: state.attachNoteId,
+        savedAt: new Date().toISOString(),
+        deleted: snap.deleted,
+      }));
+      zipU8 = fflate.zipSync(zobj, { level: 6 });
+      const fileName = 'dos-saves-' + slug + '-' + Date.now() + '.zip';
+      modification = {
         attachments: {
           added: [{ type: 'base64', data: u8ToB64(zipU8), fileName }],
           removed: oldPaths,
         },
-      },
-    }]);
+      };
+    }
+    const r = await Synapse.updateNotes([{ id: state.attachNoteId, modification }]);
     if (!r || !r.success || !r.updatedCount) {
       throw new Error((r && r.error) || 'update declined');
     }
     state.lastSaveSig = sig;
+    state.savesDirty = false;
+    state.pendingDeletes = new Set();
     // Re-export the note so state.attachments reflects the stored (renamed)
     // saves file — the next save must remove it, a later restore must find it.
-    try {
-      const exp = await Synapse.exportNotes([state.noteId], { includeSubNotesAndLinkedNotes: false });
-      const n = exp && exp.success && exp.notes && exp.notes[0];
-      if (n) {
-        state.attachments = (n.attachments || []).map((a) => ({
-          path: a.path, name: a.fileName || baseName(a.path),
-        }));
-      }
-    } catch (e) { logErr('saves path discovery', e); }
+    await refreshAttachments();
+    refreshImportStatus(snap);
+    if (empty) {
+      log('saves zip removed: C: matches the note again');
+      if (!auto) toast('💾 Nothing left to save — saves cleared');
+      return;
+    }
     log('saved ' + snap.changed.length + ' files, ' + fmtSize(zipU8.length) +
       (snap.deleted.length ? ', ' + snap.deleted.length + ' deletions' : ''));
     toast('💾 ' + (auto ? 'Auto-saved' : 'Saved') + ' ' + snap.changed.length +
@@ -864,13 +1996,15 @@ function startAutoSave() {
 
 /* -------------------------------------------------------- conf building */
 function parseUserConf(md) {
-  const m = /```dosbox[ \t]*\r?\n([\s\S]*?)```/i.exec(md || '');
-  if (!m) return null;
+  // Located with the fence scanner rather than a regex: an indented, ~~~ or
+  // nested config block has to resolve the same way the renderer sees it.
+  const f = scanFences(md || '').find((x) => parseInfoAttrs(x.info).lang.toLowerCase() === 'dosbox');
+  if (!f) return null;
   const head = [];
   const autoexec = [];
   let cur = null;
   let sawAe = false;
-  for (const line of m[1].split(/\r?\n/)) {
+  for (const line of fenceBody(md, f).split('\n')) {
     const s = /^\s*\[([^\]]+)\]/.exec(line);
     if (s) {
       cur = s[1].trim().toLowerCase();
@@ -901,6 +2035,11 @@ function buildConf(exePath) {
       ae.push(base);
     } else {
       ae.push('echo DOS STATION READY. Type DIR to list files.');
+      // Booting bare is the normal case for a note-only C:, so say what is there.
+      const names = activeImports().map((r) => r.dosPath.replace(/\//g, '\\'));
+      if (names.length && names.length <= 8) {
+        ae.push('echo FROM THIS NOTE: ' + names.join(' '));
+      }
     }
   }
   return conf + '\n[autoexec]\n' + ae.join('\n') + '\n';
@@ -976,10 +2115,10 @@ async function boot(exePath) {
     window.WDOSBOX(M);
     // Remember this game for next time.
     persist({
-      lastNote: { id: state.noteId, title: state.noteTitle },
+      lastNote: { id: state.attachNoteId, title: state.noteTitle },
       choices: {
         ...(state.appState.choices || {}),
-        [state.noteId]: { zip: state.zip ? state.zip.path : null, exe: exePath || null },
+        [state.attachNoteId]: { zip: state.zip ? state.zip.path : null, exe: exePath || null },
       },
     });
     watchFirstFrame();
@@ -999,6 +2138,7 @@ function watchFirstFrame() {
       $('ledDisk').classList.add('on');
       $('tty').classList.add('hidden');
       startAutoSave();
+      refreshImportStatus();
       toast('▶ ' + state.noteTitle);
     } else if (ticks > 120) { // 30 s
       clearInterval(iv);
@@ -1074,19 +2214,34 @@ async function afterNoteLoaded() {
   ttyLog('NOTE: ' + state.noteTitle);
   ttyLog('CONFIG BLOCK ... ' + (state.userConf ? 'FOUND' : 'NOT PRESENT (using defaults)'));
 
+  // Synapse.Notes gives stored paths, whose base name carries the host's uuid
+  // suffix; dos-files entries are keyed on the human file name, so ask for it.
+  await refreshAttachments();
+  await refreshImports();
+  const ready = activeImports().length;
+  ttyLog('NOTE FILES ................. ' +
+    (ready ? ready + ' READY' : 'NONE') +
+    (state.fileStats.bad ? ' (' + state.fileStats.bad + ' UNUSABLE)' : ''));
+
   const zips = zipAttachments();
   if (!zips.length) {
-    ttyLog('*** This note has no .zip attachment.');
+    // A note with no game disk can still be a workbench: boot a bare C: holding
+    // whatever the note contributes (a .bat to test, a BASIC listing, …).
+    if (ready || (state.userConf && state.userConf.autoexec)) {
+      await mountAndRoute(null);
+      return;
+    }
+    ttyLog('*** This note has no .zip attachment and no files to import.');
     setTimeout(() => {
       setupScreen();
-      toast('Attach a game .zip to "' + state.noteTitle + '" first', true);
+      toast('Attach a game .zip, or add a {dos-name="..."} code block', true);
     }, 1600);
     return;
   }
 
   // Pick the zip: embed param > remembered choice > single > chooser.
   const params = (window.Synapse && Synapse.Params) || {};
-  const remembered = ((state.appState.choices || {})[state.noteId]) || {};
+  const remembered = ((state.appState.choices || {})[state.attachNoteId]) || {};
   let zip = null;
   if (params.zip) zip = zips.find((z) => z.name.toLowerCase() === String(params.zip).toLowerCase());
   if (!zip && remembered.zip) zip = zips.find((z) => z.path === remembered.zip);
@@ -1096,17 +2251,19 @@ async function afterNoteLoaded() {
   await mountAndRoute(zip);
 }
 
+/* `zip` may be null: C: is then built from the note's imports alone. */
 async function mountAndRoute(zip) {
   showScreen('boot');
   try {
-    await mountZip(zip);
+    if (zip) await mountZip(zip);
+    else await mountNoteOnly();
   } catch (e) {
-    fatal('Could not mount the game zip', e);
+    fatal(zip ? 'Could not mount the game zip' : 'Could not build C: from the note', e);
     return;
   }
 
   const params = (window.Synapse && Synapse.Params) || {};
-  const remembered = ((state.appState.choices || {})[state.noteId]) || {};
+  const remembered = ((state.appState.choices || {})[state.attachNoteId]) || {};
   const autoboot = params.autoboot === '1' || params.autoboot === 'true' || params.autoboot === true;
 
   // The note's [autoexec] always wins: boot straight into it.
@@ -1149,6 +2306,7 @@ function launcherZipChooser(zips) {
 
 function launcherScreen(rememberedExe) {
   showScreen('launcher');
+  refreshImportStatus();
   const stack = $('launchStack');
   stack.innerHTML = '';
 
@@ -1157,7 +2315,8 @@ function launcherScreen(rememberedExe) {
   head.innerHTML =
     '<h2 style="font-size:1rem;">💾 ' + esc(state.noteTitle) + '</h2>' +
     '<div class="muted" style="font-size:.78rem;">' +
-    esc(state.zip.name) + ' · ' + state.files.length + ' files · ' +
+    esc(state.zip ? state.zip.name : 'NO DISK — NOTE FILES ONLY') + ' · ' +
+    state.files.length + ' files · ' +
     (state.userConf ? '<span class="tag">NOTE CONFIG</span>' : '<span class="tag amber">DEFAULT CONFIG</span>') +
     '</div>';
   stack.appendChild(head);
@@ -1166,7 +2325,9 @@ function launcherScreen(rememberedExe) {
     const w = document.createElement('div');
     w.className = 'card muted';
     w.style.fontSize = '.8rem';
-    w.textContent = 'No .exe/.com/.bat found in the zip — you can still boot to the DOS prompt.';
+    w.textContent = state.zip
+      ? 'No .exe/.com/.bat found in the zip — you can still boot to the DOS prompt.'
+      : 'Nothing executable on C: — boot to the prompt and run what the note put there.';
     stack.appendChild(w);
   }
 
@@ -1184,10 +2345,19 @@ function launcherScreen(rememberedExe) {
   stack.appendChild(div);
 
   const prompt = document.createElement('button');
-  prompt.className = 'btn warn';
+  // With no game to launch, the prompt IS the launch button.
+  prompt.className = state.executables.length ? 'btn warn' : 'btn primary';
   prompt.textContent = 'C:\\>  BOOT TO DOS PROMPT';
   prompt.onclick = () => boot(null);
   stack.appendChild(prompt);
+
+  const off = fileStatsOff();
+  const files = document.createElement('button');
+  files.className = 'btn small' + (off ? ' warn' : '');
+  files.textContent = '📁 FILES FROM THIS ' + scopeWord() + ' (' + state.fileStats.total + ')' +
+    (off ? '  ⚠ ' + off : '');
+  files.onclick = () => filesLauncherScreen(rememberedExe);
+  stack.appendChild(files);
 
   const zips = zipAttachments();
   if (zips.length > 1) {
@@ -1197,6 +2367,21 @@ function launcherScreen(rememberedExe) {
     other.onclick = () => launcherZipChooser(zips);
     stack.appendChild(other);
   }
+}
+
+/* The files panel as a launcher screen, so C: can be arranged before booting. */
+function filesLauncherScreen(rememberedExe) {
+  showScreen('launcher');
+  const stack = $('launchStack');
+  stack.innerHTML = '';
+  const back = document.createElement('button');
+  back.className = 'btn small';
+  back.textContent = '← BACK';
+  back.onclick = () => launcherScreen(rememberedExe);
+  stack.appendChild(back);
+  const host = document.createElement('div');
+  stack.appendChild(host);
+  renderFilesPanel(host, () => filesLauncherScreen(rememberedExe));
 }
 
 /* =====================================================================
@@ -1481,7 +2666,7 @@ async function saveCapture() {
 
     // 1) attach the frame to the note
     const add = await Synapse.updateNotes([{
-      id: state.noteId,
+      id: state.attachNoteId,
       modification: {
         attachments: { added: [{ type: 'base64', data: state.lastCapture, fileName: stampId + '.png' }] },
       },
@@ -1493,7 +2678,7 @@ async function saveCapture() {
     // 2) find the stored file name so the image can be embedded inline
     let imgRef = null;
     try {
-      const exp = await Synapse.exportNotes([state.noteId], { includeSubNotesAndLinkedNotes: false });
+      const exp = await Synapse.exportNotes([state.attachNoteId], { includeSubNotesAndLinkedNotes: false });
       const atts = (exp && exp.success && exp.notes && exp.notes[0] && exp.notes[0].attachments) || [];
       const hit = atts.find((a) =>
         String(a.path || '').includes(stampId) || String(a.fileName || '').includes(stampId));
@@ -1565,6 +2750,580 @@ async function askAI() {
 }
 
 /* =====================================================================
+ *  Files panel — the note's files on C:
+ * =================================================================== */
+
+/* Shorthands for the two pieces of panel UI state on `state`: which row has its
+ * inline name editor open, and what has been armed for a confirming second tap.
+ * window.confirm and window.prompt are both unreliable inside the app's WebView,
+ * so the panel never uses either. */
+const panelEdit = () => state.panelEdit;
+const setPanelEdit = (v) => { state.panelEdit = v; };
+const clearPanelArm = () => {
+  if (state.panelArm) clearTimeout(state.panelArm.timer);
+  state.panelArm = null;
+};
+
+/**
+ * Applies `mutate(content) -> string|null` to the note.
+ *
+ * The same function runs again against the freshly read content when the note
+ * moved under us, which is why every mutator locates its target by attribute or
+ * body text rather than by the offsets it was built from.
+ */
+async function writeWithMutator(mutate) {
+  const before = state.noteContent;
+  const next = mutate(before);
+  if (next === null) throw new Error('could not find that block in the note any more');
+  await writeNoteContent(next, before, (fresh) => mutate(fresh));
+  await refreshImports();
+  refreshImportStatus();
+}
+
+/* A fence deriveImports would accept as a file: closed, and not configuration.
+ * Every lookup below has to apply the same filter, or a write can land on a
+ * block the importer deliberately skipped — e.g. a stray {dos-name} left on the
+ * ```dosbox config block would otherwise catch a push-back meant for a real
+ * import and overwrite the emulator settings with the DOS file. */
+function isImportableFence(content, f) {
+  return fenceIsClosed(f) && !SKIP_LANGS.test(parseInfoAttrs(f.info).lang);
+}
+
+/** Locates a code fence for an existing import: by its attribute, else by body. */
+function findImportFence(content, rec) {
+  const fences = scanFences(content).filter((f) => isImportableFence(content, f));
+  const byAttr = fences.find((f) => {
+    const n = infoAttr(f.info, IMPORT_ATTR);
+    return n !== null && dosPathCheck(n).path === rec.dosPath;
+  });
+  if (byAttr) return byAttr;
+  return findFenceByBody(content, rec.bodyText);
+}
+
+/** Locates a fence by its exact body. Ambiguous matches are refused, not guessed. */
+function findFenceByBody(content, body) {
+  const hits = scanFences(content).filter((f) =>
+    isImportableFence(content, f) && fenceBody(content, f) === body);
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/** Rewrites the dos-files fence body through `fn(records) -> records|null`. */
+function mutateDosFiles(content, fn) {
+  const f = dosFilesFence(content);
+  if (!f) return null;
+  const recs = fn(parseDosFilesBody(fenceBody(content, f)));
+  if (!recs) return null;
+  return replaceFence(content, f, { body: formatDosFilesBody(recs) });
+}
+
+/* ------------------------------------------------------------ actions --- */
+
+/* Copies a freshly imported record onto C: once the note write has landed. */
+function placeImport(dosPath) {
+  const rec = state.imports.find((r) => r.dosPath === dosPath);
+  if (!rec || !rec.data) {
+    throw new Error(dosPath + ' was added to the note but could not be read back');
+  }
+  guestWriteFile(dosPath, rec.data);
+  baselineSet(dosPath, rec.data);
+  scanExecutables();
+  refreshImportStatus();
+  guestRefreshDirCache();
+  toast(dosPath + ' is on C:\\');
+}
+
+/* The name comes from the panel's validated input, so a failure here is a bug,
+ * not user error — throw rather than toast, or the caller closes the editor as
+ * though the file had been added. */
+function requireDosPath(name) {
+  const chk = dosPathCheck(name);
+  if (!chk.ok) throw new Error(chk.reason);
+  return chk.path;
+}
+
+async function importCodeBlock(fence, name) {
+  const dosPath = requireDosPath(name);
+  const body = fenceBody(state.noteContent, fence);
+  await writeWithMutator((content) => {
+    const f = findFenceByBody(content, body);
+    if (!f) return null;
+    return replaceFence(content, f, { info: setInfoAttr(f.info, IMPORT_ATTR, dosPath) });
+  });
+  placeImport(dosPath);
+}
+
+async function importAttachment(att, name, textMode) {
+  // Without the human file name we would write the host's `<stem>_<uuid>` into
+  // the note, and that uuid does not survive a DB export onto another device.
+  if (!state.attachNamesResolved) {
+    throw new Error('the attachment list could not be read — reopen DOS Station and try again');
+  }
+  const dosPath = requireDosPath(name);
+  const entry = {
+    kind: 'entry', text: '', src: att.name, dosPath,
+    opts: textMode ? ['text'] : [],
+  };
+  if (dosFilesFence(state.noteContent)) {
+    await writeWithMutator((content) => mutateDosFiles(content, (recs) => {
+      if (recs.some((r) => r.kind === 'entry' && r.dosPath === dosPath)) return null;
+      return recs.concat([entry]);
+    }));
+  } else {
+    // Creating the block is an append, which cannot race with an edit elsewhere.
+    await appendNoteContent('\n```' + DOS_FILES_LANG + '\n' +
+      '# DOS Station — attachments copied to C:. Managed by the app.\n' +
+      formatDosFilesLine(entry) + '\n```\n');
+    await refreshImports();
+  }
+  placeImport(dosPath);
+}
+
+/**
+ * Drops the note's claim on a file.
+ *
+ * When C: still holds exactly what the note says, the file goes too — there is
+ * nothing to lose and leaving it would be litter. Once DOS has changed it, the
+ * copy on C: is the user's work: it stays, and dropping it from the baseline
+ * hands it to the ordinary autosave.
+ */
+async function removeImport(rec) {
+  // Read C: right now rather than trusting the last status refresh: deleting a
+  // file DOS changed a moment ago would throw away the user's work.
+  const cur = guestReadFile(rec.dosPath);
+  const clean = !!cur && !!rec.data && bytesEqual(cur, rec.data);
+  if (rec.kind === 'code') {
+    await writeWithMutator((content) => {
+      const f = findImportFence(content, rec);
+      if (!f) return null;
+      return replaceFence(content, f, { info: setInfoAttr(f.info, IMPORT_ATTR, null) });
+    });
+  } else {
+    await writeWithMutator((content) => mutateDosFiles(content, (recs) => {
+      const i = recs.findIndex((r) => r.kind === 'entry' && r.dosPath === rec.dosPath);
+      if (i < 0) return null;
+      recs.splice(i, 1);
+      return recs;
+    }));
+  }
+  if (clean) {
+    guestUnlink(rec.dosPath);
+    if (state.pendingDeletes) state.pendingDeletes.add(rec.dosPath);
+  }
+  baselineDelete(rec.dosPath);
+  if (state.savesShadowed) state.savesShadowed.delete(rec.dosPath);
+  state.savesDirty = true;
+  state.lastSaveSig = null;
+  scanExecutables();
+  refreshImportStatus();
+  guestRefreshDirCache();
+  toast(clean ? rec.dosPath + ' removed from C:\\' : rec.dosPath + ' unlinked — the DOS copy stays');
+}
+
+/** Overwrites C: with the note's copy, discarding whatever DOS did to it. */
+function reimport(rec) {
+  if (!rec.data) { toast('Nothing to copy — the note side is unreadable', true); return; }
+  guestWriteFile(rec.dosPath, rec.data);
+  baselineSet(rec.dosPath, rec.data);
+  if (state.savesShadowed) state.savesShadowed.delete(rec.dosPath);
+  // The file just left the diff; the stored saves zip still holds the old copy
+  // and would shadow the note again on the next boot unless it is rewritten.
+  state.savesDirty = true;
+  state.lastSaveSig = null;
+  scanExecutables();
+  refreshImportStatus();
+  guestRefreshDirCache();
+  toast(rec.dosPath + ' restored from the note');
+}
+
+/**
+ * Sends what DOS produced back to the note.
+ *
+ * A code block is rewritten where it stands. An attachment is added as a NEW
+ * versioned file — the original the user attached is never modified — and the
+ * dos-files entry starts pointing at that version.
+ */
+async function pushBackImport(rec) {
+  const bytes = guestReadFile(rec.dosPath);
+  if (!bytes) throw new Error(rec.dosPath + ' is not on C: any more');
+
+  if (rec.kind === 'code') {
+    if (looksBinary(bytes)) {
+      throw new Error(rec.dosPath + ' is no longer text — it cannot go back into a code block');
+    }
+    const text = fromDosBytes(bytes);
+    await writeWithMutator((content) => {
+      const f = findImportFence(content, rec);
+      if (!f) return null;
+      return replaceFence(content, f, { body: text });
+    });
+  } else {
+    const dot = rec.srcName.lastIndexOf('.');
+    const stem = dot > 0 ? rec.srcName.slice(0, dot) : rec.srcName;
+    const ext = dot > 0 ? rec.srcName.slice(dot) : '';
+    const fileName = stem + '-' + Date.now() + ext;
+    // A `| text` entry is transcoded on the way in, so it has to be transcoded
+    // on the way out too — storing the CP437 bytes under an entry that says
+    // "text" would have the next mount decode them as UTF-8 and mangle them.
+    const payload = rec.textMode
+      ? new TextEncoder().encode(fromDosBytes(bytes)) : bytes;
+    const r = await Synapse.updateNotes([{
+      id: state.attachNoteId,
+      modification: { attachments: { added: [{ type: 'base64', data: u8ToB64(payload), fileName }] } },
+    }]);
+    if (!r || !r.success || !r.updatedCount) {
+      throw new Error((r && r.error) || 'the attachment was declined');
+    }
+    // The host renames stored files, so ask what it actually called this one.
+    await refreshAttachments();
+    const stored = state.attachments.find((a) => a.name === fileName);
+    const version = stored ? stored.name : fileName;
+    try {
+      await writeWithMutator((content) => mutateDosFiles(content, (recs) => {
+        const hit = recs.find((x) => x.kind === 'entry' && x.dosPath === rec.dosPath);
+        if (!hit) return null;
+        hit.opts = setDosFilesOpt(hit.opts, 'v', version);
+        return recs;
+      }));
+    } catch (e) {
+      // The bytes are safely attached; only the pointer to them failed. Say so,
+      // because the generic "block not found" reads like nothing was saved.
+      throw new Error('Saved as attachment "' + version + '", but the note could ' +
+        'not be updated to point at it (' + ((e && e.message) || 'declined') +
+        '). Try again, or set "| v=' + version + '" in the dos-files block yourself.');
+    }
+  }
+
+  // The note now says what C: says. Re-baseline so the file leaves the diff —
+  // and mark the saves zip stale so its old copy cannot shadow this again.
+  const fresh = state.imports.find((r) => r.dosPath === rec.dosPath);
+  const data = (fresh && fresh.data) || bytes;
+  // Write the re-derived bytes back to C: as well. The round-trip normalizes
+  // (a trailing ^Z or a missing final CRLF does not survive it), so leaving the
+  // raw bytes in place would leave the file permanently "changed in DOS" —
+  // exactly the drift this action exists to clear.
+  guestWriteFile(rec.dosPath, data);
+  baselineSet(rec.dosPath, data);
+  if (state.savesShadowed) state.savesShadowed.delete(rec.dosPath);
+  state.savesDirty = true;
+  state.lastSaveSig = null;
+  refreshImportStatus();
+  guestRefreshDirCache();
+  toast('↑ ' + rec.dosPath + ' saved to the note');
+}
+
+/* ------------------------------------------------------------ rendering -- */
+
+const STATUS_TAG = {
+  ok: ['', 'tag'],
+  drift: ['CHANGED IN DOS', 'tag amber'],
+  shadowed: ['SAVED COPY IN USE', 'tag amber'],
+  missing: ['NOT ON C:', 'tag amber'],
+  invalid: ['INVALID', 'tag red'],
+  conflict: ['CONFLICT', 'tag red'],
+  unresolved: ['MISSING ATTACHMENT', 'tag red'],
+};
+
+/* Creates a destructive button that needs a confirming second tap (the ⏏ idiom). */
+function armedButton(row, label, key, run) {
+  const btn = document.createElement('button');
+  btn.className = 'btn small';
+  btn.textContent = label;
+  const disarm = () => { btn.textContent = label; btn.classList.remove('warn'); };
+  btn.onclick = () => {
+    if (state.panelArm && state.panelArm.key === key) {
+      clearPanelArm();
+      disarm();
+      run();
+      return;
+    }
+    clearPanelArm();
+    btn.textContent = label + '?';
+    btn.classList.add('warn');
+    state.panelArm = { key, timer: setTimeout(() => { state.panelArm = null; disarm(); }, 2800) };
+    toast('Tap again to confirm');
+  };
+  row.appendChild(btn);
+  return btn;
+}
+
+/** Runs a panel action, reporting failure in the panel's own idiom. */
+function panelAction(rerender, fn) {
+  return async () => {
+    try {
+      await fn();
+    } catch (e) {
+      logErr('files panel', e);
+      toast((e && e.message) || 'action failed', true);
+    }
+    rerender();
+  };
+}
+
+function renderFilesPanel(host, rerender) {
+  refreshImportStatus();
+  host.innerHTML = '';
+  const add = (tag, cls, text) => {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (text !== undefined) el.textContent = text;
+    host.appendChild(el);
+    return el;
+  };
+  const button = (row, cls, text, onClick) => {
+    const b = document.createElement('button');
+    b.className = 'btn small' + (cls ? ' ' + cls : '');
+    b.textContent = text;
+    b.onclick = onClick;
+    row.appendChild(b);
+    return b;
+  };
+
+  if (!state.contentWritable) {
+    add('div', 'fbanner',
+      'This text is not writable from here — files can be shown but not changed.');
+  }
+  for (const issue of state.importIssues) add('div', 'fhint bad', '⚠ ' + issue.text);
+
+  /* ---- 1. what the note put on C: ---- */
+  add('div', 'filesec', 'ON C: FROM THIS ' + scopeWord());
+  if (!state.imports.length) {
+    add('div', 'fhint', 'Nothing yet. Add a code block or an attachment below.');
+  }
+  for (const rec of state.imports) {
+    const row = add('div', 'frow');
+    const name = document.createElement('div');
+    name.className = 'fname';
+    name.textContent = rec.dosPath.replace(/\//g, '\\');
+    row.appendChild(name);
+
+    const [label, cls] = STATUS_TAG[rec.status] || STATUS_TAG.ok;
+    if (label) {
+      const tag = document.createElement('span');
+      tag.className = cls;
+      tag.textContent = label;
+      row.appendChild(tag);
+    }
+
+    const acts = document.createElement('div');
+    acts.className = 'facts';
+    row.appendChild(acts);
+
+    const meta = document.createElement('div');
+    meta.className = 'fmeta';
+    const src = rec.kind === 'code'
+      ? '```' + (rec.lang || 'text') + ' block'
+      : rec.srcName + (rec.version ? ' (updated copy)' : '') + (rec.textMode ? ' · text' : '');
+    meta.textContent = src + ' · ' + fmtSize(rec.size) +
+      (state.overriddenZipNames && state.overriddenZipNames.has(rec.dosPath)
+        ? ' · replaces a file from the disk' : '') +
+      (rec.unmappable ? ' · ' + rec.unmappable + ' character(s) CP437 cannot store' : '') +
+      (rec.reason ? ' · ' + rec.reason : '');
+    row.appendChild(meta);
+
+    if (rec.status === 'drift' || rec.status === 'shadowed') {
+      const up = button(acts, 'primary', '↑ TO NOTE',
+        panelAction(rerender, () => pushBackImport(rec)));
+      if (!state.contentWritable) up.disabled = true;
+      // Discards whatever DOS did to the file, so it takes a second tap.
+      armedButton(acts, '↻ FROM NOTE', 'reimport:' + rec.dosPath,
+        panelAction(rerender, () => reimport(rec)));
+    } else if (rec.status === 'missing' && rec.data) {
+      button(acts, '', '↻ RESTORE', panelAction(rerender, () => reimport(rec)));
+    }
+    const rm = button(acts, '', rec.status === 'ok' ? '✕ REMOVE' : '✕ UNLINK',
+      panelAction(rerender, () => removeImport(rec)));
+    if (!state.contentWritable) rm.disabled = true;
+  }
+
+  /* ---- 2. other code blocks in the note ---- */
+  const used = new Set(state.imports.filter((r) => r.kind === 'code').map((r) => r.dosPath));
+  const free = scanFences(state.noteContent).filter((f) => {
+    if (!isImportableFence(state.noteContent, f)) return false;
+    const n = infoAttr(f.info, IMPORT_ATTR);
+    return n === null || !used.has(dosPathCheck(n).path);
+  });
+  add('div', 'filesec', 'CODE BLOCKS IN THIS ' + scopeWord());
+  if (!free.length) add('div', 'fhint', 'Every code block is already on C:.');
+  for (const f of free) {
+    const body = fenceBody(state.noteContent, f);
+    const key = 'code:' + f.idx;
+    const row = add('div', 'frow');
+    const info = parseInfoAttrs(f.info);
+    const first = body.split('\n').find((l) => l.trim()) || '(empty)';
+    const name = document.createElement('div');
+    name.className = 'fname';
+    name.textContent = (info.lang || 'text') + ' · ' +
+      (first.length > 40 ? first.slice(0, 40) + '…' : first);
+    row.appendChild(name);
+    const meta = document.createElement('div');
+    meta.className = 'fmeta';
+    meta.textContent = body.split('\n').length + ' lines · ' + fmtSize(body.length);
+    row.appendChild(meta);
+
+    const edit = panelEdit();
+    if (edit && edit.type === 'code' && edit.key === key) {
+      renderNameEditor(row, edit, rerender, (nm) => importCodeBlock(f, nm));
+    } else {
+      const acts = document.createElement('div');
+      acts.className = 'facts';
+      row.appendChild(acts);
+      const b = button(acts, 'primary', '+ ADD', () => {
+        setPanelEdit({
+          type: 'code', key,
+          name: dosifyName((info.lang ? 'file.' + info.lang : 'file.txt'), takenDosPaths()),
+        });
+        rerender();
+      });
+      if (!state.contentWritable) b.disabled = true;
+    }
+  }
+
+  /* ---- 3. attachments ---- */
+  const usedSrc = new Set(state.imports.filter((r) => r.kind === 'att').map((r) => r.srcName.toLowerCase()));
+  const cand = state.attachments.filter((a) =>
+    !isSavesAttachment(a) &&
+    !(state.zip && a.path === state.zip.path) &&
+    !usedSrc.has(String(a.name).toLowerCase()));
+  add('div', 'filesec', 'ATTACHMENTS ON THIS NOTE');
+  if (!cand.length) add('div', 'fhint', 'No other attachments to copy.');
+  for (const att of cand) {
+    const key = 'att:' + att.path;
+    const row = add('div', 'frow');
+    const name = document.createElement('div');
+    name.className = 'fname';
+    name.textContent = att.name;
+    row.appendChild(name);
+    const edit = panelEdit();
+    if (edit && edit.type === 'att' && edit.key === key) {
+      renderNameEditor(row, edit, rerender,
+        (nm) => importAttachment(att, nm, edit.textMode), true);
+    } else {
+      const acts = document.createElement('div');
+      acts.className = 'facts';
+      row.appendChild(acts);
+      const b = button(acts, 'primary', '+ ADD', () => {
+        setPanelEdit({ type: 'att', key, name: dosifyName(att.name, takenDosPaths()), textMode: false });
+        rerender();
+      });
+      if (!state.contentWritable || !state.attachNamesResolved) b.disabled = true;
+    }
+  }
+  if (cand.length && !state.attachNamesResolved) {
+    add('div', 'fhint bad', 'The attachment list could not be read, so these cannot be added yet.');
+  }
+
+  const note = add('div', 'fnote');
+  note.innerHTML =
+    'If a file exists both in your saves and in the note, the saved (DOS-modified) copy wins; ' +
+    'the note copy only seeds a new file. Text blocks are stored as CP437 with CRLF line endings. ' +
+    'A file added while a program has it open is not seen until the program reopens it.';
+}
+
+/** The inline name input. There is no window.prompt inside the app's WebView. */
+function renderNameEditor(row, edit, rerender, commit, withTextMode) {
+  const box = document.createElement('div');
+  box.className = 'fedit';
+  row.appendChild(box);
+
+  const input = document.createElement('input');
+  input.value = edit.name;
+  input.spellcheck = false;
+  input.setAttribute('autocapitalize', 'characters');
+  box.appendChild(input);
+
+  let textBox = null;
+  if (withTextMode) {
+    const lab = document.createElement('label');
+    textBox = document.createElement('input');
+    textBox.type = 'checkbox';
+    textBox.checked = !!edit.textMode;
+    lab.appendChild(textBox);
+    lab.appendChild(document.createTextNode('text'));
+    lab.title = 'Convert to CP437 + CRLF instead of copying the bytes as they are';
+    box.appendChild(lab);
+  }
+
+  const okBtn = document.createElement('button');
+  okBtn.className = 'btn small primary';
+  okBtn.textContent = 'ADD';
+  box.appendChild(okBtn);
+
+  const cancel = document.createElement('button');
+  cancel.className = 'btn small';
+  cancel.textContent = '✕';
+  cancel.onclick = () => { setPanelEdit(null); rerender(); };
+  box.appendChild(cancel);
+
+  const hint = document.createElement('div');
+  hint.className = 'fhint';
+  row.appendChild(hint);
+
+  const validate = () => {
+    const chk = dosPathCheck(input.value);
+    hint.textContent = chk.ok ? 'will be C:\\' + chk.path.replace(/\//g, '\\') : chk.reason;
+    hint.classList.toggle('bad', !chk.ok);
+    okBtn.disabled = !chk.ok;
+    return chk;
+  };
+  input.oninput = () => {
+    edit.name = input.value;
+    if (textBox) edit.textMode = textBox.checked;
+    validate();
+  };
+  if (textBox) textBox.onchange = () => { edit.textMode = textBox.checked; };
+  okBtn.onclick = async () => {
+    const chk = validate();
+    if (!chk.ok) return;
+    okBtn.disabled = true;
+    okBtn.textContent = 'ADDING…';
+    if (textBox) edit.textMode = textBox.checked;
+    try {
+      await commit(chk.path);
+      setPanelEdit(null);
+    } catch (e) {
+      // Leave the editor open with what was typed — the add did not happen.
+      logErr('files add', e);
+      toast((e && e.message) || 'could not add the file', true);
+    }
+    rerender();
+  };
+  validate();
+  setTimeout(() => input.focus(), 0);
+}
+
+/* --------------------------------------------------------- the modal ----- */
+function openFiles() {
+  setPanelEdit(null);
+  clearPanelArm();
+  state.filesWasPaused = state.paused;
+  if (state.live && !state.paused) pauseToggle(true);
+  const draw = () => renderFilesPanel($('filesBody'), draw);
+  draw();
+  $('filesWrap').classList.add('show');
+  // Only while the panel is open, and only over the handful of imported files.
+  clearInterval(state.filesTimer);
+  state.filesTimer = setInterval(() => {
+    if (!$('filesWrap').classList.contains('show')) return;
+    const before = state.fileStats;
+    const after = refreshImportStatus();
+    const moved = ['total', 'drift', 'missing', 'shadowed', 'bad']
+      .some((k) => before[k] !== after[k]);
+    // Never redraw under an open name editor — it would drop what was typed.
+    if (moved && !panelEdit()) draw();
+  }, 4000);
+}
+
+function closeFiles() {
+  clearInterval(state.filesTimer);
+  state.filesTimer = null;
+  setPanelEdit(null);
+  clearPanelArm();
+  $('filesWrap').classList.remove('show');
+  if (!state.filesWasPaused && state.paused) pauseToggle(false);
+  guestRefreshDirCache();
+}
+
+/* =====================================================================
  *  HUD wiring
  * =================================================================== */
 function pauseToggle(force) {
@@ -1597,6 +3356,8 @@ function pauseToggle(force) {
   } catch (e) { logErr('pauseToggle', e); }
   $('btnPause').textContent = next ? '▶' : '⏸';
   $('btnPause').classList.toggle('active', next);
+  // A file added while paused could not be announced to DOSBox — do it now.
+  if (!next) guestRefreshDirCache();
 }
 
 function wireHud() {
@@ -1632,6 +3393,8 @@ function wireHud() {
     $('btnPad').classList.toggle('active', on);
     if (on) { $('kb').classList.remove('show'); $('btnKb').classList.remove('active'); }
   });
+  $('btnFiles').addEventListener('click', openFiles);
+  $('btnCloseFiles').addEventListener('click', closeFiles);
   $('btnSave').addEventListener('click', () => saveGameState(false));
   $('btnShot').addEventListener('click', openCapture);
   $('btnPause').addEventListener('click', () => pauseToggle());
