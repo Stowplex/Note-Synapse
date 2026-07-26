@@ -1603,7 +1603,10 @@ void main() {
         (_) async => SqlQueryResult(
           success: true,
           data: [
-            {'id': parentId, 'content': storedParent.content},
+            // This mirrors the actual columns in the SELECT below. The old
+            // mock included an impossible `id`, which hid a bug where the
+            // bridge returned the entire parent note for content-only reads.
+            {'content': storedParent.content},
           ],
         ),
       );
@@ -1618,7 +1621,7 @@ void main() {
       // It must see the BLOCK's text, not the whole parent note — otherwise it
       // would write the entire note back into the block's range.
       expect(rows.first['content'], blockText);
-      expect(rows.first['id'], scope.tempNoteId);
+      expect(rows.first.containsKey('id'), isFalse);
 
       // The query the DB actually ran was rewritten to the real note id.
       final ranSql =
@@ -1633,6 +1636,85 @@ void main() {
       expect(ranSql, contains(parentId));
       expect(ranSql, isNot(contains(scope.tempNoteId)));
     });
+
+    test(
+      'content-only fresh read cannot duplicate a note into an empty block',
+      () async {
+        const blankParentContent = 'Intro\n\nOutro';
+        const insertionPoint = 7;
+        storedParent = buildParent(blankParentContent);
+
+        final emptyScope = scopeService.open(
+          parent: storedParent,
+          spanStart: insertionPoint,
+          spanEnd: insertionPoint,
+          text: '',
+        );
+        final emptyBlockBridge = UserAppRuntimeBridge(
+          app: UserApp(
+            id: 'test-app',
+            uuid: 'test-uuid',
+            name: 'Test App',
+            description: 'Test Description',
+            steps: const ['Step 1'],
+            htmlContent: '<html></html>',
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+          appProvider: mockAppProvider,
+          revisionNumber: 1,
+          isInteractive: true,
+          selectedNotes: [scopeService.asNote(emptyScope)],
+        );
+        emptyBlockBridge.approveSession();
+        emptyBlockBridge.registerJavaScriptHandlers(mockWebViewController);
+
+        when(
+          mockSqlQueryService.getQueryType(any),
+        ).thenReturn(SqlQueryType.select);
+        when(mockSqlQueryService.isReadOnlyQuery(any)).thenReturn(true);
+        when(
+          mockSqlQueryService.executeQuery(
+            any,
+            requireApprovalForWrites: anyNamed('requireApprovalForWrites'),
+            allowWriteOperations: anyNamed('allowWriteOperations'),
+          ),
+        ).thenAnswer(
+          (_) async => SqlQueryResult(
+            success: true,
+            data: [
+              {'content': storedParent.content},
+            ],
+          ),
+        );
+
+        final read = await jsHandlers['runQuery']!([
+          "SELECT content FROM notes WHERE id = '${emptyScope.tempNoteId}'",
+        ]);
+        final scopedContent =
+            ((read['data'] as List).single as Map)['content'] as String;
+        expect(scopedContent, isEmpty);
+
+        const formula = '\\[\nx + y\n\\]';
+        final update = await jsHandlers['updateNotes']!([
+          [
+            {
+              'id': emptyScope.tempNoteId,
+              'modification': {
+                'content': {'action': 'replace', 'text': formula},
+              },
+            },
+          ],
+        ]);
+
+        expect(update['success'], isTrue);
+        expect(update['updatedCount'], 1);
+        expect(storedParent.content, 'Intro\n\n${formula}Outro');
+        expect(storedParent.content.indexOf('Intro'), 0);
+        expect('Intro'.allMatches(storedParent.content), hasLength(1));
+        expect('Outro'.allMatches(storedParent.content), hasLength(1));
+      },
+    );
 
     test('SQL writes against a block id are refused with guidance', () async {
       when(

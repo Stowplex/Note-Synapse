@@ -166,6 +166,29 @@ void main() {
       expect(await rawNoteContent('test-id'), 'Original\n appended');
     });
 
+    test('empty replace clears the whole note', () async {
+      final note = Note(
+        id: 'test-id',
+        title: 'Test Note',
+        content: r'\[x\]',
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      rawDb = await openRawNotesDb();
+      await seedRawNote(note);
+      when(mockDb.getNoteById('test-id')).thenAnswer((_) async => note);
+      when(mockDb.database).thenAnswer((_) async => rawDb!);
+
+      final result = await service.applyModifications('test-id', {
+        'content': {'action': 'replace', 'text': ''},
+      });
+
+      expect(result.content, isEmpty);
+      expect(await rawNoteContent('test-id'), isEmpty);
+    });
+
     test('applyModifications can append within a markdown section', () async {
       final note = Note(
         id: 'test-id',

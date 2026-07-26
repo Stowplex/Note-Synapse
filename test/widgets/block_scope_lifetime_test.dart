@@ -220,6 +220,15 @@ void _assertProductionWiring() {
           'original bug: pushReplacement resolves that future early',
     );
   });
+
+  test('NoteDetailScreen permits a zero-width blank-block scope', () {
+    final handler = source.substring(
+      source.indexOf('Future<void> _handleNoteActionAppSelection()'),
+      source.indexOf('void _releaseBlockScope()'),
+    );
+    expect(handler, contains('if (spanEnd < spanStart)'));
+    expect(handler, isNot(contains('if (spanEnd <= spanStart)')));
+  });
 }
 
 /// Stands in for NoteDetailScreen: opens a scope, pushes the real picker, and

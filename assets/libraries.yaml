@@ -1,4 +1,52 @@
 libraries:
+  - id: mathlive
+    name: MathLive
+    version: "0.110.0"
+    description: Accessible WYSIWYG mathematical formula editor
+    usage: |
+      MathLive is bundled locally and can be imported with:
+
+      ```html
+      <script src="synapse://mathlive/mathlive.min.js"></script>
+      ```
+
+      Configure its optional assets before creating a math field:
+
+      ```javascript
+      MathfieldElement.fontsDirectory = "synapse://mathlive/fonts/";
+      MathfieldElement.soundsDirectory = null;
+      ```
+
+      No CDN or first-run download is required.
+    assets:
+      - path: assets/scripts/mathlive/mathlive.min.js
+        type: script
+
+  - id: compute-engine
+    name: Cortex Compute Engine
+    version: "0.94.0"
+    description: Local symbolic and numeric mathematics engine
+    usage: |
+      Cortex Compute Engine is bundled locally and can be imported with:
+
+      ```html
+      <script src="synapse://compute-engine/compute-engine.min.js"></script>
+      ```
+
+      Its browser global is `ComputeEngine`; for example:
+
+      ```javascript
+      const ce = new ComputeEngine.ComputeEngine();
+      const expression = ce.parse("x^2 + 2x + 1");
+      const result = ce.box(["Factor", expression.json]).evaluate();
+      ```
+
+      Keep user-app calculations local. Do not expose optional network-backed
+      lookups.
+    assets:
+      - path: assets/scripts/compute-engine/compute-engine.min.js
+        type: script
+
   - id: chartjs
     name: Chart.js
     version: "2.9.4"
@@ -120,4 +168,3 @@ libraries:
     assets:
       - path: assets/scripts/d3.min.js
         type: script
-

@@ -435,7 +435,10 @@ class NoteModificationService {
     final section = contentMod['section'] as String?;
     final insertPosition = contentMod['insert_position'] as String? ?? action;
 
-    if (action == 'no-op' || text.isEmpty) {
+    // Empty append/prepend operations are no-ops, but an empty replacement is
+    // meaningful: it clears the note. Block-scoped updates already follow this
+    // contract, and Note Actions need it when removing the only formula.
+    if (action == 'no-op' || (text.isEmpty && action != 'replace')) {
       return currentContent;
     }
 

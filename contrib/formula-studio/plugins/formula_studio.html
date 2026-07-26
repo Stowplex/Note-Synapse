@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+  />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'unsafe-inline' synapse:; style-src 'unsafe-inline'; font-src synapse: data:; img-src data:; connect-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'"
+  />
+  <title>Formula Studio</title>
+  <script src="synapse://mathlive/mathlive.min.js"></script>
+  <script src="synapse://compute-engine/compute-engine.min.js"></script>
+  <script src="src/formula_core.js"></script>
+  <script src="src/evaluator.js"></script>
+  <script src="src/writeback.js"></script>
+  <script src="src/i18n.js"></script>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f4f5f8;
+      --surface: #ffffff;
+      --surface-2: #eef1f6;
+      --ink: #20232a;
+      --muted: #687181;
+      --border: #d9dee8;
+      --accent: #3857d6;
+      --accent-ink: #ffffff;
+      --focus: #637cff;
+      --danger: #b42318;
+      --warning-bg: #fff6d8;
+      --warning-ink: #614b00;
+      --success-bg: #e7f7ed;
+      --success-ink: #176534;
+      --error-bg: #ffebe9;
+      --error-ink: #8e1b13;
+      --shadow: 0 8px 28px rgba(27, 36, 60, 0.09);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #15171c;
+        --surface: #202329;
+        --surface-2: #292d35;
+        --ink: #f1f3f7;
+        --muted: #aab2c0;
+        --border: #3a404c;
+        --accent: #8da1ff;
+        --accent-ink: #151b38;
+        --focus: #aab8ff;
+        --danger: #ff8a80;
+        --warning-bg: #403713;
+        --warning-ink: #ffeba5;
+        --success-bg: #173a24;
+        --success-ink: #a8edbd;
+        --error-bg: #48211e;
+        --error-ink: #ffc6c0;
+        --shadow: none;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--ink);
+      font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-text-size-adjust: 100%;
+    }
+    body { min-height: 100vh; }
+    button, input, select, textarea { font: inherit; }
+    button, select, input { min-height: 44px; }
+    button {
+      border: 1px solid transparent;
+      border-radius: 10px;
+      padding: 9px 14px;
+      background: var(--accent);
+      color: var(--accent-ink);
+      font-weight: 650;
+    }
+    button.secondary {
+      background: var(--surface);
+      color: var(--ink);
+      border-color: var(--border);
+    }
+    button.ghost {
+      background: transparent;
+      color: var(--accent);
+      border-color: transparent;
+    }
+    button.danger { color: var(--danger); }
+    button:disabled { opacity: 0.42; }
+    button:focus-visible, input:focus-visible, select:focus-visible,
+    textarea:focus-visible, math-field:focus-visible {
+      outline: 3px solid color-mix(in srgb, var(--focus) 55%, transparent);
+      outline-offset: 2px;
+    }
+    .hidden { display: none !important; }
+    .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+    .app-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-height: 58px;
+      padding: 8px 12px;
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(14px);
+    }
+    .title-wrap { min-width: 0; flex: 1 1 auto; }
+    h1 { margin: 0; font-size: 1.03rem; line-height: 1.2; }
+    .note-title {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.76rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .badge {
+      flex: none;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 8px;
+      background: var(--surface-2);
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    main { flex: 1 1 auto; width: 100%; max-width: 1040px; margin: 0 auto; padding: 14px; }
+    .screen-title { margin: 4px 0 2px; font-size: 1.3rem; }
+    .screen-hint { margin: 0 0 16px; color: var(--muted); }
+    .card {
+      margin-bottom: 14px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .card-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 10px;
+      font-size: 0.92rem;
+    }
+    .card-title span:first-child { flex: 1 1 auto; }
+    .list { display: grid; gap: 9px; }
+    .list-button {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      min-height: 58px;
+      padding: 10px 12px;
+      text-align: left;
+      background: var(--surface);
+      color: var(--ink);
+      border-color: var(--border);
+    }
+    .list-main { min-width: 0; flex: 1 1 auto; }
+    .list-title { font-weight: 680; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .list-subtitle {
+      margin-top: 2px;
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.76rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chevron { margin-left: 10px; color: var(--muted); font-size: 1.2rem; }
+    .segmented {
+      display: inline-flex;
+      padding: 3px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+    }
+    .segmented button {
+      min-height: 36px;
+      padding: 6px 12px;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    .segmented button.active {
+      background: var(--surface);
+      color: var(--ink);
+      box-shadow: 0 1px 5px rgba(20, 30, 50, 0.12);
+    }
+    .editor-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .editor-frame {
+      min-height: 156px;
+      display: flex;
+      align-items: center;
+      padding: 18px 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background:
+        linear-gradient(var(--surface), var(--surface)) padding-box,
+        linear-gradient(135deg, var(--accent), transparent) border-box;
+    }
+    math-field {
+      width: 100%;
+      min-height: 74px;
+      padding: 12px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--ink);
+      font-size: clamp(1.35rem, 5vw, 2.1rem);
+      --caret-color: var(--accent);
+      --selection-background-color: color-mix(in srgb, var(--accent) 25%, transparent);
+      --contains-highlight-background-color: transparent;
+    }
+    math-field.inline-mode { font-size: clamp(1.2rem, 4.5vw, 1.7rem); }
+    .symbol-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-top: 10px;
+    }
+    .symbol-toolbar-label {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 620;
+    }
+    .symbol-button {
+      min-width: 54px;
+      min-height: 44px;
+      padding: 5px 12px;
+      background: var(--surface-2);
+      color: var(--ink);
+      border-color: var(--border);
+    }
+    .fraction-template {
+      display: inline-grid;
+      grid-template-rows: 1fr 1fr;
+      min-width: 20px;
+      text-align: center;
+      font-family: "Times New Roman", serif;
+      font-size: 0.88rem;
+      font-weight: 500;
+      line-height: 1.05;
+    }
+    .fraction-template span:first-child {
+      padding: 0 4px 2px;
+      border-bottom: 1px solid currentColor;
+    }
+    .fraction-template span:last-child { padding-top: 2px; }
+    #latexSource {
+      width: 100%;
+      min-height: 156px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      background: var(--surface-2);
+      color: var(--ink);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      line-height: 1.55;
+    }
+    .hint { margin: 8px 2px 0; color: var(--muted); font-size: 0.78rem; }
+    .notice, .status {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--warning-bg);
+      color: var(--warning-ink);
+      font-size: 0.82rem;
+    }
+    .status.success { background: var(--success-bg); color: var(--success-ink); }
+    .status.error { background: var(--error-bg); color: var(--error-ink); }
+    .settings-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    label { display: grid; gap: 5px; color: var(--muted); font-size: 0.76rem; font-weight: 620; }
+    input, select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 8px 10px;
+      background: var(--surface);
+      color: var(--ink);
+    }
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .action-grid button {
+      min-width: 0;
+      padding: 8px 6px;
+      background: var(--surface-2);
+      color: var(--ink);
+      border-color: var(--border);
+      font-size: 0.8rem;
+    }
+    .action-grid button.active {
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-color: var(--accent);
+    }
+    .parameter-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .parameter-grid .wide { grid-column: 1 / -1; }
+    .result-field {
+      display: block;
+      min-height: 64px;
+      margin: 8px 0 10px;
+      background: var(--surface-2);
+      font-size: clamp(1.05rem, 4vw, 1.55rem);
+    }
+    .result-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .result-actions button { padding: 8px 5px; font-size: 0.78rem; }
+    .pending-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .pending-row span { flex: 1 1 auto; }
+    .pending-row button { min-height: 34px; padding: 4px 8px; }
+    .footer {
+      position: sticky;
+      bottom: 0;
+      z-index: 10;
+      display: flex;
+      gap: 10px;
+      padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+      background: color-mix(in srgb, var(--surface) 96%, transparent);
+      border-top: 1px solid var(--border);
+      backdrop-filter: blur(14px);
+    }
+    .footer button { flex: 1 1 auto; }
+    #bootError {
+      margin: 18px;
+      padding: 14px;
+      border-radius: 12px;
+      background: var(--error-bg);
+      color: var(--error-ink);
+    }
+    @media (min-width: 760px) {
+      #editorScreen {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.8fr);
+        align-items: start;
+        gap: 14px;
+      }
+      #editorScreen > .card { margin: 0; }
+      .action-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .footer { justify-content: center; }
+      .footer button { max-width: 520px; }
+    }
+    @media (max-width: 390px) {
+      main { padding: 10px; }
+      .card { padding: 11px; }
+      .action-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .result-actions { grid-template-columns: 1fr; }
+      .badge { display: none; }
+    }
+    @media (orientation: landscape) and (max-height: 520px) {
+      .editor-frame, #latexSource { min-height: 110px; }
+      main { padding-top: 8px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <script>
+    // document.body now exists, but no <math-field> has been parsed yet. This
+    // order avoids MathLive's relative asset probe and its early-body access.
+    if (window.MathfieldElement) {
+      MathfieldElement.fontsDirectory = "synapse://mathlive/fonts/";
+      MathfieldElement.soundsDirectory = null;
+    }
+  </script>
+  <div id="bootError" class="hidden" role="alert"></div>
+  <div id="app" class="app-shell">
+    <header class="app-header">
+      <button id="pickerBack" class="ghost hidden" type="button" aria-label="Back">‹</button>
+      <div class="title-wrap">
+        <h1 data-i18n="title">Formula Studio</h1>
+        <span id="noteTitle" class="note-title"></span>
+      </div>
+      <span id="scopeBadge" class="badge"></span>
+      <button id="formulaListButton" class="secondary hidden" type="button" data-i18n="formulas">Formulas</button>
+    </header>
+
+    <main>
+      <section id="notePicker" class="hidden" aria-labelledby="notePickerTitle">
+        <h2 id="notePickerTitle" class="screen-title" data-i18n="chooseNote">Choose a note</h2>
+        <p class="screen-hint" data-i18n="chooseNoteHint">Formula Studio edits one note at a time.</p>
+        <div id="noteList" class="list"></div>
+      </section>
+
+      <section id="formulaPicker" class="hidden" aria-labelledby="formulaPickerTitle">
+        <h2 id="formulaPickerTitle" class="screen-title" data-i18n="chooseFormula">Choose a formula</h2>
+        <p id="formulaPickerHint" class="screen-hint"></p>
+        <div id="formulaList" class="list"></div>
+        <div class="card">
+          <button id="addFormulaButton" type="button" data-i18n="addFormula">Add formula</button>
+        </div>
+      </section>
+
+      <section id="noFormulaScreen" class="hidden" aria-labelledby="noFormulaTitle">
+        <div class="card">
+          <h2 id="noFormulaTitle" class="screen-title" data-i18n="noFormula">No editable formula was found in this selection.</h2>
+          <button id="createDisplayButton" type="button" data-i18n="createDisplay">Create display formula</button>
+        </div>
+      </section>
+
+      <section id="editorScreen" class="hidden" aria-label="Formula editor">
+        <div class="card">
+          <div class="editor-toolbar">
+            <div id="editorMode" class="segmented" role="group" aria-label="Editor mode">
+              <button type="button" class="active" data-mode="visual" data-i18n="visual">Visual</button>
+              <button type="button" data-mode="source" data-i18n="source">LaTeX</button>
+            </div>
+            <div id="formulaKind" class="segmented" role="group" aria-label="Formula layout">
+              <button type="button" data-kind="inline" data-i18n="inline">Inline</button>
+              <button type="button" class="active" data-kind="display" data-i18n="display">Display</button>
+            </div>
+          </div>
+          <div id="visualEditor" class="editor-frame">
+            <math-field id="formulaField" aria-label="Visual math formula editor"></math-field>
+          </div>
+          <textarea id="latexSource" class="hidden" spellcheck="false" aria-label="LaTeX source"></textarea>
+          <div
+            class="symbol-toolbar"
+            role="group"
+            data-i18n-aria-label="templates"
+            aria-label="Formula templates"
+          >
+            <span class="symbol-toolbar-label" data-i18n="templates">Templates</span>
+            <button
+              id="fractionButton"
+              class="symbol-button"
+              type="button"
+              data-template="\frac{#0}{#?}"
+              data-i18n-aria-label="insertFraction"
+              aria-label="Insert fraction"
+            >
+              <span class="fraction-template" aria-hidden="true">
+                <span>a</span><span>b</span>
+              </span>
+            </button>
+          </div>
+          <p class="hint" data-i18n="editorHint">Type naturally or use the math keyboard.</p>
+          <div id="legacyNotice" class="notice hidden" role="note" data-i18n="legacyNotice"></div>
+          <div id="pendingBelow" class="notice pending-row hidden" role="note">
+            <span data-i18n="pendingBelow"></span>
+            <button id="clearBelow" class="ghost danger" type="button" data-i18n="clearBelow"></button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title"><span data-i18n="evaluator">Calculate</span></h2>
+          <p class="screen-hint" data-i18n="evaluatorHint"></p>
+          <div class="settings-row">
+            <label>
+              <span data-i18n="precision">Significant digits</span>
+              <input id="precision" type="number" min="3" max="50" value="10" inputmode="numeric" />
+            </label>
+            <label>
+              <span data-i18n="angles">Angles</span>
+              <select id="angleUnit">
+                <option value="radians" data-i18n="radians">Radians</option>
+                <option value="degrees" data-i18n="degrees">Degrees</option>
+              </select>
+            </label>
+          </div>
+          <div id="actionGrid" class="action-grid">
+            <button type="button" data-action="simplify" data-i18n="simplify">Simplify</button>
+            <button type="button" data-action="exact" data-i18n="exact">Exact</button>
+            <button type="button" data-action="decimal" data-i18n="decimal">Decimal</button>
+            <button type="button" data-action="substitute" data-i18n="substitute">Substitute</button>
+            <button type="button" data-action="expand" data-i18n="expand">Expand</button>
+            <button type="button" data-action="factor" data-i18n="factor">Factor</button>
+            <button type="button" data-action="solve" data-i18n="solve">Solve</button>
+            <button type="button" data-action="derivative" data-i18n="derivative">Derivative</button>
+            <button type="button" data-action="integral" data-i18n="integral">Integral</button>
+            <button type="button" data-action="definiteIntegral" data-i18n="definiteIntegral">Definite integral</button>
+            <button type="button" data-action="numericIntegral" data-i18n="numericIntegral">Numeric integral</button>
+            <button type="button" data-action="limit" data-i18n="limit">Limit</button>
+          </div>
+          <div id="parameterPanel" class="parameter-grid hidden">
+            <label id="variableRow">
+              <span data-i18n="variable">Variable</span>
+              <select id="variable"></select>
+            </label>
+            <label id="valueRow" class="hidden">
+              <span data-i18n="value">Value</span>
+              <input id="substitutionValue" type="text" value="1" autocapitalize="off" />
+            </label>
+            <label id="lowerRow" class="hidden">
+              <span data-i18n="lower">Lower bound</span>
+              <input id="lowerBound" type="text" value="0" autocapitalize="off" />
+            </label>
+            <label id="upperRow" class="hidden">
+              <span data-i18n="upper">Upper bound</span>
+              <input id="upperBound" type="text" value="1" autocapitalize="off" />
+            </label>
+            <label id="pointRow" class="hidden">
+              <span data-i18n="point">Approach</span>
+              <input id="limitPoint" type="text" value="0" autocapitalize="off" />
+            </label>
+            <button id="calculateButton" class="wide" type="button" data-i18n="calculate">Calculate</button>
+          </div>
+          <div id="calculationHint" class="notice hidden" role="status"></div>
+          <div id="resultPanel" class="hidden" aria-live="polite">
+            <h3 class="card-title"><span data-i18n="result">Result preview</span></h3>
+            <math-field id="resultField" class="result-field" read-only aria-label="Calculation result"></math-field>
+            <div id="resultWarning" class="notice hidden"></div>
+            <div class="result-actions">
+              <button id="appendResult" type="button" data-i18n="appendEquality">Append equality</button>
+              <button id="insertResultBelow" class="secondary" type="button" data-i18n="insertBelow">Insert below</button>
+              <button id="replaceWithResult" class="secondary danger" type="button" data-i18n="replace">Replace formula</button>
+            </div>
+          </div>
+          <div id="status" class="status hidden" role="status" aria-live="polite"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer id="editorFooter" class="footer hidden">
+      <button id="saveButton" type="button" data-i18n="save">Save to note</button>
+    </footer>
+  </div>
+  <script src="src/ui.js"></script>
+</body>
+</html>

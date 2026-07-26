@@ -140,6 +140,27 @@ void main() {
   });
 
   group('writeBack', () {
+    test('inserts into an untouched zero-width blank-block scope', () async {
+      const content = 'Intro\n\nOutro';
+      const insertionPoint = 7;
+      final parent = parentNote(content: content);
+      when(mockDb.getNote('parent-1')).thenAnswer((_) async => parent);
+      final scope = service.open(
+        parent: parent,
+        spanStart: insertionPoint,
+        spanEnd: insertionPoint,
+        text: '',
+      );
+
+      final result = await service.writeBack(
+        scope.tempNoteId,
+        '\\[\nx + y\n\\]\n\n',
+      );
+
+      expect(result.ok, isTrue);
+      expect(capturedUpdate().content, 'Intro\n\n\\[\nx + y\n\\]\n\nOutro');
+    });
+
     test('splices new text over the block range only', () async {
       when(mockDb.getNote('parent-1')).thenAnswer((_) async => parentNote());
       final scope = service.open(
