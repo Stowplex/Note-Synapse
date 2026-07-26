@@ -55,8 +55,9 @@ zip as the DOS `C:` drive and boots a DOSBox emulator, configured by a fenced
   gamepad; the user can also capture the current frame at any time. A capture
   appends a `🕹️ **DOS Station**` section to the note: the frame is added as a
   `dos-capture-*.png` attachment, embedded inline as an image, plus the user's
-  optional comment. Don't treat those sections as user-written notes — they
-  are session snapshots.
+  optional comment and, if they used Ask AI, the AI's reply (prefixed 🤖).
+  The comment box doubles as the Ask AI prompt. Don't treat those sections as
+  user-written notes — they are session snapshots.
 - The first run downloads the emulator engine (~2 MB); afterwards it works
   offline. If the user reports a hash/download error, they should retry on a
   network connection.
