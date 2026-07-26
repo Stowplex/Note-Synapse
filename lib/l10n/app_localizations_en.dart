@@ -4872,6 +4872,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editSelection => 'Edit';
 
   @override
+  String get runNoteActionAppOnSelection => 'Run Note Action App';
+
+  @override
+  String get approvalScopeBlockOnly => 'Applies to the selected block only.';
+
+  @override
+  String get approvalScopeWholeNote =>
+      'Applies to the ENTIRE note, not just the selected block.';
+
+  @override
+  String get blockSelectionOutOfSync =>
+      'This block cannot be targeted: its position in the note could not be confirmed, so no app was opened. The note was left unchanged.';
+
+  @override
   String get deleteSelection => 'Delete Blocks';
 
   @override

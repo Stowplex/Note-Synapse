@@ -30,10 +30,19 @@ class ConversationAttachmentService {
   ///    we should probably update the markdown to point to the new local file.
   ///
   /// Returns a record containing the (potentially modified) content and a list of new attachment paths.
+  ///
+  /// [allowLocalFilePaths] controls the second pass, which copies absolute
+  /// local file paths found in `![alt](/abs/path)` into the attachments
+  /// directory. That is safe for content the USER produced (chat/share flows),
+  /// but MUST be false for content authored by a plugin: it would otherwise let
+  /// plugin JS attach — and thereby read back or feed to the AI — any file the
+  /// app can open, bypassing the allowlist in
+  /// [NoteModificationService.processAttachment].
   static Future<({String content, List<String> attachmentPaths})>
   processContentForAttachments({
     required String content,
     required String noteId,
+    bool allowLocalFilePaths = true,
   }) async {
     final List<String> newAttachmentPaths = [];
 
@@ -98,6 +107,10 @@ class ConversationAttachmentService {
           error: e,
         );
       }
+    }
+
+    if (!allowLocalFilePaths) {
+      return (content: content, attachmentPaths: newAttachmentPaths);
     }
 
     // New logic: Process markdown image links with local file paths

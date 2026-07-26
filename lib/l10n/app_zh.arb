@@ -1944,6 +1944,10 @@
   "expandToBottom": "到底部",
   "contractToStart": "重置",
   "editSelection": "编辑",
+  "runNoteActionAppOnSelection": "运行笔记操作应用",
+  "approvalScopeBlockOnly": "仅作用于所选区块。",
+  "approvalScopeWholeNote": "将作用于整条笔记，而不仅是所选区块。",
+  "blockSelectionOutOfSync": "无法定位该区块：未能确认它在笔记中的位置，因此没有打开任何应用。笔记未被修改。",
   "deleteSelection": "删除区块",
   "confirmDeleteBlocks": "确定要删除 {count} 个区块吗？",
   "@confirmDeleteBlocks": {

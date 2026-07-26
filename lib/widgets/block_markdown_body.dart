@@ -113,7 +113,16 @@ class BlockMarkdownBodyState extends State<BlockMarkdownBody> {
 
   void _parseBlocks() {
     final parsed = _ensureChipsParsed(widget.content);
-    _blocks = _tracker.parseBlocks(parsed.strippedMarkdown);
+    // Parsed against the CHIPS-STRIPPED markdown (chips render as their own UI,
+    // not as markdown), but every consumer of these offsets — checkbox toggles
+    // here, and Edit / AI Edit / Delete / Note Action App in NoteDetailScreen —
+    // splices into the RAW note content. Translating here keeps the two in the
+    // same coordinate space; without it, every block after a ```chips fence is
+    // shifted and an edit silently rewrites the wrong characters.
+    _blocks = _toRawOffsets(
+      _tracker.parseBlocks(parsed.strippedMarkdown),
+      parsed,
+    );
 
     // Reset slug bookkeeping before re-registering so duplicate-suffix
     // counters are deterministic across re-parses.
@@ -137,6 +146,29 @@ class BlockMarkdownBodyState extends State<BlockMarkdownBody> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onBlocksParsed?.call(_blocks);
     });
+  }
+
+  /// Re-expresses [blocks] (offsets into the stripped markdown) as offsets into
+  /// the original note content.
+  ///
+  /// A block never spans a strip seam — the strip always leaves a paragraph
+  /// break where a chips block was — so each block maps to one contiguous run
+  /// of the original text.
+  List<MarkdownBlock> _toRawOffsets(
+    List<MarkdownBlock> blocks,
+    ChipsParseResult parsed,
+  ) {
+    if (parsed.isUnchanged) return blocks;
+    return blocks
+        .map(
+          (block) => MarkdownBlock(
+            type: block.type,
+            content: block.content,
+            startOffset: parsed.rawOffsetFor(block.startOffset),
+            endOffset: parsed.rawOffsetFor(block.endOffset),
+          ),
+        )
+        .toList();
   }
 
   /// Scroll the heading whose anchor slug matches [slug] into view.

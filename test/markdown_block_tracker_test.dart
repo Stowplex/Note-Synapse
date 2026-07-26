@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/utils/markdown_block_tracker.dart';
 
 void main() {
+  _offsetInvariantTests();
   late MarkdownBlockTracker tracker;
 
   setUp(() {
@@ -312,6 +313,57 @@ more text
 
           expect(result, '# 4');
         },
+      );
+    });
+  });
+}
+
+void _offsetInvariantTests() {
+  group('offsetsMatchContent', () {
+    final tracker = MarkdownBlockTracker();
+
+    test('accepts blocks parsed from the same content', () {
+      const content = 'Intro.\n\n```mermaid\ngraph TD\n```\n\nOutro.';
+      final blocks = tracker.parseBlocks(content);
+      expect(MarkdownBlockTracker.offsetsMatchContent(content, blocks), isTrue);
+    });
+
+    test('rejects offsets parsed from chips-stripped content', () {
+      // This is the real hazard: block offsets come from the chips-STRIPPED
+      // markdown while callers splice into the raw note content, so every
+      // offset after a ```chips fence is shifted.
+      const raw =
+          'Alpha\n\n```chips\n## Ask more\nTell me more\n```\n\nBeta\n\nGamma';
+      const stripped = 'Alpha\n\nBeta\n\nGamma';
+      final blocks = tracker.parseBlocks(stripped);
+      expect(
+        MarkdownBlockTracker.offsetsMatchContent(raw, blocks),
+        isFalse,
+        reason: 'a shifted window must never be handed to a plugin to rewrite',
+      );
+    });
+
+    test('rejects a selection that a blank-line block would make vacuous', () {
+      // The tracker emits a zero-width block with EMPTY content per blank line,
+      // so contains/startsWith/endsWith checks all pass on shifted offsets.
+      const stripped = 'Alpha\n\nBeta\n\nGamma';
+      final blocks = tracker.parseBlocks(stripped);
+      final empties = blocks.where((b) => b.content.isEmpty).toList();
+      expect(empties, isNotEmpty, reason: 'blank lines produce empty blocks');
+      // A shifted content still "contains"/"startsWith" an empty block's text.
+      const shifted = 'XXXXXXXXXX$stripped';
+      expect(
+        MarkdownBlockTracker.offsetsMatchContent(shifted, blocks),
+        isFalse,
+      );
+    });
+
+    test('rejects out-of-range offsets after the note shrank', () {
+      const content = 'Intro.\n\nBeta\n\nGamma';
+      final blocks = tracker.parseBlocks(content);
+      expect(
+        MarkdownBlockTracker.offsetsMatchContent('short', blocks),
+        isFalse,
       );
     });
   });
