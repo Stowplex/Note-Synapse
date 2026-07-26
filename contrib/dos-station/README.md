@@ -163,6 +163,29 @@ appear on `C:` immediately (DOS Station refreshes DOSBox's directory cache for
 you) — though a program that already has the file open will not notice until it
 reopens it.
 
+### Files DOS created
+
+The panel's **NEW / CHANGED ON C:** section lists the other direction: files a
+DOS program created this session, and game files DOS modified, that the note
+does not know about yet. (They are already safe — the autosave keeps them — but
+linking one makes it visible and editable in the note.) The list is computed
+when the panel opens; `↻ REFRESH` re-scans without closing it.
+
+Each file offers:
+
+- **`+ CODE BLOCK`** — appends a fenced block to the note with the `dos-name`
+  attribute already set (CP437 → UTF-8, CRLF → LF on the way in). Text files
+  only, up to 512 KB; over 64 KB the button asks for a confirming second tap
+  before dropping that much text into the note.
+- **`+ ATTACHMENT`** — saves the bytes as a new attachment (named after the DOS
+  file) and records it in the `dos-files` block, byte-for-byte. Up to 8 MB.
+
+Either way the file becomes an ordinary linked import: it moves up to the
+*ON C: FROM THIS NOTE* section and gets the drift tracking and `↑ TO NOTE` /
+`↻ FROM NOTE` actions described above. The DOS path stays exactly what it is on
+`C:` — only files whose names fit the 8.3 rules can be linked (others stay
+listed with the reason).
+
 ### A note with no game
 
 If a note has `dos-name` blocks or a `dos-files` list but no `.zip`, DOS Station

@@ -31,6 +31,7 @@ const EXPORTS = [
   'safeRelName', 'dosPathCheck', 'dosifyName',
   'parseDosFilesLine', 'formatDosFilesLine', 'parseDosFilesBody',
   'formatDosFilesBody', 'dosFilesOpt', 'setDosFilesOpt',
+  'CODE_WARN_BYTES', 'classifyNewFiles', 'composeFenceBlock', 'langForDosPath',
 ];
 const C = new Function(html.slice(a, b) + '\nreturn {' + EXPORTS.join(',') + '};')();
 
@@ -394,6 +395,74 @@ check('dosFilesOpt missing', C.dosFilesOpt(['text'], 'v'), null);
 check('setDosFilesOpt replaces', C.setDosFilesOpt(['text', 'v=old'], 'v', 'new'), ['text', 'v=new']);
 check('setDosFilesOpt removes', C.setDosFilesOpt(['text', 'v=old'], 'v', null), ['text']);
 check('setDosFilesOpt adds flag', C.setDosFilesOpt([], 'text', true), ['text']);
+
+// =====================================================================
+// files DOS created (classifyNewFiles / composeFenceBlock / langForDosPath)
+// =====================================================================
+{
+  const caps = { code: 512 * 1024, att: 8 * 1024 * 1024 };
+  const u8 = (s) => new Uint8Array([...s].map((c) => c.charCodeAt(0)));
+  const changed = [
+    { name: 'NEW.TXT', data: u8('hello\r\n') },
+    { name: 'SAVES/GAME1.SAV', data: new Uint8Array([0, 1, 2, 3]) },
+    { name: 'linked.bas', data: u8('10 PRINT\r\n') },
+    { name: 'toolongname.txt', data: u8('x') },
+  ];
+  const rows = C.classifyNewFiles(changed, new Set(['LINKED.BAS']), caps);
+  check('classify excludes linked case-insensitively',
+    rows.map((r) => r.name), ['NEW.TXT', 'SAVES/GAME1.SAV', 'toolongname.txt']);
+  const txt = rows.find((r) => r.name === 'NEW.TXT');
+  check('classify text file', { code: txt.canCode, att: txt.canAtt, bin: txt.binary, warn: txt.codeWarn },
+    { code: true, att: true, bin: false, warn: false });
+  check('classify text file size', txt.size, 7);
+  const sav = rows.find((r) => r.name === 'SAVES/GAME1.SAV');
+  check('classify binary subdir file', { code: sav.canCode, att: sav.canAtt, bin: sav.binary, path: sav.dosPath },
+    { code: false, att: true, bin: true, path: 'SAVES/GAME1.SAV' });
+  const bad = rows.find((r) => r.name === 'toolongname.txt');
+  check('classify invalid name', { code: bad.canCode, att: bad.canAtt, path: bad.dosPath },
+    { code: false, att: false, path: null });
+  check('classify invalid name reason', bad.reason, '"TOOLONGNAME" is longer than 8 characters');
+  ok('classify rows carry no data', rows.every((r) => !('data' in r)));
+
+  const warnRows = C.classifyNewFiles(
+    [{ name: 'BIG.TXT', data: new Uint8Array(C.CODE_WARN_BYTES + 1).fill(65) },
+     { name: 'OK.TXT', data: new Uint8Array(C.CODE_WARN_BYTES).fill(65) }],
+    new Set(), caps);
+  check('classify warn boundary', warnRows.map((r) => ({ n: r.name, w: r.codeWarn })),
+    [{ n: 'BIG.TXT', w: true }, { n: 'OK.TXT', w: false }]);
+
+  const huge = C.classifyNewFiles(
+    [{ name: 'HUGE.DAT', data: new Uint8Array(caps.att + 1).fill(65) },
+     { name: 'MID.TXT', data: new Uint8Array(caps.code + 1).fill(65) }],
+    new Set(), caps);
+  check('classify over attachment cap', { att: huge[0].canAtt, reason: huge[0].reason },
+    { att: false, reason: 'larger than 8 MB' });
+  check('classify text over code cap keeps attachment',
+    { code: huge[1].canCode, att: huge[1].canAtt, reason: huge[1].reason },
+    { code: false, att: true, reason: '' });
+
+  check('compose plain', C.composeFenceBlock('basic {dos-name="A.BAS"}', '10 PRINT'),
+    '```basic {dos-name="A.BAS"}\n10 PRINT\n```\n');
+  check('compose empty body', C.composeFenceBlock('', ''), '```\n```\n');
+  check('compose crlf body', C.composeFenceBlock('', 'a\r\nb'), '```\na\nb\n```\n');
+  check('compose strips backticks from info', C.composeFenceBlock('x`y', 'a'), '```xy\na\n```\n');
+  {
+    const body = 'text\n```\ninner\n```\nmore';
+    const block = C.composeFenceBlock('{dos-name="X.TXT"}', body);
+    ok('compose widens marker', block.startsWith('````'));
+    const fences = C.scanFences(block);
+    check('compose re-scans as one closed block', fences.length, 1);
+    ok('compose block is closed', fences[0].closeLine !== null);
+    check('compose body round-trips', C.fenceBody(block, fences[0]), body);
+    check('compose keeps attr', C.infoAttr(fences[0].info, 'dos-name'), 'X.TXT');
+  }
+
+  check('lang basic', C.langForDosPath('HELLO.BAS'), 'basic');
+  check('lang c header', C.langForDosPath('SRC/DEFS.H'), 'c');
+  check('lang bat', C.langForDosPath('GO.BAT'), 'bat');
+  check('lang unknown is empty', C.langForDosPath('GAME1.SAV'), '');
+  check('lang no extension', C.langForDosPath('README'), '');
+}
 
 // =====================================================================
 console.log(`${passed} passed, ${failures} failed`);
