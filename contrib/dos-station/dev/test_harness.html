@@ -10,12 +10,16 @@
   #side h1{font-size:13px;margin:8px;color:#7f7;}
   #log{flex:1;overflow:auto;font-size:11px;white-space:pre-wrap;word-break:break-word;
        margin:0;padding:8px;border-top:1px solid #333;}
+  #nav{font-size:11px;margin:0 8px 8px;line-height:1.7;}
+  #nav a{color:#7cf;margin-right:8px;}
+  #nav a.on{color:#7f7;font-weight:700;}
 </style>
 </head>
 <body>
 <iframe id="frame" allow="autoplay"></iframe>
 <div id="side">
   <h1>DOS Station harness — Synapse call log</h1>
+  <div id="nav"></div>
   <pre id="log"></pre>
 </div>
 <script>
@@ -25,10 +29,21 @@
     el.scrollTop = el.scrollHeight;
   };
   (async () => {
+    const q = new URLSearchParams(location.search);
+    const here = q.get('scenario') || '';
+    document.getElementById('nav').innerHTML =
+      [['', 'default'], ['zipless', 'no game zip'], ['block', 'block scope'], ['readonly', 'read-only note']]
+        .map(([s, label]) =>
+          '<a class="' + (s === here ? 'on' : '') + '" href="?' +
+          (s ? 'scenario=' + s : '') + '">' + label + '</a>').join('') +
+      '<br><a href="?' + (here ? 'scenario=' + here + '&' : '') + 'reset=1">reset stub storage</a>';
+
     const html = await (await fetch('../plugins/dos_station.html')).text();
-    // Inject the Synapse stub before any plugin scripts run.
+    // srcdoc frames have no query string of their own, so hand the harness's
+    // switches to the stub explicitly, before any plugin script runs.
     const patched = html.replace('<head>',
-      '<head><script src="synapse_stub.js"><' + '/script>');
+      '<head><script>window.__harnessQuery=' + JSON.stringify(location.search) + ';<' + '/script>' +
+      '<script src="synapse_stub.js"><' + '/script>');
     const frame = document.getElementById('frame');
     frame.srcdoc = patched;
   })();

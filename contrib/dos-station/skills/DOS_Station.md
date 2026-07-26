@@ -1,7 +1,7 @@
 ---
 name: DOS Station
 skill_ref: dos-station
-description: Use when the user wants to play, set up, or embed a DOS game stored in a note, tune its DOSBox configuration, or asks about DOS Station captures. Triggers on phrasing like "play this DOS game", "set up this game note", "add a dosbox config", "embed the DOS player in this note", "make this note playable".
+description: Use when the user wants to play, set up, or embed a DOS game stored in a note, tune its DOSBox configuration, put a file (BASIC listing, batch file, config) from the note onto the DOS C: drive, or asks about DOS Station captures. Triggers on phrasing like "play this DOS game", "set up this game note", "add a dosbox config", "embed the DOS player in this note", "make this note playable", "run this .bat in DOS", "put this on the DOS drive".
 enabled: true
 ---
 
@@ -49,6 +49,42 @@ zip as the DOS `C:` drive and boots a DOSBox emulator, configured by a fenced
    `exe=NAME.EXE` picks the program to run; `zip=file.zip` picks the
    attachment when the note has several zips.
 
+## Putting a file from the note onto C:
+
+Tag a fenced code block's info string with `dos-name` and DOS Station writes it
+to the DOS drive every time it boots:
+
+````markdown
+```basic {dos-name="HELLO.BAS"}
+10 PRINT "HELLO WORLD!"
+20 GOTO 10
+```
+````
+
+This is the right move whenever the user wants to *run* something they wrote in
+the note — a BASIC listing, a batch file, a config file a game reads.
+
+- The name must be DOS 8.3 and is uppercased: `hello.bas` → `C:\HELLO.BAS`.
+  Subdirectories are allowed (`src/main.bas` → `C:\SRC\MAIN.BAS`). A stem longer
+  than 8 characters, an extension longer than 3, a device name (`CON`, `NUL`,
+  `LPT1`, …) or characters outside `A-Z 0-9 ! # $ % & ' ( ) - @ ^ _ \` { } ~`
+  are rejected.
+- Add the attribute to the block the user already wrote rather than duplicating
+  its contents into a new block.
+- The block's text is stored on `C:` as code page 437 with CRLF line endings,
+  so keep it plain — em dashes and smart quotes cannot be represented and
+  become `?`.
+- A note that has such a block but no `.zip` attachment still boots, to a bare
+  `C:\>` prompt containing just those files. That is the fastest way to let the
+  user try a `.bat` or a listing.
+- ` ```dosbox ` and ` ```dos-files ` blocks are configuration, not files; never
+  give them a `dos-name`.
+
+Attachments are copied to `C:` only when the user picks them in the app's 📁
+files panel, which records the choice in a ` ```dos-files ` block. Read that
+block if you need to know what is on the drive; leave its `| v=…` options alone
+(the app uses them to track saved-back versions).
+
 ## While playing
 
 - DOS Station has an on-screen keyboard (with a quick-type bar) and a virtual
@@ -76,3 +112,8 @@ zip as the DOS `C:` drive and boots a DOSBox emulator, configured by a fenced
   user asks — the inline images in capture sections reference them.
 - Don't remove or rename `dos-saves-*.zip` attachments — they hold the user's
   game saves; deleting one erases their progress.
+- Don't hand-edit the ` ```dos-files ` block's `| v=…` options, and don't delete
+  the versioned attachments they name (`levels-1769472000.dat` and the like) —
+  those are copies DOS Station saved back from the DOS drive.
+- Don't change the body of a block that carries a `dos-name` unless the user
+  asks: that text is a live file on their DOS drive.

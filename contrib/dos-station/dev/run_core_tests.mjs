@@ -1,0 +1,295 @@
+// Offline unit tests for the pure helpers in plugins/dos_station.html.
+//
+// DOS Station is a single self-contained HTML file, so the pure section is
+// bracketed by `/* ==== core:begin ==== */` … `/* ==== core:end ==== */` and
+// sliced out here. Nothing in that region may touch the DOM, Synapse or the
+// emulator, which is exactly what this runner proves.
+//
+// Run with: node dev/run_core_tests.mjs   (from contrib/dos-station/)
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const html = readFileSync(join(here, '..', 'plugins', 'dos_station.html'), 'utf8');
+
+const BEGIN = '/* ==== core:begin ==';
+const END = '/* ==== core:end ==';
+const a = html.indexOf(BEGIN);
+const b = html.indexOf(END);
+if (a < 0 || b < 0) {
+  console.error('core:begin / core:end markers not found in dos_station.html');
+  process.exit(1);
+}
+
+const EXPORTS = [
+  'CP437_HI', 'cp437Encode', 'cp437Decode', 'cp437Unmappable',
+  'toDosBytes', 'fromDosBytes', 'looksBinary',
+  'indexLines', 'parseFenceOpen', 'isFenceClose', 'scanFences', 'fenceBody',
+  'fenceMarkerLen', 'replaceFence',
+  'parseInfoAttrs', 'infoAttr', 'setInfoAttr',
+  'safeRelName', 'dosPathCheck', 'dosifyName',
+  'parseDosFilesLine', 'formatDosFilesLine', 'parseDosFilesBody',
+  'formatDosFilesBody', 'dosFilesOpt', 'setDosFilesOpt',
+];
+const C = new Function(html.slice(a, b) + '\nreturn {' + EXPORTS.join(',') + '};')();
+
+let failures = 0;
+let passed = 0;
+
+function check(name, actual, expected) {
+  const x = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  if (x === e) passed++;
+  else {
+    failures++;
+    console.error(`FAIL ${name}\n  expected: ${e}\n  actual:   ${x}`);
+  }
+}
+function ok(name, cond) { check(name, !!cond, true); }
+const bytes = (u8) => Array.from(u8);
+
+// =====================================================================
+// CP437 + CRLF
+// =====================================================================
+check('cp437 table length', C.CP437_HI.length, 128);
+{
+  const all = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) all[i] = i;
+  check('cp437 all 256 bytes round-trip', bytes(C.cp437Encode(C.cp437Decode(all))), bytes(all));
+}
+check('cp437 e-acute is 0x82', bytes(C.cp437Encode('\u00e9')), [0x82]);
+check('cp437 full block is 0xdb', bytes(C.cp437Encode('\u2588')), [0xdb]);
+check('cp437 pi is 0xe3', bytes(C.cp437Encode('\u03c0')), [0xe3]);
+check('cp437 nbsp is 0xff', bytes(C.cp437Encode('\u00a0')), [0xff]);
+check('cp437 euro is unmappable', bytes(C.cp437Encode('\u20ac')), [0x3f]);
+check('cp437 astral pair is one ?', bytes(C.cp437Encode('\u{1F600}')), [0x3f]);
+check('cp437 ascii identity', bytes(C.cp437Encode('AZ09')), [65, 90, 48, 57]);
+check('cp437Unmappable counts', C.cp437Unmappable('a\u20ace\u00e9\u{1F600}'), 2);
+check('cp437Unmappable clean', C.cp437Unmappable('plain ascii \u00e9'), 0);
+
+check('toDosBytes lf to crlf', bytes(C.toDosBytes('a\nb')), [97, 13, 10, 98, 13, 10]);
+check('toDosBytes crlf kept', bytes(C.toDosBytes('a\r\nb\r\n')), [97, 13, 10, 98, 13, 10]);
+check('toDosBytes lone cr', bytes(C.toDosBytes('a\rb')), [97, 13, 10, 98, 13, 10]);
+check('toDosBytes empty stays empty', bytes(C.toDosBytes('')), []);
+check('fromDosBytes strips one trailing crlf', C.fromDosBytes(C.toDosBytes('a\nb')), 'a\nb');
+check('fromDosBytes keeps blank last line', C.fromDosBytes(C.toDosBytes('a\n\n')), 'a\n');
+check('fromDosBytes strips dos eof marker',
+  C.fromDosBytes(new Uint8Array([97, 13, 10, 0x1a])), 'a');
+for (const s of ['', 'x', 'print "hi"\n', 'a\nb\nc', 'caf\u00e9\nna\u00efve\n']) {
+  check('dos bytes round-trip ' + JSON.stringify(s),
+    C.fromDosBytes(C.toDosBytes(s)), s.replace(/\r\n?/g, '\n').replace(/\n$/, ''));
+}
+ok('looksBinary nul', C.looksBinary(new Uint8Array([65, 0, 66])));
+ok('looksBinary text', !C.looksBinary(C.toDosBytes('10 PRINT "HI"\n20 GOTO 10\n')));
+ok('looksBinary empty', !C.looksBinary(new Uint8Array(0)));
+
+// =====================================================================
+// Line indexing
+// =====================================================================
+check('indexLines empty', C.indexLines('').length, 1);
+check('indexLines no trailing newline', C.indexLines('a\nb').map((l) => l.text), ['a', 'b']);
+check('indexLines trailing newline has no phantom line', C.indexLines('a\n').map((l) => l.text), ['a']);
+check('indexLines crlf', C.indexLines('a\r\nb').map((l) => l.text), ['a', 'b']);
+{
+  const src = 'ab\ncd\n';
+  const lines = C.indexLines(src);
+  check('indexLines ranges', lines.map((l) => [l.start, l.end, l.next]), [[0, 2, 3], [3, 5, 6]]);
+}
+
+// =====================================================================
+// Fence parsing
+// =====================================================================
+check('fence open basic', C.parseFenceOpen('```basic'), { indent: 0, char: '`', len: 3, info: 'basic' });
+check('fence open tilde', C.parseFenceOpen('~~~js'), { indent: 0, char: '~', len: 3, info: 'js' });
+check('fence open indented', C.parseFenceOpen('   ```'), { indent: 3, char: '`', len: 3, info: '' });
+check('fence open 4-space is not a fence', C.parseFenceOpen('    ```'), null);
+check('fence open long', C.parseFenceOpen('`````x'), { indent: 0, char: '`', len: 5, info: 'x' });
+check('fence open backtick in info rejected', C.parseFenceOpen('```a`b'), null);
+ok('fence close matching', C.isFenceClose('```', { char: '`', len: 3 }));
+ok('fence close longer ok', C.isFenceClose('`````', { char: '`', len: 3 }));
+ok('fence close shorter rejected', !C.isFenceClose('```', { char: '`', len: 5 }));
+ok('fence close with info rejected', !C.isFenceClose('```js', { char: '`', len: 3 }));
+
+{
+  const src = 'intro\n\n```basic {dos-name="HELLO.BAS"}\n10 PRINT\n```\n\ntail\n';
+  const f = C.scanFences(src);
+  check('scanFences count', f.length, 1);
+  check('scanFences info', f[0].info, 'basic {dos-name="HELLO.BAS"}');
+  check('scanFences body', C.fenceBody(src, f[0]), '10 PRINT');
+  check('scanFences block slice', src.slice(f[0].blockStart, f[0].blockEnd),
+    '```basic {dos-name="HELLO.BAS"}\n10 PRINT\n```\n');
+  check('scanFences info slice', src.slice(f[0].infoStart, f[0].infoEnd), 'basic {dos-name="HELLO.BAS"}');
+}
+{
+  // A 4-backtick fence containing a 3-backtick run must be one block, not three.
+  const src = 'a\n````md\n```js\nx\n```\n````\nb\n';
+  const f = C.scanFences(src);
+  check('scanFences nested count', f.length, 1);
+  check('scanFences nested body', C.fenceBody(src, f[0]), '```js\nx\n```');
+}
+{
+  const src = 'a\n```x\nbody\n';           // unterminated at EOF
+  const f = C.scanFences(src);
+  check('scanFences unterminated count', f.length, 1);
+  check('scanFences unterminated closeLine', f[0].closeLine, null);
+  check('scanFences unterminated body', C.fenceBody(src, f[0]), 'body');
+}
+{
+  const src = '  ```txt\n  hi\n  ```\n';
+  const f = C.scanFences(src);
+  check('scanFences indented body strips indent', C.fenceBody(src, f[0]), 'hi');
+}
+{
+  const src = '```\n```\n```\n```\n';       // two empty blocks, not four fences
+  const f = C.scanFences(src);
+  check('scanFences empty blocks', f.length, 2);
+  check('scanFences empty body', C.fenceBody(src, f[0]), '');
+}
+
+// =====================================================================
+// replaceFence — the splice must not disturb one byte outside the block
+// =====================================================================
+{
+  const src = 'head\n\n```basic\nold\n```\n\ntail\n';
+  const f = C.scanFences(src)[0];
+  const out = C.replaceFence(src, f, { body: 'new\nlines' });
+  check('replaceFence body', out, 'head\n\n```basic\nnew\nlines\n```\n\ntail\n');
+  check('replaceFence prefix untouched', out.slice(0, f.blockStart), src.slice(0, f.blockStart));
+  check('replaceFence suffix untouched', out.slice(out.length - 6), src.slice(src.length - 6));
+}
+{
+  const src = '```basic\nx\n```\n';
+  const f = C.scanFences(src)[0];
+  check('replaceFence info only', C.replaceFence(src, f, { info: 'basic {dos-name="A.BAS"}' }),
+    '```basic {dos-name="A.BAS"}\nx\n```\n');
+}
+{
+  // A body that contains a fence run must widen the markers, not shred the note.
+  const src = 'a\n```txt\nx\n```\nb\n';
+  const f = C.scanFences(src)[0];
+  const out = C.replaceFence(src, f, { body: 'before\n```\nafter' });
+  check('replaceFence widens markers', out, 'a\n````txt\nbefore\n```\nafter\n````\nb\n');
+  check('replaceFence widened re-scans as one block', C.scanFences(out).length, 1);
+  check('replaceFence widened body survives', C.fenceBody(out, C.scanFences(out)[0]), 'before\n```\nafter');
+}
+{
+  const src = '  ```txt\n  x\n  ```\n';
+  const f = C.scanFences(src)[0];
+  check('replaceFence re-indents', C.replaceFence(src, f, { body: 'p\n\nq' }),
+    '  ```txt\n  p\n\n  q\n  ```\n');
+}
+{
+  const src = 'a\n```txt\nx\n```';           // no trailing newline in the note
+  const f = C.scanFences(src)[0];
+  check('replaceFence does not invent a trailing newline',
+    C.replaceFence(src, f, { body: 'y' }), 'a\n```txt\ny\n```');
+}
+{
+  const src = '```txt\nx\n```\n';
+  const f = C.scanFences(src)[0];
+  check('replaceFence empty body', C.replaceFence(src, f, { body: '' }), '```txt\n```\n');
+}
+
+// =====================================================================
+// Info string attributes
+// =====================================================================
+check('parseInfoAttrs bare', C.parseInfoAttrs('').lang, '');
+check('parseInfoAttrs lang only', C.parseInfoAttrs('basic'), { lang: 'basic', head: 'basic', attrs: [], hasBrace: false });
+check('parseInfoAttrs value', C.infoAttr('basic {dos-name="HELLO.BAS"}', 'dos-name'), 'HELLO.BAS');
+check('parseInfoAttrs single quotes', C.infoAttr("basic {dos-name='A.BAS'}", 'dos-name'), 'A.BAS');
+check('parseInfoAttrs unquoted', C.infoAttr('basic {dos-name=A.BAS}', 'dos-name'), 'A.BAS');
+check('parseInfoAttrs missing', C.infoAttr('basic', 'dos-name'), null);
+check('parseInfoAttrs pandoc style keeps lang',
+  C.parseInfoAttrs('python {.numberLines startFrom="5"}').lang, 'python');
+check('parseInfoAttrs pandoc style raw tokens',
+  C.parseInfoAttrs('python {.numberLines startFrom="5"}').attrs.map((x) => x.raw),
+  ['.numberLines', 'startFrom="5"']);
+
+check('setInfoAttr adds brace', C.setInfoAttr('basic', 'dos-name', 'A.BAS'), 'basic {dos-name="A.BAS"}');
+check('setInfoAttr adds to empty info', C.setInfoAttr('', 'dos-name', 'A.BAS'), '{dos-name="A.BAS"}');
+check('setInfoAttr replaces', C.setInfoAttr('basic {dos-name="A.BAS"}', 'dos-name', 'B.BAS'),
+  'basic {dos-name="B.BAS"}');
+check('setInfoAttr preserves neighbours',
+  C.setInfoAttr('python {.numberLines startFrom="5"}', 'dos-name', 'A.PY'),
+  'python {.numberLines startFrom="5" dos-name="A.PY"}');
+check('setInfoAttr removes and drops empty braces',
+  C.setInfoAttr('basic {dos-name="A.BAS"}', 'dos-name', null), 'basic');
+check('setInfoAttr removes but keeps others',
+  C.setInfoAttr('basic {.x dos-name="A.BAS"}', 'dos-name', null), 'basic {.x}');
+check('setInfoAttr strips quotes from the value',
+  C.setInfoAttr('basic', 'dos-name', 'A"B.BAS'), 'basic {dos-name="AB.BAS"}');
+check('setInfoAttr round-trips through the scanner', (() => {
+  const src = '```basic\nx\n```\n';
+  const f = C.scanFences(src)[0];
+  const out = C.replaceFence(src, f, { info: C.setInfoAttr(f.info, 'dos-name', 'A.BAS') });
+  return C.infoAttr(C.scanFences(out)[0].info, 'dos-name');
+})(), 'A.BAS');
+
+// =====================================================================
+// DOS names
+// =====================================================================
+ok('safeRelName plain', C.safeRelName('A/B.TXT'));
+ok('safeRelName rejects absolute', !C.safeRelName('/etc/passwd'));
+ok('safeRelName rejects traversal', !C.safeRelName('a/../../b'));
+ok('safeRelName rejects drive', !C.safeRelName('C:/x'));
+
+check('dosPathCheck uppercases', C.dosPathCheck('hello.bas').path, 'HELLO.BAS');
+ok('dosPathCheck accepts subdirs', C.dosPathCheck('src/main.bas').ok);
+check('dosPathCheck normalizes backslashes', C.dosPathCheck('DOCS\\READ.TXT').path, 'DOCS/READ.TXT');
+ok('dosPathCheck rejects long stem', !C.dosPathCheck('toolongname.txt').ok);
+check('dosPathCheck long stem reason', C.dosPathCheck('toolongname.txt').reason,
+  '"TOOLONGNAME" is longer than 8 characters');
+ok('dosPathCheck rejects long ext', !C.dosPathCheck('a.text').ok);
+ok('dosPathCheck rejects device', !C.dosPathCheck('con.txt').ok);
+ok('dosPathCheck rejects bare device', !C.dosPathCheck('nul').ok);
+ok('dosPathCheck rejects traversal', !C.dosPathCheck('../x.txt').ok);
+ok('dosPathCheck rejects drive', !C.dosPathCheck('C:\\X.TXT').ok);
+ok('dosPathCheck rejects empty', !C.dosPathCheck('   ').ok);
+ok('dosPathCheck rejects two dots', !C.dosPathCheck('a.b.c').ok);
+ok('dosPathCheck rejects plus', !C.dosPathCheck('a+b.txt').ok);
+ok('dosPathCheck accepts legal punctuation', C.dosPathCheck("go!-_~.bat").ok);
+
+check('dosifyName basic', C.dosifyName('levels.dat', []), 'LEVELS.DAT');
+check('dosifyName truncates', C.dosifyName('my-long-name.basic', []), 'MY-LONG.BAS');
+check('dosifyName strips dirs', C.dosifyName('sound/theme.mid', []), 'THEME.MID');
+check('dosifyName replaces illegal', C.dosifyName('a+b.txt', []), 'A_B.TXT');
+check('dosifyName de-dups', C.dosifyName('levels.dat', ['LEVELS.DAT']), 'LEVELS~1.DAT');
+check('dosifyName de-dups twice', C.dosifyName('levels.dat', ['LEVELS.DAT', 'LEVELS~1.DAT']), 'LEVELS~2.DAT');
+ok('dosifyName output is always valid', C.dosPathCheck(C.dosifyName('a really! bad @name.tar.gz', [])).ok);
+
+// =====================================================================
+// dos-files fence
+// =====================================================================
+check('dos-files minimal', C.parseDosFilesLine('attachment: levels.dat'),
+  { src: 'levels.dat', dosPath: null, opts: [] });
+check('dos-files renamed', C.parseDosFilesLine('attachment: levels.dat -> LEVELS.DAT'),
+  { src: 'levels.dat', dosPath: 'LEVELS.DAT', opts: [] });
+check('dos-files options', C.parseDosFilesLine('attachment: r.md -> R.TXT | text | v=r-1_a.md'),
+  { src: 'r.md', dosPath: 'R.TXT', opts: ['text', 'v=r-1_a.md'] });
+check('dos-files quoted source', C.parseDosFilesLine('attachment: "a -> b.dat" -> AB.DAT'),
+  { src: 'a -> b.dat', dosPath: 'AB.DAT', opts: [] });
+check('dos-files not an entry', C.parseDosFilesLine('# a comment'), null);
+check('dos-files format round-trip',
+  C.formatDosFilesLine(C.parseDosFilesLine('attachment: r.md -> R.TXT | text | v=r-1_a.md')),
+  'attachment: r.md -> R.TXT | text | v=r-1_a.md');
+check('dos-files format quotes when needed',
+  C.formatDosFilesLine({ src: 'a -> b.dat', dosPath: 'AB.DAT', opts: [] }),
+  'attachment: "a -> b.dat" -> AB.DAT');
+{
+  const body = '# managed by DOS Station\nattachment: levels.dat -> LEVELS.DAT\n\nattachment: r.md | text\nnonsense line';
+  const recs = C.parseDosFilesBody(body);
+  check('dos-files body entry count', recs.filter((r) => r.kind === 'entry').length, 2);
+  check('dos-files body preserves everything', C.formatDosFilesBody(recs), body);
+  check('dos-files body flags junk', recs.filter((r) => r.bad).map((r) => r.text), ['nonsense line']);
+}
+check('dosFilesOpt flag', C.dosFilesOpt(['text'], 'text'), true);
+check('dosFilesOpt value', C.dosFilesOpt(['text', 'v=x.dat'], 'v'), 'x.dat');
+check('dosFilesOpt missing', C.dosFilesOpt(['text'], 'v'), null);
+check('setDosFilesOpt replaces', C.setDosFilesOpt(['text', 'v=old'], 'v', 'new'), ['text', 'v=new']);
+check('setDosFilesOpt removes', C.setDosFilesOpt(['text', 'v=old'], 'v', null), ['text']);
+check('setDosFilesOpt adds flag', C.setDosFilesOpt([], 'text', true), ['text']);
+
+// =====================================================================
+console.log(`${passed} passed, ${failures} failed`);
+process.exit(failures ? 1 : 0);
