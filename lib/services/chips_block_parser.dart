@@ -1,5 +1,21 @@
 import '../models/chip_action.dart';
 
+/// One run of text that survived stripping, and where it came from.
+///
+/// Lets a caller translate an offset in [ChipsParseResult.strippedMarkdown]
+/// back to the same character in the ORIGINAL markdown.
+class ChipsTextSegment {
+  const ChipsTextSegment({
+    required this.strippedStart,
+    required this.rawStart,
+    required this.length,
+  });
+
+  final int strippedStart;
+  final int rawStart;
+  final int length;
+}
+
 /// Result of parsing an AI message body for ` ```chips ` fenced blocks.
 class ChipsParseResult {
   /// Chips extracted from all well-formed blocks in document order.
@@ -10,10 +26,41 @@ class ChipsParseResult {
   /// visibility — better to surface broken AI output than hide it.
   final String strippedMarkdown;
 
+  /// Preserved runs of text, in order, mapping stripped offsets to original
+  /// ones. Empty when nothing was stripped (offsets are then identical).
+  final List<ChipsTextSegment> segments;
+
   const ChipsParseResult({
     required this.chips,
     required this.strippedMarkdown,
+    this.segments = const [],
   });
+
+  /// True when [strippedMarkdown] is the original markdown, so offsets need no
+  /// translation.
+  bool get isUnchanged => segments.isEmpty;
+
+  /// The offset in the ORIGINAL markdown corresponding to [strippedOffset].
+  ///
+  /// Anything derived from [strippedMarkdown] — notably parsed block ranges —
+  /// must be translated before it is used to splice into the original content.
+  /// Skipping this is a silent corruption bug: every offset after a stripped
+  /// chips block is shifted, so an edit lands on the wrong characters.
+  int rawOffsetFor(int strippedOffset) {
+    if (isUnchanged) return strippedOffset;
+    for (final segment in segments) {
+      if (strippedOffset < segment.strippedStart) {
+        // Inside a synthetic separator the strip inserted; the nearest real
+        // character is the start of this segment.
+        return segment.rawStart;
+      }
+      if (strippedOffset <= segment.strippedStart + segment.length) {
+        return segment.rawStart + (strippedOffset - segment.strippedStart);
+      }
+    }
+    final last = segments.last;
+    return last.rawStart + last.length;
+  }
 }
 
 /// Parses fenced ```chips blocks out of an AI message body.
@@ -65,12 +112,22 @@ class ChipsBlockParser {
     // markdown is preserved verbatim, including legitimate triple-newlines
     // inside code blocks or pre-formatted text.
     final buf = StringBuffer();
+    final segments = <ChipsTextSegment>[];
     int cursor = 0;
     for (final m in matches) {
       // Trim trailing newlines from the segment ending right before this block.
       final before = markdown
           .substring(cursor, m.start)
           .replaceAll(RegExp(r'\n+$'), '');
+      if (before.isNotEmpty) {
+        segments.add(
+          ChipsTextSegment(
+            strippedStart: buf.length,
+            rawStart: cursor,
+            length: before.length,
+          ),
+        );
+      }
       buf.write(before);
       cursor = m.end;
       // Skip leading newlines of the segment that follows the block; we'll
@@ -89,9 +146,23 @@ class ChipsBlockParser {
         buf.write('\n');
       }
     }
-    buf.write(markdown.substring(cursor));
+    final tail = markdown.substring(cursor);
+    if (tail.isNotEmpty) {
+      segments.add(
+        ChipsTextSegment(
+          strippedStart: buf.length,
+          rawStart: cursor,
+          length: tail.length,
+        ),
+      );
+    }
+    buf.write(tail);
 
-    return ChipsParseResult(chips: chips, strippedMarkdown: buf.toString());
+    return ChipsParseResult(
+      chips: chips,
+      strippedMarkdown: buf.toString(),
+      segments: segments,
+    );
   }
 
   /// Walk the body of a single chips block, splitting on `## ` headings.

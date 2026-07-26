@@ -1,0 +1,40 @@
+MIT License
+
+Copyright (c) 2023-2025 Henry Heino
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+Vendored files
+--------------
+  js-draw-1.33.0.bundle.js  sha256 8d33958f0dfea20402507ce8a94331952ceb81141d3423a021171d49d60d52ba
+  js-draw-1.33.0.styles.js  sha256 a3609b645a336210cd5a19ef2b38ac2da3461b720cc96af018b5386bd79530b3
+
+Fetched from https://unpkg.com/js-draw@1.33.0/dist/
+
+The bundle statically includes two further MIT-licensed libraries, which carry
+their own copyright and are attributed inline in the bundle source:
+
+  Coloris    https://github.com/mdbassit/Coloris    (c) Momo Bassit, MIT
+  bezier.js  https://github.com/Pomax/bezierjs      (c) Mike Kamermans, MIT
+
+Audited for offline use: the bundle contains no fetch/XMLHttpRequest/Worker
+calls and no @font-face rules, and the only http(s) strings in it are the SVG
+XML namespace and the attribution URLs above.

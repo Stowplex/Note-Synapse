@@ -8414,6 +8414,30 @@ abstract class AppLocalizations {
   /// **'Edit'**
   String get editSelection;
 
+  /// No description provided for @runNoteActionAppOnSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Run Note Action App'**
+  String get runNoteActionAppOnSelection;
+
+  /// No description provided for @approvalScopeBlockOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Applies to the selected block only.'**
+  String get approvalScopeBlockOnly;
+
+  /// No description provided for @approvalScopeWholeNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Applies to the ENTIRE note, not just the selected block.'**
+  String get approvalScopeWholeNote;
+
+  /// No description provided for @blockSelectionOutOfSync.
+  ///
+  /// In en, this message translates to:
+  /// **'This block cannot be targeted: its position in the note could not be confirmed, so no app was opened. The note was left unchanged.'**
+  String get blockSelectionOutOfSync;
+
   /// No description provided for @deleteSelection.
   ///
   /// In en, this message translates to:

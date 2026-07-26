@@ -4634,6 +4634,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editSelection => '编辑';
 
   @override
+  String get runNoteActionAppOnSelection => '运行笔记操作应用';
+
+  @override
+  String get approvalScopeBlockOnly => '仅作用于所选区块。';
+
+  @override
+  String get approvalScopeWholeNote => '将作用于整条笔记，而不仅是所选区块。';
+
+  @override
+  String get blockSelectionOutOfSync =>
+      '无法定位该区块：未能确认它在笔记中的位置，因此没有打开任何应用。笔记未被修改。';
+
+  @override
   String get deleteSelection => '删除区块';
 
   @override

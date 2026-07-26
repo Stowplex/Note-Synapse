@@ -11,6 +11,15 @@ enum ApprovalType { sqlWrite, noteModification, noteDeletion, sessionAccess }
 
 /// Encapsulates details of an approval request.
 class ApprovalRequest {
+  /// Keys the plugin bridge may add to a note-modification payload so the
+  /// approval dialog can show WHICH scope a write applies to. Without this a
+  /// change to one selected block and a rewrite of the whole note render
+  /// identically, letting a plugin launched on a block get a note-wide change
+  /// approved by looking exactly like the block edit the user asked for.
+  /// Ignored when formatting the modification's fields.
+  static const String scopeBlockKey = '__scopeBlock';
+  static const String scopeWholeNoteKey = '__scopeWholeNote';
+
   ApprovalRequest({
     required this.type,
     required this.title,

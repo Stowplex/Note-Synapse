@@ -60,3 +60,10 @@ contrib/
   spreadsheet: markdown pipe tables in the note body as well as
   `.csv`/`.tsv`/`.xlsx`/`.ods` attachments, with undo, column alignment,
   multi-sheet tabs, and read-only safety for legacy `.xls`/`.xlsm` files.
+- **diagram-studio** — author the diagrams in your notes four ways: Mermaid
+  with a live preview, freehand drawing, ASCII art on a character grid, or an
+  AI-generated image you refine by conversation. Each stores a rendered
+  SVG/PNG/JPG beside its editable source, and works on a whole note or a single
+  selected block. Unlike the others this one *is* bundled as a starter app; the
+  folder holds the readable source of that bundled build. It replaces the
+  earlier Mermaid Block Renderer.

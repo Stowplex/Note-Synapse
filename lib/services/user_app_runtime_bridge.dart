@@ -24,6 +24,8 @@ import '../services/user_app_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
 import '../utils/synapse_temp_utils.dart';
+import 'approval_service.dart';
+import 'block_note_scope_service.dart';
 import 'note_modification_service.dart';
 import 'sql_query_service.dart';
 import 'service_locator.dart';
@@ -74,6 +76,19 @@ typedef PickTagsCallback =
       UserAppRuntimeBridge source,
       Map<String, dynamic> options,
     );
+
+/// An error whose message was written BY THE HOST for a plugin to display.
+///
+/// Only these are echoed verbatim into the `errors` array returned to plugin
+/// JS. Arbitrary exceptions are redacted, because they can embed absolute
+/// container paths or (from sqflite) a statement plus its bound arguments, i.e.
+/// note content.
+class PluginFacingException implements Exception {
+  PluginFacingException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
 
 /// Shared runtime bridge that wires the Synapse JavaScript API into a WebView.
 ///
@@ -140,6 +155,16 @@ class UserAppRuntimeBridge {
   }
 
   DatabaseService get _databaseService => getIt<DatabaseService>();
+
+  /// Block scopes are optional: headless hosts (AI tools) and tests may never
+  /// register the service, in which case there are simply no block scopes and
+  /// every note id is an ordinary one.
+  BlockNoteScopeService? get _blockScopes =>
+      getIt.isRegistered<BlockNoteScopeService>()
+      ? getIt<BlockNoteScopeService>()
+      : null;
+
+  BlockNoteScope? _blockScopeFor(String noteId) => _blockScopes?.lookup(noteId);
   SqlQueryService get _sqlQueryService => getIt<SqlQueryService>();
   TtsService get _ttsService => getIt<TtsService>();
   WebSessionService get _webSessionService => getIt<WebSessionService>();
@@ -406,12 +431,32 @@ class UserAppRuntimeBridge {
       callback: (args) async {
         final startTime = DateTime.now();
         try {
-          final sql = args.first as String;
-          LoggerService.debug('[Synapse.runQuery] Called with SQL: $sql');
+          final requestedSql = args.first as String;
+          LoggerService.debug(
+            '[Synapse.runQuery] Called with SQL: $requestedSql',
+          );
 
           // Detect query type using SqlQueryService
-          final queryType = _sqlQueryService.getQueryType(sql);
-          final isReadOnly = _sqlQueryService.isReadOnlyQuery(sql);
+          final queryType = _sqlQueryService.getQueryType(requestedSql);
+          final isReadOnly = _sqlQueryService.isReadOnlyQuery(requestedSql);
+
+          // A transient block-note id has no database row, so a plugin that
+          // re-reads its note with SQL before writing (good practice, and what
+          // Table Studio does) would otherwise get zero rows and abort. Serve
+          // those reads from the parent row with the block's own values patched
+          // in, so a block scope behaves like a note here too.
+          final scopedIds = _blockScopeIdsIn(requestedSql);
+          if (scopedIds.isNotEmpty && !isReadOnly) {
+            return {
+              'success': false,
+              'error':
+                  'This note id refers to a selected block, which has no '
+                  'database row, so it cannot be written with SQL. Use '
+                  'Synapse.updateNotes with this id instead - the host applies '
+                  'the change to the right part of the parent note.',
+            };
+          }
+          final sql = _rewriteBlockScopeIds(requestedSql, scopedIds);
 
           LoggerService.debug(
             '[Synapse.runQuery] Query type: ${_sqlQueryService.getQueryTypeDescription(queryType)}, read-only: $isReadOnly',
@@ -460,7 +505,7 @@ class UserAppRuntimeBridge {
             );
             return {
               'success': true,
-              'data': result.data ?? [],
+              'data': _patchBlockScopeRows(result.data ?? [], scopedIds),
               if (result.truncated) 'truncated': true,
               if (result.truncated && result.totalRows != null)
                 'totalRows': result.totalRows,
@@ -713,7 +758,8 @@ class UserAppRuntimeBridge {
             result['uri'] = saved.uri;
             result['mime'] = normalizedMime;
           } else {
-            final asText = responseMode == 'text' ||
+            final asText =
+                responseMode == 'text' ||
                 (responseMode == 'auto' && _isTextMime(normalizedMime));
             final asBinary = responseMode == 'binary';
             final data = (asText && !asBinary)
@@ -873,10 +919,7 @@ class UserAppRuntimeBridge {
           final languages = await _ttsService.getLanguages();
           return {'success': true, 'data': languages};
         } catch (e) {
-          LoggerService.error(
-            '[Synapse.tts.getLanguages] Error: $e',
-            error: e,
-          );
+          LoggerService.error('[Synapse.tts.getLanguages] Error: $e', error: e);
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -978,8 +1021,7 @@ class UserAppRuntimeBridge {
             originRaw: options['origin'] as String?,
             method: (options['method'] as String?) ?? 'GET',
             headers: headers,
-            responseMode:
-                (options['responseMode'] as String?) ?? 'tempFile',
+            responseMode: (options['responseMode'] as String?) ?? 'tempFile',
           );
           final duration = DateTime.now().difference(startTime);
           LoggerService.debug(
@@ -1001,7 +1043,9 @@ class UserAppRuntimeBridge {
       handlerName: 'sessionRequestLogin',
       callback: (args) async {
         try {
-          final url = args.isNotEmpty ? (args.first?.toString().trim() ?? '') : '';
+          final url = args.isNotEmpty
+              ? (args.first?.toString().trim() ?? '')
+              : '';
           if (url.isEmpty) {
             throw ArgumentError('A url is required to request login');
           }
@@ -1014,7 +1058,10 @@ class UserAppRuntimeBridge {
           final loggedIn = await callback(this, url);
           return {'success': loggedIn, 'loggedIn': loggedIn, 'domain': domain};
         } catch (e) {
-          LoggerService.error('[Synapse.session.requestLogin] Error: $e', error: e);
+          LoggerService.error(
+            '[Synapse.session.requestLogin] Error: $e',
+            error: e,
+          );
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -1024,7 +1071,9 @@ class UserAppRuntimeBridge {
       handlerName: 'sessionStatus',
       callback: (args) async {
         try {
-          final input = args.isNotEmpty ? (args.first?.toString().trim() ?? '') : '';
+          final input = args.isNotEmpty
+              ? (args.first?.toString().trim() ?? '')
+              : '';
           if (input.isEmpty) {
             throw ArgumentError('A domain or url is required');
           }
@@ -1048,7 +1097,9 @@ class UserAppRuntimeBridge {
       handlerName: 'sessionGetCookies',
       callback: (args) async {
         try {
-          final input = args.isNotEmpty ? (args.first?.toString().trim() ?? '') : '';
+          final input = args.isNotEmpty
+              ? (args.first?.toString().trim() ?? '')
+              : '';
           if (input.isEmpty) {
             throw ArgumentError('A domain or url is required');
           }
@@ -1056,7 +1107,10 @@ class UserAppRuntimeBridge {
 
           // Reading raw cookie values is sensitive: gate on a per-app+domain
           // grant, prompting the user for approval the first time.
-          var granted = await _appDomainGrantService.isGranted(app.uuid, domain);
+          var granted = await _appDomainGrantService.isGranted(
+            app.uuid,
+            domain,
+          );
           if (!granted) {
             final callback = onSessionAccessApprovalRequest;
             if (callback == null) {
@@ -1076,16 +1130,21 @@ class UserAppRuntimeBridge {
             return {'success': false, 'error': 'no_session', 'domain': domain};
           }
           final cookies = session.liveCookies
-              .map((c) => {
-                    'name': c.name,
-                    'value': c.value,
-                    if (c.domain != null) 'domain': c.domain,
-                    if (c.path != null) 'path': c.path,
-                  })
+              .map(
+                (c) => {
+                  'name': c.name,
+                  'value': c.value,
+                  if (c.domain != null) 'domain': c.domain,
+                  if (c.path != null) 'path': c.path,
+                },
+              )
               .toList();
           return {'success': true, 'domain': domain, 'cookies': cookies};
         } catch (e) {
-          LoggerService.error('[Synapse.session.getCookies] Error: $e', error: e);
+          LoggerService.error(
+            '[Synapse.session.getCookies] Error: $e',
+            error: e,
+          );
           return {'success': false, 'error': e.toString()};
         }
       },
@@ -1111,8 +1170,9 @@ class UserAppRuntimeBridge {
 
           // Same grant as session use — downloading with the user's live login
           // acts as them on that site.
-          final granted =
-              await _ensureDomainGrant(WebSessionService.domainKeyFor(urlRaw));
+          final granted = await _ensureDomainGrant(
+            WebSessionService.domainKeyFor(urlRaw),
+          );
           if (granted == null) {
             return {'status': 'error', 'error': 'permission_required'};
           }
@@ -1142,7 +1202,7 @@ class UserAppRuntimeBridge {
             final hopHeaders = <String, String>{
               'user-agent':
                   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
-                      '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                  '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
               'referer': '${currentUri.scheme}://${currentUri.host}/',
               'sec-fetch-site': 'cross-site',
               'sec-fetch-dest': 'document',
@@ -1150,8 +1210,9 @@ class UserAppRuntimeBridge {
               'sec-fetch-user': '?1',
               ...extraHeaders,
             };
-            final hopCookies =
-                await _webSessionService.liveCookieHeaderFor(currentUri.toString());
+            final hopCookies = await _webSessionService.liveCookieHeaderFor(
+              currentUri.toString(),
+            );
             if (hopCookies.isNotEmpty) {
               hopHeaders['cookie'] = hopCookies;
             }
@@ -1193,11 +1254,12 @@ class UserAppRuntimeBridge {
             bytesBuilder.add(chunk);
           }
           final bytes = bytesBuilder.takeBytes();
-          final mime = (response.headers.value(HttpHeaders.contentTypeHeader) ??
-                  'application/octet-stream')
-              .split(';')
-              .first
-              .trim();
+          final mime =
+              (response.headers.value(HttpHeaders.contentTypeHeader) ??
+                      'application/octet-stream')
+                  .split(';')
+                  .first
+                  .trim();
 
           // Downloadable media/binary is never text/* — a text body means a
           // login/error page slipped through.
@@ -1330,7 +1392,7 @@ class UserAppRuntimeBridge {
 
           final exported = <Map<String, dynamic>>[];
           for (final noteId in noteIds) {
-            final note = await _databaseService.getNote(noteId);
+            final note = await _resolveNoteForRead(noteId);
             if (note == null) {
               continue;
             }
@@ -1346,8 +1408,12 @@ class UserAppRuntimeBridge {
               'markdown': markdown,
             };
             if (includeAttachments) {
-              final attachments =
-                  await _databaseService.getAttachmentsForNote(noteId);
+              // A transient block note has no attachment rows of its own; it
+              // inherits the parent's, which is what its attachmentPaths
+              // already advertise.
+              final attachments = await _databaseService.getAttachmentsForNote(
+                _realNoteId(noteId),
+              );
               entry['attachments'] = [
                 for (final att in attachments)
                   {
@@ -1385,8 +1451,7 @@ class UserAppRuntimeBridge {
           final params = (options['params'] is Map)
               ? Map<String, dynamic>.from(options['params'] as Map)
               : <String, dynamic>{};
-          final delaySeconds =
-              (options['delaySeconds'] as num?)?.toInt() ?? 60;
+          final delaySeconds = (options['delaySeconds'] as num?)?.toInt() ?? 60;
           final maxRuns = (options['maxRuns'] as num?)?.toInt() ?? 1;
           final taskId = await getIt<PluginTaskService>().schedule(
             appUuid: app.uuid,
@@ -1604,7 +1669,7 @@ class UserAppRuntimeBridge {
             '[Synapse.openNote] Called with noteId: $noteId, replaceWindow: $replaceWindow',
           );
 
-          final note = await _databaseService.getNote(noteId);
+          final note = await _resolveNoteForNavigation(noteId);
           if (note == null) {
             final duration = DateTime.now().difference(startTime);
             LoggerService.warning(
@@ -1651,15 +1716,28 @@ class UserAppRuntimeBridge {
               if (notesData.length == 1 &&
                   notesData.first is Map<String, dynamic>) {
                 final noteData = notesData.first as Map<String, dynamic>;
-                targetNoteId = noteData['id']?.toString() ?? 'unknown';
+                final rawId = noteData['id']?.toString() ?? 'unknown';
+                // Show the parent note for a transient block write, so the
+                // dialog names something the user recognizes.
+                targetNoteId = _realNoteId(rawId);
 
                 // If granular modification, pass that. Otherwise pass the note data.
                 if (noteData.containsKey('modification') &&
                     noteData['modification'] is Map) {
-                  modificationData = noteData['modification'];
+                  modificationData = _sanitizedForApproval(
+                    noteData['modification'] as Map,
+                  );
                 } else {
-                  modificationData = Map.from(noteData)..remove('id');
+                  modificationData = _sanitizedForApproval(noteData)
+                    ..remove('id');
                 }
+                // Tell the user WHICH of the two this is. Without it a plugin
+                // launched on one block can get a whole-note rewrite approved
+                // by making the dialog look exactly like the block edit the
+                // user asked for. Copied above, so the applied write (which is
+                // re-read from noteData) never sees these keys.
+                final scopeKey = _writeScopeKeyFor(rawId);
+                if (scopeKey != null) modificationData[scopeKey] = true;
               } else {
                 // Batch update: Itemize first 20 notes
                 final updates = <Map<String, dynamic>>[];
@@ -1668,30 +1746,49 @@ class UserAppRuntimeBridge {
                 for (var i = 0; i < notesData.length && i < NOTE_LIMIT; i++) {
                   final item = notesData[i];
                   if (item is Map<String, dynamic>) {
-                    final id = item['id']?.toString() ?? 'unknown';
+                    final id = _realNoteId(item['id']?.toString() ?? 'unknown');
                     // Extract modification similar to single case
                     Map<String, dynamic> changes;
                     if (item.containsKey('modification') &&
                         item['modification'] is Map) {
-                      changes = item['modification'];
+                      changes = _sanitizedForApproval(
+                        item['modification'] as Map,
+                      );
                     } else {
-                      changes = Map.from(item)..remove('id');
+                      changes = _sanitizedForApproval(item)..remove('id');
                     }
 
                     updates.add({'id': id, 'changes': changes});
                   }
                 }
 
+                final rawIds = notesData
+                    .whereType<Map<String, dynamic>>()
+                    .map((n) => n['id']?.toString() ?? 'unknown')
+                    .toList();
+
                 modificationData = <String, dynamic>{
                   'isBatch': true,
                   'count': notesData.length,
                   'updates': updates,
                   // Keep noteIds for legacy/other checks if needed?
-                  'noteIds': notesData
-                      .whereType<Map<String, dynamic>>()
-                      .map((n) => n['id']?.toString() ?? 'unknown')
-                      .toList(),
+                  'noteIds': rawIds.map(_realNoteId).toList(),
                 };
+
+                // A batch must carry the scope notice too, otherwise adding a
+                // second entry is enough to hide a whole-note rewrite behind
+                // what looks like a block edit. Whole-note wins: if ANY entry
+                // targets a real note during a block-scoped session, say so.
+                if (rawIds.any(
+                  (id) =>
+                      _writeScopeKeyFor(id) ==
+                      ApprovalRequest.scopeWholeNoteKey,
+                )) {
+                  modificationData[ApprovalRequest.scopeWholeNoteKey] = true;
+                } else if (rawIds.isNotEmpty &&
+                    rawIds.every((id) => _blockScopeFor(id) != null)) {
+                  modificationData[ApprovalRequest.scopeBlockKey] = true;
+                }
               }
 
               final approved = await onModificationRequest!(
@@ -1710,12 +1807,22 @@ class UserAppRuntimeBridge {
             }
           }
 
-          final updatedCount = await _updateNotesFromJavaScript(notesData);
+          final outcome = await _updateNotesFromJavaScript(notesData);
           final duration = DateTime.now().difference(startTime);
           LoggerService.debug(
-            '[Synapse.updateNotes] Success - Updated $updatedCount notes in ${duration.inMilliseconds}ms',
+            '[Synapse.updateNotes] Success - Updated ${outcome.updatedCount} notes in ${duration.inMilliseconds}ms',
           );
-          return {'success': true, 'updatedCount': updatedCount};
+          return {
+            'success': true,
+            'updatedCount': outcome.updatedCount,
+            // Additive: existing apps ignore these, but a refused write is no
+            // longer indistinguishable from a successful no-op. `error` is the
+            // singular form existing plugins already read (Table Studio's
+            // interpretUpdateResult, for one), so they surface the reason
+            // without any change.
+            if (outcome.errors.isNotEmpty) 'errors': outcome.errors,
+            if (outcome.errors.isNotEmpty) 'error': outcome.errors.first,
+          };
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
           LoggerService.error(
@@ -1764,7 +1871,7 @@ class UserAppRuntimeBridge {
           for (final noteData in notesData) {
             if (noteData is Map<String, dynamic> && noteData['id'] != null) {
               final noteId = noteData['id'] as String;
-              final note = await _databaseService.getNote(noteId);
+              final note = await _resolveNoteForNavigation(noteId);
               if (note != null) {
                 notes.add(note);
               } else {
@@ -1773,7 +1880,7 @@ class UserAppRuntimeBridge {
                 );
               }
             } else if (noteData is String) {
-              final note = await _databaseService.getNote(noteData);
+              final note = await _resolveNoteForNavigation(noteData);
               if (note != null) {
                 notes.add(note);
               } else {
@@ -1823,7 +1930,7 @@ class UserAppRuntimeBridge {
           for (final noteData in notesData) {
             if (noteData is Map<String, dynamic> && noteData['id'] != null) {
               final noteId = noteData['id'] as String;
-              final note = await _databaseService.getNote(noteId);
+              final note = await _resolveNoteForNavigation(noteId);
               if (note != null) {
                 notes.add(note);
               } else {
@@ -1832,7 +1939,7 @@ class UserAppRuntimeBridge {
                 );
               }
             } else if (noteData is String) {
-              final note = await _databaseService.getNote(noteData);
+              final note = await _resolveNoteForNavigation(noteData);
               if (note != null) {
                 notes.add(note);
               } else {
@@ -1957,24 +2064,145 @@ class UserAppRuntimeBridge {
       return '[]';
     }
 
-    final notesData = _selectedNotes
-        .map(
-          (note) => {
-            'id': note.id,
-            'title': note.title,
-            'content': note.content,
-            'tags': note.tags,
-            'createdAt': note.createdAt.toIso8601String(),
-            'updatedAt': note.updatedAt.toIso8601String(),
-            'isTask': note.isTask,
-            'status': note.isTask ? note.status.toString() : null,
-            'pinned': note.pinned,
-            'isArchived': note.isArchived,
-            'attachmentPaths': note.attachmentPaths,
-          },
-        )
-        .toList();
+    final notesData = _selectedNotes.map((note) {
+      final data = <String, dynamic>{
+        'id': note.id,
+        'title': note.title,
+        'content': note.content,
+        'tags': note.tags,
+        'createdAt': note.createdAt.toIso8601String(),
+        'updatedAt': note.updatedAt.toIso8601String(),
+        'isTask': note.isTask,
+        'status': note.isTask ? note.status.toString() : null,
+        'pinned': note.pinned,
+        'isArchived': note.isArchived,
+        'attachmentPaths': note.attachmentPaths,
+      };
+
+      // Additive only: a transient block note also advertises the note it was
+      // sliced from. Apps that don't know about block scopes simply ignore
+      // these keys and keep working unchanged.
+      final scope = _blockScopeFor(note.id);
+      if (scope != null) {
+        data['isBlockScope'] = true;
+        data['parentNoteId'] = scope.parentNoteId;
+      }
+      return data;
+    }).toList();
     return jsonEncode(notesData);
+  }
+
+  /// Resolves a note id for reading/exporting.
+  ///
+  /// A transient block-note id resolves to a synthesized note whose content is
+  /// the block text; ordinary ids hit the database.
+  Future<Note?> _resolveNoteForRead(String noteId) async {
+    final scope = _blockScopeFor(noteId);
+    if (scope != null) return _blockScopes!.asNote(scope);
+    return _databaseService.getNote(noteId);
+  }
+
+  /// Resolves a note id for navigation (open note / conversations / AI actions).
+  ///
+  /// A transient block note cannot be navigated to — it has no database row —
+  /// so it resolves to the real note the block lives in.
+  Future<Note?> _resolveNoteForNavigation(String noteId) async {
+    final scope = _blockScopeFor(noteId);
+    if (scope != null) return _databaseService.getNote(scope.parentNoteId);
+    return _databaseService.getNote(noteId);
+  }
+
+  /// Open block-scope ids that appear literally in [sql].
+  ///
+  /// Ids are v4 UUIDs, so a coincidental match is not a practical concern, and
+  /// the scan is skipped entirely when no scope is open.
+  List<String> _blockScopeIdsIn(String sql) {
+    final scopes = _blockScopes;
+    if (scopes == null || !scopes.hasOpenScopes) return const [];
+    return scopes.openIds.where(sql.contains).toList();
+  }
+
+  /// Replaces each transient id in [sql] with its parent note id, so the query
+  /// runs against a row that actually exists.
+  String _rewriteBlockScopeIds(String sql, List<String> scopedIds) {
+    var rewritten = sql;
+    for (final id in scopedIds) {
+      final parentId = _realNoteId(id);
+      if (parentId != id) rewritten = rewritten.replaceAll(id, parentId);
+    }
+    return rewritten;
+  }
+
+  /// Patches rows that came back from a rewritten query so the plugin sees the
+  /// BLOCK, not the whole parent note: `content` becomes the block text and
+  /// `id` goes back to the transient id it asked about.
+  ///
+  /// Only touches rows whose `id` is the parent of a scope named in the original
+  /// query, so unrelated rows in a multi-note query are left alone.
+  List<Map<String, dynamic>> _patchBlockScopeRows(
+    List<Map<String, dynamic>> rows,
+    List<String> scopedIds,
+  ) {
+    if (scopedIds.isEmpty || rows.isEmpty) return rows;
+    final scopes = _blockScopes;
+    if (scopes == null) return rows;
+
+    final byParent = <String, BlockNoteScope>{};
+    for (final id in scopedIds) {
+      final scope = scopes.lookup(id);
+      if (scope != null) byParent[scope.parentNoteId] = scope;
+    }
+    if (byParent.isEmpty) return rows;
+
+    return rows.map((row) {
+      final scope = byParent[row['id']?.toString()];
+      if (scope == null) return row;
+      final patched = Map<String, dynamic>.from(row);
+      if (patched.containsKey('id')) patched['id'] = scope.tempNoteId;
+      if (patched.containsKey('content')) patched['content'] = scope.text;
+      return patched;
+    }).toList();
+  }
+
+  /// Maps a transient block-note id to the real note it belongs to, leaving
+  /// ordinary ids untouched. Used wherever a virtual id would otherwise reach
+  /// something that only understands real notes — approval dialogs (a uuid that
+  /// resolves to no note is meaningless to the user) and attachment lookups.
+  String _realNoteId(String noteId) =>
+      _blockScopeFor(noteId)?.parentNoteId ?? noteId;
+
+  /// True when this runtime was launched on a block rather than whole notes.
+  bool get _isBlockScopedSession =>
+      _selectedNotes.isNotEmpty &&
+      _selectedNotes.any((n) => _blockScopeFor(n.id) != null);
+
+  /// Copies a plugin-supplied map for display in the approval dialog, dropping
+  /// any `__`-prefixed key.
+  ///
+  /// Those keys are the HOST's channel for telling the dialog what the write is
+  /// scoped to. If a plugin's own `__scopeBlock` survived into the payload it
+  /// would label a whole-note rewrite "block only" — an attacker-controlled
+  /// reassurance, i.e. worse than showing no notice at all.
+  Map<String, dynamic> _sanitizedForApproval(Map<dynamic, dynamic> source) {
+    final copy = <String, dynamic>{};
+    source.forEach((key, value) {
+      final name = key.toString();
+      if (name.startsWith('__')) return;
+      copy[name] = value;
+    });
+    return copy;
+  }
+
+  /// Scope hint for the approval dialog, or null when there is nothing to
+  /// disambiguate (an ordinary whole-note session).
+  ///
+  /// Withholding `parentNoteId` would not help here: `Synapse.runQuery` allows
+  /// unapproved SELECTs, so a plugin can always discover real note ids. The
+  /// defence is making the two cases visibly different at the consent surface.
+  String? _writeScopeKeyFor(String noteId) {
+    if (_blockScopeFor(noteId) != null) return ApprovalRequest.scopeBlockKey;
+    if (_isBlockScopedSession) return ApprovalRequest.scopeWholeNoteKey;
+    return null;
   }
 
   _ValidatedChatOptions _validateChatOptions(Map<String, dynamic> options) {
@@ -2194,7 +2422,9 @@ class UserAppRuntimeBridge {
     String url,
     Map<String, String> headers,
   ) async {
-    final granted = await _ensureDomainGrant(WebSessionService.domainKeyFor(url));
+    final granted = await _ensureDomainGrant(
+      WebSessionService.domainKeyFor(url),
+    );
     if (granted == null) {
       return {'status': 'error', 'error': 'permission_required'};
     }
@@ -2234,8 +2464,10 @@ class UserAppRuntimeBridge {
     void writeHeader(String s) => builder.add(utf8.encode(s));
     // Prevent header injection / malformed parts: drop CR/LF and escape quotes
     // and backslashes in quoted-string header values.
-    String quote(String v) =>
-        v.replaceAll(RegExp(r'[\r\n]'), '').replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+    String quote(String v) => v
+        .replaceAll(RegExp(r'[\r\n]'), '')
+        .replaceAll(r'\', r'\\')
+        .replaceAll('"', r'\"');
 
     for (final raw in parts) {
       if (raw is! Map) {
@@ -2251,8 +2483,9 @@ class UserAppRuntimeBridge {
 
       List<int> contentBytes;
       if (part['attachmentPath'] != null) {
-        final attachment =
-            await _readAttachmentFromPath(part['attachmentPath'].toString());
+        final attachment = await _readAttachmentFromPath(
+          part['attachmentPath'].toString(),
+        );
         if (attachment == null) {
           throw ArgumentError(
             'Attachment not found: ${part['attachmentPath']}',
@@ -2358,13 +2591,23 @@ class UserAppRuntimeBridge {
       return 0;
     }
 
-    // Check approval before deleting
-    if (!_sessionApprovedDeletions) {
+    // Deleting a transient block EMPTIES one block; it never removes a note.
+    // Routing it through the note-deletion gate would show "Allow Note
+    // Deletion? ... This action cannot be undone" naming the whole parent note,
+    // which misstates the effect. Those ids go through the modification gate
+    // instead, where the block scope notice is shown.
+    final blockIds = noteIds.where((id) => _blockScopeFor(id) != null).toList();
+    final realNoteIds = noteIds
+        .where((id) => _blockScopeFor(id) == null)
+        .toList();
+
+    if (realNoteIds.isNotEmpty && !_sessionApprovedDeletions) {
       if (onDeletionApprovalRequest != null) {
-        final approved = await onDeletionApprovalRequest!(this, noteIds);
+        final approved = await onDeletionApprovalRequest!(this, realNoteIds);
         if (!approved) {
           LoggerService.debug(
-            '[Synapse.deleteNotes] User denied deletion of ${noteIds.length} notes',
+            '[Synapse.deleteNotes] User denied deletion of '
+            '${realNoteIds.length} notes',
           );
           throw Exception('User denied the note deletion.');
         }
@@ -2377,9 +2620,45 @@ class UserAppRuntimeBridge {
       }
     }
 
+    for (final blockId in blockIds) {
+      if (_sessionApprovedModifications) continue;
+      if (onModificationRequest == null) {
+        throw Exception('Modification not supported in this context.');
+      }
+      final approved = await onModificationRequest!(
+        this,
+        _realNoteId(blockId),
+        <String, dynamic>{
+          'content': {'action': 'replace', 'text': ''},
+          ApprovalRequest.scopeBlockKey: true,
+        },
+      );
+      if (!approved) {
+        throw Exception('User denied modification.');
+      }
+    }
+
     var deletedCount = 0;
     for (final noteId in noteIds) {
       try {
+        // Deleting a transient block note means removing that block from its
+        // parent, never deleting the parent note itself.
+        if (_blockScopeFor(noteId) != null) {
+          final result = await _blockScopes!.writeBack(noteId, '');
+          if (result.ok) {
+            deletedCount++;
+            LoggerService.debug(
+              '[Synapse.deleteNotes] Deleted block scope: $noteId',
+            );
+          } else {
+            LoggerService.warning(
+              '[Synapse.deleteNotes] Failed to delete block $noteId: '
+              '${result.error}',
+            );
+          }
+          continue;
+        }
+
         await appProvider.deleteNote(noteId);
         deletedCount++;
         LoggerService.debug('[Synapse.deleteNotes] Deleted note: $noteId');
@@ -2457,8 +2736,18 @@ class UserAppRuntimeBridge {
     }
   }
 
-  Future<int> _updateNotesFromJavaScript(List<dynamic> notesData) async {
+  /// Applies `updateNotes` entries, returning how many were written plus a
+  /// message for each one that was refused.
+  ///
+  /// Per-entry failures are collected rather than thrown: one bad entry must not
+  /// abort the rest. They are reported back to the plugin so a refusal (a block
+  /// that moved, a dead temp file, an immutable note) is actionable instead of
+  /// looking like a silent success.
+  Future<({int updatedCount, List<String> errors})> _updateNotesFromJavaScript(
+    List<dynamic> notesData,
+  ) async {
     var updatedCount = 0;
+    final errors = <String>[];
     final modificationService = getIt<NoteModificationService>();
 
     for (final noteData in notesData) {
@@ -2469,13 +2758,24 @@ class UserAppRuntimeBridge {
         LoggerService.warning(
           '[Synapse.updateNotes] Skipping update for note without ID',
         );
+        errors.add('An update was skipped because it had no note id.');
         continue;
       }
 
       try {
+        // A transient block note has no database row: route the write through
+        // the block scope so it lands on the parent note's block range.
+        if (_blockScopeFor(id) != null) {
+          if (await _updateBlockScopedNote(id, noteData)) {
+            updatedCount++;
+          }
+          continue;
+        }
+
         final existingNote = await _databaseService.getNote(id);
         if (existingNote == null) {
           LoggerService.warning('[Synapse.updateNotes] Note not found: $id');
+          errors.add('Note not found: $id');
           continue;
         }
 
@@ -2518,9 +2818,137 @@ class UserAppRuntimeBridge {
           '[Synapse.updateNotes] Error updating note $id: $e',
           error: e,
         );
+        // Only messages the HOST authored are safe to hand to plugin JS; see
+        // PluginFacingException. A '/'-based heuristic was wrong here — it
+        // swallowed our own "Use action append/prepend/replace" message.
+        errors.add(
+          e is PluginFacingException
+              ? e.message
+              : 'Updating note $id failed. See the app log for details.',
+        );
       }
     }
-    return updatedCount;
+    return (updatedCount: updatedCount, errors: errors);
+  }
+
+  /// Applies an `updateNotes` entry that targets a transient block note.
+  ///
+  /// A block scope is deliberately **content-only**: the write is spliced back
+  /// over the block's range in the parent note, and note-level fields (title,
+  /// tags, links, subnotes, explicit attachments, task fields, pinned…) are
+  /// ignored with a warning. Reasons:
+  ///  * consent — the user approved "change this block", not "retag the note";
+  ///  * shape — in full-replacement mode `tags`/`attachments` are Lists, but
+  ///    [NoteModificationService.applyModifications] requires the granular
+  ///    object form, so forwarding them threw and took the content write down
+  ///    with it;
+  ///  * atomicity — a forwarded parent write that committed before a failed
+  ///    splice left the note half-updated.
+  /// A plugin that genuinely wants note-level changes targets `parentNoteId`
+  /// (exposed on the note object), which prompts for the real note.
+  ///
+  /// Returns true when something was written.
+  Future<bool> _updateBlockScopedNote(
+    String tempNoteId,
+    Map<String, dynamic> noteData,
+  ) async {
+    final blockScopes = _blockScopes;
+    final scope = blockScopes?.lookup(tempNoteId);
+    if (blockScopes == null || scope == null) return false;
+
+    String? newText;
+    String? pendingAction;
+    String? pendingActionText;
+    Iterable<String> ignored = const [];
+
+    if (noteData['modification'] is Map<String, dynamic>) {
+      final modification = noteData['modification'] as Map<String, dynamic>;
+
+      if (modification['content'] is Map<String, dynamic>) {
+        final contentMod = modification['content'] as Map<String, dynamic>;
+        final section = contentMod['section'] as String?;
+        if (section != null && section.isNotEmpty) {
+          throw PluginFacingException(
+            'Section-scoped content modifications are not supported when '
+            'operating on a block (note $tempNoteId is a block of '
+            '${scope.parentNoteId}). Use action append/prepend/replace.',
+          );
+        }
+        final action = contentMod['action'] as String? ?? 'no-op';
+        final text = contentMod['text'] as String? ?? '';
+        // Reject an unknown action rather than letting
+        // applyWholeContentAction's default branch write the text back
+        // unchanged: that reports a successful update for a note nothing
+        // happened to, which is worse than an error.
+        const supported = {'append', 'prepend', 'replace', 'no-op'};
+        if (!supported.contains(action)) {
+          throw PluginFacingException(
+            'Unsupported content action "$action" for a block. Use '
+            'append, prepend or replace.',
+          );
+        }
+        if (action == 'no-op') {
+          throw PluginFacingException(
+            'Nothing to do: content action was "no-op" for block $tempNoteId.',
+          );
+        }
+        // Empty text is a genuine no-op for append/prepend, but for 'replace'
+        // it clears the block — which the full-replacement path also allows, so
+        // rejecting it here would make the two modes disagree.
+        if (text.isEmpty && action != 'replace') {
+          throw PluginFacingException(
+            'Nothing to do: "$action" with empty text leaves block '
+            '$tempNoteId unchanged. To remove the block, call '
+            'Synapse.deleteNotes with this id.',
+          );
+        }
+        // Deliberately NOT computed here: the action must be applied to the
+        // block's text as read inside writeBack's lock, or two overlapping
+        // appends both start from the same snapshot and one is silently lost.
+        pendingAction = action;
+        pendingActionText = text;
+      } else {
+        throw PluginFacingException(
+          'A block update must include a content modification. Note-level '
+          'fields are ignored for a block; target parentNoteId '
+          '(${scope.parentNoteId}) to change the note itself.',
+        );
+      }
+      ignored = modification.keys.where((k) => k != 'content');
+    } else {
+      if (noteData.containsKey('content')) {
+        newText = noteData['content']?.toString() ?? '';
+      } else {
+        throw PluginFacingException(
+          'A block update must include "content". Note-level fields are '
+          'ignored for a block; target parentNoteId (${scope.parentNoteId}) '
+          'to change the note itself.',
+        );
+      }
+      ignored = noteData.keys.where((k) => k != 'content' && k != 'id');
+    }
+
+    if (ignored.isNotEmpty) {
+      LoggerService.warning(
+        '[Synapse.updateNotes] Ignoring note-level fields '
+        '${ignored.toList()} for block-scoped note $tempNoteId - a block scope '
+        'only changes content. Target parentNoteId '
+        '(${scope.parentNoteId}) to change the note itself.',
+      );
+    }
+
+    final result = pendingAction != null
+        ? await blockScopes.applyContentAction(
+            tempNoteId,
+            pendingAction,
+            pendingActionText ?? '',
+          )
+        : await blockScopes.writeBack(tempNoteId, newText!);
+    if (!result.ok) {
+      // writeBack's messages are host-authored and actionable.
+      throw PluginFacingException(result.error ?? 'Failed to update block.');
+    }
+    return true;
   }
 
   Future<Note> _mergeNoteData(

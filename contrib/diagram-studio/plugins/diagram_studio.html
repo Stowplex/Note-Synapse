@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Diagram Studio</title>
+  <script type="text/javascript" src="synapse://mermaid.min.js"></script>
+  <script type="text/javascript" src="vendor/js-draw-1.33.0.styles.js"></script>
+  <script type="text/javascript" src="vendor/js-draw-1.33.0.bundle.js"></script>
+  <style>
+    /*
+      Mobile-first: Note Synapse ships Android + iOS only, so this is laid out
+      for a narrow viewport with 44px minimum tap targets throughout.
+    */
+    :root {
+      --app-bg: #1e1e1e;
+      --panel-bg: #2d2d2d;
+      --panel-contrast: #3c3c3c;
+      --border: #4a4a4a;
+      --accent: #64b5f6;
+      --accent-ink: #10243a;
+      --heading: #90caf9;
+      --text: #e0e0e0;
+      --muted: #b0bec5;
+      --diagram-bg: #282c34;  /* must match the rect injected into rendered SVGs */
+      --error-bg: #442222;
+      --error-ink: #ffd2d2;
+      --ok-bg: #22331f;
+      --ok-ink: #a5d6a7;
+      --warn-bg: #3d3524;
+      --warn-ink: #ffe0a3;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      background: var(--app-bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 15px; overscroll-behavior: none;
+    }
+    #app { display: flex; flex-direction: column; height: 100%; }
+
+    header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px; background: var(--panel-bg);
+      border-bottom: 1px solid var(--border); flex: none;
+    }
+    header h1 { font-size: 1rem; margin: 0; color: var(--heading); flex: 1 1 auto; }
+    .badge {
+      font-size: 0.7rem; padding: 3px 7px; border-radius: 10px;
+      background: var(--panel-contrast); color: var(--muted); white-space: nowrap;
+    }
+
+    button {
+      min-height: 44px; padding: 10px 14px; border: none; border-radius: 6px;
+      background: var(--accent); color: var(--accent-ink);
+      font-size: 0.9rem; font-weight: 600; font-family: inherit;
+    }
+    button.secondary {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text); font-weight: 500;
+    }
+    button.icon { min-width: 44px; padding: 8px 10px; }
+    button:disabled { opacity: 0.45; }
+
+    /* Block list ------------------------------------------------------- */
+    #blockPanel {
+      flex: none; background: var(--panel-bg);
+      border-bottom: 1px solid var(--border);
+      max-height: 42vh; overflow-y: auto; display: none;
+    }
+    #blockPanel.open { display: block; }
+    .block-row {
+      display: flex; align-items: center; gap: 10px; width: 100%;
+      padding: 10px 12px; background: transparent; border: none;
+      border-bottom: 1px solid var(--border); text-align: left;
+      color: var(--text); font-weight: 500; min-height: 56px;
+    }
+    .block-row.active { background: var(--panel-contrast); }
+    .block-thumb {
+      width: 44px; height: 44px; flex: none; border-radius: 4px;
+      background: var(--diagram-bg); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.65rem; color: var(--muted); overflow: hidden;
+    }
+    .block-thumb img { max-width: 100%; max-height: 100%; }
+    .block-meta { flex: 1 1 auto; min-width: 0; }
+    .block-kind { font-size: 0.75rem; color: var(--heading); text-transform: uppercase; letter-spacing: 0.04em; }
+    .block-preview {
+      font-size: 0.78rem; color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .panel-actions { padding: 10px 12px; display: flex; gap: 8px; }
+    .panel-actions button { flex: 1 1 auto; }
+
+    /* Tabs ------------------------------------------------------------- */
+    nav#tabs { display: flex; flex: none; background: var(--panel-bg); border-bottom: 1px solid var(--border); }
+    nav#tabs button {
+      flex: 1 1 0; min-height: 46px; padding: 0 4px; border-radius: 0;
+      background: transparent; color: var(--muted); font-size: 0.85rem; font-weight: 600;
+      border-bottom: 3px solid transparent;
+    }
+    nav#tabs button.active { color: var(--heading); border-bottom-color: var(--accent); }
+
+    main { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .tab { display: none; padding: 12px; }
+    .tab.active { display: block; }
+
+    .panel { background: var(--panel-bg); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+    .panel-title { font-size: 0.75rem; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+
+    textarea {
+      width: 100%; background: var(--panel-contrast); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px; padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 0.82rem; line-height: 1.45; resize: vertical;
+    }
+    textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+    .preview-frame {
+      background: var(--diagram-bg); border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px; overflow: auto; text-align: center;
+      min-height: 120px; display: flex; align-items: center; justify-content: center;
+    }
+    .preview-frame svg, .preview-frame img { max-width: 100%; height: auto; }
+
+    .msg { padding: 10px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 10px; line-height: 1.4; }
+    .msg.error { background: var(--error-bg); color: var(--error-ink); }
+    .msg.ok { background: var(--ok-bg); color: var(--ok-ink); }
+    .msg.warn { background: var(--warn-bg); color: var(--warn-ink); }
+    .msg .msg-action { margin-top: 8px; }
+    .hidden { display: none !important; }
+
+    /* ASCII grid editor ------------------------------------------------ */
+    #asciiEditor {
+      white-space: pre; overflow-x: auto; overflow-wrap: normal; word-break: normal;
+      min-height: 180px; tab-size: 4;
+    }
+    #glyphBar {
+      display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;
+    }
+    #glyphBar button {
+      min-width: 40px; min-height: 40px; padding: 0; flex: 0 0 auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 1rem; background: var(--panel-contrast); color: var(--text); font-weight: 400;
+    }
+    .caret-readout { font-size: 0.72rem; color: var(--muted); font-family: ui-monospace, monospace; }
+
+    /* Draw ------------------------------------------------------------- */
+    #drawSurface { height: 58vh; min-height: 320px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+    .imageditor-toolbar-root button, .toolbar-button { min-height: 40px; }
+
+    /* AI --------------------------------------------------------------- */
+    .turn { padding: 8px 10px; border-left: 3px solid var(--border); margin-bottom: 8px; font-size: 0.82rem; }
+    .turn .who { color: var(--heading); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+
+    /* Insert bar ------------------------------------------------------- */
+    footer {
+      flex: none; background: var(--panel-bg); border-top: 1px solid var(--border);
+      padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+    }
+    .seg-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .seg-label { font-size: 0.72rem; color: var(--muted); flex: none; width: 52px; }
+    .seg { display: flex; flex: 1 1 auto; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .seg button {
+      flex: 1 1 0; min-height: 36px; padding: 0; border-radius: 0;
+      background: transparent; color: var(--muted); font-size: 0.78rem; font-weight: 600;
+    }
+    .seg button.active { background: var(--accent); color: var(--accent-ink); }
+    .seg button:disabled { opacity: 0.3; }
+    #saveButton { width: 100%; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>Diagram Studio</h1>
+      <span class="badge" id="scopeBadge">…</span>
+      <button class="icon secondary" id="blocksToggle" aria-label="Show diagrams in this note">☰</button>
+    </header>
+
+    <div id="blockPanel">
+      <div id="blockRows"></div>
+      <div class="panel-actions">
+        <button class="secondary" id="newDiagramButton">+ New diagram</button>
+      </div>
+    </div>
+
+    <nav id="tabs">
+      <button data-tab="mermaid" class="active">Mermaid</button>
+      <button data-tab="draw">Draw</button>
+      <button data-tab="ascii">ASCII</button>
+      <button data-tab="ai">AI</button>
+    </nav>
+
+    <main>
+      <div id="message" class="msg hidden" style="margin:12px 12px 0"></div>
+
+      <!-- Mermaid ---------------------------------------------------- -->
+      <section class="tab active" data-tab="mermaid">
+        <div class="panel">
+          <div class="panel-title">Diagram source</div>
+          <textarea id="mermaidEditor" rows="8" spellcheck="false" autocapitalize="off"
+                    autocorrect="off" autocomplete="off"
+                    placeholder="graph TD&#10;  A[Start] --> B{Choice}&#10;  B -->|yes| C[Do it]&#10;  B -->|no| D[Stop]"></textarea>
+        </div>
+        <div id="mermaidError" class="msg error hidden"></div>
+        <div class="panel">
+          <div class="panel-title">Preview</div>
+          <div class="preview-frame" id="mermaidPreview"></div>
+        </div>
+      </section>
+
+      <!-- Draw ------------------------------------------------------- -->
+      <section class="tab" data-tab="draw">
+        <div id="drawSurface"></div>
+        <div class="panel-actions" style="padding-left:0;padding-right:0">
+          <button class="secondary" id="drawClear">Clear</button>
+        </div>
+      </section>
+
+      <!-- ASCII ------------------------------------------------------ -->
+      <section class="tab" data-tab="ascii">
+        <div class="panel">
+          <div class="panel-title">Characters</div>
+          <div id="glyphBar"></div>
+          <div class="panel-title" style="display:flex;justify-content:space-between;align-items:center">
+            <span>Art</span><span class="caret-readout" id="caretReadout">row 1, col 1</span>
+          </div>
+          <!-- wrap=off is non-negotiable: soft wrapping destroys the grid. -->
+          <textarea id="asciiEditor" rows="10" wrap="off" spellcheck="false"
+                    autocapitalize="off" autocorrect="off" autocomplete="off"
+                    placeholder="+--------+      +--------+&#10;| Client |----->| Server |&#10;+--------+      +--------+"></textarea>
+          <div class="panel-actions" style="padding:8px 0 0">
+            <button class="secondary" id="asciiNormalise">Pad to rectangle</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Preview</div>
+          <div class="preview-frame" id="asciiPreview"></div>
+        </div>
+      </section>
+
+      <!-- AI --------------------------------------------------------- -->
+      <section class="tab" data-tab="ai">
+        <div class="panel">
+          <div class="panel-title">Describe the diagram</div>
+          <textarea id="aiPrompt" rows="3" placeholder="a system architecture diagram with a mobile app, an API gateway and two services"></textarea>
+          <div class="panel-actions" style="padding:8px 0 0">
+            <button id="aiGenerate">Generate</button>
+            <button class="secondary" id="aiReset">Start over</button>
+          </div>
+        </div>
+        <div id="aiNotice" class="msg warn hidden"></div>
+        <div class="panel hidden" id="aiHistoryPanel">
+          <div class="panel-title">Refinements</div>
+          <div id="aiHistory"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Preview</div>
+          <div class="preview-frame" id="aiPreview"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="seg-row">
+        <span class="seg-label">Format</span>
+        <div class="seg" id="formatSeg">
+          <button data-format="svg" class="active">SVG</button>
+          <button data-format="png">PNG</button>
+          <button data-format="jpg">JPG</button>
+        </div>
+      </div>
+      <div class="seg-row">
+        <span class="seg-label">Place</span>
+        <div class="seg" id="positionSeg">
+          <button data-position="above" class="active">Above source</button>
+          <button data-position="below">Below source</button>
+        </div>
+      </div>
+      <button id="saveButton" disabled>Save to note</button>
+    </footer>
+  </div>
+
+  <script src="src/blocks.js"></script>
+  <script src="src/writeback.js"></script>
+  <script src="src/raster.js"></script>
+  <script src="src/render_mermaid.js"></script>
+  <script src="src/render_ascii.js"></script>
+  <script src="src/draw.js"></script>
+  <script src="src/ai.js"></script>
+  <script type="text/javascript">
+  /*
+   Diagram Studio — shell.
+   Wires the four tabs to the verified core modules. All note-mutating logic
+   lives in src/writeback.js; this file is presentation and orchestration.
+  */
+  (function () {
+    'use strict';
+
+    var DIAGRAM_BG = '#282c34';
+    var TABS = ['mermaid', 'draw', 'ascii', 'ai'];
+    var GLYPHS = ['│', '─', '┌', '┐', '└', '┘', '├', '┤', '┬', '┴', '┼',
+                  '╭', '╮', '╰', '╯', '→', '←', '↑', '↓', '•',
+                  '|', '-', '+', '<', '>', 'v', '^'];
+
+    var $ = function (id) { return document.getElementById(id); };
+
+    var state = {
+      note: null,
+      writer: null,
+      ai: null,
+      units: [],
+      current: null,       // the unit being edited, or null for a new diagram
+      insertAt: null,      // {unit, where} for a new diagram
+      tab: 'mermaid',
+      format: 'svg',
+      position: 'above',
+      lastSvg: null,       // last successful render of the active tab
+      drawSurface: null,
+      aiImageUri: null,
+      busy: false,
+    };
+
+    // ---------------------------------------------------------------
+    // Messaging
+    // ---------------------------------------------------------------
+    function showMessage(text, kind, action) {
+      var el = $('message');
+      el.className = 'msg ' + (kind || 'error');
+      el.textContent = text;
+      if (action) {
+        var wrap = document.createElement('div');
+        wrap.className = 'msg-action';
+        var btn = document.createElement('button');
+        btn.className = 'secondary';
+        btn.textContent = action.label;
+        btn.addEventListener('click', action.run);
+        wrap.appendChild(btn);
+        el.appendChild(wrap);
+      }
+      el.classList.remove('hidden');
+    }
+    function clearMessage() {
+      $('message').classList.add('hidden');
+      $('message').textContent = '';
+    }
+
+    function setBusy(on, label) {
+      state.busy = on;
+      var save = $('saveButton');
+      save.disabled = on || !canSave();
+      if (label) save.textContent = label;
+      else save.textContent = saveLabel();
+    }
+
+    /** Says which of the two things Save will do, so neither is a surprise. */
+    function saveLabel() {
+      if (state.current) {
+        var what = state.current.kind === 'other' ? 'block' : state.current.kind + ' diagram';
+        return 'Replace this ' + what;
+      }
+      return 'Add to note';
+    }
+
+    function canSave() {
+      if (state.tab === 'mermaid') return !!$('mermaidEditor').value.trim();
+      if (state.tab === 'ascii') return !!$('asciiEditor').value.trim();
+      if (state.tab === 'ai') return !!state.aiImageUri;
+      if (state.tab === 'draw') return !!state.drawSurface && !state.drawSurface.isEmpty();
+      return false;
+    }
+    function refreshSave() {
+      $('saveButton').disabled = state.busy || !canSave();
+      if (!state.busy) $('saveButton').textContent = saveLabel();
+    }
+
+    // ---------------------------------------------------------------
+    // Block list
+    // ---------------------------------------------------------------
+    function rescan() {
+      state.units = DiagramBlocks.scanBlocks(state.writer.initialContent());
+      renderBlockList();
+    }
+
+    function renderBlockList() {
+      var rows = $('blockRows');
+      rows.innerHTML = '';
+
+      if (!state.units.length) {
+        var empty = document.createElement('div');
+        empty.style.cssText = 'padding:12px;color:var(--muted);font-size:0.85rem';
+        empty.textContent = state.writer.isBlockScope
+          ? 'This block has no diagram yet — pick a tab and start one.'
+          : 'No diagrams found in this note yet.';
+        rows.appendChild(empty);
+        return;
+      }
+
+      state.units.forEach(function (unit) {
+        var row = document.createElement('button');
+        row.className = 'block-row' + (state.current === unit ? ' active' : '');
+
+        var thumb = document.createElement('div');
+        thumb.className = 'block-thumb';
+        thumb.textContent = unit.kind === 'other' ? '—' : unit.kind.slice(0, 3);
+
+        var meta = document.createElement('div');
+        meta.className = 'block-meta';
+        var kind = document.createElement('div');
+        kind.className = 'block-kind';
+        kind.textContent = unit.kind === 'other' ? 'text block' : unit.kind;
+        var prev = document.createElement('div');
+        prev.className = 'block-preview';
+        prev.textContent = (unit.body || '(image only)').split('\n')[0].slice(0, 60) || '(empty)';
+        meta.appendChild(kind);
+        meta.appendChild(prev);
+
+        row.appendChild(thumb);
+        row.appendChild(meta);
+        row.addEventListener('click', function () { openUnit(unit); });
+        rows.appendChild(row);
+      });
+    }
+
+    function toggleBlockPanel(force) {
+      var panel = $('blockPanel');
+      var open = force == null ? !panel.classList.contains('open') : force;
+      panel.classList.toggle('open', open);
+    }
+
+    // ---------------------------------------------------------------
+    // Opening a unit
+    // ---------------------------------------------------------------
+    function openUnit(unit) {
+      clearMessage();
+      state.current = unit;
+      state.insertAt = null;
+      toggleBlockPanel(false);
+
+      var kind = unit.kind === 'other' ? guessTabFor(unit) : unit.kind;
+      selectTab(kind, true);
+
+      if (kind === 'mermaid') {
+        $('mermaidEditor').value = unit.body || '';
+        scheduleMermaid();
+      } else if (kind === 'ascii') {
+        $('asciiEditor').value = unit.body || '';
+        renderAscii();
+      } else if (kind === 'ai') {
+        $('aiPrompt').value = unit.body || '';
+        state.aiImageUri = null;
+        renderAiThread();
+      } else if (kind === 'draw') {
+        loadDrawing(unit);
+      }
+      if (unit.renderPosition) setPosition(unit.renderPosition);
+      renderBlockList();
+      refreshSave();
+    }
+
+    /** An 'other' block is opened in whichever tab can most plausibly use it. */
+    function guessTabFor(unit) {
+      if (DiagramBlocks.looksLikeAsciiArt(unit.body || '')) return 'ascii';
+      return 'mermaid';
+    }
+
+    function startNewDiagram() {
+      clearMessage();
+      state.current = null;
+      toggleBlockPanel(false);
+
+      if (state.writer.isBlockScope || !state.units.length) {
+        state.insertAt = null;
+        resetActiveTab();
+        return;
+      }
+      pickInsertPoint();
+    }
+
+    /** Lets the user choose where a brand-new diagram lands. */
+    function pickInsertPoint() {
+      var rows = $('blockRows');
+      rows.innerHTML = '';
+      var head = document.createElement('div');
+      head.style.cssText = 'padding:12px;color:var(--heading);font-size:0.85rem';
+      head.textContent = 'Where should the new diagram go?';
+      rows.appendChild(head);
+
+      function option(label, at) {
+        var row = document.createElement('button');
+        row.className = 'block-row';
+        var meta = document.createElement('div');
+        meta.className = 'block-meta';
+        meta.textContent = label;
+        row.appendChild(meta);
+        row.addEventListener('click', function () {
+          state.insertAt = at;
+          toggleBlockPanel(false);
+          resetActiveTab();
+          showMessage('New diagram will be added ' + label.toLowerCase() + '.', 'ok');
+          renderBlockList();
+        });
+        rows.appendChild(row);
+      }
+
+      state.units.forEach(function (unit, i) {
+        var name = (unit.kind === 'other' ? 'text block' : unit.kind) + ' #' + (i + 1);
+        option('Before the ' + name, { unit: unit, where: 'before' });
+        option('After the ' + name, { unit: unit, where: 'after' });
+      });
+      option('At the end of the note', null);
+      toggleBlockPanel(true);
+    }
+
+    function resetActiveTab() {
+      if (state.tab === 'mermaid') { $('mermaidEditor').value = ''; $('mermaidPreview').innerHTML = ''; }
+      if (state.tab === 'ascii') { $('asciiEditor').value = ''; $('asciiPreview').innerHTML = ''; }
+      if (state.tab === 'ai') { $('aiPrompt').value = ''; $('aiPreview').innerHTML = ''; state.aiImageUri = null; }
+      if (state.tab === 'draw' && state.drawSurface) state.drawSurface.clear();
+      state.lastSvg = null;
+      refreshSave();
+    }
+
+    // ---------------------------------------------------------------
+    // Tabs
+    // ---------------------------------------------------------------
+    function selectTab(name, silent) {
+      if (TABS.indexOf(name) === -1) name = 'mermaid';
+
+      /*
+       Switching to a different KIND of tab drops the selection, so the save
+       creates a new diagram instead of overwriting the one on screen.
+
+       Without this, opening a Mermaid block, trying the AI tab and hitting
+       Save replaces the user's Mermaid source with an AI prompt — their
+       diagram is simply gone, with nothing on screen having warned them.
+       Accumulating an extra block is recoverable; that is not.
+
+       An 'other' block (plain text we did not classify) is exempt: adopting
+       it into whichever tab you use is exactly the intent there.
+      */
+      if (!silent && state.current && state.current.kind !== 'other' && state.current.kind !== name) {
+        state.current = null;
+        state.insertAt = null;
+        renderBlockList();
+        showMessage(
+          'Starting a new ' + name + ' diagram. The ' + '‘' +
+          'Save' + '’' + ' button adds it to the note and leaves the ' +
+          'block you were viewing alone.',
+          'ok'
+        );
+      }
+
+      state.tab = name;
+      Array.prototype.forEach.call(document.querySelectorAll('nav#tabs button'), function (b) {
+        b.classList.toggle('active', b.getAttribute('data-tab') === name);
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('main .tab'), function (s) {
+        s.classList.toggle('active', s.getAttribute('data-tab') === name);
+      });
+
+      // Draw is SVG-only: rasterising it would throw away the round trip that
+      // makes the drawing re-editable.
+      var drawOnly = name === 'draw';
+      Array.prototype.forEach.call(document.querySelectorAll('#formatSeg button'), function (b) {
+        var f = b.getAttribute('data-format');
+        b.disabled = drawOnly && f !== 'svg';
+      });
+      if (drawOnly) setFormat('svg');
+
+      if (name === 'draw') ensureDrawSurface();
+      if (!silent) { state.lastSvg = null; refreshSave(); }
+    }
+
+    function setFormat(f) {
+      state.format = f;
+      Array.prototype.forEach.call(document.querySelectorAll('#formatSeg button'), function (b) {
+        b.classList.toggle('active', b.getAttribute('data-format') === f);
+      });
+      persistPrefs();
+    }
+    function setPosition(p) {
+      state.position = p;
+      Array.prototype.forEach.call(document.querySelectorAll('#positionSeg button'), function (b) {
+        b.classList.toggle('active', b.getAttribute('data-position') === p);
+      });
+      persistPrefs();
+    }
+
+    function persistPrefs() {
+      if (!state.note) return;
+      Promise.resolve(Synapse.loadAppState()).then(function (res) {
+        var st = (res && res.success && res.data) || {};
+        st.prefs = { format: state.format, position: state.position };
+        return Synapse.storeAppState(st);
+      }).catch(function () { /* preferences are best-effort */ });
+    }
+
+    // ---------------------------------------------------------------
+    // Mermaid tab
+    // ---------------------------------------------------------------
+    var mermaidTimer = null;
+    function scheduleMermaid() {
+      if (mermaidTimer) clearTimeout(mermaidTimer);
+      mermaidTimer = setTimeout(renderMermaid, 220);
+    }
+
+    function renderMermaid() {
+      var code = $('mermaidEditor').value;
+      refreshSave();
+      if (!code.trim()) {
+        $('mermaidPreview').innerHTML = '';
+        $('mermaidError').classList.add('hidden');
+        state.lastSvg = null;
+        return;
+      }
+      DiagramMermaid.render(code, { background: DIAGRAM_BG }).then(function (svg) {
+        $('mermaidError').classList.add('hidden');
+        state.lastSvg = svg;
+        $('mermaidPreview').innerHTML = svg;
+      }, function (e) {
+        // Keep the last good preview on screen rather than blanking it.
+        var box = $('mermaidError');
+        box.textContent = e.message;
+        box.classList.remove('hidden');
+        addFixWithAi(box, code, e.message);
+      });
+    }
+
+    /** Hand a failing diagram to the model — the commonest Mermaid frustration. */
+    function addFixWithAi(box, code, error) {
+      var btn = document.createElement('button');
+      btn.className = 'secondary';
+      btn.style.marginTop = '8px';
+      btn.textContent = 'Fix with AI';
+      btn.addEventListener('click', function () {
+        btn.disabled = true;
+        btn.textContent = 'Asking…';
+        Synapse.chatAI(
+          'This Mermaid diagram does not parse. Return ONLY the corrected Mermaid ' +
+          'source with no code fence, no explanation.\n\nError: ' + error + '\n\nSource:\n' + code
+        ).then(function (res) {
+          btn.disabled = false;
+          btn.textContent = 'Fix with AI';
+          if (!res || !res.success) throw new Error((res && res.error) || 'unknown error');
+          var fixed = String(res.response || '').replace(/^```[a-z]*\s*|\s*```$/g, '').trim();
+          if (!fixed) throw new Error('the model returned nothing');
+          $('mermaidEditor').value = fixed;
+          scheduleMermaid();
+        }).catch(function (e) {
+          btn.disabled = false;
+          btn.textContent = 'Fix with AI';
+          showMessage('Could not get a fix: ' + (e && e.message ? e.message : e));
+        });
+      });
+      box.appendChild(btn);
+    }
+
+    // ---------------------------------------------------------------
+    // ASCII tab
+    // ---------------------------------------------------------------
+    function buildGlyphBar() {
+      var bar = $('glyphBar');
+      GLYPHS.forEach(function (g) {
+        var b = document.createElement('button');
+        b.textContent = g;
+        b.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          insertAtCaret($('asciiEditor'), g);
+          renderAscii();
+        });
+        bar.appendChild(b);
+      });
+    }
+
+    function insertAtCaret(el, text) {
+      var start = el.selectionStart;
+      var end = el.selectionEnd;
+      el.value = el.value.slice(0, start) + text + el.value.slice(end);
+      el.selectionStart = el.selectionEnd = start + text.length;
+      el.focus();
+      updateCaretReadout();
+    }
+
+    function updateCaretReadout() {
+      var el = $('asciiEditor');
+      var upto = el.value.slice(0, el.selectionStart);
+      var lines = upto.split('\n');
+      $('caretReadout').textContent = 'row ' + lines.length + ', col ' + (lines[lines.length - 1].length + 1);
+    }
+
+    var asciiTimer = null;
+    function scheduleAscii() {
+      if (asciiTimer) clearTimeout(asciiTimer);
+      asciiTimer = setTimeout(renderAscii, 150);
+    }
+
+    function renderAscii() {
+      var text = $('asciiEditor').value;
+      refreshSave();
+      updateCaretReadout();
+      if (!text.trim()) {
+        $('asciiPreview').innerHTML = '';
+        state.lastSvg = null;
+        return;
+      }
+      var svg = DiagramAscii.asciiToSvg(text, { background: DIAGRAM_BG, color: '#e0e0e0', fontSize: 14 });
+      state.lastSvg = svg;
+      $('asciiPreview').innerHTML = svg;
+    }
+
+    // ---------------------------------------------------------------
+    // Draw tab
+    // ---------------------------------------------------------------
+    function ensureDrawSurface() {
+      if (state.drawSurface) return;
+      if (!DiagramDraw.available()) {
+        showMessage('The drawing library did not load, so the Draw tab is unavailable.');
+        return;
+      }
+      try {
+        state.drawSurface = DiagramDraw.createSurface($('drawSurface'), {
+          background: DIAGRAM_BG,
+          onChange: refreshSave,
+        });
+      } catch (e) {
+        showMessage('The drawing surface could not start: ' + (e && e.message ? e.message : e));
+      }
+    }
+
+    function loadDrawing(unit) {
+      ensureDrawSurface();
+      if (!state.drawSurface || !unit.renderRef) return;
+      setBusy(true, 'Loading…');
+      state.writer.readRender(unit.renderRef).then(function (found) {
+        setBusy(false);
+        if (!found || !found.text) {
+          // Never silently open a blank canvas over an existing drawing.
+          showMessage(
+            'This drawing\'s image could not be read back, so it cannot be edited here. ' +
+            'The image in your note is untouched.',
+            'warn'
+          );
+          return;
+        }
+        return state.drawSurface.loadSvg(found.text).then(refreshSave);
+      }).catch(function (e) {
+        setBusy(false);
+        showMessage('Could not load the drawing: ' + (e && e.message ? e.message : e), 'warn');
+      });
+    }
+
+    // ---------------------------------------------------------------
+    // AI tab
+    // ---------------------------------------------------------------
+    function aiKey() {
+      var id = state.writer.attachmentNoteId;
+      var idx = state.current ? state.current.index : 'new';
+      return id + ':' + idx;
+    }
+
+    function renderAiThread() {
+      var thread = state.ai.getThread(aiKey());
+      var panel = $('aiHistoryPanel');
+      var list = $('aiHistory');
+      list.innerHTML = '';
+      if (!thread || !thread.turns.length) {
+        panel.classList.add('hidden');
+        return;
+      }
+      panel.classList.remove('hidden');
+      thread.turns.forEach(function (turn, i) {
+        var div = document.createElement('div');
+        div.className = 'turn';
+        var who = document.createElement('div');
+        who.className = 'who';
+        who.textContent = i === 0 ? 'brief' : 'revision ' + i;
+        var what = document.createElement('div');
+        what.textContent = turn.instruction;
+        div.appendChild(who);
+        div.appendChild(what);
+        list.appendChild(div);
+      });
+    }
+
+    function generateAi() {
+      var instruction = $('aiPrompt').value.trim();
+      if (!instruction) { showMessage('Describe the diagram you want first.'); return; }
+      clearMessage();
+      setBusy(true, 'Generating…');
+
+      state.ai.generate(aiKey(), instruction, { prompt: instruction }).then(function (res) {
+        setBusy(false);
+        state.aiImageUri = res.imageUri;
+        var img = document.createElement('img');
+        img.src = res.dataUri || res.imageUri;
+        img.alt = 'Generated diagram';
+        $('aiPreview').innerHTML = '';
+        $('aiPreview').appendChild(img);
+
+        if (res.turn > 1) {
+          // Be honest about what refinement actually did.
+          var notice = $('aiNotice');
+          notice.textContent = res.usedPriorImage
+            ? 'Refined from the previous image. If the result looks unrelated rather than edited, ' +
+              'this backend may not support image-to-image editing — the instructions are still ' +
+              'being accumulated, so keep describing the whole diagram you want.'
+            : 'Generated from the accumulated description.';
+          notice.classList.remove('hidden');
+        }
+        $('aiPrompt').value = '';
+        renderAiThread();
+        refreshSave();
+      }).catch(function (e) {
+        setBusy(false);
+        showMessage(e && e.message ? e.message : String(e));
+      });
+    }
+
+    // ---------------------------------------------------------------
+    // Saving
+    // ---------------------------------------------------------------
+    function currentSource() {
+      if (state.tab === 'mermaid') return { body: $('mermaidEditor').value.trim(), info: 'mermaid' };
+      if (state.tab === 'ascii') {
+        // ASCII lives in whatever fence it was already in; a bare paragraph
+        // stays a bare paragraph rather than being wrapped in a new fence.
+        var unit = state.current;
+        var unfenced = unit && !unit.fence && unit.kind === 'ascii';
+        return {
+          body: $('asciiEditor').value.replace(/\s+$/, ''),
+          info: unit && unit.fence ? unit.info : '',
+          fenced: !unfenced,
+        };
+      }
+      if (state.tab === 'ai') return { body: promptOfThread(), info: 'ai-diagram' };
+      return { body: '', info: '' };   // draw: the SVG is the source
+    }
+
+    function promptOfThread() {
+      var thread = state.ai.getThread(aiKey());
+      if (!thread) return $('aiPrompt').value.trim();
+      var parts = [thread.prompt];
+      thread.turns.slice(1).forEach(function (t) { if (t.instruction) parts.push('+ ' + t.instruction); });
+      return parts.filter(Boolean).join('\n');
+    }
+
+    function buildImage() {
+      if (state.tab === 'ai') {
+        // Already stored by the AI session; reuse the URI directly.
+        return Promise.resolve({ format: 'png', uri: state.aiImageUri });
+      }
+      if (state.tab === 'draw') {
+        return Promise.resolve({ format: 'svg', text: state.drawSurface.toSvg() });
+      }
+
+      var wantsRaster = state.format === 'png' || state.format === 'jpg';
+
+      var svgPromise;
+      if (state.tab === 'mermaid') {
+        // foreignObject labels vanish when the SVG is rasterised through
+        // <img>, so a raster target must be re-rendered with plain <text>.
+        svgPromise = DiagramMermaid.render($('mermaidEditor').value, {
+          background: DIAGRAM_BG,
+          htmlLabels: !wantsRaster,
+        });
+      } else {
+        svgPromise = Promise.resolve(
+          DiagramAscii.asciiToSvg($('asciiEditor').value, { background: DIAGRAM_BG, fontSize: 14 })
+        );
+      }
+
+      return svgPromise.then(function (svg) {
+        var withBg = DiagramRaster.ensureSvgBackground(svg, DIAGRAM_BG);
+        return DiagramRaster.toImage(withBg, state.format, { background: DIAGRAM_BG, scale: 2 });
+      });
+    }
+
+    function save() {
+      if (state.busy) return;
+      clearMessage();
+      setBusy(true, 'Saving…');
+
+      buildImage().then(function (image) {
+        if (image.fellBack) {
+          showMessage('Could not convert to ' + state.format.toUpperCase() +
+            ' (' + image.reason + '), so the diagram was inserted as SVG.', 'warn');
+        }
+        var src = currentSource();
+        return state.writer.saveUnit({
+          kind: state.tab,
+          unit: state.current,
+          at: state.insertAt,
+          body: src.body,
+          info: src.info,
+          fenced: src.fenced,
+          position: state.position,
+          image: image,
+        });
+      }).then(function () {
+        setBusy(false);
+        state.insertAt = null;
+        rescan();
+        // Re-select the unit we just wrote so a second save replaces it.
+        var match = null;
+        var src = currentSource();
+        for (var i = 0; i < state.units.length; i++) {
+          if (state.units[i].kind === state.tab &&
+              (src.body ? state.units[i].body === src.body : !!state.units[i].renderRef)) {
+            match = state.units[i];
+            break;
+          }
+        }
+        state.current = match;
+        renderBlockList();
+        refreshSave();
+        showMessage('Saved to the note.', 'ok');
+      }).catch(function (e) {
+        setBusy(false);
+        showMessage(e && e.message ? e.message : String(e));
+      });
+    }
+
+    // ---------------------------------------------------------------
+    // Boot
+    // ---------------------------------------------------------------
+    function start() {
+      var notes = (window.Synapse && window.Synapse.Notes) || [];
+      if (!notes.length) {
+        $('scopeBadge').textContent = 'no note';
+        showMessage('Open Diagram Studio on a note, or on a selected block within one.');
+        document.querySelector('footer').classList.add('hidden');
+        return;
+      }
+
+      state.note = notes[0];
+      state.writer = DiagramWriteback.createWriter({
+        synapse: window.Synapse,
+        blocks: DiagramBlocks,
+        note: state.note,
+      });
+      state.ai = DiagramAi.createSession({ synapse: window.Synapse });
+
+      $('scopeBadge').textContent = state.writer.isBlockScope ? 'selected block' : 'whole note';
+
+      buildGlyphBar();
+      wireEvents();
+
+      state.ai.load().then(function () {
+        return Promise.resolve(Synapse.loadAppState());
+      }).then(function (res) {
+        var prefs = (res && res.success && res.data && res.data.prefs) || null;
+        if (prefs) {
+          if (prefs.format) setFormat(prefs.format);
+          if (prefs.position) setPosition(prefs.position);
+        }
+      }).catch(function () { /* defaults are fine */ })
+        .then(function () {
+          rescan();
+          // Open the first real diagram, so the common case needs no taps.
+          var first = null;
+          for (var i = 0; i < state.units.length; i++) {
+            if (state.units[i].kind !== 'other') { first = state.units[i]; break; }
+          }
+          if (first) openUnit(first);
+          else {
+            toggleBlockPanel(!state.writer.isBlockScope && state.units.length > 0);
+            refreshSave();
+          }
+        });
+    }
+
+    function wireEvents() {
+      $('blocksToggle').addEventListener('click', function () { toggleBlockPanel(); });
+      $('newDiagramButton').addEventListener('click', startNewDiagram);
+      $('saveButton').addEventListener('click', save);
+
+      Array.prototype.forEach.call(document.querySelectorAll('nav#tabs button'), function (b) {
+        b.addEventListener('click', function () { selectTab(b.getAttribute('data-tab')); });
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('#formatSeg button'), function (b) {
+        b.addEventListener('click', function () { if (!b.disabled) setFormat(b.getAttribute('data-format')); });
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('#positionSeg button'), function (b) {
+        b.addEventListener('click', function () { setPosition(b.getAttribute('data-position')); });
+      });
+
+      $('mermaidEditor').addEventListener('input', scheduleMermaid);
+      $('asciiEditor').addEventListener('input', scheduleAscii);
+      $('asciiEditor').addEventListener('click', updateCaretReadout);
+      $('asciiEditor').addEventListener('keyup', updateCaretReadout);
+      $('asciiNormalise').addEventListener('click', function () {
+        $('asciiEditor').value = DiagramAscii.padLines($('asciiEditor').value);
+        renderAscii();
+      });
+      $('drawClear').addEventListener('click', function () {
+        if (state.drawSurface) { state.drawSurface.clear(); refreshSave(); }
+      });
+      $('aiGenerate').addEventListener('click', generateAi);
+      $('aiReset').addEventListener('click', function () {
+        state.ai.reset(aiKey(), '');
+        state.aiImageUri = null;
+        $('aiPreview').innerHTML = '';
+        $('aiNotice').classList.add('hidden');
+        renderAiThread();
+        refreshSave();
+      });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', start);
+    } else {
+      start();
+    }
+  })();
+  </script>
+</body>
+</html>

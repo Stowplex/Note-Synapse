@@ -115,8 +115,11 @@
   #stage{position:relative; flex:1; min-height:0; display:flex;}
   #cnv{
     /* !important: the SDL glue writes inline width/height styles on mode
-       changes; keep the canvas letterboxed inside the stage regardless. */
+       changes; keep the canvas letterboxed inside the stage regardless.
+       Top-aligned so the picture stays visible above the keyboard/pad
+       overlays on tall phone screens instead of centering mid-screen. */
     width:100% !important; height:100% !important; object-fit:contain;
+    object-position:center top;
     background:#000; image-rendering:pixelated; display:block; touch-action:none;
   }
   #tty{
@@ -125,9 +128,11 @@
   }
   #tty.hidden{display:none;}
 
-  /* ---- on-screen keyboard --------------------------------------------- */
+  /* ---- on-screen keyboard ---------------------------------------------
+     A flex sibling of #stage (not an overlay): showing it shrinks the stage
+     so the top-aligned video is never covered by the keys. */
   #kb{
-    position:absolute; left:0; right:0; bottom:0; z-index:45;
+    flex:none;
     background:rgba(9,13,19,.94); border-top:1px solid var(--line);
     padding:6px 4px calc(6px + env(safe-area-inset-bottom)); display:none;
     touch-action:none;
@@ -163,6 +168,23 @@
     left:46px; top:46px; background:rgba(61,255,124,.28);
     border:1px solid var(--ph-dim); pointer-events:none;
   }
+  /* 4-way cross overlaid on the analog ring: the container passes touches
+     through (pointer-events:none) so dragging the empty corners still works
+     the analog stick, while the four edge buttons give discrete keypresses
+     for games that read the arrow keys directly. */
+  #dcross{position:absolute; inset:0; pointer-events:none; z-index:2;}
+  .dbtn{
+    position:absolute; width:46px; height:46px; pointer-events:auto;
+    display:flex; align-items:center; justify-content:center; touch-action:none;
+    background:rgba(16,23,34,.82); border:1px solid rgba(80,110,140,.7);
+    border-radius:11px; color:var(--ph); font-size:.9rem; cursor:pointer;
+    text-shadow:0 0 5px rgba(61,255,124,.4);
+  }
+  .dbtn.down{background:rgba(61,255,124,.4); border-color:var(--ph); color:#eafff2;}
+  .dbtn[data-dir="38"]{top:0; left:51px;}
+  .dbtn[data-dir="40"]{bottom:0; left:51px;}
+  .dbtn[data-dir="37"]{left:0; top:51px;}
+  .dbtn[data-dir="39"]{right:0; top:51px;}
   #padbtns{
     position:absolute; right:14px; bottom:calc(16px + env(safe-area-inset-bottom));
     display:flex; gap:12px; align-items:flex-end; pointer-events:auto;
@@ -259,7 +281,15 @@
     <canvas id="cnv" width="0" height="0"></canvas>
     <div id="tty"><pre class="ttytext cursor" id="ttylog"></pre></div>
     <div id="pad">
-      <div id="dpad"><div id="dstick"></div></div>
+      <div id="dpad">
+        <div id="dcross">
+          <button class="dbtn" data-dir="38">▲</button>
+          <button class="dbtn" data-dir="37">◀</button>
+          <button class="dbtn" data-dir="39">▶</button>
+          <button class="dbtn" data-dir="40">▼</button>
+        </div>
+        <div id="dstick"></div>
+      </div>
       <div id="padcfg">
         <select id="mapA"></select><select id="mapB"></select><select id="mapC"></select>
       </div>
@@ -269,9 +299,9 @@
         <button class="pbtn" id="pbA"><b>A</b><span id="lblA"></span></button>
       </div>
     </div>
-    <div id="kb"></div>
     <div id="flash"></div>
   </div>
+  <div id="kb"></div>
 </div>
 
 <!-- ======================= CAPTURE MODAL ======================= -->
@@ -1307,6 +1337,27 @@ function buildPad() {
     el.addEventListener('touchcancel', up, { passive: false });
     el.addEventListener('mousedown', down);
     el.addEventListener('mouseup', up);
+  }
+
+  // 4-way cross buttons: discrete arrow keypresses for games that read the
+  // arrow keys directly. stopPropagation keeps a button press from also
+  // driving the analog tracker underneath it.
+  for (const el of document.querySelectorAll('.dbtn')) {
+    const code = Number(el.dataset.dir);
+    const down = (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      el.classList.add('down'); sendKey(code, true);
+    };
+    const up = (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      el.classList.remove('down'); sendKey(code, false);
+    };
+    el.addEventListener('touchstart', down, { passive: false });
+    el.addEventListener('touchend', up, { passive: false });
+    el.addEventListener('touchcancel', up, { passive: false });
+    el.addEventListener('mousedown', down);
+    el.addEventListener('mouseup', up);
+    el.addEventListener('mouseleave', (ev) => { if (el.classList.contains('down')) up(ev); });
   }
 
   // D-pad: track one touch, translate position to arrow-key chords.
