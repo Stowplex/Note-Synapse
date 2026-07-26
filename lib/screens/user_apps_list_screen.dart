@@ -27,8 +27,6 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
   final TextEditingController _editingController = TextEditingController();
   final FocusNode _editingFocusNode = FocusNode();
   final TextEditingController _searchController = TextEditingController();
-  String? _selectedYamlFile;
-  String? _errorMessage;
   String _searchQuery = '';
 
   @override
@@ -192,27 +190,6 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
         );
       },
     );
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Show error message if there's one
-    if (_errorMessage != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(_errorMessage!),
-              backgroundColor: Colors.orange,
-            ),
-          );
-          setState(() {
-            _errorMessage = null; // Clear the error
-          });
-        }
-      });
-    }
   }
 
   Widget _buildWebViewNotSupportedScreen(BuildContext context) {
@@ -501,7 +478,7 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
               title: Text(AppLocalizations.of(context)!.importApp),
               onTap: () {
                 Navigator.pop(context);
-                _importApp(context);
+                _importApp();
               },
             ),
           ],
@@ -517,7 +494,9 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
     );
   }
 
-  Future<void> _importApp(BuildContext context) async {
+  // Uses the State's own context: the bottom-sheet context that invokes this
+  // is popped before the picker completes.
+  Future<void> _importApp() async {
     try {
       LoggerService.debug('Starting file picker...');
 
@@ -536,47 +515,32 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
             'Selected file: ${file.name}, path: ${file.path}',
           );
 
-          // Store the file path and trigger navigation in the next frame
-          _selectedYamlFile = file.path!;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              _navigateToImportScreen();
-            }
-          });
+          if (!mounted) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ImportAppScreen(yamlFilePath: file.path!),
+            ),
+          );
         } else {
           LoggerService.debug('File path is null');
-          setState(() {
-            _errorMessage = 'File path is null';
-          });
+          _showImportError('File path is null');
         }
       } else {
         LoggerService.debug('No file selected or result is null');
-        setState(() {
-          _errorMessage = 'No file selected or result is null';
-        });
+        _showImportError('No file selected or result is null');
       }
     } catch (e) {
       LoggerService.error('Error in file picker: $e');
-      setState(() {
-        _errorMessage = 'Error selecting file: $e';
-      });
+      _showImportError('Error selecting file: $e');
     }
   }
 
-  void _navigateToImportScreen() {
-    if (_selectedYamlFile != null) {
-      LoggerService.debug(
-        'Navigating to ImportAppScreen with file: $_selectedYamlFile',
-      );
-      final filePath = _selectedYamlFile!; // Store the path before clearing
-      _selectedYamlFile = null; // Clear before navigation
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ImportAppScreen(yamlFilePath: filePath),
-        ),
-      );
-    }
+  void _showImportError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.orange),
+    );
   }
 
   void _navigateToViewApp(BuildContext context, UserApp app) {
