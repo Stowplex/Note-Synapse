@@ -310,7 +310,7 @@
     <h2 style="font-size:.95rem;">📸 FRAME CAPTURED</h2>
     <img id="capImg" alt="captured frame">
     <div id="aiOut"></div>
-    <textarea id="capText" placeholder="Optional note about this moment…"></textarea>
+    <textarea id="capText" placeholder="Note or question about this moment — also sent to Ask AI…"></textarea>
     <div class="row">
       <button class="btn" id="btnAskAI">🤖 Ask AI</button>
       <button class="btn primary" id="btnSaveCap">💾 Append to note</button>
@@ -388,6 +388,7 @@ const state = {
   live: false,
   paused: false,
   lastCapture: null,
+  lastAiAnswer: null,    // reply from the capture modal's Ask AI, saved with the frame
   capWasPaused: false,
   armedMods: new Set(),
   padMap: { A: 17, B: 18, C: 32 },
@@ -476,6 +477,26 @@ function fatal(msg, e) {
   };
   ['touchend', 'mousedown', 'keydown'].forEach((ev) =>
     document.addEventListener(ev, resume, true));
+})();
+
+/* ------------------------------------------- typing into our own inputs */
+// SDL's glue listens for key events on `keyboardListeningElement` (document)
+// and calls preventDefault() on every key DOSBox emulates — Backspace among
+// them. That also swallows deletions typed into this page's own text fields
+// (very visible with Android's virtual keyboard, where Backspace is one of
+// the few keys that fires a real keydown). Claim those events first, in the
+// capture phase, so keystrokes aimed at a text field never reach the
+// emulator. Registered at load time, i.e. before the engine glue attaches
+// its own listeners.
+(function guardTextFields() {
+  const isField = (el) => !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' ||
+    el.isContentEditable);
+  ['keydown', 'keyup', 'keypress'].forEach((ev) =>
+    document.addEventListener(ev, (e) => {
+      // Synthetic keys from the on-screen keyboard target document itself,
+      // so they still travel to SDL untouched.
+      if (isField(e.target)) e.stopPropagation();
+    }, true));
 })();
 
 /* ------------------------------------------------------------ app state */
@@ -1439,6 +1460,7 @@ function openCapture() {
   if (!state.paused) pauseToggle(true);
   $('capImg').src = dataUrl;
   $('capText').value = '';
+  state.lastAiAnswer = null;
   $('aiOut').style.display = 'none';
   $('aiOut').textContent = '';
   $('capWrap').classList.add('show');
@@ -1484,6 +1506,7 @@ async function saveCapture() {
     if (imgRef) block += '\n\n![DOS capture](' + imgRef + ')';
     else block += '\n\n_(frame saved as attachment ' + stampId + '.png)_';
     if (comment) block += '\n\n' + comment;
+    if (state.lastAiAnswer) block += '\n\n🤖 ' + state.lastAiAnswer;
     const app = await Synapse.updateNotes([{
       id: state.noteId,
       modification: { content: { action: 'append', text: block } },
@@ -1505,23 +1528,37 @@ async function saveCapture() {
 
 async function askAI() {
   const out = $('aiOut');
+  // Whatever the player typed in the note box is their question/context for
+  // the AI, not just note text — send it along with the frame.
+  const note = $('capText').value.trim();
   out.style.display = 'block';
   out.textContent = '🤖 examining the frame…';
   try {
+    let prompt = 'This is a screenshot of a DOS game or program running in an emulator.\n\n';
+    if (note) {
+      prompt += 'The player wrote this about the moment:\n"""\n' + note + '\n"""\n\n' +
+        'Answer it directly — if it is a question, answer that question about the ' +
+        'screenshot; otherwise respond to the remark using what you see. ' +
+        'Answer in 2-4 plain-text sentences.';
+    } else {
+      prompt += 'Briefly describe what is on screen, identify the game if you can, and give one ' +
+        'helpful, spoiler-light tip. Answer in 2-4 plain-text sentences.';
+    }
     const r = await Synapse.chatAI(
-      'This is a screenshot of a DOS game or program running in an emulator. ' +
-      'Briefly describe what is on screen, identify the game if you can, and give one ' +
-      'helpful, spoiler-light tip. Answer in 2-4 plain-text sentences.',
+      prompt,
       { attachments: [{ type: 'base64', mimeType: 'image/png', data: state.lastCapture }] },
     );
     if (r && r.success && r.response) {
-      out.textContent = '🤖 ' + r.response;
-      const cur = $('capText');
-      if (!cur.value) cur.value = r.response.trim();
+      // Kept out of the note box (that box is the prompt) — appended to the
+      // note alongside it by saveCapture().
+      state.lastAiAnswer = r.response.trim();
+      out.textContent = '🤖 ' + state.lastAiAnswer;
     } else {
+      state.lastAiAnswer = null;
       out.textContent = 'AI unavailable: ' + ((r && r.error) || 'no response');
     }
   } catch (e) {
+    state.lastAiAnswer = null;
     logErr('askAI', e);
     out.textContent = 'AI request failed: ' + (e && e.message);
   }
