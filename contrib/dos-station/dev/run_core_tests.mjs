@@ -83,6 +83,12 @@ for (const s of ['', 'x', 'print "hi"\n', 'a\nb\nc', 'caf\u00e9\nna\u00efve\n'])
 ok('looksBinary nul', C.looksBinary(new Uint8Array([65, 0, 66])));
 ok('looksBinary text', !C.looksBinary(C.toDosBytes('10 PRINT "HI"\n20 GOTO 10\n')));
 ok('looksBinary empty', !C.looksBinary(new Uint8Array(0)));
+// A trailing ^Z is ordinary DOS text; in a short file it is >5% on its own.
+ok('looksBinary tolerates a trailing ^Z',
+  !C.looksBinary(new Uint8Array([...C.toDosBytes('10 PRINT 1'), 0x1a])));
+ok('looksBinary lone ^Z', !C.looksBinary(new Uint8Array([0x1a])));
+ok('looksBinary still catches control bytes',
+  C.looksBinary(new Uint8Array([65, 1, 2, 3, 4, 5, 66])));
 
 // =====================================================================
 // Line indexing
@@ -190,6 +196,28 @@ ok('fence close with info rejected', !C.isFenceClose('```js', { char: '`', len: 
   const f = C.scanFences(src)[0];
   check('replaceFence empty body', C.replaceFence(src, f, { body: '' }), '```txt\n```\n');
 }
+{
+  // An unclosed fence's "body" is the whole rest of the note. Splicing it would
+  // delete everything after the stray ``` — refuse instead.
+  const src = 'intro\n\n```txt\nbody\n\nlots of other note text\nmore\n';
+  const f = C.scanFences(src)[0];
+  ok('scanFences still reports the unclosed block', f.closeLine === null);
+  let threw = '';
+  try { C.replaceFence(src, f, { body: 'NEW' }); } catch (e) { threw = e.message; }
+  ok('replaceFence refuses an unclosed fence', /unclosed code block/.test(threw));
+}
+{
+  // A CRLF note must not come back with one LF-ended block in the middle of it.
+  const src = 'a\r\n```txt\r\nx\r\n```\r\nb\r\n';
+  const f = C.scanFences(src)[0];
+  check('replaceFence keeps CRLF', C.replaceFence(src, f, { body: 'q' }),
+    'a\r\n```txt\r\nq\r\n```\r\nb\r\n');
+}
+{
+  const src = 'a\n```txt\nx\n```\nb\n';
+  const f = C.scanFences(src)[0];
+  check('replaceFence keeps LF', C.replaceFence(src, f, { body: 'q' }), 'a\n```txt\nq\n```\nb\n');
+}
 
 // =====================================================================
 // Info string attributes
@@ -219,12 +247,89 @@ check('setInfoAttr removes but keeps others',
   C.setInfoAttr('basic {.x dos-name="A.BAS"}', 'dos-name', null), 'basic {.x}');
 check('setInfoAttr strips quotes from the value',
   C.setInfoAttr('basic', 'dos-name', 'A"B.BAS'), 'basic {dos-name="AB.BAS"}');
+{
+  // A backtick in the info string stops the line being a fence at all: the
+  // opener turns into prose and the old closer becomes an opener.
+  check('setInfoAttr strips a backtick', C.setInfoAttr('basic', 'dos-name', 'A`B.BAS'),
+    'basic {dos-name="AB.BAS"}');
+  ok('dosPathCheck rejects a backtick', !C.dosPathCheck('a`b.txt').ok);
+  const src = 'head\n\n```basic\nx\n```\n\ntail\n';
+  const f = C.scanFences(src)[0];
+  const out = C.replaceFence(src, f, { info: C.setInfoAttr(f.info, 'dos-name', 'A`B.BAS') });
+  check('a sanitized name leaves the block a block', C.scanFences(out).length, 1);
+  check('and the attribute still round-trips', C.infoAttr(C.scanFences(out)[0].info, 'dos-name'),
+    'AB.BAS');
+}
 check('setInfoAttr round-trips through the scanner', (() => {
   const src = '```basic\nx\n```\n';
   const f = C.scanFences(src)[0];
   const out = C.replaceFence(src, f, { info: C.setInfoAttr(f.info, 'dos-name', 'A.BAS') });
   return C.infoAttr(C.scanFences(out)[0].info, 'dos-name');
 })(), 'A.BAS');
+
+// =====================================================================
+// replaceFence property test
+//
+// Every note write is a whole-body replace built from one of these splices, so
+// the invariant that protects the user's note is: nothing outside the block
+// moves, and the result re-scans to the same block with the intended body. Run
+// it over generated documents rather than only the cases I thought of.
+// =====================================================================
+{
+  // Deterministic PRNG — a failing seed has to be reproducible.
+  let seed = 0x2545f491;
+  const rnd = (n) => {
+    seed ^= seed << 13; seed >>>= 0;
+    seed ^= seed >> 17;
+    seed ^= seed << 5; seed >>>= 0;
+    return seed % n;
+  };
+  const LINES = [
+    'plain prose', '', '# heading', '   indented text', '\tTabbed',
+    '```', '````', '~~~', '```js', '~~~text', '  ```sh', '```basic {dos-name="A.BAS"}',
+    '````md', 'text with ``` inside it', '- a list item', '> quote',
+  ];
+  const BODIES = ['', 'x', 'a\nb', '```\nnested\n```', 'line\n\nblank', '````\nwide\n````', '\ttab'];
+
+  let failures0 = failures;
+  for (let iter = 0; iter < 3000; iter++) {
+    const n = 1 + rnd(9);
+    const doc = Array.from({ length: n }, () => LINES[rnd(LINES.length)]).join('\n') +
+      (rnd(2) ? '\n' : '');
+    // Unterminated fences are never writable — replaceFence refuses them,
+    // asserted separately below.
+    const fences = C.scanFences(doc).filter((g) => g.closeLine !== null);
+    if (!fences.length) continue;
+    const f = fences[rnd(fences.length)];
+    const body = BODIES[rnd(BODIES.length)];
+    let out;
+    try {
+      out = C.replaceFence(doc, f, { body });
+    } catch (e) {
+      failures++;
+      console.error(`FAIL replaceFence threw (iter ${iter})\n  doc: ${JSON.stringify(doc)}\n  ${e.message}`);
+      break;
+    }
+    const prefixOk = out.slice(0, f.blockStart) === doc.slice(0, f.blockStart);
+    const suffixOk = out.slice(out.length - (doc.length - f.blockEnd)) ===
+      doc.slice(f.blockEnd);
+    // The replaced block must come back as one block holding exactly what we put in.
+    const after = C.scanFences(out);
+    const hit = after.find((g) => g.blockStart === f.blockStart);
+    const bodyOk = hit ? C.fenceBody(out, hit) === body : false;
+    const countOk = after.length === C.scanFences(doc).length;
+    if (!prefixOk || !suffixOk || !bodyOk || !countOk) {
+      failures++;
+      console.error(`FAIL replaceFence invariant (iter ${iter})` +
+        `\n  doc:    ${JSON.stringify(doc)}` +
+        `\n  body:   ${JSON.stringify(body)}` +
+        `\n  out:    ${JSON.stringify(out)}` +
+        `\n  prefix=${prefixOk} suffix=${suffixOk} body=${bodyOk} count=${countOk}`);
+      break;
+    }
+  }
+  if (failures === failures0) passed++;
+}
 
 // =====================================================================
 // DOS names

@@ -133,21 +133,42 @@
   syncNoteAttachments();
 
   /* What the host hands the plugin. In block scope this is a transient id for
-   * the selected block, whose `content` is only that block's text. */
+   * the selected block: `content` is only that block's text, a SELECT of
+   * `content` for that id comes back patched to the block's text, a content
+   * replace rewrites only that region of the parent, and an attachment change is
+   * refused outright (the host tells you to target parentNoteId).
+   *
+   * The block is tracked by its current text rather than by offsets, so a
+   * replace can find it again after the parent moved around it. */
+  const BLOCK_ID = 'block-tmp-1';
+  let blockText = null;
   let selected;
   if (scenario === 'block') {
-    const m = /```dosbox[\s\S]*?```/.exec(fakeNote.content);
+    // The whole ```basic import block, so the block scope has a file in it.
+    const m = /```basic[\s\S]*?```/.exec(fakeNote.content);
+    blockText = m ? m[0] : '';
     selected = {
-      id: 'block-tmp-1',
+      id: BLOCK_ID,
       isBlockScope: true,
       parentNoteId: fakeNote.id,
       title: fakeNote.title,
-      content: m ? m[0] : '',
+      content: blockText,
       attachmentPaths: fakeNote.attachmentPaths.slice(),
     };
   } else {
     selected = fakeNote;
   }
+
+  /** Splices new block text into the parent, exactly like BlockNoteScopeService. */
+  const writeBackBlock = (text) => {
+    const at = fakeNote.content.indexOf(blockText);
+    if (at < 0) return { ok: false, error: 'the block is no longer in the note' };
+    fakeNote.content =
+      fakeNote.content.slice(0, at) + text + fakeNote.content.slice(at + blockText.length);
+    blockText = text;
+    selected.content = text;
+    return { ok: true };
+  };
 
   const diff = (before, after) => {
     const a = before.split('\n');
@@ -172,8 +193,10 @@
       if (scenario === 'readonly') return { success: false, error: 'query refused (harness scenario)' };
       const m = /FROM\s+notes\s+WHERE\s+id\s*=\s*'([^']*)'/i.exec(sql);
       if (!m) return { success: true, data: [] };
+      // The host rewrites a block id to its parent and then patches `content`
+      // back to the block's text, so a plugin never sees the parent by accident.
+      if (m[1] === BLOCK_ID) return { success: true, data: [{ content: blockText }] };
       if (m[1] === fakeNote.id) return { success: true, data: [{ content: fakeNote.content }] };
-      if (m[1] === 'block-tmp-1') return { success: true, data: [{ content: selected.content }] };
       return { success: true, data: [] };
     },
 
@@ -276,8 +299,28 @@
         typeof v === 'string' && v.length > 120 ? v.slice(0, 90) + '…[' + v.length + ' chars]' : v, 2));
       const n = notes && notes[0];
       const mod = n && n.modification;
-      if (n && n.id !== fakeNote.id) {
-        hlog('  !! write targeted ' + n.id + ', not the real note id ' + fakeNote.id);
+      if (n && n.id !== fakeNote.id && n.id !== BLOCK_ID) {
+        hlog('  !! write targeted unknown id ' + n.id);
+        return { success: false, error: 'no such note' };
+      }
+      if (n && n.id === BLOCK_ID) {
+        // The host refuses note-level fields on a block and applies the content
+        // action to the block's text only.
+        if (!mod || !mod.content) {
+          hlog('  !! refused: a block update must include a content modification');
+          return { success: false, error: 'A block update must include a content modification.' };
+        }
+        if (mod.attachments) hlog('  !! ignoring attachments on a block-scoped update');
+        const act = mod.content.action;
+        const before = fakeNote.content;
+        const next = act === 'append' ? blockText + '\n' + mod.content.text
+          : act === 'prepend' ? mod.content.text + '\n' + blockText
+            : mod.content.text;
+        const res = writeBackBlock(next);
+        if (!res.ok) { hlog('  !! ' + res.error); return { success: false, error: res.error }; }
+        persistNote();
+        hlog('  -> block ' + act + ' (parent note spliced):\n' + diff(before, fakeNote.content));
+        return { success: true, updatedCount: 1 };
       }
       if (mod && mod.attachments && mod.attachments.removed) {
         for (const path of mod.attachments.removed) {

@@ -102,7 +102,9 @@ name, and DOS Station writes the attribute into that fence for you.
 
 - **Names** are DOS 8.3, uppercased, subdirectories allowed:
   `hello.bas` → `C:\HELLO.BAS`, `src/main.bas` → `C:\SRC\MAIN.BAS`. Anything
-  illegal is rejected in the panel with the reason.
+  illegal is rejected in the panel with the reason. The block must be closed —
+  a stray unclosed ` ``` ` swallows the rest of the note, so DOS Station will
+  not import from it or write back into it.
 - **Text is converted**, since DOS does not read UTF-8: line endings become
   CRLF and characters are transcoded to code page 437 (so box-drawing and
   accented characters survive; anything CP437 cannot represent becomes `?`, and
@@ -150,6 +152,10 @@ you reconcile them.
 - an **attachment** is saved as a *new* file (`levels-<stamp>.dat`) and the
   `dos-files` entry starts pointing at it via `| v=…`. Your original attachment
   is never modified or deleted.
+
+Each of these changes the note, so the app asks for your approval the first time
+in a session (pushing an attachment back asks twice: once to attach the file,
+once to point the note at it).
 
 `↻ FROM NOTE` throws away the DOS-side changes and re-copies the note's version;
 it needs a second tap to confirm. Files added or removed while DOSBox is running

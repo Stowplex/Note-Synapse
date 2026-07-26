@@ -67,8 +67,9 @@ the note — a BASIC listing, a batch file, a config file a game reads.
 - The name must be DOS 8.3 and is uppercased: `hello.bas` → `C:\HELLO.BAS`.
   Subdirectories are allowed (`src/main.bas` → `C:\SRC\MAIN.BAS`). A stem longer
   than 8 characters, an extension longer than 3, a device name (`CON`, `NUL`,
-  `LPT1`, …) or characters outside `A-Z 0-9 ! # $ % & ' ( ) - @ ^ _ \` { } ~`
-  are rejected.
+  `LPT1`, …) or characters outside `A-Z 0-9 ! # $ % & ' ( ) - @ ^ _ { } ~` are
+  rejected. (DOS also allows a backtick, but it cannot appear in a fence's info
+  string, so DOS Station does not accept one either.)
 - Add the attribute to the block the user already wrote rather than duplicating
   its contents into a new block.
 - The block's text is stored on `C:` as code page 437 with CRLF line endings,
