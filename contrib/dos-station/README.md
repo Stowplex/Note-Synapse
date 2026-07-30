@@ -68,7 +68,10 @@ inside the plugin sandbox, using only the public Synapse API:
    ````
 
    - The zip is always mounted at `/dos`; `mount c /dos` + `c:` are added to
-     your `[autoexec]` automatically if you leave them out.
+     your `[autoexec]` automatically unless one of your own lines already
+     mounts drive `c`.
+   - An `[autoexec]` that only sets up mounts (no program line) still shows
+     the launcher menu; the program you pick there runs after your mounts.
    - With no ` ```dosbox ` block (or no `[autoexec]`), DOS Station scans the
      zip for `.exe`/`.com`/`.bat` programs and shows a launcher menu.
 
@@ -82,6 +85,43 @@ inside the plugin sandbox, using only the public Synapse API:
    Supported embed params: `autoboot` (skip the launcher when possible),
    `exe` (program to run, e.g. `exe=KEEN1.EXE`), `zip` (attachment file name
    to use when the note has several zips).
+
+### Multiple disks and CD-ROMs
+
+Some games ship as two disks — the installed game plus a CD the game reads at
+runtime. Attach both zips and reference them **by their file names** in the
+`[autoexec]` mount lines:
+
+````markdown
+```dosbox
+[autoexec]
+mount c content.zip
+mount f disk.zip -t cdrom
+c:
+GAME.EXE
+```
+````
+
+DOS Station sees that a mount source names an attachment, unpacks each zip to
+its own directory in the emulator, and rewrites the line before DOSBox runs it
+(`mount f disk.zip -t cdrom` boots as `mount f /zip_f -t cdrom` — MSCDEX and
+all). `mount c content.zip` also settles which zip is the game drive, so the
+disk chooser is skipped. Notes:
+
+- Use the attachment's **file name as you see it** (quote it if it contains
+  spaces: `mount f "disk two.zip" -t cdrom`) — never the internal stored name.
+- Nothing needs typing: when a note has several game zips, the disk chooser
+  lets you pick the `C:` zip and mark others `📀 CD`, then writes this block
+  into the note for you.
+- Single-file disk images work too: `imgmount d disc.iso -t iso` with a
+  `.iso`/`.img`/`.ima` attachment (`.cue`+`.bin` pairs are not supported).
+- **Only `C:` is saved.** Secondary drives are treated like real CDs: anything
+  a program writes there is lost when the session ends.
+- Everything mounted must fit in the emulator's 128 MB memory: past 64 MB of
+  content you get a warning, past 96 MB the boot is refused. Big CD images
+  generally do not fit.
+- A source that is not an attachment name (e.g. `mount c /dos`, or an image
+  file inside the game zip) passes through to DOSBox untouched.
 
 ## Files from the note
 
@@ -232,7 +272,7 @@ node dev/run_core_tests.mjs
 # Full UI, in a browser, against a stubbed Synapse:
 python3 -m http.server 8471     # from this directory
 open http://localhost:8471/dev/test_harness.html
-# ?scenario=zipless | block | readonly, and ?reset=1 to clear the stub's storage
+# ?scenario=zipless | block | readonly | multizip, and ?reset=1 to clear the stub's storage
 
 ./plugins/build.sh              # regenerate the installable YAML after any HTML edit
 ```

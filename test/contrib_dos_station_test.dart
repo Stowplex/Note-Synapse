@@ -59,6 +59,9 @@ void main() {
         'function setInfoAttr',
         'function dosPathCheck',
         'function parseDosFilesLine',
+        'function parseMountLine',
+        'function zipEntriesToFiles',
+        'function autoexecHasProgram',
       ]) {
         expect(core, contains(name), reason: '$name must stay inside the core');
       }

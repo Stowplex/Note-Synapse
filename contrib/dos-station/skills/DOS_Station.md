@@ -28,8 +28,18 @@ zip as the DOS `C:` drive and boots a DOSBox emulator, configured by a fenced
    ```
 
    Rules:
-   - The zip is always mounted at `/dos`. If the `[autoexec]` block has no
-     `mount` command, `mount c /dos` + `c:` are inserted automatically.
+   - The zip is always mounted at `/dos`. If nothing in `[autoexec]` mounts
+     drive `c`, `mount c /dos` + `c:` are inserted automatically.
+   - **Multi-disk games**: a mount source may be another attachment's file
+     name — `mount c content.zip`, `mount f disk.zip -t cdrom`, or
+     `imgmount d disc.iso -t iso` (single-file images only). DOS Station
+     unpacks the attachment and rewrites the path before DOSBox runs. Always
+     use the human file name shown on the note (quoted if it has spaces),
+     never a stored `<name>_<uuid>` form. `mount c <zip>` also picks which
+     zip is the game drive. Only `C:` is saved — writes to other drives are
+     lost, like a real CD. Keep total mounted content well under ~96 MB.
+   - An `[autoexec]` with only mount lines (no program) still shows the
+     launcher menu; the picked program runs after the mounts.
    - With **no** `[autoexec]` section, DOS Station scans the zip for
      `.exe`/`.com`/`.bat` programs and shows a launcher menu — this is the
      right default when you don't know the game's main executable.

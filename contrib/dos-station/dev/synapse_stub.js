@@ -12,6 +12,7 @@
  *   ?scenario=zipless   note with imports but no game zip
  *   ?scenario=block     launched on a selected block (isBlockScope)
  *   ?scenario=readonly  runQuery fails, so the note text is not writable
+ *   ?scenario=multizip  a second game zip (testcd.zip) for CD-ROM mounting
  *   ?reset=1            forget the stub's stored note text and attachments
  */
 (function () {
@@ -109,6 +110,14 @@
     storedAttachments.push({
       id: 'att-zip', seeded: true, path: 'attachments/testgame.zip',
       fileName: 'testgame.zip', mimeType: 'application/zip',
+    });
+  }
+  if (scenario === 'multizip') {
+    // Stored under a uuid-suffixed path, like the real host, so mount lines
+    // written with the human name must go through resolveAttachment.
+    storedAttachments.push({
+      id: 'att-cd', seeded: true, path: 'attachments/testcd_7be2c1d0.zip',
+      fileName: 'testcd.zip', mimeType: 'application/zip',
     });
   }
   // A non-zip attachment to exercise the "pull a file in by hand" path. Its
@@ -263,6 +272,12 @@
       hlog('readAttachment ' + path);
       if (/testgame\.zip$/.test(path)) {
         const r = await fetch('testgame.zip');
+        if (!r.ok) return { success: false, error: 'HTTP ' + r.status };
+        const buf = new Uint8Array(await r.arrayBuffer());
+        return { success: true, data: u8ToB64(buf), mimeType: 'application/zip' };
+      }
+      if (/testcd_7be2c1d0\.zip$/.test(path)) {
+        const r = await fetch('testcd.zip');
         if (!r.ok) return { success: false, error: 'HTTP ' + r.status };
         const buf = new Uint8Array(await r.arrayBuffer());
         return { success: true, data: u8ToB64(buf), mimeType: 'application/zip' };

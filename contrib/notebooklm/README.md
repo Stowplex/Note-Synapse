@@ -51,7 +51,7 @@ is never routed through the AI conversation — the AI only ever handles note
 The plugin talks to NotebookLM's private `batchexecute` web endpoints — the
 same requests the NotebookLM web app makes — authenticated by your in-app
 browser session cookies. No API key is involved, and nothing is sent anywhere
-except to Google.
+except to Google. This approach is inspired by https://github.com/jacob-bd/gemini-notebook-mcp-cli.
 
 Because these are **unofficial interfaces**, expect rough
 edges:

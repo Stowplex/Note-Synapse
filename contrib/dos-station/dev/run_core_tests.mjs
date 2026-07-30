@@ -32,6 +32,11 @@ const EXPORTS = [
   'parseDosFilesLine', 'formatDosFilesLine', 'parseDosFilesBody',
   'formatDosFilesBody', 'dosFilesOpt', 'setDosFilesOpt',
   'CODE_WARN_BYTES', 'classifyNewFiles', 'composeFenceBlock', 'langForDosPath',
+  'parseMountLine', 'rewriteMountLine', 'scanAutoexecMounts',
+  'isZipSource', 'isImageSource', 'guestRootForMount', 'imgGuestPath',
+  'validateMountRecs', 'zipEntriesToFiles', 'splitDosboxConf',
+  'autoexecHasProgram', 'composeMountAutoexec', 'replaceAutoexecMounts',
+  'joinConfBody', 'MOUNT_BYTES_WARN', 'MOUNT_BYTES_REFUSE', 'mountBudgetVerdict',
 ];
 const C = new Function(html.slice(a, b) + '\nreturn {' + EXPORTS.join(',') + '};')();
 
@@ -462,6 +467,109 @@ check('setDosFilesOpt adds flag', C.setDosFilesOpt([], 'text', true), ['text']);
   check('lang bat', C.langForDosPath('GO.BAT'), 'bat');
   check('lang unknown is empty', C.langForDosPath('GAME1.SAV'), '');
   check('lang no extension', C.langForDosPath('README'), '');
+}
+
+// =====================================================================
+// autoexec mount lines (multi-zip / CD-ROM mounting)
+// =====================================================================
+{
+  const p = C.parseMountLine('mount c game.zip');
+  check('mount parse basic', { kind: p.kind, drive: p.drive, driveOk: p.driveOk, src: p.src },
+    { kind: 'mount', drive: 'c', driveOk: true, src: 'game.zip' });
+  const q = C.parseMountLine('  MOUNT F "disk two.zip" -t cdrom -label GAME');
+  check('mount parse quoted + opts', { drive: q.drive, src: q.src, after: q.after },
+    { drive: 'f', src: 'disk two.zip', after: ' -t cdrom -label GAME' });
+  check('mount rewrite keeps opts', C.rewriteMountLine(q, '/zip_f'),
+    '  MOUNT F /zip_f -t cdrom -label GAME');
+  check('mount rewrite quotes spaced target', C.rewriteMountLine(p, '/a dir'),
+    'mount c "/a dir"');
+  const im = C.parseMountLine('imgmount d game.iso -t iso');
+  check('imgmount parse', { kind: im.kind, drive: im.drive, src: im.src },
+    { kind: 'imgmount', drive: 'd', src: 'game.iso' });
+  check('drive with colon', C.parseMountLine('mount d: data.zip').drive, 'd');
+  check('mount -u flagged not ok', C.parseMountLine('mount -u c').driveOk, false);
+  check('non-mount line is null', C.parseMountLine('c:'), null);
+  check('unterminated quote is null', C.parseMountLine('mount f "disk.zip'), null);
+
+  const ae = ['@echo off', 'mount c game.zip', 'mount f "cd disk.zip" -t cdrom', 'c:', 'GAME.EXE'];
+  const recs = C.scanAutoexecMounts(ae);
+  check('scan finds mounts with indices', recs.map((r) => [r.idx, r.drive]), [[1, 'c'], [2, 'f']]);
+  check('validate clean set', C.validateMountRecs(recs), []);
+  check('validate duplicate drive',
+    C.validateMountRecs(C.scanAutoexecMounts(['mount c a.zip', 'mount C b.zip'])).length, 1);
+  check('validate imgmount of zip',
+    C.validateMountRecs(C.scanAutoexecMounts(['imgmount d a.zip'])).length, 1);
+  check('validate mount of image',
+    C.validateMountRecs(C.scanAutoexecMounts(['mount d a.iso'])).length, 1);
+  check('validate bad drive token',
+    C.validateMountRecs(C.scanAutoexecMounts(['mount -u c'])).length, 1);
+
+  ok('zip source', C.isZipSource('A.ZIP') && !C.isZipSource('a.iso'));
+  ok('image source', C.isImageSource('a.iso') && C.isImageSource('B.IMG') &&
+    C.isImageSource('c.ima') && !C.isImageSource('a.cue') && !C.isImageSource('a.zip'));
+  check('root for c', C.guestRootForMount('mount', 'c'), '/dos');
+  check('root for f', C.guestRootForMount('mount', 'f'), '/zip_f');
+  check('root for imgmount', C.guestRootForMount('imgmount', 'd'), null);
+  check('img path sanitized', C.imgGuestPath('dir/My Disc (1).iso'), '/img/My_Disc__1_.iso');
+  check('img path fallback', C.imgGuestPath('???'), '/img/___');
+
+  const files = C.zipEntriesToFiles({
+    'GameDir/': new Uint8Array(0),
+    'GameDir/PLAY.BAT': new Uint8Array([1]),
+    'GameDir/SUB/A.DAT': new Uint8Array([2]),
+    'GameDir/.DS_Store': new Uint8Array([3]),
+    '__MACOSX/GameDir/PLAY.BAT': new Uint8Array([4]),
+  });
+  check('zip normalize strips wrapper + junk', files.map((f) => f.name).sort(),
+    ['PLAY.BAT', 'SUB/A.DAT']);
+  check('zip normalize no wrapper when mixed',
+    C.zipEntriesToFiles({ 'A.TXT': new Uint8Array([1]), 'DIR/B.TXT': new Uint8Array([2]) })
+      .map((f) => f.name).sort(), ['A.TXT', 'DIR/B.TXT']);
+  check('zip normalize empty input', C.zipEntriesToFiles({}), []);
+
+  check('splitDosboxConf both parts',
+    C.splitDosboxConf('[cpu]\ncycles=fixed 12000\n[autoexec]\nmount c /dos\nc:'),
+    { head: '[cpu]\ncycles=fixed 12000', autoexec: ['mount c /dos', 'c:'] });
+  check('splitDosboxConf no autoexec',
+    C.splitDosboxConf('[cpu]\ncycles=auto'), { head: '[cpu]\ncycles=auto', autoexec: null });
+
+  ok('program: exe line', C.autoexecHasProgram(['mount c /dos', 'c:', 'GAME.EXE']));
+  ok('program: mounts only is false',
+    !C.autoexecHasProgram(['@echo off', 'mount c a.zip', 'mount f b.zip -t cdrom', 'c:']));
+  ok('program: echo/cd/cls/rem is false',
+    !C.autoexecHasProgram(['echo hi', 'cd \\GAME', 'cls', 'rem x', '# y', '']));
+  ok('program: imgmount is false', !C.autoexecHasProgram(['imgmount d x.iso -t iso']));
+
+  const lines = C.composeMountAutoexec([
+    { drive: 'c', src: 'game.zip' },
+    { drive: 'f', src: 'cd disk.zip', cdrom: true },
+  ]);
+  check('compose mounts', lines,
+    ['mount c game.zip', 'mount f "cd disk.zip" -t cdrom', 'c:']);
+
+  const replaced = C.replaceAutoexecMounts(ae, lines);
+  check('replace keeps program line', replaced,
+    ['@echo off', 'mount c game.zip', 'mount f "cd disk.zip" -t cdrom', 'c:', 'GAME.EXE']);
+  check('replace is idempotent', C.replaceAutoexecMounts(replaced, lines), replaced);
+  check('replace keeps passthrough other-drive mount',
+    C.replaceAutoexecMounts(['mount d /dos', 'x.exe'], lines),
+    lines.concat(['mount d /dos', 'x.exe']));
+  check('replace into empty', C.replaceAutoexecMounts([], lines), lines);
+  check('replace drops colliding passthrough',
+    C.replaceAutoexecMounts(['mount f /dos', 'GO.BAT'], lines), lines.concat(['GO.BAT']));
+
+  check('joinConfBody with head', C.joinConfBody('[cpu]\ncycles=auto', ['mount c a.zip', 'c:']),
+    '[cpu]\ncycles=auto\n\n[autoexec]\nmount c a.zip\nc:');
+  check('joinConfBody no head', C.joinConfBody('', ['c:']), '[autoexec]\nc:');
+  {
+    const parts = C.splitDosboxConf(C.joinConfBody('[cpu]\ncycles=auto', ['mount c a.zip', 'c:']));
+    check('joinConfBody round-trips through split', parts,
+      { head: '[cpu]\ncycles=auto', autoexec: ['mount c a.zip', 'c:'] });
+  }
+
+  check('budget ok', C.mountBudgetVerdict(C.MOUNT_BYTES_WARN), 'ok');
+  check('budget warn', C.mountBudgetVerdict(C.MOUNT_BYTES_WARN + 1), 'warn');
+  check('budget refuse', C.mountBudgetVerdict(C.MOUNT_BYTES_REFUSE + 1), 'refuse');
 }
 
 // =====================================================================
