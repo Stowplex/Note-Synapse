@@ -1,5 +1,8 @@
 # Note Synapse Documentation
 
+## Community
+-   **[Discord](https://discord.gg/DmvrAh6H7)**: Ask questions, share plugins, and chat with other users and developers.
+
 ## Getting Started
 -   **[Setup Guide](guides/ai/onboarding.md)**: Setting up your first model and API keys.
 

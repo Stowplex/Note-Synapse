@@ -446,6 +446,8 @@ const state = {
   armedMods: new Set(),
   padMap: { A: 17, B: 18, C: 32 },
   zipBaseline: null,     // Map name -> Uint8Array: pristine game zip contents
+  mountPlan: null,       // {recs, primaryAtt, extras, errors} from the note's [autoexec]
+  extraMounts: [],       // [{kind:'zip'|'img', drive, att, root|path, files|data, bytes}]
   lastSaveSig: null,     // signature of the last persisted save diff
   saveBusy: false,
   autoSaveTimer: null,
@@ -1006,6 +1008,213 @@ function langForDosPath(path) {
   const dot = seg.lastIndexOf('.');
   const ext = dot >= 0 ? seg.slice(dot + 1).toUpperCase() : '';
   return { BAS: 'basic', C: 'c', H: 'c', PAS: 'pascal', ASM: 'asm', BAT: 'bat', INI: 'ini' }[ext] || '';
+}
+
+/* ------------------------------------------------ autoexec mount lines --
+ * `mount f disk.zip -t cdrom` in the note's [autoexec] may name an attachment
+ * by its HUMAN file name; the app unpacks it and splices the real guest dir
+ * back into the line. Parsing lives here so the grammar is testable offline. */
+
+function parseMountLine(line) {
+  const s = String(line == null ? '' : line);
+  const head = /^(\s*)(mount|imgmount)(\s+)/i.exec(s);
+  if (!head) return null;
+  let i = head[0].length;
+  // Drive token: a single letter, optionally with a trailing colon. Anything
+  // else (e.g. `mount -u c`) is kept but flagged so the caller leaves it alone.
+  const dm = /^(\S+)(\s+)/.exec(s.slice(i));
+  if (!dm) return null;
+  const driveTok = dm[1];
+  const driveOk = /^[a-z]:?$/i.test(driveTok);
+  const drive = driveOk ? driveTok.charAt(0).toLowerCase() : null;
+  i += dm[0].length;
+  // Source token: DOSBox groups a spaced path with double quotes (no escapes).
+  let src = null;
+  let end = i;
+  if (s.charAt(i) === '"') {
+    const close = s.indexOf('"', i + 1);
+    if (close < 0) return null;
+    src = s.slice(i + 1, close);
+    end = close + 1;
+  } else {
+    const sm = /^\S+/.exec(s.slice(i));
+    if (!sm) return null;
+    src = sm[0];
+    end = i + src.length;
+  }
+  return {
+    kind: head[2].toLowerCase(), drive, driveOk, src,
+    before: s.slice(0, i), after: s.slice(end),
+  };
+}
+
+/** The parsed line with a new source spliced in; everything else verbatim. */
+function rewriteMountLine(rec, newSrc) {
+  const src = String(newSrc);
+  return rec.before + (/\s/.test(src) ? '"' + src + '"' : src) + rec.after;
+}
+
+/** Every parseable mount/imgmount line of an [autoexec], with its line index. */
+function scanAutoexecMounts(aeLines) {
+  const out = [];
+  (aeLines || []).forEach((line, idx) => {
+    const rec = parseMountLine(line);
+    if (rec) out.push(Object.assign({ idx }, rec));
+  });
+  return out;
+}
+
+function isZipSource(src) { return /\.zip$/i.test(String(src || '')); }
+/* Single-file images only: a .cue needs its .bin next to it, which a flat
+ * attachment cannot guarantee. */
+function isImageSource(src) { return /\.(iso|img|ima)$/i.test(String(src || '')); }
+
+/** Guest dir a zip mount unpacks into. C: keeps /dos so nothing else moves. */
+function guestRootForMount(kind, drive) {
+  if (kind !== 'mount') return null;
+  return drive === 'c' ? '/dos' : '/zip_' + drive;
+}
+
+/** Guest path a disk image is materialized at. */
+function imgGuestPath(src) {
+  const base = String(src || '').replace(/\\/g, '/').split('/').pop()
+    .replace(/[^A-Za-z0-9._-]/g, '_');
+  return '/img/' + (base || 'disc.img');
+}
+
+/** Shape-level errors in a set of parsed mount lines. */
+function validateMountRecs(recs) {
+  const errors = [];
+  const claimed = new Map();
+  for (const r of recs) {
+    if (!r.driveOk) {
+      errors.push({ idx: r.idx, text: 'expected a drive letter, got "' + r.src + '" — line skipped' });
+      continue;
+    }
+    if (claimed.has(r.drive)) {
+      errors.push({ idx: r.idx, text: 'drive ' + r.drive.toUpperCase() + ': is mounted twice' });
+    }
+    claimed.set(r.drive, r);
+    if (r.kind === 'imgmount' && isZipSource(r.src)) {
+      errors.push({ idx: r.idx, text: 'imgmount cannot take a .zip — use mount for "' + r.src + '"' });
+    }
+    if (r.kind === 'mount' && isImageSource(r.src)) {
+      errors.push({ idx: r.idx, text: 'a disk image needs imgmount, not mount: "' + r.src + '"' });
+    }
+  }
+  return errors;
+}
+
+/**
+ * Normalizes an unzip result into mountable [{name, data}]: separators, junk
+ * entries, and up to 4 levels of single wrapper folder (zip-of-a-folder).
+ */
+function zipEntriesToFiles(entries) {
+  let files = [];
+  for (const rawName of Object.keys(entries || {})) {
+    let name = rawName.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+/, '');
+    if (!name || name.endsWith('/')) continue;
+    if (/(^|\/)__MACOSX\//.test(name) || /(^|\/)\.DS_Store$/i.test(name)) continue;
+    files.push({ name, data: entries[rawName] });
+  }
+  for (let guard = 0; guard < 4; guard++) {
+    const tops = new Set(files.map((f) => f.name.split('/')[0]));
+    if (tops.size !== 1 || !files.every((f) => f.name.includes('/'))) break;
+    files = files.map((f) => ({ name: f.name.split('/').slice(1).join('/'), data: f.data }));
+  }
+  return files;
+}
+
+/** Splits a dosbox fence body into non-autoexec config and [autoexec] lines. */
+function splitDosboxConf(body) {
+  const head = [];
+  const autoexec = [];
+  let cur = null;
+  let sawAe = false;
+  for (const line of String(body == null ? '' : body).split('\n')) {
+    const s = /^\s*\[([^\]]+)\]/.exec(line);
+    if (s) {
+      cur = s[1].trim().toLowerCase();
+      if (cur === 'autoexec') { sawAe = true; continue; }
+    }
+    if (cur === 'autoexec') autoexec.push(line);
+    else head.push(line);
+  }
+  return { head: head.join('\n').trim(), autoexec: sawAe ? autoexec : null };
+}
+
+/**
+ * True when an [autoexec] actually starts a program. Mount lines, echo, cd and
+ * drive switches are setup, not a boot command — a mounts-only autoexec should
+ * still get the launcher menu instead of a bare prompt.
+ */
+function autoexecHasProgram(aeLines) {
+  for (const line of aeLines || []) {
+    const s = String(line).trim();
+    if (!s) continue;
+    if (/^(@?rem\b|#|@?echo\b|cls$|@?cd\b|path\b|mount\s|imgmount\s)/i.test(s)) continue;
+    if (/^[a-z]:$/i.test(s)) continue;
+    return true;
+  }
+  return false;
+}
+
+/** [autoexec] mount lines for chooser-assigned roles, ending on C:. */
+function composeMountAutoexec(assignments) {
+  const lines = [];
+  for (const a of assignments || []) {
+    const src = /\s/.test(a.src) ? '"' + a.src + '"' : a.src;
+    lines.push('mount ' + a.drive + ' ' + src + (a.cdrom ? ' -t cdrom' : ''));
+  }
+  lines.push('c:');
+  return lines;
+}
+
+/**
+ * Replaces an [autoexec]'s attachment mounts with `mountLines`. Lines whose
+ * source is an attachment-shaped name (zip/image) go; passthrough mounts of
+ * plain guest paths stay unless their drive collides. Idempotent.
+ */
+function replaceAutoexecMounts(aeLines, mountLines) {
+  const src = (aeLines || []).slice();
+  const newDrives = new Set();
+  for (const l of mountLines) {
+    const r = parseMountLine(l);
+    if (r && r.driveOk) newDrives.add(r.drive);
+  }
+  let insertAt = -1;
+  const kept = [];
+  src.forEach((line, idx) => {
+    const r = parseMountLine(line);
+    const drop = r && r.driveOk &&
+      (isZipSource(r.src) || isImageSource(r.src) || newDrives.has(r.drive));
+    if (drop) {
+      if (insertAt < 0) insertAt = kept.length;
+      return;
+    }
+    kept.push(line);
+  });
+  if (insertAt < 0) insertAt = 0;
+  // The trailing `c:` of mountLines doubles as the drive switch; drop a bare
+  // duplicate right after the insertion point.
+  if (kept[insertAt] !== undefined && /^\s*c:\s*$/i.test(kept[insertAt])) kept.splice(insertAt, 1);
+  return kept.slice(0, insertAt).concat(mountLines, kept.slice(insertAt));
+}
+
+/** Reassembles a dosbox fence body from its parts. */
+function joinConfBody(head, aeLines) {
+  const h = String(head || '').trim();
+  return (h ? h + '\n\n' : '') + '[autoexec]\n' + (aeLines || []).join('\n');
+}
+
+/* The emulator heap is a fixed 128 MB and holds the engine, DOSBox's own 16 MB
+ * of guest RAM and every mounted byte — plus transient copies while unzipping. */
+const MOUNT_BYTES_WARN = 64 * 1024 * 1024;
+const MOUNT_BYTES_REFUSE = 96 * 1024 * 1024;
+function mountBudgetVerdict(totalBytes) {
+  if (totalBytes > MOUNT_BYTES_REFUSE) return 'refuse';
+  if (totalBytes > MOUNT_BYTES_WARN) return 'warn';
+  return 'ok';
 }
 
 /* ==== core:end ========================================================== */
@@ -1626,20 +1835,8 @@ async function mountZip(att) {
   } catch (e) {
     throw new Error('Not a valid zip file: ' + (e && e.message));
   }
-  let files = [];
-  for (const rawName of Object.keys(entries)) {
-    let name = rawName.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+/, '');
-    if (!name || name.endsWith('/')) continue;
-    if (/(^|\/)__MACOSX\//.test(name) || /(^|\/)\.DS_Store$/i.test(name)) continue;
-    files.push({ name, data: entries[rawName] });
-  }
+  const files = zipEntriesToFiles(entries);
   if (!files.length) throw new Error('The zip contains no files');
-  // If everything lives in a single wrapper folder, strip it (zip-of-a-folder).
-  for (let guard = 0; guard < 4; guard++) {
-    const tops = new Set(files.map((f) => f.name.split('/')[0]));
-    if (tops.size !== 1 || !files.every((f) => f.name.includes('/'))) break;
-    files = files.map((f) => ({ name: f.name.split('/').slice(1).join('/'), data: f.data }));
-  }
   await finishMount(files);
 }
 
@@ -2067,20 +2264,50 @@ function parseUserConf(md) {
   // nested config block has to resolve the same way the renderer sees it.
   const f = scanFences(md || '').find((x) => parseInfoAttrs(x.info).lang.toLowerCase() === 'dosbox');
   if (!f) return null;
-  const head = [];
-  const autoexec = [];
-  let cur = null;
-  let sawAe = false;
-  for (const line of fenceBody(md, f).split('\n')) {
-    const s = /^\s*\[([^\]]+)\]/.exec(line);
-    if (s) {
-      cur = s[1].trim().toLowerCase();
-      if (cur === 'autoexec') { sawAe = true; continue; }
+  return splitDosboxConf(fenceBody(md, f));
+}
+
+/**
+ * Reads the note's [autoexec] mount lines and resolves attachment sources.
+ *
+ * A source that names an attachment (by HUMAN file name — resolveAttachment
+ * also accepts the host's stored `<stem>_<uuid>` shape) becomes a mount plan
+ * entry: `mount c game.zip` picks the primary zip, other zip mounts and
+ * imgmount images become `extras` unpacked later by mountExtras(). A source
+ * that resolves to nothing (e.g. `/dos`, a path inside C:) passes through to
+ * DOSBox untouched, which is exactly the pre-feature behavior.
+ */
+function deriveMountPlan() {
+  state.mountPlan = null;
+  state.extraMounts = [];
+  const ae = state.userConf && state.userConf.autoexec;
+  if (!ae) return null;
+  const recs = scanAutoexecMounts(ae);
+  if (!recs.length) return null;
+  const errors = validateMountRecs(recs);
+  const plan = { recs, primaryAtt: null, extras: [], errors };
+  for (const rec of recs) {
+    if (!rec.driveOk) continue;
+    const att = resolveAttachment(rec.src);
+    if (!att) continue;                       // passthrough — not ours
+    if (isSavesAttachment(att)) {
+      errors.push({ idx: rec.idx, text: '"' + rec.src + '" is a saves zip, not a game disk' });
+      continue;
     }
-    if (cur === 'autoexec') autoexec.push(line);
-    else head.push(line);
+    if (rec.kind === 'mount' && isZipSource(att.name)) {
+      if (rec.drive === 'c') { plan.primaryAtt = att; plan.primaryRec = rec; }
+      else plan.extras.push({ kind: 'zip', drive: rec.drive, att, rec, root: guestRootForMount('mount', rec.drive) });
+    } else if (rec.kind === 'imgmount' && isImageSource(att.name)) {
+      plan.extras.push({ kind: 'img', drive: rec.drive, att, rec, path: imgGuestPath(att.name) });
+    } else {
+      errors.push({
+        idx: rec.idx,
+        text: '"' + att.name + '" cannot go on ' + rec.kind + ' ' + rec.drive.toUpperCase() + ':',
+      });
+    }
   }
-  return { head: head.join('\n').trim(), autoexec: sawAe ? autoexec : null };
+  state.mountPlan = plan;
+  return plan;
 }
 
 function buildConf(exePath) {
@@ -2090,8 +2317,29 @@ function buildConf(exePath) {
   let ae;
   if (user && user.autoexec) {
     ae = user.autoexec.slice();
-    if (!ae.some((l) => /^\s*(mount|imgmount)\s/i.test(l))) {
-      ae.unshift('mount c /dos', 'c:');
+    const plan = state.mountPlan;
+    if (plan) {
+      // Splice the real guest dirs into the attachment mounts.
+      const byIdx = new Map();
+      if (plan.primaryRec) byIdx.set(plan.primaryRec.idx, '/dos');
+      for (const m of state.extraMounts) byIdx.set(m.rec.idx, m.root || m.path);
+      ae = ae.map((line, idx) => {
+        if (!byIdx.has(idx)) return line;
+        return rewriteMountLine(plan.recs.find((r) => r.idx === idx), byIdx.get(idx));
+      });
+    }
+    // Give the user C: unless their own lines already claim drive c (a
+    // rewritten `mount c game.zip`, a hand-written `mount c /dos`, or an
+    // `imgmount c`). Mounts on other drives alone no longer suppress it.
+    const claimsC = scanAutoexecMounts(ae).some((r) => r.driveOk && r.drive === 'c');
+    if (!claimsC) ae.unshift('mount c /dos', 'c:');
+    // A mounts-only autoexec is setup, not a boot command: the launcher's
+    // chosen program still has to run after it.
+    if (exePath && !autoexecHasProgram(ae)) {
+      const parts = exePath.split('/');
+      const base = parts.pop();
+      if (parts.length) ae.push('cd \\' + parts.join('\\'));
+      ae.push(base);
     }
   } else {
     ae = ['@echo off', 'mount c /dos', 'c:'];
@@ -2113,22 +2361,36 @@ function buildConf(exePath) {
 }
 
 /* -------------------------------------------------------------- booting */
-function writeGuestFS(M, conf) {
-  M.FS_createPath('/', 'dos', true, true);
+function writeFilesUnder(M, rootAbs, files) {
   const made = new Set();
-  for (const f of state.files) {
+  for (const f of files) {
     const parts = f.name.split('/');
     const base = parts.pop();
     let dir = '';
     for (const part of parts) {
       const next = dir ? dir + '/' + part : part;
       if (!made.has(next)) {
-        M.FS_createPath('/dos' + (dir ? '/' + dir : ''), part, true, true);
+        M.FS_createPath(rootAbs + (dir ? '/' + dir : ''), part, true, true);
         made.add(next);
       }
       dir = next;
     }
-    M.FS_createDataFile('/dos' + (dir ? '/' + dir : ''), base, f.data, true, true);
+    M.FS_createDataFile(rootAbs + (dir ? '/' + dir : ''), base, f.data, true, true);
+  }
+}
+
+function writeGuestFS(M, conf) {
+  M.FS_createPath('/', 'dos', true, true);
+  writeFilesUnder(M, '/dos', state.files);
+  let madeImg = false;
+  for (const m of state.extraMounts) {
+    if (m.kind === 'zip') {
+      M.FS_createPath('/', m.root.slice(1), true, true);
+      writeFilesUnder(M, m.root, m.files);
+    } else {
+      if (!madeImg) { M.FS_createPath('/', 'img', true, true); madeImg = true; }
+      M.FS_createDataFile('/img', m.path.split('/').pop(), m.data, true, true);
+    }
   }
   M.FS_createDataFile('/', 'dosbox.conf', conf, true, true);
 }
@@ -2290,7 +2552,22 @@ async function afterNoteLoaded() {
     (ready ? ready + ' READY' : 'NONE') +
     (state.fileStats.bad ? ' (' + state.fileStats.bad + ' UNUSABLE)' : ''));
 
-  const zips = zipAttachments();
+  const plan = deriveMountPlan();
+  if (plan && plan.errors.length) {
+    for (const err of plan.errors) {
+      ttyLog('*** MOUNT CONFIG: line ' + (err.idx + 1) + ' — ' + err.text);
+    }
+    setTimeout(() => {
+      setupScreen();
+      toast('Mount config problem: ' + plan.errors[0].text, true);
+    }, 1600);
+    return;
+  }
+
+  // A zip claimed as a secondary drive is that game's CD, not another game:
+  // keep it out of the chooser and the "single zip" shortcut.
+  const secondary = new Set(((plan && plan.extras) || []).map((m) => m.att.path));
+  const zips = zipAttachments().filter((z) => !secondary.has(z.path));
   if (!zips.length) {
     // A note with no game disk can still be a workbench: boot a bare C: holding
     // whatever the note contributes (a .bat to test, a BASIC listing, …).
@@ -2306,16 +2583,80 @@ async function afterNoteLoaded() {
     return;
   }
 
-  // Pick the zip: embed param > remembered choice > single > chooser.
+  // Pick the zip: note config > embed param > remembered choice > single > chooser.
   const params = (window.Synapse && Synapse.Params) || {};
   const remembered = ((state.appState.choices || {})[state.attachNoteId]) || {};
   let zip = null;
-  if (params.zip) zip = zips.find((z) => z.name.toLowerCase() === String(params.zip).toLowerCase());
+  if (plan && plan.primaryAtt) zip = plan.primaryAtt;
+  if (!zip && params.zip) zip = zips.find((z) => z.name.toLowerCase() === String(params.zip).toLowerCase());
   if (!zip && remembered.zip) zip = zips.find((z) => z.path === remembered.zip);
   if (!zip && zips.length === 1) zip = zips[0];
 
   if (!zip) { launcherZipChooser(zips); return; }
   await mountAndRoute(zip);
+}
+
+/** Reads and unpacks the plan's secondary mounts. False aborts the boot. */
+async function mountExtras() {
+  const plan = state.mountPlan;
+  if (!plan || !plan.extras.length) return true;
+  const cache = new Map();     // att.path -> Uint8Array (same disk on two drives)
+  for (const m of plan.extras) {
+    let u8 = cache.get(m.att.path);
+    if (!u8) {
+      ttyLog('READ ATTACHMENT "' + m.att.name + '" ...');
+      const r = await Synapse.readAttachment(m.att.path);
+      if (!r || !r.success || !r.data) {
+        ttyLog('*** COULD NOT READ "' + m.att.name + '"');
+        return false;
+      }
+      u8 = b64ToU8(r.data);
+      cache.set(m.att.path, u8);
+    }
+    if (m.kind === 'zip') {
+      let entries;
+      try {
+        entries = fflate.unzipSync(u8);
+      } catch (e) {
+        ttyLog('*** "' + m.att.name + '" is not a valid zip: ' + (e && e.message));
+        return false;
+      }
+      m.files = zipEntriesToFiles(entries);
+      if (!m.files.length) {
+        ttyLog('*** "' + m.att.name + '" contains no files');
+        return false;
+      }
+      m.bytes = m.files.reduce((n, f) => n + f.data.length, 0);
+      ttyLog('  MOUNT ' + m.drive.toUpperCase() + ': "' + m.att.name + '" — ' +
+        m.files.length + ' FILES (' + fmtSize(m.bytes) + ')');
+      // DOSBox happily lets a program write to a plain dir mount, but only C:
+      // is diffed into the saves zip — say so once, up front.
+      if (!/-t\s+cdrom/i.test(m.rec.after)) {
+        ttyLog('  NOTE: ' + m.drive.toUpperCase() + ': is not saved — changes there are lost on exit');
+      }
+    } else {
+      m.data = u8;
+      m.bytes = u8.length;
+      ttyLog('  IMGMOUNT ' + m.drive.toUpperCase() + ': "' + m.att.name + '" (' + fmtSize(m.bytes) + ')');
+    }
+  }
+  state.extraMounts = plan.extras;
+  const total = state.files.reduce((n, f) => n + f.data.length, 0) +
+    plan.extras.reduce((n, m) => n + m.bytes, 0);
+  const verdict = mountBudgetVerdict(total);
+  if (verdict === 'refuse') {
+    ttyLog('*** TOTAL MOUNTED CONTENT ' + fmtSize(total) + ' EXCEEDS THE ' +
+      fmtSize(MOUNT_BYTES_REFUSE) + ' BUDGET (128 MB emulator memory)');
+    for (const m of plan.extras) {
+      ttyLog('***   ' + m.drive.toUpperCase() + ': "' + m.att.name + '" — ' + fmtSize(m.bytes));
+    }
+    toast('Mounted content is too large for the emulator (' + fmtSize(total) + ')', true);
+    return false;
+  }
+  if (verdict === 'warn') {
+    ttyLog('  WARNING: ' + fmtSize(total) + ' MOUNTED — close to the 128 MB emulator memory');
+  }
+  return true;
 }
 
 /* `zip` may be null: C: is then built from the note's imports alone. */
@@ -2329,12 +2670,24 @@ async function mountAndRoute(zip) {
     return;
   }
 
+  try {
+    if (!await mountExtras()) {
+      setTimeout(() => setupScreen(), 1600);
+      return;
+    }
+  } catch (e) {
+    fatal('Could not mount a secondary disk', e);
+    return;
+  }
+
   const params = (window.Synapse && Synapse.Params) || {};
   const remembered = ((state.appState.choices || {})[state.attachNoteId]) || {};
   const autoboot = params.autoboot === '1' || params.autoboot === 'true' || params.autoboot === true;
 
-  // The note's [autoexec] always wins: boot straight into it.
-  if (state.userConf && state.userConf.autoexec) { boot(null); return; }
+  // An [autoexec] that starts a program wins: boot straight into it. One that
+  // only sets up mounts still gets the launcher, so an exe can be picked.
+  if (state.userConf && state.userConf.autoexec &&
+      autoexecHasProgram(state.userConf.autoexec)) { boot(null); return; }
 
   // Explicit program requested by embed params?
   if (params.exe) {
@@ -2357,18 +2710,140 @@ async function mountAndRoute(zip) {
   launcherScreen(remembered.exe);
 }
 
+/**
+ * Multi-disk chooser: pick the C: zip and optionally mark others as CD drives.
+ * With CDs marked, the assignment is written into the note's ```dosbox block
+ * (creating it if needed) so the setup travels with the note; when the note is
+ * not writable it still applies for this session.
+ */
 function launcherZipChooser(zips) {
   showScreen('launcher');
   const stack = $('launchStack');
-  stack.innerHTML = '<h2 style="font-size:.95rem;">💾 ' + esc(state.noteTitle) + '</h2>' +
-    '<div class="muted" style="font-size:.8rem;">Several disks found — choose one:</div>';
-  zips.forEach((z) => {
-    const b = document.createElement('button');
-    b.className = 'btn';
-    b.textContent = '💾 ' + z.name;
-    b.onclick = () => mountAndRoute(z);
-    stack.appendChild(b);
-  });
+  const roles = new Map();               // att.path -> 'c' | 'cd'
+  if (zips.length === 1) roles.set(zips[0].path, 'c');
+  let busy = false;
+
+  const draw = () => {
+    const anyCd = zips.some((z) => roles.get(z.path) === 'cd');
+    const czip = zips.find((z) => roles.get(z.path) === 'c');
+    stack.innerHTML = '<h2 style="font-size:.95rem;">💾 ' + esc(state.noteTitle) + '</h2>' +
+      '<div class="muted" style="font-size:.8rem;">Several disks found — pick the game drive.' +
+      ' Mark a disk 📀 CD if the game expects it on a CD-ROM drive.</div>';
+    zips.forEach((z) => {
+      const row = document.createElement('div');
+      row.className = 'card';
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.gap = '8px';
+      const name = document.createElement('div');
+      name.style.flex = '1';
+      name.style.overflow = 'hidden';
+      name.style.textOverflow = 'ellipsis';
+      name.textContent = '💾 ' + z.name;
+      row.appendChild(name);
+      const role = roles.get(z.path);
+      const cBtn = document.createElement('button');
+      cBtn.className = 'btn small' + (role === 'c' ? ' primary' : '');
+      cBtn.textContent = '▶ C:';
+      cBtn.onclick = () => {
+        for (const [p, r] of roles) if (r === 'c') roles.delete(p);
+        roles.set(z.path, 'c');
+        draw();
+      };
+      row.appendChild(cBtn);
+      const cdBtn = document.createElement('button');
+      cdBtn.className = 'btn small' + (role === 'cd' ? ' warn' : '');
+      cdBtn.textContent = '📀 CD';
+      cdBtn.disabled = role === 'c';
+      cdBtn.onclick = () => {
+        if (roles.get(z.path) === 'cd') roles.delete(z.path);
+        else roles.set(z.path, 'cd');
+        draw();
+      };
+      row.appendChild(cdBtn);
+      stack.appendChild(row);
+    });
+
+    const start = document.createElement('button');
+    start.className = 'btn primary';
+    start.textContent = '▶ START';
+    start.disabled = !czip || busy;
+    start.onclick = async () => {
+      if (busy) return;
+      busy = true;
+      draw();
+      try {
+        await applyMountConfig(zips, roles);
+      } catch (e) {
+        logErr('zip chooser', e);
+        toast((e && e.message) || 'could not start', true);
+        busy = false;
+        draw();
+      }
+    };
+    stack.appendChild(start);
+
+    if (anyCd) {
+      const hint = document.createElement('div');
+      hint.className = 'card muted';
+      hint.style.fontSize = '.78rem';
+      hint.textContent = state.contentWritable && state.attachNamesResolved
+        ? 'The disk setup will be saved into the note (a ```dosbox block), so it sticks.'
+        : 'This text is not writable from here — the disk setup lasts for this session only.';
+      stack.appendChild(hint);
+    }
+  };
+  draw();
+}
+
+/** Turns chooser roles into mount config: note-written when possible. */
+async function applyMountConfig(zips, roles) {
+  const czip = zips.find((z) => roles.get(z.path) === 'c');
+  const cds = zips.filter((z) => roles.get(z.path) === 'cd');
+  if (!czip) throw new Error('pick the C: disk first');
+  if (!cds.length) {
+    // Single-disk choice: exactly the old behavior (remembered via boot()'s
+    // persist, nothing written into the note).
+    await mountAndRoute(czip);
+    return;
+  }
+
+  const assignments = [{ drive: 'c', src: czip.name }];
+  const letters = 'fghijklmnop';
+  cds.forEach((z, i) => assignments.push({ drive: letters.charAt(i) || 'z', src: z.name, cdrom: true }));
+  const lines = composeMountAutoexec(assignments);
+
+  // Writing stored uuid names into the note would break on re-import; only
+  // write when the human names are known (same rule as importAttachment).
+  if (state.contentWritable && state.attachNamesResolved) {
+    const findConf = (content) => scanFences(content)
+      .find((x) => parseInfoAttrs(x.info).lang.toLowerCase() === 'dosbox');
+    if (findConf(state.noteContent)) {
+      await writeWithMutator((content) => {
+        const f = findConf(content);
+        if (!f) return null;
+        const parts = splitDosboxConf(fenceBody(content, f));
+        return replaceFence(content, f, {
+          body: joinConfBody(parts.head, replaceAutoexecMounts(parts.autoexec || [], lines)),
+        });
+      });
+    } else {
+      await appendNoteContent('\n' + composeFenceBlock('dosbox', joinConfBody('', lines)));
+    }
+    state.userConf = parseUserConf(state.noteContent);
+    toast('Disk setup saved to the ' + scopeWord().toLowerCase());
+  } else {
+    // Session-only: synthesize the autoexec in memory, without touching the note.
+    const prev = state.userConf || { head: '', autoexec: null };
+    state.userConf = { head: prev.head, autoexec: replaceAutoexecMounts(prev.autoexec || [], lines) };
+  }
+
+  const plan = deriveMountPlan();
+  if (plan && plan.errors.length) {
+    for (const err of plan.errors) ttyLog('*** MOUNT CONFIG: ' + err.text);
+    throw new Error(plan.errors[0].text);
+  }
+  await mountAndRoute(czip);
 }
 
 function launcherScreen(rememberedExe) {
@@ -2426,7 +2901,8 @@ function launcherScreen(rememberedExe) {
   files.onclick = () => filesLauncherScreen(rememberedExe);
   stack.appendChild(files);
 
-  const zips = zipAttachments();
+  const zips = zipAttachments().filter((z) =>
+    !state.extraMounts.some((m) => m.att && m.att.path === z.path));
   if (zips.length > 1) {
     const other = document.createElement('button');
     other.className = 'btn small';
@@ -3393,6 +3869,7 @@ function renderFilesPanel(host, rerender) {
   const cand = state.attachments.filter((a) =>
     !isSavesAttachment(a) &&
     !(state.zip && a.path === state.zip.path) &&
+    !state.extraMounts.some((m) => m.att && a.path === m.att.path) &&
     !usedSrc.has(String(a.name).toLowerCase()));
   add('div', 'filesec', 'ATTACHMENTS ON THIS NOTE');
   if (!cand.length) add('div', 'fhint', 'No other attachments to copy.');
