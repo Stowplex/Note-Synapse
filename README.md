@@ -71,15 +71,16 @@ AI tasks execution with user-selectable tools and external MCPs. Built-in agent 
 ## Quick Start
 
 ### Prerequisites
-- Flutter SDK 3.x
+- Flutter SDK 3.x, Android SDK / NDK, XCode
 - A Google Gemini API Key (or OpenAI Compatible Key)
+- Rust toolchain -- recommend installation with rustup
 
 ### Build from Source
 ```bash
-git clone https://github.com/kkspeed/Note-Synapse.git
+git clone --recursive https://github.com/kkspeed/Note-Synapse.git
 cd Note-Synapse
 flutter pub get
-flutter run
+flutter build apk --debug
 ```
 
 ## Documentation
