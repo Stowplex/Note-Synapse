@@ -780,6 +780,217 @@ class AppLocalizationsZh extends AppLocalizations {
   String get protocolHttp11Only => '仅HTTP/1.1';
 
   @override
+  String get protocolStudies => '协议研究';
+
+  @override
+  String get protocolStudiesSubtitle => '捕获并研究网站 HTTP 工作流程';
+
+  @override
+  String get newProtocolStudy => '新建协议研究';
+
+  @override
+  String get studyWithLogin => '研究协议';
+
+  @override
+  String get protocolStudyEmpty => '尚未保存协议研究。';
+
+  @override
+  String get protocolStudyUrlHint => '输入网站网址';
+
+  @override
+  String get protocolStudyStart => '开始研究';
+
+  @override
+  String get protocolStudySave => '保存研究';
+
+  @override
+  String get protocolStudySaved => '协议研究已保存';
+
+  @override
+  String get protocolStudyNetwork => '网络';
+
+  @override
+  String get protocolStudyRequests => '个请求';
+
+  @override
+  String get protocolStudySelectRequests => '请选择属于此工作流程的请求。';
+
+  @override
+  String get protocolStudyNoRequests => '尚未捕获符合条件的请求。';
+
+  @override
+  String get protocolStudyRawLocal => '原始请求和响应数据仅保存在私有协议研究工作区。';
+
+  @override
+  String get protocolStudySharedState => '未选择已保存登录。应用内 WebView 仍可能包含共享的登录状态。';
+
+  @override
+  String get protocolStudyCaptureLimit => '捕获已达到配置的大小或事件上限。';
+
+  @override
+  String get protocolStudyAnalyze => '合成工作流程';
+
+  @override
+  String get protocolStudyChooseModel => '选择分析模型';
+
+  @override
+  String get protocolStudyRemoteDisclosure =>
+      '勾选允许远程 AI 查看值的字段。使用可见性按钮可完全排除无关字段。';
+
+  @override
+  String get protocolStudyLocalDisclosure =>
+      '只选择此设备端模型需要的字段。请求和响应会逐对分析，以适应较小的上下文窗口。';
+
+  @override
+  String get protocolStudyOutboundPreview => '检查发送给 AI 的完整内容';
+
+  @override
+  String get protocolStudySendForAnalysis => '使用此模型分析';
+
+  @override
+  String protocolStudyAnalyzingPair(int current, int total) {
+    return '正在分析第 $current/$total 对';
+  }
+
+  @override
+  String get protocolStudyRedacted => '个字段已隐藏';
+
+  @override
+  String get protocolStudyExcluded => '个字段已排除';
+
+  @override
+  String get protocolStudyIncludeField => '在分析中包含字段';
+
+  @override
+  String get protocolStudyExcludeField => '从分析中排除字段';
+
+  @override
+  String get protocolStudyMutationWarning => '此请求可能会修改网站状态。仍要运行最小复现吗？';
+
+  @override
+  String get protocolStudyRunRepro => '运行最小复现';
+
+  @override
+  String get protocolStudyReproResult => '最小复现结果';
+
+  @override
+  String get protocolStudyExportNote => '保存脱敏笔记';
+
+  @override
+  String get protocolStudyNoteSaved => '脱敏协议报告已保存为笔记';
+
+  @override
+  String get protocolStudyCreateTool => '创建 AI 工具 / 技能';
+
+  @override
+  String get protocolStudyCreateApp => '创建用户应用';
+
+  @override
+  String get protocolStudyFidelityWarning =>
+      '捕获完整度取决于平台。不会捕获 Service Worker 和 WebSocket；正文可能被截断。';
+
+  @override
+  String get protocolStudyDelete => '删除研究';
+
+  @override
+  String get protocolStudyDeleteConfirm => '删除此私有协议研究及其原始数据？';
+
+  @override
+  String get protocolStudyNoModel => '请先配置 AI 模型，再合成工作流程。';
+
+  @override
+  String get protocolStudyAnalysisFailed => '工作流程合成失败';
+
+  @override
+  String get protocolStudyResponseBodyLimit => '响应正文大小上限';
+
+  @override
+  String get protocolStudyApplyRecommendations => '应用谨慎建议';
+
+  @override
+  String get protocolStudyModelLabel => '模型';
+
+  @override
+  String get protocolStudyDestinationLabel => '目标地址';
+
+  @override
+  String get protocolStudyDisclosed => '个字段已披露';
+
+  @override
+  String get protocolStudyAll => '全部';
+
+  @override
+  String get protocolStudyForm => '表单';
+
+  @override
+  String get protocolStudyViewRaw => '查看原始请求和响应';
+
+  @override
+  String get protocolStudyRequestHeaders => '请求头';
+
+  @override
+  String get protocolStudyRequestBody => '请求正文';
+
+  @override
+  String get protocolStudyResponseHeaders => '响应头';
+
+  @override
+  String get protocolStudyResponseBody => '响应正文';
+
+  @override
+  String get protocolStudyFinalUrl => '最终网址';
+
+  @override
+  String get protocolStudyNotCaptured => '未捕获';
+
+  @override
+  String get protocolStudyParameters => '参数';
+
+  @override
+  String get protocolStudyNoneIdentified => '未识别到参数';
+
+  @override
+  String get protocolStudyWorkflow => '工作流程';
+
+  @override
+  String get protocolStudyCaveats => '注意事项';
+
+  @override
+  String get protocolStudyOptional => '可选';
+
+  @override
+  String get protocolStudyTruncated => '已截断';
+
+  @override
+  String get protocolStudyStatus => '状态';
+
+  @override
+  String get protocolStudyNewExample => '开始下一个示例';
+
+  @override
+  String protocolStudyExampleNumber(int number) {
+    return '正在记录示例 $number';
+  }
+
+  @override
+  String get protocolStudyMarkParameter => '标记为可复用参数';
+
+  @override
+  String get protocolStudyTransportMetadata => '传输元数据';
+
+  @override
+  String get protocolStudyPartial => '部分捕获';
+
+  @override
+  String get protocolStudyReviewSanitizedNote => '检查脱敏笔记';
+
+  @override
+  String get protocolStudyDiscardSession => '丢弃会话记录';
+
+  @override
+  String get protocolStudyDiscardSessionConfirm => '丢弃这份尚未保存的原始协议研究吗？丢弃后无法恢复。';
+
+  @override
   String get retryCount => '重试次数';
 
   @override

@@ -18,7 +18,20 @@ import '../services/model_selector.dart';
 import '../services/service_locator.dart';
 
 class UserAppCreationScreen extends StatefulWidget {
-  const UserAppCreationScreen({super.key});
+  const UserAppCreationScreen({
+    super.key,
+    this.initialName,
+    this.initialDescription,
+    this.initialSteps = const [],
+    this.initialContextNotes = const [],
+    this.initialAppType = UserAppType.normal,
+  });
+
+  final String? initialName;
+  final String? initialDescription;
+  final List<String> initialSteps;
+  final List<Note> initialContextNotes;
+  final UserAppType initialAppType;
 
   @override
   State<UserAppCreationScreen> createState() => _UserAppCreationScreenState();
@@ -31,7 +44,7 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen>
   final _descriptionController = TextEditingController();
   final List<TextEditingController> _stepControllers = [];
   bool _isCreating = false;
-  UserAppType _selectedAppType = UserAppType.normal;
+  late UserAppType _selectedAppType;
   final List<String> _attachmentPaths = [];
   final List<Note> _selectedNotes = [];
   ModelConfig? _selectedModel;
@@ -45,10 +58,19 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen>
   @override
   void initState() {
     super.initState();
+    _selectedAppType = widget.initialAppType;
+    _nameController.text = widget.initialName ?? '';
+    _descriptionController.text = widget.initialDescription ?? '';
+    _selectedNotes.addAll(widget.initialContextNotes);
     // Initialize tab controller
     _tabController = TabController(length: 2, vsync: this);
-    // Add one initial step
-    _addStep();
+    if (widget.initialSteps.isEmpty) {
+      _addStep();
+    } else {
+      for (final step in widget.initialSteps) {
+        _addStep(step);
+      }
+    }
   }
 
   @override
@@ -62,9 +84,9 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen>
     super.dispose();
   }
 
-  void _addStep() {
+  void _addStep([String initialText = '']) {
     setState(() {
-      _stepControllers.add(TextEditingController());
+      _stepControllers.add(TextEditingController(text: initialText));
     });
   }
 
