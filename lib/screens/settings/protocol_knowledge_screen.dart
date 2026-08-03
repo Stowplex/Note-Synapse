@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../models/note.dart';
+import '../../models/protocol_exchange.dart';
 import '../../models/protocol_knowledge.dart';
 import '../../models/protocol_study.dart';
 import '../../models/user_app.dart';
@@ -160,16 +161,27 @@ class _ProtocolKnowledgeScreenState extends State<ProtocolKnowledgeScreen> {
       exchanges: _study.exchanges,
       limits: _study.limits,
     );
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => ProtocolNetworkScreen(
-          controller: controller,
-          webSessions: getIt<WebSessionService>(),
-          savedLoginDomain: _study.savedLoginDomain,
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => ProtocolNetworkScreen(
+            controller: controller,
+            webSessions: getIt<WebSessionService>(),
+            savedLoginDomain: _study.savedLoginDomain,
+            onExchangesChanged: (exchanges) async {
+              final updated = _study.copyWith(
+                updatedAt: DateTime.now(),
+                exchanges: List<ProtocolExchange>.unmodifiable(exchanges),
+              );
+              await widget.workspace.save(updated);
+              if (mounted) setState(() => _study = updated);
+            },
+          ),
         ),
-      ),
-    );
-    controller.dispose();
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   @override

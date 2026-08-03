@@ -559,6 +559,46 @@ class WebSessionService {
     return chosen.entries.map((e) => '${e.key}=${e.value}').join('; ');
   }
 
+  /// Applies cookies received by a user-initiated local HTTP replay to the
+  /// live WebView cookie jar. This deliberately does not rewrite the saved
+  /// login snapshot; a later explicit "save login" remains the only way to
+  /// persist rotated credentials. Cookie scope is preserved by [CookieGateway].
+  Future<void> applyLiveResponseCookies(
+    String responseUrl,
+    Iterable<WebSessionCookie> cookies,
+  ) async {
+    if (!isSupported) return;
+    final uri = Uri.tryParse(responseUrl);
+    if (uri == null ||
+        uri.host.isEmpty ||
+        !const {'http', 'https'}.contains(uri.scheme)) {
+      return;
+    }
+    for (final cookie in cookies) {
+      if (cookie.name.isEmpty) continue;
+      final declaredDomain = cookie.domain?.trim().toLowerCase().replaceFirst(
+        RegExp(r'^\.+'),
+        '',
+      );
+      final responseHost = uri.host.toLowerCase();
+      if (declaredDomain != null &&
+          declaredDomain.isNotEmpty &&
+          responseHost != declaredDomain &&
+          !responseHost.endsWith('.$declaredDomain')) {
+        // Do not rely on platform differences when rejecting a response that
+        // attempts to plant a cookie for an unrelated domain.
+        continue;
+      }
+      try {
+        await _cookies.setCookie(uri.toString(), cookie);
+      } catch (error) {
+        LoggerService.warning(
+          'WebSessionService: failed to apply replay response cookie: $error',
+        );
+      }
+    }
+  }
+
   /// `proxyFetch({session: true})`); the values never need to cross into JS.
   Future<String> cookieHeaderFor(String url) async {
     if (!isSupported) {

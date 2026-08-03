@@ -1,5 +1,6 @@
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -26,6 +27,7 @@ class ProtocolCaptureController extends ChangeNotifier {
     final controller = ProtocolCaptureController(limits: limits);
     controller._exchanges.addAll(exchanges);
     for (final exchange in controller._exchanges) {
+      controller._acceptedBytes += controller._storedBodyBytes(exchange);
       if (exchange.exampleIndex > controller._currentExampleIndex) {
         controller._currentExampleIndex = exchange.exampleIndex;
       }
@@ -60,6 +62,222 @@ class ProtocolCaptureController extends ChangeNotifier {
   String? get pageInstanceId => _pageInstanceId;
   Map<String, bool> get capabilities => UnmodifiableMapView(_capabilities);
   int get currentExampleIndex => _currentExampleIndex;
+
+  /// Adds a bounded snapshot of the rendered main-frame document.
+  ///
+  /// A snapshot is represented as navigation evidence so it participates in
+  /// the existing request selection and per-field AI disclosure flow. It is
+  /// explicitly marked as rendered DOM, never as the original HTTP response.
+  String? addPageSnapshot({
+    required String url,
+    required String title,
+    required String html,
+    required String visibleText,
+    required String trigger,
+    bool browserReportedTruncated = false,
+  }) {
+    if (_disposed || _stoppedByLimit || html.isEmpty) return null;
+    final uri = Uri.tryParse(url);
+    if (uri == null || !const {'http', 'https'}.contains(uri.scheme)) {
+      return null;
+    }
+    final remainingSessionBytes = limits.maxSessionBytes - _acceptedBytes;
+    if (remainingSessionBytes <= 0) {
+      _stoppedByLimit = true;
+      _recordIssue('Capture stopped at the configured session limit.');
+      notifyListeners();
+      return null;
+    }
+    final combinedBudget = math.min(
+      limits.maxResponseBodyBytes,
+      remainingSessionBytes,
+    );
+    if (combinedBudget <= 0) {
+      _stoppedByLimit = true;
+      _recordIssue('Capture stopped at the configured session limit.');
+      notifyListeners();
+      return null;
+    }
+    final htmlBudget = math.max(1, (combinedBudget * 0.6).floor());
+    final textBudget = math.max(0, combinedBudget - htmlBudget);
+    final cappedHtml = _capUtf8(html, htmlBudget);
+    final cappedText = _capUtf8(visibleText, textBudget);
+    final sequence = _exchanges.isEmpty
+        ? 1
+        : _exchanges.map((item) => item.sequence).reduce(math.max) + 1;
+    final pageId = _pageInstanceId ?? 'native-page';
+    var id = '$pageId:navigation:$sequence';
+    var suffix = 1;
+    while (_indexOf(id) >= 0) {
+      id = '$pageId:navigation:$sequence:${suffix++}';
+    }
+    final now = _now();
+    final truncated =
+        browserReportedTruncated ||
+        cappedHtml.truncated ||
+        cappedText.truncated;
+    final body = ProtocolBody(
+      text: cappedHtml.text,
+      mimeType: 'text/html',
+      byteLength: cappedHtml.originalBytes,
+      truncated: truncated,
+      omittedReason: 'rendered_page_snapshot_not_http_response',
+      fields: [
+        ProtocolField(
+          id: '$id:${ProtocolFieldLocation.responseBody.name}:renderedHtml',
+          location: ProtocolFieldLocation.responseBody,
+          name: r'$renderedHtml',
+          value: cappedHtml.text,
+        ),
+        if (cappedText.text.isNotEmpty)
+          ProtocolField(
+            id: '$id:${ProtocolFieldLocation.responseBody.name}:visibleText',
+            location: ProtocolFieldLocation.responseBody,
+            name: r'$visibleText',
+            value: cappedText.text,
+          ),
+      ],
+    );
+    _acceptedBytes += utf8.encode(cappedHtml.text).length;
+    _acceptedBytes += utf8.encode(cappedText.text).length;
+    _exchanges.add(
+      ProtocolExchange(
+        id: id,
+        pageInstanceId: pageId,
+        sequence: sequence,
+        source: ProtocolRequestSource.navigation,
+        method: 'GET',
+        url: uri.toString(),
+        startedAt: now,
+        completedAt: now,
+        requestHeaders: const [],
+        queryFields: _queryFields(uri, id),
+        responseHeaders: const [],
+        responseBody: body,
+        requestMetadata: {
+          'evidenceKind': 'renderedPageSnapshot',
+          'snapshotTrigger': _bounded(trigger, 80) ?? 'manual',
+          if (title.isNotEmpty) 'pageTitle': _bounded(title, 2048) ?? '',
+        },
+        captureIssues: [
+          'rendered_page_snapshot_not_http_response',
+          if (truncated) 'page_snapshot_truncated',
+        ],
+        exampleIndex: _currentExampleIndex,
+      ),
+    );
+    notifyListeners();
+    return id;
+  }
+
+  /// Attaches a later HTTP replay without replacing the passively observed
+  /// response. Response cookies must already have been consumed by the local
+  /// session service and must not be present in [headers].
+  void attachReplay({
+    required String exchangeId,
+    required DateTime replayedAt,
+    required int statusCode,
+    required String finalUrl,
+    required Map<String, String> headers,
+    required String? bodyText,
+    required String? mimeType,
+    required int byteLength,
+    required bool truncated,
+    required String? omittedReason,
+    required List<String> redirectChain,
+    required bool usedSessionCookies,
+    required List<String> fidelityIssues,
+  }) {
+    if (_disposed) return;
+    final index = _indexOf(exchangeId);
+    final parsedFinalUrl = Uri.tryParse(finalUrl);
+    if (index < 0 ||
+        parsedFinalUrl == null ||
+        !const {'http', 'https'}.contains(parsedFinalUrl.scheme)) {
+      return;
+    }
+    final priorReplayBytes = utf8.encode(
+      _exchanges[index].replayObservation?.responseBody.text ?? '',
+    ).length;
+    final remainingSessionBytes = math.max(
+      0,
+      limits.maxSessionBytes - _acceptedBytes + priorReplayBytes,
+    );
+    final replayBodyLimit = math.min(
+      math.max(0, limits.maxResponseBodyBytes),
+      remainingSessionBytes,
+    );
+    final capped = bodyText == null || replayBodyLimit == 0
+        ? null
+        : _capUtf8(bodyText, replayBodyLimit);
+    final bodyOmittedReason =
+        bodyText != null && bodyText.isNotEmpty && replayBodyLimit == 0
+        ? 'replay_body_session_limit'
+        : omittedReason;
+    final body = ProtocolBody(
+      text: capped?.text,
+      mimeType: _bounded(mimeType, 512),
+      byteLength: byteLength,
+      truncated: truncated || (capped?.truncated ?? false),
+      omittedReason: _bounded(bodyOmittedReason, 512),
+    );
+    final hydratedBody = body.text == null
+        ? body
+        : body.copyWith(
+            fields: _deriveBodyFields(
+              body.text!,
+              body.mimeType,
+              '$exchangeId:replay',
+              request: false,
+            ),
+          );
+    final responseHeaders = <ProtocolField>[];
+    for (final entry in headers.entries) {
+      final name = entry.key.toLowerCase();
+      if (const {'set-cookie', 'set-cookie2', 'cookie'}.contains(name)) {
+        continue;
+      }
+      final value = _bounded(entry.value, 64 * 1024);
+      if (value == null) continue;
+      responseHeaders.add(
+        ProtocolField(
+          id: '$exchangeId:replay:${ProtocolFieldLocation.responseHeader.name}:${responseHeaders.length}',
+          location: ProtocolFieldLocation.responseHeader,
+          name: entry.key,
+          value: value,
+        ),
+      );
+    }
+    _exchanges[index] = _exchanges[index].copyWith(
+      replayObservation: ProtocolReplayObservation(
+        replayedAt: replayedAt,
+        statusCode: statusCode.clamp(0, 999),
+        finalUrl: parsedFinalUrl.toString(),
+        redirectChain: redirectChain
+            .map((value) => _bounded(value, 64 * 1024))
+            .whereType<String>()
+            .toList(growable: false),
+        responseHeaders: List.unmodifiable(responseHeaders),
+        responseBody: hydratedBody,
+        usedSessionCookies: usedSessionCookies,
+        fidelityIssues: fidelityIssues
+            .map((value) => _bounded(value, 512))
+            .whereType<String>()
+            .toSet()
+            .toList(growable: false),
+      ),
+    );
+    _acceptedBytes =
+        _acceptedBytes -
+        priorReplayBytes +
+        utf8.encode(hydratedBody.text ?? '').length;
+    notifyListeners();
+  }
+
+  int _storedBodyBytes(ProtocolExchange exchange) =>
+      utf8.encode(exchange.requestBody?.text ?? '').length +
+      utf8.encode(exchange.responseBody?.text ?? '').length +
+      utf8.encode(exchange.replayObservation?.responseBody.text ?? '').length;
 
   /// Returns true only when [raw] passes schema, rate, and size checks.
   bool acceptEvent(dynamic raw) {
@@ -465,6 +683,12 @@ class ProtocolCaptureController extends ChangeNotifier {
       id,
       ProtocolFieldLocation.requestBody,
     );
+    final rawFields = event['fields'];
+    final containsFile =
+        rawFields is List &&
+        rawFields.any(
+          (pair) => pair is List && pair.length >= 2 && pair[1] is! String,
+        );
     final bodyText = jsonEncode([
       for (final field in fields) [field.name, field.value],
     ]);
@@ -487,6 +711,9 @@ class ProtocolCaptureController extends ChangeNotifier {
           fields: fields,
         ),
         responseHeaders: const [],
+        captureIssues: [
+          if (containsFile) 'form_contains_file_body_not_replayable',
+        ],
         mutatesState: !const {'GET', 'HEAD', 'OPTIONS'}.contains(method),
         exampleIndex: _currentExampleIndex,
       ),
@@ -650,6 +877,9 @@ class ProtocolCaptureController extends ChangeNotifier {
       'responseType',
       'synchronous',
       'withCredentials',
+      'evidenceKind',
+      'snapshotTrigger',
+      'pageTitle',
     };
     final result = <String, String>{};
     for (final entry in raw.entries) {

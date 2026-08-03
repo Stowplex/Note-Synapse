@@ -361,11 +361,27 @@ class ProtocolCaptureUserScript {
           truncated: false, omittedReason: 'request_body_not_cloneable_after_dispatch'});
       }
 
-      // Defer installing the observer until after the caller has received the
-      // unchanged promise. Its await/then callbacks therefore keep priority
-      // over capture-side cloning and body reads.
-      queueMicrotask(() => {
-        Promise.resolve(result).then((response) => {
+      // Protocol Study is a deliberate deep-capture mode. Register the
+      // observer before returning the unchanged promise so the response can be
+      // cloned before a page callback consumes its body. Only clone and enqueue
+      // metadata synchronously; bounded body reading remains asynchronous.
+      Promise.resolve(result).then((response) => {
+          let clone;
+          try { clone = response.clone(); }
+          catch (_) {
+            emit('response', {
+              exchangeId,
+              status: response.status,
+              url: response.url || url,
+              redirected: Boolean(response.redirected),
+              responseType: String(response.type || ''),
+              headers: headerPairs(response.headers)
+            });
+            emitBody('response', exchangeId, {text: null, byteLength: null,
+              truncated: false, omittedReason: 'response_not_cloneable_before_page_callback'});
+            emit('complete', {exchangeId, omittedReason: 'response_not_cloneable_before_page_callback'});
+            return;
+          }
           emit('response', {
             exchangeId,
             status: response.status,
@@ -374,14 +390,6 @@ class ProtocolCaptureUserScript {
             responseType: String(response.type || ''),
             headers: headerPairs(response.headers)
           });
-          let clone;
-          try { clone = response.clone(); }
-          catch (_) {
-            emitBody('response', exchangeId, {text: null, byteLength: null,
-              truncated: false, omittedReason: 'response_not_cloneable_after_page_callback'});
-            emit('complete', {exchangeId, omittedReason: 'response_not_cloneable_after_page_callback'});
-            return;
-          }
           responseSnapshot(clone).then((body) => {
             emitBody('response', exchangeId, body);
             emit('complete', {exchangeId});
@@ -389,7 +397,6 @@ class ProtocolCaptureUserScript {
         }, (error) => {
           emit('error', {exchangeId, error: String(error && error.message || error)});
         });
-      });
       return result;
     };
     window.fetch = wrappedFetch;

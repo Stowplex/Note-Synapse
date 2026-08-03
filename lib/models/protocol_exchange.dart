@@ -125,6 +125,68 @@ class ProtocolBody {
   );
 }
 
+/// A response obtained by explicitly replaying a previously captured request.
+///
+/// This is deliberately separate from [ProtocolExchange.responseBody]: replay
+/// happens later and may observe different server state. Cookie values are
+/// attached only while executing the request and are never represented here.
+class ProtocolReplayObservation {
+  const ProtocolReplayObservation({
+    required this.replayedAt,
+    required this.statusCode,
+    required this.finalUrl,
+    required this.responseHeaders,
+    required this.responseBody,
+    this.redirectChain = const [],
+    this.usedSessionCookies = false,
+    this.fidelityIssues = const [],
+  });
+
+  final DateTime replayedAt;
+  final int statusCode;
+  final String finalUrl;
+  final List<String> redirectChain;
+  final List<ProtocolField> responseHeaders;
+  final ProtocolBody responseBody;
+  final bool usedSessionCookies;
+  final List<String> fidelityIssues;
+
+  Map<String, dynamic> toJson() => {
+    'replayedAt': replayedAt.toIso8601String(),
+    'statusCode': statusCode,
+    'finalUrl': finalUrl,
+    if (redirectChain.isNotEmpty) 'redirectChain': redirectChain,
+    'responseHeaders': responseHeaders.map((field) => field.toJson()).toList(),
+    'responseBody': responseBody.toJson(),
+    'usedSessionCookies': usedSessionCookies,
+    if (fidelityIssues.isNotEmpty) 'fidelityIssues': fidelityIssues,
+  };
+
+  factory ProtocolReplayObservation.fromJson(
+    Map<String, dynamic> json,
+  ) => ProtocolReplayObservation(
+    replayedAt: DateTime.parse(json['replayedAt'] as String),
+    statusCode: (json['statusCode'] as num).toInt(),
+    finalUrl: json['finalUrl'] as String,
+    redirectChain: ((json['redirectChain'] as List?) ?? const [])
+        .map((value) => value.toString())
+        .toList(growable: false),
+    responseHeaders: ((json['responseHeaders'] as List?) ?? const [])
+        .map(
+          (field) =>
+              ProtocolField.fromJson(Map<String, dynamic>.from(field as Map)),
+        )
+        .toList(growable: false),
+    responseBody: ProtocolBody.fromJson(
+      Map<String, dynamic>.from(json['responseBody'] as Map),
+    ),
+    usedSessionCookies: json['usedSessionCookies'] as bool? ?? false,
+    fidelityIssues: ((json['fidelityIssues'] as List?) ?? const [])
+        .map((value) => value.toString())
+        .toList(growable: false),
+  );
+}
+
 class ProtocolInteraction {
   const ProtocolInteraction({
     required this.kind,
@@ -172,6 +234,7 @@ class ProtocolExchange {
     this.exampleIndex = 1,
     this.requestBody,
     this.responseBody,
+    this.replayObservation,
     this.status,
     this.responseUrl,
     this.redirected = false,
@@ -215,6 +278,7 @@ class ProtocolExchange {
   /// One-based user-marked example run within the same study session.
   final int exampleIndex;
   final ProtocolBody? responseBody;
+  final ProtocolReplayObservation? replayObservation;
   final String? error;
   final bool mutatesState;
   final bool selected;
@@ -231,6 +295,7 @@ class ProtocolExchange {
     ProtocolBody? requestBody,
     List<ProtocolField>? responseHeaders,
     ProtocolBody? responseBody,
+    ProtocolReplayObservation? replayObservation,
     Map<String, String>? requestMetadata,
     List<String>? captureIssues,
     Set<String>? parameterFieldIds,
@@ -254,6 +319,7 @@ class ProtocolExchange {
     requestBody: requestBody ?? this.requestBody,
     responseHeaders: responseHeaders ?? this.responseHeaders,
     responseBody: responseBody ?? this.responseBody,
+    replayObservation: replayObservation ?? this.replayObservation,
     requestMetadata: requestMetadata ?? this.requestMetadata,
     captureIssues: captureIssues ?? this.captureIssues,
     parameterFieldIds: parameterFieldIds ?? this.parameterFieldIds,
@@ -285,6 +351,7 @@ class ProtocolExchange {
       'parameterFieldIds': parameterFieldIds.toList(growable: false)..sort(),
     'exampleIndex': exampleIndex,
     if (responseBody != null) 'responseBody': responseBody!.toJson(),
+    if (replayObservation != null) 'replay': replayObservation!.toJson(),
     if (error != null) 'error': error,
     'mutatesState': mutatesState,
     'selected': selected,
@@ -333,6 +400,11 @@ class ProtocolExchange {
           ? null
           : ProtocolBody.fromJson(
               Map<String, dynamic>.from(json['responseBody'] as Map),
+            ),
+      replayObservation: json['replay'] == null
+          ? null
+          : ProtocolReplayObservation.fromJson(
+              Map<String, dynamic>.from(json['replay'] as Map),
             ),
       error: json['error'] as String?,
       mutatesState: json['mutatesState'] as bool? ?? false,

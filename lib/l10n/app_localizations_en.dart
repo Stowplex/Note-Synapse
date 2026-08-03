@@ -1025,6 +1025,30 @@ class AppLocalizationsEn extends AppLocalizations {
       'Discard this unsaved raw protocol study? It cannot be recovered.';
 
   @override
+  String get protocolStudyReplay => 'Replay request';
+
+  @override
+  String get protocolStudyReplayResponse => 'Replayed response';
+
+  @override
+  String get protocolStudyReplayFailed => 'Replay failed';
+
+  @override
+  String get protocolStudyReplayedAt => 'Replayed at';
+
+  @override
+  String get protocolStudyReplayUsedSession => 'Used live session cookies';
+
+  @override
+  String get protocolStudyCapturePage => 'Capture rendered page';
+
+  @override
+  String get protocolStudyPageCaptured => 'Rendered page snapshot captured';
+
+  @override
+  String get protocolStudyPageSnapshot => 'Page';
+
+  @override
   String get retryCount => 'Retry Count';
 
   @override

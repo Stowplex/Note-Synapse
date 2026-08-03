@@ -129,7 +129,18 @@ void main() {
         maxOutputTokens: 512,
       );
       final source = [
-        exchange('exchange-1', 'first'),
+        exchange('exchange-1', 'first').copyWith(
+          replayObservation: ProtocolReplayObservation(
+            replayedAt: DateTime.parse('2026-08-02T13:00:00Z'),
+            statusCode: 200,
+            finalUrl: 'https://example.test/first?cursor=replayed',
+            responseHeaders: const [],
+            responseBody: ProtocolBody(
+              text: List.filled(12000, 'replay').join('-'),
+              mimeType: 'text/plain',
+            ),
+          ),
+        ),
         exchange('exchange-2', 'second'),
       ];
       final disclosure = ProtocolDisclosureSession(

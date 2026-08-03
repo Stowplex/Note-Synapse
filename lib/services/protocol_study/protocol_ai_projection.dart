@@ -124,6 +124,14 @@ class ProtocolAIProjectionBuilder {
       final fields = classifier.fieldsFor(exchange);
       final request = <Map<String, dynamic>>[];
       final response = <Map<String, dynamic>>[];
+      final replayResponse = <Map<String, dynamic>>[];
+      final replayFieldPrefix = '${exchange.id}:replay:';
+      final passiveFields = fields
+          .where((field) => !field.id.startsWith(replayFieldPrefix))
+          .toList(growable: false);
+      final replayFields = fields
+          .where((field) => field.id.startsWith(replayFieldPrefix))
+          .toList(growable: false);
       for (final field in fields) {
         if (!disclosure.isIncluded(field.id)) {
           excluded += 1;
@@ -143,7 +151,9 @@ class ProtocolAIProjectionBuilder {
           'userMarkedParameter': field.isParameter,
           'value': allowed ? field.value : '<redacted>',
         };
-        if (field.location == ProtocolFieldLocation.responseHeader ||
+        if (field.id.startsWith(replayFieldPrefix)) {
+          replayResponse.add(output);
+        } else if (field.location == ProtocolFieldLocation.responseHeader ||
             field.location == ProtocolFieldLocation.responseUrlPath ||
             field.location == ProtocolFieldLocation.responseUrlQuery ||
             field.location == ProtocolFieldLocation.responseBody) {
@@ -156,10 +166,15 @@ class ProtocolAIProjectionBuilder {
         'exchangeId': exchange.id,
         'exampleIndex': exchange.exampleIndex,
         'source': exchange.source.name,
+        'evidenceKind':
+            exchange.requestMetadata['evidenceKind'] ??
+            'passiveNetworkObservation',
+        if (exchange.requestMetadata['evidenceKind'] == 'renderedPageSnapshot')
+          'responseProvenance': 'renderedDomSnapshotNotOriginalHttpResponse',
         'method': exchange.method,
         'urlTemplate': _projectUrl(
           exchange.url,
-          fields,
+          passiveFields,
           disclosure,
           pathLocation: ProtocolFieldLocation.requestPath,
           queryLocation: ProtocolFieldLocation.query,
@@ -167,7 +182,7 @@ class ProtocolAIProjectionBuilder {
         if (exchange.responseUrl != null)
           'finalResponseUrl': _projectUrl(
             exchange.responseUrl!,
-            fields,
+            passiveFields,
             disclosure,
             pathLocation: ProtocolFieldLocation.responseUrlPath,
             queryLocation: ProtocolFieldLocation.responseUrlQuery,
@@ -179,6 +194,27 @@ class ProtocolAIProjectionBuilder {
         'responseFields': response,
         'requestBodyTruncated': exchange.requestBody?.truncated ?? false,
         'responseBodyTruncated': exchange.responseBody?.truncated ?? false,
+        if (exchange.replayObservation case final replay?)
+          'replayEvidence': {
+            'provenance': 'userInitiatedHttpReplay',
+            'replayedAt': replay.replayedAt.toIso8601String(),
+            'status': replay.statusCode,
+            'finalResponseUrl': _projectUrl(
+              replay.finalUrl,
+              replayFields,
+              disclosure,
+              pathLocation: ProtocolFieldLocation.responseUrlPath,
+              queryLocation: ProtocolFieldLocation.responseUrlQuery,
+            ),
+            'redirectCount': replay.redirectChain.length,
+            'usedSessionCookies': replay.usedSessionCookies,
+            'responseFields': replayResponse,
+            'responseBodyTruncated': replay.responseBody.truncated,
+            if (replay.responseBody.omittedReason case final reason?)
+              'responseBodyOmittedReason': reason,
+            if (replay.fidelityIssues.isNotEmpty)
+              'fidelityIssues': replay.fidelityIssues,
+          },
       });
     }
     return ProtocolAIPreview(
@@ -286,8 +322,13 @@ class ProtocolOutboundVerifier {
         throw StateError('The AI payload contains an invalid exchange.');
       }
       final exchange = Map<String, dynamic>.from(rawExchange);
-      for (final key in const ['requestFields', 'responseFields']) {
-        final rawFields = exchange[key];
+      final fieldLists = <dynamic>[
+        exchange['requestFields'],
+        exchange['responseFields'],
+        if (exchange['replayEvidence'] case final Map replayEvidence)
+          replayEvidence['responseFields'],
+      ];
+      for (final rawFields in fieldLists) {
         if (rawFields is! List) {
           throw StateError('The AI payload has an invalid field list.');
         }
@@ -319,6 +360,8 @@ class ProtocolOutboundVerifier {
       final urls = [
         exchange['urlTemplate'],
         exchange['finalResponseUrl'],
+        if (exchange['replayEvidence'] case final Map replayEvidence)
+          replayEvidence['finalResponseUrl'],
       ].whereType<String>();
       for (final field in sourceFields.values) {
         if (field.value.isEmpty || permittedValues.contains(field.value)) {

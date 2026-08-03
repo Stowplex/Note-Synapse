@@ -991,6 +991,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get protocolStudyDiscardSessionConfirm => '丢弃这份尚未保存的原始协议研究吗？丢弃后无法恢复。';
 
   @override
+  String get protocolStudyReplay => '重放请求';
+
+  @override
+  String get protocolStudyReplayResponse => '重放响应';
+
+  @override
+  String get protocolStudyReplayFailed => '重放失败';
+
+  @override
+  String get protocolStudyReplayedAt => '重放时间';
+
+  @override
+  String get protocolStudyReplayUsedSession => '使用了实时会话 Cookie';
+
+  @override
+  String get protocolStudyCapturePage => '捕获渲染页面';
+
+  @override
+  String get protocolStudyPageCaptured => '已捕获渲染页面快照';
+
+  @override
+  String get protocolStudyPageSnapshot => '页面';
+
+  @override
   String get retryCount => '重试次数';
 
   @override

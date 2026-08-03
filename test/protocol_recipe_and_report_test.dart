@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -10,8 +12,45 @@ import 'package:note_synapse/services/protocol_study/protocol_report_renderer.da
 import 'package:note_synapse/services/web_session_service.dart';
 
 class _FakeWebSessions extends WebSessionService {
+  final Map<String, String> liveHeaders = {};
+  final List<({String url, WebSessionCookie cookie})> appliedCookies = [];
+
   @override
   Future<String> cookieHeaderFor(String url) async => 'sid=cookie-secret';
+
+  @override
+  Future<String> liveCookieHeaderFor(String url) async =>
+      liveHeaders[url] ?? 'sid=cookie-secret';
+
+  @override
+  Future<void> applyLiveResponseCookies(
+    String responseUrl,
+    Iterable<WebSessionCookie> cookies,
+  ) async {
+    for (final cookie in cookies) {
+      appliedCookies.add((url: responseUrl, cookie: cookie));
+      liveHeaders[responseUrl] = '${cookie.name}=${cookie.value}';
+    }
+  }
+}
+
+class _FakeReplayTransport implements ProtocolReplayTransport {
+  _FakeReplayTransport(this.responses);
+
+  final List<ProtocolReplayTransportResponse> responses;
+  final List<ProtocolReplayTransportRequest> requests = [];
+
+  @override
+  Future<ProtocolReplayTransportResponse> send(
+    ProtocolReplayTransportRequest request, {
+    required int maxResponseBytes,
+  }) async {
+    requests.add(request);
+    return responses.removeAt(0);
+  }
+
+  @override
+  void close() {}
 }
 
 void main() {
@@ -117,6 +156,150 @@ void main() {
     expect(results.map((step) => step.exchange.id), ['earlier', 'later']);
     runner.close();
   });
+
+  test(
+    'replay follows redirects with fresh cookies and strips cross-origin auth',
+    () async {
+      final sessions = _FakeWebSessions()
+        ..liveHeaders['https://api.example.com/search?q=private-search'] =
+            'sid=old'
+        ..liveHeaders['https://api.example.com/next'] = 'sid=rotated'
+        ..liveHeaders['https://cdn.example.net/final'] = 'cdn=session';
+      final transport = _FakeReplayTransport([
+        const ProtocolReplayTransportResponse(
+          statusCode: 302,
+          headers: {
+            'location': ['/next'],
+          },
+          bodyBytes: [],
+          byteLength: 0,
+          truncated: false,
+          cookies: [WebSessionCookie(name: 'sid', value: 'rotated')],
+        ),
+        const ProtocolReplayTransportResponse(
+          statusCode: 302,
+          headers: {
+            'location': ['https://cdn.example.net/final'],
+          },
+          bodyBytes: [],
+          byteLength: 0,
+          truncated: false,
+        ),
+        ProtocolReplayTransportResponse(
+          statusCode: 200,
+          headers: const {
+            'content-type': ['text/plain; charset=utf-8'],
+            'set-cookie': ['never=persist-this-header'],
+          },
+          bodyBytes: utf8.encode('done'),
+          byteLength: 4,
+          truncated: false,
+        ),
+      ]);
+      final runner = ProtocolRecipeRunner(
+        webSessions: sessions,
+        transport: transport,
+      );
+
+      final result = await runner.run(exchange, useSessionCookies: true);
+
+      expect(transport.requests, hasLength(3));
+      expect(transport.requests[0].headers['Cookie'], 'sid=old');
+      expect(transport.requests[1].headers['Cookie'], 'sid=rotated');
+      expect(transport.requests[1].method, 'GET');
+      expect(transport.requests[1].bodyBytes, isEmpty);
+      expect(transport.requests[2].headers['Cookie'], 'cdn=session');
+      expect(transport.requests[2].headers['Authorization'], isNull);
+      expect(sessions.appliedCookies.single.cookie.value, 'rotated');
+      expect(result.finalUrl, 'https://cdn.example.net/final');
+      expect(result.redirectChain, [
+        'https://api.example.com/next',
+        'https://cdn.example.net/final',
+      ]);
+      expect(result.headers.keys, isNot(contains('set-cookie')));
+      expect(result.body, 'done');
+      expect(
+        result.fidelityIssues,
+        contains('cross_origin_authorization_removed'),
+      );
+    },
+  );
+
+  test('binary replay response records metadata without mojibake', () async {
+    final transport = _FakeReplayTransport([
+      const ProtocolReplayTransportResponse(
+        statusCode: 200,
+        headers: {
+          'content-type': ['image/png'],
+        },
+        bodyBytes: [0, 159, 255, 10],
+        byteLength: 5000,
+        truncated: true,
+      ),
+    ]);
+    final runner = ProtocolRecipeRunner(
+      webSessions: _FakeWebSessions(),
+      transport: transport,
+    );
+
+    final result = await runner.run(exchange);
+
+    expect(result.body, isNull);
+    expect(result.mimeType, 'image/png');
+    expect(result.byteLength, 5000);
+    expect(result.truncated, true);
+    expect(result.omittedReason, 'binary_response_not_stored');
+  });
+
+  test(
+    'captured form fields are reconstructed with an explicit caveat',
+    () async {
+      final transport = _FakeReplayTransport([
+        const ProtocolReplayTransportResponse(
+          statusCode: 204,
+          headers: {},
+          bodyBytes: [],
+          byteLength: 0,
+          truncated: false,
+        ),
+      ]);
+      final form = ProtocolExchange(
+        id: 'form-1',
+        pageInstanceId: 'page-1',
+        sequence: 2,
+        source: ProtocolRequestSource.form,
+        method: 'POST',
+        url: 'https://example.com/submit',
+        startedAt: timestamp,
+        requestHeaders: const [],
+        queryFields: const [],
+        requestBody: const ProtocolBody(
+          text: '[["name","A B"],["tag","one"]]',
+          mimeType: 'application/x-note-synapse-form-fields+json',
+        ),
+        responseHeaders: const [],
+      );
+      final runner = ProtocolRecipeRunner(
+        webSessions: _FakeWebSessions(),
+        transport: transport,
+      );
+
+      final result = await runner.run(form);
+
+      expect(
+        utf8.decode(transport.requests.single.bodyBytes),
+        'name=A+B&tag=one',
+      );
+      expect(
+        transport.requests.single.headers['Content-Type'],
+        contains('application/x-www-form-urlencoded'),
+      );
+      expect(
+        result.fidelityIssues,
+        contains('form_reconstructed_not_byte_exact'),
+      );
+    },
+  );
 
   test('sanitized note view cannot import captured values from model fields', () {
     final study = ProtocolStudy(

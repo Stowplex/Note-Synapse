@@ -49,11 +49,20 @@ void main() {
         reason:
             'The browser must accept the original request before capture cloning.',
       );
+      expect(script, contains('Promise.resolve(result).then((response) => {'));
+      final responseObserver = script.indexOf(
+        'Promise.resolve(result).then((response) => {',
+      );
+      expect(
+        responseObserver,
+        lessThan(script.indexOf('return result;', responseObserver)),
+        reason: 'Deep capture must clone before page callbacks consume it.',
+      );
+      expect(script, contains('response.clone()'));
+      expect(script, contains('response_not_cloneable_before_page_callback'));
       expect(
         script,
-        contains(
-          'queueMicrotask(() => {\n        Promise.resolve(result).then',
-        ),
+        isNot(contains('response_not_cloneable_after_page_callback')),
       );
       expect(script, contains('queueMicrotask(flush)'));
       expect(script, isNot(contains('await bridge.callHandler')));
@@ -461,6 +470,108 @@ void main() {
       expect(controller.acceptEvent(event('hello')), true);
       expect(controller.acceptEvent(event('hello', sequence: 2)), false);
       expect(controller.stoppedByLimit, true);
+    });
+
+    test('stores rendered page snapshots as bounded supplemental evidence', () {
+      final controller = ProtocolCaptureController(
+        limits: const ProtocolCaptureLimits(
+          maxResponseBodyBytes: 100,
+          maxSessionBytes: 200,
+        ),
+        now: () => now,
+      );
+
+      final id = controller.addPageSnapshot(
+        url: 'https://app.example.com/results?q=private',
+        title: 'Results',
+        html: '<html><body>${'🙂' * 100}</body></html>',
+        visibleText: 'visible ' * 100,
+        trigger: 'loadStop',
+      );
+
+      expect(id, isNotNull);
+      final snapshot = controller.exchanges.single;
+      expect(snapshot.source, ProtocolRequestSource.navigation);
+      expect(snapshot.selected, false);
+      expect(snapshot.requestMetadata['evidenceKind'], 'renderedPageSnapshot');
+      expect(snapshot.requestMetadata['snapshotTrigger'], 'loadStop');
+      expect(snapshot.responseBody!.mimeType, 'text/html');
+      expect(
+        utf8.encode(snapshot.responseBody!.text!).length,
+        lessThanOrEqualTo(60),
+      );
+      expect(snapshot.responseBody!.truncated, true);
+      expect(
+        snapshot.captureIssues,
+        contains('rendered_page_snapshot_not_http_response'),
+      );
+      expect(
+        snapshot.responseBody!.fields.map((field) => field.name),
+        containsAll([r'$renderedHtml', r'$visibleText']),
+      );
+    });
+
+    test('attaches replay without replacing passive response or cookies', () {
+      final original = ProtocolExchange(
+        id: 'exchange-1',
+        pageInstanceId: 'page-1',
+        sequence: 1,
+        source: ProtocolRequestSource.fetch,
+        method: 'GET',
+        url: 'https://app.example.com/api',
+        startedAt: now,
+        requestHeaders: const [],
+        queryFields: const [],
+        responseHeaders: const [],
+        responseBody: const ProtocolBody(
+          text: '{"passive":true}',
+          mimeType: 'application/json',
+        ),
+      );
+      final controller = ProtocolCaptureController.fromExchanges(
+        exchanges: [original],
+      );
+
+      controller.attachReplay(
+        exchangeId: original.id,
+        replayedAt: now,
+        statusCode: 201,
+        finalUrl: 'https://app.example.com/api?version=2',
+        headers: const {
+          'content-type': 'application/json',
+          'set-cookie': 'sid=must-not-be-stored',
+        },
+        bodyText: '{"replayed":true}',
+        mimeType: 'application/json',
+        byteLength: 17,
+        truncated: false,
+        omittedReason: null,
+        redirectChain: const ['https://app.example.com/api?version=2'],
+        usedSessionCookies: true,
+        fidelityIssues: const ['server_state_may_have_changed'],
+      );
+
+      final exchange = controller.exchanges.single;
+      expect(exchange.responseBody!.text, '{"passive":true}');
+      expect(
+        exchange.replayObservation!.responseBody.text,
+        '{"replayed":true}',
+      );
+      expect(exchange.replayObservation!.statusCode, 201);
+      expect(exchange.replayObservation!.usedSessionCookies, true);
+      expect(
+        exchange.replayObservation!.responseHeaders.map((field) => field.name),
+        isNot(contains('set-cookie')),
+      );
+
+      final restored = ProtocolExchange.fromJson(
+        jsonDecode(jsonEncode(exchange.toJson())) as Map<String, dynamic>,
+      );
+      expect(
+        restored.replayObservation!.responseBody.text,
+        '{"replayed":true}',
+      );
+      expect(restored.responseBody!.text, '{"passive":true}');
     });
 
     test('protocol study records round-trip through JSON', () {

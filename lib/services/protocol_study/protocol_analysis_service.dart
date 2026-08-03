@@ -312,17 +312,27 @@ class ProtocolAnalysisService {
         16384;
     final payloadBudget = math.max(256, (inputLimit * 0.65).floor() - 512);
     final exchange = (payload['exchanges'] as List).single as Map;
+    final replayEvidence = exchange['replayEvidence'] is Map
+        ? exchange['replayEvidence'] as Map
+        : null;
     for (final key in const ['urlTemplate', 'finalResponseUrl']) {
       final value = exchange[key];
       if (value is String && value.length > 2048) {
         exchange[key] = '${value.substring(0, 2048)}…<truncated>';
       }
     }
+    final replayUrl = replayEvidence?['finalResponseUrl'];
+    if (replayUrl is String && replayUrl.length > 2048) {
+      replayEvidence!['finalResponseUrl'] =
+          '${replayUrl.substring(0, 2048)}…<truncated>';
+    }
     final fieldLists = <List<dynamic>>[];
     for (final key in const ['requestFields', 'responseFields']) {
       final fields = exchange[key];
       if (fields is List) fieldLists.add(fields);
     }
+    final replayFields = replayEvidence?['responseFields'];
+    if (replayFields is List) fieldLists.add(replayFields);
     final fieldMaps = fieldLists
         .expand((fields) => fields)
         .whereType<Map>()
@@ -375,6 +385,19 @@ class ProtocolAnalysisService {
         if (value is! String) continue;
         final uri = Uri.tryParse(value);
         exchange[key] = uri != null && uri.hasScheme
+            ? uri
+                  .replace(
+                    path: '/<omitted-context-limit>',
+                    query: '',
+                    fragment: '',
+                  )
+                  .toString()
+            : '<omitted: local context limit>';
+      }
+      final value = replayEvidence?['finalResponseUrl'];
+      if (value is String) {
+        final uri = Uri.tryParse(value);
+        replayEvidence!['finalResponseUrl'] = uri != null && uri.hasScheme
             ? uri
                   .replace(
                     path: '/<omitted-context-limit>',

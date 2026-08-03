@@ -1898,6 +1898,54 @@ abstract class AppLocalizations {
   /// **'Discard this unsaved raw protocol study? It cannot be recovered.'**
   String get protocolStudyDiscardSessionConfirm;
 
+  /// No description provided for @protocolStudyReplay.
+  ///
+  /// In en, this message translates to:
+  /// **'Replay request'**
+  String get protocolStudyReplay;
+
+  /// No description provided for @protocolStudyReplayResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'Replayed response'**
+  String get protocolStudyReplayResponse;
+
+  /// No description provided for @protocolStudyReplayFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Replay failed'**
+  String get protocolStudyReplayFailed;
+
+  /// No description provided for @protocolStudyReplayedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Replayed at'**
+  String get protocolStudyReplayedAt;
+
+  /// No description provided for @protocolStudyReplayUsedSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Used live session cookies'**
+  String get protocolStudyReplayUsedSession;
+
+  /// No description provided for @protocolStudyCapturePage.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture rendered page'**
+  String get protocolStudyCapturePage;
+
+  /// No description provided for @protocolStudyPageCaptured.
+  ///
+  /// In en, this message translates to:
+  /// **'Rendered page snapshot captured'**
+  String get protocolStudyPageCaptured;
+
+  /// No description provided for @protocolStudyPageSnapshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Page'**
+  String get protocolStudyPageSnapshot;
+
   /// No description provided for @retryCount.
   ///
   /// In en, this message translates to:

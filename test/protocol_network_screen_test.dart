@@ -1,13 +1,46 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/l10n/app_localizations.dart';
 import 'package:note_synapse/models/protocol_exchange.dart';
 import 'package:note_synapse/screens/settings/protocol_network_screen.dart';
 import 'package:note_synapse/services/protocol_study/protocol_capture_controller.dart';
+import 'package:note_synapse/services/protocol_study/protocol_recipe_runner.dart';
 import 'package:note_synapse/services/web_session_service.dart';
 
+class _NoCookieSessions extends WebSessionService {
+  @override
+  Future<String> liveCookieHeaderFor(String url) async => '';
+
+  @override
+  Future<void> applyLiveResponseCookies(
+    String responseUrl,
+    Iterable<WebSessionCookie> cookies,
+  ) async {}
+}
+
+class _OneResponseTransport implements ProtocolReplayTransport {
+  @override
+  Future<ProtocolReplayTransportResponse> send(
+    ProtocolReplayTransportRequest request, {
+    required int maxResponseBytes,
+  }) async => ProtocolReplayTransportResponse(
+    statusCode: 200,
+    headers: const {
+      'content-type': ['application/json'],
+    },
+    bodyBytes: utf8.encode('{"fresh":true}'),
+    byteLength: 14,
+    truncated: false,
+  );
+
+  @override
+  void close() {}
+}
+
 void main() {
-  ProtocolExchange exchange() => ProtocolExchange(
+  ProtocolExchange exchange({bool mutatesState = true}) => ProtocolExchange(
     id: 'exchange-1',
     pageInstanceId: 'page-1',
     sequence: 1,
@@ -36,7 +69,7 @@ void main() {
       omittedReason: 'response_capture_partial',
     ),
     captureIssues: const ['response_capture_partial'],
-    mutatesState: true,
+    mutatesState: mutatesState,
     selected: true,
   );
 
@@ -86,5 +119,45 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(find.text('Continue'), findsNothing);
+  });
+
+  testWidgets('per-request replay attaches separate persisted evidence', (
+    tester,
+  ) async {
+    final controller = ProtocolCaptureController.fromExchanges(
+      exchanges: [exchange(mutatesState: false)],
+    );
+    final sessions = _NoCookieSessions();
+    var persisted = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ProtocolNetworkScreen(
+          controller: controller,
+          webSessions: sessions,
+          runnerFactory: () => ProtocolRecipeRunner(
+            webSessions: sessions,
+            transport: _OneResponseTransport(),
+          ),
+          onExchangesChanged: (exchanges) async {
+            persisted = true;
+            expect(exchanges.single.replayObservation, isNotNull);
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Replay request'));
+    await tester.pumpAndSettle();
+
+    expect(persisted, true);
+    expect(controller.exchanges.single.responseBody!.text, '{"ok":true}');
+    expect(
+      controller.exchanges.single.replayObservation!.responseBody.text,
+      '{"fresh":true}',
+    );
+    expect(find.textContaining('Replayed response'), findsWidgets);
   });
 }

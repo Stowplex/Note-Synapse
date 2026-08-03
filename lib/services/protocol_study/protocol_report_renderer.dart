@@ -178,12 +178,24 @@ class _SafeProtocolReportRenderer {
     for (var i = 0; i < knowledge.steps.length; i++) {
       final step = knowledge.steps[i];
       final mutation = step.mutatesState ? ' — **mutates state**' : '';
+      final evidence = study.exchanges
+          .where((exchange) => exchange.id == step.exchangeId)
+          .firstOrNull;
+      final evidenceProvenance = evidence == null
+          ? ''
+          : evidence.requestMetadata['evidenceKind'] == 'renderedPageSnapshot'
+          ? ' (rendered page snapshot; not the original HTTP response)'
+          : evidence.replayObservation != null
+          ? ' (passive capture plus later user-initiated replay)'
+          : ' (passive capture)';
       buffer
         ..writeln(
           '${i + 1}. `${step.method}` `${clean(step.urlTemplate)}`$mutation',
         )
         ..writeln('   ${clean(step.purpose)}')
-        ..writeln('   Evidence: `${clean(step.exchangeId)}`');
+        ..writeln(
+          '   Evidence: `${clean(step.exchangeId)}`$evidenceProvenance',
+        );
     }
     buffer
       ..writeln()
@@ -195,6 +207,19 @@ class _SafeProtocolReportRenderer {
       ..writeln(
         '- Request/response bodies may be truncated at user-configured limits.',
       );
+    if (study.exchanges.any(
+      (exchange) =>
+          exchange.requestMetadata['evidenceKind'] == 'renderedPageSnapshot',
+    )) {
+      buffer.writeln(
+        '- Rendered page snapshots describe the DOM after page scripts ran; they are supplemental evidence, not original HTTP response bodies.',
+      );
+    }
+    if (study.exchanges.any((exchange) => exchange.replayObservation != null)) {
+      buffer.writeln(
+        '- Replayed responses were observed later and may differ from the passive capture because server or session state changed.',
+      );
+    }
     for (final caveat in knowledge.caveats) {
       buffer.writeln('- ${clean(caveat)}');
     }

@@ -1,5 +1,6 @@
-import 'dart:collection';
 import 'dart:async';
+import 'dart:collection';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -45,6 +46,7 @@ class _ProtocolStudyBrowserScreenState
   bool _started = false;
   bool _loading = false;
   bool _saving = false;
+  bool _capturingPage = false;
   bool _savedOrDiscarded = false;
   bool _confirmingDiscard = false;
 
@@ -177,6 +179,73 @@ class _ProtocolStudyBrowserScreenState
         ),
       ),
     );
+  }
+
+  Future<void> _capturePageSnapshot({required String trigger}) async {
+    final controller = _webView;
+    final url = _currentUrl?.toString();
+    if (controller == null || url == null || _capturingPage) return;
+    setState(() => _capturingPage = true);
+    try {
+      // Bound the JavaScript bridge payload as well as the controller's stored
+      // UTF-8 payload. Four bytes per character is the worst-case UTF-8 size.
+      final htmlCharacters = (_limits.maxResponseBodyBytes ~/ 8).clamp(
+        1024,
+        640 * 1024,
+      );
+      final textCharacters = (_limits.maxResponseBodyBytes ~/ 12).clamp(
+        512,
+        320 * 1024,
+      );
+      final raw = await controller.evaluateJavascript(
+        source:
+            '''
+          (function() {
+            try {
+              var html = document.documentElement
+                ? document.documentElement.outerHTML : '';
+              var text = document.body ? (document.body.innerText || '') : '';
+              var truncated = html.length > $htmlCharacters ||
+                text.length > $textCharacters;
+              return JSON.stringify({
+                url: String(location.href || ''),
+                title: String(document.title || ''),
+                html: html.substring(0, $htmlCharacters),
+                visibleText: text.substring(0, $textCharacters),
+                truncated: truncated
+              });
+            } catch (_) {
+              return JSON.stringify({url: '', title: '', html: '', visibleText: '', truncated: false});
+            }
+          })();
+        ''',
+      );
+      final decoded = raw is String ? jsonDecode(raw) : raw;
+      if (decoded is! Map) return;
+      final snapshot = Map<String, dynamic>.from(decoded);
+      final id = _capture.addPageSnapshot(
+        url: snapshot['url']?.toString() ?? url,
+        title: snapshot['title']?.toString() ?? '',
+        html: snapshot['html']?.toString() ?? '',
+        visibleText: snapshot['visibleText']?.toString() ?? '',
+        trigger: trigger,
+        browserReportedTruncated: snapshot['truncated'] == true,
+      );
+      if (trigger == 'manual' && id != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.protocolStudyPageCaptured,
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      // A page can block DOM access while navigating. The network capture must
+      // remain usable even when this optional evidence cannot be collected.
+    } finally {
+      if (mounted) setState(() => _capturingPage = false);
+    }
   }
 
   Future<void> _attachCookieObservation(
@@ -330,6 +399,19 @@ class _ProtocolStudyBrowserScreenState
             ),
             if (_started)
               IconButton(
+                onPressed: _capturingPage
+                    ? null
+                    : () => _capturePageSnapshot(trigger: 'manual'),
+                icon: _capturingPage
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.document_scanner_outlined),
+                tooltip: l10n.protocolStudyCapturePage,
+              ),
+            if (_started)
+              IconButton(
                 onPressed: () {
                   _capture.startNewExample();
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -349,7 +431,7 @@ class _ProtocolStudyBrowserScreenState
               ),
             if (_started)
               IconButton(
-                onPressed: _saving ? null : _save,
+                onPressed: _saving || _capturingPage ? null : _save,
                 icon: const Icon(Icons.save_outlined),
                 tooltip: l10n.protocolStudySave,
               ),
@@ -453,6 +535,7 @@ class _ProtocolStudyBrowserScreenState
                           _currentUrl = url;
                           if (url != null) _urlController.text = url.toString();
                         });
+                        unawaited(_capturePageSnapshot(trigger: 'loadStop'));
                       },
                     ),
             ),

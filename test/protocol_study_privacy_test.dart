@@ -146,6 +146,77 @@ void main() {
       expect(preview.redactedFieldCount, 0);
     });
 
+    test(
+      'replay evidence is separate and honors per-field remote approval',
+      () {
+        const destination = ProtocolAIDestination(
+          modelId: 'remote-model',
+          displayName: 'Remote model',
+          endpoint: 'https://ai.example.com/v1',
+          isLocal: false,
+        );
+        final source = exchange().copyWith(
+          replayObservation: ProtocolReplayObservation(
+            replayedAt: DateTime.parse('2026-08-02T13:00:00Z'),
+            statusCode: 200,
+            finalUrl: 'https://api.example.com/result?cursor=private-cursor',
+            responseHeaders: const [
+              ProtocolField(
+                id: 'exchange-1:replay:responseHeader:0',
+                location: ProtocolFieldLocation.responseHeader,
+                name: 'X-Session-Result',
+                value: 'sensitive-replay-value',
+              ),
+            ],
+            responseBody: const ProtocolBody(
+              text: '{"result":"visible-by-choice"}',
+              mimeType: 'application/json',
+              fields: [
+                ProtocolField(
+                  id: 'exchange-1:replay:responseBody:result',
+                  location: ProtocolFieldLocation.responseBody,
+                  name: 'result',
+                  value: 'visible-by-choice',
+                ),
+              ],
+            ),
+            usedSessionCookies: true,
+          ),
+        );
+        final disclosure = ProtocolDisclosureSession(destination)
+          ..setDisclosed('exchange-1:replay:responseBody:result', true)
+          ..setDisclosed('exchange-1:replay:responseHeader:0', true);
+
+        final preview = const ProtocolAIProjectionBuilder().build(
+          exchanges: [source],
+          disclosure: disclosure,
+        );
+        final projected = (preview.payload['exchanges'] as List).single as Map;
+        final replay = projected['replayEvidence'] as Map;
+
+        expect(projected['responseFields'], isEmpty);
+        expect(replay['provenance'], 'userInitiatedHttpReplay');
+        expect(replay['usedSessionCookies'], true);
+        expect(replay['finalResponseUrl'], contains('cursor=%3Credacted%3E'));
+        expect(
+          replay['responseFields'],
+          contains(containsPair('value', 'visible-by-choice')),
+        );
+        expect(
+          replay['responseFields'],
+          contains(containsPair('value', 'sensitive-replay-value')),
+        );
+        expect(
+          () => const ProtocolOutboundVerifier().verify(
+            preview: preview,
+            disclosure: disclosure,
+            sourceExchanges: [source],
+          ),
+          returnsNormally,
+        );
+      },
+    );
+
     test('local model can omit irrelevant fields from its input', () {
       const destination = ProtocolAIDestination(
         modelId: 'local-model',

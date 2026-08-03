@@ -514,6 +514,48 @@ void main() {
       },
     );
 
+    test('applies replay response cookies only to the live jar', () async {
+      await service
+          .applyLiveResponseCookies('https://example.com/account', const [
+            WebSessionCookie(
+              name: 'sid',
+              value: 'rotated-secret',
+              domain: '.example.com',
+              path: '/',
+              isSecure: true,
+              isHttpOnly: true,
+            ),
+          ]);
+
+      expect(cookies.restored, hasLength(1));
+      expect(cookies.restored.single.url, 'https://example.com/account');
+      expect(cookies.restored.single.cookie.value, 'rotated-secret');
+      expect(await service.listDomains(), isEmpty);
+    });
+
+    test('does not apply replay cookies for a non-HTTP URL', () async {
+      await service.applyLiveResponseCookies('file:///private/page', const [
+        WebSessionCookie(name: 'sid', value: 'secret'),
+      ]);
+
+      expect(cookies.restored, isEmpty);
+    });
+
+    test('rejects a replay cookie scoped to an unrelated domain', () async {
+      await service.applyLiveResponseCookies(
+        'https://example.com/account',
+        const [
+          WebSessionCookie(
+            name: 'sid',
+            value: 'secret',
+            domain: '.attacker.example',
+          ),
+        ],
+      );
+
+      expect(cookies.restored, isEmpty);
+    });
+
     test('host-only cookie is scoped to the captured host', () async {
       // Host-only cookie (no Domain) captured on a.example.com must go to that
       // exact host but not to a sibling host b.example.com.

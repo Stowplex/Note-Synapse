@@ -42,6 +42,7 @@ class ProtocolSensitivityClassifier {
       field.copyWith(sensitivity: classify(field));
 
   List<ProtocolField> fieldsFor(ProtocolExchange exchange) {
+    final replay = exchange.replayObservation;
     final fields = <ProtocolField>[
       ...exchange.requestHeaders,
       ..._urlFields(
@@ -63,12 +64,26 @@ class ProtocolSensitivityClassifier {
           includeQuery: true,
         ),
       ...?exchange.responseBody?.fields,
+      ...?replay?.responseHeaders,
+      if (replay != null)
+        ..._urlFields(
+          '${exchange.id}:replay',
+          replay.finalUrl,
+          pathLocation: ProtocolFieldLocation.responseUrlPath,
+          queryLocation: ProtocolFieldLocation.responseUrlQuery,
+          includeQuery: true,
+        ),
+      ...?replay?.responseBody.fields,
     ];
-    void addRaw(ProtocolBody? body, ProtocolFieldLocation location) {
+    void addRaw(
+      ProtocolBody? body,
+      ProtocolFieldLocation location, {
+      String? idPrefix,
+    }) {
       if (body?.text == null || body!.fields.isNotEmpty) return;
       fields.add(
         ProtocolField(
-          id: '${exchange.id}:${location.name}:raw',
+          id: '${idPrefix ?? exchange.id}:${location.name}:raw',
           location: location,
           name: r'$raw',
           value: body.text!,
@@ -79,6 +94,11 @@ class ProtocolSensitivityClassifier {
 
     addRaw(exchange.requestBody, ProtocolFieldLocation.requestBody);
     addRaw(exchange.responseBody, ProtocolFieldLocation.responseBody);
+    addRaw(
+      replay?.responseBody,
+      ProtocolFieldLocation.responseBody,
+      idPrefix: '${exchange.id}:replay',
+    );
     return fields
         .map(label)
         .map(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../models/protocol_exchange.dart';
 import '../../models/protocol_study.dart';
 import '../../services/protocol_study/protocol_capture_controller.dart';
 import '../../services/protocol_study/protocol_study_workspace.dart';
@@ -158,13 +159,15 @@ class _ProtocolStudyDetailScreen extends StatefulWidget {
 class _ProtocolStudyDetailScreenState
     extends State<_ProtocolStudyDetailScreen> {
   late final ProtocolCaptureController _controller;
+  late ProtocolStudy _study;
 
   @override
   void initState() {
     super.initState();
+    _study = widget.study;
     _controller = ProtocolCaptureController.fromExchanges(
-      exchanges: widget.study.exchanges,
-      limits: widget.study.limits,
+      exchanges: _study.exchanges,
+      limits: _study.limits,
     );
   }
 
@@ -178,7 +181,7 @@ class _ProtocolStudyDetailScreenState
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => ProtocolAnalysisScreen(
-          study: widget.study,
+          study: _study,
           controller: _controller,
           workspace: widget.workspace,
         ),
@@ -186,18 +189,27 @@ class _ProtocolStudyDetailScreenState
     );
   }
 
+  Future<void> _saveExchanges(List<ProtocolExchange> exchanges) async {
+    final updated = _study.copyWith(
+      updatedAt: DateTime.now(),
+      exchanges: List<ProtocolExchange>.unmodifiable(exchanges),
+    );
+    await widget.workspace.save(updated);
+    if (mounted) setState(() => _study = updated);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.study.title)),
+      appBar: AppBar(title: Text(_study.title)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           ListTile(
             leading: const Icon(Icons.public),
-            title: Text(widget.study.startUrl),
-            subtitle: Text(widget.study.sessionProvenance.name),
+            title: Text(_study.startUrl),
+            subtitle: Text(_study.sessionProvenance.name),
           ),
           ListTile(
             leading: const Icon(Icons.security_outlined),
@@ -211,24 +223,25 @@ class _ProtocolStudyDetailScreenState
                 builder: (_) => ProtocolNetworkScreen(
                   controller: _controller,
                   webSessions: widget.webSessions,
-                  savedLoginDomain: widget.study.savedLoginDomain,
+                  savedLoginDomain: _study.savedLoginDomain,
                   onAnalyze: _analyze,
+                  onExchangesChanged: _saveExchanges,
                 ),
               ),
             ),
             icon: const Icon(Icons.network_check),
             label: Text(
-              '${l10n.protocolStudyNetwork} (${widget.study.exchanges.length})',
+              '${l10n.protocolStudyNetwork} (${_controller.exchanges.length})',
             ),
           ),
-          if (widget.study.knowledge != null) ...[
+          if (_study.knowledge != null) ...[
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: () => Navigator.of(context).push<void>(
                 MaterialPageRoute(
                   builder: (_) => ProtocolKnowledgeScreen(
-                    study: widget.study,
-                    knowledge: widget.study.knowledge!,
+                    study: _study,
+                    knowledge: _study.knowledge!,
                     workspace: widget.workspace,
                   ),
                 ),
