@@ -23,7 +23,14 @@ import 'package:note_synapse/services/tools/tool_param_validator.dart';
 
 const _defaultModels = ['gemini-3-flash-preview', 'gemini-3.1-flash-lite'];
 
+// Table format — the shape from the 2026-08-03 failure trace, where the
+// model must flip a Status cell rather than a checkbox.
 const _readingRecordContent =
+    '## 2026-08-03\n'
+    '| Status | Book Title | Count |\n'
+    '| :----- | :--------- | ----- |\n'
+    '|        | 小猪皮皮的游乐园之梦 |   1    |\n'
+    '\n'
     '## 2026-07-31\n'
     '- [ ] 飞吧，小猪璞璞：星际奇遇记 x 3遍\n'
     '- [ ] 小猪璞璞的秘密书包 x 2遍\n';
