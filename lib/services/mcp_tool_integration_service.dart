@@ -6,6 +6,7 @@ import 'mcp_service.dart';
 import 'logger_service.dart';
 import 'prompts/prompt_template_service.dart';
 import 'service_locator.dart';
+import 'tools/tool_outcome.dart';
 
 /// Service for integrating MCP tools with AI models
 class McpToolIntegrationService {
@@ -272,11 +273,12 @@ class McpToolIntegrationService {
 
   /// Maximum nesting depth rendered for object/array parameter schemas.
   /// Top-level params are depth 1; we descend through nested objects and the
-  /// element shape of object arrays (e.g. `modification` -> `link` -> `added`
-  /// -> `relation`/`target`, which is depth 4). This covers every built-in
-  /// tool schema while still capping pathologically deep inputs so the prompt
-  /// can't blow up.
-  static const int _maxSchemaDepth = 4;
+  /// element shape of object arrays. The deepest built-in shape is the batch
+  /// `modify_notes`: `modifications` -> item `modification` -> `link` ->
+  /// `added` -> `relation`/`target`, which is depth 5 (the batch array adds a
+  /// level over the single-note `modify_note`). Capped so pathologically deep
+  /// inputs can't blow up the prompt.
+  static const int _maxSchemaDepth = 5;
 
   /// Recursively render a JSON-schema `properties` map into the textual tool
   /// catalog so the model can see nested object/array shapes (not just the
@@ -329,6 +331,7 @@ class McpToolIntegrationService {
       if (items is Map<String, dynamic>) {
         final itemProps = items['properties'];
         if (itemProps is Map<String, dynamic> && itemProps.isNotEmpty) {
+          buffer.writeln('$indent  Each array item is an object with:');
           _writeSchemaProperties(
             buffer,
             itemProps,
@@ -400,6 +403,20 @@ class McpToolIntegrationService {
               depth: 1,
             );
           }
+          // Opt-in worked example via the standard JSON-Schema `examples`
+          // keyword — one line, only for tools that declare it.
+          final examples = schema['examples'];
+          if (examples is List && examples.isNotEmpty) {
+            try {
+              detailsBuffer.writeln(
+                '  Example: call_tool({"service_name": "${entry.key}", '
+                '"tool_name": "${tool.name}", '
+                '"params": ${jsonEncode(examples.first)}})',
+              );
+            } catch (_) {
+              // Skip unencodable examples.
+            }
+          }
         }
         detailsBuffer.writeln();
       }
@@ -439,6 +456,163 @@ class McpToolIntegrationService {
       );
 
   /// Execute an MCP tool call
+  /// Upper bound on individual tool declarations per request, so a large
+  /// MCP catalog cannot blow up request size; overflow tools remain callable
+  /// through the `call_tool` wrapper.
+  static const int maxPerToolDeclarations = 48;
+
+  static final RegExp _validFunctionName = RegExp(r'^[a-zA-Z0-9_-]{1,64}$');
+
+  /// Argument names [parseCallToolArguments] treats as wrapper fields. A
+  /// directly-declared tool whose schema uses one of these would have its
+  /// arguments corrupted by the direct-call normalization path (e.g. a
+  /// `params` property being unwrapped as the nested-params slot), so such
+  /// tools stay on the call_tool wrapper only.
+  static const Set<String> _reservedArgumentNames = {
+    'service_name',
+    'serviceName',
+    'service',
+    'tool_name',
+    'toolName',
+    'tool',
+    'params',
+    'param',
+    'parameters',
+  };
+
+  /// Individual function declarations for the active tools (cloud chat
+  /// models). With a real schema per tool, constrained decoding (Gemini
+  /// VALIDATED mode / OpenAI function calling) structurally rejects
+  /// malformed arguments that a prose catalog cannot prevent.
+  ///
+  /// Only tools whose bare name is globally unique across the active set
+  /// (the engine dispatches direct calls by unique name) and valid as a
+  /// function name are declared. Everything else — plus all declared tools,
+  /// for backward compatibility — stays callable through the `call_tool`
+  /// wrapper, which callers should append after these declarations.
+  static List<Map<String, dynamic>> buildPerToolDeclarations(
+    Map<String, List<McpTool>> toolsByEndpoint,
+  ) {
+    final nameCounts = <String, int>{};
+    for (final tools in toolsByEndpoint.values) {
+      for (final tool in tools) {
+        nameCounts[tool.name] = (nameCounts[tool.name] ?? 0) + 1;
+      }
+    }
+
+    final declarations = <Map<String, dynamic>>[];
+    for (final entry in toolsByEndpoint.entries) {
+      for (final tool in entry.value) {
+        if (declarations.length >= maxPerToolDeclarations) {
+          LoggerService.warning(
+            'Per-tool declaration cap ($maxPerToolDeclarations) reached; '
+            'remaining tools stay on the call_tool wrapper',
+          );
+          return declarations;
+        }
+        if (nameCounts[tool.name] != 1) continue;
+        if (!_validFunctionName.hasMatch(tool.name)) continue;
+        if (tool.name == 'call_tool') continue;
+        final topLevelProps = tool.inputSchema?['properties'];
+        if (topLevelProps is Map &&
+            topLevelProps.keys.any(
+              (key) => _reservedArgumentNames.contains(key.toString()),
+            )) {
+          continue;
+        }
+        final description = tool.description?.trim();
+        declarations.add({
+          'name': tool.name,
+          'description': (description == null || description.isEmpty)
+              ? tool.name
+              : description,
+          'parameters': sanitizeSchemaForDeclaration(tool.inputSchema),
+        });
+      }
+    }
+    return declarations;
+  }
+
+  /// Deep-copies a JSON schema keeping only the structural keywords the
+  /// cloud declaration formats support (an OpenAPI subset). Documentation
+  /// keywords (`examples`) are dropped; schemas using unsupported structure
+  /// (`$ref`, `oneOf`, type arrays, ...) fall back to a permissive object so
+  /// the tool is never rejected by the API or silently dropped.
+  static Map<String, dynamic> sanitizeSchemaForDeclaration(
+    Map<String, dynamic>? schema,
+  ) {
+    final sanitized = schema == null ? null : _sanitizeSchemaNode(schema);
+    return sanitized ?? {'type': 'object'};
+  }
+
+  static Map<String, dynamic>? _sanitizeSchemaNode(Map<String, dynamic> node) {
+    const unsupportedKeys = {r'$ref', 'oneOf', 'anyOf', 'allOf', 'not'};
+    if (node.keys.any(unsupportedKeys.contains)) return null;
+
+    final type = node['type'];
+    final hasProperties = node['properties'] is Map;
+    if (type is! String && !hasProperties) return null;
+    final effectiveType = type is String ? type : 'object';
+    const knownTypes = {
+      'object',
+      'array',
+      'string',
+      'number',
+      'integer',
+      'boolean',
+    };
+    if (!knownTypes.contains(effectiveType)) return null;
+
+    final sanitized = <String, dynamic>{'type': effectiveType};
+    final description = node['description'];
+    if (description is String && description.isNotEmpty) {
+      sanitized['description'] = description;
+    }
+
+    final enumValues = node['enum'];
+    if (enumValues is List &&
+        enumValues.isNotEmpty &&
+        enumValues.every((e) => e is String || e is num || e is bool)) {
+      sanitized['enum'] = List<dynamic>.from(enumValues);
+    }
+
+    if (effectiveType == 'object') {
+      final properties = node['properties'];
+      if (properties is Map) {
+        final sanitizedProps = <String, dynamic>{};
+        for (final entry in properties.entries) {
+          final value = entry.value;
+          if (value is! Map) return null;
+          final child = _sanitizeSchemaNode(value.cast<String, dynamic>());
+          if (child == null) return null;
+          sanitizedProps[entry.key.toString()] = child;
+        }
+        if (sanitizedProps.isNotEmpty) {
+          sanitized['properties'] = sanitizedProps;
+          final required = node['required'];
+          if (required is List) {
+            final requiredNames = required
+                .whereType<String>()
+                .where(sanitizedProps.containsKey)
+                .toList();
+            if (requiredNames.isNotEmpty) {
+              sanitized['required'] = requiredNames;
+            }
+          }
+        }
+      }
+    } else if (effectiveType == 'array') {
+      final items = node['items'];
+      if (items is Map) {
+        final child = _sanitizeSchemaNode(items.cast<String, dynamic>());
+        if (child == null) return null;
+        sanitized['items'] = child;
+      }
+    }
+
+    return sanitized;
+  }
+
   static Future<String> executeToolCall({
     required String serviceName,
     required String toolName,
@@ -471,9 +645,22 @@ class McpToolIntegrationService {
 
       LoggerService.info('MCP tool call completed successfully');
       return result;
+    } on McpToolErrorException catch (e) {
+      // The server executed the tool and the tool itself failed
+      // (CallToolResult.isError). Deterministic — not retryable as-is.
+      LoggerService.error('MCP tool reported error: $e');
+      return ToolOutcome.failure(
+        code: ToolOutcome.codeToolError,
+        message: 'Tool $serviceName.$toolName failed: $e',
+      ).serialize();
     } catch (e) {
+      // Connection/transport-level failure — eligible for retry.
       LoggerService.error('Error executing MCP tool call: $e');
-      return 'Error executing tool $serviceName.$toolName: $e';
+      return ToolOutcome.failure(
+        code: ToolOutcome.codeTransportError,
+        message: 'Error executing tool $serviceName.$toolName: $e',
+        retryable: true,
+      ).serialize();
     }
   }
 

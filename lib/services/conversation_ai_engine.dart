@@ -16,6 +16,7 @@ import '../services/prompts/system_prompt_builder.dart';
 import '../services/prompts/registrations/chat_prompt_configuration.dart';
 import 'conversation_settings_service.dart';
 import 'prompts/prompt_configuration_service.dart';
+import 'tools/tool_outcome.dart';
 
 class ConversationCancelledException implements Exception {
   const ConversationCancelledException([
@@ -261,6 +262,21 @@ class ConversationAiEngine {
       var iteration = 0;
       final conversationParts = <String>[];
       Map<String, dynamic>? lastAssistantMetadata;
+      // Cumulative parts across all iterations, used ONLY for the final
+      // persisted message metadata. In-flight assistant messages carry only
+      // their own iteration's slice; sharing (or copying) the cumulative list
+      // into every iteration's message re-sends every prior tool call in
+      // every model turn, ballooning the request superlinearly.
+      final persistedPartsHistory = <dynamic>[];
+
+      // Retry discipline + honest-failure bookkeeping for this turn.
+      // Deterministic failures keyed by canonical call identity: a second
+      // byte-equivalent call is not executed again. Tools whose failures are
+      // never followed by a success of the same tool get deterministic
+      // disclosure in the final message regardless of what the model claims.
+      final deterministicFailures = <String, ToolOutcome>{};
+      final unresolvedToolFailures = <String, Map<String, dynamic>>{};
+      final succeededToolNames = <String>{};
 
       // Streaming-first for local models: stream with tool awareness.
       // If pure text, return fast. If tool calls detected, seed and enter
@@ -327,10 +343,17 @@ class ConversationAiEngine {
           LoggerService.warning(
             'MCP tool loop exceeded $iterationLimit iterations',
           );
-          return const ConversationAiResponse(
-            content:
-                'I was unable to complete the request with the available tools. Please try again later.',
-            metadata: {'isSynthesized': true},
+          return ConversationAiResponse(
+            content: [
+              'I was unable to complete the request with the available tools. Please try again later.',
+              if (unresolvedToolFailures.isNotEmpty)
+                _buildToolFailureDisclosure(unresolvedToolFailures),
+            ].join('\n\n'),
+            metadata: {
+              'isSynthesized': true,
+              if (unresolvedToolFailures.isNotEmpty)
+                'failed_tool_calls': unresolvedToolFailures.values.toList(),
+            },
           );
         }
 
@@ -375,8 +398,10 @@ class ConversationAiEngine {
             'AI requested ${functionCalls.length} tool call(s)',
           );
 
-          final toolResults = <String>[];
-          final toolCallsWithResults = <Map<String, dynamic>>[];
+          // One record per function call — success, execution error, unknown
+          // tool, or unparseable arguments — so every call is guaranteed a
+          // paired response message downstream.
+          final callRecords = <Map<String, dynamic>>[];
 
           for (int i = 0; i < functionCalls.length; i++) {
             if (isCancelled()) {
@@ -438,34 +463,17 @@ class ConversationAiEngine {
                 );
 
                 final errorResult = 'Error: $errorMessage';
-                toolResults.add(errorResult);
                 conversationParts.add(
                   '[Tool error: Unknown function "$functionName"]',
                 );
-
-                // Build proper tool error message based on model type
-                if (getIt<ModelSelector>().currentModelConfig?.type ==
-                    ModelType.openaiCompatible) {
-                  // OpenAI: Use the original tool_call_id from the API response
-                  final toolCallId =
+                callRecords.add({
+                  'function_call': functionCall,
+                  'result': errorResult,
+                  'dispatched': false,
+                  'id':
                       functionCall['id'] as String? ??
-                      't_err_${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}_$i';
-                  toolCallsWithResults.add({
-                    'id': toolCallId,
-                    'function_call': functionCall,
-                    'result': errorResult,
-                  });
-                } else {
-                  // Gemini: Store with function metadata for proper functionResponse format
-                  toolCallsWithResults.add({
-                    'function_name': functionName,
-                    'function_args': rawArgs,
-                    'result': errorResult,
-                    // Preserve thought_signature for Gemini 3+ models
-                    if (functionCall.containsKey('thoughtSignature'))
-                      'thought_signature': functionCall['thoughtSignature'],
-                  });
-                }
+                      't_err_${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}_$i',
+                });
 
                 continue;
               }
@@ -477,6 +485,24 @@ class ConversationAiEngine {
                   'Failed to parse call_tool arguments',
                   error: {'args': rawArgs},
                 );
+                // Record a paired error response anyway — a functionCall with
+                // no functionResponse violates the wire contract and leaves
+                // the model with no feedback to correct itself.
+                conversationParts.add(
+                  '[Tool error: Invalid call_tool arguments]',
+                );
+                callRecords.add({
+                  'function_call': functionCall,
+                  'result':
+                      'Error: Could not parse call_tool arguments. Expected '
+                      '{"service_name": "...", "tool_name": "...", '
+                      '"params": {...}} with every tool argument inside '
+                      '"params".',
+                  'dispatched': false,
+                  'id':
+                      functionCall['id'] as String? ??
+                      't_err_${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}_$i',
+                });
                 continue;
               }
 
@@ -488,78 +514,160 @@ class ConversationAiEngine {
             LoggerService.info('Executing: $serviceName.$toolName');
             LoggerService.debug('Tool parameters', error: params);
 
-            try {
-              final result = await executeTool(
-                serviceName,
-                toolName,
-                params,
-                generationContext,
-              );
-              final toolSummary =
-                  'Tool: $serviceName.$toolName\nResult: $result';
-              toolResults.add(toolSummary);
-              conversationParts.add('[Tool executed: $serviceName.$toolName]');
+            final qualifiedName = '$serviceName.$toolName';
+            final callKey = canonicalToolCallKey(
+              serviceName: serviceName,
+              toolName: toolName,
+              params: params,
+            );
 
-              if (getIt<ModelSelector>().currentModelConfig?.type ==
-                  ModelType.openaiCompatible) {
-                // Use the original tool_call_id from the API response if available
-                final toolCallId =
-                    functionCall['id'] as String? ??
-                    't_${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}_${toolName.length > 10 ? toolName.substring(0, 10) : toolName}_$i';
-                toolCallsWithResults.add({
-                  'id': toolCallId,
-                  'function_call': functionCall,
-                  'result': toolSummary,
-                });
+            String result;
+            ToolOutcome? failure;
+            final priorFailure = deterministicFailures[callKey];
+            if (priorFailure != null) {
+              // Second byte-equivalent call after a deterministic failure —
+              // do NOT execute it again; return an escalated directive.
+              LoggerService.warning(
+                'Skipping repeated failing call to $qualifiedName',
+              );
+              failure = ToolOutcome.failure(
+                code: priorFailure.code,
+                message: priorFailure.isUserDenied
+                    ? 'The user already declined this exact action; it was '
+                          'NOT retried. Do not ask again — adjust your plan '
+                          'or finish, and tell the user the action was not '
+                          'performed.'
+                    : 'This exact call to $qualifiedName already failed and '
+                          'was NOT executed again. Previous error: '
+                          '${priorFailure.message} Change the arguments, use '
+                          'a different tool, or stop and report the failure '
+                          'to the user. Never claim this operation '
+                          'succeeded.',
+              );
+              result = failure.serialize();
+            } else {
+              try {
+                result = await executeTool(
+                  serviceName,
+                  toolName,
+                  params,
+                  generationContext,
+                );
+              } catch (e, stackTrace) {
+                LoggerService.error(
+                  'Tool execution failed: $e',
+                  error: e,
+                  stackTrace: stackTrace,
+                );
+                result = ToolOutcome.fromException(
+                  qualifiedName,
+                  e,
+                ).serialize();
               }
-            } catch (e, stackTrace) {
-              LoggerService.error(
-                'Tool execution failed: $e',
-                error: e,
-                stackTrace: stackTrace,
-              );
-              toolResults.add('Tool: $serviceName.$toolName\nError: $e');
+              failure = ToolOutcome.tryParseFailure(result);
             }
-          }
 
-          // Accumulate parts history
-          if (partsHistory != null) {
-            // If this is not the first iteration, we need to append to the existing history
-            // However, the model returns the full history of the *current* turn's generation
-            // We need to inject the tool results into this history for the next iteration
-            // But here, we are preparing the final metadata for the ConversationMessage.
+            if (failure != null) {
+              if (!failure.retryable) {
+                deterministicFailures[callKey] = failure;
+              }
+              var summary = failure.message;
+              if (summary.length > 300) {
+                summary = '${summary.substring(0, 300)}…';
+              }
+              // Keyed by call identity, not tool name: a success against a
+              // DIFFERENT target must not erase this call's disclosure.
+              unresolvedToolFailures[callKey] = {
+                'tool': qualifiedName,
+                'code': failure.code,
+                'message': summary,
+              };
+              conversationParts.add('[Tool failed: $qualifiedName]');
+            } else {
+              succeededToolNames.add(qualifiedName);
+              // A success clears the exact same call's failure (e.g. a
+              // transport retry that went through), and this tool's
+              // invalid_argument failures (the model corrected its
+              // arguments and the corrected call succeeded). Failures of
+              // other calls to the same tool — different targets — stay
+              // disclosed.
+              unresolvedToolFailures.removeWhere(
+                (key, info) =>
+                    key == callKey ||
+                    (info['tool'] == qualifiedName &&
+                        info['code'] == ToolOutcome.codeInvalidArgument),
+              );
+              deterministicFailures.remove(callKey);
+              conversationParts.add('[Tool executed: $qualifiedName]');
+            }
 
-            // For the final message, we want the COMPLETE history of this interaction:
-            // 1. Initial thought + tool call (from first iteration)
-            // 2. Tool result (from execution)
-            // 3. Subsequent thought + response (from next iteration)
-
-            // Currently, 'partsHistory' only contains the parts from the *last* model response.
-            // We need to maintain a running list of parts across iterations.
-          }
-
-          // Initialize running parts history if needed
-          final runningPartsHistory =
-              lastAssistantMetadata?['parts_history'] as List? ?? [];
-          if (partsHistory != null) {
-            runningPartsHistory.addAll(partsHistory);
-          }
-
-          // Inject tool results into the running history
-          for (int i = 0; i < toolResults.length; i++) {
-            runningPartsHistory.add({
-              'type': 'tool_result',
-              'text': toolResults[i],
-              'is_included': true,
-              // Link to the corresponding tool call if possible?
-              // For now, just adding the result is enough for the UI to show it.
+            final toolSummary = failure != null
+                ? 'Tool: $qualifiedName\nError: $result'
+                : 'Tool: $qualifiedName\nResult: $result';
+            callRecords.add({
+              'function_call': functionCall,
+              'result': toolSummary,
+              'dispatched': true,
+              'id':
+                  functionCall['id'] as String? ??
+                  't_${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}_${toolName.length > 10 ? toolName.substring(0, 10) : toolName}_$i',
             });
           }
 
-          if (toolResults.isNotEmpty) {
+          // This iteration's own parts (the model's response for THIS call
+          // only). The cumulative history lives in [persistedPartsHistory]
+          // and is attached exclusively to the final persisted metadata, so
+          // in-flight assistant messages never re-send prior iterations'
+          // tool calls.
+          final iterationPartsHistory = <dynamic>[...?partsHistory];
+          persistedPartsHistory.addAll(iterationPartsHistory);
+
+          // Tool results go into the persisted (UI-facing) history only; the
+          // wire formats replay them via PromptRole.tool messages below.
+          for (final record in callRecords) {
+            persistedPartsHistory.add({
+              'type': 'tool_result',
+              'text': record['result'],
+              'is_included': true,
+            });
+          }
+
+          if (callRecords.isNotEmpty) {
+            final currentModelConfig =
+                generationContext.modelOverride ??
+                getIt<ModelSelector>().currentModelConfig;
+            final isOpenAiCompatible =
+                currentModelConfig?.type == ModelType.openaiCompatible;
+
+            final toolCallsWithResults = <Map<String, dynamic>>[
+              for (final record in callRecords)
+                if (isOpenAiCompatible)
+                  {
+                    'id': record['id'],
+                    'function_call': record['function_call'],
+                    'result': record['result'],
+                  }
+                else if (record['dispatched'] != true)
+                  // Gemini legacy shape, kept for undispatched calls only
+                  // (unknown tool / unparseable args) as before.
+                  {
+                    'function_name':
+                        (record['function_call'] as Map)['name'],
+                    'function_args':
+                        (record['function_call'] as Map)['args'],
+                    'result': record['result'],
+                    if ((record['function_call'] as Map).containsKey(
+                      'thoughtSignature',
+                    ))
+                      'thought_signature':
+                          (record['function_call'] as Map)['thoughtSignature'],
+                  },
+            ];
+
             final assistantMetadata = <String, dynamic>{
               'function_calls': functionCalls, // Keep for legacy
-              'parts_history': runningPartsHistory, // Updated history
+              // This iteration's parts only — never the cumulative history.
+              'parts_history': iterationPartsHistory,
               'modelUsed':
                   response['modelUsed'] ??
                   getIt<ModelSelector>().currentModelConfig?.id,
@@ -576,69 +684,42 @@ class ConversationAiEngine {
               metadata: assistantMetadata,
             );
             lastAssistantMetadata = assistantMetadata;
-            final currentModelConfig =
-                generationContext.modelOverride ??
-                getIt<ModelSelector>().currentModelConfig;
-            if (currentModelConfig?.type == ModelType.openaiCompatible) {
-              final toolMessages = toolCallsWithResults
-                  .map(
-                    (toolCall) => PromptMessage(
-                      role: PromptRole.tool,
-                      content: toolCall['result'] as String,
-                      metadata: {'tool_call_id': toolCall['id']},
-                    ),
-                  )
-                  .toList();
 
-              currentMessages = [
-                ...currentMessages,
-                assistantMessage,
-                ...toolMessages,
-              ];
-            } else {
-              // Gemini: Use PromptRole.tool with function metadata for proper functionResponse format
-              final toolMessages = <PromptMessage>[];
-              for (int i = 0; i < toolResults.length; i++) {
-                final functionCall = i < functionCalls.length
-                    ? functionCalls[i]
-                    : null;
-                final toolCallResult = i < toolCallsWithResults.length
-                    ? toolCallsWithResults[i]
-                    : null;
-
-                // Build metadata with function info and thought_signature
-                final metadata = <String, dynamic>{};
-                if (functionCall != null) {
-                  metadata['function_name'] = functionCall['name'];
-                  metadata['function_args'] = functionCall['args'];
-                  // Preserve thought_signature for Gemini 3+ models
-                  if (functionCall.containsKey('thoughtSignature')) {
-                    metadata['thought_signature'] =
-                        functionCall['thoughtSignature'];
-                  }
-                }
-                // Also check toolCallResult for thought_signature (for error cases)
-                if (toolCallResult != null &&
-                    toolCallResult.containsKey('thought_signature')) {
-                  metadata['thought_signature'] =
-                      toolCallResult['thought_signature'];
-                }
-
-                toolMessages.add(
+            // Exactly one tool message per function call, in call order —
+            // including error and unparseable-argument outcomes.
+            final toolMessages = <PromptMessage>[
+              for (final record in callRecords)
+                if (isOpenAiCompatible)
                   PromptMessage(
                     role: PromptRole.tool,
-                    content: toolResults[i],
-                    metadata: metadata.isNotEmpty ? metadata : null,
+                    content: record['result'] as String,
+                    metadata: {'tool_call_id': record['id']},
+                  )
+                else
+                  // Gemini/local: function metadata for proper
+                  // functionResponse pairing.
+                  PromptMessage(
+                    role: PromptRole.tool,
+                    content: record['result'] as String,
+                    metadata: {
+                      'function_name':
+                          (record['function_call'] as Map)['name'],
+                      'function_args':
+                          (record['function_call'] as Map)['args'],
+                      if ((record['function_call'] as Map).containsKey(
+                        'thoughtSignature',
+                      ))
+                        'thought_signature': (record['function_call']
+                            as Map)['thoughtSignature'],
+                    },
                   ),
-                );
-              }
+            ];
 
-              currentMessages = [
-                ...currentMessages,
-                assistantMessage,
-                ...toolMessages,
-              ];
-            }
+            currentMessages = [
+              ...currentMessages,
+              assistantMessage,
+              ...toolMessages,
+            ];
 
             final latestTools = resolveActiveTools();
             final newTools = _diffTools(
@@ -673,13 +754,14 @@ class ConversationAiEngine {
             conversationParts.add(textResponse);
           }
 
-          // Use the accumulated history
-          final finalPartsHistory =
-              lastAssistantMetadata?['parts_history'] as List? ?? [];
-          if (partsHistory != null) {
-            // If this was the final response (no more tools), add its parts
-            finalPartsHistory.addAll(partsHistory);
-          }
+          // The persisted metadata carries the COMPLETE history of this
+          // interaction (every iteration's parts, tool results, and the
+          // final response's parts) as a fresh list that is never aliased
+          // to any in-flight message's metadata.
+          final finalPartsHistory = <dynamic>[
+            ...persistedPartsHistory,
+            ...?partsHistory,
+          ];
 
           final finalMetadata = <String, dynamic>{
             if (lastAssistantMetadata != null) ...lastAssistantMetadata,
@@ -691,6 +773,21 @@ class ConversationAiEngine {
                 : getIt<ModelSelector>().currentModelConfig?.id,
           };
 
+          // Harness-owned honest-failure disclosure: the engine knows every
+          // call's outcome, so unresolved failures are disclosed
+          // deterministically — the model's own claims cannot override this.
+          if (unresolvedToolFailures.isNotEmpty) {
+            conversationParts.add(
+              _buildToolFailureDisclosure(unresolvedToolFailures),
+            );
+            finalMetadata['failed_tool_calls'] = unresolvedToolFailures.values
+                .toList();
+            if (succeededToolNames.isNotEmpty) {
+              finalMetadata['succeeded_tool_calls'] = succeededToolNames
+                  .toList();
+            }
+          }
+
           return ConversationAiResponse(
             content: conversationParts.join('\n\n'),
             metadata: finalMetadata,
@@ -698,8 +795,16 @@ class ConversationAiEngine {
         }
 
         LoggerService.warning('AI returned empty response after tool calls');
-        return const ConversationAiResponse(
-          content: 'I was unable to generate a response. Please try again.',
+        return ConversationAiResponse(
+          content: [
+            'I was unable to generate a response. Please try again.',
+            if (unresolvedToolFailures.isNotEmpty)
+              _buildToolFailureDisclosure(unresolvedToolFailures),
+          ].join('\n\n'),
+          metadata: {
+            if (unresolvedToolFailures.isNotEmpty)
+              'failed_tool_calls': unresolvedToolFailures.values.toList(),
+          },
         );
       }
     } on ConversationCancelledException {
@@ -716,6 +821,24 @@ class ConversationAiEngine {
         metadata: {'is_client_synthetic': true},
       );
     }
+  }
+
+  /// Deterministic user-facing report of tool calls that never succeeded in
+  /// this turn. Appended by the harness so a model claiming success cannot
+  /// hide a failed operation. (Hardcoded English, consistent with the
+  /// engine's other synthesized messages.)
+  String _buildToolFailureDisclosure(
+    Map<String, Map<String, dynamic>> failures,
+  ) {
+    final lines = failures.values.map((failure) {
+      final label = failure['code'] == ToolOutcome.codeUserDenied
+          ? 'declined by you'
+          : 'failed';
+      return '- ${failure['tool']} ($label): ${failure['message']}';
+    });
+    return '⚠️ Tool execution report: the following operations did NOT '
+        'complete, so their changes were not applied. If the answer above '
+        'claims otherwise, disregard that claim.\n${lines.join('\n')}';
   }
 
   Set<String> _toolKeys(Map<String, List<McpTool>> toolsByService) {

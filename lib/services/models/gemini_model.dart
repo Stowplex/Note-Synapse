@@ -343,7 +343,15 @@ class GeminiModel implements AIModel {
     Map<String, List<McpTool>> toolsByEndpoint,
   ) {
     if (toolsByEndpoint.isEmpty) return [];
+    // Individual declarations first: VALIDATED-mode constrained decoding
+    // then enforces each tool's real parameter schema. The call_tool
+    // wrapper stays as a catch-all for undeclared tools (duplicate names,
+    // catalogs over the declaration cap) and backward compatibility.
+    final perTool = McpToolIntegrationService.buildPerToolDeclarations(
+      toolsByEndpoint,
+    );
     return [
+      ...perTool,
       McpToolIntegrationService.getCallToolFunctionForGemini(toolsByEndpoint),
     ];
   }

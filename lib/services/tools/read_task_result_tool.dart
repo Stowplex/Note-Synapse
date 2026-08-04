@@ -14,6 +14,9 @@ class ReadTaskResultTool implements NativeTool {
   String get name => 'read_task_result';
 
   @override
+  bool get isMutating => false;
+
+  @override
   String get description => '''
 Read result content from a previous task. Use this when ancestor/sibling task results 
 show a TOC preview and you need the full content or a specific section.

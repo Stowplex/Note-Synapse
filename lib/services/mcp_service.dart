@@ -515,11 +515,24 @@ class McpService {
           }
         }
 
+        final resultText = buffer.toString();
+
+        // MCP marks tool-level failures with isError; the content is the
+        // error description. Surface it as a failure instead of success
+        // text, so callers can classify it.
+        if (result.isError == true) {
+          LoggerService.warning(
+            'McpService: Tool reported error (isError=true): $resultText',
+          );
+          throw McpToolErrorException(
+            resultText.isEmpty ? 'Tool reported an error.' : resultText,
+          );
+        }
+
         LoggerService.debug('McpService: Tool call successful');
 
         // Log successful response to AI debug overlay
         final duration = DateTime.now().difference(startTime);
-        final resultText = buffer.toString();
         LoggerService.logAiResponse(
           statusCode: 200,
           headers: {
@@ -559,4 +572,17 @@ class McpService {
       rethrow;
     }
   }
+}
+
+/// A tool-level failure reported by an MCP server via `CallToolResult.isError`.
+///
+/// Distinct from transport/connection failures: the server ran the tool and
+/// the tool itself failed, so retrying with identical arguments is unlikely
+/// to help.
+class McpToolErrorException implements Exception {
+  final String message;
+  const McpToolErrorException(this.message);
+
+  @override
+  String toString() => message;
 }

@@ -720,4 +720,505 @@ void main() {
       );
     });
   });
+
+  group('ConversationAiEngine history integrity', () {
+    Map<String, dynamic> callToolFn(String tool, [Map<String, dynamic>? p]) {
+      return {
+        'name': 'call_tool',
+        'args': {
+          'service_name': 'System',
+          'tool_name': tool,
+          'params': p ?? <String, dynamic>{},
+        },
+      };
+    }
+
+    Map<String, List<McpTool>> systemTools() => {
+      'System': [
+        McpTool(name: 'tool_a', description: 'A', inputSchema: const {}),
+        McpTool(name: 'tool_b', description: 'B', inputSchema: const {}),
+      ],
+    };
+
+    test(
+      'in-flight assistant messages carry only their own iteration parts '
+      '(no cumulative aliasing)',
+      () async {
+        var callCount = 0;
+        final modelCalls = <List<PromptMessage>>[];
+
+        when(
+          mockModelSelector.generateWithToolsAndMessages(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer((invocation) async {
+          modelCalls.add(
+            (invocation.positionalArguments[0] as List)
+                .cast<PromptMessage>()
+                .toList(),
+          );
+          callCount++;
+          if (callCount <= 3) {
+            return {
+              'text': null,
+              'function_calls': [callToolFn('tool_a')],
+              'parts_history': [
+                {
+                  'type': 'tool_call',
+                  'function_call': {
+                    'name': 'call_tool',
+                    'args': {
+                      'service_name': 'System',
+                      'tool_name': 'tool_a',
+                      'params': {'iteration': callCount},
+                    },
+                  },
+                  'is_included': true,
+                },
+              ],
+            };
+          }
+          return {
+            'text': 'Done!',
+            'function_calls': null,
+            'parts_history': [
+              {'type': 'text', 'text': 'Done!', 'is_included': true},
+            ],
+          };
+        });
+
+        final result = await engine.generate(
+          request: createTestRequest(),
+          activeTools: systemTools(),
+          enableTools: true,
+          executeTool: (_, __, ___, ____) async => 'ok',
+          isCancelled: () => false,
+          generationContext: GenerationContext(),
+        );
+
+        expect(modelCalls, hasLength(4));
+
+        // The final request contains 3 assistant messages, each holding
+        // exactly its own iteration's single tool_call part — never the
+        // accumulated set.
+        final assistants = modelCalls[3]
+            .where((m) => m.role == PromptRole.assistant)
+            .toList();
+        expect(assistants, hasLength(3));
+        for (var i = 0; i < assistants.length; i++) {
+          final parts = assistants[i].metadata?['parts_history'] as List;
+          expect(
+            parts,
+            hasLength(1),
+            reason: 'assistant $i must hold only its own iteration parts',
+          );
+          final call = (parts.single as Map)['function_call'] as Map;
+          expect(
+            (call['args'] as Map)['params'],
+            {'iteration': i + 1},
+            reason: 'assistant $i must hold iteration ${i + 1}\'s call',
+          );
+        }
+
+        // Distinct list instances — mutating one must not affect another.
+        final lists = assistants
+            .map((m) => m.metadata?['parts_history'] as List)
+            .toList();
+        expect(identical(lists[0], lists[1]), isFalse);
+        expect(identical(lists[1], lists[2]), isFalse);
+
+        // Request size grows linearly: every iteration adds exactly one
+        // assistant + one tool message.
+        for (var i = 1; i < modelCalls.length; i++) {
+          expect(modelCalls[i].length - modelCalls[i - 1].length, 2);
+        }
+
+        // Final persisted metadata still carries the full union:
+        // 3 tool_call parts + 3 tool_result parts + 1 final text part.
+        final persisted = result.metadata?['parts_history'] as List;
+        expect(persisted, hasLength(7));
+        expect(
+          persisted.where((p) => (p as Map)['type'] == 'tool_call').length,
+          3,
+        );
+        expect(
+          persisted.where((p) => (p as Map)['type'] == 'tool_result').length,
+          3,
+        );
+        expect(
+          persisted.where((p) => (p as Map)['type'] == 'text').length,
+          1,
+        );
+        // And the persisted list is not aliased to any in-flight message.
+        for (final list in lists) {
+          expect(identical(persisted, list), isFalse);
+        }
+      },
+    );
+
+    test(
+      'every function call gets exactly one paired tool response, including '
+      'unparseable and unknown calls',
+      () async {
+        var callCount = 0;
+        final modelCalls = <List<PromptMessage>>[];
+
+        when(
+          mockModelSelector.generateWithToolsAndMessages(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer((invocation) async {
+          modelCalls.add(
+            (invocation.positionalArguments[0] as List)
+                .cast<PromptMessage>()
+                .toList(),
+          );
+          callCount++;
+          if (callCount == 1) {
+            return {
+              'text': null,
+              'function_calls': [
+                callToolFn('tool_a'),
+                // Unparseable: no service/tool names anywhere.
+                {'name': 'call_tool', 'args': 42},
+                // Unknown function called directly by name.
+                {
+                  'name': 'not_a_tool',
+                  'args': {'x': 1},
+                },
+              ],
+              'parts_history': [],
+            };
+          }
+          return {'text': 'Done!', 'function_calls': null, 'parts_history': []};
+        });
+
+        final executed = <String>[];
+        await engine.generate(
+          request: createTestRequest(),
+          activeTools: systemTools(),
+          enableTools: true,
+          executeTool: (service, tool, params, ctx) async {
+            executed.add('$service.$tool');
+            return 'ok';
+          },
+          isCancelled: () => false,
+          generationContext: GenerationContext(),
+        );
+
+        expect(executed, ['System.tool_a']);
+        expect(modelCalls, hasLength(2));
+
+        // Second request: 3 function calls → exactly 3 tool messages,
+        // in call order, each with function metadata.
+        final toolMessages = modelCalls[1]
+            .where((m) => m.role == PromptRole.tool)
+            .toList();
+        expect(toolMessages, hasLength(3));
+        expect(
+          toolMessages.map((m) => m.metadata?['function_name']).toList(),
+          ['call_tool', 'call_tool', 'not_a_tool'],
+        );
+        expect(toolMessages[0].content, contains('Result: ok'));
+        expect(
+          toolMessages[1].content,
+          contains('Could not parse call_tool arguments'),
+        );
+        expect(toolMessages[2].content, contains('Error'));
+      },
+    );
+  });
+
+  group('ConversationAiEngine retry discipline and disclosure', () {
+    const invalidArgEnvelope =
+        '{"synapse_tool_outcome": 1, "error": {"code": "invalid_argument", '
+        '"message": '
+        '"modifications[0].modification: expected object, got int (4)", '
+        '"retryable": false}}';
+    const transportEnvelope =
+        '{"synapse_tool_outcome": 1, "error": {"code": "transport_error", '
+        '"message": "Connection refused", "retryable": true}}';
+
+    Map<String, dynamic> callToolFn(Map<String, dynamic> params) {
+      return {
+        'name': 'call_tool',
+        'args': {
+          'service_name': 'System',
+          'tool_name': 'modify_notes',
+          'params': params,
+        },
+      };
+    }
+
+    Map<String, List<McpTool>> systemTools() => {
+      'System': [
+        McpTool(name: 'modify_notes', description: 'M', inputSchema: const {}),
+      ],
+    };
+
+    test(
+      'second byte-equivalent deterministic failure is not executed again, '
+      'even with reordered keys',
+      () async {
+        var callCount = 0;
+        when(
+          mockModelSelector.generateWithToolsAndMessages(
+            any,
+            any,
+            generationContext: anyNamed('generationContext'),
+          ),
+        ).thenAnswer((invocation) async {
+          callCount++;
+          if (callCount == 1) {
+            return {
+              'text': null,
+              'function_calls': [
+                callToolFn({'note_id': 'n1', 'modification': 4}),
+              ],
+              'parts_history': [],
+            };
+          }
+          if (callCount == 2) {
+            // Identical call, different key order.
+            return {
+              'text': null,
+              'function_calls': [
+                callToolFn({'modification': 4, 'note_id': 'n1'}),
+              ],
+              'parts_history': [],
+            };
+          }
+          return {'text': 'Done', 'function_calls': null, 'parts_history': []};
+        });
+
+        var executions = 0;
+        final result = await engine.generate(
+          request: createTestRequest(),
+          activeTools: systemTools(),
+          enableTools: true,
+          executeTool: (_, __, ___, ____) async {
+            executions++;
+            return invalidArgEnvelope;
+          },
+          isCancelled: () => false,
+          generationContext: GenerationContext(),
+        );
+
+        // Executed once; the identical retry was answered without execution.
+        expect(executions, 1);
+        // Unresolved failure is disclosed deterministically.
+        expect(result.content, contains('Tool execution report'));
+        expect(result.content, contains('System.modify_notes'));
+        final failed = result.metadata?['failed_tool_calls'] as List;
+        expect(failed, hasLength(1));
+        expect((failed.single as Map)['code'], 'invalid_argument');
+      },
+    );
+
+    test('retryable transport failures are executed again', () async {
+      var callCount = 0;
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((invocation) async {
+        callCount++;
+        if (callCount <= 2) {
+          return {
+            'text': null,
+            'function_calls': [
+              callToolFn({'note_id': 'n1'}),
+            ],
+            'parts_history': [],
+          };
+        }
+        return {'text': 'Done', 'function_calls': null, 'parts_history': []};
+      });
+
+      var executions = 0;
+      await engine.generate(
+        request: createTestRequest(),
+        activeTools: systemTools(),
+        enableTools: true,
+        executeTool: (_, __, ___, ____) async {
+          executions++;
+          return transportEnvelope;
+        },
+        isCancelled: () => false,
+        generationContext: GenerationContext(),
+      );
+
+      expect(executions, 2);
+    });
+
+    test('a later success of the same tool clears the disclosure', () async {
+      var callCount = 0;
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((invocation) async {
+        callCount++;
+        if (callCount == 1) {
+          return {
+            'text': null,
+            'function_calls': [
+              callToolFn({'note_id': 'n1', 'modification': 4}),
+            ],
+            'parts_history': [],
+          };
+        }
+        if (callCount == 2) {
+          // Corrected arguments.
+          return {
+            'text': null,
+            'function_calls': [
+              callToolFn({
+                'note_id': 'n1',
+                'modification': {
+                  'content': {'action': 'append', 'text': 'x'},
+                },
+              }),
+            ],
+            'parts_history': [],
+          };
+        }
+        return {
+          'text': 'All done',
+          'function_calls': null,
+          'parts_history': [],
+        };
+      });
+
+      var executions = 0;
+      final result = await engine.generate(
+        request: createTestRequest(),
+        activeTools: systemTools(),
+        enableTools: true,
+        executeTool: (_, __, params, ___) async {
+          executions++;
+          return params['modification'] is Map
+              ? '{"status": "success"}'
+              : invalidArgEnvelope;
+        },
+        isCancelled: () => false,
+        generationContext: GenerationContext(),
+      );
+
+      expect(executions, 2);
+      expect(result.content, isNot(contains('Tool execution report')));
+      expect(result.metadata?.containsKey('failed_tool_calls'), isFalse);
+    });
+
+    test('a success against a different target does not erase a distinct '
+        'failed call\'s disclosure', () async {
+      var callCount = 0;
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((invocation) async {
+        callCount++;
+        if (callCount == 1) {
+          // Two calls in one turn: note1 fails, note2 succeeds.
+          return {
+            'text': null,
+            'function_calls': [
+              callToolFn({'note_id': 'note-1'}),
+              callToolFn({'note_id': 'note-2'}),
+            ],
+            'parts_history': [],
+          };
+        }
+        return {
+          'text': 'Both notes updated!',
+          'function_calls': null,
+          'parts_history': [],
+        };
+      });
+
+      final result = await engine.generate(
+        request: createTestRequest(),
+        activeTools: systemTools(),
+        enableTools: true,
+        executeTool: (_, __, params, ___) async =>
+            params['note_id'] == 'note-1'
+            ? '{"synapse_tool_outcome": 1, "error": {"code": "tool_error", '
+                  '"message": "Section not found", "retryable": false}}'
+            : '{"status": "success"}',
+        isCancelled: () => false,
+        generationContext: GenerationContext(),
+      );
+
+      // note-2's success must NOT clear note-1's tool_error disclosure.
+      expect(result.content, contains('Tool execution report'));
+      expect(result.content, contains('Section not found'));
+      final failed = result.metadata?['failed_tool_calls'] as List;
+      expect(failed, hasLength(1));
+    });
+
+    test('disclosure overrides a hallucinated success claim (two distinct '
+        'failed calls, then a false success)', () async {
+      var callCount = 0;
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((invocation) async {
+        callCount++;
+        if (callCount == 1) {
+          return {
+            'text': null,
+            'function_calls': [
+              callToolFn({'note_id': 'n1', 'modification': 4}),
+            ],
+            'parts_history': [],
+          };
+        }
+        if (callCount == 2) {
+          // A DIFFERENT malformed call — identical-call dedupe alone would
+          // never catch this sequence.
+          return {
+            'text': null,
+            'function_calls': [
+              callToolFn({'note_id': 'n1', 'modification': 'Infinity'}),
+            ],
+            'parts_history': [],
+          };
+        }
+        return {
+          'text': 'I have successfully updated your Reading Record!',
+          'function_calls': null,
+          'parts_history': [],
+        };
+      });
+
+      final result = await engine.generate(
+        request: createTestRequest(),
+        activeTools: systemTools(),
+        enableTools: true,
+        executeTool: (_, __, ___, ____) async => invalidArgEnvelope,
+        isCancelled: () => false,
+        generationContext: GenerationContext(),
+      );
+
+      // The model's claim stays, but the harness disclosure follows it.
+      expect(result.content, contains('successfully updated'));
+      expect(result.content, contains('Tool execution report'));
+      expect(result.content, contains('did NOT complete'));
+      expect(result.metadata?['failed_tool_calls'], isNotEmpty);
+    });
+  });
 }

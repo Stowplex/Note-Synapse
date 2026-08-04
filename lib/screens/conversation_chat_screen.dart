@@ -64,6 +64,8 @@ import '../services/built_in_tools_service.dart';
 import '../services/context_manager_service.dart';
 import '../services/skill_service.dart';
 import '../services/tools/note_tools.dart';
+import '../services/tools/tool_outcome.dart';
+import '../services/tools/tool_param_validator.dart';
 import '../services/sql_query_service.dart';
 import '../widgets/agent_plan_review_widget.dart';
 import '../widgets/agent_task_tree_widget.dart';
@@ -1532,10 +1534,21 @@ $historyBuffer
         enableTools: _hasAnyTools || _selectedModelFeatures.isNotEmpty,
         executeTool: (serviceName, toolName, params, context) async {
           return _runWithToolStatus(serviceName, toolName, () async {
+            // Validate against the declared schema BEFORE approval or
+            // execution — the same boundary ChatToolSession.executeTool
+            // applies, so all chat surfaces behave identically.
+            final invalid = ToolParamValidator.validationFailure(
+              toolName: toolName,
+              params: params,
+              inputSchema: _findActiveToolSchema(serviceName, toolName),
+            );
+            if (invalid != null) return invalid.serialize();
+
             // Handle AI Tools
             if (_aiToolBundles.containsKey(serviceName)) {
               final runtime = await _getAiToolRuntime(serviceName);
-              return runtime.invoke(toolName, params, context);
+              final result = await runtime.invoke(toolName, params, context);
+              return ToolOutcome.fromAiToolResult(toolName, result).serialize();
             }
 
             // Handle System Tools (native tools from AgentService)
@@ -1546,9 +1559,15 @@ $historyBuffer
                   .firstOrNull;
               if (nativeTool != null) {
                 final result = await nativeTool.execute(params);
-                return result is String ? result : result.toString();
+                return ToolOutcome.fromNativeResult(
+                  toolName,
+                  result,
+                ).serialize();
               }
-              return 'Error: System tool "$toolName" not found';
+              return ToolOutcome.failure(
+                code: ToolOutcome.codeNotFound,
+                message: 'System tool "$toolName" not found',
+              ).serialize();
             }
 
             // Handle Skill Tools (load_skill + skill-discovered tools)
@@ -1568,7 +1587,10 @@ $historyBuffer
                     resultStr,
                   );
                 }
-                return resultStr;
+                return ToolOutcome.fromNativeResult(
+                  toolName,
+                  result,
+                ).serialize();
               }
               // Skill-discovered native (builtin) tool — route to native execution
               if (_conversationService.skillDiscoveredNativeToolNames.contains(
@@ -1580,9 +1602,15 @@ $historyBuffer
                     .firstOrNull;
                 if (nativeTool != null) {
                   final result = await nativeTool.execute(params);
-                  return result is String ? result : result.toString();
+                  return ToolOutcome.fromNativeResult(
+                    toolName,
+                    result,
+                  ).serialize();
                 }
-                return 'Error: Native tool "$toolName" not found';
+                return ToolOutcome.failure(
+                  code: ToolOutcome.codeNotFound,
+                  message: 'Native tool "$toolName" not found',
+                ).serialize();
               }
               // Skill-discovered user_defined tool — route via AI tool bundle
               for (final entry
@@ -1594,7 +1622,15 @@ $historyBuffer
                     entry.key,
                     entry.value,
                   );
-                  return runtime.invoke(toolName, params, context);
+                  final result = await runtime.invoke(
+                    toolName,
+                    params,
+                    context,
+                  );
+                  return ToolOutcome.fromAiToolResult(
+                    toolName,
+                    result,
+                  ).serialize();
                 }
               }
               // Skill-discovered MCP tool — use the real endpoint name
@@ -1611,7 +1647,10 @@ $historyBuffer
                   generationContext: context,
                 );
               }
-              return 'Error: Skill tool "$toolName" not found';
+              return ToolOutcome.failure(
+                code: ToolOutcome.codeNotFound,
+                message: 'Skill tool "$toolName" not found',
+              ).serialize();
             }
 
             // Handle MCP Tools
@@ -3981,13 +4020,31 @@ $historyBuffer
     }
   }
 
+  /// The declared input schema for a tool in the active tool map, if any.
+  /// Missing schemas disable validation for that call (fail open).
+  Map<String, dynamic>? _findActiveToolSchema(
+    String serviceName,
+    String toolName,
+  ) {
+    try {
+      final schema = _buildActiveToolsMap()[serviceName]
+          ?.where((tool) => tool.name == toolName)
+          .firstOrNull
+          ?.inputSchema;
+      return schema == null || schema.isEmpty ? null : schema;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Creates a tool executor that captures the current context and runtimes.
   ToolExecutor _createToolExecutor() {
     return (serviceName, toolName, params, ctx) async {
       // Handle AI Tools
       if (_aiToolBundles.containsKey(serviceName)) {
         final runtime = await _getAiToolRuntime(serviceName);
-        return runtime.invoke(toolName, params, ctx);
+        final result = await runtime.invoke(toolName, params, ctx);
+        return ToolOutcome.fromAiToolResult(toolName, result).serialize();
       }
       // Handle System Tools (native tools from AgentService)
       if (serviceName == BuiltInToolsService.systemToolsServiceKey) {
@@ -3997,9 +4054,12 @@ $historyBuffer
             .firstOrNull;
         if (nativeTool != null) {
           final result = await nativeTool.execute(params);
-          return result is String ? result : result.toString();
+          return ToolOutcome.fromNativeResult(toolName, result).serialize();
         }
-        return 'Error: System tool "$toolName" not found';
+        return ToolOutcome.failure(
+          code: ToolOutcome.codeNotFound,
+          message: 'System tool "$toolName" not found',
+        ).serialize();
       }
       // Handle MCP Tools
       return McpToolIntegrationService.executeToolCall(

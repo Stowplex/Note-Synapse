@@ -529,6 +529,9 @@ class _FakeNativeTool implements NativeTool {
   String get description => 'Read a note';
 
   @override
+  bool get isMutating => false;
+
+  @override
   Map<String, dynamic> get inputSchema => const {};
 
   @override

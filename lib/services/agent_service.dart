@@ -16,6 +16,8 @@ import '../models/note.dart';
 import 'tag_workflow_service.dart';
 import 'tools/load_skill_tool.dart';
 import 'tools/note_tools.dart';
+import 'tools/tool_outcome.dart';
+import 'tools/tool_param_validator.dart';
 import 'tools/read_task_result_tool.dart';
 import 'ai_service.dart';
 import 'agentic_settings_service.dart';
@@ -1983,7 +1985,7 @@ Use the source note above as "this note" for the workflow. Do not search for a c
       orElse: () => _UnknownTool(),
     );
     if (nativeTool is! _UnknownTool) {
-      return nativeTool.execute(args);
+      return _validateAndExecuteNativeTool(nativeTool, args);
     }
 
     final skillDiscoveredBuiltin =
@@ -1994,10 +1996,29 @@ Use the source note above as "this note" for the workflow. Do not search for a c
           )
         : _UnknownTool();
     if (skillDiscoveredBuiltin is! _UnknownTool) {
-      return skillDiscoveredBuiltin.execute(args);
+      return _validateAndExecuteNativeTool(skillDiscoveredBuiltin, args);
     }
 
     throw 'Tool $toolName not found.';
+  }
+
+  /// Validates args against the tool's declared schema before execution, so
+  /// structurally invalid calls fail with a path-specific error (and trigger
+  /// neither approval dialogs nor side effects) instead of surfacing a raw
+  /// type-cast error from inside the tool.
+  Future<dynamic> _validateAndExecuteNativeTool(
+    NativeTool tool,
+    Map<String, dynamic> args,
+  ) async {
+    final invalid = ToolParamValidator.validationFailure(
+      toolName: tool.name,
+      params: args,
+      inputSchema: tool.inputSchema,
+    );
+    if (invalid != null) {
+      return {'error': invalid.message, 'code': invalid.code};
+    }
+    return tool.execute(args);
   }
 
   Future<String> _resolveSkillNoteId(Map<String, dynamic> args) async {
@@ -2324,6 +2345,76 @@ Use the source note above as "this note" for the workflow. Do not search for a c
       case AgentTaskValidationProfile.wikiIngest:
         return _validateWikiIngestAnswer(task, answerContent);
     }
+  }
+
+  /// Whether an identical (canonical-key) call to the same tool has already
+  /// failed DETERMINISTICALLY in this task. Retryable failures (transport
+  /// blips, marked via the ToolOutcome envelope) never block a retry —
+  /// mirroring the chat engine, which dedupes only non-retryable failures.
+  bool _hasIdenticalFailedCall(
+    AgentTask task,
+    String serviceName,
+    String toolName,
+    Map<String, dynamic> params,
+  ) {
+    final qualified = '$serviceName.$toolName';
+    final identity = canonicalToolCallKey(
+      serviceName: serviceName,
+      toolName: toolName,
+      params: params,
+    );
+    return task.toolExecutionRecords.any((record) {
+      if (record.succeeded || record.toolName != qualified) return false;
+      final recordedFailure = ToolOutcome.tryParseFailure(record.result);
+      if (recordedFailure != null && recordedFailure.retryable) return false;
+      return canonicalToolCallKey(
+            serviceName: serviceName,
+            toolName: toolName,
+            params: record.args,
+          ) ==
+          identity;
+    });
+  }
+
+  /// Detects structured failures that do not throw: native `{'error': ...}`
+  /// maps and serialized [ToolOutcome] envelopes. Returns null for success.
+  ToolOutcome? _classifyStructuredFailure(dynamic result) {
+    if (result is Map && result['error'] != null) {
+      final outcome = ToolOutcome.fromNativeResult('tool', result);
+      return outcome.success ? null : outcome;
+    }
+    if (result is String) {
+      return ToolOutcome.tryParseFailure(result);
+    }
+    return null;
+  }
+
+  /// Harness-owned disclosure for agent answers, mirroring the chat engine:
+  /// mutating tools that were attempted but never succeeded are reported in
+  /// the final result deterministically, regardless of the model's claims.
+  String _withMutationFailureDisclosure(AgentTask task, String answer) {
+    // Derived from NativeTool.isMutating so newly added mutating tools are
+    // covered automatically. Remote MCP tools cannot be classified here and
+    // are not included.
+    final mutatingTools = {
+      for (final tool in nativeTools)
+        if (tool.isMutating) tool.name,
+    };
+    bool matches(String recordName, String tool) =>
+        recordName == tool || recordName.endsWith('.$tool');
+    final failed = <String>[];
+    for (final tool in mutatingTools) {
+      final records = task.toolExecutionRecords
+          .where((record) => matches(record.toolName, tool))
+          .toList();
+      if (records.isNotEmpty && records.every((record) => !record.succeeded)) {
+        failed.add(tool);
+      }
+    }
+    if (failed.isEmpty) return answer;
+    return '$answer\n\n⚠️ Tool execution report: ${failed.join(', ')} did '
+        'not succeed during this task, so those changes were NOT applied. '
+        'If the answer above claims otherwise, disregard that claim.';
   }
 
   String? _validateWikiIngestAnswer(AgentTask task, String answerContent) {
@@ -2993,7 +3084,7 @@ $taskSkillSection''';
             return;
           }
 
-          task.result = result;
+          task.result = _withMutationFailureDisclosure(task, result);
 
           task.status = AgentTaskStatus.completed;
           task.executionHistory.add('Final deliverable produced directly.');
@@ -3044,7 +3135,7 @@ $taskSkillSection''';
             notifyListeners();
             return;
           }
-          task.result = answerContent;
+          task.result = _withMutationFailureDisclosure(task, answerContent);
           task.status = AgentTaskStatus.completed;
           // Store full answer content for findings extraction and context propagation
           task.executionHistory.add('Answer: $answerContent');
@@ -3153,45 +3244,68 @@ $taskSkillSection''';
 
       dynamic result;
       var toolSucceeded = true;
-      try {
-        if (serviceName == _systemToolServiceName) {
-          result = await _executeSystemTool(
-            toolName: toolName,
-            args: params,
-            allowedNativeTools: currentAllowedNative,
-          );
-        } else {
-          final generationContext = GenerationContext(
-            values: {'type': 'agent_tool_exec'},
-          );
-          if (_toolExecutor != null) {
-            result = await _toolExecutor!(
-              serviceName,
-              toolName,
-              params,
-              generationContext,
+      if (_hasIdenticalFailedCall(task, serviceName, toolName, params)) {
+        // Byte-equivalent repeat of a call that already failed — do not
+        // execute it again; a failed turn still consumes a turn, so this
+        // also stops burn-down loops.
+        result =
+            'This exact call to $serviceName.$toolName already failed and '
+            'was NOT executed again. Change the arguments, use a different '
+            'tool, or report the failure honestly in your final answer. '
+            'Never claim this operation succeeded.';
+        toolSucceeded = false;
+        _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+            'Repeated failing tool call skipped: $serviceName.$toolName';
+      } else {
+        try {
+          if (serviceName == _systemToolServiceName) {
+            result = await _executeSystemTool(
+              toolName: toolName,
+              args: params,
+              allowedNativeTools: currentAllowedNative,
             );
           } else {
-            final endpoints = await getIt<McpService>().getEndpoints();
-            final ids = endpoints.map((e) => e.id).toList();
-            result = await McpToolIntegrationService.executeToolCall(
-              serviceName: serviceName,
-              toolName: toolName,
-              parameters: params,
-              enabledEndpointIds: ids,
-              generationContext: generationContext,
+            final generationContext = GenerationContext(
+              values: {'type': 'agent_tool_exec'},
             );
+            if (_toolExecutor != null) {
+              result = await _toolExecutor!(
+                serviceName,
+                toolName,
+                params,
+                generationContext,
+              );
+            } else {
+              final endpoints = await getIt<McpService>().getEndpoints();
+              final ids = endpoints.map((e) => e.id).toList();
+              result = await McpToolIntegrationService.executeToolCall(
+                serviceName: serviceName,
+                toolName: toolName,
+                parameters: params,
+                enabledEndpointIds: ids,
+                generationContext: generationContext,
+              );
+            }
           }
-        }
-      } catch (e) {
-        final errorStr = "Error executing $serviceName.$toolName: $e";
-        LoggerService.error(errorStr);
-        result = errorStr;
-        toolSucceeded = false;
+        } catch (e) {
+          final errorStr = "Error executing $serviceName.$toolName: $e";
+          LoggerService.error(errorStr);
+          result = errorStr;
+          toolSucceeded = false;
 
-        // Also set as last execution error for explicit visibility
-        _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
-            "Tool Execution Error: $e";
+          // Also set as last execution error for explicit visibility
+          _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+              "Tool Execution Error: $e";
+        }
+
+        // Structured failures don't throw: native tools return
+        // {'error': ...} maps and the shared boundary returns serialized
+        // ToolOutcome envelopes. Record them as failures so retry
+        // discipline and final-answer disclosure see the truth.
+        final structuredFailure = _classifyStructuredFailure(result);
+        if (structuredFailure != null) {
+          toolSucceeded = false;
+        }
       }
 
       // Intercept load_skill results to route to context and resolve tool URIs
@@ -3453,41 +3567,63 @@ Call tools when you need information. When you have a complete answer, respond w
 
       dynamic result;
       var toolSucceeded = true;
-      try {
-        if (serviceName == _systemToolServiceName) {
-          result = await _executeSystemTool(
-            toolName: toolName,
-            args: params,
-            allowedNativeTools: currentAllowedNative,
-          );
-        } else {
-          final generationContext = GenerationContext(
-            values: {'type': 'agent_tool_exec'},
-          );
-          if (_toolExecutor != null) {
-            result = await _toolExecutor!(
-              serviceName,
-              toolName,
-              params,
-              generationContext,
+      if (_hasIdenticalFailedCall(task, serviceName, toolName, params)) {
+        // Same discipline as the XML path: never re-execute a
+        // byte-equivalent call that already failed deterministically.
+        result =
+            'This exact call to $serviceName.$toolName already failed and '
+            'was NOT executed again. Change the arguments, use a different '
+            'tool, or report the failure honestly in your final answer. '
+            'Never claim this operation succeeded.';
+        toolSucceeded = false;
+        _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+            'Repeated failing tool call skipped: $serviceName.$toolName';
+      } else {
+        try {
+          if (serviceName == _systemToolServiceName) {
+            result = await _executeSystemTool(
+              toolName: toolName,
+              args: params,
+              allowedNativeTools: currentAllowedNative,
             );
           } else {
-            final endpoints = await getIt<McpService>().getEndpoints();
-            final ids = endpoints.map((e) => e.id).toList();
-            result = await McpToolIntegrationService.executeToolCall(
-              serviceName: serviceName,
-              toolName: toolName,
-              parameters: params,
-              enabledEndpointIds: ids,
-              generationContext: generationContext,
+            final generationContext = GenerationContext(
+              values: {'type': 'agent_tool_exec'},
             );
+            if (_toolExecutor != null) {
+              result = await _toolExecutor!(
+                serviceName,
+                toolName,
+                params,
+                generationContext,
+              );
+            } else {
+              final endpoints = await getIt<McpService>().getEndpoints();
+              final ids = endpoints.map((e) => e.id).toList();
+              result = await McpToolIntegrationService.executeToolCall(
+                serviceName: serviceName,
+                toolName: toolName,
+                parameters: params,
+                enabledEndpointIds: ids,
+                generationContext: generationContext,
+              );
+            }
           }
+        } catch (e) {
+          final errorStr = 'Error executing $serviceName.$toolName: $e';
+          LoggerService.error(errorStr);
+          result = errorStr;
+          toolSucceeded = false;
+          _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+              'Tool Execution Error: $e';
         }
-      } catch (e) {
-        final errorStr = 'Error executing $serviceName.$toolName: $e';
-        LoggerService.error(errorStr);
-        result = errorStr;
-        toolSucceeded = false;
+
+        // Structured failures ({'error': ...} maps and ToolOutcome
+        // envelopes) don't throw; record them as failures so retry
+        // discipline and disclosure see the truth.
+        if (_classifyStructuredFailure(result) != null) {
+          toolSucceeded = false;
+        }
       }
 
       // Handle load_skill results
@@ -3584,7 +3720,7 @@ Call tools when you need information. When you have a complete answer, respond w
         notifyListeners();
         return;
       }
-      task.result = cleanedText;
+      task.result = _withMutationFailureDisclosure(task, cleanedText);
       task.status = AgentTaskStatus.completed;
       task.executionHistory.add('Final deliverable produced directly.');
       if (task.contextNodeId != null) {
@@ -3973,6 +4109,8 @@ class _UnknownTool implements NativeTool {
   String get name => 'unknown';
   @override
   String get description => 'Legacy placeholder';
+  @override
+  bool get isMutating => false;
   @override
   Map<String, dynamic> get inputSchema => {};
   @override
