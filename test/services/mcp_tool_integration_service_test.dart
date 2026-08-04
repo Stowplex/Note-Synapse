@@ -103,6 +103,47 @@ void main() {
         expect(prompt, isNot(contains('param: {a: "hello"}')));
       });
 
+      test('preferDirectCalls swaps the intro for chat surfaces while the '
+          'default (agent/local) keeps the call_tool-only wording', () {
+        final tools = <String, List<McpTool>>{
+          'System': [
+            McpTool(
+              name: 'search_notes',
+              description: 'Search',
+              inputSchema: const {
+                'type': 'object',
+                'properties': {
+                  'query': {'type': 'string'},
+                },
+              },
+            ),
+          ],
+        };
+
+        final chatPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
+          tools,
+          maxBudgetTokens: 16000,
+          preferDirectCalls: true,
+        );
+        expect(chatPrompt, contains('Call tools directly by their declared'));
+        expect(chatPrompt, isNot(contains('only through call_tool')));
+
+        // The default — used by agent mode, whose XML protocol depends on
+        // call_tool — must keep the original wording byte-for-byte.
+        final agentPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
+          tools,
+          maxBudgetTokens: 16000,
+        );
+        expect(
+          agentPrompt,
+          contains(
+            'Call external tools only through call_tool with '
+            '{service_name, tool_name, params}.',
+          ),
+        );
+        expect(agentPrompt, isNot(contains('directly by their declared')));
+      });
+
       test('renders an Example line for tools declaring schema examples, '
           'and none for tools without', () {
         final prompt = McpToolIntegrationService.buildMcpSystemPrompt({

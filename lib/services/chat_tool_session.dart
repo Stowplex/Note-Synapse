@@ -387,16 +387,25 @@ class ChatToolSession extends ChangeNotifier {
       // execution: structurally invalid calls must trigger neither approval
       // dialogs nor side effects, and the model needs a path-specific error
       // instead of a raw type-cast failure from deep inside a tool.
-      final invalid = ToolParamValidator.validationFailure(
+      // Normalization coerces double-encoded/misplaced arguments, so the
+      // returned params — not the raw ones — are what get executed.
+      final validation = ToolParamValidator.validateAndNormalize(
         toolName: toolName,
         params: params,
         inputSchema: _findToolSchema(context, serviceName, toolName),
       );
-      if (invalid != null) return invalid.serialize();
+      if (validation.failure != null) {
+        return validation.failure!.serialize();
+      }
+      final effectiveParams = validation.params;
 
       if (aiToolBundles.containsKey(serviceName)) {
         final runtime = await _getAiToolRuntime(context, serviceName);
-        final result = await runtime.invoke(toolName, params, generationContext);
+        final result = await runtime.invoke(
+          toolName,
+          effectiveParams,
+          generationContext,
+        );
         return ToolOutcome.fromAiToolResult(toolName, result).serialize();
       }
 
@@ -406,7 +415,7 @@ class ChatToolSession extends ChangeNotifier {
             .where((tool) => tool.name == toolName)
             .firstOrNull;
         if (nativeTool != null) {
-          final result = await nativeTool.execute(params);
+          final result = await nativeTool.execute(effectiveParams);
           return ToolOutcome.fromNativeResult(toolName, result).serialize();
         }
         return ToolOutcome.failure(
@@ -416,13 +425,18 @@ class ChatToolSession extends ChangeNotifier {
       }
 
       if (serviceName == skillToolsServiceKey) {
-        return _executeSkillTool(context, toolName, params, generationContext);
+        return _executeSkillTool(
+          context,
+          toolName,
+          effectiveParams,
+          generationContext,
+        );
       }
 
       return McpToolIntegrationService.executeToolCall(
         serviceName: serviceName,
         toolName: toolName,
-        parameters: params,
+        parameters: effectiveParams,
         enabledEndpointIds: selectedMcpEndpointIds.toList(),
         generationContext: generationContext,
       );

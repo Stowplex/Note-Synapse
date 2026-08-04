@@ -282,7 +282,10 @@ class OpenAIModel implements AIModel {
     );
     return [
       ...perTool,
-      McpToolIntegrationService.getCallToolFunctionForOpenAI(toolsByEndpoint),
+      McpToolIntegrationService.getCallToolFunctionForOpenAI(
+        toolsByEndpoint,
+        preferDirectCalls: perTool.isNotEmpty,
+      ),
     ];
   }
 

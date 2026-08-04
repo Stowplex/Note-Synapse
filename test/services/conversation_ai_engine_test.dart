@@ -1118,6 +1118,51 @@ void main() {
       expect(result.metadata?.containsKey('failed_tool_calls'), isFalse);
     });
 
+    test('circuit breaker: variant invalid calls stop executing after 3 '
+        'failures and terminate the turn on a further attempt', () async {
+      var callCount = 0;
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((invocation) async {
+        callCount++;
+        // A different invalid payload every iteration — byte-identity
+        // dedupe can never fire.
+        return {
+          'text': null,
+          'function_calls': [
+            callToolFn({'note_id': 'n1', 'modification': callCount}),
+          ],
+          'parts_history': [],
+        };
+      });
+
+      var executions = 0;
+      final result = await engine.generate(
+        request: createTestRequest(),
+        activeTools: systemTools(),
+        enableTools: true,
+        executeTool: (_, __, ___, ____) async {
+          executions++;
+          return invalidArgEnvelope;
+        },
+        isCancelled: () => false,
+        generationContext: GenerationContext(),
+      );
+
+      // 3 executed failures, then a blocked directive, then termination —
+      // far below the 10-iteration cap.
+      expect(executions, 3);
+      expect(callCount, 5);
+      expect(result.content, contains('invalid arguments'));
+      expect(result.content, contains('Tool execution report'));
+      expect(result.metadata?['isSynthesized'], isTrue);
+      expect(result.metadata?['failed_tool_calls'], isNotEmpty);
+    });
+
     test('a success against a different target does not erase a distinct '
         'failed call\'s disclosure', () async {
       var callCount = 0;

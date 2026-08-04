@@ -173,6 +173,171 @@ void main() {
     });
   });
 
+  group('ToolParamValidator.validateAndNormalize — coercion and lifting', () {
+    test('coerces a double-encoded modification.content JSON string', () {
+      final result = ToolParamValidator.validateAndNormalize(
+        toolName: 'modify_note',
+        params: {
+          'note_id': 'cc1cf667',
+          'modification': {
+            'content':
+                '{"action": "replace_text", "old_text": "| |", '
+                '"new_text": "| [x] |"}',
+          },
+        },
+        inputSchema: modifyNoteSchema,
+      );
+
+      expect(result.failure, isNull);
+      final content =
+          (result.params['modification'] as Map)['content'] as Map;
+      expect(content['action'], 'replace_text');
+      expect(content['new_text'], '| [x] |');
+    });
+
+    test('coerces the verbatim mangled trace payload (double-encoded object '
+        'with a trailing "}},note_id:" tail) via repairJson', () {
+      const mangled =
+          '{\n  "action": "replace_text",\n  "old_text": '
+          '"|        | 小猪皮皮的游乐园之梦 |   1    |",\n  "new_text": '
+          '"| [x]      | 小猪皮皮的游乐园之梦 |   1    |",\n  "section": '
+          '"## 2026-08-03"\n}},note_id:';
+      final result = ToolParamValidator.validateAndNormalize(
+        toolName: 'modify_note',
+        params: {
+          'note_id': 'cc1cf667',
+          'modification': {'content': mangled},
+        },
+        inputSchema: modifyNoteSchema,
+      );
+
+      expect(result.failure, isNull, reason: result.failure?.message);
+      final content =
+          (result.params['modification'] as Map)['content'] as Map;
+      expect(content['action'], 'replace_text');
+      expect(content['old_text'], contains('小猪皮皮的游乐园之梦'));
+      expect(content['section'], '## 2026-08-03');
+    });
+
+    test('lifts misplaced content keys from the modification level '
+        '(verbatim trace attempt 2 shape)', () {
+      final result = ToolParamValidator.validateAndNormalize(
+        toolName: 'modify_note',
+        params: {
+          'note_id': 'cc1cf667',
+          'modification': {
+            'NOTE_ID': 'cc1cf667',
+            'content': '|        | 小猪皮皮的游乐园之梦 |   1    |',
+            'action': 'replace_text',
+            'old_text': '|        | 小猪皮皮的游乐园之梦 |   1    |',
+            'new_text': '| [x]      | 小猪皮皮的游乐园之梦 |   1    |',
+          },
+        },
+        inputSchema: modifyNoteSchema,
+      );
+
+      expect(result.failure, isNull, reason: result.failure?.message);
+      final modification = result.params['modification'] as Map;
+      final content = modification['content'] as Map;
+      expect(content['action'], 'replace_text');
+      expect(content['old_text'], contains('小猪皮皮'));
+      // The lifted keys are gone from the modification level; the stray
+      // string content was superseded by the replace_text keys.
+      expect(modification.containsKey('old_text'), isFalse);
+      expect(content.containsKey('text'), isFalse);
+    });
+
+    test('a stray string content becomes text when only an action is '
+        'misplaced', () {
+      final result = ToolParamValidator.validateAndNormalize(
+        toolName: 'modify_note',
+        params: {
+          'note_id': 'n1',
+          'modification': {'content': 'hello world', 'action': 'append'},
+        },
+        inputSchema: modifyNoteSchema,
+      );
+
+      expect(result.failure, isNull, reason: result.failure?.message);
+      final content =
+          (result.params['modification'] as Map)['content'] as Map;
+      expect(content['action'], 'append');
+      expect(content['text'], 'hello world');
+    });
+
+    test('lifting does not fire when content is already a valid object', () {
+      final result = ToolParamValidator.validateAndNormalize(
+        toolName: 'modify_note',
+        params: {
+          'note_id': 'n1',
+          'modification': {
+            'content': {'action': 'append', 'text': 'x'},
+            'section': '## Should stay put? No — section IS a content key',
+          },
+        },
+        inputSchema: modifyNoteSchema,
+      );
+      // content is a Map, so nothing is lifted or altered.
+      expect(result.failure, isNull);
+      final modification = result.params['modification'] as Map;
+      expect((modification['content'] as Map)['text'], 'x');
+      expect(modification.containsKey('section'), isTrue);
+    });
+
+    test('non-JSON strings for object properties are still rejected', () {
+      final result = ToolParamValidator.validateAndNormalize(
+        toolName: 'modify_notes',
+        params: {
+          'modifications': [
+            {'note_id': 'n1', 'modification': 'Infinity'},
+          ],
+        },
+        inputSchema: modifyNotesSchema,
+      );
+      expect(result.failure, isNotNull);
+      expect(result.failure!.code, ToolOutcome.codeInvalidArgument);
+      // Original params returned untouched on failure.
+      expect(
+        ((result.params['modifications'] as List).single
+            as Map)['modification'],
+        'Infinity',
+      );
+    });
+
+    test('coerces a JSON-encoded array string for an array property', () {
+      final result = ToolParamValidator.validateAndNormalize(
+        toolName: 'modify_notes',
+        params: {
+          'modifications':
+              '[{"note_id": "n1", "modification": '
+              '{"content": {"action": "append", "text": "x"}}}]',
+        },
+        inputSchema: modifyNotesSchema,
+      );
+      expect(result.failure, isNull, reason: result.failure?.message);
+      expect(result.params['modifications'], isA<List>());
+    });
+
+    test('normalization never mutates the caller\'s params', () {
+      final original = {
+        'note_id': 'n1',
+        'modification': {
+          'content': '{"action": "append", "text": "x"}',
+        },
+      };
+      ToolParamValidator.validateAndNormalize(
+        toolName: 'modify_note',
+        params: original,
+        inputSchema: modifyNoteSchema,
+      );
+      expect(
+        (original['modification'] as Map)['content'],
+        isA<String>(),
+        reason: 'input map must stay untouched',
+      );
+    });
+  });
+
   group('ToolParamValidator.validationFailure', () {
     test('produces a parseable invalid_argument envelope with path, hint, '
         'and no raw cast text', () {

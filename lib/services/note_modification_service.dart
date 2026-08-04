@@ -483,7 +483,14 @@ class NoteModificationService {
     String currentContent,
     Map<String, dynamic> contentMod,
   ) {
-    final action = contentMod['action'] as String? ?? 'no-op';
+    // old_text + new_text without an action unambiguously mean
+    // replace_text — models often omit the action when supplying both
+    // (observed after misplaced-key lifting normalizes their arguments).
+    final inferredAction =
+        contentMod.containsKey('old_text') && contentMod.containsKey('new_text')
+        ? 'replace_text'
+        : 'no-op';
+    final action = contentMod['action'] as String? ?? inferredAction;
     final text = contentMod['text'] as String? ?? '';
     final section = contentMod['section'] as String?;
     final insertPosition = contentMod['insert_position'] as String? ?? action;

@@ -35,6 +35,7 @@ class McpToolIntegrationService {
   static Map<String, dynamic> getCallToolFunctionForGemini(
     Map<String, List<McpTool>> toolsByEndpoint, {
     bool compactDescription = false,
+    bool preferDirectCalls = false,
   }) {
     final serviceNames = toolsByEndpoint.keys.toList();
     final toolsDescription = compactDescription
@@ -43,6 +44,7 @@ class McpToolIntegrationService {
             toolsByEndpoint,
             compact: true,
             includeWrapperIntro: true,
+            preferDirectCalls: preferDirectCalls,
           );
 
     return {
@@ -74,13 +76,15 @@ class McpToolIntegrationService {
   /// Get the call_tool function definition for OpenAI
   /// This is a single function that can call any MCP tool
   static Map<String, dynamic> getCallToolFunctionForOpenAI(
-    Map<String, List<McpTool>> toolsByEndpoint,
-  ) {
+    Map<String, List<McpTool>> toolsByEndpoint, {
+    bool preferDirectCalls = false,
+  }) {
     final serviceNames = toolsByEndpoint.keys.toList();
     final toolsDescription = _buildToolCatalogDescription(
       toolsByEndpoint,
       compact: true,
       includeWrapperIntro: true,
+      preferDirectCalls: preferDirectCalls,
     );
 
     return {
@@ -115,6 +119,7 @@ class McpToolIntegrationService {
     Map<String, List<McpTool>> toolsByEndpoint, {
     int? maxBudgetTokens,
     bool includeWrapperIntro = true,
+    bool preferDirectCalls = false,
   }) {
     if (toolsByEndpoint.isEmpty) {
       return '';
@@ -126,6 +131,7 @@ class McpToolIntegrationService {
       compact: compact,
       includeWrapperIntro: includeWrapperIntro,
       includeHeader: true,
+      preferDirectCalls: preferDirectCalls,
     );
   }
 
@@ -356,6 +362,7 @@ class McpToolIntegrationService {
     required bool compact,
     bool includeWrapperIntro = true,
     bool includeHeader = false,
+    bool preferDirectCalls = false,
   }) {
     final templateService = getIt<PromptTemplateService>();
 
@@ -435,6 +442,7 @@ class McpToolIntegrationService {
       {
         'includeHeader': includeHeader,
         'includeWrapperIntro': includeWrapperIntro && toolsByEndpoint.isNotEmpty,
+        'preferDirectCalls': preferDirectCalls,
         'exampleService': exampleService,
         'exampleTool': exampleTool,
         'toolDetails': detailsBuffer.toString(),

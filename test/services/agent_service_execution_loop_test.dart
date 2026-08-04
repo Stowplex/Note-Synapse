@@ -406,6 +406,55 @@ void main() {
       );
     });
 
+    test('Circuit breaker: variant failing calls are skipped after 3 '
+        'deterministic failures', () async {
+      final task = AgentTask(
+        id: 't1',
+        name: 'task 1',
+        description: 'desc',
+        allowedTools: [],
+      );
+      when(
+        mockContextManager.getContext(any),
+      ).thenReturn(ContextNode(id: 'n', objective: 'o'));
+
+      // Four different payloads — identity dedupe never fires.
+      final responses = [
+        for (var i = 1; i <= 4; i++)
+          '<Action type="tool"><ToolName>mock_tool</ToolName>'
+              '<Content>{"attempt":$i}</Content></Action>',
+        '<Action type="answer"><Content>Done</Content></Action>',
+      ];
+      when(
+        mockAIService.generateWithAttachments(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((_) async => responses.removeAt(0));
+
+      var executions = 0;
+      agentService.toolExecutor = (service, tool, params, ctx) async {
+        executions++;
+        throw Exception('deterministic failure ${params['attempt']}');
+      };
+      agentService.externalToolsForTest = {
+        'mock_service': [McpTool(name: 'mock_tool', description: 'mock')],
+      };
+
+      for (var i = 0; i < 5; i++) {
+        await agentService.performTaskForTest(task, 'ctx');
+      }
+
+      expect(executions, 3, reason: '4th variant must be skipped');
+      expect(
+        task.executionHistory.any(
+          (l) => l.contains('was NOT executed again'),
+        ),
+        isTrue,
+      );
+    });
+
     test('Structured {"error": ...} tool results are recorded as failures',
         () async {
       final task = AgentTask(

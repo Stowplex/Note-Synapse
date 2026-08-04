@@ -334,6 +334,31 @@ void main() {
         expect(result.content, alreadyChecked.content);
       });
 
+      test('old_text + new_text without an action infer replace_text', () async {
+        final result = await apply({
+          'old_text': '- [ ] Book B',
+          'new_text': '- [x] Book B',
+        });
+        expect(result.content, contains('- [x] Book B'));
+        expect(result.content, isNot(contains('- [ ] Book B')));
+      });
+
+      test('replaces a table Status cell (trace scenario)', () async {
+        final tableNote = recordNote().copyWith(
+          content:
+              '## 2026-08-03\n'
+              '| Status | Book Title | Count |\n'
+              '| :----- | :--------- | ----- |\n'
+              '|        | 小猪皮皮的游乐园之梦 |   1    |\n',
+        );
+        final result = await apply({
+          'action': 'replace_text',
+          'old_text': '|        | 小猪皮皮的游乐园之梦 |   1    |',
+          'new_text': '| Done   | 小猪皮皮的游乐园之梦 |   1    |',
+        }, note: tableNote);
+        expect(result.content, contains('| Done   | 小猪皮皮的游乐园之梦'));
+      });
+
       test('missing old_text is rejected with the expected shape', () async {
         try {
           await apply({'action': 'replace_text', 'new_text': 'x'});

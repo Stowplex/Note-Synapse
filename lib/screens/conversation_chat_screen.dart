@@ -1537,12 +1537,15 @@ $historyBuffer
             // Validate against the declared schema BEFORE approval or
             // execution — the same boundary ChatToolSession.executeTool
             // applies, so all chat surfaces behave identically.
-            final invalid = ToolParamValidator.validationFailure(
+            final validation = ToolParamValidator.validateAndNormalize(
               toolName: toolName,
               params: params,
               inputSchema: _findActiveToolSchema(serviceName, toolName),
             );
-            if (invalid != null) return invalid.serialize();
+            if (validation.failure != null) {
+              return validation.failure!.serialize();
+            }
+            params = validation.params;
 
             // Handle AI Tools
             if (_aiToolBundles.containsKey(serviceName)) {
@@ -1776,6 +1779,9 @@ $historyBuffer
       final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
         combinedTools,
         maxBudgetTokens: budget,
+        // Cloud chat models get per-tool declarations, so direct calls are
+        // preferred (constrained decoding validates their arguments).
+        preferDirectCalls: true,
       );
       if (mcpToolsPrompt.trim().isNotEmpty) {
         contextBuffer

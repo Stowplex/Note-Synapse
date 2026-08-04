@@ -2010,15 +2010,16 @@ Use the source note above as "this note" for the workflow. Do not search for a c
     NativeTool tool,
     Map<String, dynamic> args,
   ) async {
-    final invalid = ToolParamValidator.validationFailure(
+    final validation = ToolParamValidator.validateAndNormalize(
       toolName: tool.name,
       params: args,
       inputSchema: tool.inputSchema,
     );
+    final invalid = validation.failure;
     if (invalid != null) {
       return {'error': invalid.message, 'code': invalid.code};
     }
-    return tool.execute(args);
+    return tool.execute(validation.params);
   }
 
   Future<String> _resolveSkillNoteId(Map<String, dynamic> args) async {
@@ -2374,6 +2375,23 @@ Use the source note above as "this note" for the workflow. Do not search for a c
           ) ==
           identity;
     });
+  }
+
+  /// Deterministic failures allowed per tool per task before the tool is
+  /// blocked, however the arguments vary. Mirrors the chat engine's
+  /// circuit breaker for argument-variant retry loops.
+  static const int _maxDeterministicFailuresPerTool = 3;
+
+  /// Number of non-retryable failed records for [qualifiedToolName].
+  /// Envelope-marked retryable (transport) failures don't count.
+  int _deterministicFailureStrikes(AgentTask task, String qualifiedToolName) {
+    return task.toolExecutionRecords.where((record) {
+      if (record.succeeded || record.toolName != qualifiedToolName) {
+        return false;
+      }
+      final failure = ToolOutcome.tryParseFailure(record.result);
+      return failure == null || !failure.retryable;
+    }).length;
   }
 
   /// Detects structured failures that do not throw: native `{'error': ...}`
@@ -3244,7 +3262,9 @@ $taskSkillSection''';
 
       dynamic result;
       var toolSucceeded = true;
-      if (_hasIdenticalFailedCall(task, serviceName, toolName, params)) {
+      if (_hasIdenticalFailedCall(task, serviceName, toolName, params) ||
+          _deterministicFailureStrikes(task, '$serviceName.$toolName') >=
+              _maxDeterministicFailuresPerTool) {
         // Byte-equivalent repeat of a call that already failed — do not
         // execute it again; a failed turn still consumes a turn, so this
         // also stops burn-down loops.
@@ -3567,7 +3587,9 @@ Call tools when you need information. When you have a complete answer, respond w
 
       dynamic result;
       var toolSucceeded = true;
-      if (_hasIdenticalFailedCall(task, serviceName, toolName, params)) {
+      if (_hasIdenticalFailedCall(task, serviceName, toolName, params) ||
+          _deterministicFailureStrikes(task, '$serviceName.$toolName') >=
+              _maxDeterministicFailuresPerTool) {
         // Same discipline as the XML path: never re-execute a
         // byte-equivalent call that already failed deterministically.
         result =

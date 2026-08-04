@@ -5447,12 +5447,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         return _runWithToolStatus(serviceName, toolName, () async {
           // Validate against the declared schema BEFORE approval or
           // execution — same boundary as ChatToolSession.executeTool.
-          final invalid = ToolParamValidator.validationFailure(
+          final validation = ToolParamValidator.validateAndNormalize(
             toolName: toolName,
             params: params,
             inputSchema: _findActiveToolSchema(serviceName, toolName),
           );
-          if (invalid != null) return invalid.serialize();
+          if (validation.failure != null) {
+            return validation.failure!.serialize();
+          }
+          params = validation.params;
 
           // Handle AI Tools
           if (_aiToolBundles.containsKey(serviceName)) {
@@ -5606,6 +5609,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
       combinedTools,
       maxBudgetTokens: budget,
+      // Chat models get per-tool declarations, so direct calls are
+      // preferred (constrained decoding validates their arguments).
+      preferDirectCalls: true,
     );
 
     final systemAddOn = PromptConfigurationService.instance.getValue(

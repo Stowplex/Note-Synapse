@@ -52,6 +52,11 @@ typedef IterationsExhaustedHandler = Future<int?> Function(int exhaustedLimit);
 class ConversationAiEngine {
   const ConversationAiEngine();
 
+  /// Invalid-argument failures allowed per tool per turn before the tool is
+  /// blocked (and one further attempt terminates the turn). Catches
+  /// argument-variant retry loops that byte-identity dedupe cannot.
+  static const int _maxInvalidArgumentFailuresPerTool = 3;
+
   /// Converts stored [ConversationMessage]s into [PromptMessage]s for model
   /// consumption. Handles role conversion for model mismatches, modelUsed
   /// metadata propagation, timestamp context, attachment loading, and tool
@@ -277,6 +282,12 @@ class ConversationAiEngine {
       final deterministicFailures = <String, ToolOutcome>{};
       final unresolvedToolFailures = <String, Map<String, dynamic>>{};
       final succeededToolNames = <String>{};
+      // Circuit breaker for argument-VARIANT loops, which byte-identity
+      // dedupe cannot catch (a model mutating one detail per retry): after
+      // N invalid_argument failures for one tool, the tool is blocked for
+      // the turn; a further attempt terminates the turn immediately.
+      final invalidArgFailuresByTool = <String, int>{};
+      final invalidArgBlockedTools = <String>{};
 
       // Streaming-first for local models: stream with tool awareness.
       // If pure text, return fast. If tool calls detected, seed and enter
@@ -521,10 +532,51 @@ class ConversationAiEngine {
               params: params,
             );
 
+            if (invalidArgBlockedTools.contains(qualifiedName)) {
+              // The model called a blocked tool AGAIN after the terminal
+              // directive — end the turn now with a harness-synthesized
+              // honest failure instead of burning the remaining iterations.
+              LoggerService.warning(
+                'Circuit breaker: terminating turn after repeated invalid '
+                'calls to $qualifiedName',
+              );
+              return ConversationAiResponse(
+                content: [
+                  ...conversationParts,
+                  'I was unable to complete the request: $qualifiedName was '
+                      'called repeatedly with invalid arguments.',
+                  if (unresolvedToolFailures.isNotEmpty)
+                    _buildToolFailureDisclosure(unresolvedToolFailures),
+                ].join('\n\n'),
+                metadata: {
+                  'isSynthesized': true,
+                  if (unresolvedToolFailures.isNotEmpty)
+                    'failed_tool_calls': unresolvedToolFailures.values
+                        .toList(),
+                },
+              );
+            }
+
             String result;
             ToolOutcome? failure;
             final priorFailure = deterministicFailures[callKey];
-            if (priorFailure != null) {
+            final invalidArgStrikes =
+                invalidArgFailuresByTool[qualifiedName] ?? 0;
+            if (priorFailure == null &&
+                invalidArgStrikes >= _maxInvalidArgumentFailuresPerTool) {
+              // Third strike: stop executing this tool for the rest of the
+              // turn, regardless of how the arguments vary.
+              invalidArgBlockedTools.add(qualifiedName);
+              failure = ToolOutcome.failure(
+                code: ToolOutcome.codeInvalidArgument,
+                message:
+                    '$qualifiedName has failed $invalidArgStrikes times with '
+                    'invalid arguments this turn and is now blocked; the '
+                    'call was NOT executed. Do NOT call it again. Tell the '
+                    'user the operation could not be completed.',
+              );
+              result = failure.serialize();
+            } else if (priorFailure != null) {
               // Second byte-equivalent call after a deterministic failure —
               // do NOT execute it again; return an escalated directive.
               LoggerService.warning(
@@ -571,6 +623,10 @@ class ConversationAiEngine {
               if (!failure.retryable) {
                 deterministicFailures[callKey] = failure;
               }
+              if (failure.isInvalidArgument) {
+                invalidArgFailuresByTool[qualifiedName] =
+                    (invalidArgFailuresByTool[qualifiedName] ?? 0) + 1;
+              }
               var summary = failure.message;
               if (summary.length > 300) {
                 summary = '${summary.substring(0, 300)}…';
@@ -598,6 +654,8 @@ class ConversationAiEngine {
                         info['code'] == ToolOutcome.codeInvalidArgument),
               );
               deterministicFailures.remove(callKey);
+              invalidArgFailuresByTool.remove(qualifiedName);
+              invalidArgBlockedTools.remove(qualifiedName);
               conversationParts.add('[Tool executed: $qualifiedName]');
             }
 
