@@ -36,6 +36,7 @@ class McpToolIntegrationService {
     Map<String, List<McpTool>> toolsByEndpoint, {
     bool compactDescription = false,
     bool preferDirectCalls = false,
+    Set<String> directlyDeclaredToolNames = const {},
   }) {
     final serviceNames = toolsByEndpoint.keys.toList();
     final toolsDescription = compactDescription
@@ -45,6 +46,7 @@ class McpToolIntegrationService {
             compact: true,
             includeWrapperIntro: true,
             preferDirectCalls: preferDirectCalls,
+            excludeToolNames: directlyDeclaredToolNames,
           );
 
     return {
@@ -78,6 +80,7 @@ class McpToolIntegrationService {
   static Map<String, dynamic> getCallToolFunctionForOpenAI(
     Map<String, List<McpTool>> toolsByEndpoint, {
     bool preferDirectCalls = false,
+    Set<String> directlyDeclaredToolNames = const {},
   }) {
     final serviceNames = toolsByEndpoint.keys.toList();
     final toolsDescription = _buildToolCatalogDescription(
@@ -85,6 +88,7 @@ class McpToolIntegrationService {
       compact: true,
       includeWrapperIntro: true,
       preferDirectCalls: preferDirectCalls,
+      excludeToolNames: directlyDeclaredToolNames,
     );
 
     return {
@@ -363,6 +367,7 @@ class McpToolIntegrationService {
     bool includeWrapperIntro = true,
     bool includeHeader = false,
     bool preferDirectCalls = false,
+    Set<String> excludeToolNames = const {},
   }) {
     final templateService = getIt<PromptTemplateService>();
 
@@ -372,7 +377,22 @@ class McpToolIntegrationService {
       detailsBuffer.writeln(
         '=== Endpoint: ${entry.key} (service_name: "${entry.key}") ===',
       );
+      // Tools with their own function declarations get one summary line
+      // instead of full schema text: the declaration itself carries the
+      // schema, and repeating the catalog here anchors models on the
+      // call_tool wrapper (and bloats every request).
+      final directlyDeclared = entry.value
+          .where((tool) => excludeToolNames.contains(tool.name))
+          .map((tool) => tool.name)
+          .toList();
+      if (directlyDeclared.isNotEmpty) {
+        detailsBuffer.writeln(
+          'Directly declared (call by function name, not via call_tool): '
+          '${directlyDeclared.join(', ')}',
+        );
+      }
       for (final tool in entry.value) {
+        if (excludeToolNames.contains(tool.name)) continue;
         final description = tool.description?.trim();
         if (compact) {
           detailsBuffer.write('- ${tool.name}');

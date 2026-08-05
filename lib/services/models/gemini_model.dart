@@ -355,6 +355,9 @@ class GeminiModel implements AIModel {
       McpToolIntegrationService.getCallToolFunctionForGemini(
         toolsByEndpoint,
         preferDirectCalls: perTool.isNotEmpty,
+        directlyDeclaredToolNames: {
+          for (final declaration in perTool) declaration['name'] as String,
+        },
       ),
     ];
   }

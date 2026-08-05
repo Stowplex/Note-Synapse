@@ -430,6 +430,16 @@ void main() {
           ),
           isTrue,
         );
+        // Cloud models are nudged to call newly discovered tools directly
+        // by their declared function names.
+        expect(
+          secondMessages.any(
+            (message) =>
+                message.role == PromptRole.system &&
+                message.content.contains('call them DIRECTLY'),
+          ),
+          isTrue,
+        );
 
         final secondFunctions = (modelCalls[1][1] as List)
             .cast<Map<String, dynamic>>();

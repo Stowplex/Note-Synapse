@@ -83,7 +83,8 @@ class NoteModificationService {
         '"section": "(optional) markdown heading to target", '
         '"insert_position": "(optional) append|prepend within the section"} '
         '— for replace_text, pass "old_text" and "new_text" instead of '
-        '"text" to change exactly one occurrence (e.g. check a checkbox)',
+        '"text" to change exactly one occurrence (e.g. check a checkbox); '
+        'action may be omitted when old_text and new_text are provided',
     'title': '{"new_title": "..."}',
     'tags': '{"added": ["tag1"], "removed": ["tag2"]}',
     'attachments': '{"added": ["file.png"], "removed": ["old.png"]}',

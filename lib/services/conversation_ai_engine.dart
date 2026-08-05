@@ -943,6 +943,9 @@ class ConversationAiEngine {
     return [
       'EXECUTE NOW: New tools are ready. Call the appropriate tool immediately to complete the user\'s request.',
       'Do NOT explain what tools are available. Do NOT describe what you will do. Call a tool NOW.',
+      'These tools have their own function declarations — call them DIRECTLY '
+          'by name (arguments are validated as you write them); do not wrap '
+          'them in call_tool.',
       prompt,
     ].where((line) => line.isNotEmpty).join('\n\n');
   }
@@ -958,7 +961,9 @@ class ConversationAiEngine {
     buffer.writeln('ERROR: Unrecognized function "$functionName"');
     buffer.writeln();
     buffer.writeln(
-      'You must call tools through the "call_tool" function with:',
+      'Call tools DIRECTLY by their declared function name when a '
+      'declaration exists. For tools without their own declaration, use '
+      '"call_tool" with:',
     );
     buffer.writeln('  - service_name: The endpoint/service name');
     buffer.writeln('  - tool_name: The tool name within the service');
@@ -982,7 +987,8 @@ class ConversationAiEngine {
       buffer.writeln('Did you mean to call one of these?');
       for (final match in matches) {
         buffer.writeln(
-          '  call_tool({service_name: "${match.value}", tool_name: "${match.key}", params: {...}})',
+          '  ${match.key}({...}) — or call_tool({service_name: '
+          '"${match.value}", tool_name: "${match.key}", params: {...}})',
         );
       }
     } else if (activeTools.isNotEmpty) {

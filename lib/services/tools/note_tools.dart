@@ -828,7 +828,7 @@ class ModifyNoteTool implements NativeTool {
 
   @override
   String get description =>
-      'Modify a note\'s content, title, tags, attachments, subnotes, or links. Supports whole-note append/prepend/replace and section-targeted markdown inserts.';
+      'Modify a note\'s content, title, tags, attachments, subnotes, or links. Supports whole-note append/prepend/replace, precise replace_text edits, and section-targeted markdown inserts. The "modification" argument must be an object of objects, e.g. {"content": {"old_text": "...", "new_text": "..."}}.';
 
   @override
   Map<String, dynamic> get inputSchema => {
@@ -1066,6 +1066,10 @@ class ModifyNotesTool implements NativeTool {
 const Map<String, dynamic> _modificationProperties = {
   'content': {
     'type': 'object',
+    'description':
+        'An OBJECT, never a plain string. For precise edits: '
+        '{"action": "replace_text", "old_text": "...", "new_text": "..."}; '
+        'action may be omitted when old_text and new_text are provided.',
     'properties': {
       'action': {
         'type': 'string',
@@ -1073,7 +1077,8 @@ const Map<String, dynamic> _modificationProperties = {
         'description':
             'Use replace_text (with old_text/new_text) for precise edits '
             'such as checking off one list item; replace rewrites the whole '
-            'note or section.',
+            'note or section. Inferred as replace_text when old_text and '
+            'new_text are given without an action.',
       },
       'text': {
         'type': 'string',

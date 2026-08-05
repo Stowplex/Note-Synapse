@@ -202,6 +202,13 @@ void main() {
         }, maxBudgetTokens: 16000);
 
         expect(prompt, contains('Each array item is an object with:'));
+        // The content node itself warns against plain strings and documents
+        // the action-inference tolerance.
+        expect(prompt, contains('An OBJECT, never a plain string'));
+        expect(
+          prompt,
+          contains('action may be omitted when old_text and new_text'),
+        );
         // Depth regression: the batch tool nests one level deeper than
         // modify_note; link.added item fields must still render.
         expect(prompt, contains('relation (string'));
@@ -309,6 +316,52 @@ void main() {
           (d) => d['name'] != 'call_tool',
         );
         expect((perTool['parameters'] as Map)['properties'], isNotEmpty);
+      });
+
+      test('call_tool description summarizes directly declared tools '
+          'instead of repeating their schemas', () {
+        final toolSet = <String, List<McpTool>>{
+          'A': [
+            // Uniquely named → individually declared.
+            McpTool(
+              name: 'unique_tool',
+              description: 'Unique tool description marker',
+              inputSchema: const {
+                'type': 'object',
+                'properties': {
+                  'arg': {'type': 'string', 'description': 'Arg marker'},
+                },
+              },
+            ),
+            McpTool(name: 'dupe_tool', description: 'a-side', inputSchema: const {}),
+          ],
+          'B': [
+            // Duplicate name → NOT declared; must keep full catalog text.
+            McpTool(name: 'dupe_tool', description: 'b-side', inputSchema: const {}),
+          ],
+        };
+
+        final wrapper = McpToolIntegrationService.getCallToolFunctionForGemini(
+          toolSet,
+          preferDirectCalls: true,
+          directlyDeclaredToolNames: {'unique_tool'},
+        );
+        final description = wrapper['description'] as String;
+
+        expect(
+          description,
+          contains(
+            'Directly declared (call by function name, not via call_tool): '
+            'unique_tool',
+          ),
+        );
+        // The declared tool's schema/description text is no longer repeated
+        // in the wrapper (the declaration itself carries it)...
+        expect(description, isNot(contains('Unique tool description marker')));
+        expect(description, isNot(contains('Arg marker')));
+        // ...while undeclared tools keep their full catalog entries.
+        expect(description, contains('- dupe_tool: a-side'));
+        expect(description, contains('- dupe_tool: b-side'));
       });
 
       test('per-tool declarations sanitize schemas and skip duplicates', () {
