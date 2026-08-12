@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -27,6 +29,19 @@ class AiLogEntry {
 }
 
 class LoggerService {
+  static const _sensitiveRedactionZoneKey = #noteSynapseSensitiveLogRedaction;
+
+  static bool get _redactSensitiveOperation =>
+      Zone.current[_sensitiveRedactionZoneKey] == true;
+
+  /// Runs [action] with payload logging disabled across its async call tree.
+  /// Request/response metadata is retained, but bodies, console content, and
+  /// exception strings are replaced. Protocol Study uses this after its exact
+  /// outbound preview so approved fields do not leak into the global log UI.
+  static Future<T> runWithSensitiveDataRedacted<T>(
+    Future<T> Function() action,
+  ) => runZoned(action, zoneValues: {_sensitiveRedactionZoneKey: true});
+
   static final Logger _logger = Logger(
     printer: PrettyPrinter(
       methodCount: 2,
@@ -109,27 +124,57 @@ class LoggerService {
 
   static void debug(String message, {dynamic error, StackTrace? stackTrace}) {
     if (kDebugMode) {
-      _logger.d(message, error: error, stackTrace: stackTrace);
+      _logger.d(
+        _redactSensitiveOperation
+            ? 'Sensitive operation event (details redacted)'
+            : message,
+        error: _redactSensitiveOperation ? null : error,
+        stackTrace: _redactSensitiveOperation ? null : stackTrace,
+      );
     }
   }
 
   static void info(String message, {dynamic error, StackTrace? stackTrace}) {
     if (kDebugMode) {
-      _logger.i(message, error: error, stackTrace: stackTrace);
+      _logger.i(
+        _redactSensitiveOperation
+            ? 'Sensitive operation event (details redacted)'
+            : message,
+        error: _redactSensitiveOperation ? null : error,
+        stackTrace: _redactSensitiveOperation ? null : stackTrace,
+      );
     }
   }
 
   static void warning(String message, {dynamic error, StackTrace? stackTrace}) {
-    _logger.w(message, error: error, stackTrace: stackTrace);
+    _logger.w(
+      _redactSensitiveOperation
+          ? 'Sensitive operation warning (details redacted)'
+          : message,
+      error: _redactSensitiveOperation ? null : error,
+      stackTrace: _redactSensitiveOperation ? null : stackTrace,
+    );
   }
 
   static void error(String message, {dynamic error, StackTrace? stackTrace}) {
-    _logger.e(message, error: error, stackTrace: stackTrace);
+    _logger.e(
+      _redactSensitiveOperation
+          ? 'Sensitive operation error (details redacted)'
+          : message,
+      error: _redactSensitiveOperation ? null : error,
+      stackTrace: _redactSensitiveOperation ? null : stackTrace,
+    );
   }
 
   static void verbose(String message, {dynamic error, StackTrace? stackTrace}) {
     if (kDebugMode) {
-      _logger.t(message, error: error, stackTrace: stackTrace);
+      _logger.t(
+        _redactSensitiveOperation
+            ? 'Sensitive operation event (details redacted)'
+            : message,
+        error: _redactSensitiveOperation ? null : error,
+        stackTrace: _redactSensitiveOperation ? null : stackTrace,
+      );
     }
   }
 
@@ -165,7 +210,11 @@ class LoggerService {
     if (endpoint.isEmpty) return endpoint;
     final uri = Uri.tryParse(endpoint);
     if (uri == null || uri.query.isEmpty) return endpoint;
-    return uri.replace(query: '').toString();
+    final queryStart = endpoint.indexOf('?');
+    final fragmentStart = endpoint.indexOf('#', queryStart);
+    return fragmentStart < 0
+        ? endpoint.substring(0, queryStart)
+        : '${endpoint.substring(0, queryStart)}${endpoint.substring(fragmentStart)}';
   }
 
   // Specialized logging for AI requests and responses
@@ -181,13 +230,20 @@ class LoggerService {
     final safeEndpoint = _redactEndpoint(endpoint);
     final safeHeaders = _redactHeaders(headers);
 
+    final safeBody = _redactSensitiveOperation
+        ? <String, dynamic>{
+            'redacted': true,
+            'topLevelKeys': requestBody.keys.toList(growable: false),
+          }
+        : requestBody;
+
     if (kDebugMode) {
       _logger.d(
         '🤖 AI REQUEST [$requestIdStr]',
         error: {
           'endpoint': safeEndpoint,
           'headers': safeHeaders,
-          'body': requestBody,
+          'body': safeBody,
           'timestamp': timestamp.toIso8601String(),
         },
       );
@@ -199,7 +255,7 @@ class LoggerService {
         id: requestIdStr,
         type: 'request',
         endpoint: safeEndpoint,
-        data: {'headers': safeHeaders, 'body': requestBody},
+        data: {'headers': safeHeaders, 'body': safeBody},
         timestamp: timestamp,
       ),
     );
@@ -220,13 +276,17 @@ class LoggerService {
     final timestamp = DateTime.now();
     final safeHeaders = _redactHeaders(headers);
 
+    final safeBody = _redactSensitiveOperation
+        ? const <String, dynamic>{'redacted': true}
+        : responseBody;
+
     if (kDebugMode) {
       _logger.d(
         '🤖 AI RESPONSE [$requestIdStr]$durationStr',
         error: {
           'statusCode': statusCode,
           'headers': safeHeaders,
-          'body': responseBody,
+          'body': safeBody,
           'timestamp': timestamp.toIso8601String(),
         },
       );
@@ -241,7 +301,7 @@ class LoggerService {
         data: {
           'statusCode': statusCode,
           'headers': safeHeaders,
-          'body': responseBody,
+          'body': safeBody,
           'duration': duration?.inMilliseconds,
         },
         timestamp: timestamp,
@@ -263,11 +323,14 @@ class LoggerService {
     final timestamp = DateTime.now();
     final safeEndpoint = _redactEndpoint(endpoint);
 
+    final safeError = _redactSensitiveOperation
+        ? 'Sensitive AI call failed (details redacted)'
+        : error;
     _logger.e(
       '🤖 AI ERROR [$requestIdStr]$durationStr',
       error: {
         'endpoint': safeEndpoint,
-        'error': error,
+        'error': safeError,
         'timestamp': timestamp.toIso8601String(),
       },
     );
@@ -278,7 +341,7 @@ class LoggerService {
         id: requestIdStr,
         type: 'error',
         endpoint: safeEndpoint,
-        data: {'error': error, 'duration': duration?.inMilliseconds},
+        data: {'error': safeError, 'duration': duration?.inMilliseconds},
         timestamp: timestamp,
       ),
     );
@@ -301,7 +364,9 @@ class LoggerService {
         type: 'console',
         endpoint: _redactEndpoint(endpoint),
         data: {
-          'consoleOutput': consoleOutput,
+          'consoleOutput': _redactSensitiveOperation
+              ? '<redacted>'
+              : consoleOutput,
           'duration': duration?.inMilliseconds,
         },
         timestamp: timestamp,

@@ -7,7 +7,6 @@ import 'models/openai_model.dart';
 import 'models/local_mnn_model.dart';
 import 'model_storage_service.dart';
 import '../utils/token_estimator.dart';
-import 'service_locator.dart';
 import 'logger_service.dart';
 import 'prompts/prompt_models.dart';
 import '../models/mcp_endpoint.dart';
@@ -16,12 +15,19 @@ import '../models/model_config.dart';
 import '../models/generation_context.dart';
 import 'model_preference_service.dart';
 
+typedef AIModelFactory = AIModel Function(ModelType modelType);
+
 /// Service for selecting and managing AI models
 class ModelSelector {
   final ModelStorageService _modelStorage;
   final ModelPreferenceService _modelPreference;
+  final AIModelFactory? _modelFactory;
 
-  ModelSelector(this._modelStorage, this._modelPreference);
+  ModelSelector(
+    this._modelStorage,
+    this._modelPreference, {
+    AIModelFactory? modelFactory,
+  }) : _modelFactory = modelFactory;
 
   AIModel? _currentModel;
   ModelConfig? _currentModelConfig;
@@ -314,6 +320,43 @@ class ModelSelector {
     );
   }
 
+  /// Generates with exactly [config], failing closed if that model cannot be
+  /// initialized. Unlike [generateFromPrompt], this method never auto-selects
+  /// or falls back to the active model.
+  ///
+  /// Protocol Study uses this after showing the user the exact local/remote
+  /// destination and outbound field preview. Falling back after that approval
+  /// would send the payload somewhere the user did not approve.
+  Future<String> generateFromPromptExact(
+    PromptRequest request, {
+    required ModelConfig config,
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    GenerationContext? generationContext,
+  }) async {
+    final context = generationContext ?? GenerationContext();
+    context.modelOverride = config;
+    var model = _modelCache[config.id];
+    model ??= _createModel(config.type);
+    _modelCache[config.id] = model;
+    await model.initialize(config: config);
+    if (!await model.isReady()) {
+      throw StateError(
+        'Approved model ${config.displayName ?? config.id} is not ready.',
+      );
+    }
+    return model.generateFromPrompt(
+      request,
+      temperature: temperature,
+      topK: topK,
+      topP: topP,
+      maxOutputTokens: maxOutputTokens,
+      generationContext: context,
+    );
+  }
+
   /// Generate a multi-part response from a prompt request.
   ///
   /// Returns a list of parts where each part is a map with 'type' ('text' or 'image')
@@ -461,10 +504,10 @@ class ModelSelector {
         _modelCache[modelOverride.id] = model;
       }
     }
-    
+
     // Fallback to current model if no override or instance not in cache
     model ??= _currentModel;
-    
+
     return model?.buildToolDeclarations(toolsByEndpoint) ?? [];
   }
 
@@ -562,6 +605,8 @@ class ModelSelector {
 
   /// Create a model instance for the given model type
   AIModel _createModel(ModelType modelType) {
+    final factory = _modelFactory;
+    if (factory != null) return factory(modelType);
     switch (modelType) {
       case ModelType.gemini:
         return GeminiModel();
@@ -690,8 +735,9 @@ class ModelSelector {
   Future<ModelConfig?> selectModelByPreference(Set<String> requiredCaps) async {
     // 1. Prepare candidates: Active Model + Preference List
     final activeModel = await _modelStorage.getActiveModel();
-    if (activeModel == null)
+    if (activeModel == null) {
       return null; // Should not happen if app initialized
+    }
 
     final preferenceListIds = await _modelPreference.getPreferenceList();
     final allModels = await _modelStorage.getConfiguredModels();

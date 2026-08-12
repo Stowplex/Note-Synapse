@@ -1490,6 +1490,462 @@ abstract class AppLocalizations {
   /// **'HTTP/1.1 Only'**
   String get protocolHttp11Only;
 
+  /// No description provided for @protocolStudies.
+  ///
+  /// In en, this message translates to:
+  /// **'Protocol studies'**
+  String get protocolStudies;
+
+  /// No description provided for @protocolStudiesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture and study website HTTP workflows'**
+  String get protocolStudiesSubtitle;
+
+  /// No description provided for @newProtocolStudy.
+  ///
+  /// In en, this message translates to:
+  /// **'New protocol study'**
+  String get newProtocolStudy;
+
+  /// No description provided for @studyWithLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Study protocol'**
+  String get studyWithLogin;
+
+  /// No description provided for @protocolStudyEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No saved protocol studies yet.'**
+  String get protocolStudyEmpty;
+
+  /// No description provided for @protocolStudyUrlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a website URL'**
+  String get protocolStudyUrlHint;
+
+  /// No description provided for @protocolStudyStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start study'**
+  String get protocolStudyStart;
+
+  /// No description provided for @protocolStudySave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save study'**
+  String get protocolStudySave;
+
+  /// No description provided for @protocolStudySaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Protocol study saved'**
+  String get protocolStudySaved;
+
+  /// No description provided for @protocolStudyNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Network'**
+  String get protocolStudyNetwork;
+
+  /// No description provided for @protocolStudyRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'requests'**
+  String get protocolStudyRequests;
+
+  /// No description provided for @protocolStudySelectRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'Select the requests that belong to the workflow.'**
+  String get protocolStudySelectRequests;
+
+  /// No description provided for @protocolStudyNoRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching requests captured yet.'**
+  String get protocolStudyNoRequests;
+
+  /// No description provided for @protocolStudyRawLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Raw request and response data stays in the private protocol study workspace.'**
+  String get protocolStudyRawLocal;
+
+  /// No description provided for @protocolStudySharedState.
+  ///
+  /// In en, this message translates to:
+  /// **'No saved login was selected. The in-app WebView may still contain shared ambient login state.'**
+  String get protocolStudySharedState;
+
+  /// No description provided for @protocolStudyCaptureLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture stopped at the configured size or event limit.'**
+  String get protocolStudyCaptureLimit;
+
+  /// No description provided for @protocolStudyAnalyze.
+  ///
+  /// In en, this message translates to:
+  /// **'Synthesize workflow'**
+  String get protocolStudyAnalyze;
+
+  /// No description provided for @protocolStudyChooseModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose analysis model'**
+  String get protocolStudyChooseModel;
+
+  /// No description provided for @protocolStudyRemoteDisclosure.
+  ///
+  /// In en, this message translates to:
+  /// **'Check fields whose values the remote AI may see. Use the visibility control to omit irrelevant fields entirely.'**
+  String get protocolStudyRemoteDisclosure;
+
+  /// No description provided for @protocolStudyLocalDisclosure.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose only the fields this on-device model needs. Request/response pairs are analyzed separately to fit smaller context windows.'**
+  String get protocolStudyLocalDisclosure;
+
+  /// No description provided for @protocolStudyOutboundPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Review exact AI payload'**
+  String get protocolStudyOutboundPreview;
+
+  /// No description provided for @protocolStudySendForAnalysis.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyze with this model'**
+  String get protocolStudySendForAnalysis;
+
+  /// No description provided for @protocolStudyAnalyzingPair.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyzing pair {current} of {total}'**
+  String protocolStudyAnalyzingPair(int current, int total);
+
+  /// No description provided for @protocolStudyRedacted.
+  ///
+  /// In en, this message translates to:
+  /// **'redacted fields'**
+  String get protocolStudyRedacted;
+
+  /// No description provided for @protocolStudyExcluded.
+  ///
+  /// In en, this message translates to:
+  /// **'excluded fields'**
+  String get protocolStudyExcluded;
+
+  /// No description provided for @protocolStudyIncludeField.
+  ///
+  /// In en, this message translates to:
+  /// **'Include field in analysis'**
+  String get protocolStudyIncludeField;
+
+  /// No description provided for @protocolStudyExcludeField.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude field from analysis'**
+  String get protocolStudyExcludeField;
+
+  /// No description provided for @protocolStudyMutationWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This request may mutate website state. Run the minimal repro anyway?'**
+  String get protocolStudyMutationWarning;
+
+  /// No description provided for @protocolStudyRunRepro.
+  ///
+  /// In en, this message translates to:
+  /// **'Run minimal repro'**
+  String get protocolStudyRunRepro;
+
+  /// No description provided for @protocolStudyReproResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimal repro result'**
+  String get protocolStudyReproResult;
+
+  /// No description provided for @protocolStudyExportNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Save sanitized note'**
+  String get protocolStudyExportNote;
+
+  /// No description provided for @protocolStudyNoteSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Sanitized protocol report saved as a note'**
+  String get protocolStudyNoteSaved;
+
+  /// No description provided for @protocolStudyCreateTool.
+  ///
+  /// In en, this message translates to:
+  /// **'Create AI tool / skill'**
+  String get protocolStudyCreateTool;
+
+  /// No description provided for @protocolStudyCreateApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Create User App'**
+  String get protocolStudyCreateApp;
+
+  /// No description provided for @protocolStudyFidelityWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture fidelity is platform-dependent. Service workers and WebSockets are not captured; bodies may be truncated.'**
+  String get protocolStudyFidelityWarning;
+
+  /// No description provided for @protocolStudyDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete study'**
+  String get protocolStudyDelete;
+
+  /// No description provided for @protocolStudyDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this private protocol study and its raw data?'**
+  String get protocolStudyDeleteConfirm;
+
+  /// No description provided for @protocolStudyNoModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure an AI model before synthesizing the workflow.'**
+  String get protocolStudyNoModel;
+
+  /// No description provided for @protocolStudyAnalysisFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Workflow synthesis failed'**
+  String get protocolStudyAnalysisFailed;
+
+  /// No description provided for @protocolStudyResponseBodyLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Response body limit'**
+  String get protocolStudyResponseBodyLimit;
+
+  /// No description provided for @protocolStudyApplyRecommendations.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply cautious recommendations'**
+  String get protocolStudyApplyRecommendations;
+
+  /// No description provided for @protocolStudyModelLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Model'**
+  String get protocolStudyModelLabel;
+
+  /// No description provided for @protocolStudyDestinationLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Destination'**
+  String get protocolStudyDestinationLabel;
+
+  /// No description provided for @protocolStudyDisclosed.
+  ///
+  /// In en, this message translates to:
+  /// **'disclosed'**
+  String get protocolStudyDisclosed;
+
+  /// No description provided for @protocolStudyAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get protocolStudyAll;
+
+  /// No description provided for @protocolStudyForm.
+  ///
+  /// In en, this message translates to:
+  /// **'Form'**
+  String get protocolStudyForm;
+
+  /// No description provided for @protocolStudyViewRaw.
+  ///
+  /// In en, this message translates to:
+  /// **'View raw request and response'**
+  String get protocolStudyViewRaw;
+
+  /// No description provided for @protocolStudyRequestHeaders.
+  ///
+  /// In en, this message translates to:
+  /// **'Request headers'**
+  String get protocolStudyRequestHeaders;
+
+  /// No description provided for @protocolStudyRequestBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Request body'**
+  String get protocolStudyRequestBody;
+
+  /// No description provided for @protocolStudyResponseHeaders.
+  ///
+  /// In en, this message translates to:
+  /// **'Response headers'**
+  String get protocolStudyResponseHeaders;
+
+  /// No description provided for @protocolStudyResponseBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Response body'**
+  String get protocolStudyResponseBody;
+
+  /// No description provided for @protocolStudyFinalUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Final URL'**
+  String get protocolStudyFinalUrl;
+
+  /// No description provided for @protocolStudyNotCaptured.
+  ///
+  /// In en, this message translates to:
+  /// **'not captured'**
+  String get protocolStudyNotCaptured;
+
+  /// No description provided for @protocolStudyParameters.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameters'**
+  String get protocolStudyParameters;
+
+  /// No description provided for @protocolStudyNoneIdentified.
+  ///
+  /// In en, this message translates to:
+  /// **'None identified'**
+  String get protocolStudyNoneIdentified;
+
+  /// No description provided for @protocolStudyWorkflow.
+  ///
+  /// In en, this message translates to:
+  /// **'Workflow'**
+  String get protocolStudyWorkflow;
+
+  /// No description provided for @protocolStudyCaveats.
+  ///
+  /// In en, this message translates to:
+  /// **'Caveats'**
+  String get protocolStudyCaveats;
+
+  /// No description provided for @protocolStudyOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'optional'**
+  String get protocolStudyOptional;
+
+  /// No description provided for @protocolStudyTruncated.
+  ///
+  /// In en, this message translates to:
+  /// **'truncated'**
+  String get protocolStudyTruncated;
+
+  /// No description provided for @protocolStudyStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get protocolStudyStatus;
+
+  /// No description provided for @protocolStudyNewExample.
+  ///
+  /// In en, this message translates to:
+  /// **'Start next example'**
+  String get protocolStudyNewExample;
+
+  /// No description provided for @protocolStudyExampleNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording example {number}'**
+  String protocolStudyExampleNumber(int number);
+
+  /// No description provided for @protocolStudyMarkParameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as reusable parameter'**
+  String get protocolStudyMarkParameter;
+
+  /// No description provided for @protocolStudyTransportMetadata.
+  ///
+  /// In en, this message translates to:
+  /// **'Transport metadata'**
+  String get protocolStudyTransportMetadata;
+
+  /// No description provided for @protocolStudyPartial.
+  ///
+  /// In en, this message translates to:
+  /// **'partial'**
+  String get protocolStudyPartial;
+
+  /// No description provided for @protocolStudyReviewSanitizedNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Review sanitized note'**
+  String get protocolStudyReviewSanitizedNote;
+
+  /// No description provided for @protocolStudyDiscardSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard session record'**
+  String get protocolStudyDiscardSession;
+
+  /// No description provided for @protocolStudyDiscardSessionConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard this unsaved raw protocol study? It cannot be recovered.'**
+  String get protocolStudyDiscardSessionConfirm;
+
+  /// No description provided for @protocolStudyReplay.
+  ///
+  /// In en, this message translates to:
+  /// **'Replay request'**
+  String get protocolStudyReplay;
+
+  /// No description provided for @protocolStudyReplayResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'Replayed response'**
+  String get protocolStudyReplayResponse;
+
+  /// No description provided for @protocolStudyReplayFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Replay failed'**
+  String get protocolStudyReplayFailed;
+
+  /// No description provided for @protocolStudyReplayedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Replayed at'**
+  String get protocolStudyReplayedAt;
+
+  /// No description provided for @protocolStudyReplayUsedSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Used live session cookies'**
+  String get protocolStudyReplayUsedSession;
+
+  /// No description provided for @protocolStudyCapturePage.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture rendered page'**
+  String get protocolStudyCapturePage;
+
+  /// No description provided for @protocolStudyPageCaptured.
+  ///
+  /// In en, this message translates to:
+  /// **'Rendered page snapshot captured'**
+  String get protocolStudyPageCaptured;
+
+  /// No description provided for @protocolStudyPageSnapshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Page'**
+  String get protocolStudyPageSnapshot;
+
   /// No description provided for @retryCount.
   ///
   /// In en, this message translates to:

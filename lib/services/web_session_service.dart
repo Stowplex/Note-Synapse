@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart' hide AndroidOptions;
+import 'package:flutter_inappwebview/flutter_inappwebview.dart'
+    hide AndroidOptions;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_domain_grant_service.dart';
 import 'logger_service.dart';
+import 'registrable_domain.dart';
 
 /// A single persisted cookie belonging to a saved web login session.
 ///
@@ -299,25 +301,6 @@ class WebSessionService {
   // Domain handling
   // --------------------------------------------------------------------------
 
-  /// A small set of multi-label public suffixes, enough to keep common
-  /// `co.uk`-style hosts from collapsing unrelated sites into one bucket.
-  ///
-  /// This is intentionally a pragmatic subset rather than the full Public
-  /// Suffix List; unknown suffixes fall back to the last two labels.
-  static const Set<String> _multiLabelSuffixes = {
-    'co.uk', 'org.uk', 'gov.uk', 'ac.uk', 'me.uk', 'ltd.uk', 'plc.uk',
-    'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au', 'id.au',
-    'co.nz', 'net.nz', 'org.nz', 'govt.nz',
-    'com.cn', 'net.cn', 'org.cn', 'gov.cn', 'edu.cn',
-    'co.jp', 'or.jp', 'ne.jp', 'go.jp', 'ac.jp',
-    'com.br', 'net.br', 'org.br', 'gov.br',
-    'co.in', 'net.in', 'org.in', 'gov.in',
-    'com.sg', 'edu.sg', 'gov.sg',
-    'com.hk', 'org.hk', 'gov.hk',
-    'co.za', 'org.za',
-    'com.tw', 'org.tw', 'gov.tw',
-  };
-
   /// Computes the registrable domain (the key a session is filed under) for a
   /// host or URL. Returns an empty string if no host can be determined.
   ///
@@ -325,37 +308,31 @@ class WebSessionService {
   ///   `https://a.b.example.com/x` -> `example.com`
   ///   `https://shop.example.co.uk` -> `example.co.uk`
   static String domainKeyFor(String urlOrHost) {
-    var host = urlOrHost.trim().toLowerCase();
-    final uri = Uri.tryParse(host);
-    if (uri != null && uri.host.isNotEmpty) {
-      host = uri.host;
-    } else {
-      // Strip any scheme/path remnants if parsing as a bare host failed.
-      host = host.replaceFirst(RegExp(r'^[a-z]+://'), '').split('/').first;
+    final input = urlOrHost.trim().toLowerCase();
+    var host = Uri.tryParse(input)?.host ?? '';
+    if (host.isEmpty) {
+      // Parsing through an authority-form URI handles bare hosts, ports, and
+      // bracketed IPv6 without hand-splitting on ':' characters.
+      host =
+          Uri.tryParse(
+            'https://${input.replaceFirst(RegExp(r'^\.+'), '')}',
+          )?.host ??
+          '';
     }
-    host = host.split(':').first; // drop port
     // Trim leading/trailing dots: a trailing-dot FQDN (`example.com.`) is
     // equivalent to the dotless form and must map to the same key.
     host = host.replaceAll(RegExp(r'^\.+|\.+$'), '');
     if (host.isEmpty) {
       return '';
     }
-    // IP addresses (v4) are used as-is.
-    if (RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(host)) {
+    // IP addresses (v4 and v6) and single-label development hosts are used as
+    // is; the Public Suffix List applies only to registered DNS names.
+    if (InternetAddress.tryParse(host) != null || !host.contains('.')) {
       return host;
     }
-
-    final labels = host.split('.');
-    if (labels.length <= 2) {
-      return host;
-    }
-
-    final lastTwo = labels.sublist(labels.length - 2).join('.');
-    if (_multiLabelSuffixes.contains(lastTwo)) {
-      // Registrable domain is the last three labels.
-      return labels.sublist(labels.length - 3).join('.');
-    }
-    return lastTwo;
+    // Private rules are security-relevant: independent tenants such as
+    // a.github.io and b.github.io must never share a login/grant bucket.
+    return RegistrableDomain.forHost(host);
   }
 
   // --------------------------------------------------------------------------
@@ -461,9 +438,7 @@ class WebSessionService {
     await collect('https://$domain');
 
     if (collected.isEmpty) {
-      LoggerService.debug(
-        'WebSessionService: no cookies captured for $domain',
-      );
+      LoggerService.debug('WebSessionService: no cookies captured for $domain');
       return null;
     }
 
@@ -584,6 +559,46 @@ class WebSessionService {
     return chosen.entries.map((e) => '${e.key}=${e.value}').join('; ');
   }
 
+  /// Applies cookies received by a user-initiated local HTTP replay to the
+  /// live WebView cookie jar. This deliberately does not rewrite the saved
+  /// login snapshot; a later explicit "save login" remains the only way to
+  /// persist rotated credentials. Cookie scope is preserved by [CookieGateway].
+  Future<void> applyLiveResponseCookies(
+    String responseUrl,
+    Iterable<WebSessionCookie> cookies,
+  ) async {
+    if (!isSupported) return;
+    final uri = Uri.tryParse(responseUrl);
+    if (uri == null ||
+        uri.host.isEmpty ||
+        !const {'http', 'https'}.contains(uri.scheme)) {
+      return;
+    }
+    for (final cookie in cookies) {
+      if (cookie.name.isEmpty) continue;
+      final declaredDomain = cookie.domain?.trim().toLowerCase().replaceFirst(
+        RegExp(r'^\.+'),
+        '',
+      );
+      final responseHost = uri.host.toLowerCase();
+      if (declaredDomain != null &&
+          declaredDomain.isNotEmpty &&
+          responseHost != declaredDomain &&
+          !responseHost.endsWith('.$declaredDomain')) {
+        // Do not rely on platform differences when rejecting a response that
+        // attempts to plant a cookie for an unrelated domain.
+        continue;
+      }
+      try {
+        await _cookies.setCookie(uri.toString(), cookie);
+      } catch (error) {
+        LoggerService.warning(
+          'WebSessionService: failed to apply replay response cookie: $error',
+        );
+      }
+    }
+  }
+
   /// `proxyFetch({session: true})`); the values never need to cross into JS.
   Future<String> cookieHeaderFor(String url) async {
     if (!isSupported) {
@@ -635,7 +650,11 @@ class WebSessionService {
   /// RFC 6265 host-match: a host-only cookie (no/blank Domain) matches only the
   /// exact host it was captured on ([savedHost]); a domain cookie matches its
   /// domain and any subdomain.
-  static bool _hostMatches(String host, String? cookieDomain, String? savedHost) {
+  static bool _hostMatches(
+    String host,
+    String? cookieDomain,
+    String? savedHost,
+  ) {
     if (cookieDomain == null || cookieDomain.isEmpty) {
       // Host-only: send only to the captured host. If the captured host is
       // unknown, fall back to sending it (the session is the user's own login

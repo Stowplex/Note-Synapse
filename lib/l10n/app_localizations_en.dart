@@ -803,6 +803,252 @@ class AppLocalizationsEn extends AppLocalizations {
   String get protocolHttp11Only => 'HTTP/1.1 Only';
 
   @override
+  String get protocolStudies => 'Protocol studies';
+
+  @override
+  String get protocolStudiesSubtitle =>
+      'Capture and study website HTTP workflows';
+
+  @override
+  String get newProtocolStudy => 'New protocol study';
+
+  @override
+  String get studyWithLogin => 'Study protocol';
+
+  @override
+  String get protocolStudyEmpty => 'No saved protocol studies yet.';
+
+  @override
+  String get protocolStudyUrlHint => 'Enter a website URL';
+
+  @override
+  String get protocolStudyStart => 'Start study';
+
+  @override
+  String get protocolStudySave => 'Save study';
+
+  @override
+  String get protocolStudySaved => 'Protocol study saved';
+
+  @override
+  String get protocolStudyNetwork => 'Network';
+
+  @override
+  String get protocolStudyRequests => 'requests';
+
+  @override
+  String get protocolStudySelectRequests =>
+      'Select the requests that belong to the workflow.';
+
+  @override
+  String get protocolStudyNoRequests => 'No matching requests captured yet.';
+
+  @override
+  String get protocolStudyRawLocal =>
+      'Raw request and response data stays in the private protocol study workspace.';
+
+  @override
+  String get protocolStudySharedState =>
+      'No saved login was selected. The in-app WebView may still contain shared ambient login state.';
+
+  @override
+  String get protocolStudyCaptureLimit =>
+      'Capture stopped at the configured size or event limit.';
+
+  @override
+  String get protocolStudyAnalyze => 'Synthesize workflow';
+
+  @override
+  String get protocolStudyChooseModel => 'Choose analysis model';
+
+  @override
+  String get protocolStudyRemoteDisclosure =>
+      'Check fields whose values the remote AI may see. Use the visibility control to omit irrelevant fields entirely.';
+
+  @override
+  String get protocolStudyLocalDisclosure =>
+      'Choose only the fields this on-device model needs. Request/response pairs are analyzed separately to fit smaller context windows.';
+
+  @override
+  String get protocolStudyOutboundPreview => 'Review exact AI payload';
+
+  @override
+  String get protocolStudySendForAnalysis => 'Analyze with this model';
+
+  @override
+  String protocolStudyAnalyzingPair(int current, int total) {
+    return 'Analyzing pair $current of $total';
+  }
+
+  @override
+  String get protocolStudyRedacted => 'redacted fields';
+
+  @override
+  String get protocolStudyExcluded => 'excluded fields';
+
+  @override
+  String get protocolStudyIncludeField => 'Include field in analysis';
+
+  @override
+  String get protocolStudyExcludeField => 'Exclude field from analysis';
+
+  @override
+  String get protocolStudyMutationWarning =>
+      'This request may mutate website state. Run the minimal repro anyway?';
+
+  @override
+  String get protocolStudyRunRepro => 'Run minimal repro';
+
+  @override
+  String get protocolStudyReproResult => 'Minimal repro result';
+
+  @override
+  String get protocolStudyExportNote => 'Save sanitized note';
+
+  @override
+  String get protocolStudyNoteSaved =>
+      'Sanitized protocol report saved as a note';
+
+  @override
+  String get protocolStudyCreateTool => 'Create AI tool / skill';
+
+  @override
+  String get protocolStudyCreateApp => 'Create User App';
+
+  @override
+  String get protocolStudyFidelityWarning =>
+      'Capture fidelity is platform-dependent. Service workers and WebSockets are not captured; bodies may be truncated.';
+
+  @override
+  String get protocolStudyDelete => 'Delete study';
+
+  @override
+  String get protocolStudyDeleteConfirm =>
+      'Delete this private protocol study and its raw data?';
+
+  @override
+  String get protocolStudyNoModel =>
+      'Configure an AI model before synthesizing the workflow.';
+
+  @override
+  String get protocolStudyAnalysisFailed => 'Workflow synthesis failed';
+
+  @override
+  String get protocolStudyResponseBodyLimit => 'Response body limit';
+
+  @override
+  String get protocolStudyApplyRecommendations =>
+      'Apply cautious recommendations';
+
+  @override
+  String get protocolStudyModelLabel => 'Model';
+
+  @override
+  String get protocolStudyDestinationLabel => 'Destination';
+
+  @override
+  String get protocolStudyDisclosed => 'disclosed';
+
+  @override
+  String get protocolStudyAll => 'All';
+
+  @override
+  String get protocolStudyForm => 'Form';
+
+  @override
+  String get protocolStudyViewRaw => 'View raw request and response';
+
+  @override
+  String get protocolStudyRequestHeaders => 'Request headers';
+
+  @override
+  String get protocolStudyRequestBody => 'Request body';
+
+  @override
+  String get protocolStudyResponseHeaders => 'Response headers';
+
+  @override
+  String get protocolStudyResponseBody => 'Response body';
+
+  @override
+  String get protocolStudyFinalUrl => 'Final URL';
+
+  @override
+  String get protocolStudyNotCaptured => 'not captured';
+
+  @override
+  String get protocolStudyParameters => 'Parameters';
+
+  @override
+  String get protocolStudyNoneIdentified => 'None identified';
+
+  @override
+  String get protocolStudyWorkflow => 'Workflow';
+
+  @override
+  String get protocolStudyCaveats => 'Caveats';
+
+  @override
+  String get protocolStudyOptional => 'optional';
+
+  @override
+  String get protocolStudyTruncated => 'truncated';
+
+  @override
+  String get protocolStudyStatus => 'Status';
+
+  @override
+  String get protocolStudyNewExample => 'Start next example';
+
+  @override
+  String protocolStudyExampleNumber(int number) {
+    return 'Recording example $number';
+  }
+
+  @override
+  String get protocolStudyMarkParameter => 'Mark as reusable parameter';
+
+  @override
+  String get protocolStudyTransportMetadata => 'Transport metadata';
+
+  @override
+  String get protocolStudyPartial => 'partial';
+
+  @override
+  String get protocolStudyReviewSanitizedNote => 'Review sanitized note';
+
+  @override
+  String get protocolStudyDiscardSession => 'Discard session record';
+
+  @override
+  String get protocolStudyDiscardSessionConfirm =>
+      'Discard this unsaved raw protocol study? It cannot be recovered.';
+
+  @override
+  String get protocolStudyReplay => 'Replay request';
+
+  @override
+  String get protocolStudyReplayResponse => 'Replayed response';
+
+  @override
+  String get protocolStudyReplayFailed => 'Replay failed';
+
+  @override
+  String get protocolStudyReplayedAt => 'Replayed at';
+
+  @override
+  String get protocolStudyReplayUsedSession => 'Used live session cookies';
+
+  @override
+  String get protocolStudyCapturePage => 'Capture rendered page';
+
+  @override
+  String get protocolStudyPageCaptured => 'Rendered page snapshot captured';
+
+  @override
+  String get protocolStudyPageSnapshot => 'Page';
+
+  @override
   String get retryCount => 'Retry Count';
 
   @override

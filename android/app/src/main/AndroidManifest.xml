@@ -31,6 +31,8 @@
         android:label="Note Synapse"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="true">
         <!-- GPU compute libraries for flutter_gemma local model inference -->
 

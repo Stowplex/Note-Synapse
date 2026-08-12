@@ -4,8 +4,11 @@ import '../../l10n/app_localizations.dart';
 import '../../services/app_domain_grant_service.dart';
 import '../../services/database_service.dart';
 import '../../services/logger_service.dart';
+import '../../services/protocol_study/protocol_study_workspace.dart';
 import '../../services/service_locator.dart';
 import '../../services/web_session_service.dart';
+import 'protocol_studies_screen.dart';
+import 'protocol_study_browser_screen.dart';
 import 'web_login_browser_screen.dart';
 
 /// Lists saved web logins (one per registrable domain) and lets the user add a
@@ -40,6 +43,7 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
         _WebLoginEntry(
           domain: domains[i],
           savedAt: sessions[i]?.savedAt,
+          savedUrl: sessions[i]?.savedUrl,
           apps: grantedApps[i],
         ),
     ];
@@ -96,6 +100,27 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
     if (added == true) {
       _refresh();
     }
+  }
+
+  Future<void> _openProtocolStudies() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ProtocolStudiesScreen(webSessions: _service),
+      ),
+    );
+  }
+
+  Future<void> _studyWithLogin(_WebLoginEntry entry) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ProtocolStudyBrowserScreen(
+          workspace: ProtocolStudyWorkspace(),
+          webSessions: _service,
+          initialUrl: entry.savedUrl ?? 'https://${entry.domain}',
+          savedLoginDomain: entry.domain,
+        ),
+      ),
+    );
   }
 
   Future<void> _deleteLogin(String domain) async {
@@ -183,6 +208,15 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.schema_outlined),
+                  title: Text(l10n.protocolStudies),
+                  subtitle: Text(l10n.protocolStudiesSubtitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _openProtocolStudies,
+                ),
+              ),
               if (!_service.isSupported)
                 _buildNotice(
                   context,
@@ -221,6 +255,14 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
                           onPressed: () => _deleteLogin(entry.domain),
                         ),
                       ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                        child: OutlinedButton.icon(
+                          onPressed: () => _studyWithLogin(entry),
+                          icon: const Icon(Icons.network_check),
+                          label: Text(l10n.studyWithLogin),
+                        ),
+                      ),
                       if (entry.apps.isNotEmpty) ...[
                         const Divider(height: 1),
                         Padding(
@@ -233,7 +275,10 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
                         ...entry.apps.map(
                           (app) => ListTile(
                             dense: true,
-                            leading: const Icon(Icons.extension_outlined, size: 20),
+                            leading: const Icon(
+                              Icons.extension_outlined,
+                              size: 20,
+                            ),
                             title: Text(app.name),
                             trailing: TextButton(
                               onPressed: () => _revokeApp(entry.domain, app),
@@ -279,11 +324,13 @@ class _WebLoginEntry {
   const _WebLoginEntry({
     required this.domain,
     required this.savedAt,
+    required this.savedUrl,
     this.apps = const [],
   });
 
   final String domain;
   final DateTime? savedAt;
+  final String? savedUrl;
   final List<_GrantedApp> apps;
 }
 

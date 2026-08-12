@@ -69,6 +69,32 @@ import AVFoundation
       }
     }
 
+    let protocolStudyChannel = FlutterMethodChannel(
+      name: "note_synapse/protocol_study",
+      binaryMessenger: controller.binaryMessenger
+    )
+    protocolStudyChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
+      guard call.method == "excludeFromBackup",
+            let arguments = call.arguments as? [String: Any],
+            let path = arguments["path"] as? String else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      var url = URL(fileURLWithPath: path, isDirectory: true)
+      do {
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try url.setResourceValues(values)
+        result(nil)
+      } catch {
+        result(FlutterError(
+          code: "BACKUP_EXCLUSION_FAILED",
+          message: error.localizedDescription,
+          details: nil
+        ))
+      }
+    }
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
   
