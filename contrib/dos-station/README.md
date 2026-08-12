@@ -17,7 +17,8 @@ inside the plugin sandbox, using only the public Synapse API:
   A note with files but no game zip still boots, to a bare `C:\>` prompt.
 - **On-screen controls** — a full DOS keyboard overlay (sticky modifiers,
   quick-type bar) and a virtual gamepad (analog d-pad with four discrete
-  direction buttons for arrow-key games, plus mappable A/B/C buttons) for
+  direction buttons for arrow-key games, plus A/B/C buttons mappable to any
+  key — letters, digits, F-keys, arrows, nav keys, symbols, modifiers) for
   touch play. The keyboard docks below the picture so it never covers the game.
 - **Game saves that stick** — anything the game writes to `C:` (RPG save
   games, configs, high scores) is diffed against the game zip and stored on
