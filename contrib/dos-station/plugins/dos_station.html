@@ -3054,19 +3054,44 @@ function buildKeyboard() {
 }
 
 /* --------------------------------------------------------- virtual pad */
-const PAD_CHOICES = [
-  ['Ctrl', 17], ['Alt', 18], ['Space', 32], ['Enter', 13], ['Shift', 16],
-  ['Z', 90], ['X', 88], ['Y', 89], ['Esc', 27], ['F1', 112],
-];
+/* Every key a game might want on a pad button, grouped for the pickers. */
+const PAD_KEY_GROUPS = (() => {
+  const letters = [], digits = [], fkeys = [];
+  for (let i = 0; i < 26; i++) letters.push([String.fromCharCode(65 + i), 65 + i]);
+  for (let i = 0; i < 10; i++) digits.push([String(i), 48 + i]);
+  for (let i = 0; i < 12; i++) fkeys.push(['F' + (i + 1), 112 + i]);
+  return [
+    ['Common', [['Ctrl', 17], ['Alt', 18], ['Shift', 16], ['Space', 32],
+      ['Enter', 13], ['Esc', 27], ['Tab', 9], ['Bksp', 8]]],
+    ['Letters', letters],
+    ['Digits', digits],
+    ['Function', fkeys],
+    ['Arrows', [['←', 37], ['↑', 38], ['→', 39], ['↓', 40]]],
+    ['Nav', [['Ins', 45], ['Del', 46], ['Home', 36], ['End', 35],
+      ['PgUp', 33], ['PgDn', 34]]],
+    ['Symbols', [['-', 189], ['=', 187], ['[', 219], [']', 221], ['\\', 220],
+      [';', 186], ["'", 222], [',', 188], ['.', 190], ['/', 191], ['`', 192]]],
+  ];
+})();
+const PAD_KEY_LABELS = (() => {
+  const m = {};
+  for (const [, keys] of PAD_KEY_GROUPS) for (const [label, code] of keys) m[code] = label;
+  return m;
+})();
 
 function buildPad() {
   // A/B/C mapping selectors
   for (const btn of ['A', 'B', 'C']) {
     const sel = $('map' + btn);
-    for (const [label, code] of PAD_CHOICES) {
-      const o = document.createElement('option');
-      o.value = code; o.textContent = btn + ':' + label;
-      sel.appendChild(o);
+    for (const [group, keys] of PAD_KEY_GROUPS) {
+      const og = document.createElement('optgroup');
+      og.label = group;
+      for (const [label, code] of keys) {
+        const o = document.createElement('option');
+        o.value = code; o.textContent = btn + ':' + label;
+        og.appendChild(o);
+      }
+      sel.appendChild(og);
     }
     sel.value = state.padMap[btn];
     sel.addEventListener('change', () => {
@@ -3163,8 +3188,7 @@ function buildPad() {
 
 function refreshPadLabels() {
   for (const btn of ['A', 'B', 'C']) {
-    const found = PAD_CHOICES.find(([, c]) => c === state.padMap[btn]);
-    $('lbl' + btn).textContent = found ? found[0] : '?';
+    $('lbl' + btn).textContent = PAD_KEY_LABELS[state.padMap[btn]] || '?';
   }
 }
 
