@@ -274,8 +274,21 @@ class OpenAIModel implements AIModel {
     Map<String, List<McpTool>> toolsByEndpoint,
   ) {
     if (toolsByEndpoint.isEmpty) return [];
+    // Individual declarations first, so the API validates each tool's real
+    // parameter schema; the call_tool wrapper stays as a catch-all for
+    // undeclared tools and backward compatibility.
+    final perTool = McpToolIntegrationService.buildPerToolDeclarations(
+      toolsByEndpoint,
+    );
     return [
-      McpToolIntegrationService.getCallToolFunctionForOpenAI(toolsByEndpoint),
+      ...perTool,
+      McpToolIntegrationService.getCallToolFunctionForOpenAI(
+        toolsByEndpoint,
+        preferDirectCalls: perTool.isNotEmpty,
+        directlyDeclaredToolNames: {
+          for (final declaration in perTool) declaration['name'] as String,
+        },
+      ),
     ];
   }
 

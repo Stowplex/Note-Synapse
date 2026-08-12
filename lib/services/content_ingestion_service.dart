@@ -242,6 +242,10 @@ Content: ${note.content}
             // re-inserted the same primary key, threw, and dumped every
             // immutable-note ingestion into the summary-prepend fallback.
             await modService.createNote(newNoteData);
+          } else if (NoteModificationService.isNoOpModification(json)) {
+            // Nothing left after stripping (e.g. the AI returned only an
+            // 'attachments' key): a silent no-op, NOT the raw-JSON fallback.
+            LoggerService.debug('Ingestion produced a no-op modification');
           } else {
             // applyModifications writes to DB and publishes the UI refresh.
             await modService.applyModifications(note.id, json);

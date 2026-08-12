@@ -21,6 +21,13 @@ abstract class NativeTool {
   String get name;
   String get description;
   Map<String, dynamic> get inputSchema;
+
+  /// Whether this tool changes persistent state (notes, database rows).
+  /// Drives honest-failure disclosure: a mutating tool that never succeeds
+  /// in a task must be reported in the final answer. Classes using
+  /// `implements` must declare this explicitly.
+  bool get isMutating => false;
+
   Future<dynamic> execute(Map<String, dynamic> args);
 }
 
@@ -29,6 +36,9 @@ class NoteSearchTool implements NativeTool {
 
   @override
   String get name => 'search_notes';
+
+  @override
+  bool get isMutating => false;
 
   @override
   String get description => '''
@@ -93,6 +103,9 @@ class NoteReadTool implements NativeTool {
 
   @override
   String get name => 'read_note';
+
+  @override
+  bool get isMutating => false;
 
   @override
   String get description => '''
@@ -610,6 +623,9 @@ class RunSqlTool implements NativeTool {
   String get name => 'run_sql';
 
   @override
+  bool get isMutating => true;
+
+  @override
   String get description =>
       '''
 Run a SQL query on the local database. Supports SELECT, INSERT, UPDATE, DELETE.
@@ -700,6 +716,9 @@ class ListFiltersTool implements NativeTool {
 
   @override
   String get name => 'ls';
+
+  @override
+  bool get isMutating => false;
 
   @override
   String get description => '''
@@ -805,8 +824,11 @@ class ModifyNoteTool implements NativeTool {
   String get name => 'modify_note';
 
   @override
+  bool get isMutating => true;
+
+  @override
   String get description =>
-      'Modify a note\'s content, title, tags, attachments, subnotes, or links. Supports whole-note append/prepend/replace and section-targeted markdown inserts.';
+      'Modify a note\'s content, title, tags, attachments, subnotes, or links. Supports whole-note append/prepend/replace, precise replace_text edits, and section-targeted markdown inserts. The "modification" argument must be an object of objects, e.g. {"content": {"old_text": "...", "new_text": "..."}}.';
 
   @override
   Map<String, dynamic> get inputSchema => {
@@ -823,12 +845,51 @@ class ModifyNoteTool implements NativeTool {
       },
     },
     'required': ['note_id', 'modification'],
+    'examples': [
+      {
+        'note_id': '<note-id>',
+        'modification': {
+          'content': {
+            'action': 'replace_text',
+            'old_text': '- [ ] Book Title',
+            'new_text': '- [x] Book Title',
+            'section': '## 2026-07-31',
+          },
+        },
+      },
+    ],
   };
 
   @override
   Future<dynamic> execute(Map<String, dynamic> args) async {
-    final noteId = args['note_id'] as String;
-    final modification = args['modification'] as Map<String, dynamic>;
+    // Checked extraction before approval: structurally invalid calls must
+    // not trigger approval dialogs, and raw casts here would throw opaque
+    // type errors out of execute().
+    final noteIdRaw = args['note_id'];
+    if (noteIdRaw is! String || noteIdRaw.isEmpty) {
+      return {
+        'error':
+            'modify_note requires a top-level "note_id" string, got '
+            '${noteIdRaw == null ? 'nothing' : noteIdRaw.runtimeType}. Shape: '
+            '{"note_id": "...", "modification": {"content": {...}}}',
+        'code': 'invalid_argument',
+      };
+    }
+    final modificationRaw = args['modification'];
+    if (modificationRaw is! Map) {
+      return {
+        'error':
+            'modify_note requires "modification" to be an object, got '
+            '${modificationRaw == null ? 'nothing' : '${modificationRaw.runtimeType} ($modificationRaw)'}. '
+            'Example: {"note_id": "...", "modification": '
+            '{"content": {"action": "append", "text": "..."}}}',
+        'code': 'invalid_argument',
+      };
+    }
+    final noteId = noteIdRaw;
+    final modification = modificationRaw.map(
+      (key, value) => MapEntry(key.toString(), value),
+    );
 
     // Check approval before modification
     if (!ApprovalService.sessionApprovedNoteModifications) {
@@ -838,7 +899,10 @@ class ModifyNoteTool implements NativeTool {
         source: 'Agent',
       );
       if (!approved) {
-        return {'error': 'User denied the note modification.'};
+        return {
+          'error': 'User denied the note modification.',
+          'code': 'user_denied',
+        };
       }
     }
 
@@ -864,6 +928,9 @@ class ModifyNotesTool implements NativeTool {
 
   @override
   String get name => 'modify_notes';
+
+  @override
+  bool get isMutating => true;
 
   @override
   String get description =>
@@ -895,16 +962,74 @@ class ModifyNotesTool implements NativeTool {
       },
     },
     'required': ['modifications'],
+    'examples': [
+      {
+        'modifications': [
+          {
+            'note_id': '<note-id>',
+            'modification': {
+              'content': {
+                'action': 'replace_text',
+                'old_text': '- [ ] Book Title',
+                'new_text': '- [x] Book Title',
+              },
+            },
+          },
+        ],
+      },
+    ],
   };
 
   @override
   Future<dynamic> execute(Map<String, dynamic> args) async {
-    final modifications = (args['modifications'] as List? ?? [])
-        .whereType<Map<String, dynamic>>()
-        .toList();
+    final modificationsRaw = args['modifications'];
+    if (modificationsRaw is! List || modificationsRaw.isEmpty) {
+      return {
+        'error':
+            'modify_notes requires a non-empty "modifications" array. Shape: '
+            '{"modifications": [{"note_id": "...", "modification": '
+            '{"content": {...}}}]}',
+        'code': 'invalid_argument',
+      };
+    }
 
-    if (modifications.isEmpty) {
-      return {'error': 'No note modifications provided.'};
+    // Validate every item by index BEFORE approval instead of silently
+    // dropping malformed ones — a dropped item would report "success" for
+    // work never done, and invalid calls must not raise approval dialogs.
+    final modifications = <Map<String, dynamic>>[];
+    for (var i = 0; i < modificationsRaw.length; i++) {
+      final item = modificationsRaw[i];
+      if (item is! Map) {
+        return {
+          'error':
+              'modifications[$i]: expected an object '
+              '{"note_id": "...", "modification": {...}} but got '
+              '${item == null ? 'null' : '${item.runtimeType} ($item)'}.',
+          'code': 'invalid_argument',
+        };
+      }
+      final noteId = item['note_id'];
+      if (noteId is! String || noteId.isEmpty) {
+        return {
+          'error':
+              'modifications[$i].note_id: expected a non-empty string but '
+              'got ${noteId == null ? 'nothing' : noteId.runtimeType}.',
+          'code': 'invalid_argument',
+        };
+      }
+      final modification = item['modification'];
+      if (modification is! Map) {
+        return {
+          'error':
+              'modifications[$i].modification: expected an object but got '
+              '${modification == null ? 'nothing' : '${modification.runtimeType} ($modification)'}. '
+              'Example: {"content": {"action": "append", "text": "..."}}',
+          'code': 'invalid_argument',
+        };
+      }
+      modifications.add(
+        item.map((key, value) => MapEntry(key.toString(), value)),
+      );
     }
 
     if (!ApprovalService.sessionApprovedNoteModifications) {
@@ -914,7 +1039,10 @@ class ModifyNotesTool implements NativeTool {
             source: 'Agent',
           );
       if (!approved) {
-        return {'error': 'User denied the note modification batch.'};
+        return {
+          'error': 'User denied the note modification batch.',
+          'code': 'user_denied',
+        };
       }
     }
 
@@ -938,12 +1066,34 @@ class ModifyNotesTool implements NativeTool {
 const Map<String, dynamic> _modificationProperties = {
   'content': {
     'type': 'object',
+    'description':
+        'An OBJECT, never a plain string. For precise edits: '
+        '{"action": "replace_text", "old_text": "...", "new_text": "..."}; '
+        'action may be omitted when old_text and new_text are provided.',
     'properties': {
       'action': {
         'type': 'string',
-        'enum': ['append', 'prepend', 'replace', 'no-op'],
+        'enum': ['append', 'prepend', 'replace', 'replace_text', 'no-op'],
+        'description':
+            'Use replace_text (with old_text/new_text) for precise edits '
+            'such as checking off one list item; replace rewrites the whole '
+            'note or section. Inferred as replace_text when old_text and '
+            'new_text are given without an action.',
       },
-      'text': {'type': 'string'},
+      'text': {
+        'type': 'string',
+        'description': 'The text for append/prepend/replace actions.',
+      },
+      'old_text': {
+        'type': 'string',
+        'description':
+            'For replace_text: the exact existing text to replace. Must '
+            'match exactly one location; copy it verbatim from the note.',
+      },
+      'new_text': {
+        'type': 'string',
+        'description': 'For replace_text: the replacement text.',
+      },
       'section': {
         'type': 'string',
         'description':
@@ -1038,6 +1188,9 @@ class CreateNotesTool implements NativeTool {
 
   @override
   String get name => 'create_notes';
+
+  @override
+  bool get isMutating => true;
 
   @override
   String get description =>
@@ -1187,6 +1340,9 @@ class DeleteNoteTool implements NativeTool {
 
   @override
   String get name => 'delete_notes';
+
+  @override
+  bool get isMutating => true;
 
   @override
   String get description =>

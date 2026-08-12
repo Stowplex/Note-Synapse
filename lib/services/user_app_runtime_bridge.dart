@@ -2852,11 +2852,21 @@ class UserAppRuntimeBridge {
             }
           }
 
-          await modificationService.applyModifications(id, modification);
-          updatedCount++;
-          LoggerService.debug(
-            '[Synapse.updateNotes] Applied granular modification to note: $id',
-          );
+          if (NoteModificationService.isNoOpModification(modification)) {
+            // Preserve the pre-existing plugin contract: an empty or
+            // unrecognized-fields-only modification is a silent no-op
+            // success, not an error.
+            updatedCount++;
+            LoggerService.debug(
+              '[Synapse.updateNotes] No-op modification for note: $id',
+            );
+          } else {
+            await modificationService.applyModifications(id, modification);
+            updatedCount++;
+            LoggerService.debug(
+              '[Synapse.updateNotes] Applied granular modification to note: $id',
+            );
+          }
         } else {
           // Full replacement mode (existing behavior)
           final updatedNote = await _mergeNoteData(existingNote, noteData);
