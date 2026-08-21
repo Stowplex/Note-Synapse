@@ -42,14 +42,20 @@ class _FakeDatabase_0 extends _i1.SmartFake implements _i2.Database {
     : super(parent, parentInvocation);
 }
 
-class _FakeRawWriteResult_1 extends _i1.SmartFake
-    implements _i3.RawWriteResult {
-  _FakeRawWriteResult_1(Object parent, Invocation parentInvocation)
+class _FakeAppRevisionVisibility_1 extends _i1.SmartFake
+    implements _i3.AppRevisionVisibility {
+  _FakeAppRevisionVisibility_1(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeNote_2 extends _i1.SmartFake implements _i4.Note {
-  _FakeNote_2(Object parent, Invocation parentInvocation)
+class _FakeRawWriteResult_2 extends _i1.SmartFake
+    implements _i3.RawWriteResult {
+  _FakeRawWriteResult_2(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeNote_3 extends _i1.SmartFake implements _i4.Note {
+  _FakeNote_3(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
@@ -495,9 +501,16 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i5.Future<void>);
 
   @override
-  _i5.Future<void> deleteRelationshipsForNote(String? noteId) =>
+  _i5.Future<void> deleteRelationshipsForNote(
+    String? noteId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#deleteRelationshipsForNote, [noteId]),
+            Invocation.method(
+              #deleteRelationshipsForNote,
+              [noteId],
+              {#executor: executor},
+            ),
             returnValue: _i5.Future<void>.value(),
             returnValueForMissingStub: _i5.Future<void>.value(),
           )
@@ -658,6 +671,90 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
             ),
           )
           as _i5.Future<List<Map<String, dynamic>>>);
+
+  @override
+  _i5.Future<_i3.AppRevisionVisibility> computeAppRevisionVisibility(
+    String? appId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #computeAppRevisionVisibility,
+              [appId],
+              {#executor: executor},
+            ),
+            returnValue: _i5.Future<_i3.AppRevisionVisibility>.value(
+              _FakeAppRevisionVisibility_1(
+                this,
+                Invocation.method(
+                  #computeAppRevisionVisibility,
+                  [appId],
+                  {#executor: executor},
+                ),
+              ),
+            ),
+          )
+          as _i5.Future<_i3.AppRevisionVisibility>);
+
+  @override
+  _i5.Future<String?> fallbackRevisionIdForApp(
+    String? appId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #fallbackRevisionIdForApp,
+              [appId],
+              {#executor: executor},
+            ),
+            returnValue: _i5.Future<String?>.value(),
+          )
+          as _i5.Future<String?>);
+
+  @override
+  _i5.Future<bool> isAppRevisionEffectivelyVisible(
+    String? revisionId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isAppRevisionEffectivelyVisible,
+              [revisionId],
+              {#executor: executor},
+            ),
+            returnValue: _i5.Future<bool>.value(false),
+          )
+          as _i5.Future<bool>);
+
+  @override
+  _i5.Future<bool> isUserAppLibraryEffectivelyVisible(
+    int? libraryId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isUserAppLibraryEffectivelyVisible,
+              [libraryId],
+              {#executor: executor},
+            ),
+            returnValue: _i5.Future<bool>.value(false),
+          )
+          as _i5.Future<bool>);
+
+  @override
+  _i5.Future<bool> isUserAppLibraryDependencyEffectivelyVisible(
+    int? dependencyId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isUserAppLibraryDependencyEffectivelyVisible,
+              [dependencyId],
+              {#executor: executor},
+            ),
+            returnValue: _i5.Future<bool>.value(false),
+          )
+          as _i5.Future<bool>);
 
   @override
   _i5.Future<String> insertUserApp(_i12.UserApp? app) =>
@@ -834,15 +931,6 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
   _i5.Future<void> deleteUserAppLibrary(int? libraryId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteUserAppLibrary, [libraryId]),
-            returnValue: _i5.Future<void>.value(),
-            returnValueForMissingStub: _i5.Future<void>.value(),
-          )
-          as _i5.Future<void>);
-
-  @override
-  _i5.Future<void> deleteUserAppLibrariesForRevision(int? revisionId) =>
-      (super.noSuchMethod(
-            Invocation.method(#deleteUserAppLibrariesForRevision, [revisionId]),
             returnValue: _i5.Future<void>.value(),
             returnValueForMissingStub: _i5.Future<void>.value(),
           )
@@ -1282,9 +1370,16 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i5.Future<void>);
 
   @override
-  _i5.Future<void> deleteNoteConversationMappings(String? noteId) =>
+  _i5.Future<void> deleteNoteConversationMappings(
+    String? noteId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#deleteNoteConversationMappings, [noteId]),
+            Invocation.method(
+              #deleteNoteConversationMappings,
+              [noteId],
+              {#executor: executor},
+            ),
             returnValue: _i5.Future<void>.value(),
             returnValueForMissingStub: _i5.Future<void>.value(),
           )
@@ -1489,7 +1584,7 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
       (super.noSuchMethod(
             Invocation.method(#runRawWriteWithChangeCapture, [sql]),
             returnValue: _i5.Future<_i3.RawWriteResult>.value(
-              _FakeRawWriteResult_1(
+              _FakeRawWriteResult_2(
                 this,
                 Invocation.method(#runRawWriteWithChangeCapture, [sql]),
               ),
@@ -1606,7 +1701,7 @@ class MockNoteModificationService extends _i1.Mock
       (super.noSuchMethod(
             Invocation.method(#applyModifications, [noteId, modifications]),
             returnValue: _i5.Future<_i4.Note>.value(
-              _FakeNote_2(
+              _FakeNote_3(
                 this,
                 Invocation.method(#applyModifications, [noteId, modifications]),
               ),
@@ -1629,7 +1724,7 @@ class MockNoteModificationService extends _i1.Mock
       (super.noSuchMethod(
             Invocation.method(#buildNote, [data]),
             returnValue: _i5.Future<_i4.Note>.value(
-              _FakeNote_2(this, Invocation.method(#buildNote, [data])),
+              _FakeNote_3(this, Invocation.method(#buildNote, [data])),
             ),
           )
           as _i5.Future<_i4.Note>);
@@ -1639,10 +1734,27 @@ class MockNoteModificationService extends _i1.Mock
       (super.noSuchMethod(
             Invocation.method(#createNote, [data]),
             returnValue: _i5.Future<_i4.Note>.value(
-              _FakeNote_2(this, Invocation.method(#createNote, [data])),
+              _FakeNote_3(this, Invocation.method(#createNote, [data])),
             ),
           )
           as _i5.Future<_i4.Note>);
+
+  @override
+  _i5.Future<void> applyLinkModificationsForTest(
+    String? noteId,
+    dynamic linkData, {
+    _i2.DatabaseExecutor? txn,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #applyLinkModificationsForTest,
+              [noteId, linkData],
+              {#txn: txn},
+            ),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
 
   @override
   _i5.Future<String> processAttachment(dynamic attachment) =>

@@ -2900,6 +2900,213 @@ class AppLocalizationsZh extends AppLocalizations {
   String get resetOnboardingSuccess => '引导页标志已重置';
 
   @override
+  String get triggerSyncTitle => '触发同步';
+
+  @override
+  String get triggerSyncSubtitle => '对内存中的调试后端运行一次同步（不进行真实设备配对）';
+
+  @override
+  String get triggerSyncRunning => '同步中…';
+
+  @override
+  String triggerSyncResult(int touches, int seeded, int pulled, int pushed) {
+    return '同步完成——已收集 $touches 项、已初始化 $seeded 项、拉取 $pulled 项、推送 $pushed 项';
+  }
+
+  @override
+  String triggerSyncError(String error) {
+    return '同步失败：$error';
+  }
+
+  @override
+  String get cloudSync => '云同步';
+
+  @override
+  String get cloudSyncSubtitle => '通过 Google 云端硬盘在多台设备间同步笔记';
+
+  @override
+  String get cloudSyncAccountSection => 'Google 云端硬盘账号';
+
+  @override
+  String get cloudSyncStateNotConfigured => '此版本不可用';
+
+  @override
+  String get cloudSyncStateNotConfiguredDetail =>
+      '此版本未配置 Google OAuth 客户端，无法连接 Google 云端硬盘。';
+
+  @override
+  String get cloudSyncStateDisconnected => '未连接';
+
+  @override
+  String get cloudSyncStateDisconnectedDetail => '连接 Google 账号，将同步数据保存到其云端硬盘中。';
+
+  @override
+  String get cloudSyncStateConnected => '已连接';
+
+  @override
+  String get cloudSyncStateConnectedDetail =>
+      'Note Synapse 只能读写它自己在你的云端硬盘中创建的文件。';
+
+  @override
+  String get cloudSyncStateNoRefreshToken => '已连接，但会话即将过期';
+
+  @override
+  String get cloudSyncStateNoRefreshTokenDetail =>
+      'Google 未返回长期令牌。请断开后重新连接；若反复出现，同步将在每次连接约一小时后停止工作。';
+
+  @override
+  String get cloudSyncConnect => '连接 Google 云端硬盘';
+
+  @override
+  String get cloudSyncConnecting => '等待 Google 登录…';
+
+  @override
+  String get cloudSyncConnected => '已连接到 Google 云端硬盘';
+
+  @override
+  String cloudSyncConnectError(String error) {
+    return '连接失败：$error';
+  }
+
+  @override
+  String get cloudSyncDisconnect => '断开连接';
+
+  @override
+  String get cloudSyncDisconnectConfirm =>
+      '要从本设备删除已保存的 Google 云端硬盘凭据吗？已同步到云端硬盘的数据不会被删除，你随时可以重新连接。';
+
+  @override
+  String get cloudSyncDisconnected => '已断开与 Google 云端硬盘的连接';
+
+  @override
+  String get cloudSyncDatasetSection => '同步数据集';
+
+  @override
+  String get cloudSyncDatasetPending => '尚未设置';
+
+  @override
+  String get cloudSyncDatasetPendingDetail => '在你的云端硬盘中创建同步数据集，或加入已存在的数据集。';
+
+  @override
+  String get cloudSyncDatasetInProgress => '设置被中断';
+
+  @override
+  String get cloudSyncDatasetInProgressDetail => '上次设置未完成。重新运行是安全的。';
+
+  @override
+  String get cloudSyncDatasetReady => '就绪';
+
+  @override
+  String get cloudSyncDatasetReadyDetail => '本设备已加入同步数据集。';
+
+  @override
+  String get cloudSyncDatasetSetUp => '设置数据集';
+
+  @override
+  String get cloudSyncDatasetSettingUp => '正在设置…';
+
+  @override
+  String get cloudSyncDatasetDone => '同步数据集已就绪';
+
+  @override
+  String cloudSyncDatasetError(String error) {
+    return '数据集设置失败：$error';
+  }
+
+  @override
+  String get cloudSyncNowSection => '同步';
+
+  @override
+  String get cloudSyncNow => '立即同步';
+
+  @override
+  String get cloudSyncNowRunning => '同步中…';
+
+  @override
+  String cloudSyncSeeding(String table, int done, int total, int operations) {
+    return '正在准备已有数据——$table（第 $done / $total 张表），已生成 $operations 项操作';
+  }
+
+  @override
+  String cloudSyncNowResult(int touches, int seeded, int pulled, int pushed) {
+    return '同步完成——已收集 $touches 项、已初始化 $seeded 项、拉取 $pulled 项、推送 $pushed 项';
+  }
+
+  @override
+  String get cloudSyncDegraded => '同步已完成，但部分数据未能同步';
+
+  @override
+  String cloudSyncHealthTablesNotSynced(int count, String detail) {
+    return '有 $count 类内容暂不支持同步：$detail';
+  }
+
+  @override
+  String cloudSyncHealthOperationsFailed(int count, String detail) {
+    return '来自其他设备的 $count 项更改无法应用：$detail';
+  }
+
+  @override
+  String cloudSyncHealthWaitingOnEntity(int count, String detail) {
+    return '$count 项更改正在等待尚未到达的条目：$detail';
+  }
+
+  @override
+  String cloudSyncHealthWaitingOnDot(int count, String detail) {
+    return '$count 项删除正在等待本设备尚未看到的更改：$detail';
+  }
+
+  @override
+  String cloudSyncHealthMembershipNotBuilt(int count, String detail) {
+    return '$count 个关联无法重建：$detail';
+  }
+
+  @override
+  String cloudSyncHealthSince(String time) {
+    return '自 $time 起等待中';
+  }
+
+  @override
+  String get syncItemsSubnotes => '子任务';
+
+  @override
+  String get syncItemsRelationships => '笔记关联';
+
+  @override
+  String get syncItemsAttachments => '笔记附件';
+
+  @override
+  String get syncItemsConversationAttachments => '对话附件';
+
+  @override
+  String get syncItemsUserApps => '小应用';
+
+  @override
+  String get syncItemsAppRevisions => '小应用版本';
+
+  @override
+  String get syncItemsUserAppLibraries => '小应用库';
+
+  @override
+  String get syncItemsUserAppLibraryDependencies => '小应用库文件';
+
+  @override
+  String cloudSyncNowError(String error) {
+    return '同步失败：$error';
+  }
+
+  @override
+  String cloudSyncLastRun(String time) {
+    return '上次运行：$time';
+  }
+
+  @override
+  String get cloudSyncNeverRun => '本设备尚未同步过';
+
+  @override
+  String get cloudSyncEncryptionNotice =>
+      '此版本中，同步数据以未端到端加密的形式存储在你的 Google 云端硬盘中。这意味着 Google、能访问你 Google 账号的人，以及你分享这些文件的对象都可以读取其内容。';
+
+  @override
   String get dependencyLicenses => '依赖库许可证';
 
   @override

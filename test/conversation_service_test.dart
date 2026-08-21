@@ -589,33 +589,77 @@ In the context of the **FORGE** benchmark.''',
           equals(1),
         ); // Only user message remains
 
-        // The fork should be deleted since its messages are part of the subtree
-        final deletedFork = await conversationService
+        // M1.12: the fork's messages were all part of the deleted subtree,
+        // so the fork is now derived-empty -- but per this milestone's own
+        // design decision (see _cleanupEmptyConversations's doc comment in
+        // database_service.dart), a derived-empty conversation is no longer
+        // physically removed or tombstoned, only excluded from
+        // includeEmpty: false listings. getConversationWithMessages calls
+        // the unconditional getConversation (not includeEmpty-aware), so it
+        // now correctly still finds the row, just with zero messages.
+        final emptiedFork = await conversationService
             .getConversationWithMessages(fork1.id);
-        expect(deletedFork, isNull);
+        expect(emptiedFork, isNotNull);
+        expect(emptiedFork!.messages, isEmpty);
+
+        // The derived-empty check itself is exercised via
+        // getAllConversations(includeEmpty: false), the actual mechanism
+        // that replaces "physically deleted" for display purposes.
+        final nonEmptyConversations = await databaseService
+            .getAllConversations(includeEmpty: false);
+        expect(
+          nonEmptyConversations.map((c) => c.id),
+          isNot(contains(fork1.id)),
+        );
       });
 
-      test('Garbage collect empty conversations after deletion', () async {
-        final conversation = await conversationService.createConversation(
-          title: 'To Be Emptied',
-        );
+      test(
+        'Derived-empty conversations are excluded from non-empty listings '
+        'after deletion, but not physically removed (M1.12 design decision)',
+        () async {
+          final conversation = await conversationService.createConversation(
+            title: 'To Be Emptied',
+          );
 
-        await conversationService.addUserMessage(
-          conversationId: conversation.id,
-          content: 'Only message',
-        );
+          await conversationService.addUserMessage(
+            conversationId: conversation.id,
+            content: 'Only message',
+          );
 
-        final messages = await conversationService.getConversationWithMessages(
-          conversation.id,
-        );
-        final userMessage = messages!.messages.first;
+          final messages = await conversationService
+              .getConversationWithMessages(conversation.id);
+          final userMessage = messages!.messages.first;
 
-        await conversationService.deleteMessageWithSubtree(userMessage.id);
+          await conversationService.deleteMessageWithSubtree(userMessage.id);
 
-        final deletedConversation = await conversationService
-            .getConversationWithMessages(conversation.id);
-        expect(deletedConversation, isNull);
-      });
+          // Still physically present and findable by direct id lookup --
+          // this milestone deliberately does NOT tombstone or remove a
+          // derived-empty conversation (see _cleanupEmptyConversations's
+          // doc comment in database_service.dart for the full reasoning:
+          // doing so would reintroduce the same tombstone-vs-concurrent-
+          // membership-add race round 14 already fixed for messages).
+          final emptiedConversation = await conversationService
+              .getConversationWithMessages(conversation.id);
+          expect(emptiedConversation, isNotNull);
+          expect(emptiedConversation!.messages, isEmpty);
+
+          // ...but excluded from the "real" (non-empty) listing.
+          final nonEmptyConversations = await databaseService
+              .getAllConversations(includeEmpty: false);
+          expect(
+            nonEmptyConversations.map((c) => c.id),
+            isNot(contains(conversation.id)),
+          );
+
+          // ...while still included when the caller explicitly wants
+          // everything.
+          final allConversations = await databaseService.getAllConversations();
+          expect(
+            allConversations.map((c) => c.id),
+            contains(conversation.id),
+          );
+        },
+      );
 
       test('Delete message with attachments', () async {
         final conversation = await conversationService.createConversation(

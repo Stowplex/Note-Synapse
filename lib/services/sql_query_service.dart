@@ -3,7 +3,6 @@ import 'package:sqlparser/sqlparser.dart';
 import 'data_change_notifier.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
-import 'service_locator.dart';
 
 /// Callback type for requesting write operation approval.
 /// Returns true if the user approves the write operation.
@@ -162,6 +161,47 @@ class SqlQueryService {
         queryType == SqlQueryType.update ||
         queryType == SqlQueryType.delete ||
         queryType == SqlQueryType.replace;
+  }
+
+  /// M1.5: DDL is rejected outright, unconditionally — never offered
+  /// through the write-approval flow at all, approved or not. This closes
+  /// the exact bypass named in `executeQuery`'s own comment below ("a DROP
+  /// TABLE takes its triggers with it"): the M1.5 hard-delete guard
+  /// (`BEFORE DELETE ... RAISE(ABORT, ...)` triggers installed by
+  /// `DatabaseService` on the four User-App-family tables) is itself just
+  /// schema — a `DROP TRIGGER guard_no_hard_delete_user_apps`, a
+  /// `DROP TABLE`/`ALTER TABLE ... RENAME TO` dance, or any other DDL
+  /// approved through this service's ordinary write-approval flow could
+  /// silently remove or neuter it. Ordinary DML (`INSERT`/`UPDATE`/
+  /// `DELETE`/`REPLACE`) is unaffected by this check and continues through
+  /// the existing approval flow exactly as before. **M1.13 note**: this
+  /// check is keyed purely on statement TYPE (`CREATE`/`DROP`/`ALTER`,
+  /// switched on below), never on a table name, so it already fully
+  /// covers the ten additional tables M1.13 adds to
+  /// `_hardDeleteGuardedTables` too — no change was needed here, or in
+  /// assets/prompts/user_app/api_documentation.md's own description of
+  /// this behavior, when that guard extension landed.
+  bool isDdlQuery(SqlQueryType queryType) {
+    switch (queryType) {
+      case SqlQueryType.createTable:
+      case SqlQueryType.createIndex:
+      case SqlQueryType.createTrigger:
+      case SqlQueryType.createView:
+      case SqlQueryType.dropTable:
+      case SqlQueryType.dropIndex:
+      case SqlQueryType.dropTrigger:
+      case SqlQueryType.dropView:
+      case SqlQueryType.alterTable:
+        return true;
+      case SqlQueryType.select:
+      case SqlQueryType.insert:
+      case SqlQueryType.update:
+      case SqlQueryType.delete:
+      case SqlQueryType.replace:
+      case SqlQueryType.pragma:
+      case SqlQueryType.other:
+        return false;
+    }
   }
 
   /// Read-only PRAGMAs that take a `(...)` argument (inspection forms).
@@ -353,6 +393,25 @@ class SqlQueryService {
     LoggerService.debug(
       '[SqlQueryService] Executing query type: ${getQueryTypeDescription(queryType)}, read-only: $isReadOnly',
     );
+
+    // M1.5: DDL is rejected outright, before it ever reaches the
+    // write-approval flow — see isDdlQuery's doc comment. This check is
+    // unconditional: it runs regardless of _sessionApprovedWrites or
+    // requireApprovalForWrites/allowWriteOperations, so DDL can never be
+    // approved through this service, by a user or otherwise.
+    if (isDdlQuery(queryType)) {
+      return SqlQueryResult(
+        success: false,
+        error:
+            'DDL statements (${getQueryTypeDescription(queryType)}) are not '
+            'allowed through this service. Schema changes (including '
+            'anything that could remove or alter a hard-delete guard '
+            'trigger, e.g. DROP TRIGGER/DROP TABLE/ALTER TABLE) must go '
+            'through a reviewed database migration, not an AI-approved '
+            'write.',
+        isReadOnly: false,
+      );
+    }
 
     // If it's a write operation, check approval
     if (!isReadOnly) {

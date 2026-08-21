@@ -45,6 +45,27 @@ void main() {
   DataChangeEvent merged() =>
       events.fold(const DataChangeEvent(), (a, b) => a.merge(b));
 
+  /// M1.5 changed SqlQueryService.executeQuery to reject all DDL outright,
+  /// before it ever reaches the write-approval flow (see
+  /// test/services/sql_query_service_ddl_rejection_test.dart) — so DDL can
+  /// no longer reach the database through `run()`/SqlQueryService at all,
+  /// unlike when the tests below were first written. The underlying
+  /// DatabaseService degraded-capture mechanism these tests exercise
+  /// (markSchemaChangedForCapture + reinstall-on-next-write) is still real
+  /// and still matters for schema changes that happen through some other
+  /// path (e.g. recovery/import, or a future privileged migration tool) —
+  /// so DDL here is driven directly against the raw connection, with
+  /// [DatabaseService.markSchemaChangedForCapture] and the bulk
+  /// notification called explicitly, mirroring exactly what
+  /// SqlQueryService used to do internally for a DDL statement, to keep
+  /// exercising that same downstream logic.
+  Future<void> runDdlDirectly(String sql) async {
+    final rawDb = await db.database;
+    await rawDb.execute(sql);
+    db.markSchemaChangedForCapture();
+    notifier.publish(const DataChangeEvent(bulk: true));
+  }
+
   group('classification', () {
     test('REPLACE INTO is capturable DML', () {
       final type = service.getQueryType(
@@ -73,19 +94,29 @@ void main() {
   });
 
   group('journal capture', () {
-    test('INSERT / UPDATE / DELETE on notes publish the affected ids',
-        () async {
-      await insertNoteRow('n1');
-      await run("UPDATE notes SET title = 'renamed' WHERE id = 'n1'");
-      await run("DELETE FROM notes WHERE id = 'n1'");
-      await notifier.waitForIdle();
+    test(
+      'INSERT / UPDATE / tombstone-UPDATE on notes publish the affected ids',
+      () async {
+        // M1.13 extended the hard-delete guard to `notes` itself, so a
+        // real `DELETE FROM notes` (the third mutation kind this test
+        // originally used) is no longer reachable at all -- it throws
+        // before the statement completes, exactly like every other real
+        // code path already does today (deleteNote has issued a tombstone
+        // `UPDATE ... SET __deleted__ = 1` since M1.10, never a real
+        // DELETE). This test now exercises the actual third mutation kind
+        // production code performs: the tombstone write.
+        await insertNoteRow('n1');
+        await run("UPDATE notes SET title = 'renamed' WHERE id = 'n1'");
+        await run("UPDATE notes SET __deleted__ = 1 WHERE id = 'n1'");
+        await notifier.waitForIdle();
 
-      expect(events, hasLength(3));
-      for (final event in events) {
-        expect(event.noteIds, {'n1'});
-        expect(event.bulk, isFalse);
-      }
-    });
+        expect(events, hasLength(3));
+        for (final event in events) {
+          expect(event.noteIds, {'n1'});
+          expect(event.bulk, isFalse);
+        }
+      },
+    );
 
     test('UPDATE that rewrites the primary key captures BOTH ids', () async {
       await insertNoteRow('old-id');
@@ -227,25 +258,40 @@ void main() {
       expect(merged().noteIds, {'n1'});
     });
 
-    test('tag delete captures affected notes before the join rows go away',
-        () async {
-      await insertNoteRow('n1');
-      await run(
-        "INSERT INTO tags (id, name, color, createdAt) "
-        "VALUES ('t1', 'doomed', '#fff', 1)",
-      );
-      await run("INSERT INTO note_tags (noteId, tagId) VALUES ('n1', 't1')");
-      // Drain any pending events from setup statements before clearing, so
-      // a late-arriving event cannot leak into the assertion window.
-      await notifier.waitForIdle();
-      events.clear();
+    test(
+      'tag tombstone + note_tags cleanup captures affected notes before '
+      'the join rows go away',
+      () async {
+        // M1.13 extended the hard-delete guard to `tags` itself, so a real
+        // `DELETE FROM tags` (which used to `ON DELETE CASCADE` into
+        // `note_tags`, the scenario this test originally exercised) can no
+        // longer happen at all. This matches real production behavior
+        // since M1.9: `deleteTag` tombstones the `tags` row (an UPDATE,
+        // never a DELETE) and separately, explicitly deletes the
+        // `note_tags` rows itself (a real delete is still correct for
+        // that OR-Set membership table) -- the cascade this test used to
+        // rely on has not fired for a real `deleteTag` call since M1.9,
+        // only the test's own raw SQL still assumed it. This test now
+        // reproduces that real two-statement sequence instead.
+        await insertNoteRow('n1');
+        await run(
+          "INSERT INTO tags (id, name, color, createdAt) "
+          "VALUES ('t1', 'doomed', '#fff', 1)",
+        );
+        await run("INSERT INTO note_tags (noteId, tagId) VALUES ('n1', 't1')");
+        // Drain any pending events from setup statements before clearing, so
+        // a late-arriving event cannot leak into the assertion window.
+        await notifier.waitForIdle();
+        events.clear();
 
-      await run("DELETE FROM tags WHERE id = 't1'");
-      await notifier.waitForIdle();
+        await run("UPDATE tags SET __deleted__ = 1 WHERE id = 't1'");
+        await run("DELETE FROM note_tags WHERE tagId = 't1'");
+        await notifier.waitForIdle();
 
-      expect(merged().tagsChanged, isTrue);
-      expect(merged().noteIds, {'n1'});
-    });
+        expect(merged().tagsChanged, isTrue);
+        expect(merged().noteIds, {'n1'});
+      },
+    );
 
     test('filter writes publish filtersChanged only', () async {
       await run(
@@ -259,7 +305,9 @@ void main() {
 
     test('writes to a plugin-created table publish nothing beyond the DDL '
         'bulk', () async {
-      await run('CREATE TABLE plugin_data (id TEXT PRIMARY KEY, value TEXT)');
+      await runDdlDirectly(
+        'CREATE TABLE plugin_data (id TEXT PRIMARY KEY, value TEXT)',
+      );
       await notifier.waitForIdle();
       expect(merged().bulk, isTrue, reason: 'DDL publishes bulk');
       // Drain any pending events from setup statements before clearing, so
@@ -275,8 +323,8 @@ void main() {
 
     test('a persistent user trigger cascading into notes is captured',
         () async {
-      await run('CREATE TABLE plugin_log (id TEXT PRIMARY KEY)');
-      await run(
+      await runDdlDirectly('CREATE TABLE plugin_log (id TEXT PRIMARY KEY)');
+      await runDdlDirectly(
         "CREATE TRIGGER plugin_cascade AFTER INSERT ON plugin_log BEGIN "
         "INSERT INTO notes (id, title, content, type, createdAt, updatedAt) "
         "VALUES ('via-trigger', 't', 'c', 'note', 1, 1); END",
@@ -316,7 +364,7 @@ void main() {
         'failing unrelated writes', () async {
       // Install triggers first so the DROP takes some of them down.
       await insertNoteRow('n0');
-      await run('DROP TABLE filters');
+      await runDdlDirectly('DROP TABLE filters');
       // Drain any pending events from setup statements before clearing, so
       // a late-arriving event cannot leak into the assertion window.
       await notifier.waitForIdle();

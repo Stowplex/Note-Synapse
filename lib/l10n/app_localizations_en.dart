@@ -2991,6 +2991,251 @@ class AppLocalizationsEn extends AppLocalizations {
   String get resetOnboardingSuccess => 'Onboarding flag reset';
 
   @override
+  String get triggerSyncTitle => 'Trigger Sync';
+
+  @override
+  String get triggerSyncSubtitle =>
+      'Run one sync round against an in-memory debug backend (no real device pairing)';
+
+  @override
+  String get triggerSyncRunning => 'Syncing…';
+
+  @override
+  String triggerSyncResult(int touches, int seeded, int pulled, int pushed) {
+    return 'Sync complete — drained $touches, seeded $seeded, pulled $pulled, pushed $pushed';
+  }
+
+  @override
+  String triggerSyncError(String error) {
+    return 'Sync failed: $error';
+  }
+
+  @override
+  String get cloudSync => 'Cloud Sync';
+
+  @override
+  String get cloudSyncSubtitle =>
+      'Sync your notes across devices using Google Drive';
+
+  @override
+  String get cloudSyncAccountSection => 'Google Drive account';
+
+  @override
+  String get cloudSyncStateNotConfigured => 'Not available in this build';
+
+  @override
+  String get cloudSyncStateNotConfiguredDetail =>
+      'This build has no Google OAuth client configured, so it cannot connect to Google Drive.';
+
+  @override
+  String get cloudSyncStateDisconnected => 'Not connected';
+
+  @override
+  String get cloudSyncStateDisconnectedDetail =>
+      'Connect a Google account to store your sync data in its Drive.';
+
+  @override
+  String get cloudSyncStateConnected => 'Connected';
+
+  @override
+  String get cloudSyncStateConnectedDetail =>
+      'Note Synapse can read and write only the files it creates in your Drive.';
+
+  @override
+  String get cloudSyncStateNoRefreshToken =>
+      'Connected, but the session will expire';
+
+  @override
+  String get cloudSyncStateNoRefreshTokenDetail =>
+      'Google did not return a long-lived token. Disconnect and connect again; if it keeps happening, sync will stop working about an hour after each connection.';
+
+  @override
+  String get cloudSyncConnect => 'Connect Google Drive';
+
+  @override
+  String get cloudSyncConnecting => 'Waiting for Google sign-in…';
+
+  @override
+  String get cloudSyncConnected => 'Connected to Google Drive';
+
+  @override
+  String cloudSyncConnectError(String error) {
+    return 'Could not connect: $error';
+  }
+
+  @override
+  String get cloudSyncDisconnect => 'Disconnect';
+
+  @override
+  String get cloudSyncDisconnectConfirm =>
+      'Remove the stored Google Drive credentials from this device? Nothing already synced to Drive is deleted, and you can connect again at any time.';
+
+  @override
+  String get cloudSyncDisconnected => 'Disconnected from Google Drive';
+
+  @override
+  String get cloudSyncDatasetSection => 'Sync dataset';
+
+  @override
+  String get cloudSyncDatasetPending => 'Not set up yet';
+
+  @override
+  String get cloudSyncDatasetPendingDetail =>
+      'Create a sync dataset in your Drive, or join the one that is already there.';
+
+  @override
+  String get cloudSyncDatasetInProgress => 'Setup was interrupted';
+
+  @override
+  String get cloudSyncDatasetInProgressDetail =>
+      'The last setup attempt did not finish. Running it again is safe.';
+
+  @override
+  String get cloudSyncDatasetReady => 'Ready';
+
+  @override
+  String get cloudSyncDatasetReadyDetail =>
+      'This device has joined the sync dataset.';
+
+  @override
+  String get cloudSyncDatasetSetUp => 'Set up dataset';
+
+  @override
+  String get cloudSyncDatasetSettingUp => 'Setting up…';
+
+  @override
+  String get cloudSyncDatasetDone => 'Sync dataset ready';
+
+  @override
+  String cloudSyncDatasetError(String error) {
+    return 'Dataset setup failed: $error';
+  }
+
+  @override
+  String get cloudSyncNowSection => 'Sync';
+
+  @override
+  String get cloudSyncNow => 'Sync now';
+
+  @override
+  String get cloudSyncNowRunning => 'Syncing…';
+
+  @override
+  String cloudSyncSeeding(String table, int done, int total, int operations) {
+    return 'Preparing existing data — $table ($done of $total tables), $operations operations so far';
+  }
+
+  @override
+  String cloudSyncNowResult(int touches, int seeded, int pulled, int pushed) {
+    return 'Sync complete — drained $touches, seeded $seeded, pulled $pulled, pushed $pushed';
+  }
+
+  @override
+  String get cloudSyncDegraded => 'Sync finished, but some data did not sync';
+
+  @override
+  String cloudSyncHealthTablesNotSynced(int count, String detail) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kinds of item do not sync yet',
+      one: '1 kind of item does not sync yet',
+    );
+    return '$_temp0: $detail';
+  }
+
+  @override
+  String cloudSyncHealthOperationsFailed(int count, String detail) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count changes from other devices could not be applied',
+      one: '1 change from another device could not be applied',
+    );
+    return '$_temp0: $detail';
+  }
+
+  @override
+  String cloudSyncHealthWaitingOnEntity(int count, String detail) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count changes are waiting for items that have not arrived',
+      one: '1 change is waiting for an item that has not arrived',
+    );
+    return '$_temp0: $detail';
+  }
+
+  @override
+  String cloudSyncHealthWaitingOnDot(int count, String detail) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count removals are waiting for changes this device has not seen yet',
+      one: '1 removal is waiting for a change this device has not seen yet',
+    );
+    return '$_temp0: $detail';
+  }
+
+  @override
+  String cloudSyncHealthMembershipNotBuilt(int count, String detail) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count links could not be recreated',
+      one: '1 link could not be recreated',
+    );
+    return '$_temp0: $detail';
+  }
+
+  @override
+  String cloudSyncHealthSince(String time) {
+    return 'waiting since $time';
+  }
+
+  @override
+  String get syncItemsSubnotes => 'Sub-tasks';
+
+  @override
+  String get syncItemsRelationships => 'Note links';
+
+  @override
+  String get syncItemsAttachments => 'Note attachments';
+
+  @override
+  String get syncItemsConversationAttachments => 'Chat attachments';
+
+  @override
+  String get syncItemsUserApps => 'Mini apps';
+
+  @override
+  String get syncItemsAppRevisions => 'Mini app versions';
+
+  @override
+  String get syncItemsUserAppLibraries => 'Mini app libraries';
+
+  @override
+  String get syncItemsUserAppLibraryDependencies => 'Mini app library files';
+
+  @override
+  String cloudSyncNowError(String error) {
+    return 'Sync failed: $error';
+  }
+
+  @override
+  String cloudSyncLastRun(String time) {
+    return 'Last run: $time';
+  }
+
+  @override
+  String get cloudSyncNeverRun => 'Not synced on this device yet';
+
+  @override
+  String get cloudSyncEncryptionNotice =>
+      'Sync data is stored in your Google Drive without end-to-end encryption in this version. That means Google, anyone with access to your Google account, and anyone you share these files with can read it.';
+
+  @override
   String get dependencyLicenses => 'Dependency Library Licenses';
 
   @override

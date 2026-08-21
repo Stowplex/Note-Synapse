@@ -65,6 +65,22 @@
 				<string>notesynapse</string>
 			</array>
 		</dict>
+		<!-- Google Drive sync OAuth redirect (M2.9). The scheme is the
+		     "reversed client ID" of this build variant's Google OAuth
+		     client, supplied as a build setting from
+		     ios/Flutter/Debug.xcconfig and ios/Flutter/Release.xcconfig so
+		     Debug and Release register different schemes without touching
+		     project.pbxproj. -->
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.github.kkspeed.notesynapse.googledrive</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(GOOGLE_REVERSED_CLIENT_ID)</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

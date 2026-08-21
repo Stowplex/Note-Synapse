@@ -307,7 +307,8 @@ void main() {
           pinned INTEGER NOT NULL DEFAULT 0,
           isArchived INTEGER NOT NULL DEFAULT 0,
           recurrenceRule TEXT,
-          metadata TEXT
+          metadata TEXT,
+          __deleted__ INTEGER NOT NULL DEFAULT 0
         )
       ''');
         await rawDb!.execute('''
@@ -317,7 +318,8 @@ void main() {
           name TEXT NOT NULL,
           content TEXT NOT NULL,
           createdAt INTEGER NOT NULL,
-          isCompleted INTEGER NOT NULL DEFAULT 0
+          isCompleted INTEGER NOT NULL DEFAULT 0,
+          __deleted__ INTEGER NOT NULL DEFAULT 0
         )
       ''');
         await rawDb!.execute('''
@@ -345,7 +347,8 @@ void main() {
           fileType TEXT NOT NULL,
           isRelativePath INTEGER NOT NULL DEFAULT 0,
           createdAt INTEGER NOT NULL,
-          includeInAIContext INTEGER NOT NULL DEFAULT 1
+          includeInAIContext INTEGER NOT NULL DEFAULT 1,
+          __deleted__ INTEGER NOT NULL DEFAULT 0
         )
       ''');
         await rawDb!.execute('''

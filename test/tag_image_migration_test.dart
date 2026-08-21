@@ -27,41 +27,65 @@ void main() {
     expect(colNames, contains('imagePath'));
   });
 
-  test('tag_images cascade deletes when tag is deleted', () async {
-    final dbService = DatabaseService.createNew();
-    final db = await dbService.database;
+  test(
+    'tag_images becomes invisible (not cascade-deleted) once the owning '
+    'tag is tombstoned',
+    () async {
+      // This test used to prove `tag_images` real-cascade-deletes via the
+      // schema's `ON DELETE CASCADE` FK when `tags` itself is
+      // real-deleted. That stopped being how tag removal actually works
+      // back in M1.9 (`deleteTag`/`replaceTag` tombstone the `tags` row,
+      // an UPDATE, never a real DELETE -- the FK cascade genuinely never
+      // fires for either function since then), and M1.13 additionally
+      // installed a hard-delete guard trigger directly on `tags` at the
+      // database level, so a raw `db.delete('tags', ...)` like this test
+      // used to issue now throws outright rather than merely being
+      // unreachable through the service layer. What actually happens to a
+      // tag's image today -- proven here via the real `deleteTag` call,
+      // not a raw DELETE -- is M1.9's "derive, don't tombstone" design:
+      // the `tag_images` row is left physically in place (no `__deleted__`
+      // column of its own) and `getTagImage`/`getAllTagImages` instead
+      // derive its visibility from the owning tag's own liveness via a
+      // JOIN.
+      final dbService = DatabaseService.createNew();
+      final db = await dbService.database;
 
-    // Enable foreign keys (needed for cascade)
-    await db.execute('PRAGMA foreign_keys = ON');
+      await db.insert('tags', {
+        'id': 'test-tag-id',
+        'name': 'TestTag',
+        'color': '#2196F3',
+        'createdAt': DateTime.now().millisecondsSinceEpoch,
+        'usageCount': 0,
+      });
+      await db.insert('tag_images', {
+        'tagId': 'test-tag-id',
+        'imagePath': 'builtin:sunset-glow',
+      });
 
-    // Insert a tag
-    await db.insert('tags', {
-      'id': 'test-tag-id',
-      'name': 'TestTag',
-      'color': '#2196F3',
-      'createdAt': DateTime.now().millisecondsSinceEpoch,
-      'usageCount': 0,
-    });
+      var images = await db.query(
+        'tag_images',
+        where: 'tagId = ?',
+        whereArgs: ['test-tag-id'],
+      );
+      expect(images.length, 1);
+      expect(await dbService.getTagImage('test-tag-id'), 'builtin:sunset-glow');
 
-    // Insert a tag image
-    await db.insert('tag_images', {
-      'tagId': 'test-tag-id',
-      'imagePath': 'builtin:sunset-glow',
-    });
+      await dbService.deleteTag('TestTag');
 
-    // Verify it exists
-    var images = await db.query('tag_images',
-        where: 'tagId = ?', whereArgs: ['test-tag-id']);
-    expect(images.length, 1);
-
-    // Delete the tag
-    await db.delete('tags', where: 'id = ?', whereArgs: ['test-tag-id']);
-
-    // Verify cascade delete
-    images = await db.query('tag_images',
-        where: 'tagId = ?', whereArgs: ['test-tag-id']);
-    expect(images.length, 0);
-  });
+      // Still physically present -- not cascade-deleted, not tombstoned
+      // itself.
+      images = await db.query(
+        'tag_images',
+        where: 'tagId = ?',
+        whereArgs: ['test-tag-id'],
+      );
+      expect(images.length, 1);
+      // ...but no longer visible through the read path, since the owning
+      // tag is now tombstoned.
+      expect(await dbService.getTagImage('test-tag-id'), isNull);
+      expect(await dbService.getAllTagImages(), isNot(contains('test-tag-id')));
+    },
+  );
 
   test('DatabaseService.setTagImage inserts image path', () async {
     final dbService = DatabaseService.createNew();

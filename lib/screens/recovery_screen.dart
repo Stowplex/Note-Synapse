@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:archive/archive_io.dart';
@@ -12,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
+import '../services/recovery_merge_service.dart';
 import '../utils/file_utils.dart';
 import '../providers/app_provider.dart';
 import 'raw_data_manager/raw_data_manager_screen.dart';
@@ -26,6 +26,13 @@ class RecoveryScreen extends StatefulWidget {
 }
 
 class _RecoveryScreenState extends State<RecoveryScreen> {
+  // M1.6: the actual per-table merge logic lives in RecoveryMergeService
+  // (lib/services/recovery_merge_service.dart), extracted out of this
+  // State class specifically so it can be exercised by dedicated, isolated
+  // tests (test/recovery_merge_service_test.dart) independent of this
+  // widget's file-picker/BuildContext/l10n/platform-channel machinery.
+  final RecoveryMergeService _mergeService = RecoveryMergeService();
+
   bool _isBackingUp = false;
   double _backupProgress = 0.0;
   final List<String> _backupLogs = [];
@@ -578,46 +585,46 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       _updateImportProgress(0.06);
 
       // Step 1: Merge the notes table
-      await _mergeNotes(stagingDb, migratedBackupDb);
+      await _mergeService.mergeNotes(stagingDb, migratedBackupDb);
 
       _addImportLog(l10n.mergingSubNotes);
       _updateImportProgress(0.12);
 
       // Step 2: Insert all subnotes
-      await _mergeSubNotes(stagingDb, migratedBackupDb);
+      await _mergeService.mergeSubNotes(stagingDb, migratedBackupDb);
 
       _addImportLog(l10n.mergingTags);
       _updateImportProgress(0.18);
 
       // Step 3: Insert all tags
-      await _mergeTags(stagingDb, migratedBackupDb);
+      await _mergeService.mergeTags(stagingDb, migratedBackupDb);
 
       _addImportLog('Merging tag images...');
-      await _mergeTagImages(stagingDb, migratedBackupDb);
+      await _mergeService.mergeTagImages(stagingDb, migratedBackupDb);
 
       _addImportLog('Merging note-tag relationships...');
       _updateImportProgress(0.24);
 
       // Step 4: Merge note_tags table
-      await _mergeNoteTags(stagingDb, migratedBackupDb);
+      await _mergeService.mergeNoteTags(stagingDb, migratedBackupDb);
 
       _addImportLog(l10n.mergingRelationships);
       _updateImportProgress(0.30);
 
       // Step 5: Insert all relationships
-      await _mergeRelationships(stagingDb, migratedBackupDb);
+      await _mergeService.mergeRelationships(stagingDb, migratedBackupDb);
 
       _addImportLog(l10n.mergingFilters);
       _updateImportProgress(0.36);
 
       // Step 6: Insert all unique filters
-      await _mergeFilters(stagingDb, migratedBackupDb);
+      await _mergeService.mergeFilters(stagingDb, migratedBackupDb);
 
       _addImportLog(l10n.mergingUserApps);
       _updateImportProgress(0.42);
 
       // Step 7: Merge user apps
-      await _mergeUserApps(stagingDb, migratedBackupDb);
+      await _mergeService.mergeUserApps(stagingDb, migratedBackupDb);
 
       _addImportLog(l10n.copyingAttachments);
       _updateImportProgress(0.48);
@@ -643,60 +650,75 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       _updateImportProgress(0.54);
 
       // Step 8: Merge attachments table
-      await _mergeAttachments(stagingDb, migratedBackupDb);
+      await _mergeService.mergeAttachments(stagingDb, migratedBackupDb);
 
       _addImportLog('Merging conversations...');
       _updateImportProgress(0.60);
 
       // Step 9: Insert all conversations that are not already in the db (by id)
-      await _mergeConversations(stagingDb, migratedBackupDb);
+      await _mergeService.mergeConversations(stagingDb, migratedBackupDb);
 
       _addImportLog('Merging conversation messages...');
       _updateImportProgress(0.66);
 
       // Step 10: Insert all conversation messages that are not already in the db (by message id)
-      await _mergeConversationMessages(stagingDb, migratedBackupDb);
+      await _mergeService.mergeConversationMessages(stagingDb, migratedBackupDb);
 
       _addImportLog('Merging conversation attachments...');
       _updateImportProgress(0.72);
 
       // Step 11: Insert all conversation attachments that are not already in db (by id)
-      await _mergeConversationAttachments(stagingDb, migratedBackupDb);
+      await _mergeService.mergeConversationAttachments(stagingDb, migratedBackupDb);
 
       _addImportLog('Merging conversation-message mappings...');
       _updateImportProgress(0.78);
 
       // Step 12: Insert all unique conversation - message mappings by (conversationId, messageId)
-      await _mergeConversationMessageMappings(stagingDb, migratedBackupDb);
+      await _mergeService.mergeConversationMessageMappings(stagingDb, migratedBackupDb);
 
       _addImportLog('Merging message parents...');
       _updateImportProgress(0.84);
 
       // Step 13: Insert all unique message parents (unique by messageId, parentMessageId)
-      await _mergeMessageParents(stagingDb, migratedBackupDb);
+      await _mergeService.mergeMessageParents(stagingDb, migratedBackupDb);
 
       _addImportLog('Merging conversation-tag mappings...');
       _updateImportProgress(0.87);
 
       // Step 14: Insert all unique conversation tag mappings (conversationId, tagId)
-      await _mergeConversationTagMappings(stagingDb, migratedBackupDb);
+      await _mergeService.mergeConversationTagMappings(stagingDb, migratedBackupDb);
 
       _addImportLog('Merging conversation-note mappings...');
       _updateImportProgress(0.90);
 
       // Step 15: Insert all conversation note mapping unique by (noteId, conversationId)
-      await _mergeConversationNoteMappings(stagingDb, migratedBackupDb);
+      await _mergeService.mergeConversationNoteMappings(stagingDb, migratedBackupDb);
 
       _addImportLog('Merging note annotations...');
       _updateImportProgress(0.92);
 
       // Step 16: Merge note_annotations (immutable: insert-or-skip by UUID)
-      await _mergeNoteAnnotations(stagingDb, migratedBackupDb);
+      await _mergeService.mergeNoteAnnotations(stagingDb, migratedBackupDb);
 
       _addImportLog('Merging tag workflow bindings...');
-      // Step 17: Merge tag_workflow_bindings (upsert by pattern primary key)
-      await _mergeTagWorkflowBindings(stagingDb, migratedBackupDb);
+      // Step 17: Merge tag_workflow_bindings (insert-if-absent by pattern
+      // primary key; a pattern already present in staging, in whatever
+      // liveness state, is left untouched — see mergeTagWorkflowBindings's
+      // own M1.7 doc comment for why this is no longer an unconditional
+      // upsert)
+      await _mergeService.mergeTagWorkflowBindings(stagingDb, migratedBackupDb);
 
+      // Deliberately NOT merged, by design, and not merely omitted —
+      // `multi_function_apps` and the fifteen M1.1 CRDT-cloud-sync
+      // control-plane tables (`sync_field_state`, `sync_set_state`,
+      // `sync_grave`, `sync_touch_log`, `sync_pending_ops`, `sync_state`,
+      // `sync_ack_frontier`, `sync_device_labels`, `sync_view_cache`,
+      // `sync_blob_refs`, `sync_publish_intent`, `sync_materialize_queue`,
+      // `sync_conflict_copies`, `sync_dedup_index`, `sync_dot_redirects`).
+      // See RecoveryMergeService's own class doc comment
+      // (lib/services/recovery_merge_service.dart) for the full rationale
+      // — kept there now, alongside the merge methods it documents, rather
+      // than here.
       await migratedBackupDb.close();
       await stagingDb.close();
 
@@ -748,903 +770,6 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
             backgroundColor: Colors.red,
           ),
         );
-      }
-    }
-  }
-
-  Future<void> _mergeNotes(Database stagingDb, Database backupDb) async {
-    // Get all notes from backup
-    final backupNotes = await backupDb.query('notes');
-
-    for (final note in backupNotes) {
-      // Check if note exists in staging
-      final existingNotes = await stagingDb.query(
-        'notes',
-        where: 'id = ?',
-        whereArgs: [note['id']],
-      );
-
-      if (existingNotes.isNotEmpty) {
-        // Check if backup note is newer
-        final existingNote = existingNotes.first;
-        final existingUpdatedAt = existingNote['updatedAt'] as int;
-        final backupUpdatedAt = note['updatedAt'] as int;
-
-        if (backupUpdatedAt > existingUpdatedAt) {
-          // Replace with backup note - filter to only existing columns
-          final filteredData = await _filterDataForTable(
-            stagingDb,
-            'notes',
-            note,
-          );
-          await stagingDb.update(
-            'notes',
-            filteredData,
-            where: 'id = ?',
-            whereArgs: [note['id']],
-          );
-        }
-      } else {
-        // Insert new note - filter to only existing columns
-        final filteredData = await _filterDataForTable(
-          stagingDb,
-          'notes',
-          note,
-        );
-        await stagingDb.insert('notes', filteredData);
-      }
-    }
-  }
-
-  Future<void> _mergeNoteAnnotations(
-    Database stagingDb,
-    Database backupDb,
-  ) async {
-    // note_annotations may not exist in older backups — skip gracefully
-    final tables = await backupDb.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='note_annotations'",
-    );
-    if (tables.isEmpty) return;
-
-    final backupAnnotations = await backupDb.query('note_annotations');
-
-    for (final ann in backupAnnotations) {
-      final id = ann['id'] as String;
-      final existing = await stagingDb.query(
-        'note_annotations',
-        where: 'id = ?',
-        whereArgs: [id],
-        limit: 1,
-      );
-
-      if (existing.isEmpty) {
-        // Not in staging → insert, filtering to known columns for safety
-        final filteredData = await _filterDataForTable(
-          stagingDb,
-          'note_annotations',
-          ann,
-        );
-        await stagingDb.insert('note_annotations', filteredData);
-      }
-      // Same UUID found → skip (immutable record, idempotent)
-    }
-  }
-
-  Future<void> _mergeTagWorkflowBindings(
-    Database stagingDb,
-    Database backupDb,
-  ) async {
-    // tag_workflow_bindings may not exist in older backups — skip gracefully
-    final tables = await backupDb.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='tag_workflow_bindings'",
-    );
-    if (tables.isEmpty) return;
-
-    final backupBindings = await backupDb.query('tag_workflow_bindings');
-
-    for (final binding in backupBindings) {
-      final filteredData = await _filterDataForTable(
-        stagingDb,
-        'tag_workflow_bindings',
-        binding,
-      );
-      await stagingDb.insert(
-        'tag_workflow_bindings',
-        filteredData,
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    }
-  }
-
-  Future<void> _mergeSubNotes(Database stagingDb, Database backupDb) async {
-    final backupSubNotes = await backupDb.query('subnotes');
-
-    for (final subNote in backupSubNotes) {
-      // Check if subnote exists in staging
-      final existingSubNotes = await stagingDb.query(
-        'subnotes',
-        where: 'id = ? AND noteId = ?',
-        whereArgs: [subNote['id'], subNote['noteId']],
-      );
-
-      if (existingSubNotes.isNotEmpty) {
-        // Check if backup subnote is newer
-        final existingSubNote = existingSubNotes.first;
-        final existingCreatedAt = existingSubNote['createdAt'] as int;
-        final backupCreatedAt = subNote['createdAt'] as int;
-
-        if (backupCreatedAt > existingCreatedAt) {
-          // Replace with backup subnote - filter to only existing columns
-          final filteredData = await _filterDataForTable(
-            stagingDb,
-            'subnotes',
-            subNote,
-          );
-          await stagingDb.update(
-            'subnotes',
-            filteredData,
-            where: 'id = ? AND noteId = ?',
-            whereArgs: [subNote['id'], subNote['noteId']],
-          );
-        }
-      } else {
-        // Insert new subnote - filter to only existing columns
-        final filteredData = await _filterDataForTable(
-          stagingDb,
-          'subnotes',
-          subNote,
-        );
-        await stagingDb.insert('subnotes', filteredData);
-      }
-    }
-  }
-
-  Future<void> _mergeTags(Database stagingDb, Database backupDb) async {
-    final backupTags = await backupDb.query('tags');
-
-    for (final tag in backupTags) {
-      // Check if tag exists in staging
-      final existingTags = await stagingDb.query(
-        'tags',
-        where: 'name = ?',
-        whereArgs: [tag['name']],
-      );
-
-      if (existingTags.isEmpty) {
-        // Insert new tag - filter to only existing columns
-        final filteredData = await _filterDataForTable(stagingDb, 'tags', tag);
-        await stagingDb.insert('tags', filteredData);
-      } else {
-        // Tag exists, check if note_tags table needs updating
-        final existingTag = existingTags.first;
-        final existingTagId = existingTag['id'] as String;
-        final backupTagId = tag['id'] as String;
-
-        if (existingTagId != backupTagId) {
-          // Update note_tags table to use the existing tag ID
-          await stagingDb.update(
-            'note_tags',
-            {'tagId': existingTagId},
-            where: 'tagId = ?',
-            whereArgs: [backupTagId],
-          );
-        }
-      }
-    }
-  }
-
-  Future<void> _mergeTagImages(Database stagingDb, Database backupDb) async {
-    // Check if tag_images table exists in backup DB
-    final tableCheck = await backupDb.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='tag_images'",
-    );
-    if (tableCheck.isEmpty) return; // Old backup without tag_images
-
-    final backupTagImages = await backupDb.query('tag_images');
-
-    for (final tagImage in backupTagImages) {
-      final tagId = tagImage['tagId'] as String;
-
-      // Only import if the tag exists in staging
-      final existingTag = await stagingDb.query(
-        'tags',
-        where: 'id = ?',
-        whereArgs: [tagId],
-      );
-      if (existingTag.isEmpty) continue;
-
-      // Only import if no image already set for this tag
-      final existing = await stagingDb.query(
-        'tag_images',
-        where: 'tagId = ?',
-        whereArgs: [tagId],
-      );
-      if (existing.isEmpty) {
-        await stagingDb.insert('tag_images', {
-          'tagId': tagId,
-          'imagePath': tagImage['imagePath'] as String,
-        });
-      }
-    }
-  }
-
-  Future<void> _mergeNoteTags(Database stagingDb, Database backupDb) async {
-    final backupNoteTags = await backupDb.query('note_tags');
-
-    for (final noteTag in backupNoteTags) {
-      // Check if note-tag relationship exists in staging
-      final existingNoteTags = await stagingDb.query(
-        'note_tags',
-        where: 'noteId = ? AND tagId = ?',
-        whereArgs: [noteTag['noteId'], noteTag['tagId']],
-      );
-
-      if (existingNoteTags.isEmpty) {
-        // Insert new note-tag relationship - filter to only existing columns
-        final filteredData = await _filterDataForTable(
-          stagingDb,
-          'note_tags',
-          noteTag,
-        );
-        await stagingDb.insert('note_tags', filteredData);
-      }
-    }
-  }
-
-  Future<void> _mergeRelationships(
-    Database stagingDb,
-    Database backupDb,
-  ) async {
-    final backupRelationships = await backupDb.query('relationships');
-
-    for (final relationship in backupRelationships) {
-      // Check if relationship exists in staging
-      final existingRelationships = await stagingDb.query(
-        'relationships',
-        where: 'fromNoteId = ? AND toNoteId = ? AND type = ?',
-        whereArgs: [
-          relationship['fromNoteId'],
-          relationship['toNoteId'],
-          relationship['type'],
-        ],
-      );
-
-      if (existingRelationships.isEmpty) {
-        // Insert new relationship - filter to only existing columns
-        final filteredData = await _filterDataForTable(
-          stagingDb,
-          'relationships',
-          relationship,
-        );
-        await stagingDb.insert('relationships', filteredData);
-      }
-    }
-  }
-
-  Future<void> _mergeFilters(Database stagingDb, Database backupDb) async {
-    final backupFilters = await backupDb.query('filters');
-
-    for (final filter in backupFilters) {
-      final id = filter['id'] as String;
-      final backupUpdatedAt = filter['updatedAt'] as int;
-
-      // Check if filter exists in staging by ID
-      final existingFilters = await stagingDb.query(
-        'filters',
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-
-      if (existingFilters.isNotEmpty) {
-        final existingFilter = existingFilters.first;
-        final existingUpdatedAt = existingFilter['updatedAt'] as int;
-
-        // If backup is newer, update the existing filter
-        if (backupUpdatedAt > existingUpdatedAt) {
-          final filteredData = await _filterDataForTable(
-            stagingDb,
-            'filters',
-            filter,
-          );
-          await stagingDb.update(
-            'filters',
-            filteredData,
-            where: 'id = ?',
-            whereArgs: [id],
-          );
-        }
-      } else {
-        // Insert new filter
-        final filteredData = await _filterDataForTable(
-          stagingDb,
-          'filters',
-          filter,
-        );
-        await stagingDb.insert('filters', filteredData);
-      }
-    }
-  }
-
-  Future<void> _mergeUserApps(Database stagingDb, Database backupDb) async {
-    final backupApps = await backupDb.query('user_apps');
-
-    for (final app in backupApps) {
-      // Check if app exists in staging by UUID
-      final existingApps = await stagingDb.query(
-        'user_apps',
-        where: 'uuid = ?',
-        whereArgs: [app['uuid']],
-      );
-
-      if (existingApps.isNotEmpty) {
-        // UUID clash - insert PINNED revision as latest revision
-        await _insertPinnedRevisionForApp(stagingDb, backupDb, app);
-      } else {
-        // Insert app - filter to only existing columns
-        final filteredData = await _filterDataForTable(
-          stagingDb,
-          'user_apps',
-          app,
-        );
-        await stagingDb.insert('user_apps', filteredData);
-
-        // Insert associated revisions
-        final revisions = await backupDb.query(
-          'app_revisions',
-          where: 'appId = ?',
-          whereArgs: [app['id']],
-        );
-
-        for (final revision in revisions) {
-          // Insert revision - filter to only existing columns
-          final filteredRevision = await _filterDataForTable(
-            stagingDb,
-            'app_revisions',
-            revision,
-          );
-          await stagingDb.insert('app_revisions', filteredRevision);
-        }
-
-        // Insert associated libraries and dependencies
-        await _copyAppLibrariesAndDependencies(
-          stagingDb,
-          backupDb,
-          app['uuid'] as String,
-        );
-      }
-    }
-  }
-
-  Future<void> _insertPinnedRevisionForApp(
-    Database stagingDb,
-    Database backupDb,
-    Map<String, dynamic> app,
-  ) async {
-    LoggerService.info(
-      'Inserting PINNED revision for app with UUID: ${app['uuid']}',
-    );
-
-    // 1. Get the pinned revision from the backup database
-    final backupPinnedRevisionId = app['selectedRevisionId'] as String?;
-    if (backupPinnedRevisionId == null) {
-      LoggerService.warning(
-        'No pinned revision found for app ${app['uuid']}, skipping',
-      );
-      return;
-    }
-
-    final backupPinnedRevision = await backupDb.query(
-      'app_revisions',
-      where: 'id = ?',
-      whereArgs: [backupPinnedRevisionId],
-    );
-
-    if (backupPinnedRevision.isEmpty) {
-      LoggerService.warning(
-        'Pinned revision $backupPinnedRevisionId not found in backup database, skipping',
-      );
-      return;
-    }
-
-    final pinnedRevisionData = backupPinnedRevision.first;
-
-    // 2. Get the latest revision number from the staging database for the existing app
-    final existingApp = await stagingDb
-        .query('user_apps', where: 'uuid = ?', whereArgs: [app['uuid']])
-        .then((apps) => apps.first);
-
-    final existingAppId = existingApp['id'] as String;
-
-    final latestRevisions = await stagingDb.query(
-      'app_revisions',
-      where: 'appId = ?',
-      whereArgs: [existingAppId],
-      orderBy: 'revisionNumber DESC',
-      limit: 1,
-    );
-
-    final nextRevisionNumber = latestRevisions.isEmpty
-        ? 1
-        : (latestRevisions.first['revisionNumber'] as int) + 1;
-
-    // 3. Create a new revision in staging database that copies the pinned revision from backup
-    final newRevisionId = '${existingAppId}_rev_$nextRevisionNumber';
-    final now = DateTime.now().millisecondsSinceEpoch;
-
-    final newRevision = {
-      'id': newRevisionId,
-      'appId': existingAppId, // Use the existing app's ID in staging
-      'revisionNumber': nextRevisionNumber,
-      'revisionTimestamp': now,
-      'userPrompt': pinnedRevisionData['userPrompt'],
-      'aiResponse': pinnedRevisionData['aiResponse'],
-      'appCode': pinnedRevisionData['appCode'],
-      'attachmentPaths': pinnedRevisionData['attachmentPaths'],
-    };
-
-    // Insert the new revision - filter to only existing columns
-    final filteredRevision = await _filterDataForTable(
-      stagingDb,
-      'app_revisions',
-      newRevision,
-    );
-    await stagingDb.insert('app_revisions', filteredRevision);
-
-    // Update the existing app to set the selectedRevisionId to the new revision
-    await stagingDb.update(
-      'user_apps',
-      {'selectedRevisionId': newRevisionId},
-      where: 'uuid = ?',
-      whereArgs: [app['uuid']],
-    );
-
-    LoggerService.info(
-      'Created new revision $newRevisionId (revision $nextRevisionNumber) from pinned revision $backupPinnedRevisionId for app UUID: ${app['uuid']}',
-    );
-  }
-
-  Future<void> _copyAppLibrariesAndDependencies(
-    Database stagingDb,
-    Database backupDb,
-    String appUuid,
-  ) async {
-    // Get libraries for this app
-    final libraries = await backupDb.query(
-      'user_app_libraries',
-      where: 'app_uuid = ?',
-      whereArgs: [appUuid],
-    );
-
-    for (final library in libraries) {
-      // Insert library - filter to only existing columns
-      final filteredLibrary = await _filterDataForTable(
-        stagingDb,
-        'user_app_libraries',
-        library,
-      );
-      final libraryId = await stagingDb.insert(
-        'user_app_libraries',
-        filteredLibrary,
-      );
-
-      // Get dependencies for this library using chunked reading to avoid cursor window issues
-      final dependencies = await backupDb.rawQuery(
-        '''
-        SELECT id, original_url, local_path, library_id,
-               CASE 
-                 WHEN length(bytes) > 0 THEN 'BLOB_DATA'
-                 ELSE NULL 
-               END as has_blob
-        FROM user_app_library_dependencies 
-        WHERE library_id = ?
-      ''',
-        [library['id']],
-      );
-
-      for (final dependency in dependencies) {
-        final dependencyData = Map<String, dynamic>.from(dependency);
-        dependencyData['library_id'] = libraryId;
-
-        // Remove the temporary has_blob column before inserting
-        dependencyData.remove('has_blob');
-
-        // Read BLOB data in chunks to avoid cursor window issues
-        if (dependency['has_blob'] != null) {
-          try {
-            final blobData = await _readBlobInChunks(
-              backupDb,
-              dependency['id'] as int,
-            );
-            dependencyData['bytes'] = Uint8List.fromList(blobData);
-          } catch (e) {
-            LoggerService.error(
-              'Failed to read BLOB data for dependency ${dependency['id']}: $e',
-              error: e,
-            );
-            dependencyData['bytes'] = Uint8List(0);
-          }
-        } else {
-          dependencyData['bytes'] = Uint8List(0);
-        }
-
-        // Insert dependency - filter to only existing columns
-        final filteredDependency = await _filterDataForTable(
-          stagingDb,
-          'user_app_library_dependencies',
-          dependencyData,
-        );
-        await stagingDb.insert(
-          'user_app_library_dependencies',
-          filteredDependency,
-        );
-      }
-    }
-  }
-
-  Future<void> _mergeAttachments(Database stagingDb, Database backupDb) async {
-    final backupAttachments = await backupDb.query('attachments');
-
-    for (final attachment in backupAttachments) {
-      final filePath = attachment['filePath'] as String;
-      final isRelativePath = (attachment['isRelativePath'] as int) == 1;
-
-      // Convert file path if needed
-      String finalFilePath = filePath;
-      if (isRelativePath) {
-        // Path is already relative, keep as is
-        finalFilePath = filePath;
-      } else {
-        // Convert absolute path to relative path
-        final fileName = filePath.split('/').last;
-        finalFilePath = 'attachments/$fileName';
-      }
-
-      // Check if attachment exists in staging (unique on noteId, filePath)
-      final existingAttachments = await stagingDb.query(
-        'attachments',
-        where: 'noteId = ? AND filePath = ?',
-        whereArgs: [attachment['noteId'], finalFilePath],
-      );
-
-      if (existingAttachments.isEmpty) {
-        // Create new attachment record with proper path
-        final newAttachment = Map<String, dynamic>.from(attachment);
-        newAttachment['filePath'] = finalFilePath;
-        newAttachment['isRelativePath'] = 1; // Always store as relative path
-
-        // Insert attachment - filter to only existing columns
-        final filteredAttachment = await _filterDataForTable(
-          stagingDb,
-          'attachments',
-          newAttachment,
-        );
-        await stagingDb.insert(
-          'attachments',
-          filteredAttachment,
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-      }
-    }
-  }
-
-  /// Gets the list of column names that exist in the target table
-  Future<List<String>> _getTableColumns(Database db, String tableName) async {
-    final tableInfo = await db.rawQuery('PRAGMA table_info($tableName)');
-    return tableInfo.map((col) => col['name'] as String).toList();
-  }
-
-  /// Filters data to only include columns that exist in the target table
-  Future<Map<String, dynamic>> _filterDataForTable(
-    Database db,
-    String tableName,
-    Map<String, dynamic> data,
-  ) async {
-    final validColumns = await _getTableColumns(db, tableName);
-    final filtered = <String, dynamic>{};
-
-    for (final entry in data.entries) {
-      if (validColumns.contains(entry.key)) {
-        filtered[entry.key] = entry.value;
-      }
-    }
-
-    return filtered;
-  }
-
-  Future<void> _mergeConversations(
-    Database stagingDb,
-    Database backupDb,
-  ) async {
-    final backupConversations = await backupDb.query('conversations');
-
-    for (final conversation in backupConversations) {
-      // Check if conversation exists in staging by id
-      final existingConversations = await stagingDb.query(
-        'conversations',
-        where: 'id = ?',
-        whereArgs: [conversation['id']],
-      );
-
-      if (existingConversations.isEmpty) {
-        // Insert new conversation - filter to only existing columns
-        final filteredData = await _filterDataForTable(
-          stagingDb,
-          'conversations',
-          conversation,
-        );
-        await stagingDb.insert('conversations', filteredData);
-      }
-    }
-  }
-
-  Future<void> _mergeConversationMessages(
-    Database stagingDb,
-    Database backupDb,
-  ) async {
-    // Process messages in batches to avoid CursorWindow size limits
-    int offset = 0;
-    const int limit = 50;
-    bool hasMore = true;
-
-    while (hasMore) {
-      // Select all columns except 'content' and 'metadata', which can be huge
-      final batch = await backupDb.rawQuery(
-        '''
-        SELECT id, type, timestamp, modelUsed, length(content) as content_length, length(metadata) as metadata_length
-        FROM conversation_messages
-        LIMIT ? OFFSET ?
-        ''',
-        [limit, offset],
-      );
-
-      if (batch.isEmpty) {
-        hasMore = false;
-        break;
-      }
-
-      for (final row in batch) {
-        final messageId = row['id'] as String;
-        final contentLength = (row['content_length'] as int?) ?? 0;
-        final metadataLength = (row['metadata_length'] as int?) ?? 0;
-
-        // Check if message exists in staging by id
-        final existingMessages = await stagingDb.query(
-          'conversation_messages',
-          where: 'id = ?',
-          whereArgs: [messageId],
-        );
-
-        if (existingMessages.isEmpty) {
-          String content = '';
-          String?
-          metadata; // metadata is nullable in schema, treating as String?
-
-          // --- Handle Content ---
-          // If content is small (< 1MB), read it normally
-          // Otherwise read in chunks
-          if (contentLength < 1024 * 1024) {
-            final contentResult = await backupDb.query(
-              'conversation_messages',
-              columns: ['content'],
-              where: 'id = ?',
-              whereArgs: [messageId],
-            );
-            if (contentResult.isNotEmpty) {
-              content = contentResult.first['content'] as String;
-            }
-          } else {
-            // Large content, read in chunks
-            content = await _readStringInChunks(
-              backupDb,
-              messageId,
-              'content',
-              contentLength,
-            );
-          }
-
-          // --- Handle Metadata ---
-          // Metadata can be null or empty string in DB, usually stored as text
-          if (metadataLength > 0) {
-            if (metadataLength < 1024 * 1024) {
-              final metaResult = await backupDb.query(
-                'conversation_messages',
-                columns: ['metadata'],
-                where: 'id = ?',
-                whereArgs: [messageId],
-              );
-              if (metaResult.isNotEmpty) {
-                metadata = metaResult.first['metadata'] as String?;
-              }
-            } else {
-              // Large metadata, read in chunks
-              metadata = await _readStringInChunks(
-                backupDb,
-                messageId,
-                'metadata',
-                metadataLength,
-              );
-            }
-          }
-
-          // Construct full message map
-          final message = Map<String, dynamic>.from(row);
-          message['content'] = content;
-          message['metadata'] = metadata;
-          message.remove('content_length'); // Remove the helper column
-          message.remove('metadata_length'); // Remove the helper column
-
-          // Insert new message - filter to only existing columns
-          final filteredData = await _filterDataForTable(
-            stagingDb,
-            'conversation_messages',
-            message,
-          );
-          await stagingDb.insert('conversation_messages', filteredData);
-        }
-      }
-
-      offset += limit;
-      // Yield to event loop to prevent UI freeze during large imports
-      await Future.delayed(Duration.zero);
-    }
-  }
-
-  Future<void> _mergeConversationAttachments(
-    Database stagingDb,
-    Database backupDb,
-  ) async {
-    final backupAttachments = await backupDb.query('conversation_attachments');
-
-    for (final attachment in backupAttachments) {
-      final filePath = attachment['filePath'] as String;
-
-      String finalFilePath = filePath;
-      if (filePath.startsWith('/')) {
-        if (filePath.contains('/attachments/')) {
-          final parts = filePath.split('/attachments/');
-          if (parts.length > 1) {
-            finalFilePath = 'attachments/${parts[1]}';
-          } else {
-            final fileName = attachment['fileName'] as String;
-            finalFilePath = 'attachments/$fileName';
-          }
-        } else {
-          final fileName = attachment['fileName'] as String;
-          final messageId = attachment['messageId'] as String;
-          finalFilePath = 'attachments/${messageId}_$fileName';
-        }
-      }
-
-      // Check if attachment exists in staging by id
-      final existingAttachments = await stagingDb.query(
-        'conversation_attachments',
-        where: 'id = ?',
-        whereArgs: [attachment['id']],
-      );
-
-      if (existingAttachments.isEmpty) {
-        final newAttachment = Map<String, dynamic>.from(attachment);
-        newAttachment['filePath'] = finalFilePath;
-        newAttachment['isRelativePath'] = 1;
-
-        // Insert new attachment - filter to only existing columns
-        final filteredData = await _filterDataForTable(
-          stagingDb,
-          'conversation_attachments',
-          newAttachment,
-        );
-        await stagingDb.insert('conversation_attachments', filteredData);
-      }
-    }
-  }
-
-  Future<void> _mergeConversationMessageMappings(
-    Database stagingDb,
-    Database backupDb,
-  ) async {
-    final backupMappings = await backupDb.query('conversation_message_mapping');
-
-    for (final mapping in backupMappings) {
-      // Check if mapping exists in staging (unique by conversationId, messageId)
-      final existingMappings = await stagingDb.query(
-        'conversation_message_mapping',
-        where: 'conversationId = ? AND messageId = ?',
-        whereArgs: [mapping['conversationId'], mapping['messageId']],
-      );
-
-      if (existingMappings.isEmpty) {
-        // Insert new mapping - filter to only existing columns, remove id if auto-increment
-        var filteredData = await _filterDataForTable(
-          stagingDb,
-          'conversation_message_mapping',
-          mapping,
-        );
-        // Remove id if it's auto-increment to let SQLite generate a new one
-        if (filteredData.containsKey('id') && mapping['id'] is int) {
-          filteredData.remove('id');
-        }
-        await stagingDb.insert('conversation_message_mapping', filteredData);
-      }
-    }
-  }
-
-  Future<void> _mergeMessageParents(
-    Database stagingDb,
-    Database backupDb,
-  ) async {
-    final backupParents = await backupDb.query('message_parents');
-
-    for (final parent in backupParents) {
-      // Check if parent relationship exists in staging (unique by messageId, parentMessageId)
-      final existingParents = await stagingDb.query(
-        'message_parents',
-        where: 'messageId = ? AND parentMessageId = ?',
-        whereArgs: [parent['messageId'], parent['parentMessageId']],
-      );
-
-      if (existingParents.isEmpty) {
-        // Insert new parent relationship - filter to only existing columns
-        final filteredData = await _filterDataForTable(
-          stagingDb,
-          'message_parents',
-          parent,
-        );
-        await stagingDb.insert('message_parents', filteredData);
-      }
-    }
-  }
-
-  Future<void> _mergeConversationTagMappings(
-    Database stagingDb,
-    Database backupDb,
-  ) async {
-    final backupMappings = await backupDb.query('conversation_tags');
-
-    for (final mapping in backupMappings) {
-      final existingMappings = await stagingDb.query(
-        'conversation_tags',
-        where: 'conversationId = ? AND tagId = ?',
-        whereArgs: [mapping['conversationId'], mapping['tagId']],
-        limit: 1,
-      );
-
-      if (existingMappings.isEmpty) {
-        final filteredData = await _filterDataForTable(
-          stagingDb,
-          'conversation_tags',
-          mapping,
-        );
-        await stagingDb.insert('conversation_tags', filteredData);
-      }
-    }
-  }
-
-  Future<void> _mergeConversationNoteMappings(
-    Database stagingDb,
-    Database backupDb,
-  ) async {
-    final backupMappings = await backupDb.query('conversation_note_mapping');
-
-    for (final mapping in backupMappings) {
-      // Check if mapping exists in staging (unique by conversationId, noteId)
-      final existingMappings = await stagingDb.query(
-        'conversation_note_mapping',
-        where: 'conversationId = ? AND noteId = ?',
-        whereArgs: [mapping['conversationId'], mapping['noteId']],
-      );
-
-      if (existingMappings.isEmpty) {
-        // Insert new mapping - filter to only existing columns, remove id if auto-increment
-        var filteredData = await _filterDataForTable(
-          stagingDb,
-          'conversation_note_mapping',
-          mapping,
-        );
-        // Remove id if it's auto-increment to let SQLite generate a new one
-        if (filteredData.containsKey('id') && mapping['id'] is int) {
-          filteredData.remove('id');
-        }
-        await stagingDb.insert('conversation_note_mapping', filteredData);
       }
     }
   }
@@ -2260,102 +1385,6 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     );
   }
 
-  // Helper method to read BLOB data in chunks to avoid cursor window issues
-  Future<List<int>> _readBlobInChunks(Database db, int dependencyId) async {
-    const int chunkSize = 1024 * 1024; // 1MB chunks
-    final List<int> allBytes = [];
-
-    try {
-      // Get the total size of the BLOB
-      final sizeResult = await db.rawQuery(
-        '''
-        SELECT length(bytes) as blob_size 
-        FROM user_app_library_dependencies 
-        WHERE id = ?
-      ''',
-        [dependencyId],
-      );
-
-      if (sizeResult.isEmpty) {
-        return <int>[];
-      }
-
-      final int totalSize = sizeResult.first['blob_size'] as int;
-
-      // Read BLOB in chunks
-      for (int offset = 0; offset < totalSize; offset += chunkSize) {
-        final int currentChunkSize = (offset + chunkSize > totalSize)
-            ? totalSize - offset
-            : chunkSize;
-
-        final chunkResult = await db.rawQuery(
-          '''
-          SELECT substr(bytes, ?, ?) as chunk
-          FROM user_app_library_dependencies 
-          WHERE id = ?
-        ''',
-          [offset + 1, currentChunkSize, dependencyId],
-        );
-
-        if (chunkResult.isNotEmpty && chunkResult.first['chunk'] != null) {
-          final chunk = chunkResult.first['chunk'] as Uint8List;
-          allBytes.addAll(chunk);
-        }
-      }
-
-      return allBytes;
-    } catch (e) {
-      LoggerService.error('Error reading BLOB in chunks: $e', error: e);
-      return <int>[];
-    }
-  }
-
-  // Helper method to read String data in chunks to avoid cursor window issues
-  Future<String> _readStringInChunks(
-    Database db,
-    String messageId,
-    String columnName,
-    int totalSize,
-  ) async {
-    // const int chunkSize = 1024 * 1024; // 1MB chunks (unused)
-    final StringBuffer buffer = StringBuffer();
-
-    try {
-      // Read String in chunks using substr
-      // SQLite substr is 1-based, and operates on characters/codepoints.
-      // Note: If the text contains multi-byte characters, 'length' is in characters (usually).
-      // However, CursorWindow limit is in BYTES (2MB).
-      // So reading 1 million CHARACTERS might exceed 2MB bytes if they are multi-byte.
-      // But for safety locally, we can read smaller chunks if needed.
-      // 500k chars is safer for UTF-8 (max 4 bytes per char = 2MB).
-      const int safeCharChunkSize = 500 * 1024;
-
-      for (int offset = 0; offset < totalSize; offset += safeCharChunkSize) {
-        final int currentChunkSize = (offset + safeCharChunkSize > totalSize)
-            ? totalSize - offset
-            : safeCharChunkSize;
-
-        final chunkResult = await db.rawQuery(
-          '''
-          SELECT substr($columnName, ?, ?) as chunk
-          FROM conversation_messages 
-          WHERE id = ?
-        ''',
-          [offset + 1, currentChunkSize, messageId],
-        );
-
-        if (chunkResult.isNotEmpty && chunkResult.first['chunk'] != null) {
-          final chunk = chunkResult.first['chunk'] as String;
-          buffer.write(chunk);
-        }
-      }
-
-      return buffer.toString();
-    } catch (e) {
-      LoggerService.error('Error reading String in chunks: $e', error: e);
-      return '';
-    }
-  }
 
   Widget _buildSectionTitle(String title) {
     return Text(

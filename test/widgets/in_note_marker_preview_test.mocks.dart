@@ -53,31 +53,37 @@ class _FakeDatabase_0 extends _i1.SmartFake implements _i2.Database {
     : super(parent, parentInvocation);
 }
 
-class _FakeRawWriteResult_1 extends _i1.SmartFake
+class _FakeAppRevisionVisibility_1 extends _i1.SmartFake
+    implements _i3.AppRevisionVisibility {
+  _FakeAppRevisionVisibility_1(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeRawWriteResult_2 extends _i1.SmartFake
     implements _i3.RawWriteResult {
-  _FakeRawWriteResult_1(Object parent, Invocation parentInvocation)
+  _FakeRawWriteResult_2(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeLoadSkillTool_2 extends _i1.SmartFake implements _i4.LoadSkillTool {
-  _FakeLoadSkillTool_2(Object parent, Invocation parentInvocation)
+class _FakeLoadSkillTool_3 extends _i1.SmartFake implements _i4.LoadSkillTool {
+  _FakeLoadSkillTool_3(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeConversation_3 extends _i1.SmartFake implements _i5.Conversation {
-  _FakeConversation_3(Object parent, Invocation parentInvocation)
+class _FakeConversation_4 extends _i1.SmartFake implements _i5.Conversation {
+  _FakeConversation_4(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeForkContextSelection_4 extends _i1.SmartFake
+class _FakeForkContextSelection_5 extends _i1.SmartFake
     implements _i6.ForkContextSelection {
-  _FakeForkContextSelection_4(Object parent, Invocation parentInvocation)
+  _FakeForkContextSelection_5(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeConversationMessage_5 extends _i1.SmartFake
+class _FakeConversationMessage_6 extends _i1.SmartFake
     implements _i5.ConversationMessage {
-  _FakeConversationMessage_5(Object parent, Invocation parentInvocation)
+  _FakeConversationMessage_6(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
@@ -523,9 +529,16 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i7.Future<void>);
 
   @override
-  _i7.Future<void> deleteRelationshipsForNote(String? noteId) =>
+  _i7.Future<void> deleteRelationshipsForNote(
+    String? noteId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#deleteRelationshipsForNote, [noteId]),
+            Invocation.method(
+              #deleteRelationshipsForNote,
+              [noteId],
+              {#executor: executor},
+            ),
             returnValue: _i7.Future<void>.value(),
             returnValueForMissingStub: _i7.Future<void>.value(),
           )
@@ -686,6 +699,90 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
             ),
           )
           as _i7.Future<List<Map<String, dynamic>>>);
+
+  @override
+  _i7.Future<_i3.AppRevisionVisibility> computeAppRevisionVisibility(
+    String? appId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #computeAppRevisionVisibility,
+              [appId],
+              {#executor: executor},
+            ),
+            returnValue: _i7.Future<_i3.AppRevisionVisibility>.value(
+              _FakeAppRevisionVisibility_1(
+                this,
+                Invocation.method(
+                  #computeAppRevisionVisibility,
+                  [appId],
+                  {#executor: executor},
+                ),
+              ),
+            ),
+          )
+          as _i7.Future<_i3.AppRevisionVisibility>);
+
+  @override
+  _i7.Future<String?> fallbackRevisionIdForApp(
+    String? appId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #fallbackRevisionIdForApp,
+              [appId],
+              {#executor: executor},
+            ),
+            returnValue: _i7.Future<String?>.value(),
+          )
+          as _i7.Future<String?>);
+
+  @override
+  _i7.Future<bool> isAppRevisionEffectivelyVisible(
+    String? revisionId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isAppRevisionEffectivelyVisible,
+              [revisionId],
+              {#executor: executor},
+            ),
+            returnValue: _i7.Future<bool>.value(false),
+          )
+          as _i7.Future<bool>);
+
+  @override
+  _i7.Future<bool> isUserAppLibraryEffectivelyVisible(
+    int? libraryId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isUserAppLibraryEffectivelyVisible,
+              [libraryId],
+              {#executor: executor},
+            ),
+            returnValue: _i7.Future<bool>.value(false),
+          )
+          as _i7.Future<bool>);
+
+  @override
+  _i7.Future<bool> isUserAppLibraryDependencyEffectivelyVisible(
+    int? dependencyId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isUserAppLibraryDependencyEffectivelyVisible,
+              [dependencyId],
+              {#executor: executor},
+            ),
+            returnValue: _i7.Future<bool>.value(false),
+          )
+          as _i7.Future<bool>);
 
   @override
   _i7.Future<String> insertUserApp(_i15.UserApp? app) =>
@@ -862,15 +959,6 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
   _i7.Future<void> deleteUserAppLibrary(int? libraryId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteUserAppLibrary, [libraryId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
-          )
-          as _i7.Future<void>);
-
-  @override
-  _i7.Future<void> deleteUserAppLibrariesForRevision(int? revisionId) =>
-      (super.noSuchMethod(
-            Invocation.method(#deleteUserAppLibrariesForRevision, [revisionId]),
             returnValue: _i7.Future<void>.value(),
             returnValueForMissingStub: _i7.Future<void>.value(),
           )
@@ -1310,9 +1398,16 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i7.Future<void>);
 
   @override
-  _i7.Future<void> deleteNoteConversationMappings(String? noteId) =>
+  _i7.Future<void> deleteNoteConversationMappings(
+    String? noteId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#deleteNoteConversationMappings, [noteId]),
+            Invocation.method(
+              #deleteNoteConversationMappings,
+              [noteId],
+              {#executor: executor},
+            ),
             returnValue: _i7.Future<void>.value(),
             returnValueForMissingStub: _i7.Future<void>.value(),
           )
@@ -1517,7 +1612,7 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
       (super.noSuchMethod(
             Invocation.method(#runRawWriteWithChangeCapture, [sql]),
             returnValue: _i7.Future<_i3.RawWriteResult>.value(
-              _FakeRawWriteResult_1(
+              _FakeRawWriteResult_2(
                 this,
                 Invocation.method(#runRawWriteWithChangeCapture, [sql]),
               ),
@@ -1683,7 +1778,7 @@ class MockConversationService extends _i1.Mock
   _i4.LoadSkillTool get loadSkillTool =>
       (super.noSuchMethod(
             Invocation.getter(#loadSkillTool),
-            returnValue: _FakeLoadSkillTool_2(
+            returnValue: _FakeLoadSkillTool_3(
               this,
               Invocation.getter(#loadSkillTool),
             ),
@@ -1725,7 +1820,7 @@ class MockConversationService extends _i1.Mock
               #noteIds: noteIds,
             }),
             returnValue: _i7.Future<_i5.Conversation>.value(
-              _FakeConversation_3(
+              _FakeConversation_4(
                 this,
                 Invocation.method(#createConversation, [], {
                   #title: title,
@@ -1749,7 +1844,7 @@ class MockConversationService extends _i1.Mock
               #newTitle: newTitle,
             }),
             returnValue: _i7.Future<_i5.Conversation>.value(
-              _FakeConversation_3(
+              _FakeConversation_4(
                 this,
                 Invocation.method(#forkConversation, [], {
                   #originalConversationId: originalConversationId,
@@ -1770,7 +1865,7 @@ class MockConversationService extends _i1.Mock
               forkFromMessageId,
             ]),
             returnValue: _i7.Future<_i6.ForkContextSelection>.value(
-              _FakeForkContextSelection_4(
+              _FakeForkContextSelection_5(
                 this,
                 Invocation.method(#prepareForkContextSelection, [
                   forkFromMessageId,
@@ -1793,7 +1888,7 @@ class MockConversationService extends _i1.Mock
               #newTitle: newTitle,
             }),
             returnValue: _i7.Future<_i5.Conversation>.value(
-              _FakeConversation_3(
+              _FakeConversation_4(
                 this,
                 Invocation.method(#forkConversationWithContext, [], {
                   #forkFromMessageId: forkFromMessageId,
@@ -1818,7 +1913,7 @@ class MockConversationService extends _i1.Mock
               #attachmentPaths: attachmentPaths,
             }),
             returnValue: _i7.Future<_i5.ConversationMessage>.value(
-              _FakeConversationMessage_5(
+              _FakeConversationMessage_6(
                 this,
                 Invocation.method(#addUserMessage, [], {
                   #conversationId: conversationId,
@@ -1845,7 +1940,7 @@ class MockConversationService extends _i1.Mock
               #metadata: metadata,
             }),
             returnValue: _i7.Future<_i5.ConversationMessage>.value(
-              _FakeConversationMessage_5(
+              _FakeConversationMessage_6(
                 this,
                 Invocation.method(#addAIResponse, [], {
                   #conversationId: conversationId,
@@ -2065,7 +2160,7 @@ class MockConversationService extends _i1.Mock
               #title: title,
             }),
             returnValue: _i7.Future<_i5.Conversation>.value(
-              _FakeConversation_3(
+              _FakeConversation_4(
                 this,
                 Invocation.method(#createConversationFromSelectedNodes, [], {
                   #selectedNodeIds: selectedNodeIds,

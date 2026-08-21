@@ -1,2 +1,11 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
 #include "Generated.xcconfig"
+
+// Google Drive sync OAuth redirect scheme (M2.9). See Debug.xcconfig for the
+// full explanation. This file backs BOTH the Release and Profile build
+// configurations of the Runner target (both reference Release.xcconfig), which
+// matches Android, where `profile` also inherits the release scheme.
+//
+// Must match `releaseClientId` in
+// lib/services/sync/google_drive_client_config.dart, reversed.
+GOOGLE_REVERSED_CLIENT_ID=com.googleusercontent.apps.replace-with-release-client-id

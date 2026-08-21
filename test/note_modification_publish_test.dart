@@ -183,10 +183,16 @@ void main() {
       await db.updateNote(note);
 
       final rawDb = await db.database;
-      expect(
-        await rawDb.query('notes', where: 'id = ?', whereArgs: [note.id]),
-        isEmpty,
+      // M1.10: deleteNote now tombstones `notes` instead of really
+      // deleting the row (`__deleted__=1`, `AND __deleted__ = 0` is what
+      // makes updateNote's own guard correctly skip re-inserting child
+      // rows below -- see updateNote's own doc comment).
+      final notesRows = await rawDb.query(
+        'notes',
+        where: 'id = ?',
+        whereArgs: [note.id],
       );
+      expect(notesRows.single['__deleted__'], 1);
       expect(
         await rawDb.query('note_tags', where: 'noteId = ?', whereArgs: [note.id]),
         isEmpty,

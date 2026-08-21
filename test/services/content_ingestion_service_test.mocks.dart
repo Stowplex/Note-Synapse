@@ -46,24 +46,30 @@ class _FakeDatabase_0 extends _i1.SmartFake implements _i2.Database {
     : super(parent, parentInvocation);
 }
 
-class _FakeRawWriteResult_1 extends _i1.SmartFake
+class _FakeAppRevisionVisibility_1 extends _i1.SmartFake
+    implements _i3.AppRevisionVisibility {
+  _FakeAppRevisionVisibility_1(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeRawWriteResult_2 extends _i1.SmartFake
     implements _i3.RawWriteResult {
-  _FakeRawWriteResult_1(Object parent, Invocation parentInvocation)
+  _FakeRawWriteResult_2(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeLocale_2 extends _i1.SmartFake implements _i4.Locale {
-  _FakeLocale_2(Object parent, Invocation parentInvocation)
+class _FakeLocale_3 extends _i1.SmartFake implements _i4.Locale {
+  _FakeLocale_3(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeAppRevision_3 extends _i1.SmartFake implements _i5.AppRevision {
-  _FakeAppRevision_3(Object parent, Invocation parentInvocation)
+class _FakeAppRevision_4 extends _i1.SmartFake implements _i5.AppRevision {
+  _FakeAppRevision_4(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeUserApp_4 extends _i1.SmartFake implements _i6.UserApp {
-  _FakeUserApp_4(Object parent, Invocation parentInvocation)
+class _FakeUserApp_5 extends _i1.SmartFake implements _i6.UserApp {
+  _FakeUserApp_5(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
@@ -509,9 +515,16 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i7.Future<void>);
 
   @override
-  _i7.Future<void> deleteRelationshipsForNote(String? noteId) =>
+  _i7.Future<void> deleteRelationshipsForNote(
+    String? noteId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#deleteRelationshipsForNote, [noteId]),
+            Invocation.method(
+              #deleteRelationshipsForNote,
+              [noteId],
+              {#executor: executor},
+            ),
             returnValue: _i7.Future<void>.value(),
             returnValueForMissingStub: _i7.Future<void>.value(),
           )
@@ -672,6 +685,90 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
             ),
           )
           as _i7.Future<List<Map<String, dynamic>>>);
+
+  @override
+  _i7.Future<_i3.AppRevisionVisibility> computeAppRevisionVisibility(
+    String? appId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #computeAppRevisionVisibility,
+              [appId],
+              {#executor: executor},
+            ),
+            returnValue: _i7.Future<_i3.AppRevisionVisibility>.value(
+              _FakeAppRevisionVisibility_1(
+                this,
+                Invocation.method(
+                  #computeAppRevisionVisibility,
+                  [appId],
+                  {#executor: executor},
+                ),
+              ),
+            ),
+          )
+          as _i7.Future<_i3.AppRevisionVisibility>);
+
+  @override
+  _i7.Future<String?> fallbackRevisionIdForApp(
+    String? appId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #fallbackRevisionIdForApp,
+              [appId],
+              {#executor: executor},
+            ),
+            returnValue: _i7.Future<String?>.value(),
+          )
+          as _i7.Future<String?>);
+
+  @override
+  _i7.Future<bool> isAppRevisionEffectivelyVisible(
+    String? revisionId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isAppRevisionEffectivelyVisible,
+              [revisionId],
+              {#executor: executor},
+            ),
+            returnValue: _i7.Future<bool>.value(false),
+          )
+          as _i7.Future<bool>);
+
+  @override
+  _i7.Future<bool> isUserAppLibraryEffectivelyVisible(
+    int? libraryId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isUserAppLibraryEffectivelyVisible,
+              [libraryId],
+              {#executor: executor},
+            ),
+            returnValue: _i7.Future<bool>.value(false),
+          )
+          as _i7.Future<bool>);
+
+  @override
+  _i7.Future<bool> isUserAppLibraryDependencyEffectivelyVisible(
+    int? dependencyId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isUserAppLibraryDependencyEffectivelyVisible,
+              [dependencyId],
+              {#executor: executor},
+            ),
+            returnValue: _i7.Future<bool>.value(false),
+          )
+          as _i7.Future<bool>);
 
   @override
   _i7.Future<String> insertUserApp(_i6.UserApp? app) =>
@@ -848,15 +945,6 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
   _i7.Future<void> deleteUserAppLibrary(int? libraryId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteUserAppLibrary, [libraryId]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
-          )
-          as _i7.Future<void>);
-
-  @override
-  _i7.Future<void> deleteUserAppLibrariesForRevision(int? revisionId) =>
-      (super.noSuchMethod(
-            Invocation.method(#deleteUserAppLibrariesForRevision, [revisionId]),
             returnValue: _i7.Future<void>.value(),
             returnValueForMissingStub: _i7.Future<void>.value(),
           )
@@ -1296,9 +1384,16 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i7.Future<void>);
 
   @override
-  _i7.Future<void> deleteNoteConversationMappings(String? noteId) =>
+  _i7.Future<void> deleteNoteConversationMappings(
+    String? noteId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#deleteNoteConversationMappings, [noteId]),
+            Invocation.method(
+              #deleteNoteConversationMappings,
+              [noteId],
+              {#executor: executor},
+            ),
             returnValue: _i7.Future<void>.value(),
             returnValueForMissingStub: _i7.Future<void>.value(),
           )
@@ -1503,7 +1598,7 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
       (super.noSuchMethod(
             Invocation.method(#runRawWriteWithChangeCapture, [sql]),
             returnValue: _i7.Future<_i3.RawWriteResult>.value(
-              _FakeRawWriteResult_1(
+              _FakeRawWriteResult_2(
                 this,
                 Invocation.method(#runRawWriteWithChangeCapture, [sql]),
               ),
@@ -1680,7 +1775,7 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
   _i4.Locale get locale =>
       (super.noSuchMethod(
             Invocation.getter(#locale),
-            returnValue: _FakeLocale_2(this, Invocation.getter(#locale)),
+            returnValue: _FakeLocale_3(this, Invocation.getter(#locale)),
           )
           as _i4.Locale);
 
@@ -2233,7 +2328,7 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               #attachmentPaths: attachmentPaths,
             }),
             returnValue: _i7.Future<_i5.AppRevision>.value(
-              _FakeAppRevision_3(
+              _FakeAppRevision_4(
                 this,
                 Invocation.method(#saveManualCodeEdit, [], {
                   #originalApp: originalApp,
@@ -2277,7 +2372,7 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               #generationContext: generationContext,
             }),
             returnValue: _i7.Future<_i6.UserApp>.value(
-              _FakeUserApp_4(
+              _FakeUserApp_5(
                 this,
                 Invocation.method(#createUserApp, [], {
                   #name: name,
@@ -2313,7 +2408,7 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               #generationContext: generationContext,
             }),
             returnValue: _i7.Future<_i5.AppRevision>.value(
-              _FakeAppRevision_3(
+              _FakeAppRevision_4(
                 this,
                 Invocation.method(#editUserApp, [], {
                   #originalApp: originalApp,
@@ -2401,7 +2496,7 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
       (super.noSuchMethod(
             Invocation.method(#createInitialRevision, [appId]),
             returnValue: _i7.Future<_i5.AppRevision>.value(
-              _FakeAppRevision_3(
+              _FakeAppRevision_4(
                 this,
                 Invocation.method(#createInitialRevision, [appId]),
               ),

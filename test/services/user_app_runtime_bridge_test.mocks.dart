@@ -69,47 +69,53 @@ class _FakeDatabase_3 extends _i1.SmartFake implements _i5.Database {
     : super(parent, parentInvocation);
 }
 
-class _FakeRawWriteResult_4 extends _i1.SmartFake
+class _FakeAppRevisionVisibility_4 extends _i1.SmartFake
+    implements _i6.AppRevisionVisibility {
+  _FakeAppRevisionVisibility_4(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeRawWriteResult_5 extends _i1.SmartFake
     implements _i6.RawWriteResult {
-  _FakeRawWriteResult_4(Object parent, Invocation parentInvocation)
+  _FakeRawWriteResult_5(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeSqlQueryResult_5 extends _i1.SmartFake
+class _FakeSqlQueryResult_6 extends _i1.SmartFake
     implements _i7.SqlQueryResult {
-  _FakeSqlQueryResult_5(Object parent, Invocation parentInvocation)
+  _FakeSqlQueryResult_6(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeAndroidInAppWebViewController_6 extends _i1.SmartFake
+class _FakeAndroidInAppWebViewController_7 extends _i1.SmartFake
     implements _i8.AndroidInAppWebViewController {
-  _FakeAndroidInAppWebViewController_6(
+  _FakeAndroidInAppWebViewController_7(
     Object parent,
     Invocation parentInvocation,
   ) : super(parent, parentInvocation);
 }
 
-class _FakeIOSInAppWebViewController_7 extends _i1.SmartFake
+class _FakeIOSInAppWebViewController_8 extends _i1.SmartFake
     implements _i8.IOSInAppWebViewController {
-  _FakeIOSInAppWebViewController_7(Object parent, Invocation parentInvocation)
+  _FakeIOSInAppWebViewController_8(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakePlatformInAppWebViewController_8 extends _i1.SmartFake
+class _FakePlatformInAppWebViewController_9 extends _i1.SmartFake
     implements _i8.PlatformInAppWebViewController {
-  _FakePlatformInAppWebViewController_8(
+  _FakePlatformInAppWebViewController_9(
     Object parent,
     Invocation parentInvocation,
   ) : super(parent, parentInvocation);
 }
 
-class _FakeWebStorage_9 extends _i1.SmartFake implements _i8.WebStorage {
-  _FakeWebStorage_9(Object parent, Invocation parentInvocation)
+class _FakeWebStorage_10 extends _i1.SmartFake implements _i8.WebStorage {
+  _FakeWebStorage_10(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeNote_10 extends _i1.SmartFake implements _i9.Note {
-  _FakeNote_10(Object parent, Invocation parentInvocation)
+class _FakeNote_11 extends _i1.SmartFake implements _i9.Note {
+  _FakeNote_11(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
@@ -1944,9 +1950,16 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i13.Future<void>);
 
   @override
-  _i13.Future<void> deleteRelationshipsForNote(String? noteId) =>
+  _i13.Future<void> deleteRelationshipsForNote(
+    String? noteId, {
+    _i5.DatabaseExecutor? executor,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#deleteRelationshipsForNote, [noteId]),
+            Invocation.method(
+              #deleteRelationshipsForNote,
+              [noteId],
+              {#executor: executor},
+            ),
             returnValue: _i13.Future<void>.value(),
             returnValueForMissingStub: _i13.Future<void>.value(),
           )
@@ -2134,6 +2147,105 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
                 ),
           )
           as _i13.Future<List<Map<String, dynamic>>>);
+
+  @override
+  _i13.Future<_i6.AppRevisionVisibility> computeAppRevisionVisibility(
+    String? appId, {
+    _i5.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #computeAppRevisionVisibility,
+              [appId],
+              {#executor: executor},
+            ),
+            returnValue: _i13.Future<_i6.AppRevisionVisibility>.value(
+              _FakeAppRevisionVisibility_4(
+                this,
+                Invocation.method(
+                  #computeAppRevisionVisibility,
+                  [appId],
+                  {#executor: executor},
+                ),
+              ),
+            ),
+            returnValueForMissingStub:
+                _i13.Future<_i6.AppRevisionVisibility>.value(
+                  _FakeAppRevisionVisibility_4(
+                    this,
+                    Invocation.method(
+                      #computeAppRevisionVisibility,
+                      [appId],
+                      {#executor: executor},
+                    ),
+                  ),
+                ),
+          )
+          as _i13.Future<_i6.AppRevisionVisibility>);
+
+  @override
+  _i13.Future<String?> fallbackRevisionIdForApp(
+    String? appId, {
+    _i5.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #fallbackRevisionIdForApp,
+              [appId],
+              {#executor: executor},
+            ),
+            returnValue: _i13.Future<String?>.value(),
+            returnValueForMissingStub: _i13.Future<String?>.value(),
+          )
+          as _i13.Future<String?>);
+
+  @override
+  _i13.Future<bool> isAppRevisionEffectivelyVisible(
+    String? revisionId, {
+    _i5.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isAppRevisionEffectivelyVisible,
+              [revisionId],
+              {#executor: executor},
+            ),
+            returnValue: _i13.Future<bool>.value(false),
+            returnValueForMissingStub: _i13.Future<bool>.value(false),
+          )
+          as _i13.Future<bool>);
+
+  @override
+  _i13.Future<bool> isUserAppLibraryEffectivelyVisible(
+    int? libraryId, {
+    _i5.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isUserAppLibraryEffectivelyVisible,
+              [libraryId],
+              {#executor: executor},
+            ),
+            returnValue: _i13.Future<bool>.value(false),
+            returnValueForMissingStub: _i13.Future<bool>.value(false),
+          )
+          as _i13.Future<bool>);
+
+  @override
+  _i13.Future<bool> isUserAppLibraryDependencyEffectivelyVisible(
+    int? dependencyId, {
+    _i5.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isUserAppLibraryDependencyEffectivelyVisible,
+              [dependencyId],
+              {#executor: executor},
+            ),
+            returnValue: _i13.Future<bool>.value(false),
+            returnValueForMissingStub: _i13.Future<bool>.value(false),
+          )
+          as _i13.Future<bool>);
 
   @override
   _i13.Future<String> insertUserApp(_i4.UserApp? app) =>
@@ -2340,15 +2452,6 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
   _i13.Future<void> deleteUserAppLibrary(int? libraryId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteUserAppLibrary, [libraryId]),
-            returnValue: _i13.Future<void>.value(),
-            returnValueForMissingStub: _i13.Future<void>.value(),
-          )
-          as _i13.Future<void>);
-
-  @override
-  _i13.Future<void> deleteUserAppLibrariesForRevision(int? revisionId) =>
-      (super.noSuchMethod(
-            Invocation.method(#deleteUserAppLibrariesForRevision, [revisionId]),
             returnValue: _i13.Future<void>.value(),
             returnValueForMissingStub: _i13.Future<void>.value(),
           )
@@ -2885,9 +2988,16 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i13.Future<void>);
 
   @override
-  _i13.Future<void> deleteNoteConversationMappings(String? noteId) =>
+  _i13.Future<void> deleteNoteConversationMappings(
+    String? noteId, {
+    _i5.DatabaseExecutor? executor,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#deleteNoteConversationMappings, [noteId]),
+            Invocation.method(
+              #deleteNoteConversationMappings,
+              [noteId],
+              {#executor: executor},
+            ),
             returnValue: _i13.Future<void>.value(),
             returnValueForMissingStub: _i13.Future<void>.value(),
           )
@@ -3120,13 +3230,13 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
       (super.noSuchMethod(
             Invocation.method(#runRawWriteWithChangeCapture, [sql]),
             returnValue: _i13.Future<_i6.RawWriteResult>.value(
-              _FakeRawWriteResult_4(
+              _FakeRawWriteResult_5(
                 this,
                 Invocation.method(#runRawWriteWithChangeCapture, [sql]),
               ),
             ),
             returnValueForMissingStub: _i13.Future<_i6.RawWriteResult>.value(
-              _FakeRawWriteResult_4(
+              _FakeRawWriteResult_5(
                 this,
                 Invocation.method(#runRawWriteWithChangeCapture, [sql]),
               ),
@@ -3294,6 +3404,15 @@ class MockSqlQueryService extends _i1.Mock implements _i7.SqlQueryService {
           as bool);
 
   @override
+  bool isDdlQuery(_i7.SqlQueryType? queryType) =>
+      (super.noSuchMethod(
+            Invocation.method(#isDdlQuery, [queryType]),
+            returnValue: false,
+            returnValueForMissingStub: false,
+          )
+          as bool);
+
+  @override
   _i7.SqlQueryType getQueryType(String? sql) =>
       (super.noSuchMethod(
             Invocation.method(#getQueryType, [sql]),
@@ -3335,7 +3454,7 @@ class MockSqlQueryService extends _i1.Mock implements _i7.SqlQueryService {
               },
             ),
             returnValue: _i13.Future<_i7.SqlQueryResult>.value(
-              _FakeSqlQueryResult_5(
+              _FakeSqlQueryResult_6(
                 this,
                 Invocation.method(
                   #executeQuery,
@@ -3349,7 +3468,7 @@ class MockSqlQueryService extends _i1.Mock implements _i7.SqlQueryService {
               ),
             ),
             returnValueForMissingStub: _i13.Future<_i7.SqlQueryResult>.value(
-              _FakeSqlQueryResult_5(
+              _FakeSqlQueryResult_6(
                 this,
                 Invocation.method(
                   #executeQuery,
@@ -3848,11 +3967,11 @@ class MockInAppWebViewController extends _i1.Mock
   _i8.AndroidInAppWebViewController get android =>
       (super.noSuchMethod(
             Invocation.getter(#android),
-            returnValue: _FakeAndroidInAppWebViewController_6(
+            returnValue: _FakeAndroidInAppWebViewController_7(
               this,
               Invocation.getter(#android),
             ),
-            returnValueForMissingStub: _FakeAndroidInAppWebViewController_6(
+            returnValueForMissingStub: _FakeAndroidInAppWebViewController_7(
               this,
               Invocation.getter(#android),
             ),
@@ -3863,11 +3982,11 @@ class MockInAppWebViewController extends _i1.Mock
   _i8.IOSInAppWebViewController get ios =>
       (super.noSuchMethod(
             Invocation.getter(#ios),
-            returnValue: _FakeIOSInAppWebViewController_7(
+            returnValue: _FakeIOSInAppWebViewController_8(
               this,
               Invocation.getter(#ios),
             ),
-            returnValueForMissingStub: _FakeIOSInAppWebViewController_7(
+            returnValueForMissingStub: _FakeIOSInAppWebViewController_8(
               this,
               Invocation.getter(#ios),
             ),
@@ -3878,11 +3997,11 @@ class MockInAppWebViewController extends _i1.Mock
   _i8.PlatformInAppWebViewController get platform =>
       (super.noSuchMethod(
             Invocation.getter(#platform),
-            returnValue: _FakePlatformInAppWebViewController_8(
+            returnValue: _FakePlatformInAppWebViewController_9(
               this,
               Invocation.getter(#platform),
             ),
-            returnValueForMissingStub: _FakePlatformInAppWebViewController_8(
+            returnValueForMissingStub: _FakePlatformInAppWebViewController_9(
               this,
               Invocation.getter(#platform),
             ),
@@ -3893,11 +4012,11 @@ class MockInAppWebViewController extends _i1.Mock
   _i8.WebStorage get webStorage =>
       (super.noSuchMethod(
             Invocation.getter(#webStorage),
-            returnValue: _FakeWebStorage_9(
+            returnValue: _FakeWebStorage_10(
               this,
               Invocation.getter(#webStorage),
             ),
-            returnValueForMissingStub: _FakeWebStorage_9(
+            returnValueForMissingStub: _FakeWebStorage_10(
               this,
               Invocation.getter(#webStorage),
             ),
@@ -5097,13 +5216,13 @@ class MockNoteModificationService extends _i1.Mock
       (super.noSuchMethod(
             Invocation.method(#applyModifications, [noteId, modifications]),
             returnValue: _i13.Future<_i9.Note>.value(
-              _FakeNote_10(
+              _FakeNote_11(
                 this,
                 Invocation.method(#applyModifications, [noteId, modifications]),
               ),
             ),
             returnValueForMissingStub: _i13.Future<_i9.Note>.value(
-              _FakeNote_10(
+              _FakeNote_11(
                 this,
                 Invocation.method(#applyModifications, [noteId, modifications]),
               ),
@@ -5129,10 +5248,10 @@ class MockNoteModificationService extends _i1.Mock
       (super.noSuchMethod(
             Invocation.method(#buildNote, [data]),
             returnValue: _i13.Future<_i9.Note>.value(
-              _FakeNote_10(this, Invocation.method(#buildNote, [data])),
+              _FakeNote_11(this, Invocation.method(#buildNote, [data])),
             ),
             returnValueForMissingStub: _i13.Future<_i9.Note>.value(
-              _FakeNote_10(this, Invocation.method(#buildNote, [data])),
+              _FakeNote_11(this, Invocation.method(#buildNote, [data])),
             ),
           )
           as _i13.Future<_i9.Note>);
@@ -5142,13 +5261,30 @@ class MockNoteModificationService extends _i1.Mock
       (super.noSuchMethod(
             Invocation.method(#createNote, [data]),
             returnValue: _i13.Future<_i9.Note>.value(
-              _FakeNote_10(this, Invocation.method(#createNote, [data])),
+              _FakeNote_11(this, Invocation.method(#createNote, [data])),
             ),
             returnValueForMissingStub: _i13.Future<_i9.Note>.value(
-              _FakeNote_10(this, Invocation.method(#createNote, [data])),
+              _FakeNote_11(this, Invocation.method(#createNote, [data])),
             ),
           )
           as _i13.Future<_i9.Note>);
+
+  @override
+  _i13.Future<void> applyLinkModificationsForTest(
+    String? noteId,
+    dynamic linkData, {
+    _i5.DatabaseExecutor? txn,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #applyLinkModificationsForTest,
+              [noteId, linkData],
+              {#txn: txn},
+            ),
+            returnValue: _i13.Future<void>.value(),
+            returnValueForMissingStub: _i13.Future<void>.value(),
+          )
+          as _i13.Future<void>);
 
   @override
   _i13.Future<String> processAttachment(dynamic attachment) =>

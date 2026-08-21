@@ -601,9 +601,43 @@ class OAuthService {
 
   /// Perform the OAuth Authorization Code flow (with optional PKCE)
   /// Returns token response JSON
+  ///
+  /// **[redirectUriOverride] (M2.9):** by default this method routes
+  /// `config.redirectUri` through [OAuthRedirectHelper.resolve], which on
+  /// mobile force-rewrites *anything* it is given — loopback URIs and any
+  /// unrecognized scheme alike — to `notesynapse://oauth/callback`. That is
+  /// correct and deliberate for the MCP flow the helper was written for
+  /// (MCP servers hand us arbitrary, often loopback, redirect URIs, and the
+  /// app is only registered for `notesynapse://`), but it is fatal for the
+  /// Google Drive sync flow, whose redirect must be Google's own
+  /// reversed-client-ID scheme
+  /// (`com.googleusercontent.apps.<prefix>:/oauth2redirect`) — a scheme
+  /// `resolve()` would silently destroy.
+  ///
+  /// Rather than widening `resolve()` (which would risk changing what the
+  /// MCP flow does with some future MCP-supplied scheme), a caller that
+  /// owns its own, already-registered redirect scheme passes it here
+  /// verbatim: [redirectUriOverride] bypasses `resolve()` entirely and is
+  /// used exactly as given. `null` (the default, and what every MCP call
+  /// site passes) preserves the previous behavior byte-for-byte.
+  ///
+  /// The loopback-server-vs-deep-link dispatch follows the same rule: with
+  /// an override, the choice is made from the override's own scheme
+  /// (http/https => loopback server, anything else => deep link) instead of
+  /// from [OAuthRedirectHelper.usesCustomScheme], because "this platform
+  /// uses the app's custom scheme" is no longer the question being asked.
+  ///
+  /// **[extraAuthorizationParams]:** additional query parameters merged into
+  /// the authorization request. Google requires `access_type=offline` (and,
+  /// in practice, `prompt=consent`) to issue a refresh token at all; without
+  /// them Drive sync would stop working roughly an hour after consent with
+  /// no way to recover but re-consenting. Applied last, so a caller can also
+  /// override a computed parameter if it ever needs to.
   static Future<Map<String, dynamic>> authorizationCodeFlow({
     required OAuthConfig config,
     required String state,
+    String? redirectUriOverride,
+    Map<String, String>? extraAuthorizationParams,
   }) async {
     final verifier = config.usePkce ? _codeVerifier() : null;
     final codeChallenge = config.usePkce && verifier != null
@@ -611,15 +645,24 @@ class OAuthService {
         : null;
 
     await cancelActiveFlow();
-    final redirectUri = OAuthRedirectHelper.resolve(config.redirectUri);
 
-    if (OAuthRedirectHelper.usesCustomScheme) {
+    final override = redirectUriOverride?.trim();
+    final hasOverride = override != null && override.isNotEmpty;
+    final redirectUri = hasOverride
+        ? override
+        : OAuthRedirectHelper.resolve(config.redirectUri);
+    final useDeepLink = hasOverride
+        ? !_isHttpRedirect(redirectUri)
+        : OAuthRedirectHelper.usesCustomScheme;
+
+    if (useDeepLink) {
       return _authorizationCodeFlowWithDeepLink(
         config: config,
         state: state,
         verifier: verifier,
         codeChallenge: codeChallenge,
         redirectUri: redirectUri,
+        extraAuthorizationParams: extraAuthorizationParams,
       );
     }
 
@@ -629,7 +672,66 @@ class OAuthService {
       verifier: verifier,
       codeChallenge: codeChallenge,
       redirectUri: redirectUri,
+      extraAuthorizationParams: extraAuthorizationParams,
     );
+  }
+
+  /// True iff [redirectUri] is an `http`/`https` URI — i.e. one a local
+  /// loopback HTTP server could actually receive. Any other scheme (a
+  /// custom/app scheme) can only come back via a deep link.
+  static bool _isHttpRedirect(String redirectUri) {
+    final uri = Uri.tryParse(redirectUri);
+    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+  }
+
+  /// Builds the authorization-endpoint URL both flow branches launch.
+  ///
+  /// Extracted from the two (previously identical, separately maintained)
+  /// inline copies so there is exactly one definition of what the user's
+  /// browser is sent to, and so that definition is directly assertable
+  /// without launching a browser or completing a flow.
+  ///
+  /// Deliberately **public rather than `@visibleForTesting`**: it is called
+  /// from real production code (both branches of
+  /// [authorizationCodeFlow], and `GoogleDriveAuthService`), so marking it
+  /// test-only would be both inaccurate and an analyzer violation at those
+  /// call sites. Its testability is a consequence of being a pure function
+  /// of its arguments, not of an access annotation.
+  ///
+  /// That testability is not incidental. The Drive flow depends on
+  /// [extraAuthorizationParams] carrying `access_type=offline` and
+  /// `prompt=consent`; if either is silently dropped here, Google issues no
+  /// refresh token, everything looks fine for about an hour, and then sync
+  /// fails permanently with "no refresh token stored" — a failure whose
+  /// cause is arbitrarily far from its symptom. `extraAuthorizationParams`
+  /// is applied LAST so a caller can also override a computed parameter.
+  static Uri buildAuthorizationUri({
+    required OAuthConfig config,
+    required String state,
+    required String redirectUri,
+    String? codeChallenge,
+    Map<String, String>? extraAuthorizationParams,
+  }) {
+    final authParams = <String, String>{
+      'response_type': 'code',
+      'client_id': config.clientId,
+      'redirect_uri': redirectUri,
+      'state': state,
+      if (config.usePkce && codeChallenge != null)
+        'code_challenge': codeChallenge,
+      if (config.usePkce && codeChallenge != null)
+        'code_challenge_method': 'S256',
+    };
+    final trimmedScope = config.scope.trim();
+    if (trimmedScope.isNotEmpty) {
+      authParams['scope'] = trimmedScope;
+    }
+    if (extraAuthorizationParams != null) {
+      authParams.addAll(extraAuthorizationParams);
+    }
+    return Uri.parse(
+      config.authorizationEndpoint,
+    ).replace(queryParameters: authParams);
   }
 
   static Future<Map<String, dynamic>> _authorizationCodeFlowWithLoopbackServer({
@@ -638,6 +740,7 @@ class OAuthService {
     required String redirectUri,
     String? verifier,
     String? codeChallenge,
+    Map<String, String>? extraAuthorizationParams,
   }) async {
     final uri = Uri.tryParse(redirectUri);
     if (uri == null) {
@@ -665,23 +768,13 @@ class OAuthService {
 
     _activeServer = server;
 
-    final authParams = <String, String>{
-      'response_type': 'code',
-      'client_id': config.clientId,
-      'redirect_uri': redirectUri,
-      'state': state,
-      if (config.usePkce && codeChallenge != null)
-        'code_challenge': codeChallenge,
-      if (config.usePkce && codeChallenge != null)
-        'code_challenge_method': 'S256',
-    };
-    final trimmedScope = config.scope.trim();
-    if (trimmedScope.isNotEmpty) {
-      authParams['scope'] = trimmedScope;
-    }
-    final authUri = Uri.parse(
-      config.authorizationEndpoint,
-    ).replace(queryParameters: authParams);
+    final authUri = buildAuthorizationUri(
+      config: config,
+      state: state,
+      redirectUri: redirectUri,
+      codeChallenge: codeChallenge,
+      extraAuthorizationParams: extraAuthorizationParams,
+    );
 
     LoggerService.debug('OAuthService: Launching auth at: $authUri');
     await launchUrl(authUri, mode: LaunchMode.externalApplication);
@@ -918,24 +1011,15 @@ class OAuthService {
     required String redirectUri,
     String? verifier,
     String? codeChallenge,
+    Map<String, String>? extraAuthorizationParams,
   }) async {
-    final authParams = <String, String>{
-      'response_type': 'code',
-      'client_id': config.clientId,
-      'redirect_uri': redirectUri,
-      'state': state,
-      if (config.usePkce && codeChallenge != null)
-        'code_challenge': codeChallenge,
-      if (config.usePkce && codeChallenge != null)
-        'code_challenge_method': 'S256',
-    };
-    final trimmedScope = config.scope.trim();
-    if (trimmedScope.isNotEmpty) {
-      authParams['scope'] = trimmedScope;
-    }
-    final authUri = Uri.parse(
-      config.authorizationEndpoint,
-    ).replace(queryParameters: authParams);
+    final authUri = buildAuthorizationUri(
+      config: config,
+      state: state,
+      redirectUri: redirectUri,
+      codeChallenge: codeChallenge,
+      extraAuthorizationParams: extraAuthorizationParams,
+    );
 
     LoggerService.debug(
       'OAuthService: Launching auth with deep link redirect: $authUri',

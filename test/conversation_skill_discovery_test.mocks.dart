@@ -52,25 +52,31 @@ class _FakeDatabase_0 extends _i1.SmartFake implements _i2.Database {
     : super(parent, parentInvocation);
 }
 
-class _FakeRawWriteResult_1 extends _i1.SmartFake
+class _FakeAppRevisionVisibility_1 extends _i1.SmartFake
+    implements _i3.AppRevisionVisibility {
+  _FakeAppRevisionVisibility_1(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeRawWriteResult_2 extends _i1.SmartFake
     implements _i3.RawWriteResult {
-  _FakeRawWriteResult_1(Object parent, Invocation parentInvocation)
+  _FakeRawWriteResult_2(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeContextManagerService_2 extends _i1.SmartFake
+class _FakeContextManagerService_3 extends _i1.SmartFake
     implements _i4.ContextManagerService {
-  _FakeContextManagerService_2(Object parent, Invocation parentInvocation)
+  _FakeContextManagerService_3(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeMcpEndpoint_3 extends _i1.SmartFake implements _i5.McpEndpoint {
-  _FakeMcpEndpoint_3(Object parent, Invocation parentInvocation)
+class _FakeMcpEndpoint_4 extends _i1.SmartFake implements _i5.McpEndpoint {
+  _FakeMcpEndpoint_4(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeMcpToolsCache_4 extends _i1.SmartFake implements _i5.McpToolsCache {
-  _FakeMcpToolsCache_4(Object parent, Invocation parentInvocation)
+class _FakeMcpToolsCache_5 extends _i1.SmartFake implements _i5.McpToolsCache {
+  _FakeMcpToolsCache_5(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
@@ -516,9 +522,16 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i6.Future<void>);
 
   @override
-  _i6.Future<void> deleteRelationshipsForNote(String? noteId) =>
+  _i6.Future<void> deleteRelationshipsForNote(
+    String? noteId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#deleteRelationshipsForNote, [noteId]),
+            Invocation.method(
+              #deleteRelationshipsForNote,
+              [noteId],
+              {#executor: executor},
+            ),
             returnValue: _i6.Future<void>.value(),
             returnValueForMissingStub: _i6.Future<void>.value(),
           )
@@ -679,6 +692,90 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
             ),
           )
           as _i6.Future<List<Map<String, dynamic>>>);
+
+  @override
+  _i6.Future<_i3.AppRevisionVisibility> computeAppRevisionVisibility(
+    String? appId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #computeAppRevisionVisibility,
+              [appId],
+              {#executor: executor},
+            ),
+            returnValue: _i6.Future<_i3.AppRevisionVisibility>.value(
+              _FakeAppRevisionVisibility_1(
+                this,
+                Invocation.method(
+                  #computeAppRevisionVisibility,
+                  [appId],
+                  {#executor: executor},
+                ),
+              ),
+            ),
+          )
+          as _i6.Future<_i3.AppRevisionVisibility>);
+
+  @override
+  _i6.Future<String?> fallbackRevisionIdForApp(
+    String? appId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #fallbackRevisionIdForApp,
+              [appId],
+              {#executor: executor},
+            ),
+            returnValue: _i6.Future<String?>.value(),
+          )
+          as _i6.Future<String?>);
+
+  @override
+  _i6.Future<bool> isAppRevisionEffectivelyVisible(
+    String? revisionId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isAppRevisionEffectivelyVisible,
+              [revisionId],
+              {#executor: executor},
+            ),
+            returnValue: _i6.Future<bool>.value(false),
+          )
+          as _i6.Future<bool>);
+
+  @override
+  _i6.Future<bool> isUserAppLibraryEffectivelyVisible(
+    int? libraryId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isUserAppLibraryEffectivelyVisible,
+              [libraryId],
+              {#executor: executor},
+            ),
+            returnValue: _i6.Future<bool>.value(false),
+          )
+          as _i6.Future<bool>);
+
+  @override
+  _i6.Future<bool> isUserAppLibraryDependencyEffectivelyVisible(
+    int? dependencyId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isUserAppLibraryDependencyEffectivelyVisible,
+              [dependencyId],
+              {#executor: executor},
+            ),
+            returnValue: _i6.Future<bool>.value(false),
+          )
+          as _i6.Future<bool>);
 
   @override
   _i6.Future<String> insertUserApp(_i14.UserApp? app) =>
@@ -855,15 +952,6 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
   _i6.Future<void> deleteUserAppLibrary(int? libraryId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteUserAppLibrary, [libraryId]),
-            returnValue: _i6.Future<void>.value(),
-            returnValueForMissingStub: _i6.Future<void>.value(),
-          )
-          as _i6.Future<void>);
-
-  @override
-  _i6.Future<void> deleteUserAppLibrariesForRevision(int? revisionId) =>
-      (super.noSuchMethod(
-            Invocation.method(#deleteUserAppLibrariesForRevision, [revisionId]),
             returnValue: _i6.Future<void>.value(),
             returnValueForMissingStub: _i6.Future<void>.value(),
           )
@@ -1303,9 +1391,16 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i6.Future<void>);
 
   @override
-  _i6.Future<void> deleteNoteConversationMappings(String? noteId) =>
+  _i6.Future<void> deleteNoteConversationMappings(
+    String? noteId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#deleteNoteConversationMappings, [noteId]),
+            Invocation.method(
+              #deleteNoteConversationMappings,
+              [noteId],
+              {#executor: executor},
+            ),
             returnValue: _i6.Future<void>.value(),
             returnValueForMissingStub: _i6.Future<void>.value(),
           )
@@ -1510,7 +1605,7 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
       (super.noSuchMethod(
             Invocation.method(#runRawWriteWithChangeCapture, [sql]),
             returnValue: _i6.Future<_i3.RawWriteResult>.value(
-              _FakeRawWriteResult_1(
+              _FakeRawWriteResult_2(
                 this,
                 Invocation.method(#runRawWriteWithChangeCapture, [sql]),
               ),
@@ -1643,7 +1738,7 @@ class MockAgentService extends _i1.Mock implements _i19.AgentService {
   _i4.ContextManagerService get contextManager =>
       (super.noSuchMethod(
             Invocation.getter(#contextManager),
-            returnValue: _FakeContextManagerService_2(
+            returnValue: _FakeContextManagerService_3(
               this,
               Invocation.getter(#contextManager),
             ),
@@ -2161,7 +2256,7 @@ class MockMcpService extends _i1.Mock implements _i27.McpService {
               #additionalHeaders: additionalHeaders,
             }),
             returnValue: _i6.Future<_i5.McpEndpoint>.value(
-              _FakeMcpEndpoint_3(
+              _FakeMcpEndpoint_4(
                 this,
                 Invocation.method(#addEndpoint, [], {
                   #name: name,
@@ -2234,7 +2329,7 @@ class MockMcpService extends _i1.Mock implements _i27.McpService {
       (super.noSuchMethod(
             Invocation.method(#refreshTools, [endpointId]),
             returnValue: _i6.Future<_i5.McpToolsCache>.value(
-              _FakeMcpToolsCache_4(
+              _FakeMcpToolsCache_5(
                 this,
                 Invocation.method(#refreshTools, [endpointId]),
               ),

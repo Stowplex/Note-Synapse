@@ -131,10 +131,15 @@ class _FileManagerTabState extends State<FileManagerTab> {
       final db = _rawDb!;
 
       // Check attachments table - check BOTH filePath and fileName columns
-      // for consistency with _showFileUsageDetails query
+      // for consistency with _showFileUsageDetails query. M1.11: only live
+      // rows count as "used" -- a soft-deleted attachment's file should be
+      // eligible for cleanup here just like a hard-deleted one always was
+      // (same reasoning as the conversation_attachments filter below, M1.8,
+      // now that `attachments` has its own `__deleted__` column too).
       final attachments = await db.query(
         'attachments',
         columns: ['filePath', 'fileName'],
+        where: '__deleted__ = 0',
       );
       for (final row in attachments) {
         final filePath = row['filePath'] as String;
@@ -147,10 +152,13 @@ class _FileManagerTabState extends State<FileManagerTab> {
         }
       }
 
-      // Check conversation_attachments table
+      // Check conversation_attachments table. M1.8: only live rows count as
+      // "used" -- a soft-deleted attachment's file should be eligible for
+      // cleanup here just like a hard-deleted one always was.
       final convAttachments = await db.query(
         'conversation_attachments',
         columns: ['filePath', 'fileName'],
+        where: '__deleted__ = 0',
       );
       for (final row in convAttachments) {
         final filePath = row['filePath'] as String;
@@ -285,24 +293,30 @@ class _FileManagerTabState extends State<FileManagerTab> {
     List<Map<String, Object?>> convReferences = [];
 
     try {
-      // Query note attachments that reference this file
+      // Query note attachments that reference this file. M1.11: excludes
+      // soft-deleted rows, consistent with the conversation_attachments
+      // query below (M1.8) and with _checkFileUsage above -- a tombstoned
+      // attachment should not appear as a live "usage" of the file.
       noteReferences = await _rawDb!.rawQuery(
         '''
         SELECT n.id, n.title, substr(n.content, 1, 100) as digest
         FROM attachments a
         LEFT JOIN notes n ON a.noteId = n.id
-        WHERE a.filePath LIKE ? OR a.fileName = ?
+        WHERE (a.filePath LIKE ? OR a.fileName = ?) AND a.__deleted__ = 0
       ''',
         ['%$fileName', fileName],
       );
 
-      // Query conversation attachments that reference this file
+      // Query conversation attachments that reference this file. M1.8:
+      // excludes soft-deleted rows, consistent with _checkFileUsage above
+      // -- a tombstoned attachment should not appear as a live "usage" of
+      // the file.
       convReferences = await _rawDb!.rawQuery(
         '''
         SELECT ca.messageId, substr(cm.content, 1, 100) as digest
         FROM conversation_attachments ca
         LEFT JOIN conversation_messages cm ON ca.messageId = cm.id
-        WHERE ca.filePath LIKE ? OR ca.fileName = ?
+        WHERE (ca.filePath LIKE ? OR ca.fileName = ?) AND ca.__deleted__ = 0
       ''',
         ['%$fileName', fileName],
       );

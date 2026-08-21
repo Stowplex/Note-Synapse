@@ -86,36 +86,42 @@ class _FakeDatabase_4 extends _i1.SmartFake implements _i5.Database {
     : super(parent, parentInvocation);
 }
 
-class _FakeRawWriteResult_5 extends _i1.SmartFake
+class _FakeAppRevisionVisibility_5 extends _i1.SmartFake
+    implements _i6.AppRevisionVisibility {
+  _FakeAppRevisionVisibility_5(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeRawWriteResult_6 extends _i1.SmartFake
     implements _i6.RawWriteResult {
-  _FakeRawWriteResult_5(Object parent, Invocation parentInvocation)
+  _FakeRawWriteResult_6(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeContextManagerService_6 extends _i1.SmartFake
+class _FakeContextManagerService_7 extends _i1.SmartFake
     implements _i7.ContextManagerService {
-  _FakeContextManagerService_6(Object parent, Invocation parentInvocation)
+  _FakeContextManagerService_7(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeMcpEndpoint_7 extends _i1.SmartFake implements _i8.McpEndpoint {
-  _FakeMcpEndpoint_7(Object parent, Invocation parentInvocation)
+class _FakeMcpEndpoint_8 extends _i1.SmartFake implements _i8.McpEndpoint {
+  _FakeMcpEndpoint_8(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeMcpToolsCache_8 extends _i1.SmartFake implements _i8.McpToolsCache {
-  _FakeMcpToolsCache_8(Object parent, Invocation parentInvocation)
+class _FakeMcpToolsCache_9 extends _i1.SmartFake implements _i8.McpToolsCache {
+  _FakeMcpToolsCache_9(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeContextNode_9 extends _i1.SmartFake implements _i9.ContextNode {
-  _FakeContextNode_9(Object parent, Invocation parentInvocation)
+class _FakeContextNode_10 extends _i1.SmartFake implements _i9.ContextNode {
+  _FakeContextNode_10(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeTaskResultStorage_10 extends _i1.SmartFake
+class _FakeTaskResultStorage_11 extends _i1.SmartFake
     implements _i10.TaskResultStorage {
-  _FakeTaskResultStorage_10(Object parent, Invocation parentInvocation)
+  _FakeTaskResultStorage_11(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
@@ -1204,9 +1210,16 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i14.Future<void>);
 
   @override
-  _i14.Future<void> deleteRelationshipsForNote(String? noteId) =>
+  _i14.Future<void> deleteRelationshipsForNote(
+    String? noteId, {
+    _i5.DatabaseExecutor? executor,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#deleteRelationshipsForNote, [noteId]),
+            Invocation.method(
+              #deleteRelationshipsForNote,
+              [noteId],
+              {#executor: executor},
+            ),
             returnValue: _i14.Future<void>.value(),
             returnValueForMissingStub: _i14.Future<void>.value(),
           )
@@ -1367,6 +1380,90 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
             ),
           )
           as _i14.Future<List<Map<String, dynamic>>>);
+
+  @override
+  _i14.Future<_i6.AppRevisionVisibility> computeAppRevisionVisibility(
+    String? appId, {
+    _i5.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #computeAppRevisionVisibility,
+              [appId],
+              {#executor: executor},
+            ),
+            returnValue: _i14.Future<_i6.AppRevisionVisibility>.value(
+              _FakeAppRevisionVisibility_5(
+                this,
+                Invocation.method(
+                  #computeAppRevisionVisibility,
+                  [appId],
+                  {#executor: executor},
+                ),
+              ),
+            ),
+          )
+          as _i14.Future<_i6.AppRevisionVisibility>);
+
+  @override
+  _i14.Future<String?> fallbackRevisionIdForApp(
+    String? appId, {
+    _i5.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #fallbackRevisionIdForApp,
+              [appId],
+              {#executor: executor},
+            ),
+            returnValue: _i14.Future<String?>.value(),
+          )
+          as _i14.Future<String?>);
+
+  @override
+  _i14.Future<bool> isAppRevisionEffectivelyVisible(
+    String? revisionId, {
+    _i5.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isAppRevisionEffectivelyVisible,
+              [revisionId],
+              {#executor: executor},
+            ),
+            returnValue: _i14.Future<bool>.value(false),
+          )
+          as _i14.Future<bool>);
+
+  @override
+  _i14.Future<bool> isUserAppLibraryEffectivelyVisible(
+    int? libraryId, {
+    _i5.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isUserAppLibraryEffectivelyVisible,
+              [libraryId],
+              {#executor: executor},
+            ),
+            returnValue: _i14.Future<bool>.value(false),
+          )
+          as _i14.Future<bool>);
+
+  @override
+  _i14.Future<bool> isUserAppLibraryDependencyEffectivelyVisible(
+    int? dependencyId, {
+    _i5.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isUserAppLibraryDependencyEffectivelyVisible,
+              [dependencyId],
+              {#executor: executor},
+            ),
+            returnValue: _i14.Future<bool>.value(false),
+          )
+          as _i14.Future<bool>);
 
   @override
   _i14.Future<String> insertUserApp(_i23.UserApp? app) =>
@@ -1545,15 +1642,6 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
   _i14.Future<void> deleteUserAppLibrary(int? libraryId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteUserAppLibrary, [libraryId]),
-            returnValue: _i14.Future<void>.value(),
-            returnValueForMissingStub: _i14.Future<void>.value(),
-          )
-          as _i14.Future<void>);
-
-  @override
-  _i14.Future<void> deleteUserAppLibrariesForRevision(int? revisionId) =>
-      (super.noSuchMethod(
-            Invocation.method(#deleteUserAppLibrariesForRevision, [revisionId]),
             returnValue: _i14.Future<void>.value(),
             returnValueForMissingStub: _i14.Future<void>.value(),
           )
@@ -1993,9 +2081,16 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i14.Future<void>);
 
   @override
-  _i14.Future<void> deleteNoteConversationMappings(String? noteId) =>
+  _i14.Future<void> deleteNoteConversationMappings(
+    String? noteId, {
+    _i5.DatabaseExecutor? executor,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#deleteNoteConversationMappings, [noteId]),
+            Invocation.method(
+              #deleteNoteConversationMappings,
+              [noteId],
+              {#executor: executor},
+            ),
             returnValue: _i14.Future<void>.value(),
             returnValueForMissingStub: _i14.Future<void>.value(),
           )
@@ -2200,7 +2295,7 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
       (super.noSuchMethod(
             Invocation.method(#runRawWriteWithChangeCapture, [sql]),
             returnValue: _i14.Future<_i6.RawWriteResult>.value(
-              _FakeRawWriteResult_5(
+              _FakeRawWriteResult_6(
                 this,
                 Invocation.method(#runRawWriteWithChangeCapture, [sql]),
               ),
@@ -2333,7 +2428,7 @@ class MockAgentService extends _i1.Mock implements _i27.AgentService {
   _i7.ContextManagerService get contextManager =>
       (super.noSuchMethod(
             Invocation.getter(#contextManager),
-            returnValue: _FakeContextManagerService_6(
+            returnValue: _FakeContextManagerService_7(
               this,
               Invocation.getter(#contextManager),
             ),
@@ -2711,7 +2806,7 @@ class MockMcpService extends _i1.Mock implements _i34.McpService {
               #additionalHeaders: additionalHeaders,
             }),
             returnValue: _i14.Future<_i8.McpEndpoint>.value(
-              _FakeMcpEndpoint_7(
+              _FakeMcpEndpoint_8(
                 this,
                 Invocation.method(#addEndpoint, [], {
                   #name: name,
@@ -2784,7 +2879,7 @@ class MockMcpService extends _i1.Mock implements _i34.McpService {
       (super.noSuchMethod(
             Invocation.method(#refreshTools, [endpointId]),
             returnValue: _i14.Future<_i8.McpToolsCache>.value(
-              _FakeMcpToolsCache_8(
+              _FakeMcpToolsCache_9(
                 this,
                 Invocation.method(#refreshTools, [endpointId]),
               ),
@@ -2853,7 +2948,7 @@ class MockContextManagerService extends _i1.Mock
               #maxTokens: maxTokens,
             }),
             returnValue: _i14.Future<_i9.ContextNode>.value(
-              _FakeContextNode_9(
+              _FakeContextNode_10(
                 this,
                 Invocation.method(#createRootContext, [], {
                   #objective: objective,
@@ -2877,7 +2972,7 @@ class MockContextManagerService extends _i1.Mock
               #objective: objective,
               #allowedTools: allowedTools,
             }),
-            returnValue: _FakeContextNode_9(
+            returnValue: _FakeContextNode_10(
               this,
               Invocation.method(#createChildContext, [], {
                 #parent: parent,
@@ -3071,7 +3166,7 @@ class MockContextManagerService extends _i1.Mock
   ) =>
       (super.noSuchMethod(
             Invocation.method(#generateTocFromResult, [taskId, goal, result]),
-            returnValue: _FakeTaskResultStorage_10(
+            returnValue: _FakeTaskResultStorage_11(
               this,
               Invocation.method(#generateTocFromResult, [taskId, goal, result]),
             ),
