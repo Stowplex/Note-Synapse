@@ -2143,27 +2143,81 @@ void main() {
         canSync,
         <String>[
           'notes',
+          // M2.14: the five tables below became syncable when `__exists__`
+          // started carrying owner references and identity columns.
+          'subnotes',
           'tags',
           'filters',
+          'relationships',
           'tag_workflow_bindings',
           'conversations',
           'conversation_messages',
+          'conversation_attachments',
+          'attachments',
+          'user_apps',
         ],
         reason:
-            'exactly these six can be built by a receiving device today. If '
-            'this list changes, something either became syncable (good — say '
-            'so in the milestone notes) or regressed (fix it).',
+            'exactly these eleven can be built by a receiving device today. '
+            'If this list changes, something either became syncable (good — '
+            'say so in the milestone notes) or regressed (fix it).',
       );
       expect(blocked, {
-        'subnotes': 'unresolvable column noteId',
-        'relationships': 'unresolvable column fromNoteId',
-        'conversation_attachments': 'unresolvable column messageId',
-        'attachments': 'unresolvable column noteId',
-        'user_apps': 'unresolvable column uuid',
-        'app_revisions': 'unresolvable column appId',
+        // The one column in the whole schema still unresolvable and NOT a
+        // reference: an app revision's source code, a blob in a TEXT column
+        // awaiting M3's content-addressed blob mechanism. Note the reported
+        // column — before M2.14 it was `appId`, an owner FK now carried, and
+        // `revisionTimestamp`, which was never really unresolvable at all
+        // (it is this table's createdAt-equivalent; see
+        // `syncEntityCreatedAtColumnByTable`).
+        'app_revisions': 'unresolvable column appCode',
         'user_app_libraries': 'non-portable id',
         'user_app_library_dependencies': 'non-portable id',
       });
+    });
+
+    test('every carried column is a declared reference or a unique identity, '
+        'and no blob is ever carried', () async {
+      final carried = <String, List<String>>{};
+      for (final scope in DatabaseService.syncEntityCaptureScopes) {
+        final syncability = await entitySyncability(db, scope);
+        if (syncability.existsCarriedColumns.isEmpty) continue;
+        carried[scope.table] = syncability.existsCarriedColumns;
+      }
+
+      expect(carried, {
+        'subnotes': ['noteId'],
+        // Sorted, not schema order — see `_computeEntitySyncability`'s note
+        // on why declaration order is not stable across devices.
+        'relationships': ['fromNoteId', 'toNoteId'],
+        'conversation_attachments': ['messageId'],
+        'attachments': ['noteId'],
+        'user_apps': ['uuid'],
+        'app_revisions': ['appId'],
+        // `user_app_libraries`/`user_app_library_dependencies` are absent,
+        // not empty-by-coincidence: a non-portable INTEGER PRIMARY KEY is
+        // rejected before any column classification runs, because there is
+        // no cross-device row for a carried value to belong to. Porting
+        // those ids (a separate, tracked milestone) is what makes them
+        // appear here — automatically, with no change to this rule.
+      });
+
+      // The load-bearing negative: the naive rule ("carry every NOT NULL,
+      // no-default column outside sync scope") would carry these two, and
+      // they are a whole mini-app's source and a dependency's raw file bytes
+      // — inlined into a permanent CRDT operation and hashed into its
+      // GENESIS contentKey. If this ever fails, the carried-column rule has
+      // been widened past what it can safely carry.
+      for (final entry in syncContentDeferredTables.entries) {
+        for (final column in entry.value) {
+          expect(
+            carried[entry.key] ?? const [],
+            isNot(contains(column)),
+            reason:
+                '${entry.key}.$column is deferred to M3 and must never ride '
+                'on an __exists__ payload',
+          );
+        }
+      }
     });
   });
 
@@ -2417,16 +2471,33 @@ void main() {
         final dbB = await b.db;
 
         await _insertPreExistingNote(dbA, id: 'n1', title: 'Owner', content: 'C');
-        // subnotes.noteId is a NOT NULL owner FK outside sync scope, so no
-        // peer can ever construct the row — every operation minted for it
-        // would become a permanent missing_exists entry on every device.
-        await dbA.insert('subnotes', {
-          'id': 's1',
-          'noteId': 'n1',
-          'name': 'Step one',
-          'content': 'do it',
+        // **M2.14 moved the subject of this test.** It used to be `subnotes`,
+        // whose `noteId` owner FK made it unbuildable on any peer; `__exists__`
+        // now carries that value and subnotes round-trip (see
+        // `child_entity_sync_test.dart`). `app_revisions` is what is left:
+        // `appCode` is a `NOT NULL` column that is neither in sync scope nor
+        // a reference — it is an app's whole source, awaiting M3's blob
+        // mechanism — so no peer can construct the row, and every operation
+        // minted for it would become a permanent missing_exists entry.
+        await dbA.insert('user_apps', {
+          'id': 'app1',
+          'uuid': 'uuid-app1',
+          'name': 'Counter',
+          'description': 'counts',
+          'steps': '[]',
+          'htmlContent': '',
+          'type': 'normal',
           'createdAt': 1000,
-          'isCompleted': 0,
+          'updatedAt': 1000,
+        });
+        await dbA.insert('app_revisions', {
+          'id': 'rev1',
+          'appId': 'app1',
+          'revisionNumber': 1,
+          'revisionTimestamp': 1000,
+          'userPrompt': 'make a counter',
+          'aiResponse': 'ok',
+          'appCode': '<html>lots of code</html>',
         });
         // Two tables with nothing unresolvable, which DO sync end to end.
         await dbA.insert('tag_workflow_bindings', {
@@ -2447,7 +2518,7 @@ void main() {
         final seedResult = await a.scanner.scan();
         expect(
           seedResult.nonPortableTablesSkipped,
-          contains('subnotes (unresolvable column noteId)'),
+          contains('app_revisions (unresolvable column appCode)'),
           reason: 'the gate names the table AND the column responsible',
         );
 
@@ -2460,7 +2531,7 @@ void main() {
           await dbA.query(
             'sync_pending_ops',
             where: 'entityTable = ?',
-            whereArgs: ['subnotes'],
+            whereArgs: ['app_revisions'],
           ),
           isEmpty,
           reason:
@@ -2472,12 +2543,20 @@ void main() {
           await dbB.query(
             'sync_materialize_queue',
             where: 'entityTable = ?',
-            whereArgs: ['subnotes'],
+            whereArgs: ['app_revisions'],
           ),
           isEmpty,
           reason: 'and therefore no undrainable backlog on the receiver',
         );
-        expect(await dbB.query('subnotes'), isEmpty);
+        expect(await dbB.query('app_revisions'), isEmpty);
+        expect(
+          (await dbB.query('user_apps')).single['name'],
+          'Counter',
+          reason:
+              'the app row itself DOES sync as of M2.14 (uuid is carried on '
+              '__exists__) — only its revisions, and therefore its runnable '
+              'source, wait for M3',
+        );
 
         // The tables that CAN sync are untouched by the gate.
         expect(
@@ -2494,10 +2573,10 @@ void main() {
         expect(health.isDegraded, isTrue);
         final issue = health.issues
             .firstWhere((i) => i.kind == SyncHealthIssueKind.tablesNotSynced);
-        expect(issue.detail, contains('subnotes'));
+        expect(issue.detail, contains('app_revisions'));
         expect(
           issue.detail,
-          isNot(contains('attachments')),
+          isNot(contains('user_app_libraries')),
           reason:
               'only tables the user actually HAS rows in are reported — an '
               'unconditional list would mark every device permanently '

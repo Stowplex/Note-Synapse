@@ -3167,6 +3167,13 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get userAppNoRunnableCode => '此应用的代码尚未同步到本设备';
+
+  @override
+  String get userAppNoRunnableCodeDetail =>
+      '应用的信息已同步，但应用代码暂不支持云同步。请在创建它的设备上打开。';
+
+  @override
   String cloudSyncHealthTablesNotSynced(int count, String detail) {
     return '有 $count 类内容暂不支持同步：$detail';
   }

@@ -501,10 +501,56 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
     );
   }
 
+  /// Shown when the app has no revision at all — so there is no code to run.
+  ///
+  /// **This used to be `SizedBox.shrink()`: a normal app bar over a
+  /// completely blank body, with no message of any kind.** That was already
+  /// reachable (an interrupted creation, an import), but M2.14 made it a
+  /// routine, expected state rather than a rare one: cloud sync now
+  /// replicates a `user_apps` row to a second device while `app_revisions`
+  /// stays behind, because a revision's `appCode` is an entire HTML/JS
+  /// source and belongs to the content-addressed blob mechanism (M3), not to
+  /// inline field sync. A user opening a synced app would have got a silent
+  /// white screen. Saying which of the two situations they are in is the
+  /// least this can do until the code itself travels.
+  Widget _buildNoRevisionState() {
+    final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.cloud_off_outlined,
+              size: 48,
+              color: theme.colorScheme.outline,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              l10n.userAppNoRunnableCode,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              l10n.userAppNoRunnableCodeDetail,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildWebView(UserApp currentApp) {
     final revision = _selectedRevision;
     if (revision == null) {
-      return const SizedBox.shrink();
+      return _buildNoRevisionState();
     }
     LoggerService.debug(
       'WebView loading data: ${revision.appCode.length} characters',

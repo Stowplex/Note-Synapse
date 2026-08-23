@@ -68,40 +68,59 @@
 // product/design question for later work, not resolved by this milestone.
 //
 // **Columns that are neither `idColumn`, the createdAt-equivalent, nor in
-// `syncScopeColumns` at all (an owner FK excluded from sync scope, e.g.
-// `subnotes.noteId`/`attachments.noteId`/`app_revisions.appId`, or
-// `user_apps.uuid`) can never be resolved by this file, by construction —
-// M2.4's own capture-scope decisions, not something this milestone
-// reopens.** If such a column is `NOT NULL` with no SQL-level default, this
-// file will never have a real value for it and a placeholder would be
-// permanently wrong (never corrected by any future operation, unlike a
-// `syncScopeColumns` placeholder). Rather than insert a row with a garbage
-// FK, `_materializeExists` detects this generically (via `PRAGMA
-// table_info`, not a hardcoded per-table list) and skips the INSERT
-// entirely for that entity — a disclosed residual, not a crash: brand-new
-// cross-device creation of `subnotes`/`attachments`/`relationships`/
-// `conversation_attachments`/`app_revisions`/`user_apps` does not yet
-// materialize into a real row (their `__deleted__`-only sync scope already
-// signals this — full content sync for the User-App/attachment/conversation
-// families is M3/M4 scope per Phased Delivery, not M2).
+// `syncScopeColumns` at all used to be unresolvable here by construction —
+// and that is what M2.14 fixed.** For six tables the missing column was an
+// owner pointer or a second required identity column
+// (`subnotes.noteId`, `attachments.noteId`,
+// `relationships.fromNoteId`/`toNoteId`,
+// `conversation_attachments.messageId`, `app_revisions.appId`,
+// `user_apps.uuid`). Those values now travel ON the `__exists__` operation
+// (`encodeExistsPayloadJson`, `sync_table_shape.dart`) and
+// `_materializeExists` reads them back, so five of those six tables now
+// produce real rows on a peer: `subnotes`, `relationships`, `attachments`,
+// `conversation_attachments` and `user_apps`. Read "rows", not "content" —
+// an `attachments` row arrives complete while the file it names does not,
+// and a `user_apps` row arrives without any `app_revisions`. The next
+// paragraph is that boundary, stated in full.
 //
-// **Precisely, because "not synced" and "not minted" are different claims
-// and have been conflated in review notes before:** every table in that
-// list DOES mint and publish operations normally — their ids are portable,
-// so `OutboxDrainer`/`SeedScanner` treat them like any other entity. What
-// fails is only the receiving end. `user_apps` is the clearest case: its
-// `uuid` column is `NOT NULL UNIQUE` and outside `syncScopeColumns`, so a
-// receiving device parks every one of its field operations under
-// `missing_exists` — 11 entries after four rounds, permanently — rather
-// than creating the row. That is separate from, and must not be confused
-// with, the `user_app_libraries`/`user_app_library_dependencies` case
-// below, where nothing is minted in the first place. The SAME generic
-// check also skips any table whose `idColumn` is a non-portable `INTEGER
-// PRIMARY KEY AUTOINCREMENT` (`user_app_libraries`/
-// `user_app_library_dependencies`) — a locally-assigned integer id from one
-// device is meaningless on another, so materializing a brand-new row for
-// these under a remote `entityId` would be actively wrong, not merely
-// incomplete. See the milestone report for the full table-by-table trace.
+// **What the carried-column rule deliberately will NOT carry, because the
+// obvious version of the rule got this wrong.** "Every `NOT NULL`,
+// no-default column outside sync scope" also selects `app_revisions.appCode`
+// (an entire mini app's HTML/JS source) and
+// `user_app_library_dependencies.bytes` (a dependency's raw file), which
+// would inline a blob into a permanent CRDT operation and hash it into a
+// GENESIS `contentKey`. So the rule is narrowed to REFERENCE and IDENTITY
+// columns — a declared `FOREIGN KEY`, or a sole-column non-partial `UNIQUE`
+// index — and everything else still blocks. See `entitySyncability`'s doc
+// comment for the full reasoning.
+//
+// **So the residual is smaller and sharper, not gone.** `app_revisions` is
+// still skipped here, now for `appCode` alone: a mini app syncs its row,
+// name, description, steps, pinned-revision id and app state, and does NOT
+// sync the revision that holds its runnable code — that waits for §
+// Architecture 4's content-addressed blobs (M3). `attachments`/
+// `conversation_attachments` rows arrive complete while the FILES they
+// point at do not, for the same reason. `app_revisions` IS on the health
+// surface (it is `canSync == false`, so `tablesNotSynced` names it, with
+// `appCode` as the reason); the attachment tables deliberately are NOT —
+// see `SyncHealthIssueKind.tablesNotSynced`'s own doc comment for why a
+// health kind for them was written and then removed, and where the
+// per-attachment "File not found" affordance lives instead. The SAME
+// generic check still skips any table whose
+// `idColumn` is a non-portable `INTEGER PRIMARY KEY AUTOINCREMENT`
+// (`user_app_libraries`/`user_app_library_dependencies`) — a
+// locally-assigned integer id from one device is meaningless on another,
+// so materializing a brand-new row for these under a remote `entityId`
+// would be actively wrong, not merely incomplete.
+//
+// **An `__exists__` minted before M2.14 carries the constant `true` and
+// therefore no owner value, and those operations are real and on real
+// backends** (every one of these tables minted and published normally until
+// M2.10 gated them — `user_apps` accumulated 11 permanent `missing_exists`
+// entries on a real device that way). This file reads such a payload
+// without throwing and declines to build the row, exactly as before;
+// `OutboxDrainer._upgradeLegacyExistsPayloads` is what replaces those stale
+// registers with complete ones.
 //
 // A `field` operation that resolves before its entity's `__exists__` has
 // materialized (a real, if narrow, possibility across independently-pulled
@@ -258,6 +277,41 @@ const String missingExistsBlockingReason = 'missing_exists';
 const String unfillableMembershipColumnBlockingReason =
     'unfillable_membership_column';
 
+/// What one shell-row (`__exists__`) insert attempt actually did — M2.14.
+///
+/// Returned rather than inferred for the same reason
+/// [MembershipInsertOutcome] is: [SyncMaterializer.sweepMissingExists] has
+/// to tell "this queue entry is resolved, delete it" from "still blocked,
+/// leave `enqueuedAt` alone", and a retry that re-enqueued itself would
+/// destroy the only aging signal the row has.
+enum ExistsInsertOutcome {
+  /// The shell row was written.
+  inserted,
+
+  /// A row for this entity was already there — an idempotent re-apply, and a
+  /// legitimate success (a queued retry for it is resolved).
+  alreadyPresent,
+
+  /// The row cannot be built from what this protocol carries: a non-portable
+  /// integer id, a `NOT NULL` column that is neither in `syncScopeColumns`
+  /// nor carried on `__exists__` (`app_revisions.appCode`), or an
+  /// `__exists__` payload minted before M2.14 that carries no owner values
+  /// at all.
+  ///
+  /// **Nothing is enqueued for it**, deliberately: a queue entry whose
+  /// prerequisite can never arrive is exactly the permanent, undrainable
+  /// per-peer backlog M2.10 spent a milestone deleting. The condition is
+  /// reported at the TABLE level instead, by `entitySyncability` through the
+  /// health surface, where one line covers every row rather than one row
+  /// covering every line.
+  unresolvable,
+
+  /// Every value is available, but a row this one references does not exist
+  /// locally yet — the ordinary cross-log ordering case. See
+  /// [SyncMaterializer.sweepMissingExists].
+  blockedOnOwner,
+}
+
 /// What one membership-row insert attempt actually did. Returned rather
 /// than inferred so [SyncMaterializer.sweepMissingExists] can tell "this
 /// queue entry is resolved, delete it" from "this entry is STILL
@@ -288,6 +342,13 @@ class SyncMaterializer {
   /// instance's lifetime — `_writeResolvedFieldValue` runs once per
   /// materialized field, which is the hottest loop in a pull.
   final Map<String, bool> _portabilityCache = {};
+
+  /// The same memoization for [entitySyncability], which M2.14 makes a
+  /// per-`__exists__` lookup (it now answers "which columns does this
+  /// table's `__exists__` carry, and what do they reference?"). Four
+  /// `PRAGMA` round trips per call, so caching it is the difference between
+  /// four and four-thousand on a first sync.
+  final Map<String, EntitySyncability> _syncabilityCache = {};
 
   SyncMaterializer(this._seqCounter, this._hlc, {CausalEngine? engine})
     : _engine = engine ?? CausalEngine();
@@ -384,6 +445,17 @@ class SyncMaterializer {
         missingExistsBlockingReason,
         unfillableMembershipColumnBlockingReason,
       ],
+      // **`__exists__` entries first, then everything else in id order —
+      // M2.14, and this ordering is load-bearing, not cosmetic.** A blocked
+      // child entity produces one queue entry for its own `__exists__` plus
+      // one per field operation that arrived while its row was missing. If a
+      // field entry is retried before the `__exists__` entry in the same
+      // pass, it finds no row, stays queued, and the whole entity needs an
+      // extra sync round to appear — for every field, on every peer. Doing
+      // the row-creating entries first means one sweep drains the entity
+      // completely. Ties keep `id ASC`, which is the drain order the rest of
+      // this engine is built on.
+      orderBy: "CASE WHEN fieldName = '$existsFieldSentinel' THEN 0 ELSE 1 END, id ASC",
     );
     for (final row in rows) {
       final id = row['id'] as int;
@@ -391,6 +463,66 @@ class SyncMaterializer {
       final entityId = row['entityId'] as String;
       final payload =
           jsonDecode(row['operationJson'] as String) as Map<String, dynamic>;
+
+      if (payload['kind'] == existsFieldSentinel) {
+        final scope = _entityScopesByTable[entityTable];
+        if (scope == null) continue;
+        // Fully re-derived, exactly like the `set_add` branch below: a table
+        // with two references (`relationships`) can have the recorded
+        // blocker resolve while the other has not, and trusting the one
+        // recorded blocker was a reproduced outage one kind over.
+        final result = await db.transaction(
+          (txn) => _materializeExists(
+            txn,
+            scope,
+            entityId,
+            payload['hlcWallMs'] as int? ?? 0,
+          ),
+        );
+        switch (result.outcome) {
+          case ExistsInsertOutcome.inserted:
+          case ExistsInsertOutcome.alreadyPresent:
+            await db.delete(
+              'sync_materialize_queue',
+              where: 'id = ?',
+              whereArgs: [id],
+            );
+            resolved++;
+          case ExistsInsertOutcome.blockedOnOwner:
+            final blocker = result.blocker!;
+            if (blocker.$1 != payload['waitingOnTable'] ||
+                blocker.$2 != payload['waitingOnId']) {
+              await db.update(
+                'sync_materialize_queue',
+                {
+                  'operationJson': jsonEncode({
+                    ...payload,
+                    'waitingOnTable': blocker.$1,
+                    'waitingOnId': blocker.$2,
+                  }),
+                  'blockingKey': '${blocker.$1}:${blocker.$2}',
+                },
+                where: 'id = ?',
+                whereArgs: [id],
+              );
+            }
+          case ExistsInsertOutcome.unresolvable:
+            // **Defensive, and not claimed reachable.** An entry only gets
+            // here having once been `blockedOnOwner`, which requires a
+            // COMPLETE payload, and a register's payload never regresses
+            // from complete to incomplete. (The two genuinely unresolvable
+            // cases — a pre-M2.14 `true` payload, and
+            // `app_revisions.appCode` — are rejected on the FIRST attempt,
+            // which enqueues nothing at all, precisely so they cannot
+            // produce the permanent undrainable backlog M2.10 removed.)
+            // Left queued rather than deleted if it ever does happen:
+            // dropping a row on a state nobody predicted is how a change
+            // becomes invisible, and the health surface counts what is
+            // queued.
+            break;
+        }
+        continue;
+      }
 
       if (payload['kind'] == 'set_add') {
         final fieldName = payload['fieldName'] as String;
@@ -523,7 +655,29 @@ class SyncMaterializer {
     if (scope == null) return; // not a materializable table (defensive)
 
     if (op.kind == existsFieldSentinel) {
-      await _materializeExists(txn, scope, op.entityId, op.hlc.wallMs);
+      final result = await _materializeExists(
+        txn,
+        scope,
+        op.entityId,
+        op.hlc.wallMs,
+      );
+      if (result.blocker case final blocker?) {
+        // The owner row has not arrived yet — reuse the existing
+        // `missing_exists` queue and its sweep rather than inventing a
+        // second dependency mechanism. `hlcWallMs` travels with the entry so
+        // the retry derives the identical createdAt the first attempt would
+        // have (`_createdAtFromHlcWall`).
+        await _enqueueMissingExists(
+          txn,
+          entityTable: op.entityTable,
+          entityId: op.entityId,
+          fieldName: existsFieldSentinel,
+          kind: existsFieldSentinel,
+          hlcWallMs: op.hlc.wallMs,
+          waitingOnTable: blocker.$1,
+          waitingOnId: blocker.$2,
+        );
+      }
       return;
     }
 
@@ -687,24 +841,107 @@ class SyncMaterializer {
   /// each column's own field commit materializes. See this file's top doc
   /// comment for the full reasoning, including why some tables are
   /// generically, deliberately skipped.
-  Future<void> _materializeExists(
+  ///
+  /// **M2.14: the owner columns now come off the operation itself.** The
+  /// values for `subnotes.noteId`, `attachments.noteId`,
+  /// `relationships.fromNoteId`/`toNoteId`,
+  /// `conversation_attachments.messageId`, `app_revisions.appId` and
+  /// `user_apps.uuid` are carried in the `__exists__` payload
+  /// (`encodeExistsPayloadJson`, `sync_table_shape.dart`) and read back here.
+  /// Every one of those tables used to fall out of the `resolvable = false`
+  /// branch below and never produce a row on any peer.
+  ///
+  /// **The payload is read from `sync_field_state`, not from the arriving
+  /// operation**, and that is deliberate on two counts. It is the RESOLVED
+  /// winner of the `__exists__` register rather than whichever candidate
+  /// happens to be in hand, so two devices that somehow hold competing
+  /// `__exists__` dots insert from the same one. And it is the only source
+  /// available to [sweepMissingExists]'s retry, which has no operation —
+  /// re-reading here means the first attempt and the retry cannot build
+  /// different rows.
+  ///
+  /// **The residual that survives the convergence argument, named because it
+  /// is real.** This method returns early when the row already exists, so a
+  /// device that inserted under one `__exists__` payload and LATER sees a
+  /// different payload win the register keeps the row it already has. Every
+  /// carried column is one this codebase never reassigns (that is why they
+  /// sit outside `syncScopeColumns` — see each table's scope comment in
+  /// `database_service.dart`), so reaching this needs two devices to hold the
+  /// same row uuid under different owners: a uuid collision or a hand-edited
+  /// database, not any flow the app can produce. Rewriting an owner FK
+  /// underneath a live row would be a worse answer than declining to.
+  Future<({ExistsInsertOutcome outcome, (String, String)? blocker})>
+  _materializeExists(
     DatabaseExecutor txn,
     SyncEntityCaptureScope scope,
     String entityId,
     int existsHlcWallMs,
   ) async {
-    if (await _rowExists(txn, scope, entityId)) return; // already materialized
+    if (await _rowExists(txn, scope, entityId)) {
+      return (outcome: ExistsInsertOutcome.alreadyPresent, blocker: null);
+    }
 
     final columns = await syncTableInfo(txn, scope.table);
     final idColumnInfo = columns
         .where((c) => c['name'] == scope.idColumn)
         .firstOrNull;
-    if (idColumnInfo == null) return; // defensive
+    if (idColumnInfo == null) {
+      return (outcome: ExistsInsertOutcome.unresolvable, blocker: null);
+    }
     if (isNonPortableIntegerPrimaryKey(idColumnInfo)) {
       // e.g. user_app_libraries/user_app_library_dependencies — see top doc
       // comment, and `hasPortableEntityId` (`sync_table_shape.dart`), which
       // is the same predicate this and `_writeResolvedFieldValue` both use.
-      return;
+      return (outcome: ExistsInsertOutcome.unresolvable, blocker: null);
+    }
+
+    final syncability = await entitySyncability(
+      txn,
+      scope,
+      cache: _syncabilityCache,
+    );
+    if (!syncability.canSync) {
+      // **Checked BEFORE the owner-existence check below, and the order is
+      // the point.** A table that can never materialize must never produce a
+      // `missing_exists` queue entry — that permanent, undrainable per-peer
+      // backlog is exactly what M2.10 removed. Without this line an
+      // `app_revisions` `__exists__` carrying a complete `appId` would park
+      // waiting for its `user_apps` row and only THEN discover that `appCode`
+      // makes the row unbuildable anyway. Not reachable today (the same
+      // predicate gates minting, so no such operation is produced), which is
+      // why it is a guard rather than a fix.
+      return (outcome: ExistsInsertOutcome.unresolvable, blocker: null);
+    }
+    final carried = syncability.existsCarriedColumns;
+    final payload = decodeExistsPayload(
+      await _readFieldStateValueJson(
+        txn,
+        scope.table,
+        entityId,
+        existsFieldSentinel,
+      ),
+    );
+    if (!existsPayloadIsComplete(carried, payload)) {
+      // Either this table has an unresolvable column that is not a reference
+      // at all (`app_revisions.appCode`), or the winning `__exists__` was
+      // minted by a build older than M2.14 and carries the constant `true`.
+      // Both mean the same thing here: no row, no guess.
+      return (outcome: ExistsInsertOutcome.unresolvable, blocker: null);
+    }
+
+    // Ordering. A child cannot be inserted before the row it references, and
+    // this codebase runs with `PRAGMA foreign_keys = ON`, so an unchecked
+    // INSERT is a thrown constraint failure rather than a skipped write.
+    // Checked here, and re-checked in full on every retry, for exactly the
+    // reason `_setAddBlocker`'s doc comment records: a table with TWO
+    // references (`relationships`) can have the recorded blocker resolve
+    // while the other one has not.
+    final ownerBlocker = await _existsOwnerBlocker(txn, syncability, payload);
+    if (ownerBlocker != null) {
+      return (
+        outcome: ExistsInsertOutcome.blockedOnOwner,
+        blocker: ownerBlocker,
+      );
     }
 
     final createdAtColumn = syncEntityCreatedAtColumnByTable[scope.table];
@@ -716,6 +953,10 @@ class SyncMaterializer {
       if (name == scope.idColumn) continue;
       if (name == createdAtColumn) {
         row[name] = _createdAtFromHlcWall(existsHlcWallMs);
+        continue;
+      }
+      if (carried.contains(name)) {
+        row[name] = payload[name];
         continue;
       }
       if (scope.syncScopeColumns.contains(name)) {
@@ -733,16 +974,20 @@ class SyncMaterializer {
       final notNull = (col['notnull'] as int) != 0;
       final hasDefault = col['dflt_value'] != null;
       if (notNull && !hasDefault) {
-        // An owner FK or other permanently-unresolvable column — see top
-        // doc comment. Never materializable under current M2.4 capture
-        // scope; skip the whole INSERT rather than write a garbage row.
+        // Neither in sync scope nor carried — `app_revisions.appCode` is the
+        // one column in the whole schema still in this position, and it is a
+        // blob in a TEXT column awaiting M3 (`syncContentDeferredTables`).
+        // Skip the whole INSERT rather than write a row whose source code is
+        // a permanently-wrong empty string that nothing will ever correct.
         resolvable = false;
         break;
       }
       // Nullable, or has its own SQL default — omit; SQLite fills it in.
     }
 
-    if (!resolvable) return;
+    if (!resolvable) {
+      return (outcome: ExistsInsertOutcome.unresolvable, blocker: null);
+    }
 
     // Forced shell-row overrides — `tags.__deleted__ = 1` today (forced
     // tombstone-at-insert; see this file's top doc comment, "Why
@@ -784,6 +1029,36 @@ class SyncMaterializer {
       row,
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
+    return (outcome: ExistsInsertOutcome.inserted, blocker: null);
+  }
+
+  /// The first row an `__exists__` shell insert references that does not
+  /// exist locally yet, as `(table, id)`, or `null` when every reference is
+  /// satisfied.
+  ///
+  /// Queried directly against the referenced `(table, column)` rather than
+  /// through [_entityScopesByTable], because a foreign key is free to point
+  /// at a column that is not that table's sync `idColumn` — and because a
+  /// reference to a table with no capture scope at all still has to be
+  /// checked before SQLite checks it for us.
+  Future<(String, String)?> _existsOwnerBlocker(
+    DatabaseExecutor txn,
+    EntitySyncability syncability,
+    Map<String, Object?> payload,
+  ) async {
+    for (final reference in syncability.existsOwnerReferences) {
+      final ownerId = payload[reference.column];
+      if (ownerId == null) continue; // completeness was checked by the caller
+      final rows = await txn.query(
+        reference.table,
+        columns: [reference.toColumn],
+        where: 'CAST(${reference.toColumn} AS TEXT) = ?',
+        whereArgs: ['$ownerId'],
+        limit: 1,
+      );
+      if (rows.isEmpty) return (reference.table, '$ownerId');
+    }
+    return null;
   }
 
   // ── § 11.6(e): tags auto-merge / collision detection ──────────────────

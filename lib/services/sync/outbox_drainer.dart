@@ -198,6 +198,15 @@ class OutboxDrainer {
       scope.table: scope,
   };
 
+  /// Memoizes [entitySyncability] for this drainer's lifetime. Scoped to the
+  /// instance rather than to one `drain()` call, which is still exactly the
+  /// scoping that function's doc comment requires (schema shape is immutable
+  /// for an open database, and one `OutboxDrainer` holds one
+  /// `DatabaseService`) — `_processExistsTouch` needs the same answer
+  /// `drain()` already computed, and threading a local map through three
+  /// call layers to say so buys nothing.
+  final Map<String, EntitySyncability> _syncabilityCache = {};
+
   // M2.7 note: this composite-key string literal (and the identically-shaped
   // one in `_processSetTouch` below) was found, during M2.7 development, to
   // contain a literal NUL byte (0x00) in place of the space between
@@ -220,6 +229,10 @@ class OutboxDrainer {
     final db = await _databaseService.database;
     final authorId = await _deviceIdentity.ensureDeviceId();
 
+    // Runs BEFORE the touch query, so the touches it manufactures drain in
+    // this very pass rather than waiting for the next sync.
+    await _upgradeLegacyExistsPayloads(db);
+
     final touches = await db.query(
       'sync_touch_log',
       where: 'processedAt IS NULL',
@@ -229,7 +242,7 @@ class OutboxDrainer {
     final minted = <MintedOperation>[];
     final skipped = <String, bool>{};
     // Schema shape is immutable for this pass — see `entitySyncability`.
-    final syncabilityCache = <String, EntitySyncability>{};
+    final syncabilityCache = _syncabilityCache;
     for (final touch in touches) {
       final touchId = touch['id'] as int;
       final entityTable = touch['entityTable'] as String;
@@ -322,18 +335,124 @@ class OutboxDrainer {
     );
   }
 
+  /// `sync_state` key marking that the one-shot M2.14 `__exists__` payload
+  /// upgrade has run on this device.
+  static const String existsPayloadUpgradeStateKey =
+      'exists_payload_upgrade_v1_completed_at';
+
+  /// **The upgrade path for entities whose `__exists__` was minted before
+  /// M2.14 — without which this milestone's headline claim is false for
+  /// precisely the data that prompted it.**
+  ///
+  /// `subnotes`/`attachments`/`relationships`/`conversation_attachments`/
+  /// `user_apps` all minted and published `__exists__` operations normally
+  /// until M2.10 gated them (see `materializer.dart`'s own note about
+  /// `user_apps` accumulating 11 permanent `missing_exists` entries on a real
+  /// device). Those operations carry the constant `true`, so they supply no
+  /// owner reference — and nothing would ever replace them, because every
+  /// mint site's condition is "no `__exists__` register recorded yet" and one
+  /// IS recorded. A user who upgraded would watch newly-created notes carry
+  /// their subnotes to a second device while every subnote they already had
+  /// stayed behind, permanently, with no error anywhere.
+  ///
+  /// So this manufactures exactly the input the existing machinery needs: an
+  /// `AFTER INSERT`-shaped touch (`fieldName IS NULL`) for every local row in
+  /// a carried-column table whose recorded `__exists__` payload is not a JSON
+  /// object. `_processExistsTouch` then re-mints under the ORDINARY drain
+  /// namespace — no `contentKey`, and a real current frontier that dominates
+  /// the register being replaced, so the new payload wins on every peer
+  /// uncontested rather than entering conflict resolution.
+  ///
+  /// **Why a `sync_state` marker and not a schema migration.** No column or
+  /// table changes, so there is nothing for a migration's `PRAGMA table_info`
+  /// guard to guard and nothing for `recovery_screen.dart` to mirror; the
+  /// work is entirely about sync-engine state, which is where
+  /// `seedScanCompletedAtKey` already lives. Correctness does not depend on
+  /// the marker either — it is a fast path. The `WHERE` clause below is the
+  /// real idempotency: it selects only rows whose register is still
+  /// incomplete, so once the upgrade has run, deleting the marker and
+  /// re-running manufactures no touches at all.
+  ///
+  /// **The re-mint dominates rather than merely out-timestamping the
+  /// register it replaces**, which is what makes it uncontested (no
+  /// `sync_conflict_copies` row, no tie-break) — and that rests on
+  /// `frontier.dart`'s M2.10 fix, not on luck: a locally-minted operation's
+  /// frontier folds in every `next_seq:` namespace this device mints under
+  /// (so a legacy `seed:<self>` dot is covered) as well as every
+  /// `frontier:<author>` it has pulled (so a legacy dot authored elsewhere
+  /// is covered too).
+  ///
+  /// Scoped to tables that actually carry something: for the ten tables whose
+  /// payload is still the bare `true` sentinel, every recorded register is
+  /// already complete and this would select zero rows.
+  Future<void> _upgradeLegacyExistsPayloads(Database db) async {
+    final done = await db.query(
+      'sync_state',
+      columns: const ['value'],
+      where: 'key = ?',
+      whereArgs: [existsPayloadUpgradeStateKey],
+      limit: 1,
+    );
+    if (done.isNotEmpty) return;
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    for (final scope in DatabaseService.syncEntityCaptureScopes) {
+      final syncability = await entitySyncability(
+        db,
+        scope,
+        cache: _syncabilityCache,
+      );
+      if (syncability.existsCarriedColumns.isEmpty) continue;
+      // A table that still cannot sync at all (`app_revisions`, blocked by
+      // `appCode`) would have its touches dropped by drain's own gate a
+      // moment later. Skipping here keeps the touch log honest instead of
+      // filling it with work that is discarded.
+      if (!syncability.canSync) continue;
+
+      // `NOT LIKE '{%'` is the recorded-payload test in SQL: M2.14 writes a
+      // JSON object, every older build wrote the four characters `true`.
+      // Deliberately narrower than "every row" so the touch log gains one
+      // entry per genuinely stale entity rather than one per entity.
+      await db.rawInsert(
+        '''
+        INSERT INTO sync_touch_log(entityTable, entityId, fieldName, memberUuid, touchedAt)
+        SELECT ?, CAST(t.${scope.idColumn} AS TEXT), NULL, NULL, ?
+        FROM ${scope.table} t
+        JOIN sync_field_state s
+          ON s.entityTable = ?
+         AND s.entityId = CAST(t.${scope.idColumn} AS TEXT)
+         AND s.fieldName = ?
+        WHERE s.valueJson IS NULL OR s.valueJson NOT LIKE '{%'
+        ''',
+        [scope.table, now, scope.table, _existsFieldSentinel],
+      );
+    }
+
+    await db.insert('sync_state', {
+      'key': existsPayloadUpgradeStateKey,
+      'value': '$now',
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
   // ── Entity whole-row (__exists__) touches ────────────────────────────
 
   /// An `AFTER INSERT` touch (`fieldName = NULL`, `memberUuid = NULL`) on an
   /// entity table. Two things happen, independently:
-  ///  1. If no `__exists__` sentinel is recorded yet for this entity, mint
-  ///     a `kind: '__exists__'` operation and record the sentinel — this is
-  ///     the "entity did not exist before, from this device's point of
-  ///     view" case (a genuinely fresh insert, or the FIRST time this
-  ///     entity's insert is drained). If the sentinel is already recorded
-  ///     (e.g. `tag_workflow_bindings`' `INSERT OR REPLACE`-driven
-  ///     "re-insert" — see `_syncEntityCaptureStatementGroups`'s own doc
-  ///     comment in database_service.dart), nothing is minted here.
+  ///  1. Mint a `kind: '__exists__'` operation, recording the sentinel, when
+  ///     no complete one is recorded yet for this entity. "Complete" rather
+  ///     than merely "present" as of M2.14: the payload now carries this
+  ///     table's owner references and identity columns, and a register
+  ///     holding the pre-M2.14 constant `true` supplies none of them — see
+  ///     [_upgradeLegacyExistsPayloads]. So this covers both the "entity did
+  ///     not exist before, from this device's point of view" case (a
+  ///     genuinely fresh insert, or the FIRST time this entity's insert is
+  ///     drained) and the stale-register upgrade. If a COMPLETE sentinel is
+  ///     already recorded (e.g. `tag_workflow_bindings`' `INSERT OR
+  ///     REPLACE`-driven "re-insert" — see
+  ///     `_syncEntityCaptureStatementGroups`'s own doc comment in
+  ///     database_service.dart, and note that the ten tables carrying no
+  ///     payload at all are complete the moment they are present), nothing
+  ///     is minted here.
   ///  2. Regardless, EVERY sync-scope column for this table is re-checked
   ///     against `sync_field_state` exactly like an ordinary field touch
   ///     would be — necessary because an `AFTER INSERT` touch carries no
@@ -368,13 +487,46 @@ class OutboxDrainer {
 
     final minted = <MintedOperation>[];
 
-    final existsRecorded = await _fieldStateExists(
+    // M2.14: the payload is no longer the constant `true` for every table —
+    // it carries this row's owner references and identity columns where it
+    // has any (`encodeExistsPayloadJson`). `syncability` is already computed
+    // once per table by `drain()`; re-read from the same cache here.
+    final syncability = await entitySyncability(
+      txn,
+      scope,
+      cache: _syncabilityCache,
+    );
+    final existsValueJson = encodeExistsPayloadJson(
+      syncability.existsCarriedColumns,
+      row,
+    );
+
+    final recordedExistsValueJson = await _readFieldStateValueJson(
       txn,
       entityTable: entityTable,
       entityId: entityId,
       fieldName: _existsFieldSentinel,
     );
-    if (!existsRecorded) {
+    // **Two conditions, not one, and the second is the upgrade path for
+    // operations this device published before M2.14.** Every one of these
+    // tables minted and published `__exists__` normally until M2.10 gated
+    // them, so a device that has been syncing for a while holds
+    // `sync_field_state` registers whose payload is the constant `true` —
+    // and nothing would ever replace them, because the ordinary condition is
+    // "no register recorded". A peer would then keep skipping exactly the
+    // subnotes/attachments/links/apps that already existed when the user
+    // asked why they were not syncing. Re-minting when the recorded payload
+    // is missing a carried column closes that, through the ordinary drain
+    // namespace: no `contentKey`, a real current frontier that dominates the
+    // register it replaces, and therefore an uncontested win on every peer.
+    // See [_upgradeLegacyExistsPayloads] for what generates the touch.
+    final recordedIsComplete =
+        recordedExistsValueJson != null &&
+        existsPayloadIsComplete(
+          syncability.existsCarriedColumns,
+          decodeExistsPayload(recordedExistsValueJson),
+        );
+    if (!recordedIsComplete) {
       final op = await _mintFieldOperation(
         txn,
         authorId: authorId,
@@ -382,7 +534,7 @@ class OutboxDrainer {
         entityTable: entityTable,
         entityId: entityId,
         fieldName: _existsFieldSentinel,
-        valueJson: jsonEncode(true),
+        valueJson: existsValueJson,
       );
       minted.add(op);
     }
@@ -737,22 +889,6 @@ class OutboxDrainer {
       fieldName: fieldName,
       valueJson: valueJson,
     );
-  }
-
-  Future<bool> _fieldStateExists(
-    DatabaseExecutor txn, {
-    required String entityTable,
-    required String entityId,
-    required String fieldName,
-  }) async {
-    final rows = await txn.query(
-      'sync_field_state',
-      columns: const ['fieldName'],
-      where: 'entityTable = ? AND entityId = ? AND fieldName = ?',
-      whereArgs: [entityTable, entityId, fieldName],
-      limit: 1,
-    );
-    return rows.isNotEmpty;
   }
 
   Future<String?> _readFieldStateValueJson(

@@ -675,6 +675,7 @@ class SeedScanner {
             txn,
             authorId: authorId,
             scope: scope,
+            syncability: syncability,
             entityId: entityId,
             recessive: recessive,
           ),
@@ -771,6 +772,7 @@ class SeedScanner {
     DatabaseExecutor txn, {
     required String authorId,
     required SyncEntityCaptureScope scope,
+    required EntitySyncability syncability,
     required String entityId,
     required bool recessive,
   }) async {
@@ -830,6 +832,16 @@ class SeedScanner {
         // `_createdAtFromHlcWall` in `materializer.dart` for the full
         // weighing, including why carrying the real `createdAt` on the wire
         // was not chosen.
+        //
+        // **M2.14** replaces the constant `true` with this row's carried
+        // owner/identity values (`encodeExistsPayloadJson`). It stays a
+        // constant — the bare `true` sentinel — for the ten tables that
+        // carry nothing, so every GENESIS `contentKey` already published for
+        // `notes`/`tags`/`filters`/`conversations`/`conversation_messages`/
+        // `tag_workflow_bindings` is byte-identical before and after, and
+        // two devices seeding the same subnote still produce the same key
+        // (see [encodeExistsPayloadJson]'s own doc comment for that
+        // argument, and for what happens if they ever disagree).
         await _mintAndApplyField(
           txn,
           authorId: authorId,
@@ -837,7 +849,10 @@ class SeedScanner {
           entityTable: scope.table,
           entityId: entityId,
           fieldName: _existsFieldSentinel,
-          valueJson: jsonEncode(true),
+          valueJson: encodeExistsPayloadJson(
+            syncability.existsCarriedColumns,
+            row,
+          ),
           recessive: recessive,
         );
         minted++;

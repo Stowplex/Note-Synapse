@@ -5798,6 +5798,18 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{This device\'s sync history no longer matches the copy in Drive, so its changes cannot be uploaded} other{{count} of this device\'s sync histories no longer match the copies in Drive, so its changes cannot be uploaded}}. Reset sync on this device to start over.'**
   String cloudSyncHealthLogDiverged(int count);
 
+  /// No description provided for @userAppNoRunnableCode.
+  ///
+  /// In en, this message translates to:
+  /// **'This app\'s code hasn\'t arrived on this device'**
+  String get userAppNoRunnableCode;
+
+  /// No description provided for @userAppNoRunnableCodeDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Its details synced, but app code isn\'t uploaded to cloud sync yet. Open it on the device where you created it.'**
+  String get userAppNoRunnableCodeDetail;
+
   /// No description provided for @cloudSyncHealthTablesNotSynced.
   ///
   /// In en, this message translates to:

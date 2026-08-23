@@ -168,6 +168,25 @@ enum SyncHealthIssueKind {
 
   /// Entity tables whose rows are deliberately not minted at all, because a
   /// receiving device could never build them (`entitySyncability`).
+  ///
+  /// **M2.14 note — what this kind deliberately does NOT cover, and why a
+  /// sibling kind for it was written and then removed.** Attachment rows now
+  /// reach a second device while the FILES they point at do not (they live
+  /// on disk and have never been part of any operation), and the obvious
+  /// move was a second health kind reporting `syncContentDeferredTables`. It
+  /// would have marked essentially every device with an attachment
+  /// permanently degraded, which is precisely the outcome this detector's
+  /// own "only when the user actually HAS rows there" rule exists to avoid
+  /// — and the rule's own words settle it: "'You have data that is not
+  /// syncing' is actionable; 'this app does not sync attachments yet' is a
+  /// release note."
+  ///
+  /// The honest, actionable signal for a file that did not travel is
+  /// per-attachment and already exists at the point of use: the note-detail
+  /// card greys the attachment and prints "File not found" in red with its
+  /// tap disabled, and the immersive viewer shows `l10n.attachmentMissing`.
+  /// `app_revisions` needs no sibling either — it is `canSync == false`, so
+  /// THIS kind already names it, with `appCode` as the reason.
   tablesNotSynced,
 
   /// Remote operations parked after their apply/materialize step failed.

@@ -180,22 +180,30 @@ void main() {
       expect(status.health.isDegraded, isFalse);
 
       // Now give the device real data in a table no peer can build.
+      // **M2.14 moved which table that is.** `subnotes` used to be the
+      // example; its owner FK now rides on `__exists__` and it syncs. What is
+      // left is `app_revisions`, blocked by `appCode` — an app's whole source,
+      // deferred to M3's content-addressed blob mechanism.
       final raw = await db.database;
-      await raw.insert('notes', {
-        'id': 'n1',
-        'title': 'owner',
-        'content': '',
-        'type': 'note',
+      await raw.insert('user_apps', {
+        'id': 'app1',
+        'uuid': 'uuid-app1',
+        'name': 'Counter',
+        'description': 'counts',
+        'steps': '[]',
+        'htmlContent': '',
+        'type': 'normal',
         'createdAt': 1000,
         'updatedAt': 1000,
       });
-      await raw.insert('subnotes', {
-        'id': 's1',
-        'noteId': 'n1',
-        'name': 'step',
-        'content': 'body',
-        'createdAt': 1000,
-        'isCompleted': 0,
+      await raw.insert('app_revisions', {
+        'id': 'rev1',
+        'appId': 'app1',
+        'revisionNumber': 1,
+        'revisionTimestamp': 1000,
+        'userPrompt': 'p',
+        'aiResponse': 'a',
+        'appCode': '<html></html>',
       });
 
       await service.syncNow();
@@ -215,7 +223,7 @@ void main() {
       final issue = status.health.issues.firstWhere(
         (i) => i.kind == SyncHealthIssueKind.tablesNotSynced,
       );
-      expect(issue.detail, contains('subnotes'));
+      expect(issue.detail, contains('app_revisions'));
 
       // Persisted: a fresh service over the same database sees it, so the
       // signal survives leaving the screen and restarting the app.

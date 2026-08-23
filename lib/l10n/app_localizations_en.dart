@@ -3277,6 +3277,14 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get userAppNoRunnableCode =>
+      'This app\'s code hasn\'t arrived on this device';
+
+  @override
+  String get userAppNoRunnableCodeDetail =>
+      'Its details synced, but app code isn\'t uploaded to cloud sync yet. Open it on the device where you created it.';
+
+  @override
   String cloudSyncHealthTablesNotSynced(int count, String detail) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

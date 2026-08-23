@@ -1159,6 +1159,8 @@
   "cloudSyncDegraded": "同步已完成，但部分数据未能同步",
   "cloudSyncHealthDatasetMissing": "本设备加入的同步数据集已不在云端硬盘中，因此无法同步任何内容。请重置本设备的同步以重新开始。",
   "cloudSyncHealthLogDiverged": "本设备的 {count} 条同步记录与云端硬盘中的副本不再一致，其更改无法上传。请重置本设备的同步以重新开始。",
+  "userAppNoRunnableCode": "此应用的代码尚未同步到本设备",
+  "userAppNoRunnableCodeDetail": "应用的信息已同步，但应用代码暂不支持云同步。请在创建它的设备上打开。",
   "cloudSyncHealthTablesNotSynced": "有 {count} 类内容暂不支持同步：{detail}",
   "cloudSyncHealthOperationsFailed": "来自其他设备的 {count} 项更改无法应用：{detail}",
   "cloudSyncHealthWaitingOnEntity": "{count} 项更改正在等待尚未到达的条目：{detail}",

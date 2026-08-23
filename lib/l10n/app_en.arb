@@ -1277,6 +1277,8 @@
   "@cloudSyncHealthLogDiverged": {
     "placeholders": {"count": {"type": "int"}}
   },
+  "userAppNoRunnableCode": "This app's code hasn't arrived on this device",
+  "userAppNoRunnableCodeDetail": "Its details synced, but app code isn't uploaded to cloud sync yet. Open it on the device where you created it.",
   "cloudSyncHealthTablesNotSynced": "{count, plural, =1{1 kind of item does not sync yet} other{{count} kinds of item do not sync yet}}: {detail}",
   "@cloudSyncHealthTablesNotSynced": {
     "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}

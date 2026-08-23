@@ -436,14 +436,30 @@ void main() {
           'createdAt': 1000,
           'updatedAt': 1000,
         });
-        // Real data in a table no receiving device can build.
-        await raw.insert('subnotes', {
-          'id': 's1',
-          'noteId': 'n1',
-          'name': 'step',
-          'content': 'body',
+        // Real data in a table no receiving device can build. **M2.14
+        // moved which table that is**: `subnotes` now syncs (its owner FK
+        // rides on `__exists__`), and what is left is `app_revisions`,
+        // blocked by `appCode` — a mini app's whole source, deferred to M3's
+        // content-addressed blob mechanism.
+        await raw.insert('user_apps', {
+          'id': 'app1',
+          'uuid': 'uuid-app1',
+          'name': 'Counter',
+          'description': 'counts',
+          'steps': '[]',
+          'htmlContent': '',
+          'type': 'normal',
           'createdAt': 1000,
-          'isCompleted': 0,
+          'updatedAt': 1000,
+        });
+        await raw.insert('app_revisions', {
+          'id': 'rev1',
+          'appId': 'app1',
+          'revisionNumber': 1,
+          'revisionTimestamp': 1000,
+          'userPrompt': 'p',
+          'aiResponse': 'a',
+          'appCode': '<html></html>',
         });
       });
       await pumpScreen(tester);
@@ -460,16 +476,16 @@ void main() {
             'nobody reads is the exact defect this surface exists to fix',
       );
       expect(
-        find.textContaining('Sub-tasks'),
+        find.textContaining('Mini app versions'),
         findsWidgets,
         reason: 'and it must say WHAT did not sync',
       );
       expect(
-        find.textContaining('subnotes'),
+        find.textContaining('app_revisions'),
         findsNothing,
         reason:
-            'in the user\'s language, not schema jargon — "subnotes (1, '
-            'unresolvable column noteId)" tells an engineer everything and a '
+            'in the user\'s language, not schema jargon — "app_revisions (1, '
+            'unresolvable column appCode)" tells an engineer everything and a '
             'user nothing',
       );
     },
