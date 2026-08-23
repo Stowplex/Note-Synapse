@@ -38,6 +38,7 @@ import 'blob_sync.dart';
 import 'pull_phase.dart';
 import 'push_phase.dart';
 import 'seed_scanner.dart';
+import 'sync_crypto.dart';
 import 'seq_counter.dart';
 import 'sync_backend.dart';
 import 'sync_health.dart';
@@ -106,6 +107,7 @@ class SyncSession {
     PullPhase? pullPhase,
     PushPhase? pushPhase,
     BlobSyncPhase? blobs,
+    DatasetCrypto crypto = const DatasetCrypto.plaintext(),
   }) : _databaseService = databaseService,
        _blobs = blobs ?? BlobSyncPhase(databaseService),
        _deviceIdentity = deviceIdentity ?? DeviceIdentity(databaseService),
@@ -131,9 +133,11 @@ class SyncSession {
            PullPhase(
              databaseService,
              hlc ?? HybridLogicalClock(databaseService),
+             crypto: crypto,
            ),
        _pushPhase =
-           pushPhase ?? PushPhase(databaseService, blobs: blobs);
+           pushPhase ??
+           PushPhase(databaseService, blobs: blobs, crypto: crypto);
 
   final DatabaseService _databaseService;
   final DeviceIdentity _deviceIdentity;

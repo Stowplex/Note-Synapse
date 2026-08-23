@@ -104,6 +104,7 @@ import 'hlc.dart';
 import 'materializer.dart';
 import 'seq_counter.dart';
 import 'sync_backend.dart';
+import 'sync_crypto.dart';
 import 'wire_format.dart';
 
 /// Re-derives a commit's `commitHash` from its own framing + `commitBytes`,
@@ -262,7 +263,9 @@ class PullPhase {
     CausalEngine? engine,
     SyncMaterializer? materializer,
     SeqCounter? seqCounter,
-  }) : _engine = engine ?? CausalEngine(),
+    DatasetCrypto crypto = const DatasetCrypto.plaintext(),
+  }) : _crypto = crypto,
+       _engine = engine ?? CausalEngine(),
        _redirects = const DotRedirectResolver(),
        _materializer =
            materializer ??
@@ -270,6 +273,10 @@ class PullPhase {
 
   final DatabaseService _databaseService;
   final HybridLogicalClock _hlc;
+
+  /// Plaintext by default, so every existing dataset and every test that
+  /// does not care about encryption behaves byte-identically.
+  final DatasetCrypto _crypto;
   final CausalEngine _engine;
 
   /// Used only by [_referencedDotIsResolvable]'s read-only pre-check; the
@@ -459,10 +466,33 @@ class PullPhase {
         // envelope version this build does not implement stops this log for
         // the round WITHOUT advancing past it — see this file's top doc
         // comment for why that is different from parking.
+        // ── M3.3: decrypt the payload, AFTER the chain check ────────────
+        //
+        // Order matters and is not arbitrary. The hash chain authenticates
+        // the bytes AS STORED, so it must run against exactly what the
+        // backend returned; decrypting first would verify a hash of
+        // something the backend never held. And § 8.5's framing
+        // (`deviceLogId`, `deviceSeq`, `parentCommitHash`) stays cleartext
+        // precisely so this check needs no key at all.
+        //
+        // A payload that fails to authenticate here is NOT a passphrase
+        // problem — the canary settled that at bootstrap — so it surfaces as
+        // the integrity failure it is.
+        final Uint8List payloadBytes;
+        try {
+          payloadBytes = await _crypto.open(
+            commit.commitBytes,
+            'commit ${commit.deviceSeq} of $deviceLogId',
+          );
+        } on SyncDecryptionFailedException catch (error) {
+          LoggerService.error('PullPhase: $error');
+          rethrow;
+        }
+
         final List<WireOperation> wireOps;
         try {
           wireOps = decodeCommitOperations(
-            commit.commitBytes,
+            payloadBytes,
             expectedAuthorId: deviceLogId,
             deviceSeq: commit.deviceSeq,
           );

@@ -119,6 +119,7 @@ import 'package:sqflite/sqflite.dart';
 import '../database_service.dart';
 import 'blob_sync.dart';
 import 'sync_backend.dart';
+import 'sync_crypto.dart';
 import 'wire_format.dart';
 
 /// § 11.7 Phase A step 3: "`ParentMismatch` on a device's own log is not an
@@ -245,10 +246,24 @@ class PushPhase {
     this.maxOperationsPerCommit = defaultMaxOperationsPerCommit,
     this.maxPayloadBytesPerCommit = defaultMaxPayloadBytesPerCommit,
     BlobSyncPhase? blobs,
-  }) : _blobs = blobs ?? BlobSyncPhase(_databaseService);
+    DatasetCrypto crypto = const DatasetCrypto.plaintext(),
+  }) : _blobs = blobs ?? BlobSyncPhase(_databaseService),
+       _crypto = crypto;
 
   final DatabaseService _databaseService;
   final BlobSyncPhase _blobs;
+
+  /// **Sealing happens at the `appendCommit` call site, not in
+  /// [_encodeBatch], and `payloadHash` is taken over the PLAINTEXT.**
+  ///
+  /// AES-GCM uses a fresh nonce per encryption, so sealing the same batch
+  /// twice produces different bytes. Hashing the sealed form would therefore
+  /// make step 0's resume unable to recognise its own recorded intent — the
+  /// re-encode would hash differently every attempt, and a push interrupted
+  /// mid-flight could never be resolved. Hashing the plaintext keeps the
+  /// intent's identity a pure function of what the operations say, which is
+  /// what it was always meant to be.
+  final DatasetCrypto _crypto;
 
   /// Blobs uploaded (or found already present) by the most recent [push].
   BlobSyncResult lastBlobResult = const BlobSyncResult();
@@ -438,7 +453,7 @@ class PushPhase {
         deviceSeq: commitSeq,
         publishIntentId: intentHash,
         parentCommitHash: parentCommitHash,
-        commitBytes: batch.bytes,
+        commitBytes: await _crypto.seal(batch.bytes, 'commit'),
       );
 
       switch (outcome) {
