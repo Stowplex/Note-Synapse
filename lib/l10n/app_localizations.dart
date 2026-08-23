@@ -5552,6 +5552,54 @@ abstract class AppLocalizations {
   /// **'Dataset setup failed: {error}'**
   String cloudSyncDatasetError(String error);
 
+  /// No description provided for @cloudSyncDatasetMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync dataset is missing'**
+  String get cloudSyncDatasetMissing;
+
+  /// No description provided for @cloudSyncDatasetMissingDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'This device is set up for a sync dataset that is no longer in your Drive. Reset sync on this device to start over — your notes stay on this device.'**
+  String get cloudSyncDatasetMissingDetail;
+
+  /// No description provided for @cloudSyncReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset sync'**
+  String get cloudSyncReset;
+
+  /// No description provided for @cloudSyncResetting.
+  ///
+  /// In en, this message translates to:
+  /// **'Resetting…'**
+  String get cloudSyncResetting;
+
+  /// No description provided for @cloudSyncResetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset sync on this device?'**
+  String get cloudSyncResetTitle;
+
+  /// No description provided for @cloudSyncResetConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Your notes, tags, conversations and attachments stay on this device, and nothing already in Drive is deleted.\n\nThis device forgets what it has already synced: it takes a new sync identity and re-offers everything it holds. Where the cloud already has a different version, the cloud\'s wins — including versions this device itself uploaded earlier. Edits made here that were never uploaded are the exception: they are re-sent and kept.\n\nOne thing is lost: anything you deleted on this device but never managed to upload comes back on the next sync, because this device also forgets the deletion.\n\nAfter the reset, set up the dataset again to start syncing.'**
+  String get cloudSyncResetConfirm;
+
+  /// No description provided for @cloudSyncResetDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync state reset — set up the dataset again to start syncing'**
+  String get cloudSyncResetDone;
+
+  /// No description provided for @cloudSyncResetError.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset failed: {error}'**
+  String cloudSyncResetError(String error);
+
   /// No description provided for @cloudSyncNowSection.
   ///
   /// In en, this message translates to:
@@ -5576,6 +5624,12 @@ abstract class AppLocalizations {
   /// **'Preparing existing data — {table} ({done} of {total} tables), {operations} operations so far'**
   String cloudSyncSeeding(String table, int done, int total, int operations);
 
+  /// No description provided for @cloudSyncPushing.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading changes — {done} of {total} batches, {operations} changes sent'**
+  String cloudSyncPushing(int done, int total, int operations);
+
   /// No description provided for @cloudSyncNowResult.
   ///
   /// In en, this message translates to:
@@ -5587,6 +5641,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sync finished, but some data did not sync'**
   String get cloudSyncDegraded;
+
+  /// No description provided for @cloudSyncHealthDatasetMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The sync dataset this device joined is no longer in Drive, so nothing can sync. Reset sync on this device to start over.'**
+  String get cloudSyncHealthDatasetMissing;
+
+  /// No description provided for @cloudSyncHealthLogDiverged.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{This device\'s sync history no longer matches the copy in Drive, so its changes cannot be uploaded} other{{count} of this device\'s sync histories no longer match the copies in Drive, so its changes cannot be uploaded}}. Reset sync on this device to start over.'**
+  String cloudSyncHealthLogDiverged(int count);
 
   /// No description provided for @cloudSyncHealthTablesNotSynced.
   ///

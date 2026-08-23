@@ -3014,6 +3014,34 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get cloudSyncDatasetMissing => '同步数据集已不存在';
+
+  @override
+  String get cloudSyncDatasetMissingDetail =>
+      '本设备关联的同步数据集已不在你的云端硬盘中。请重置本设备的同步以重新开始——你的笔记会保留在本设备上。';
+
+  @override
+  String get cloudSyncReset => '重置同步';
+
+  @override
+  String get cloudSyncResetting => '正在重置…';
+
+  @override
+  String get cloudSyncResetTitle => '重置本设备的同步？';
+
+  @override
+  String get cloudSyncResetConfirm =>
+      '你的笔记、标签、对话和附件会保留在本设备上，云端硬盘中已有的内容也不会被删除。\n\n本设备将忘记已同步的记录：它会启用新的同步身份，并重新提交本地全部内容。若云端已有不同的版本，以云端为准——包括本设备此前自己上传的版本。唯一的例外是本设备上尚未上传的修改：它们会被重新发送并保留。\n\n只有一项会丢失：你在本设备上删除、但尚未上传的内容，会在下次同步时重新出现，因为本设备同样忘记了这个删除操作。\n\n重置后，请重新设置数据集以开始同步。';
+
+  @override
+  String get cloudSyncResetDone => '同步状态已重置——请重新设置数据集以开始同步';
+
+  @override
+  String cloudSyncResetError(String error) {
+    return '重置失败：$error';
+  }
+
+  @override
   String get cloudSyncNowSection => '同步';
 
   @override
@@ -3028,12 +3056,26 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String cloudSyncPushing(int done, int total, int operations) {
+    return '正在上传更改——第 $done / $total 批，已发送 $operations 项更改';
+  }
+
+  @override
   String cloudSyncNowResult(int touches, int seeded, int pulled, int pushed) {
     return '同步完成——已收集 $touches 项、已初始化 $seeded 项、拉取 $pulled 项、推送 $pushed 项';
   }
 
   @override
   String get cloudSyncDegraded => '同步已完成，但部分数据未能同步';
+
+  @override
+  String get cloudSyncHealthDatasetMissing =>
+      '本设备加入的同步数据集已不在云端硬盘中，因此无法同步任何内容。请重置本设备的同步以重新开始。';
+
+  @override
+  String cloudSyncHealthLogDiverged(int count) {
+    return '本设备的 $count 条同步记录与云端硬盘中的副本不再一致，其更改无法上传。请重置本设备的同步以重新开始。';
+  }
 
   @override
   String cloudSyncHealthTablesNotSynced(int count, String detail) {

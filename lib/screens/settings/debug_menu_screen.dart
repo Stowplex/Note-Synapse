@@ -35,7 +35,7 @@ class _DebugMenuScreenState extends State<DebugMenuScreen> {
             l10n.triggerSyncResult(
               result.drain.touchesProcessed,
               result.seed.operationsSeeded,
-              result.pull.commitsApplied,
+              result.pull.operationsApplied,
               result.totalPublished,
             ),
           ),

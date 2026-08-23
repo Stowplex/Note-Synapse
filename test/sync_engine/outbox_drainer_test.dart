@@ -425,7 +425,7 @@ void main() {
   group('drain-then-clearAllData interleaving (clearAllData follow-up fix)', () {
     // Every sync control-plane table clearAllData is now documented to
     // wipe (database_service.dart's own
-    // _syncEntityScopedControlPlaneTablesToWipe), independent of whether
+    // syncEntityScopedControlPlaneTablesToWipe), independent of whether
     // anything actually populated it in this specific scenario -- this
     // test's job is to confirm the ones a real drain DOES populate
     // (sync_field_state/sync_set_state/sync_pending_ops/sync_touch_log)

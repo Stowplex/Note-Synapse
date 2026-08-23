@@ -241,7 +241,81 @@ class OrSetResolver {
       applied.add(target);
     }
 
+    if (applied.isEmpty && missing.isNotEmpty) {
+      final supersededRecessive = await _supersedeRecessiveAdds(
+        txn,
+        entityTable: entityTable,
+        entityId: entityId,
+        fieldName: fieldName,
+        memberUuid: memberUuid,
+      );
+      if (supersededRecessive) {
+        return SetRemoveResult(appliedTargets: targetDots, missingTargets: []);
+      }
+    }
+
     return SetRemoveResult(appliedTargets: applied, missingTargets: missing);
+  }
+
+  /// A `set_remove` supersedes a **recessive** (post-reset) add of the same
+  /// member, even though it names a dot this replica has never seen.
+  ///
+  /// Why this exception exists, and why it is safe (M2.13, review round 3):
+  /// `Hlc.zero`-stamped seeds were introduced so a post-reset re-seed LOSES
+  /// rather than wins — but that mechanism reaches only field conflicts,
+  /// because this resolver is add-wins plus `contentKey` dedup and stores
+  /// the HLC without ever reading it. So a reset re-minted every live
+  /// membership under a brand-new GENESIS dot, a peer's already-published
+  /// `set_remove` targeting the OLD dot parked in `missing_referenced_dot`
+  /// forever, and a tag assignment (or note/message linkage) the user had
+  /// deliberately removed came back — on both devices. Same defect class as
+  /// the one recessive seeds exist to close, surviving because "recessive"
+  /// had been reasoned about only against the field path.
+  ///
+  /// The rule fires only when **every** live add-dot for the member is
+  /// recessive, which is exactly the "all this replica has is its own
+  /// re-statement" case:
+  ///
+  ///  * Outside a reset no operation is ever stamped [Hlc.zero], so no
+  ///    ordinary path can reach this branch at all — add-wins is untouched.
+  ///  * A genuine concurrent re-add (post-reset or otherwise) is drained
+  ///    through the ordinary path with a real generated HLC, so the member
+  ///    has a non-recessive live dot and the rule does not fire. Add-wins
+  ///    still beats a remove that never saw it, as it must.
+  ///  * A remove whose target resolves through [DotRedirectResolver] never
+  ///    reaches here — `applied` is non-empty and the caller sees an
+  ///    ordinary removal.
+  ///
+  /// Returning every target as applied (rather than parking the unresolved
+  /// ones) is deliberate: the membership is gone, so re-attempting this
+  /// remove later has nothing left to act on, and leaving a
+  /// `missing_referenced_dot` entry behind would be a queue row no arrival
+  /// can ever clear.
+  Future<bool> _supersedeRecessiveAdds(
+    DatabaseExecutor txn, {
+    required String entityTable,
+    required String entityId,
+    required String fieldName,
+    required String memberUuid,
+  }) async {
+    const where =
+        'entityTable = ? AND entityId = ? AND fieldName = ? AND memberUuid = ?';
+    final args = [entityTable, entityId, fieldName, memberUuid];
+
+    final rows = await txn.query(
+      'sync_set_state',
+      columns: const ['hlc'],
+      where: where,
+      whereArgs: args,
+    );
+    if (rows.isEmpty) return false;
+
+    final recessiveHlc = Hlc.zero.toString();
+    final allRecessive = rows.every((r) => r['hlc'] == recessiveHlc);
+    if (!allRecessive) return false;
+
+    await txn.delete('sync_set_state', where: where, whereArgs: args);
+    return true;
   }
 
   /// Direct port of `setContains`: is there at least one live add-dot for

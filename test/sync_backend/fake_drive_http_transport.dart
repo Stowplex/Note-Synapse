@@ -360,6 +360,24 @@ class FakeDriveHttpTransport extends http.BaseClient {
   /// introspection, not part of any real Drive API.
   int get debugFileCount => _files.length;
 
+  /// Every request this transport has served, as `"<METHOD> <path>"` — the
+  /// unit a "round trip" is actually counted in.
+  ///
+  /// Added for M2.12: `GoogleDriveBackend.appendCommit` used to cost three
+  /// Drive round trips per commit (two `files.list`, one `files.create`) and
+  /// now costs one on the sequential-push fast path. That saving is
+  /// invisible to every other assertion in this suite — the stored objects
+  /// and the returned outcomes are identical either way — so without
+  /// something counting requests, a change that quietly reinstated the two
+  /// listings would pass every test. [debugRequestLog] is what
+  /// `google_drive_backend_test.dart`'s round-trip budget test pins.
+  final List<String> debugRequestLog = [];
+
+  /// Requests served since the last [debugResetRequestLog].
+  int get debugRequestCount => debugRequestLog.length;
+
+  void debugResetRequestLog() => debugRequestLog.clear();
+
   /// How many distinct stored Drive objects currently have exactly this
   /// set of `appProperties` key/value pairs — the way tests observe the
   /// §8.4 duplicate-create race actually happening at the storage layer
@@ -429,6 +447,8 @@ class FakeDriveHttpTransport extends http.BaseClient {
     // non-atomic by construction (§ file-level doc comment on
     // `google_drive_backend.dart`).
     await Future<void>.delayed(Duration.zero);
+
+    debugRequestLog.add('${request.method} ${request.url.path}');
 
     for (var i = 0; i < scriptedFailures.length; i++) {
       if (scriptedFailures[i].matches(request)) {

@@ -85,12 +85,12 @@ void main() {
         'updatedAt': 1000,
       });
       final drainResult = await drainerB.drain();
-      await pushB.push(backend: backend, authorId: authorB);
+      final pushResult = await pushB.push(backend: backend, authorId: authorB);
 
       final result = await pullA.pull(backend: backend, ownAuthorId: authorA);
 
-      expect(result.commitsApplied, drainResult.mintedOperations.length);
-      expect(result.commitsBlocked, 0);
+      expect(result.operationsApplied, drainResult.mintedOperations.length);
+      expect(result.operationsBlocked, 0);
       expect(result.gappedDeviceLogIds, isEmpty);
 
       final titleRow = await fieldStateRow('notes', 'n1', 'title');
@@ -98,10 +98,13 @@ void main() {
       expect(jsonDecode(titleRow!['valueJson'] as String), 'from B');
       expect(titleRow['authorId'], authorB);
 
-      // Frontier + pull tip persisted for B's log.
+      // Frontier + pull tip persisted for B's log. **The frontier counts
+      // COMMITS, not operations** (M2.12) — `deviceSeq` is a commit-chain
+      // position, and B's whole drain went out as a single batched commit.
       final frontierRows =
           await dbA.query('sync_state', where: 'key = ?', whereArgs: ['frontier:$authorB']);
-      expect(int.parse(frontierRows.single['value'] as String), drainResult.mintedOperations.length);
+      expect(int.parse(frontierRows.single['value'] as String), pushResult.commitCount);
+      expect(pushResult.commitCount, lessThan(drainResult.mintedOperations.length));
 
       // sync_ack_frontier opportunistically updated from B's own carried frontier.
       final ackRows = await dbA.query('sync_ack_frontier', where: 'deviceId = ? AND authorId = ?', whereArgs: [authorB, authorB]);
@@ -122,10 +125,10 @@ void main() {
       await pushB.push(backend: backend, authorId: authorB);
 
       final first = await pullA.pull(backend: backend, ownAuthorId: authorA);
-      expect(first.commitsApplied, greaterThan(0));
+      expect(first.operationsApplied, greaterThan(0));
       final second = await pullA.pull(backend: backend, ownAuthorId: authorA);
-      expect(second.commitsApplied, 0);
-      expect(second.commitsBlocked, 0);
+      expect(second.operationsApplied, 0);
+      expect(second.operationsBlocked, 0);
     });
 
     test(
@@ -161,15 +164,16 @@ void main() {
         'updatedAt': 1000,
       });
       final firstDrain = await drainerB.drain();
-      await pushB.push(backend: backend, authorId: authorB);
+      final firstPush = await pushB.push(backend: backend, authorId: authorB);
 
       final firstPullResult = await pullA.pull(backend: backend, ownAuthorId: authorA);
-      expect(firstPullResult.commitsApplied, firstDrain.mintedOperations.length);
+      expect(firstPullResult.operationsApplied, firstDrain.mintedOperations.length);
 
       final frontierAfterFirst =
           await dbA.query('sync_state', where: 'key = ?', whereArgs: ['frontier:$authorB']);
       final frontierValueAfterFirst = int.parse(frontierAfterFirst.single['value'] as String);
-      expect(frontierValueAfterFirst, firstDrain.mintedOperations.length);
+      // Commits, not operations — see the M2.12 note in the test above.
+      expect(frontierValueAfterFirst, firstPush.commitCount);
       final titleRowAfterFirst = await fieldStateRow('notes', 'n1', 'title');
       expect(jsonDecode(titleRowAfterFirst!['valueJson'] as String), 'v1');
       final firstWinnerDot = (titleRowAfterFirst['authorId'], titleRowAfterFirst['authorSeq']);
@@ -189,7 +193,7 @@ void main() {
       final secondPullResult = await resumedPull.pull(backend: backend, ownAuthorId: authorA);
 
       // No skip: exactly the new (post-crash) ops are applied, not zero.
-      expect(secondPullResult.commitsApplied, secondDrain.mintedOperations.length);
+      expect(secondPullResult.operationsApplied, secondDrain.mintedOperations.length);
 
       final titleRowAfterSecond = await fieldStateRow('notes', 'n1', 'title');
       expect(jsonDecode(titleRowAfterSecond!['valueJson'] as String), 'v2',
@@ -215,18 +219,16 @@ void main() {
           reason: 'B is the sole author of both v1 and v2 (a causal chain, not a fork) — a double-apply bug would '
               'be exactly the kind of thing that could spuriously fork this into a LIVE conflict-copy pair');
 
-      // Frontier now reflects BOTH sessions' worth of B's ops, durably.
+      // Frontier now reflects BOTH sessions' worth of B's commits, durably —
+      // one batched commit per push round (M2.12).
       final frontierAfterSecond =
           await dbA.query('sync_state', where: 'key = ?', whereArgs: ['frontier:$authorB']);
-      expect(
-        int.parse(frontierAfterSecond.single['value'] as String),
-        firstDrain.mintedOperations.length + secondDrain.mintedOperations.length,
-      );
+      expect(int.parse(frontierAfterSecond.single['value'] as String), 2);
 
       // A third pull (nothing new available) must apply zero — the
       // steady-state confirmation that resumption converged cleanly.
       final thirdPullResult = await resumedPull.pull(backend: backend, ownAuthorId: authorA);
-      expect(thirdPullResult.commitsApplied, 0);
+      expect(thirdPullResult.operationsApplied, 0);
     });
 
     test("skips this device's own authorId — a device never pulls its own pushed commits back", () async {
@@ -245,7 +247,7 @@ void main() {
       await PushPhase(dbServiceA).push(backend: backend, authorId: authorA);
 
       final result = await pullA.pull(backend: backend, ownAuthorId: authorA);
-      expect(result.commitsApplied, 0);
+      expect(result.operationsApplied, 0);
     });
   });
 
@@ -269,7 +271,7 @@ void main() {
 
       final result = await pullA.pull(backend: backend, ownAuthorId: authorA);
       // Exactly one real op is applied despite the duplicate delivery.
-      expect(result.commitsApplied, drainResult.mintedOperations.length);
+      expect(result.operationsApplied, drainResult.mintedOperations.length);
 
       final titleRow = await fieldStateRow('notes', 'n1', 'title');
       expect(jsonDecode(titleRow!['valueJson'] as String), 'from B');
@@ -279,9 +281,10 @@ void main() {
   group('hasGap handling', () {
     test('stops applying at the gap this round, and resumes correctly on a later call', () async {
       final dbB = await dbServiceB.database;
-      // Three distinct fields -> at least 3 ops (title, content, plus
-      // __exists__) minted in one drain, giving OutOfOrderDelivery's
-      // middle-element removal something real to remove.
+      // M2.12: one drain now produces ONE batched commit, so three separate
+      // drain+push rounds are what give B's log three commits — which is
+      // what `OutOfOrderDelivery`'s middle-element removal needs in order to
+      // remove something and leave a real hole behind.
       await dbB.insert('notes', {
         'id': 'n1',
         'title': 'from B',
@@ -290,9 +293,18 @@ void main() {
         'createdAt': 1000,
         'updatedAt': 1000,
       });
-      final drainResult = await drainerB.drain();
-      expect(drainResult.mintedOperations.length, greaterThanOrEqualTo(3));
+      var totalOps = (await drainerB.drain()).mintedOperations.length;
       await pushB.push(backend: backend, authorId: authorB);
+      await dbB.update('notes', {'title': 'from B v2'}, where: 'id = ?', whereArgs: ['n1']);
+      totalOps += (await drainerB.drain()).mintedOperations.length;
+      await pushB.push(backend: backend, authorId: authorB);
+      await dbB.update('notes', {'title': 'from B v3'}, where: 'id = ?', whereArgs: ['n1']);
+      totalOps += (await drainerB.drain()).mintedOperations.length;
+      final lastPush = await pushB.push(backend: backend, authorId: authorB);
+      expect(lastPush.commitCount, 1);
+
+      final allCommits = await backend.readCommits(deviceLogId: authorB, afterSeq: 0);
+      expect(allCommits.commits.length, 3);
 
       final faults = ScriptedFaultQueue();
       faults.enqueue(const OutOfOrderDelivery(SyncOp.readCommits));
@@ -300,8 +312,8 @@ void main() {
 
       final first = await pullA.pull(backend: backend, ownAuthorId: authorA);
       expect(first.gappedDeviceLogIds, [authorB]);
-      expect(first.commitsApplied, greaterThan(0));
-      expect(first.commitsApplied, lessThan(drainResult.mintedOperations.length));
+      expect(first.operationsApplied, greaterThan(0));
+      expect(first.operationsApplied, lessThan(totalOps));
 
       // No fault this time -> the rest gets pulled and applied.
       backend.faultSource = null;
@@ -310,7 +322,8 @@ void main() {
 
       final frontierRows =
           await dbA.query('sync_state', where: 'key = ?', whereArgs: ['frontier:$authorB']);
-      expect(int.parse(frontierRows.single['value'] as String), drainResult.mintedOperations.length);
+      // Three commits observed, whatever the operation count inside them.
+      expect(int.parse(frontierRows.single['value'] as String), 3);
     });
   });
 
@@ -358,8 +371,8 @@ void main() {
       );
 
       final pull1 = await pullA.pull(backend: backend, ownAuthorId: authorA);
-      expect(pull1.commitsBlocked, 1);
-      expect(pull1.commitsApplied, 0);
+      expect(pull1.operationsBlocked, 1);
+      expect(pull1.operationsApplied, 0);
 
       final queueRows = await dbA.query('sync_materialize_queue', where: 'blockingReason = ?', whereArgs: ['missing_referenced_dot']);
       expect(queueRows, hasLength(1));
@@ -395,7 +408,7 @@ void main() {
       final pull2 = await pullA.pull(backend: backend, ownAuthorId: authorA);
       // X's add applies normally this round, and the end-of-round sweep
       // resolves the queued remove.
-      expect(pull2.commitsApplied, 1);
+      expect(pull2.operationsApplied, 1);
       expect(pull2.materializeQueueResolved, 1);
 
       final queueAfter = await dbA.query('sync_materialize_queue');
@@ -432,7 +445,7 @@ void main() {
       );
 
       final pull1 = await pullA.pull(backend: backend, ownAuthorId: authorA);
-      expect(pull1.commitsBlocked, 1);
+      expect(pull1.operationsBlocked, 1);
 
       // Nothing new to observe -> the sweep finds the entry still blocked.
       final pull2 = await pullA.pull(backend: backend, ownAuthorId: authorA);
@@ -484,7 +497,7 @@ void main() {
       );
 
       final result = await pullA.pull(backend: backend, ownAuthorId: authorA);
-      expect(result.commitsApplied, 2);
+      expect(result.operationsApplied, 2);
       expect(result.gappedDeviceLogIds, isEmpty);
     });
 
@@ -512,7 +525,7 @@ void main() {
       final firstHash = (firstOutcome as AppendCommitSucceeded).commitHash;
 
       final firstPull = await pullA.pull(backend: backend, ownAuthorId: authorA);
-      expect(firstPull.commitsApplied, 1);
+      expect(firstPull.operationsApplied, 1);
       final tipRow =
           (await dbA.query('sync_state', where: 'key = ?', whereArgs: ['pull_tip:device-Z'])).single;
       expect(tipRow['value'], firstHash);

@@ -45,6 +45,53 @@ class Hlc implements Comparable<Hlc> {
 
   const Hlc(this.wallMs, this.logical);
 
+  /// The minimum representable HLC — smaller than any value this device's
+  /// clock can ever [HybridLogicalClock.generate], since `generate` returns
+  /// `Hlc(physNow, 0)` or `Hlc(lastWall, lastLogical + 1)` and both
+  /// components are non-negative.
+  ///
+  /// Two uses, and they are not the same thing:
+  ///
+  ///  * **Inert placeholder** — `pull_phase.dart`'s `set_remove` queue sweep
+  ///    builds an `IncomingOperation` whose `hlc` the `set_remove` branch of
+  ///    `CausalEngine.apply` never reads. Nothing depends on the value.
+  ///  * **Load-bearing, and a deliberate documented exception to § 11.2
+  ///    (M2.13, review round 3).** `seed_scanner.dart` stamps this on the
+  ///    `field` and `set_add` operations of a POST-RESET re-seed, so that
+  ///    seed is *recessive*: it loses every field conflict it is in on the
+  ///    `(hlc, authorId, authorSeq)` tie-break and decides only content the
+  ///    dataset genuinely lacks.
+  ///
+  ///    **Two scope limits, both found by review after an earlier version of
+  ///    this comment claimed dataset-wide coverage — a claim that was false
+  ///    for two of the four operation kinds.** `__exists__` is deliberately
+  ///    excluded, because an `__exists__` HLC has a THIRD consumer this list
+  ///    originally missed: `materializer.dart` writes its `wallMs` into the
+  ///    entity's `createdAt`, outside `syncScopeColumns`, so a recessive
+  ///    `__exists__` dated a rebuilt library 1970-01-01 permanently. And a
+  ///    recessive `set_add` decides nothing on its own, because
+  ///    `OrSetResolver` is add-wins and never reads an HLC — the stamp is
+  ///    still applied there, but only so that resolver's explicit
+  ///    "a remove supersedes an all-recessive member" rule has something to
+  ///    key off. Read this constant as "recessive where the tie-break
+  ///    decides", not "recessive everywhere".
+  ///
+  ///    § 11.2's rule that "seed operations must
+  ///    get a real HLC value... never a placeholder" is about a first-ever
+  ///    seed of never-synced content, where the HLC really is a statement
+  ///    about when this device first knew the value; a post-reset seed is a
+  ///    re-statement of content the dataset may already hold, and must not
+  ///    out-rank a real edit it simply has not seen yet. See
+  ///    `dataset_reset.dart`'s F1 section for the failure that forced this
+  ///    and for why no phase ordering could substitute for it.
+  ///
+  /// **Stamping this never moves the clock.** It bypasses
+  /// [HybridLogicalClock.generate] entirely, so `sync_state['hlc_wall_ms']`
+  /// / `['hlc_logical']` are not written and § 11.2 property (a) —
+  /// monotonicity of a device's own successive GENERATED values — is
+  /// untouched. A peer that [HybridLogicalClock.merge]s a wall-0 value is
+  /// likewise unaffected: `merge` takes `max(physNow, lastWall, remoteWall)`,
+  /// so a zero can never drag any clock backwards.
   static const zero = Hlc(0, 0);
 
   static const _fieldWidth = 19; // see class doc comment.
@@ -94,6 +141,14 @@ class Hlc implements Comparable<Hlc> {
   int get hashCode => Object.hash(wallMs, logical);
 }
 
+/// The two `sync_state` keys [HybridLogicalClock] owns, named at top level
+/// (M2.13) so `dataset_reset.dart` can name them as the ONLY keys a sync
+/// reset preserves without reaching into a private member or re-typing the
+/// strings. Monotonicity of this clock must survive a reset — see that
+/// file's own reasoning.
+const String hlcWallStateKey = 'hlc_wall_ms';
+const String hlcLogicalStateKey = 'hlc_logical';
+
 /// Per-device hybrid logical clock, backed by `sync_state`. One instance is
 /// meant to be shared for the lifetime of a device's sync engine — not
 /// because this class holds any load-bearing in-memory state of its own
@@ -115,8 +170,8 @@ class HybridLogicalClock {
 
   static int _systemClockMs() => DateTime.now().millisecondsSinceEpoch;
 
-  static const _wallKey = 'hlc_wall_ms';
-  static const _logicalKey = 'hlc_logical';
+  static const _wallKey = hlcWallStateKey;
+  static const _logicalKey = hlcLogicalStateKey;
 
   Future<Hlc> _readState(DatabaseExecutor db) async {
     final rows = await db.query(

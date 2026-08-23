@@ -682,10 +682,39 @@ class SyncMaterializer {
 
     if (!resolvable) return;
 
-    if (scope.table == 'tags') {
-      // Forced tombstone-at-insert — see top doc comment ("Why
-      // _materializeExists forcibly writes __deleted__ = 1").
-      row['__deleted__'] = 1;
+    // Forced shell-row overrides — `tags.__deleted__ = 1` today (forced
+    // tombstone-at-insert; see this file's top doc comment, "Why
+    // _materializeExists forcibly writes __deleted__ = 1"). Read from the
+    // shared table in `sync_table_shape.dart` rather than inlined here, so
+    // `SeedScanner`'s default-skip and this INSERT can never disagree about
+    // what a shell row actually holds (M2.12).
+    //
+    // ── TRACKED RESIDUAL (pre-existing; identical before and after M2.12,
+    //    NOT introduced by the default-skip and NOT fixed by it) ──────────
+    //
+    // This override is unconditional: it overwrites `row[entry.key]` even
+    // when the loop above resolved a REAL value for that column out of
+    // `sync_field_state`. So a `tags.__deleted__ = 0` that resolved BEFORE
+    // its entity's own `__exists__` materialized is discarded here, and
+    // nothing re-applies it — `_materializeField` only writes when a field
+    // RESOLVES, and that field has already resolved. The tag stays
+    // tombstoned on this device while every other replica shows it live.
+    //
+    // Reaching it requires a `field` operation for `tags.__deleted__` to be
+    // applied before the `__exists__` for the same tag, which the ordinary
+    // same-log ordering (`__exists__` is always minted first, at a lower
+    // `authorSeq`) prevents — but NOT across independently-pulled device
+    // logs, which is exactly the case `sweepMissingExists` exists for.
+    //
+    // Left unfixed here deliberately: the correct repair is for
+    // `sweepMissingExists` to re-apply already-resolved field state after a
+    // late `__exists__` insert (or for this override to apply only when no
+    // resolved value exists, which changes the § Architecture 10 partial-
+    // unique-index argument the forced tombstone is there to protect). Both
+    // are materializer-scoped decisions with their own reasoning to redo,
+    // and neither belongs in a traffic milestone.
+    for (final entry in shellRowForcedValuesFor(scope.table).entries) {
+      if (row.containsKey(entry.key)) row[entry.key] = entry.value;
     }
 
     await txn.insert(
@@ -1494,32 +1523,12 @@ class SyncMaterializer {
     return (dot, hlc);
   }
 
-  Object? _placeholderDefault(Map<String, Object?> column) {
-    final dflt = column['dflt_value'];
-    final type = (column['type'] as String? ?? '').toUpperCase();
-    if (dflt != null) {
-      final text = dflt as String;
-      if (type.contains('INT')) return int.tryParse(text) ?? 0;
-      if (type.contains('REAL') ||
-          type.contains('FLOA') ||
-          type.contains('DOUB')) {
-        return double.tryParse(text) ?? 0.0;
-      }
-      if (text.length >= 2 && text.startsWith("'") && text.endsWith("'")) {
-        return text.substring(1, text.length - 1);
-      }
-      return text;
-    }
-    final notNull = (column['notnull'] as int? ?? 0) != 0;
-    if (!notNull) return null;
-    if (type.contains('INT')) return 0;
-    if (type.contains('REAL') ||
-        type.contains('FLOA') ||
-        type.contains('DOUB')) {
-      return 0.0;
-    }
-    return '';
-  }
+  /// Delegates to [shellRowPlaceholderValue] (`sync_table_shape.dart`) —
+  /// M2.12 moved the body there because `SeedScanner`'s default-skip needs
+  /// the identical answer and must get it from the same function, not a
+  /// copy. See that function's own doc comment.
+  Object? _placeholderDefault(Map<String, Object?> column) =>
+      shellRowPlaceholderValue(column);
 
   /// § Architecture 10 round 19's `hash(...)` — the same `sha256` hex-digest
   /// convention `field_conflict_resolver.dart`'s `_rowId` already uses for

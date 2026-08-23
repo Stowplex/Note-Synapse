@@ -255,4 +255,287 @@ void main() {
       expect(decoded.targetDots, op.targetDots);
     });
   });
+
+  // =========================================================================
+  // M2.12: the `v: 2` batch envelope, and v1 decode compatibility.
+  // =========================================================================
+  group('v2 batch envelope', () {
+    WireOperation opAt(int seq, {String kind = 'field', String? value}) =>
+        WireOperation(
+          authorId: 'device-a',
+          authorSeq: seq,
+          hlc: Hlc(1732900000000 + seq, 0),
+          contentKey: 'ck-$seq',
+          kind: kind,
+          entityTable: 'notes',
+          entityId: 'n$seq',
+          fieldName: 'title',
+          valueJson: value ?? jsonEncode('title $seq'),
+          frontier: {'device-a': seq},
+        );
+
+    test('round-trips every operation in order, with its own dot intact', () {
+      final ops = [opAt(1), opAt(2), opAt(3)];
+      final bytes = encodeCommitBatchBytes(ops);
+
+      // deviceSeq is a COMMIT position here and deliberately unrelated to any
+      // operation's authorSeq — 7 is picked to be a number that appears
+      // nowhere in the batch, so a decoder that conflated the two would fail.
+      final decoded = decodeCommitOperations(
+        bytes,
+        expectedAuthorId: 'device-a',
+        deviceSeq: 7,
+      );
+
+      expect(decoded, hasLength(3));
+      for (var i = 0; i < ops.length; i++) {
+        expect(decoded[i].authorId, ops[i].authorId);
+        expect(decoded[i].authorSeq, ops[i].authorSeq);
+        expect(decoded[i].hlc, ops[i].hlc);
+        expect(decoded[i].contentKey, ops[i].contentKey);
+        expect(decoded[i].kind, ops[i].kind);
+        expect(decoded[i].entityTable, ops[i].entityTable);
+        expect(decoded[i].entityId, ops[i].entityId);
+        expect(decoded[i].fieldName, ops[i].fieldName);
+        expect(decoded[i].valueJson, ops[i].valueJson);
+        expect(decoded[i].frontier, ops[i].frontier);
+      }
+    });
+
+    test('declares v: 2 and nests the operations under "ops"', () {
+      final envelope =
+          jsonDecode(utf8.decode(encodeCommitBatchBytes([opAt(1), opAt(2)])))
+              as Map<String, dynamic>;
+      expect(envelope['v'], 2);
+      expect(envelope['ops'], hasLength(2));
+      expect((envelope['ops'] as List).first['authorSeq'], 1);
+    });
+
+    test(
+      'preserves the value-absent vs. value-is-JSON-null distinction per '
+      'operation, exactly as v1 does',
+      () {
+        final bytes = encodeCommitBatchBytes([
+          // A field cleared to NULL: a real value that happens to be null.
+          opAt(1, value: jsonEncode(null)),
+          // A set_remove: no value at all.
+          WireOperation(
+            authorId: 'device-a',
+            authorSeq: 2,
+            hlc: const Hlc(200, 0),
+            kind: 'set_remove',
+            entityTable: 'notes',
+            entityId: 'n1',
+            fieldName: 'tags',
+            memberUuid: 'tag1',
+            targetDots: const [Dot('device-b', 4)],
+            frontier: const {'device-a': 2},
+          ),
+        ]);
+        final decoded = decodeCommitOperations(
+          bytes,
+          expectedAuthorId: 'device-a',
+          deviceSeq: 1,
+        );
+        expect(decoded[0].valueJson, 'null');
+        expect(decoded[1].valueJson, isNull);
+        expect(decoded[1].targetDots, const [Dot('device-b', 4)]);
+      },
+    );
+
+    test('a batch of one is still a valid v2 batch', () {
+      final decoded = decodeCommitOperations(
+        encodeCommitBatchBytes([opAt(5)]),
+        expectedAuthorId: 'device-a',
+        deviceSeq: 1,
+      );
+      expect(decoded, hasLength(1));
+      expect(decoded.single.authorSeq, 5);
+    });
+
+    test('refuses to encode an empty or out-of-order batch', () {
+      expect(() => encodeCommitBatchBytes([]), throwsArgumentError);
+      expect(
+        () => encodeCommitBatchBytes([opAt(2), opAt(1)]),
+        throwsArgumentError,
+      );
+      expect(
+        () => encodeCommitBatchBytes([opAt(2), opAt(2)]),
+        throwsArgumentError,
+      );
+    });
+
+    test('rejects an operation authored by a different device log', () {
+      final envelope = {
+        'v': 2,
+        'ops': [
+          jsonDecode(
+            utf8.decode(encodeCommitBatchBytes([opAt(1)])),
+          )['ops'][0],
+        ],
+      };
+      expect(
+        () => decodeCommitOperations(
+          Uint8List.fromList(utf8.encode(jsonEncode(envelope))),
+          expectedAuthorId: 'device-b',
+          deviceSeq: 1,
+        ),
+        throwsA(isA<WireFormatIntegrityException>()),
+      );
+    });
+
+    test('rejects an empty ops list and a non-increasing authorSeq run', () {
+      Uint8List raw(Object envelope) =>
+          Uint8List.fromList(utf8.encode(jsonEncode(envelope)));
+      final one =
+          jsonDecode(utf8.decode(encodeCommitBatchBytes([opAt(1)])))['ops'][0];
+      expect(
+        () => decodeCommitOperations(
+          raw({'v': 2, 'ops': <Object>[]}),
+          expectedAuthorId: 'device-a',
+          deviceSeq: 1,
+        ),
+        throwsA(isA<WireFormatIntegrityException>()),
+      );
+      expect(
+        () => decodeCommitOperations(
+          raw({
+            'v': 2,
+            'ops': [one, one],
+          }),
+          expectedAuthorId: 'device-a',
+          deviceSeq: 1,
+        ),
+        throwsA(isA<WireFormatIntegrityException>()),
+      );
+    });
+  });
+
+  group('v1 decode compatibility (commits already on a backend)', () {
+    test(
+      'decodeCommitOperations reads a v1 single-operation envelope, applying '
+      "§ 11.5's authorSeq-equals-deviceSeq integrity check",
+      () {
+        final op = WireOperation(
+          authorId: 'device-a',
+          authorSeq: 3,
+          hlc: const Hlc(300, 1),
+          kind: 'field',
+          entityTable: 'notes',
+          entityId: 'n1',
+          fieldName: 'title',
+          valueJson: jsonEncode('legacy'),
+          frontier: const {'device-a': 3},
+        );
+        // Bytes produced by the PRE-M2.12 encoder — `encodeCommitBytes` is
+        // unchanged and still emits exactly this.
+        final bytes = encodeCommitBytes(op);
+        expect(jsonDecode(utf8.decode(bytes))['v'], 1);
+
+        final decoded = decodeCommitOperations(
+          bytes,
+          expectedAuthorId: 'device-a',
+          deviceSeq: 3,
+        );
+        expect(decoded, hasLength(1));
+        expect(decoded.single.authorSeq, 3);
+        expect(decoded.single.valueJson, jsonEncode('legacy'));
+
+        // For v1 the two counters really are the same number, so the check
+        // stays in force and a disagreement is still an integrity failure.
+        expect(
+          () => decodeCommitOperations(
+            bytes,
+            expectedAuthorId: 'device-a',
+            deviceSeq: 4,
+          ),
+          throwsA(isA<WireFormatIntegrityException>()),
+        );
+      },
+    );
+
+    test(
+      'a v1 payload byte-frozen from before M2.12 still decodes — this is the '
+      'literal shape sitting on the reporting user\'s Drive folder',
+      () {
+        const frozen =
+            '{"v":1,"authorId":"device-a","authorSeq":2,'
+            '"hlc":"0000000000000000500:0000000000000000000","contentKey":null,'
+            '"kind":"field","entityTable":"notes","entityId":"n1",'
+            '"fieldName":"status","memberUuid":null,"value":null,'
+            '"blobHash":null,"targetDots":null,"frontier":{"device-a":2}}';
+        final decoded = decodeCommitOperations(
+          Uint8List.fromList(utf8.encode(frozen)),
+          expectedAuthorId: 'device-a',
+          deviceSeq: 2,
+        );
+        expect(decoded, hasLength(1));
+        expect(decoded.single.kind, 'field');
+        expect(decoded.single.fieldName, 'status');
+        expect(
+          decoded.single.valueJson,
+          'null',
+          reason:
+              'an explicit set-to-NULL is a real value, not an absent one — '
+              'the distinction survives unchanged',
+        );
+      },
+    );
+
+    test(
+      'an unknown FUTURE version is refused with a typed, clear error rather '
+      'than best-effort parsed',
+      () {
+        final bytes = Uint8List.fromList(
+          utf8.encode(jsonEncode({'v': 99, 'ops': <Object>[]})),
+        );
+        expect(
+          () => decodeCommitOperations(
+            bytes,
+            expectedAuthorId: 'device-a',
+            deviceSeq: 1,
+          ),
+          throwsA(
+            isA<WireFormatUnsupportedVersionException>()
+                .having((e) => e.version, 'version', 99)
+                .having((e) => e.message, 'message', contains('update the app')),
+          ),
+        );
+        // Still a WireFormatIntegrityException, so every existing catch site
+        // keeps working.
+        expect(
+          () => decodeCommitOperations(
+            bytes,
+            expectedAuthorId: 'device-a',
+            deviceSeq: 1,
+          ),
+          throwsA(isA<WireFormatIntegrityException>()),
+        );
+      },
+    );
+
+    test('the v1-only decodeCommitBytes still refuses a v2 payload', () {
+      final bytes = encodeCommitBatchBytes([
+        WireOperation(
+          authorId: 'device-a',
+          authorSeq: 1,
+          hlc: const Hlc(1, 0),
+          kind: 'field',
+          entityTable: 'notes',
+          entityId: 'n1',
+          fieldName: 'title',
+          valueJson: jsonEncode('x'),
+          frontier: const {'device-a': 1},
+        ),
+      ]);
+      expect(
+        () => decodeCommitBytes(
+          bytes,
+          expectedAuthorId: 'device-a',
+          expectedAuthorSeq: 1,
+        ),
+        throwsA(isA<WireFormatIntegrityException>()),
+      );
+    });
+  });
 }

@@ -466,6 +466,278 @@ void main() {
       },
     );
   });
+
+  // =========================================================================
+  // M2.12: the in-session tip cache — a round-trip BUDGET, pinned.
+  // =========================================================================
+  //
+  // Every other assertion in this file is blind to how many Drive requests a
+  // call made: the stored objects and returned outcomes are identical whether
+  // `appendCommit` lists twice or not at all. So the saving this milestone
+  // exists for is exactly the kind that can be silently undone. These tests
+  // count requests.
+  group('appendCommit round-trip budget (M2.12 tip cache)', () {
+    test(
+      'the FIRST append of a session still pays for both existence checks — '
+      'that is the §8.4 mitigation and it is not cached away',
+      () async {
+        final transport = FakeDriveHttpTransport();
+        final backend = _backendWithTransport(transport);
+        // Resolve the root folder first so its own list+create is not
+        // counted against the append.
+        await backend.listDeviceLogIds();
+        transport.debugResetRequestLog();
+
+        final outcome = await backend.appendCommit(
+          deviceLogId: 'device-a',
+          deviceSeq: 1,
+          publishIntentId: 'intent-1',
+          parentCommitHash: null,
+          commitBytes: _bytes('c1'),
+        );
+        expect(outcome, isA<AppendCommitSucceeded>());
+
+        expect(
+          transport.debugRequestLog,
+          [
+            'GET /drive/v3/files', // _findCommitAt — the §8.4 slot check
+            'GET /drive/v3/files', // _findTip — halt-not-retarget
+            'POST /upload/drive/v3/files', // the create
+          ],
+          reason:
+              'the first append of a session is also the resume/retry case: '
+              'a previous session may have created this very commit and never '
+              'seen the response, and the existence check under the identical '
+              'publishIntentId is what makes that retry idempotent',
+        );
+      },
+    );
+
+    test(
+      'every SUBSEQUENT sequential append costs exactly one round trip',
+      () async {
+        final transport = FakeDriveHttpTransport();
+        final backend = _backendWithTransport(transport);
+        await backend.listDeviceLogIds();
+
+        String? parent;
+        for (var seq = 1; seq <= 5; seq++) {
+          transport.debugResetRequestLog();
+          final outcome = await backend.appendCommit(
+            deviceLogId: 'device-a',
+            deviceSeq: seq,
+            publishIntentId: 'intent-$seq',
+            parentCommitHash: parent,
+            commitBytes: _bytes('commit-$seq'),
+          );
+          parent = (outcome as AppendCommitSucceeded).commitHash;
+          expect(
+            transport.debugRequestCount,
+            seq == 1 ? 3 : 1,
+            reason: 'append #$seq: only the first pays for the two listings',
+          );
+          if (seq > 1) {
+            expect(transport.debugRequestLog, ['POST /upload/drive/v3/files']);
+          }
+        }
+
+        // And the log is genuinely, correctly stored — the saving is not
+        // "we skipped the work", it is "we skipped re-deriving what we
+        // already knew".
+        final page = await backend.readCommits(
+          deviceLogId: 'device-a',
+          afterSeq: 0,
+        );
+        expect(page.hasGap, isFalse);
+        expect(page.commits.map((c) => c.deviceSeq), [1, 2, 3, 4, 5]);
+        String? expectedParent;
+        for (final commit in page.commits) {
+          expect(commit.parentCommitHash, expectedParent);
+          expectedParent = commit.commitHash;
+        }
+      },
+    );
+
+    test(
+      'an append that does NOT chain onto the cached tip falls back to the '
+      'full two-listing path, and a ParentMismatch drops the cache',
+      () async {
+        final transport = FakeDriveHttpTransport();
+        final backend = _backendWithTransport(transport);
+        await backend.listDeviceLogIds();
+
+        final first =
+            await backend.appendCommit(
+                  deviceLogId: 'device-a',
+                  deviceSeq: 1,
+                  publishIntentId: 'intent-1',
+                  parentCommitHash: null,
+                  commitBytes: _bytes('c1'),
+                )
+                as AppendCommitSucceeded;
+
+        // Wrong parent for seq 2 -> must not take the fast path, must be
+        // reported as a mismatch against the real tip.
+        transport.debugResetRequestLog();
+        final mismatch = await backend.appendCommit(
+          deviceLogId: 'device-a',
+          deviceSeq: 2,
+          publishIntentId: 'intent-2',
+          parentCommitHash: 'not-the-real-tip',
+          commitBytes: _bytes('c2'),
+        );
+        expect(mismatch, isA<AppendCommitParentMismatch>());
+        expect(
+          (mismatch as AppendCommitParentMismatch).actualTipHash,
+          first.commitHash,
+        );
+        expect(
+          transport.debugRequestCount,
+          2,
+          reason: 'both listings ran; nothing was created',
+        );
+
+        // After a mismatch the cache is gone, so the next (correct) append
+        // re-queries rather than trusting a stale belief.
+        transport.debugResetRequestLog();
+        await backend.appendCommit(
+          deviceLogId: 'device-a',
+          deviceSeq: 2,
+          publishIntentId: 'intent-2',
+          parentCommitHash: first.commitHash,
+          commitBytes: _bytes('c2'),
+        );
+        expect(transport.debugRequestCount, 3);
+      },
+    );
+
+    test(
+      'a thrown append (Drive 5xx — this backend\'s shape of "ambiguous") '
+      'drops the cache, so the retry lands on the existence check and cannot '
+      'create a duplicate',
+      () async {
+        final transport = FakeDriveHttpTransport();
+        final backend = _backendWithTransport(transport);
+        await backend.listDeviceLogIds();
+
+        final first =
+            await backend.appendCommit(
+                  deviceLogId: 'device-a',
+                  deviceSeq: 1,
+                  publishIntentId: 'intent-1',
+                  parentCommitHash: null,
+                  commitBytes: _bytes('c1'),
+                )
+                as AppendCommitSucceeded;
+
+        // The create for seq 2 lands, but the caller sees a 5xx. (The fake
+        // stores nothing on a scripted failure, so this test scripts the
+        // failure on the FOLLOWING request instead: what matters here is
+        // that the throw invalidates the cache, which the request count on
+        // the retry proves.)
+        transport.scriptedFailures.add(
+          ScriptedDriveFailure.serverError(
+            matches: (r) => r.url.path == '/upload/drive/v3/files',
+          ),
+        );
+        await expectLater(
+          backend.appendCommit(
+            deviceLogId: 'device-a',
+            deviceSeq: 2,
+            publishIntentId: 'intent-2',
+            parentCommitHash: first.commitHash,
+            commitBytes: _bytes('c2'),
+          ),
+          throwsA(isA<SyncNetworkException>()),
+        );
+
+        transport.debugResetRequestLog();
+        final retry = await backend.appendCommit(
+          deviceLogId: 'device-a',
+          deviceSeq: 2,
+          publishIntentId: 'intent-2',
+          parentCommitHash: first.commitHash,
+          commitBytes: _bytes('c2'),
+        );
+        expect(retry, isA<AppendCommitSucceeded>());
+        expect(
+          transport.debugRequestCount,
+          3,
+          reason:
+              'after an unknown-outcome write the cache must be discarded, so '
+              'the retry re-establishes the truth from Drive',
+        );
+        expect(
+          transport.debugCountMatching({
+            'deviceLogId': 'device-a',
+            'deviceSeq': '2',
+          }),
+          1,
+          reason: 'exactly one stored object at the slot, never a duplicate',
+        );
+      },
+    );
+
+    test('the tip cache is per-deviceLogId, never shared across logs', () async {
+      final transport = FakeDriveHttpTransport();
+      final backend = _backendWithTransport(transport);
+      await backend.listDeviceLogIds();
+
+      await backend.appendCommit(
+        deviceLogId: 'device-a',
+        deviceSeq: 1,
+        publishIntentId: 'a1',
+        parentCommitHash: null,
+        commitBytes: _bytes('a1'),
+      );
+
+      transport.debugResetRequestLog();
+      await backend.appendCommit(
+        deviceLogId: 'device-b',
+        deviceSeq: 1,
+        publishIntentId: 'b1',
+        parentCommitHash: null,
+        commitBytes: _bytes('b1'),
+      );
+      expect(
+        transport.debugRequestCount,
+        3,
+        reason: "device-a's cached tip must say nothing about device-b's log",
+      );
+    });
+
+    test(
+      'readDatasetInitMarker does not create the root folder (M2.13, F6)',
+      () async {
+        final transport = FakeDriveHttpTransport();
+        final backend = _backendWithTransport(transport);
+
+        expect(await backend.readDatasetInitMarker(), isNull);
+        expect(
+          transport.debugFileCount,
+          0,
+          reason: 'M2.13 put this read on every syncNow(), so a find-or-CREATE '
+              'root resolution silently recreated an empty "Note Synapse Sync" '
+              'folder in the Drive of a user who had deliberately deleted it — '
+              'while the very same call was supposed to be telling them the '
+              'dataset was gone',
+        );
+
+        // The create path still creates: this is a read-only READ, not a
+        // backend that has forgotten how to make its own folder.
+        await backend.initializeDatasetOnce(
+          DatasetInitMarker(
+            encryptionEnabled: false,
+            kdfSalt: null,
+            passphraseCanary: null,
+            createdByDeviceId: 'device-a',
+            createdAt: DateTime.utc(2026),
+          ),
+        );
+        expect(await backend.readDatasetInitMarker(), isNotNull);
+      },
+    );
+  });
 }
 
 String _sha256Hex(List<int> bytes) => sha256.convert(bytes).toString();

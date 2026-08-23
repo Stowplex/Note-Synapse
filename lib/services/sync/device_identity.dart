@@ -15,6 +15,11 @@ import 'package:uuid/uuid.dart';
 
 import '../database_service.dart';
 
+/// The single `sync_state` key [DeviceIdentity] owns, named at top level
+/// (M2.13) so `dataset_reset.dart` can read the outgoing id before clearing
+/// it without re-typing the string.
+const String deviceIdStateKey = 'device_id';
+
 /// Generates and durably persists this installation's stable device
 /// identity — a `Uuid().v4()`, generated exactly once, on first touch of the
 /// sync engine (§ 11.1). Every subsequent call, from this process or a
@@ -37,12 +42,21 @@ import '../database_service.dart';
 /// instead of a thrown constraint-violation, and the following `SELECT`
 /// always returns whichever value actually won, regardless of which
 /// transaction's own locally-generated uuid that was.
+///
+/// **"Exactly once" is now "exactly once per identity generation."** M2.13's
+/// `DatasetReset` retires this device's id and clears the row, so the next
+/// call here mints a fresh one — see `dataset_reset.dart`'s option-(c)
+/// argument for why a reset must not continue or restart the old counter.
+/// Nothing about the race argument above changes; what changes is that a
+/// physical device can, over its lifetime, own more than one identity, and
+/// § Architecture 2's "devices ever, including retired ones" bound now
+/// counts reset generations too.
 class DeviceIdentity {
   DeviceIdentity(this._databaseService);
 
   final DatabaseService _databaseService;
 
-  static const _deviceIdKey = 'device_id';
+  static const _deviceIdKey = deviceIdStateKey;
 
   /// In-memory cache for the lifetime of this instance — device identity is
   /// immutable once minted, so there is no reason to re-hit the database on

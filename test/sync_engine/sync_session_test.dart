@@ -84,11 +84,18 @@ void main() {
       final result = await deviceA.session.run(backend);
       expect(result.drain.mintedOperations, isNotEmpty);
       expect(result.push.publishedCount, result.drain.mintedOperations.length);
-      expect(result.pull.commitsApplied, 0); // nothing else on the backend yet
+      expect(result.pull.operationsApplied, 0); // nothing else on the backend yet
 
       final authorA = await deviceA.authorId;
       final page = await backend.readCommits(deviceLogId: authorA, afterSeq: 0);
-      expect(page.commits.length, result.drain.mintedOperations.length);
+      // M2.12: every drained operation goes out in ONE batched commit.
+      expect(page.commits.length, 1);
+      expect(result.push.commitCount, 1);
+      expect(
+        result.push.publishedCount,
+        greaterThan(result.push.commitCount),
+        reason: 'batching is what makes these two numbers differ at all',
+      );
     });
 
     test('a second call with nothing new locally and nothing new remotely is a safe no-op', () async {
@@ -106,7 +113,7 @@ void main() {
 
       final second = await deviceA.session.run(backend);
       expect(second.drain.mintedOperations, isEmpty);
-      expect(second.pull.commitsApplied, 0);
+      expect(second.pull.operationsApplied, 0);
       expect(second.push.publishedCount, 0);
     });
   });
@@ -160,7 +167,7 @@ void main() {
       // converged by the end of round 1, and only A strictly needs round 2
       // to see B's round-1 push; this asymmetry is a property of call
       // ORDER, not a bug, which is why the assertions below check final
-      // convergence rather than commitsApplied at any specific call.)
+      // convergence rather than operationsApplied at any specific call.)
       await deviceA.session.run(backend);
       await deviceB.session.run(backend);
 

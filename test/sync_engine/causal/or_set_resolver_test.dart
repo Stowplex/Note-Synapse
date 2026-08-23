@@ -236,6 +236,123 @@ void main() {
     });
   });
 
+  // M2.13, review round 3 (finding F-B). `Hlc.zero`-stamped recessive seeds
+  // were introduced so a post-reset re-seed LOSES rather than wins — but that
+  // reaches only field conflicts, since this resolver is add-wins plus
+  // `contentKey` dedup and never reads the HLC. So a reset re-minted every
+  // live membership under a brand-new GENESIS dot, the peer's already-
+  // published `set_remove` targeting the OLD dot parked forever, and a tag
+  // assignment the user had deliberately removed came back on BOTH devices.
+  //
+  // Each test below is paired with a control that must keep the pre-existing
+  // add-wins behaviour, so the fix cannot pass by simply weakening removal.
+  group('set_remove — recessive (post-reset) adds are superseded', () {
+    const recessiveHlc = 0; // `Hlc.zero`, what SeedScanner stamps post-reset.
+
+    test('a remove naming an unseen dot removes a member whose only live dot is recessive', () async {
+      final reseeded = TestMintingDevice('A-after-reset');
+      final peer = TestMintingDevice('B');
+
+      // The reset device re-seeds the membership: fresh GENESIS dot, HLC 0.
+      await apply(reseeded.mintSetAdd(
+        table: 'notes',
+        entityId: 'n1',
+        memberUuid: 'tag1',
+        contentKey: 'genesis:n1:tag1',
+        authorNamespace: 'seed:A-after-reset',
+        hlcOverride: recessiveHlc,
+      ));
+      expect(await liveDots('notes', 'n1', 'members', 'tag1'), hasLength(1));
+
+      // The peer's removal targets the PRE-reset dot, which this replica has
+      // no record of — before the fix this parked in `missing_referenced_dot`
+      // and the membership stayed live forever.
+      final result = await apply(peer.mintSetRemove(
+        table: 'notes',
+        entityId: 'n1',
+        memberUuid: 'tag1',
+        targetDots: [const Dot('A-before-reset', 7)],
+      ));
+
+      expect(result.setRemoveResult!.blocked, isFalse,
+          reason: 'the removal is applied, not parked: nothing can ever arrive to clear that queue entry');
+      expect(await liveDots('notes', 'n1', 'members', 'tag1'), isEmpty);
+    });
+
+    test('CONTROL: an ordinary (non-recessive) live add still wins over a remove that never saw it', () async {
+      final devA = TestMintingDevice('A');
+      final peer = TestMintingDevice('B');
+
+      await apply(devA.mintSetAdd(table: 'notes', entityId: 'n1', memberUuid: 'tag1'));
+
+      final result = await apply(peer.mintSetRemove(
+        table: 'notes',
+        entityId: 'n1',
+        memberUuid: 'tag1',
+        targetDots: [const Dot('C', 3)],
+      ));
+
+      expect(result.setRemoveResult!.blocked, isTrue);
+      expect(await liveDots('notes', 'n1', 'members', 'tag1'), hasLength(1),
+          reason: 'OR-Set add-wins is untouched outside a reset — no ordinary path ever stamps Hlc.zero');
+    });
+
+    test('CONTROL: a genuine concurrent re-add after the reset keeps the member live', () async {
+      final reseeded = TestMintingDevice('A-after-reset');
+      final peer = TestMintingDevice('B');
+
+      await apply(reseeded.mintSetAdd(
+        table: 'notes',
+        entityId: 'n1',
+        memberUuid: 'tag1',
+        contentKey: 'genesis:n1:tag1',
+        authorNamespace: 'seed:A-after-reset',
+        hlcOverride: recessiveHlc,
+      ));
+      // A real user action after the reset drains through the ordinary path
+      // with a generated HLC — so the member has a non-recessive live dot.
+      await apply(reseeded.mintSetAdd(table: 'notes', entityId: 'n1', memberUuid: 'tag1'));
+
+      final result = await apply(peer.mintSetRemove(
+        table: 'notes',
+        entityId: 'n1',
+        memberUuid: 'tag1',
+        targetDots: [const Dot('A-before-reset', 7)],
+      ));
+
+      expect(result.setRemoveResult!.blocked, isTrue);
+      expect(await liveDots('notes', 'n1', 'members', 'tag1'), isNotEmpty,
+          reason: 'the rule fires only when EVERY live dot is a re-statement; a real re-add must still beat '
+              'a remove that never observed it');
+    });
+
+    test('a remove that does resolve is unaffected by the recessive branch', () async {
+      final reseeded = TestMintingDevice('A-after-reset');
+      final peer = TestMintingDevice('B');
+
+      final add = reseeded.mintSetAdd(
+        table: 'notes',
+        entityId: 'n1',
+        memberUuid: 'tag1',
+        contentKey: 'genesis:n1:tag1',
+        authorNamespace: 'seed:A-after-reset',
+        hlcOverride: recessiveHlc,
+      );
+      await apply(add);
+
+      final result = await apply(peer.mintSetRemove(
+        table: 'notes',
+        entityId: 'n1',
+        memberUuid: 'tag1',
+        targetDots: [add.dot],
+      ));
+
+      expect(result.setRemoveResult!.blocked, isFalse);
+      expect(result.setRemoveResult!.appliedTargets, hasLength(1));
+      expect(await liveDots('notes', 'n1', 'members', 'tag1'), isEmpty);
+    });
+  });
+
   group('setContains helper', () {
     test('reflects live membership state directly', () async {
       const resolver = OrSetResolver(ContentKeyDedupEngine(), DotRedirectResolver());

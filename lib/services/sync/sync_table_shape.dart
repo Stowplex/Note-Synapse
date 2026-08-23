@@ -257,6 +257,191 @@ Future<EntitySyncability> _computeEntitySyncability(
   return const EntitySyncability.ok();
 }
 
+// ---------------------------------------------------------------------------
+// Shell-row defaults (M2.12) — the single definition of "what value will a
+// receiving device's row already hold for this column before that column's
+// own `field` operation arrives?"
+// ---------------------------------------------------------------------------
+
+/// The value `SyncMaterializer._materializeExists` writes into a brand-new
+/// shell row for [columnInfo] (one `PRAGMA table_info` row) — its own
+/// SQL-declared default where it has one, else a type-appropriate
+/// empty/zero value for a `NOT NULL` column, else `NULL`.
+///
+/// **Extracted in M2.12 because a second caller now needs the identical
+/// answer, and needs it to be identical by construction rather than by
+/// coincidence.** `SeedScanner` skips seeding any field whose live value
+/// already equals what the receiving device's shell row will hold — a seed
+/// that transmits zero information but costs a permanent CRDT operation.
+/// That skip is only sound if "what the shell row will hold" is computed by
+/// the very function that fills the shell row; two independently-maintained
+/// copies of this logic would eventually disagree, and the failure mode of
+/// disagreement is silent (a field skipped on the sending side that the
+/// receiving side never actually defaults to that value).
+Object? shellRowPlaceholderValue(Map<String, Object?> columnInfo) =>
+    decodeShellRowDefault(columnInfo).value;
+
+/// [shellRowPlaceholderValue], plus whether the answer is a real, statically
+/// resolvable SQL default (`known: true`) or a best-effort stand-in for a
+/// default this function cannot evaluate (`known: false`).
+///
+/// The distinction exists because the two callers need different things from
+/// the same computation. `_materializeExists` must write SOMETHING into a
+/// shell row's column and a type-appropriate empty value is the least-wrong
+/// choice; `SeedScanner`'s skip must be certain, and an uncertain answer has
+/// to mean "do not skip" (seeding a field unnecessarily costs traffic;
+/// skipping one wrongly costs data).
+///
+/// **The literal parsing here is deliberately broader than the original
+/// inline version's**, which handled only single-quoted strings and bare
+/// numbers. Three real gaps, all found in review:
+///   * **Double-quoted defaults.** `user_apps.author`/`user_apps.license`
+///     are declared `DEFAULT ""`, and SQLite reports `dflt_value` as the
+///     two-character string `""`. The old parser returned that verbatim, so
+///     `_materializeExists` would have written a literal `""` into the row
+///     the moment `user_apps` became syncable. (It is `canSync == false`
+///     today, which is the only reason this was latent rather than live.)
+///   * **`DEFAULT NULL`.** Reported as the four-character string `NULL`, so
+///     the old parser produced `int.tryParse('NULL') ?? 0` == `0` on an
+///     INTEGER column. Treated here as equivalent to no default declared,
+///     which is what SQLite itself does.
+///   * **Non-literal defaults** (`CURRENT_TIMESTAMP`, a parenthesised
+///     expression, a function call). SQLite evaluates these at INSERT time
+///     and this function cannot; they now return `known: false`. No
+///     sync-scope column declares one today.
+({bool known, Object? value}) decodeShellRowDefault(
+  Map<String, Object?> columnInfo,
+) {
+  final type = (columnInfo['type'] as String? ?? '').toUpperCase();
+  final isInt = type.contains('INT');
+  final isReal =
+      type.contains('REAL') || type.contains('FLOA') || type.contains('DOUB');
+  final notNull = (columnInfo['notnull'] as int? ?? 0) != 0;
+
+  // What the column holds when no default applies: NULL if it may be, else
+  // a type-appropriate empty value (a NOT NULL column has to hold
+  // something, and every such column in sync scope is corrected in place by
+  // its own field operation moments later).
+  Object? implicit() {
+    if (!notNull) return null;
+    if (isInt) return 0;
+    if (isReal) return 0.0;
+    return '';
+  }
+
+  final raw = columnInfo['dflt_value'] as String?;
+  if (raw == null) return (known: true, value: implicit());
+  final text = raw.trim();
+  if (text.toUpperCase() == 'NULL') return (known: true, value: implicit());
+
+  final unquoted = _unquoteSqlStringLiteral(text);
+  final literal = unquoted ?? text;
+
+  if (isInt) {
+    final parsed = int.tryParse(literal);
+    return parsed == null
+        ? (known: false, value: implicit())
+        : (known: true, value: parsed);
+  }
+  if (isReal) {
+    final parsed = double.tryParse(literal);
+    return parsed == null
+        ? (known: false, value: implicit())
+        : (known: true, value: parsed);
+  }
+  if (unquoted != null) return (known: true, value: unquoted);
+
+  // An untyped/TEXT column with an unquoted default: a bare number is a real
+  // literal; anything else is an expression this function cannot evaluate.
+  final asInt = int.tryParse(text);
+  if (asInt != null) return (known: true, value: asInt);
+  final asDouble = double.tryParse(text);
+  if (asDouble != null) return (known: true, value: asDouble);
+  return (known: false, value: implicit());
+}
+
+/// Strips the quotes from a SQL string literal, unescaping the doubled
+/// quote form (`'it''s'`). Returns null if [text] is not a quoted literal.
+///
+/// Both quote characters are accepted: SQLite's own dialect treats a
+/// double-quoted token as an identifier first and silently degrades it to a
+/// string literal when no such column exists, which is how `DEFAULT ""` ends
+/// up in this codebase's schema at all.
+String? _unquoteSqlStringLiteral(String text) {
+  if (text.length < 2) return null;
+  final quote = text[0];
+  if (quote != "'" && quote != '"') return null;
+  if (!text.endsWith(quote)) return null;
+  return text
+      .substring(1, text.length - 1)
+      .replaceAll('$quote$quote', quote);
+}
+
+/// Per-table overrides of [shellRowPlaceholderValue] — columns a shell-row
+/// INSERT deliberately writes at something other than the column's own
+/// declared default.
+///
+/// **`tags.__deleted__` is the one entry, and leaving it out would be a
+/// real, silent data-loss bug rather than a missed optimization.**
+/// `_materializeExists` forcibly writes `__deleted__ = 1` for a brand-new
+/// `tags` shell row regardless of the column's SQL default of `0` (see
+/// `materializer.dart`'s own doc comment on `idx_tags_name_live`: a raw-live
+/// placeholder `name = ''` would occupy the partial unique index's slot for
+/// `''`). So a live tag's `__deleted__ = 0` is NOT what the receiving
+/// device's row already holds — it is the opposite — and skipping its seed
+/// on the grounds that `0` "is the default" would leave every seeded tag
+/// permanently tombstoned on every peer.
+const Map<String, Map<String, Object?>> _shellRowForcedValues = {
+  'tags': {'__deleted__': 1},
+};
+
+/// The forced shell-row column values for [table] — empty for every table
+/// but `tags`. `materializer.dart`'s `_materializeExists` applies these on
+/// top of the per-column [shellRowPlaceholderValue]s it just computed.
+Map<String, Object?> shellRowForcedValuesFor(String table) =>
+    _shellRowForcedValues[table] ?? const {};
+
+/// What a receiving device's row for [table] will hold for [column] before
+/// that column's own `field` operation has arrived — the column's shell-row
+/// placeholder, with any per-table forced override applied.
+///
+/// Returns `known: false` when the answer is not certain, which callers must
+/// treat as "cannot skip" rather than as any particular value. Three ways
+/// that happens: the column is absent from [columns]; its default is not a
+/// statically resolvable literal ([decodeShellRowDefault]); or a forced
+/// override names a column this table does not have.
+///
+/// **The column-presence check is applied to the forced override too, and
+/// that ordering is deliberate.** `_materializeExists` applies its forced
+/// values on top of a row map that only ever contains `syncScopeColumns`
+/// entries, i.e. `if (row.containsKey(...))`. Today's sole override
+/// (`tags.__deleted__`) is in scope, so an unconditional lookup here would
+/// agree with it — but only by luck. A future override naming a column
+/// outside `syncScopeColumns` would be silently ignored by the materializer
+/// and silently honoured here, breaking the agree-by-construction guarantee
+/// this whole extraction exists to provide, in the one direction that loses
+/// data (a skip against a value the receiving row never takes).
+({bool known, Object? value}) shellRowValueFor({
+  required String table,
+  required String column,
+  required List<Map<String, Object?>> columns,
+}) {
+  Map<String, Object?>? info;
+  for (final candidate in columns) {
+    if (candidate['name'] == column) {
+      info = candidate;
+      break;
+    }
+  }
+  if (info == null) return (known: false, value: null);
+
+  final forced = _shellRowForcedValues[table];
+  if (forced != null && forced.containsKey(column)) {
+    return (known: true, value: forced[column]);
+  }
+  return decodeShellRowDefault(info);
+}
+
 /// The bare-membership sentinel: the `set_add` payload for a membership
 /// table with no [SyncSetCaptureScope.payloadColumns] at all (`note_tags`/
 /// `conversation_tags`, whose two id columns ARE the whole row).

@@ -135,7 +135,7 @@ void main() {
         // — all via ONE ordinary `SyncSession.run()` call, exactly as a
         // real device's manual-sync button would trigger.
         final bResult = await b.session.run(backend);
-        expect(bResult.pull.commitsApplied, greaterThan(0));
+        expect(bResult.pull.operationsApplied, greaterThan(0));
 
         final titleB = await fieldValue(b, 'notes', 'n1', 'title');
         expect(titleB, 'from A via Drive');

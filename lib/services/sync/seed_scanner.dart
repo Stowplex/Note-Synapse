@@ -58,6 +58,63 @@
 // value, from the same per-device clock every other mint in this codebase
 // uses.
 //
+// ---------------------------------------------------------------------
+// **The one exception: a POST-RESET re-seed is recessive (M2.13, review
+// round 3, finding F1).**
+// ---------------------------------------------------------------------
+// `DatasetReset` writes `sync_state[postResetRecessiveSeedStateKey]`. While
+// it is set, every `field` operation minted here is stamped [Hlc.zero]
+// instead — deliberately the minimum representable value, so it LOSES every
+// field conflict it is in rather than winning on recency, and decides only
+// the content the dataset genuinely lacks (where it is uncontested and wins).
+//
+// **Two kinds are deliberately NOT recessive, and both exclusions were found
+// by review after the first version claimed dataset-wide coverage. State the
+// scope honestly rather than restating the slogan:**
+//
+//   * **`__exists__`** — its HLC is *also* the entity's creation timestamp on
+//     every receiving device (`materializer.dart`'s `_materializeExists`
+//     writes `op.hlc.wallMs` into the `syncEntityCreatedAtColumnByTable`
+//     column, which is outside `syncScopeColumns`, so nothing ever corrects
+//     it). A recessive `__exists__` dated the entire library 1970-01-01 on
+//     any device rebuilding from the backend. Safe to exclude because an
+//     `__exists__` seed's value is the constant `true`: whichever side of
+//     that conflict wins, the outcome is identical, so F1 cannot travel
+//     through it. See the mint site for the full argument.
+//   * **`set_add`** — `OrSetResolver` is add-wins plus `contentKey` dedup and
+//     never reads an HLC, so a recessive stamp buys nothing there. Membership
+//     is instead protected by an explicit rule in
+//     `causal/or_set_resolver.dart`: a `set_remove` naming an unseen dot
+//     supersedes a member whose live dots are *all* recessive. The stamp is
+//     still applied here, because it is what that rule keys off.
+//
+// **Why the exception does not contradict the paragraph above.** That
+// paragraph is about a first-ever seed of content nobody has synced: its HLC
+// is a real statement about when this device first knew this value, and the
+// round-14 scenario turns on it. A post-reset seed is a *re-statement* of
+// content this device already had and, in the diverged case, may already
+// have published — the dataset's copy, if it has one, is the authority, and
+// there is no version of "when did this device first know this" that a fresh
+// clock reading would be telling the truth about. Recessive is the honest
+// encoding of "I am not claiming this is new."
+//
+// **Ordering cannot substitute for it**, which is what the round-2 fix
+// (pull before seed for one round) assumed and why it was reproduced
+// failing three separate ways — see `dataset_reset.dart`'s F1 section. The
+// short version: a device can never know it has observed everything the
+// backend holds, so no phase order makes the precondition
+// ([_isPristine]) sufficient.
+//
+// **Scope, and the clock itself.** The marker is cleared in the same
+// transaction that writes [seedScanCompletedAtKey] ([_markComplete]), so a
+// seed deferred by a `sync_materialize_queue` row stays recessive across
+// every round it takes. In recessive mode `generate()` is called only for
+// the `__exists__` exclusion above — one call per seeded entity, never per
+// field — so § 11.2 property (a), monotonicity of this device's own
+// successive GENERATED values, is unaffected either way: the clock only ever
+// moves forward, and a recessive `field` seed does not move it at all. See
+// [Hlc.zero]'s own doc comment.
+//
 // **Conversation-mapping ordering (round 14's deliberate exception).** For
 // `conversation_message_mapping` the local autoincrement `id` order IS the
 // real historical message order (`database_service.dart`'s batch insert
@@ -73,7 +130,10 @@
 // membership rows are enumerated in `rowid ASC` order (== insertion order
 // for these tables) and HLCs are strictly increasing per `generate()` call,
 // so seed HLCs come out in real historical order. The same ordering is
-// applied uniformly to every membership table since it costs nothing.
+// applied uniformly to every membership table since it costs nothing. (This
+// is a property of ORDINARY seeds; a recessive post-reset seed calls no
+// `generate()` at all — see [SeedScanner._mintHlc] for why that costs
+// nothing either.)
 //
 // ---------------------------------------------------------------------
 // **`contentKey` with `baseContext = "GENESIS"` (round 14).**
@@ -258,6 +318,71 @@
 // seed scan never pollutes `sync_touch_log`.
 //
 // ---------------------------------------------------------------------
+// **M2.12: fields already at the receiving device's own default are not
+// seeded at all.**
+// ---------------------------------------------------------------------
+// Measured on a real first sync of a small library: 22 entities produced
+// 152 commits. `tags` spent 2 of every 5 operations on `redirectTarget`
+// (always NULL — M1.3 left it unused) and `__deleted__`; `notes` spent
+// six of its fourteen on `scheduledAt`/`completeBy`/`status`/
+// `completionPercentage`/`recurrenceRule`/`metadata`, all typically NULL.
+// Every one of those is a permanent CRDT operation that competes in
+// conflict resolution forever, and none of them carries any information:
+// the receiving device's row already holds that exact value the moment its
+// `__exists__` materializes.
+//
+// So [_seedEntity] skips a column whose live value equals
+// `shellRowValueFor` (`sync_table_shape.dart`) — the SAME function
+// `materializer.dart`'s `_materializeExists` uses to fill a shell row, not
+// a re-derivation of it, because the skip is only sound if the two agree by
+// construction. In particular that is why the rule is stated against the
+// SHELL-ROW value rather than the column's raw `PRAGMA table_info`
+// `dflt_value`: `tags.__deleted__` has a SQL default of `0` but a shell row
+// is force-inserted at `1`, so skipping a live tag's `__deleted__ = 0`
+// would leave that tag permanently tombstoned on every peer.
+//
+// **Why this does not violate "nothing discarded" (requirement 2/3).** The
+// principle constrains what the protocol may throw away once it exists; it
+// does not oblige the protocol to manufacture an operation for a decision
+// nobody made. A field left unset carries no user intent — it is the
+// absence of a value, not a chosen one. Concretely, for the adversarial
+// case: device A holds `status = NULL`, device B independently holds
+// `status = 'done'`, both pre-existing, both seeding.
+//   * BEFORE: both mint a GENESIS operation. Their `contentKey`s differ
+//     (different values), so dedup does not fire; the two dots are
+//     concurrent, and `FieldConflictResolver` picks between them on
+//     `(hlc, authorId, authorSeq)` — i.e. on which device's clock happened
+//     to be later and, failing that, on a lexicographic device-id
+//     comparison. A coin flip decides whether the user keeps `'done'` or
+//     silently loses it to a NULL that nobody ever typed.
+//   * AFTER: A mints nothing, B's `'done'` wins uncontested, and A
+//     materializes it. The user's only actual datum survives, on both
+//     devices, deterministically.
+// The change therefore removes an opportunity to discard information rather
+// than creating one. The genuinely-intentional counterpart — A *clearing* a
+// field it had previously set — is not affected at all: that is an ordinary
+// post-trigger edit, drained by `outbox_drainer.dart`, which mints an
+// explicit set-to-NULL under A's ORDINARY namespace with a real causal
+// frontier that dominates whatever it is clearing. The drain path is
+// untouched by this milestone, deliberately, and
+// `seed_scanner_test.dart`/`outbox_drainer_test.dart` both pin that.
+//
+// **GENESIS `contentKey` convergence is preserved**, and for a structural
+// reason rather than an empirical one: the skip predicate is a pure
+// function of `(table, column, live value)` evaluated against the same
+// schema, so two devices holding identical content necessarily make
+// identical skip decisions and therefore mint the identical SET of
+// operations — the same values, hence the same `contentKey`s, hence the
+// same dedup classes and the same canonical winners. A skipped field
+// contributes no operation on either side and both rows already hold the
+// same default, so there is nothing left to converge. (Two devices running
+// DIFFERENT schema versions whose default for some column changed between
+// them could disagree; the disagreement is benign — the seeding device
+// simply transmits a value the other one already had — and is disclosed
+// rather than defended against, since a schema migration that changes a
+// default already has to reason about existing rows.)
+//
+// ---------------------------------------------------------------------
 // **What is deliberately NOT here.** No `external:` namespace (that is
 // requirement 8, plain-file external edits, much later). No Drive folder
 // naming/identity changes (M2.11). No encryption, no conflict-resolution
@@ -271,6 +396,7 @@ import 'package:sqflite/sqflite.dart';
 import '../database_service.dart';
 import 'causal/causal_engine.dart';
 import 'causal/dot.dart';
+import 'dataset_reset.dart';
 import 'device_identity.dart';
 import 'frontier.dart';
 import 'hlc.dart';
@@ -324,6 +450,8 @@ class SeedScanResult {
     required this.fieldsDeferred,
     required this.completed,
     required this.skippedAlreadyComplete,
+    this.fieldsAtDefaultSkipped = 0,
+    this.recessive = false,
   });
 
   /// How many operations this call minted into `sync_pending_ops` — the
@@ -361,6 +489,22 @@ class SeedScanResult {
   /// [seedScanCompletedAtKey] was already set (the steady state on any
   /// device that has synced once).
   final bool skippedAlreadyComplete;
+
+  /// M2.12: fields not seeded because their live value already equals what
+  /// a receiving device's shell row will hold for that column
+  /// (`shellRowValueFor`, `sync_table_shape.dart`). Reported so the saving
+  /// is a measured number rather than a claim, and so a regression that
+  /// silently stops skipping shows up as a count going to zero rather than
+  /// as a slower sync nobody attributes to anything.
+  final int fieldsAtDefaultSkipped;
+
+  /// **M2.13.** Whether this pass ran in post-reset RECESSIVE mode — every
+  /// minted operation stamped [Hlc.zero] so it loses any field conflict it
+  /// is in (see this file's HLC section). Reported rather than inferred so a
+  /// test can assert the mode was actually in force, and so a regression
+  /// that silently stops applying it shows up as a `false` rather than as a
+  /// reverted note nobody attributes to anything.
+  final bool recessive;
 
   static const SeedScanResult noop = SeedScanResult(
     operationsSeeded: 0,
@@ -455,10 +599,16 @@ class SeedScanner {
 
     final authorId = await seedAuthorId();
 
+    // Read once per pass, not per mint: `DatasetReset` writes this marker
+    // inside its own transaction and only [_markComplete] clears it, so it
+    // cannot change under a running scan.
+    final recessive = await _isRecessive(db);
+
     var seeded = 0;
     var entities = 0;
     var memberships = 0;
     var deferred = 0;
+    var atDefault = 0;
     var budgetExhausted = false;
     final nonPortable = <String>[];
     final syncabilityCache = <String, EntitySyncability>{};
@@ -513,11 +663,13 @@ class SeedScanner {
             authorId: authorId,
             scope: scope,
             entityId: entityId,
+            recessive: recessive,
           ),
         );
         entities++;
         seeded += outcome.$1;
         deferred += outcome.$2;
+        atDefault += outcome.$3;
       }
       // Not reported when the budget cut this table off partway: the table
       // is not done, and claiming otherwise would make a resumed scan look
@@ -563,6 +715,7 @@ class SeedScanner {
             authorId: authorId,
             scope: scope,
             batch: batch,
+            recessive: recessive,
           ),
         );
         memberships += batch.length;
@@ -583,12 +736,15 @@ class SeedScanner {
       fieldsDeferred: deferred,
       completed: completed,
       skippedAlreadyComplete: false,
+      fieldsAtDefaultSkipped: atDefault,
+      recessive: recessive,
     );
   }
 
   // ── Entity rows: __exists__ + one operation per sync-scope column ─────
 
-  /// Returns `(operationsMinted, fieldsDeferred)` for one entity row.
+  /// Returns `(operationsMinted, fieldsDeferred, fieldsAtDefaultSkipped)`
+  /// for one entity row.
   ///
   /// `__exists__` is minted first, then one `field` operation per
   /// [SyncEntityCaptureScope.syncScopeColumns] entry **in list order** —
@@ -599,11 +755,12 @@ class SeedScanner {
   /// see that file's own ordering argument). Since `authorSeq` and the HLC
   /// both increase per mint, minting in list order is what preserves that
   /// property on the receiving device.
-  Future<(int, int)> _seedEntity(
+  Future<(int, int, int)> _seedEntity(
     DatabaseExecutor txn, {
     required String authorId,
     required SyncEntityCaptureScope scope,
     required String entityId,
+    required bool recessive,
   }) async {
     final rows = await txn.query(
       scope.table,
@@ -611,11 +768,15 @@ class SeedScanner {
       whereArgs: [entityId],
       limit: 1,
     );
-    if (rows.isEmpty) return (0, 0); // deleted between enumeration and now
+    if (rows.isEmpty) {
+      return (0, 0, 0); // deleted between enumeration and now
+    }
     final row = rows.first;
+    final columns = await _tableInfo(txn, scope.table);
 
     var minted = 0;
     var deferred = 0;
+    var atDefault = 0;
 
     final existsState = await _isPristine(
       txn,
@@ -625,6 +786,38 @@ class SeedScanner {
     );
     switch (existsState) {
       case _Pristine.yes:
+        // NOT recessive, even in recessive mode — and the exception is
+        // load-bearing rather than an oversight (M2.13, review round 3).
+        //
+        // An `__exists__` operation's HLC has a SECOND consumer nobody
+        // enumerated when `Hlc.zero` was introduced: `materializer.dart`'s
+        // `_materializeExists` writes `op.hlc.wallMs` straight into the
+        // entity's creation-timestamp column (`syncEntityCreatedAtColumnByTable`),
+        // and `createdAt` is deliberately excluded from every scope's
+        // `syncScopeColumns`, so NO later operation ever corrects it. A
+        // recessive `__exists__` therefore materialized every note, tag,
+        // filter and conversation at 1970-01-01 on any device rebuilding
+        // from the backend — permanent, silent, and on exactly the flow
+        // this milestone exists to serve (delete folder -> reset ->
+        // republish -> a second device rebuilds). `createdAt` is the
+        // `ORDER BY` at ~13 query sites.
+        //
+        // Excluding `__exists__` from recessive mode cannot reopen F1,
+        // because F1 travels through field VALUES and an `__exists__`
+        // seed's value is the constant `true` (below): whichever side of
+        // an `__exists__` conflict wins, the materialized outcome is
+        // identical ("the entity exists"). Two devices seeding the same
+        // entity produce the same GENESIS `contentKey` here and dedup
+        // outright, so the conflict path is usually not even entered.
+        //
+        // Residual, pre-existing and NOT introduced here: the timestamp a
+        // rebuilding peer gets is the seeding device's seed time, not the
+        // entity's true creation time, because the real `createdAt` value
+        // is never transmitted. That is M2.10's shipped behaviour for an
+        // ordinary seed too; this restores parity with it rather than
+        // fixing it. Carrying the real value would be a wire-format
+        // change (the `__exists__` payload is a bare `true`) and belongs
+        // with whatever milestone brings `createdAt` into scope.
         await _mintAndApplyField(
           txn,
           authorId: authorId,
@@ -633,6 +826,7 @@ class SeedScanner {
           entityId: entityId,
           fieldName: _existsFieldSentinel,
           valueJson: jsonEncode(true),
+          recessive: false,
         );
         minted++;
       case _Pristine.hasHistory:
@@ -649,6 +843,33 @@ class SeedScanner {
         // drift regardless.
         continue;
       }
+      final valueJson = jsonEncode(row[column]);
+
+      // M2.12's default-skip. Checked BEFORE `_isPristine`, deliberately:
+      // it is a pure in-memory comparison against a `PRAGMA table_info`
+      // result already read once per entity, whereas `_isPristine` is two
+      // indexed queries per field. On the measured dataset that ordering
+      // removes ~40% of this loop's database work as well as ~40% of its
+      // operations.
+      //
+      // Skipping writes NO `sync_field_state` row, and that is correct
+      // rather than merely acceptable: `sync_field_state` records "an
+      // operation exists for this field," and after a skip none does. The
+      // consequences are all the desirable ones — a later real edit to the
+      // field drains normally (`_diffAndMaybeMintField` sees no recorded
+      // value and mints), a remote non-default value applies uncontested,
+      // and a re-run of this scan re-evaluates the same predicate and skips
+      // again.
+      final shell = shellRowValueFor(
+        table: scope.table,
+        column: column,
+        columns: columns,
+      );
+      if (shell.known && jsonEncode(shell.value) == valueJson) {
+        atDefault++;
+        continue;
+      }
+
       final state = await _isPristine(
         txn,
         entityTable: scope.table,
@@ -664,7 +885,8 @@ class SeedScanner {
             entityTable: scope.table,
             entityId: entityId,
             fieldName: column,
-            valueJson: jsonEncode(row[column]),
+            valueJson: valueJson,
+            recessive: recessive,
           );
           minted++;
         case _Pristine.hasHistory:
@@ -674,8 +896,18 @@ class SeedScanner {
       }
     }
 
-    return (minted, deferred);
+    return (minted, deferred, atDefault);
   }
+
+  /// `PRAGMA table_info`, memoized for the life of this scanner instance —
+  /// schema shape is immutable for an open database, and the walk asks for
+  /// the same table's shape once per entity row.
+  final Map<String, List<Map<String, Object?>>> _tableInfoCache = {};
+
+  Future<List<Map<String, Object?>>> _tableInfo(
+    DatabaseExecutor txn,
+    String table,
+  ) async => _tableInfoCache[table] ??= await syncTableInfo(txn, table);
 
   // ── OR-Set membership rows: one set_add each ─────────────────────────
 
@@ -684,6 +916,7 @@ class SeedScanner {
     required String authorId,
     required SyncSetCaptureScope scope,
     required List<Map<String, Object?>> batch,
+    required bool recessive,
   }) async {
     var minted = 0;
     var deferred = 0;
@@ -706,6 +939,7 @@ class SeedScanner {
             entityId: entityId,
             memberUuid: memberUuid,
             valueJson: encodeSetAddPayloadJson(scope, row),
+            recessive: recessive,
           );
           minted++;
         case _Pristine.hasHistory:
@@ -785,9 +1019,10 @@ class SeedScanner {
     required String entityId,
     required String fieldName,
     required String valueJson,
+    required bool recessive,
   }) async {
     final authorSeq = await _seqCounter.mintNextSeq(authorId, executor: txn);
-    final hlc = await _hlc.generate(executor: txn);
+    final hlc = await _mintHlc(txn, recessive);
     final frontierJson = await currentFrontierJson(txn, authorId, authorSeq);
     final contentKey = genesisContentKey(
       entityTable: entityTable,
@@ -847,9 +1082,10 @@ class SeedScanner {
     required String entityId,
     required String memberUuid,
     required String valueJson,
+    required bool recessive,
   }) async {
     final authorSeq = await _seqCounter.mintNextSeq(authorId, executor: txn);
-    final hlc = await _hlc.generate(executor: txn);
+    final hlc = await _mintHlc(txn, recessive);
     final frontierJson = await currentFrontierJson(txn, authorId, authorSeq);
     final contentKey = genesisContentKey(
       entityTable: scope.entityTable,
@@ -969,11 +1205,70 @@ class SeedScanner {
     return rows.isNotEmpty;
   }
 
-  Future<void> _markComplete(DatabaseExecutor db) async {
-    await db.insert('sync_state', {
-      'key': seedScanCompletedAtKey,
-      'value': '${DateTime.now().millisecondsSinceEpoch}',
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  /// The two `sync_state` keys that put this scan in post-reset recessive
+  /// mode. [legacyPullBeforeSeedStateKey] is honoured as well as
+  /// [postResetRecessiveSeedStateKey] so a device that took this update
+  /// midway through a recovery started by the previous build is not silently
+  /// downgraded to dominant seeds — see that constant's doc comment.
+  ///
+  /// **The legacy key's reach is narrower than "any device mid-recovery",
+  /// and its lifetime is not what an earlier note claimed (review round 3,
+  /// finding F-E).** The round-2 build cleared its own flag after a single
+  /// round, so the only device this rescues is one that reset and completed
+  /// *no* sync round before upgrading. And it is not "dead the first time a
+  /// seed completes": if the key is present while [seedScanCompletedAtKey] is
+  /// already set, [scan] short-circuits on `_isAlreadyComplete` before
+  /// reaching [_markComplete], so the stale key survives until the next
+  /// reset. Inert — nothing else reads it — but stated accurately here rather
+  /// than optimistically.
+  static const List<String> _recessiveMarkerKeys = [
+    postResetRecessiveSeedStateKey,
+    legacyPullBeforeSeedStateKey,
+  ];
+
+  Future<bool> _isRecessive(DatabaseExecutor db) async {
+    final rows = await db.query(
+      'sync_state',
+      columns: const ['key'],
+      where: 'key IN (?, ?)',
+      whereArgs: _recessiveMarkerKeys,
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  /// The HLC one minted seed operation carries.
+  ///
+  /// In recessive mode this returns [Hlc.zero] **without calling
+  /// `generate()`**, which is the whole of why the durable clock is
+  /// untouched (§ 11.2 property (a) is about successive generated values).
+  /// It also means recessive seed operations do not come out in strictly
+  /// increasing HLC order the way ordinary ones do — the round-14
+  /// conversation-mapping ordering property above is a property of ordinary
+  /// seeds. That costs nothing here: it is a tie among operations that are
+  /// all designed to lose, and `contentKey`, not the HLC, is what converges
+  /// them.
+  Future<Hlc> _mintHlc(DatabaseExecutor txn, bool recessive) async =>
+      recessive ? Hlc.zero : await _hlc.generate(executor: txn);
+
+  /// Writes the completion marker **and** clears the post-reset recessive
+  /// marker, in one transaction. The two must move together: the recessive
+  /// window is exactly "from the reset until the seed genuinely finishes",
+  /// and a seed deferred by a `sync_materialize_queue` row takes several
+  /// rounds to get there. The round-2 fix this replaced cleared its flag
+  /// after ONE round and was defeated by precisely that.
+  Future<void> _markComplete(Database db) async {
+    await db.transaction((txn) async {
+      await txn.insert('sync_state', {
+        'key': seedScanCompletedAtKey,
+        'value': '${DateTime.now().millisecondsSinceEpoch}',
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.delete(
+        'sync_state',
+        where: 'key IN (?, ?)',
+        whereArgs: _recessiveMarkerKeys,
+      );
+    });
   }
 
   static Map<String, int> _decodeFrontier(String json) =>

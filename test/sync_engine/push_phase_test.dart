@@ -86,18 +86,36 @@ void main() {
           await db.query('sync_pending_ops', where: 'authorId = ? AND publishedAt IS NULL', whereArgs: [authorId]);
       expect(stillPending, isEmpty);
 
-      // The backend actually stored them, in authorSeq order, hash-chained.
+      // M2.12: the backend stored them BATCHED — one commit carrying every
+      // operation, not one commit each — still in authorSeq order and still
+      // hash-chained. `deviceSeq` (commit position) and `authorSeq` (dot)
+      // are now different counters, so the assertions below check each
+      // against the right thing.
       final page = await backend.readCommits(deviceLogId: authorId, afterSeq: 0);
       expect(page.hasGap, isFalse);
-      expect(page.commits.length, drainResult.mintedOperations.length);
+      expect(page.commits.length, 1);
+      expect(page.commits.single.deviceSeq, 1);
+      expect(result.commitCount, 1);
+
       String? expectedParent;
+      final decodedSeqs = <int>[];
       for (final commit in page.commits) {
         expect(commit.parentCommitHash, expectedParent);
-        final decoded =
-            decodeCommitBytes(commit.commitBytes, expectedAuthorId: authorId, expectedAuthorSeq: commit.deviceSeq);
-        expect(decoded.authorId, authorId);
+        final ops = decodeCommitOperations(
+          commit.commitBytes,
+          expectedAuthorId: authorId,
+          deviceSeq: commit.deviceSeq,
+        );
+        for (final op in ops) {
+          expect(op.authorId, authorId);
+          decodedSeqs.add(op.authorSeq);
+        }
         expectedParent = commit.commitHash;
       }
+      expect(
+        decodedSeqs,
+        drainResult.mintedOperations.map((o) => o.authorSeq).toList(),
+      );
 
       // sync_state['tip:<authorId>'] reflects the LAST commit's hash.
       final tipRows =
@@ -148,9 +166,10 @@ void main() {
       expect(result.publishedCount, drainResult.mintedOperations.length);
 
       final page = await backend.readCommits(deviceLogId: authorId, afterSeq: 0);
-      expect(page.commits.length, drainResult.mintedOperations.length);
-      // No duplicate object was created at the first op's position despite
-      // the ambiguous outcome.
+      // M2.12: one batched commit carrying every operation.
+      expect(page.commits.length, 1);
+      // No duplicate object was created at the first commit's position
+      // despite the ambiguous outcome.
       expect(backend.debugStorageObjectCountAtSeq(authorId, page.commits.first.deviceSeq), 1);
 
       final stillPending =

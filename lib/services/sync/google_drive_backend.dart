@@ -153,6 +153,11 @@ class GoogleDriveBackend implements SyncBackend {
   /// there is no reason to re-resolve it on every call.
   String? _rootFolderId;
 
+  /// M2.12: per-`deviceLogId` in-session tip cache — see [appendCommit]'s
+  /// own doc comment for exactly which appends it skips queries for and
+  /// which still pay for them.
+  final Map<String, ({int deviceSeq, String commitHash})> _tipCache = {};
+
   int _uploadCounter = 0;
 
   @override
@@ -449,7 +454,22 @@ class GoogleDriveBackend implements SyncBackend {
   static const _rootTagKey = 'synapseObjectType';
   static const _rootTagValue = 'datasetRoot';
 
-  Future<String> _ensureRootFolder() async {
+  /// Resolves the root folder **without creating it** — `null` when the user
+  /// has no such folder.
+  ///
+  /// **Split out from [_ensureRootFolder] for M2.13, review finding F6.**
+  /// `readDatasetInitMarker` called `_ensureRootFolder`, which creates the
+  /// folder when absent. That was harmless while the only caller was the
+  /// bootstrap sequence (which is about to create it anyway), and stopped
+  /// being harmless when M2.13 put `verifyDatasetStillExists` — one
+  /// `readDatasetInitMarker` — on every `syncNow()`: a user who had
+  /// deliberately deleted `Note Synapse Sync` from their Drive got an empty
+  /// one silently recreated by the very sync that was supposed to be telling
+  /// them the dataset was gone. "Is there a marker?" is a read; it must not
+  /// have a write as a side effect. Deliberately NOT expanded into M2.11's
+  /// folder-identity work — the folder is still name-and-tag addressed here,
+  /// exactly as before.
+  Future<String?> _findRootFolder() async {
     final cached = _rootFolderId;
     if (cached != null) return cached;
 
@@ -458,15 +478,19 @@ class GoogleDriveBackend implements SyncBackend {
         "and name = '${_escapeQueryValue(_rootFolderName)}' and "
         "appProperties has { key='$_rootTagKey' and value='$_rootTagValue' }";
     final existing = await _listAll(query);
-    if (existing.isNotEmpty) {
-      // Same existence-check-before-create race as everything else in this
-      // file — oldest-wins keeps this deterministic across every device
-      // that might independently race to create the root folder on first
-      // run, without needing a second reconciliation pass.
-      existing.sort((a, b) => a.createdTime.compareTo(b.createdTime));
-      _rootFolderId = existing.first.id;
-      return _rootFolderId!;
-    }
+    if (existing.isEmpty) return null;
+    // Same existence-check-before-create race as everything else in this
+    // file — oldest-wins keeps this deterministic across every device
+    // that might independently race to create the root folder on first
+    // run, without needing a second reconciliation pass.
+    existing.sort((a, b) => a.createdTime.compareTo(b.createdTime));
+    _rootFolderId = existing.first.id;
+    return _rootFolderId!;
+  }
+
+  Future<String> _ensureRootFolder() async {
+    final found = await _findRootFolder();
+    if (found != null) return found;
 
     final created = await _createMetadataOnly({
       'name': _rootFolderName,
@@ -506,7 +530,11 @@ class GoogleDriveBackend implements SyncBackend {
 
   @override
   Future<DatasetInitMarker?> readDatasetInitMarker() async {
-    final rootId = await _ensureRootFolder();
+    // Read-only resolution: no folder means no marker, and asking the
+    // question must not create the thing being asked about. See
+    // [_findRootFolder] (M2.13, review finding F6).
+    final rootId = await _findRootFolder();
+    if (rootId == null) return null;
     final existing = await _listAll(_markerQuery(rootId));
     if (existing.isEmpty) return null;
     existing.sort((a, b) => a.createdTime.compareTo(b.createdTime));
@@ -599,6 +627,67 @@ class GoogleDriveBackend implements SyncBackend {
     return deduped.last;
   }
 
+  /// Appends one commit.
+  ///
+  /// **M2.12 — the in-session tip cache: 3 Drive round trips per commit down
+  /// to 1, without weakening the § 8.4 mitigation for any case that
+  /// actually depends on it.**
+  ///
+  /// The unconditional shape was `_findCommitAt` (files.list) + `_findTip`
+  /// (files.list) + `_createWithContent`. Both listings are redundant for a
+  /// caller that is walking its own log forward, which `PushPhase` provably
+  /// is: it tracks `parentCommitHash` locally and advances it on each
+  /// success, and each `deviceLogId` is single-writer by design (§
+  /// Architecture 1 gives every namespace exactly one owning device). So
+  /// after this instance has itself created the commit at `deviceSeq`, the
+  /// slot at `deviceSeq + 1` cannot have been taken by anyone else, and the
+  /// tip cannot be anything but what it just wrote.
+  ///
+  /// The fast path is therefore taken **only** when all three hold:
+  ///   1. this instance has a cached tip for [deviceLogId] — meaning it
+  ///      either created that commit itself in this session, or read the tip
+  ///      from Drive during a slow-path append in this session;
+  ///   2. [parentCommitHash] equals that cached tip's hash; and
+  ///   3. [deviceSeq] equals that cached tip's `deviceSeq + 1`.
+  /// Any other combination is exactly a case where the caller's belief and
+  /// this instance's knowledge disagree, so it falls through to the full,
+  /// unchanged two-listing path.
+  ///
+  /// **Which appends still query Drive, and why each one has to:**
+  ///   * **The first append of a session for a log** — no cache entry
+  ///     exists. This is the one that must never be optimized away: it is
+  ///     also the resume/retry case, where a previous session may have
+  ///     created a commit whose response never arrived, and the existence
+  ///     check under the identical `publishIntentId` is precisely what makes
+  ///     that retry idempotent on a backend with no atomic create-if-absent.
+  ///   * **Any append after a failure.** [_tipCache] is dropped for the log
+  ///     on any thrown exception (a timeout, a 5xx, a dropped connection —
+  ///     Drive's shape of "ambiguous"), because after one of those this
+  ///     instance genuinely does not know whether its create landed. The
+  ///     subsequent retry therefore re-queries and finds its own earlier
+  ///     write if it exists.
+  ///   * **Any append whose parent/seq does not chain onto the cached tip**
+  ///     — including every `ParentMismatch`, which additionally drops the
+  ///     cache so the next call re-derives the truth rather than compounding
+  ///     a stale belief.
+  ///   * **Every non-append path**, unchanged: `readCommits`,
+  ///     `listDeviceLogIds`, blob and snapshot operations all still go to
+  ///     Drive.
+  ///
+  /// **Disclosed residual — out-of-band deletion, which "single-writer by
+  /// design" does not cover.** That justification is about other *writers*;
+  /// it says nothing about the user opening the Drive web UI and deleting
+  /// commit files between two appends of the same process. Before the cache,
+  /// the per-append `_findTip` would have noticed and returned
+  /// `ParentMismatch`; on the fast path it does not, and this backend
+  /// appends into a hole — a chain that references a parent Drive no longer
+  /// stores. The condition is still DETECTED, just later and by a different
+  /// mechanism: `readCommits` reports the resulting `hasGap`, and
+  /// `pull_phase.dart` stops applying at it rather than skipping past. The
+  /// window is one process lifetime, and the trade is deliberate: paying two
+  /// listings on every commit forever to shorten the detection window for a
+  /// user manually deleting the sync folder's internals mid-sync is not a
+  /// trade worth making.
   @override
   Future<AppendCommitOutcome> appendCommit({
     required String deviceLogId,
@@ -607,43 +696,83 @@ class GoogleDriveBackend implements SyncBackend {
     required String? parentCommitHash,
     required Uint8List commitBytes,
   }) async {
+    try {
+      return await _appendCommitInner(
+        deviceLogId: deviceLogId,
+        deviceSeq: deviceSeq,
+        publishIntentId: publishIntentId,
+        parentCommitHash: parentCommitHash,
+        commitBytes: commitBytes,
+      );
+    } catch (_) {
+      // The write's outcome is unknown (§ 8.2 items 1-2 / the `Ambiguous`
+      // condition, which this backend surfaces as a thrown
+      // `SyncNetworkException` rather than an outcome value). Anything the
+      // cache claims about this log is now a guess, and the next attempt
+      // must re-establish it from Drive — which is also what makes the
+      // caller's retry-under-the-same-publishIntentId land on the
+      // existence check.
+      _tipCache.remove(deviceLogId);
+      rethrow;
+    }
+  }
+
+  Future<AppendCommitOutcome> _appendCommitInner({
+    required String deviceLogId,
+    required int deviceSeq,
+    required String publishIntentId,
+    required String? parentCommitHash,
+    required Uint8List commitBytes,
+  }) async {
     final rootId = await _ensureRootFolder();
 
-    // 1. Existence check at this exact (deviceLogId, deviceSeq) slot — the
-    //    §8.4 existence-check-before-create mitigation, keyed off the slot
-    //    itself (not a global publishIntentId lookup — see the M2.2 brief
-    //    and the file-level doc comment for why this differs from
-    //    MockSyncBackend's cheaper in-memory global lookup).
-    final existing = await _findCommitAt(rootId, deviceLogId, deviceSeq);
-    if (existing != null) {
-      final existingIntent = existing.appProperties['publishIntentId'];
-      if (existingIntent == publishIntentId) {
-        // Idempotent replay: this is the resolution path for a retried
-        // appendCommit under the identical intent (§ 8.2 item 7), and for
-        // AppendCommitAmbiguous being resolved via re-issue rather than a
-        // readCommits round-trip.
-        return AppendCommitSucceeded(existing.appProperties['commitHash']!);
-      }
-      // The slot is occupied by someone else's write — the caller's belief
-      // that (deviceLogId, deviceSeq) was free is stale. Report it as a
-      // tip mismatch against the actual current tip, same as any other
-      // halt-not-retarget case.
-      final tip = await _findTip(rootId, deviceLogId);
-      return AppendCommitParentMismatch(
-        tip == null ? '' : tip.appProperties['commitHash']!,
-      );
-    }
+    final cachedTip = _tipCache[deviceLogId];
+    final chainsOntoCachedTip =
+        cachedTip != null &&
+        parentCommitHash == cachedTip.commitHash &&
+        deviceSeq == cachedTip.deviceSeq + 1;
 
-    // 2. Halt-not-retarget (§ Architecture 3): confirm the caller's
-    //    parentCommitHash/deviceSeq against the actual current tip before
-    //    writing anything.
-    final tip = await _findTip(rootId, deviceLogId);
-    final expectedParent = tip?.appProperties['commitHash'];
-    final expectedSeq = tip == null
-        ? 1
-        : int.parse(tip.appProperties['deviceSeq']!) + 1;
-    if (parentCommitHash != expectedParent || deviceSeq != expectedSeq) {
-      return AppendCommitParentMismatch(expectedParent ?? '');
+    if (!chainsOntoCachedTip) {
+      // 1. Existence check at this exact (deviceLogId, deviceSeq) slot — the
+      //    §8.4 existence-check-before-create mitigation, keyed off the slot
+      //    itself (not a global publishIntentId lookup — see the M2.2 brief
+      //    and the file-level doc comment for why this differs from
+      //    MockSyncBackend's cheaper in-memory global lookup).
+      final existing = await _findCommitAt(rootId, deviceLogId, deviceSeq);
+      if (existing != null) {
+        final existingIntent = existing.appProperties['publishIntentId'];
+        if (existingIntent == publishIntentId) {
+          // Idempotent replay: this is the resolution path for a retried
+          // appendCommit under the identical intent (§ 8.2 item 7), and for
+          // AppendCommitAmbiguous being resolved via re-issue rather than a
+          // readCommits round-trip.
+          final commitHash = existing.appProperties['commitHash']!;
+          _rememberTip(deviceLogId, deviceSeq, commitHash);
+          return AppendCommitSucceeded(commitHash);
+        }
+        // The slot is occupied by someone else's write — the caller's belief
+        // that (deviceLogId, deviceSeq) was free is stale. Report it as a
+        // tip mismatch against the actual current tip, same as any other
+        // halt-not-retarget case.
+        _tipCache.remove(deviceLogId);
+        final tip = await _findTip(rootId, deviceLogId);
+        return AppendCommitParentMismatch(
+          tip == null ? '' : tip.appProperties['commitHash']!,
+        );
+      }
+
+      // 2. Halt-not-retarget (§ Architecture 3): confirm the caller's
+      //    parentCommitHash/deviceSeq against the actual current tip before
+      //    writing anything.
+      final tip = await _findTip(rootId, deviceLogId);
+      final expectedParent = tip?.appProperties['commitHash'];
+      final expectedSeq = tip == null
+          ? 1
+          : int.parse(tip.appProperties['deviceSeq']!) + 1;
+      if (parentCommitHash != expectedParent || deviceSeq != expectedSeq) {
+        _tipCache.remove(deviceLogId);
+        return AppendCommitParentMismatch(expectedParent ?? '');
+      }
     }
 
     // 3. Create. The disclosed non-atomic-create race window is exactly
@@ -671,7 +800,18 @@ class GoogleDriveBackend implements SyncBackend {
       bytes: commitBytes,
       mimeType: 'application/octet-stream',
     );
+    _rememberTip(deviceLogId, deviceSeq, commitHash);
     return AppendCommitSucceeded(commitHash);
+  }
+
+  /// Records what this instance now knows to be [deviceLogId]'s tip.
+  /// Monotonic: a lower `deviceSeq` never overwrites a higher one, so an
+  /// idempotent-replay confirmation of an older slot cannot walk the cache
+  /// backwards.
+  void _rememberTip(String deviceLogId, int deviceSeq, String commitHash) {
+    final existing = _tipCache[deviceLogId];
+    if (existing != null && existing.deviceSeq > deviceSeq) return;
+    _tipCache[deviceLogId] = (deviceSeq: deviceSeq, commitHash: commitHash);
   }
 
   @override
@@ -939,6 +1079,9 @@ class GoogleDriveBackend implements SyncBackend {
         return found ? const DeleteSucceeded() : const DeleteNotFound();
 
       case DeviceLogPrefixRef(:final deviceLogId, :final throughSeq):
+        // Pruning removes commits from this log; whatever the tip cache
+        // believes about it is no longer something this instance verified.
+        _tipCache.remove(deviceLogId);
         final all = await _listAll(_commitsQuery(rootId, deviceLogId));
         final toDelete = _dedupeBySeq(all)
             .where(

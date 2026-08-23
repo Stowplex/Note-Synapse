@@ -1,5 +1,6 @@
 // Phase A — push, per owned `authorId` namespace — M2.6, § Architecture 11.7
-// of the CRDT-cloud-sync design (`plan-and-propse-the-glistening-dolphin.md`).
+// of the CRDT-cloud-sync design (`plan-and-propse-the-glistening-dolphin.md`),
+// with M2.12's commit batching.
 //
 // This milestone pushes for the ORDINARY device namespace only, consistent
 // with M2.4's own scope ("no `seed:`/`external:` authorId namespace minting"
@@ -15,10 +16,100 @@
 // *similar* to what an ambiguous step-2 attempt needs — it is the SAME
 // procedure, recursively. [_resolveOnePublish] implements that procedure
 // once; step 0's scan calls it directly for each pre-existing pending
-// intent, and step 2's loop falls into it only on `Ambiguous` (a fresh op's
-// first `appendCommit` attempt is not preceded by a redundant readCommits
-// check — nothing has been attempted yet — matching § 11.7's step 2 text
-// literally).
+// intent, and step 2's loop falls into it only on `Ambiguous` (a fresh
+// batch's first `appendCommit` attempt is not preceded by a redundant
+// readCommits check — nothing has been attempted yet — matching § 11.7's
+// step 2 text literally).
+//
+// ===========================================================================
+// M2.12: `deviceSeq` and `authorSeq` are now two different things.
+// ===========================================================================
+//
+// They used to be numerically equal, because every commit carried exactly one
+// operation. That equality was never part of the design — § Architecture 3
+// defines `deviceSeq` as a position in a device log's hash-linked chain and
+// § Architecture 2 defines `authorSeq` as the second component of a causal
+// dot — and this file relied on it in three places, all of which are now
+// explicit:
+//
+//   * **`deviceSeq` — the commit-chain position.** Owned by this file,
+//     advanced once per COMMIT, persisted as `sync_state['commit_seq:<
+//     authorId>']` in the same transaction that advances
+//     `sync_state['tip:<authorId>']`. It is what `appendCommit`,
+//     `parentCommitHash`, the hash chain, `readCommits(afterSeq:)` and
+//     `sync_publish_intent.deviceSeq` all mean. It never appears inside
+//     `commitBytes`.
+//   * **`authorSeq` — the dot.** Owned by `SeqCounter`, advanced once per
+//     OPERATION, carried inside `commitBytes` on each operation
+//     individually, and used by nothing in this file except to identify
+//     which `sync_pending_ops` rows a commit covers. The dot space is
+//     completely unchanged by batching: the same operations get the same
+//     dots they always would have.
+//
+// The three former conflation points, and what each became:
+//   1. `final deviceSeq = opRow['authorSeq'] as int;` in step 2 — replaced
+//      by [_readCommitSeq]'s own commit counter.
+//   2. Step 0's `_readPendingOp(db, authorId, deviceSeq)`, which looked a
+//      pending op up BY `authorSeq = deviceSeq` — replaced by
+//      [_reconstructBatch], which reads the operations an intent covers from
+//      `sync_publish_intent.opAuthorSeqsJson` (schema v61) and verifies them
+//      against its recorded `payloadHash` (see that method).
+//   3. `decodeCommitBytes(expectedAuthorSeq: commit.deviceSeq)` on the pull
+//      side — replaced by `decodeCommitOperations` (`wire_format.dart`),
+//      which applies that check for v1 only, where it remains correct.
+//
+// **Existing v1 logs keep working without a migration.** [_readCommitSeq]
+// falls back to `MAX(sync_publish_intent.deviceSeq)` when no `commit_seq:`
+// row exists yet — which, for a log written entirely by the pre-M2.12 build,
+// is exactly the last commit position, because back then every intent's
+// `deviceSeq` was one commit. The chain therefore continues from wherever it
+// actually is, with v2 commits appended after v1 ones in the same log.
+//
+// ===========================================================================
+// Batch size, and why it is two limits rather than one.
+// ===========================================================================
+//
+// [maxOperationsPerCommit] = 64 and [maxPayloadBytesPerCommit] = 256 KiB,
+// whichever binds first; a single operation larger than the byte limit is
+// always sent alone rather than being split (operations are atomic).
+//
+//   * **Drive request size.** `GoogleDriveBackend` uploads a commit as a
+//     `multipart/related` create, i.e. one non-resumable request. Google
+//     documents 5 MB as the multipart-upload ceiling. 256 KiB leaves ~20x
+//     headroom, which matters because the limit is on the SUM and one
+//     `notes.content` can be megabytes on its own — the byte limit is what
+//     stops a batch of ten large notes from turning a working push into a
+//     413.
+//
+//     **The budget is measured in real bytes, not characters, and on this
+//     app that is not pedantry.** `LENGTH(valueJson)` on a TEXT column
+//     counts CHARACTERS; Note Synapse ships a Chinese localization and CJK
+//     content is an ordinary case, at roughly 3 UTF-8 bytes per character.
+//     Budgeting by character count would have let a wholly-Chinese batch
+//     reach ~768 KiB of real payload against a "256 KiB" limit — still
+//     safe, but the documented headroom would have been ~6x rather than the
+//     ~20x claimed, and the discrepancy would have been invisible. Planning
+//     uses `LENGTH(CAST(valueJson AS BLOB))`, which is SQLite's byte
+//     length, so the number means what it says in every language.
+//   * **Memory.** A commit is built, hashed, and held in memory whole, on a
+//     phone, while the request is in flight; and on the receiving side
+//     `readCommits` downloads it whole. Both scale with this number.
+//   * **Resume granularity.** A commit is the atomic unit of durable
+//     progress: a push interrupted mid-flight re-derives and re-sends at
+//     most one commit's worth of work. 64 operations is roughly four
+//     entities on the measured dataset — small enough that an interrupted
+//     first sync loses no meaningful ground, large enough that the same
+//     dataset's 152 operations fit in 3 commits instead of 152.
+//   * **Why not "one commit per push".** Progress would stop being durable
+//     until the very end, a single failure would cost the whole round, and
+//     the payload would be unbounded in exactly the two dimensions above.
+//
+// The planning pass ([_planBatches]) deliberately reads only `authorSeq` and
+// the value's byte length — never the values themselves — so deciding the
+// batch layout for a large outbox costs one small query rather than loading
+// every `notes.content` in `sync_pending_ops` into memory at once (which is
+// what the pre-M2.12 `db.query('sync_pending_ops', ...)` did before the
+// loop).
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -69,8 +160,49 @@ class PushAmbiguousUnresolvedException implements Exception {
       'PushAmbiguousUnresolvedException(authorId: $authorId, deviceSeq: $deviceSeq)';
 }
 
+/// Progress for one [PushPhase.push] call, emitted once per commit
+/// confirmed.
+///
+/// **M2.12 exists partly because this type did not.** During push the
+/// settings screen kept showing the SEED phase's last message ("Preparing
+/// existing data — message_parents (19 of 19 tables), 441 operations so
+/// far") for the entire, much longer push, so the phase that actually took
+/// minutes looked like a hang on a phase that had already finished. Routed
+/// through the same callback plumbing M2.10 built for
+/// `SeedScanProgress` — `SyncSession.onPushProgress` ->
+/// `CloudSyncService.syncNow(onPushProgress:)` -> the same single live-status
+/// line in `cloud_sync_screen.dart`.
+class PushProgress {
+  const PushProgress({
+    required this.authorId,
+    required this.commitsSent,
+    required this.commitsTotal,
+    required this.operationsPublished,
+  });
+
+  /// Which namespace is being pushed — the ordinary device id or
+  /// `seed:<deviceId>`, since `SyncSession` runs Phase A once per owned
+  /// namespace.
+  final String authorId;
+
+  final int commitsSent;
+
+  /// Planned commits for this namespace, computed once from the outbox
+  /// before the first append. An estimate in exactly one respect: a resumed
+  /// intent from an interrupted earlier session may have grouped its
+  /// operations differently, so [commitsSent] can end slightly under
+  /// [commitsTotal]. Progress text, not a correctness signal.
+  final int commitsTotal;
+
+  final int operationsPublished;
+}
+
 class PushResult {
-  const PushResult({required this.publishedCount, required this.resumedCount});
+  const PushResult({
+    required this.publishedCount,
+    required this.resumedCount,
+    this.commitCount = 0,
+  });
 
   /// Total ops (new + resumed) confirmed published by this call.
   final int publishedCount;
@@ -79,16 +211,68 @@ class PushResult {
   /// (a pending intent left over from an earlier, interrupted session) —
   /// informational, for tests/diagnostics.
   final int resumedCount;
+
+  /// M2.12: how many COMMITS carried those [publishedCount] operations.
+  /// Equal to `publishedCount` before batching existed; the ratio between
+  /// the two is the traffic saving, and a test pins it.
+  final int commitCount;
+}
+
+/// One commit's worth of operations, planned and encoded.
+class _CommitBatch {
+  const _CommitBatch({
+    required this.authorSeqs,
+    required this.bytes,
+    required this.payloadHash,
+  });
+
+  /// The `sync_pending_ops.authorSeq` values this commit covers, ascending.
+  /// Stamping `publishedAt` for exactly these is what makes a commit's
+  /// confirmation atomic with respect to the outbox.
+  final List<int> authorSeqs;
+  final Uint8List bytes;
+  final String payloadHash;
+
+  int get operationCount => authorSeqs.length;
 }
 
 /// § 11.7 Phase A. One instance is stateless/reusable; every method takes
 /// the backend and namespace explicitly.
 class PushPhase {
-  PushPhase(this._databaseService);
+  PushPhase(
+    this._databaseService, {
+    this.maxOperationsPerCommit = defaultMaxOperationsPerCommit,
+    this.maxPayloadBytesPerCommit = defaultMaxPayloadBytesPerCommit,
+  });
 
   final DatabaseService _databaseService;
 
   static const int _maxAmbiguousResolutionAttempts = 5;
+
+  /// See the batch-size section of this file's top doc comment.
+  static const int defaultMaxOperationsPerCommit = 64;
+
+  /// Budget over the summed BYTE length of a commit's operations'
+  /// `sync_pending_ops.valueJson` — a planning proxy for the encoded payload
+  /// size, which is dominated by values (`notes.content`,
+  /// `conversation_messages.metadata`). Deliberately compared against a
+  /// cheap `LENGTH(CAST(... AS BLOB))` rather than the real encoded size so
+  /// planning never has to load the values; see the batch-size section of
+  /// this file's top doc comment for why the `CAST` (and not a bare
+  /// `LENGTH`) is load-bearing on a CJK-capable app.
+  static const int defaultMaxPayloadBytesPerCommit = 256 * 1024;
+
+  /// Overridable per instance so a test can pin the *equivalence* of
+  /// batching rather than only its effect: running the identical multi-device
+  /// scenario at `maxOperationsPerCommit: 1` reproduces the pre-M2.12
+  /// one-operation-per-commit shape, and the resolved state must come out
+  /// byte-identical either way. Production never passes these.
+  ///
+  /// **Lowering either of these in a future release is safe**, and was not
+  /// before the v61 `opAuthorSeqsJson` column existed — see
+  /// [_reconstructBatch] for the permanent-wedge that column removes.
+  final int maxOperationsPerCommit;
+  final int maxPayloadBytesPerCommit;
 
   static String _sha256Hex(List<int> bytes) => sha256.convert(bytes).toString();
 
@@ -97,6 +281,11 @@ class PushPhase {
   static String _intentHash(String? parentCommitHash, String payloadHash) =>
       _sha256Hex(utf8.encode('${parentCommitHash ?? ''}|$payloadHash'));
 
+  /// `sync_state` key holding this namespace's last confirmed commit-chain
+  /// position — see this file's top doc comment on `deviceSeq` vs
+  /// `authorSeq`.
+  static String commitSeqKey(String authorId) => 'commit_seq:$authorId';
+
   /// Runs § 11.7 Phase A in full for [authorId]: step 0's resume check,
   /// then step 2's ordinary push of whatever remains pending. Throws
   /// [PushParentMismatchException] (step 3's "halt-not-retarget," a real
@@ -104,15 +293,32 @@ class PushPhase {
   /// unresolvable-within-this-call `Ambiguous` outcome) — both leave
   /// whatever was already durably confirmed before the failure exactly as
   /// confirmed; nothing is rolled back, matching this procedure's own
-  /// crash-safety design (each op's publish is its own atomic local
-  /// transaction, independent of every other op's).
+  /// crash-safety design (each COMMIT's publish is its own atomic local
+  /// transaction, independent of every other commit's).
   Future<PushResult> push({
     required SyncBackend backend,
     required String authorId,
+    void Function(PushProgress)? onProgress,
   }) async {
     final db = await _databaseService.database;
     var resumed = 0;
     var published = 0;
+    var commits = 0;
+
+    // Planned once, over EVERY unpublished operation (including the ones a
+    // pending intent already covers, which are still unpublished by
+    // definition) — so the total a progress UI shows does not jump when
+    // step 0 hands over to step 2.
+    final commitsTotal = (await _planBatches(db, authorId)).length;
+
+    void report() => onProgress?.call(
+      PushProgress(
+        authorId: authorId,
+        commitsSent: commits,
+        commitsTotal: commitsTotal,
+        operationsPublished: published,
+      ),
+    );
 
     // Step 0 — resume check.
     final pendingIntents = await db.query(
@@ -130,31 +336,29 @@ class PushPhase {
         // ever execute against a real database.
         continue;
       }
-      final opRow = await _readPendingOp(db, authorId, deviceSeq);
-      if (opRow == null) {
-        throw StateError(
-          'sync_publish_intent has a pending row for authorId=$authorId deviceSeq=$deviceSeq '
-          'with no matching sync_pending_ops row — an internal-consistency violation, since '
-          'every intent is recorded from an existing pending op in the same push() call',
-        );
-      }
-      final commitBytes = encodeCommitBytes(
-        WireOperation.fromPendingOpsRow(opRow),
-      );
-      final payloadHash = _payloadHash(commitBytes);
       final recordedPayloadHash = intentRow['payloadHash'] as String;
-      if (payloadHash != recordedPayloadHash) {
-        // Re-encoding the same sync_pending_ops row must be byte-identical
-        // to what was originally encoded (the wire format is a pure
-        // function of the row's own columns) — a mismatch here means the
-        // row was mutated after its intent was recorded, which never
-        // happens by construction (sync_pending_ops rows are immutable
-        // once minted, aside from publishedAt). Surfaced loudly rather than
-        // silently re-publishing under a stale hash.
+      final batch = await _reconstructBatch(
+        db,
+        authorId: authorId,
+        deviceSeq: deviceSeq,
+        payloadHash: recordedPayloadHash,
+        opAuthorSeqsJson: intentRow['opAuthorSeqsJson'] as String?,
+      );
+      if (batch == null) {
+        // The operations this intent names do not re-encode to the
+        // payloadHash it recorded (or, for a pre-v61 intent, the single
+        // operation at `authorSeq == deviceSeq` does not). Since
+        // `sync_pending_ops` rows are immutable once minted (aside from
+        // `publishedAt`) and the covered set is now recorded rather than
+        // guessed, the only ways to reach here are real corruption or a
+        // mutated row. Surfaced loudly rather than silently re-publishing
+        // something else under a stale hash — the same stance the
+        // pre-M2.12 code took for its own narrower version of this check.
         throw StateError(
-          'sync_pending_ops row for authorId=$authorId deviceSeq=$deviceSeq re-encodes to a '
-          'different payloadHash than its recorded sync_publish_intent — data corruption '
-          'or a mutated pending-op row',
+          'sync_publish_intent has a pending row for authorId=$authorId '
+          'deviceSeq=$deviceSeq whose recorded payloadHash does not match a '
+          're-encoding of the operations it names — data corruption or a '
+          'mutated pending-op row',
         );
       }
 
@@ -165,36 +369,29 @@ class PushPhase {
         deviceSeq: deviceSeq,
         intentHash: intentRow['intentHash'] as String,
         parentCommitHash: intentRow['parentCommitHash'] as String?,
-        payloadHash: payloadHash,
-        commitBytes: commitBytes,
+        batch: batch,
         attempt: 0,
         publishedSoFar: published,
       );
-      resumed++;
-      published++;
+      resumed += batch.operationCount;
+      published += batch.operationCount;
+      commits++;
+      report();
     }
 
-    // Step 1 — this namespace's current tip, freshly read (step 0 may have
-    // just advanced it).
+    // Step 1 — this namespace's current tip and commit-chain position,
+    // freshly read (step 0 may have just advanced both).
     var parentCommitHash = await _readTip(db, authorId);
+    var commitSeq = await _readCommitSeq(db, authorId);
 
-    // Step 2 — ordinary push of whatever remains pending. Rows step 0
+    // Step 2 — ordinary push of whatever remains pending. Operations step 0
     // resolved already have publishedAt stamped (by _confirmAndAdvance
-    // inside _resolveOnePublish), so this query naturally excludes them —
+    // inside _resolveOnePublish), so this plan naturally excludes them —
     // no separate bookkeeping needed to avoid double-processing.
-    final newOps = await db.query(
-      'sync_pending_ops',
-      where: 'authorId = ? AND publishedAt IS NULL',
-      whereArgs: [authorId],
-      orderBy: 'authorSeq ASC',
-    );
-    for (final opRow in newOps) {
-      final deviceSeq = opRow['authorSeq'] as int;
-      final commitBytes = encodeCommitBytes(
-        WireOperation.fromPendingOpsRow(opRow),
-      );
-      final payloadHash = _payloadHash(commitBytes);
-      final intentHash = _intentHash(parentCommitHash, payloadHash);
+    for (final authorSeqs in await _planBatches(db, authorId)) {
+      final batch = await _encodeBatch(db, authorId, authorSeqs);
+      commitSeq++;
+      final intentHash = _intentHash(parentCommitHash, batch.payloadHash);
 
       // Record/reuse the intent row BEFORE calling appendCommit — a crash
       // here is exactly what step 0's resume check recovers from on the
@@ -203,17 +400,18 @@ class PushPhase {
         db,
         intentHash: intentHash,
         parentCommitHash: parentCommitHash,
-        payloadHash: payloadHash,
+        payloadHash: batch.payloadHash,
         authorId: authorId,
-        deviceSeq: deviceSeq,
+        deviceSeq: commitSeq,
+        authorSeqs: batch.authorSeqs,
       );
 
       final outcome = await backend.appendCommit(
         deviceLogId: authorId,
-        deviceSeq: deviceSeq,
+        deviceSeq: commitSeq,
         publishIntentId: intentHash,
         parentCommitHash: parentCommitHash,
-        commitBytes: commitBytes,
+        commitBytes: batch.bytes,
       );
 
       switch (outcome) {
@@ -221,16 +419,16 @@ class PushPhase {
           await _confirmAndAdvance(
             db,
             authorId: authorId,
-            deviceSeq: deviceSeq,
+            deviceSeq: commitSeq,
+            authorSeqs: batch.authorSeqs,
             commitHash: commitHash,
             intentHash: intentHash,
           );
           parentCommitHash = commitHash;
-          published++;
         case AppendCommitParentMismatch(:final actualTipHash):
           throw PushParentMismatchException(
             authorId: authorId,
-            deviceSeq: deviceSeq,
+            deviceSeq: commitSeq,
             actualTipHash: actualTipHash,
             publishedBeforeHalt: published,
           );
@@ -239,21 +437,176 @@ class PushPhase {
             db: db,
             backend: backend,
             authorId: authorId,
-            deviceSeq: deviceSeq,
+            deviceSeq: commitSeq,
             intentHash: intentHash,
             parentCommitHash: parentCommitHash,
-            payloadHash: payloadHash,
-            commitBytes: commitBytes,
+            batch: batch,
             attempt: 0,
             publishedSoFar: published,
           );
           parentCommitHash = commitHash;
-          published++;
+      }
+      published += batch.operationCount;
+      commits++;
+      report();
+    }
+
+    return PushResult(
+      publishedCount: published,
+      resumedCount: resumed,
+      commitCount: commits,
+    );
+  }
+
+  // ── Batch planning / encoding ────────────────────────────────────────
+
+  /// Groups this namespace's unpublished operations into commits, reading
+  /// only each operation's `authorSeq` and its value's BYTE length — never
+  /// its value. See the batch-size section of this file's top doc comment,
+  /// including why the length is taken over a `CAST(... AS BLOB)`.
+  Future<List<List<int>>> _planBatches(
+    DatabaseExecutor db,
+    String authorId,
+  ) async {
+    final rows = await db.rawQuery(
+      'SELECT authorSeq, '
+      'COALESCE(LENGTH(CAST(valueJson AS BLOB)), 0) AS valueBytes '
+      'FROM sync_pending_ops '
+      'WHERE authorId = ? AND publishedAt IS NULL '
+      'ORDER BY authorSeq ASC',
+      [authorId],
+    );
+
+    final batches = <List<int>>[];
+    var current = <int>[];
+    var currentBytes = 0;
+    for (final row in rows) {
+      final authorSeq = row['authorSeq'] as int;
+      final valueBytes = (row['valueBytes'] as int?) ?? 0;
+      final wouldOverflow =
+          current.length >= maxOperationsPerCommit ||
+          (current.isNotEmpty &&
+              currentBytes + valueBytes > maxPayloadBytesPerCommit);
+      if (wouldOverflow) {
+        batches.add(current);
+        current = <int>[];
+        currentBytes = 0;
+      }
+      current.add(authorSeq);
+      currentBytes += valueBytes;
+    }
+    if (current.isNotEmpty) batches.add(current);
+    return batches;
+  }
+
+  /// Reads the named operations in full and encodes them as one `v: 2`
+  /// commit payload.
+  Future<_CommitBatch> _encodeBatch(
+    DatabaseExecutor db,
+    String authorId,
+    List<int> authorSeqs,
+  ) async {
+    final placeholders = List.filled(authorSeqs.length, '?').join(',');
+    final rows = await db.query(
+      'sync_pending_ops',
+      where: 'authorId = ? AND authorSeq IN ($placeholders)',
+      whereArgs: [authorId, ...authorSeqs],
+      orderBy: 'authorSeq ASC',
+    );
+    if (rows.length != authorSeqs.length) {
+      throw StateError(
+        'sync_pending_ops is missing rows for authorId=$authorId at '
+        '${authorSeqs.where((s) => !rows.any((r) => r['authorSeq'] == s)).toList()} '
+        '— pending operations are immutable once minted',
+      );
+    }
+    final bytes = encodeCommitBatchBytes([
+      for (final row in rows) WireOperation.fromPendingOpsRow(row),
+    ]);
+    return _CommitBatch(
+      authorSeqs: [for (final row in rows) row['authorSeq'] as int],
+      bytes: bytes,
+      payloadHash: _payloadHash(bytes),
+    );
+  }
+
+  /// Rebuilds exactly the commit a recorded, still-pending intent covers.
+  ///
+  /// **The intent RECORDS which operations it covers
+  /// (`sync_publish_intent.opAuthorSeqsJson`, added by schema v61), so this
+  /// method verifies rather than searches.** An earlier version of this file
+  /// carried no such column and instead re-derived the batch by trying
+  /// candidate layouts — the batch today's constants would form, then every
+  /// shorter prefix — accepting whichever re-encoding hashed to
+  /// [payloadHash]. That worked only for batches no LARGER than today's
+  /// constants produce. A future release that ever LOWERED
+  /// [maxOperationsPerCommit] or [maxPayloadBytesPerCommit], meeting a push
+  /// interrupted by the build that preceded it, would find no candidate at
+  /// all, throw, and throw again on every subsequent `push()` — the
+  /// namespace could never publish again without manual database surgery.
+  /// Nothing would be lost, but it is exactly the permanent-wedge class
+  /// M2.10 exists to have removed. Recording the answer costs one nullable
+  /// column and removes the failure mode outright; it also removes the
+  /// search's cost, which was up to [maxOperationsPerCommit] full
+  /// `_encodeBatch` calls, each loading every covered row's `valueJson` —
+  /// megabytes of `notes.content`, on a phone, per resumed intent.
+  ///
+  /// The recorded `authorSeq` list is still not trusted blindly: the batch is
+  /// re-encoded from the named rows and its hash must equal [payloadHash]
+  /// before it is used. That check is what makes a match PROOF (the encoding
+  /// is a pure function of the rows' own immutable columns) rather than
+  /// inference.
+  ///
+  /// [opAuthorSeqsJson] is null for an intent written before v61 — a
+  /// pre-M2.12, one-operation-per-commit intent, and the one case where
+  /// `deviceSeq` really does name an `authorSeq`. Those must still resume
+  /// correctly for a user who already has v1 commits on a backend, so they
+  /// fall back to re-encoding that single operation in the v1 envelope.
+  /// Looked up WITHOUT a `publishedAt IS NULL` filter, matching the
+  /// pre-M2.12 code's own query, so an operation stamped published by a
+  /// partially-completed earlier attempt is still findable.
+  ///
+  /// Returns null if nothing verifies — the caller treats that as corruption.
+  Future<_CommitBatch?> _reconstructBatch(
+    DatabaseExecutor db, {
+    required String authorId,
+    required int deviceSeq,
+    required String payloadHash,
+    required String? opAuthorSeqsJson,
+  }) async {
+    if (opAuthorSeqsJson != null) {
+      final authorSeqs = [
+        for (final seq in jsonDecode(opAuthorSeqsJson) as List<dynamic>)
+          seq as int,
+      ];
+      if (authorSeqs.isEmpty) return null;
+      final batch = await _encodeBatch(db, authorId, authorSeqs);
+      return batch.payloadHash == payloadHash ? batch : null;
+    }
+
+    final legacyRows = await db.query(
+      'sync_pending_ops',
+      where: 'authorId = ? AND authorSeq = ?',
+      whereArgs: [authorId, deviceSeq],
+      limit: 1,
+    );
+    if (legacyRows.isNotEmpty) {
+      final bytes = encodeCommitBytes(
+        WireOperation.fromPendingOpsRow(legacyRows.first),
+      );
+      if (_payloadHash(bytes) == payloadHash) {
+        return _CommitBatch(
+          authorSeqs: [deviceSeq],
+          bytes: bytes,
+          payloadHash: payloadHash,
+        );
       }
     }
 
-    return PushResult(publishedCount: published, resumedCount: resumed);
+    return null;
   }
+
+  // ── The resume/retry primitive ───────────────────────────────────────
 
   /// § 11.7 Phase A step 0's resume procedure, exactly as written — and,
   /// per step 3's explicit "resolve exactly as step 0's resume procedure
@@ -263,6 +616,13 @@ class PushPhase {
   /// further `Ambiguous` (bounded by [_maxAmbiguousResolutionAttempts]).
   /// Returns the confirmed `commitHash`. Throws [PushParentMismatchException]
   /// or [PushAmbiguousUnresolvedException] on an unresolvable outcome.
+  ///
+  /// **Unchanged in shape by batching, and that is the point:** the
+  /// procedure compares the payload hash of what is stored at [deviceSeq]
+  /// against the payload hash of what it is trying to publish. A payload
+  /// carrying N operations is compared exactly as a payload carrying 1 was;
+  /// only [_confirmAndAdvance]'s bookkeeping had to learn that a
+  /// confirmation stamps N rows rather than one.
   Future<String> _resolveOnePublish({
     required Database db,
     required SyncBackend backend,
@@ -270,8 +630,7 @@ class PushPhase {
     required int deviceSeq,
     required String intentHash,
     required String? parentCommitHash,
-    required String payloadHash,
-    required Uint8List commitBytes,
+    required _CommitBatch batch,
     required int attempt,
     required int publishedSoFar,
   }) async {
@@ -282,12 +641,13 @@ class PushPhase {
     );
     for (final commit in page.commits) {
       if (commit.deviceSeq == deviceSeq &&
-          _sha256Hex(commit.commitBytes) == payloadHash) {
+          _sha256Hex(commit.commitBytes) == batch.payloadHash) {
         // The earlier appendCommit actually landed.
         await _confirmAndAdvance(
           db,
           authorId: authorId,
           deviceSeq: deviceSeq,
+          authorSeqs: batch.authorSeqs,
           commitHash: commit.commitHash,
           intentHash: intentHash,
         );
@@ -307,7 +667,7 @@ class PushPhase {
       deviceSeq: deviceSeq,
       publishIntentId: intentHash,
       parentCommitHash: parentCommitHash,
-      commitBytes: commitBytes,
+      commitBytes: batch.bytes,
     );
 
     switch (outcome) {
@@ -316,6 +676,7 @@ class PushPhase {
           db,
           authorId: authorId,
           deviceSeq: deviceSeq,
+          authorSeqs: batch.authorSeqs,
           commitHash: commitHash,
           intentHash: intentHash,
         );
@@ -335,27 +696,14 @@ class PushPhase {
           deviceSeq: deviceSeq,
           intentHash: intentHash,
           parentCommitHash: parentCommitHash,
-          payloadHash: payloadHash,
-          commitBytes: commitBytes,
+          batch: batch,
           attempt: attempt + 1,
           publishedSoFar: publishedSoFar,
         );
     }
   }
 
-  Future<Map<String, Object?>?> _readPendingOp(
-    DatabaseExecutor db,
-    String authorId,
-    int deviceSeq,
-  ) async {
-    final rows = await db.query(
-      'sync_pending_ops',
-      where: 'authorId = ? AND authorSeq = ?',
-      whereArgs: [authorId, deviceSeq],
-      limit: 1,
-    );
-    return rows.isEmpty ? null : rows.first;
-  }
+  // ── Local bookkeeping ────────────────────────────────────────────────
 
   Future<String?> _readTip(DatabaseExecutor db, String authorId) async {
     final rows = await db.query(
@@ -367,6 +715,35 @@ class PushPhase {
     return rows.isEmpty ? null : rows.first['value'] as String?;
   }
 
+  /// This namespace's last confirmed commit-chain position.
+  ///
+  /// The `commit_seq:` row is written by [_confirmAndAdvance]. When it is
+  /// absent the log either has no commits at all (-> 0) or was written
+  /// entirely by the pre-M2.12 build, where one commit == one operation and
+  /// `sync_publish_intent.deviceSeq` recorded that commit's position
+  /// directly — so `MAX(deviceSeq)` over this namespace's intents is exactly
+  /// the last position used, and the chain continues from there. No
+  /// migration, and no round trip to the backend, is needed to find it.
+  Future<int> _readCommitSeq(DatabaseExecutor db, String authorId) async {
+    final rows = await db.query(
+      'sync_state',
+      columns: const ['value'],
+      where: 'key = ?',
+      whereArgs: [commitSeqKey(authorId)],
+      limit: 1,
+    );
+    if (rows.isNotEmpty) {
+      final parsed = int.tryParse(rows.first['value'] as String? ?? '');
+      if (parsed != null) return parsed;
+    }
+    final legacy = await db.rawQuery(
+      'SELECT MAX(deviceSeq) AS maxSeq FROM sync_publish_intent '
+      'WHERE authorId = ?',
+      [authorId],
+    );
+    return (legacy.first['maxSeq'] as int?) ?? 0;
+  }
+
   /// Records a `sync_publish_intent` row as its own, quick, local
   /// transaction — deliberately NOT wrapped around the subsequent
   /// `appendCommit` network call (holding a SQLite write transaction open
@@ -375,6 +752,12 @@ class PushPhase {
   /// ignore` makes re-recording an already-present intent (e.g. a second
   /// `push()` call within the same process before the first's outcome is
   /// known) a safe no-op rather than a thrown constraint violation.
+  ///
+  /// [authorSeqs] is what makes the resume procedure a verification rather
+  /// than a search — see [_reconstructBatch]. Recorded here, before the
+  /// network call, for the same reason everything else on this row is: the
+  /// crash this whole mechanism exists for can happen the instant after
+  /// this insert commits.
   Future<void> _recordIntent(
     Database db, {
     required String intentHash,
@@ -382,6 +765,7 @@ class PushPhase {
     required String payloadHash,
     required String authorId,
     required int deviceSeq,
+    required List<int> authorSeqs,
   }) async {
     await db.insert('sync_publish_intent', {
       'intentHash': intentHash,
@@ -389,25 +773,30 @@ class PushPhase {
       'payloadHash': payloadHash,
       'authorId': authorId,
       'deviceSeq': deviceSeq,
+      'opAuthorSeqsJson': jsonEncode(authorSeqs),
       'status': 'pending',
       'createdAt': DateTime.now().millisecondsSinceEpoch,
       'confirmedAt': null,
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
-  /// Marks the intent confirmed, stamps `sync_pending_ops.publishedAt`, and
-  /// advances `sync_state['tip:<authorId>']` — all three in one local
-  /// transaction, so a crash partway through this call is impossible to
-  /// observe as "confirmed but not published" or "tip advanced but intent
-  /// still pending."
+  /// Marks the intent confirmed, stamps `sync_pending_ops.publishedAt` for
+  /// **every operation the commit carried**, and advances both
+  /// `sync_state['tip:<authorId>']` and
+  /// `sync_state['commit_seq:<authorId>']` — all in one local transaction,
+  /// so a crash partway through this call is impossible to observe as
+  /// "confirmed but not published", "tip advanced but intent still pending",
+  /// or (new with batching) "half the commit's operations published".
   Future<void> _confirmAndAdvance(
     Database db, {
     required String authorId,
     required int deviceSeq,
+    required List<int> authorSeqs,
     required String commitHash,
     required String intentHash,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
+    final placeholders = List.filled(authorSeqs.length, '?').join(',');
     await db.transaction((txn) async {
       await txn.update(
         'sync_publish_intent',
@@ -418,12 +807,16 @@ class PushPhase {
       await txn.update(
         'sync_pending_ops',
         {'publishedAt': now},
-        where: 'authorId = ? AND authorSeq = ?',
-        whereArgs: [authorId, deviceSeq],
+        where: 'authorId = ? AND authorSeq IN ($placeholders)',
+        whereArgs: [authorId, ...authorSeqs],
       );
       await txn.insert('sync_state', {
         'key': 'tip:$authorId',
         'value': commitHash,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.insert('sync_state', {
+        'key': commitSeqKey(authorId),
+        'value': '$deviceSeq',
       }, conflictAlgorithm: ConflictAlgorithm.replace);
     });
   }

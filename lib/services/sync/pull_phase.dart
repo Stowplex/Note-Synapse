@@ -47,6 +47,37 @@
 //    content-hash verification alone would miss a chain assembled out of
 //    otherwise-individually-valid commits in the wrong order/lineage.
 //
+// **M2.12: a commit now carries N operations, not 1.** Three consequences,
+// all of them local to this file:
+//
+//  * Decoding goes through `decodeCommitOperations` (`wire_format.dart`),
+//    which reads both the v1 single-operation envelope and the v2 batch and
+//    returns a list either way. `deviceSeq` is passed as what it now is — a
+//    commit-chain position — and is only cross-checked against an operation's
+//    `authorSeq` for v1, where the two really are the same number.
+//  * **A commit is still applied atomically, in ONE transaction**, and that
+//    is load-bearing rather than tidy: this file's duplicate/gap guards are
+//    keyed on `deviceSeq`, so "half a commit applied, frontier not advanced"
+//    would re-apply the applied half on the next round — and `set_remove`
+//    specifically cannot tell "already applied" from "never observed" (see
+//    `OrSetResolver.applySetRemove`'s own disclosed limitation). All-or-
+//    nothing per commit keeps the M2.6 crash-safety story exactly as it was.
+//  * M2.10's per-operation containment survives batching via a **fallback,
+//    not a weakening**: if the whole-commit transaction throws, the commit is
+//    retried operation-by-operation, each in its own transaction, so one
+//    unapplicable operation parks only itself and its 63 neighbours still
+//    apply. The fast path is unchanged for the overwhelmingly common case
+//    where nothing throws.
+//
+// **An unknown FUTURE envelope version stops that log for the round rather
+// than parking it.** Parking advances the frontier past a commit, which is
+// right for an operation this build understands and cannot apply, and wrong
+// for one it cannot even read: the data would be permanently invisible to
+// this device. Stopping the log is the same treatment an ordinary gap gets
+// (§ 11.7: "retry on the next manual sync") — every other log still pulls,
+// and this device's own push still runs, so it is not the wedge M2.10
+// removed either.
+//
 // **Duplicate delivery, handled without a separate per-dot ledger.** Since
 // `readCommits(afterSeq: X)` only ever returns `deviceSeq > X`, the only way
 // this device can see an already-applied `deviceSeq` again is within a
@@ -168,21 +199,29 @@ const int maxParkedOperationAttempts = 3;
 
 class PullResult {
   const PullResult({
-    required this.commitsApplied,
-    required this.commitsBlocked,
+    required this.operationsApplied,
+    required this.operationsBlocked,
     required this.gappedDeviceLogIds,
     required this.materializeQueueResolved,
     this.failedOperations = const [],
+    this.unreadableCommits = const [],
   });
 
-  /// Commits successfully routed through `CausalEngine.apply` (field/
+  /// Operations successfully routed through `CausalEngine.apply` (field/
   /// `__exists__`/`set_add`, or a `set_remove` whose targets were all
   /// resolved).
-  final int commitsApplied;
+  ///
+  /// **Renamed from `commitsApplied` in M2.12**, when a commit stopped being
+  /// one operation: this has always counted the things that were applied,
+  /// and after batching those are operations, not commits. Keeping the old
+  /// name would have made "pulled N" mean something different from "pushed
+  /// N" on the very same screen.
+  final int operationsApplied;
 
-  /// `set_remove` commits that hit `missing_referenced_dot` and were queued
-  /// into `sync_materialize_queue` instead.
-  final int commitsBlocked;
+  /// `set_remove` operations that hit `missing_referenced_dot` and were
+  /// queued into `sync_materialize_queue` instead, plus (M2.12) any
+  /// operation parked by the per-operation fallback.
+  final int operationsBlocked;
 
   /// `deviceLogId`s where this pull round stopped early on a gap (§ 11.7:
   /// "retry on the next manual sync rather than treating it as an error").
@@ -194,10 +233,25 @@ class PullResult {
 
   /// Operations whose apply/materialize step threw and were parked under
   /// [operationFailedBlockingReason] so the session could continue —
-  /// `(deviceLogId, deviceSeq, error)`. Non-empty means something is wrong
-  /// and needs a human, but the device is still syncing everything else.
-  final List<(String deviceLogId, int deviceSeq, String error)>
+  /// `(authorId, authorSeq, error)`, i.e. the operation's own DOT (M2.12; it
+  /// used to be the commit's `(deviceLogId, deviceSeq)`, which was the same
+  /// pair only while a commit carried exactly one operation). Matching
+  /// `sync_materialize_queue.blockingKey` is what lets `sync_health.dart`
+  /// avoid double-counting a parked operation that also failed this round.
+  /// Non-empty means something is wrong and needs a human, but the device is
+  /// still syncing everything else.
+  final List<(String authorId, int authorSeq, String error)>
   failedOperations;
+
+  /// Commits whose envelope version this build does not implement —
+  /// `(deviceLogId, deviceSeq, error)`, a COMMIT POSITION, not a dot, since
+  /// nothing inside such a commit was ever decoded. Kept separate from
+  /// [failedOperations] for exactly that reason.
+  ///
+  /// Non-empty means a peer is running a newer build: that log stopped at
+  /// this position for the round and will be retried, having lost nothing.
+  final List<(String deviceLogId, int deviceSeq, String error)>
+  unreadableCommits;
 }
 
 /// § 11.7 Phase B.
@@ -256,6 +310,7 @@ class PullPhase {
     var blocked = 0;
     final gapped = <String>[];
     final failed = <(String, int, String)>[];
+    final unreadable = <(String, int, String)>[];
 
     for (final deviceLogId in rawIds) {
       if (ownPhysicalIds.contains(deviceLogId)) continue;
@@ -264,6 +319,7 @@ class PullPhase {
       applied += result.applied;
       blocked += result.blocked;
       failed.addAll(result.failed);
+      unreadable.addAll(result.unreadable);
       if (result.gapped) gapped.add(deviceLogId);
     }
 
@@ -297,21 +353,38 @@ class PullPhase {
     resolved += replayed;
 
     return PullResult(
-      commitsApplied: applied,
-      commitsBlocked: blocked,
+      operationsApplied: applied,
+      operationsBlocked: blocked,
       gappedDeviceLogIds: gapped,
       materializeQueueResolved: resolved,
       failedOperations: List.unmodifiable(failed),
+      unreadableCommits: List.unmodifiable(unreadable),
     );
   }
 
   /// This device's own raw namespace ids — the ordinary `authorId` plus its
   /// `seed:`/`external:` pseudo-device forms, since § Architecture 1 lets
   /// one physical device own up to three independent `deviceLogId` chains.
-  /// No `seed:`/`external:` minting exists yet (M2.4's own disclosed scope),
-  /// so only [ownAuthorId] itself is ever actually present in [rawIds]
-  /// today — the other two are included defensively, for when that minting
-  /// exists.
+  /// `seed:` is minted for real as of M2.10 (`seed_scanner.dart`);
+  /// `external:` still is not (requirement 8) and is included defensively.
+  ///
+  /// **This is computed from the CURRENT device id, so after an M2.13 reset
+  /// it deliberately does NOT cover the retired one — and that is a
+  /// decision, not an oversight (review finding F5).** A reset mints a fresh
+  /// `device_id`, so this device's pre-reset logs (`<oldUuid>`,
+  /// `seed:<oldUuid>`) are pulled back as if they were a peer's. Skipping
+  /// them was considered and rejected: the dataset genuinely holds that
+  /// history, and M2.13's post-reset seed is RECESSIVE precisely so it
+  /// defers to whatever the dataset holds. Skipping the retired namespaces
+  /// would make the re-seed win by DEFAULT over content the backend has —
+  /// the F1 shape, aimed at this device's own history — and would leave the
+  /// device with no way to re-learn what it had published. (The retired id
+  /// is still recoverable — `sync_device_labels` keeps it with `retiredAt`
+  /// set — so the option remains open if a future milestone finds a reason.)
+  ///
+  /// The cost is disclosed in `dataset_reset.dart`: retired backend logs are
+  /// never reclaimed, so each reset permanently adds to what this device
+  /// contributes to backend size.
   Set<String> _ownNamespaceIds(String ownAuthorId) => {
     ownAuthorId,
     'seed:$ownAuthorId',
@@ -329,7 +402,9 @@ class PullPhase {
     var applied = 0;
     var blocked = 0;
     var gapped = false;
+    var unsupported = false;
     final failed = <(String, int, String)>[];
+    final unreadable = <(String, int, String)>[];
 
     outer:
     while (true) {
@@ -380,11 +455,34 @@ class PullPhase {
           );
         }
 
-        final wireOp = decodeCommitBytes(
-          commit.commitBytes,
-          expectedAuthorId: deviceLogId,
-          expectedAuthorSeq: commit.deviceSeq,
-        );
+        // M2.12: one commit, N operations (v2) or exactly one (v1). An
+        // envelope version this build does not implement stops this log for
+        // the round WITHOUT advancing past it — see this file's top doc
+        // comment for why that is different from parking.
+        final List<WireOperation> wireOps;
+        try {
+          wireOps = decodeCommitOperations(
+            commit.commitBytes,
+            expectedAuthorId: deviceLogId,
+            deviceSeq: commit.deviceSeq,
+          );
+        } on WireFormatUnsupportedVersionException catch (error) {
+          LoggerService.error(
+            'PullPhase: stopping log $deviceLogId at commit '
+            '#${commit.deviceSeq} — $error',
+          );
+          // Reported on its own channel, NOT folded into [failedOperations]:
+          // that list is typed and documented as operation DOTS
+          // (`authorId#authorSeq`) and is matched against
+          // `sync_materialize_queue.blockingKey` on exactly that basis. A
+          // commit whose envelope could not be read has no dots to name —
+          // its operations were never decoded — so putting its
+          // `(deviceLogId, deviceSeq)` there would have quietly broken the
+          // invariant the field's own doc states.
+          unreadable.add((deviceLogId, commit.deviceSeq, '$error'));
+          unsupported = true;
+          break outer;
+        }
 
         // ── Per-operation resilience (M2.10) ──────────────────────────
         //
@@ -424,45 +522,40 @@ class PullPhase {
         // above this point, before the transaction, and mean the LOG is
         // untrustworthy rather than one operation being unapplicable —
         // § 11.7 is explicit that they must surface as real errors.
-        bool wasBlocked;
+        int appliedHere;
+        int blockedHere;
         try {
-          wasBlocked = await _applyOneCommit(
+          // Fast path: the whole commit, atomically.
+          (appliedHere, blockedHere) = await _applyOneCommit(
             db,
             deviceLogId: deviceLogId,
             commit: commit,
-            wireOp: wireOp,
+            wireOps: wireOps,
             ownAuthorId: ownAuthorId,
           );
         } catch (error, stack) {
           LoggerService.error(
-            'PullPhase: parking operation $deviceLogId#${commit.deviceSeq} '
-            '(${wireOp.kind} ${wireOp.entityTable}/${wireOp.entityId}) after '
-            'its apply/materialize step failed; the rest of this sync '
-            'continues',
+            'PullPhase: commit $deviceLogId#${commit.deviceSeq} '
+            '(${wireOps.length} operation(s)) failed to apply as a unit; '
+            'retrying operation by operation so one unapplicable operation '
+            'parks only itself',
             error: error,
             stackTrace: stack,
           );
-          await _parkFailedOperation(
+          (appliedHere, blockedHere) = await _applyCommitOperationByOperation(
             db,
             deviceLogId: deviceLogId,
             commit: commit,
-            wireOp: wireOp,
-            error: error,
+            wireOps: wireOps,
+            ownAuthorId: ownAuthorId,
+            failed: failed,
           );
-          failed.add((deviceLogId, commit.deviceSeq, '$error'));
-          localFrontier = commit.deviceSeq;
-          lastKnownHash = commit.commitHash;
-          blocked++;
-          continue;
         }
 
         localFrontier = commit.deviceSeq;
         lastKnownHash = commit.commitHash;
-        if (wasBlocked) {
-          blocked++;
-        } else {
-          applied++;
-        }
+        applied += appliedHere;
+        blocked += blockedHere;
       }
 
       if (page.commits.length < _pageLimit) break;
@@ -471,72 +564,170 @@ class PullPhase {
     return _LogPullOutcome(
       applied: applied,
       blocked: blocked,
-      gapped: gapped,
+      // An unreadable-envelope stop is ALSO reported as a gap: both mean
+      // "this log has more, and this device will try again next round."
+      gapped: gapped || unsupported,
       failed: failed,
+      unreadable: unreadable,
     );
   }
 
-  /// One commit's apply + materialize + bookkeeping, in a single
-  /// transaction. Returns whether the operation ended up blocked
-  /// (`missing_referenced_dot`). Extracted from [_pullOneLog] so its caller
-  /// can wrap exactly this step in the per-operation guard documented
-  /// there — the guard needs a clean transaction boundary to roll back to.
-  Future<bool> _applyOneCommit(
+  /// One commit's operations — apply + materialize for each, plus this
+  /// log's bookkeeping — in a **single transaction**. Returns
+  /// `(applied, blocked)` operation counts. See this file's top doc comment
+  /// for why commit-level atomicity is load-bearing and not merely tidy.
+  ///
+  /// Extracted from [_pullOneLog] so its caller can wrap exactly this step
+  /// in the guard documented there — the guard needs a clean transaction
+  /// boundary to roll back to.
+  Future<(int, int)> _applyOneCommit(
     Database db, {
     required String deviceLogId,
     required StoredCommit commit,
-    required WireOperation wireOp,
+    required List<WireOperation> wireOps,
     required String ownAuthorId,
   }) async {
     return db.transaction((txn) async {
-      // Same construction the parked-operation replay uses, so a replayed
-      // operation is byte-identical to the live one.
-      final op = _incomingFrom(wireOp, deviceLogId, commit.deviceSeq);
-
-      final result = await _engine.apply(txn, op);
-      var blockedThisOp = false;
-      if (result.kind == AppliedKind.setRemove &&
-          result.setRemoveResult!.blocked) {
-        await _enqueueMissingReferencedDot(
+      var applied = 0;
+      var blocked = 0;
+      for (final wireOp in wireOps) {
+        if (await _applyOneOperation(
           txn,
-          wireOp,
-          result.setRemoveResult!.missingTargets,
-        );
-        blockedThisOp = true;
+          deviceLogId: deviceLogId,
+          wireOp: wireOp,
+          ownAuthorId: ownAuthorId,
+        )) {
+          blocked++;
+        } else {
+          applied++;
+        }
       }
-
-      // M2.7, § 11.6: write whatever `_engine.apply` just resolved into
-      // the real app-table row. Called unconditionally (not gated on
-      // `blockedThisOp`) — a partially-applied `set_remove` (some
-      // targets resolved, one still missing) still needs its resolved
-      // targets' consequences materialized; `SyncMaterializer` itself
-      // gates each op kind's own no-op cases (unchanged winner, nothing
-      // newly live/removed, entity not yet materialized) internally.
-      await _materializer.materialize(
-        txn,
-        op: op,
-        result: result,
-        ownAuthorId: ownAuthorId,
-      );
-
-      // § 11.2 merge: fold the remote HLC into this device's own clock
-      // on every observed operation, whether or not it ended up
-      // blocked — mirrors the frontier bump below, which is also
-      // unconditional-on-observation.
-      await _hlc.merge(wireOp.hlc.wallMs, wireOp.hlc.logical, executor: txn);
 
       // Frontier bump, unconditionally, on observation (round 14's
       // observation-vs-materialization split) — persisted in the same
-      // transaction as this commit's own processing.
+      // transaction as this commit's own processing. Commit-scoped, not
+      // operation-scoped: `deviceSeq` counts commits.
       await _writeFrontier(txn, deviceLogId, commit.deviceSeq);
       await _writePullTip(txn, deviceLogId, commit.commitHash);
 
-      // Opportunistic sync_ack_frontier update from this operation's
-      // own carried frontier field.
-      await _updateAckFrontier(txn, deviceLogId, wireOp.frontier);
-
-      return blockedThisOp;
+      return (applied, blocked);
     });
+  }
+
+  /// One operation's apply + materialize + per-operation bookkeeping,
+  /// inside whatever transaction the caller opened. Returns whether the
+  /// operation ended up blocked (`missing_referenced_dot`).
+  ///
+  /// The dot is built from the operation's OWN `authorSeq`, never from the
+  /// commit's `deviceSeq` — those are different counters as of M2.12 (see
+  /// `push_phase.dart`'s top doc comment).
+  Future<bool> _applyOneOperation(
+    DatabaseExecutor txn, {
+    required String deviceLogId,
+    required WireOperation wireOp,
+    required String ownAuthorId,
+  }) async {
+    // Same construction the parked-operation replay uses, so a replayed
+    // operation is byte-identical to the live one.
+    final op = _incomingFrom(wireOp, wireOp.authorId, wireOp.authorSeq);
+
+    final result = await _engine.apply(txn, op);
+    var blockedThisOp = false;
+    if (result.kind == AppliedKind.setRemove &&
+        result.setRemoveResult!.blocked) {
+      await _enqueueMissingReferencedDot(
+        txn,
+        wireOp,
+        result.setRemoveResult!.missingTargets,
+      );
+      blockedThisOp = true;
+    }
+
+    // M2.7, § 11.6: write whatever `_engine.apply` just resolved into
+    // the real app-table row. Called unconditionally (not gated on
+    // `blockedThisOp`) — a partially-applied `set_remove` (some
+    // targets resolved, one still missing) still needs its resolved
+    // targets' consequences materialized; `SyncMaterializer` itself
+    // gates each op kind's own no-op cases (unchanged winner, nothing
+    // newly live/removed, entity not yet materialized) internally.
+    await _materializer.materialize(
+      txn,
+      op: op,
+      result: result,
+      ownAuthorId: ownAuthorId,
+    );
+
+    // § 11.2 merge: fold the remote HLC into this device's own clock
+    // on every observed operation, whether or not it ended up
+    // blocked — mirrors the frontier bump, which is also
+    // unconditional-on-observation.
+    await _hlc.merge(wireOp.hlc.wallMs, wireOp.hlc.logical, executor: txn);
+
+    // Opportunistic sync_ack_frontier update from this operation's
+    // own carried frontier field.
+    await _updateAckFrontier(txn, deviceLogId, wireOp.frontier);
+
+    return blockedThisOp;
+  }
+
+  /// M2.10's per-operation containment, applied after a whole-commit
+  /// transaction has already failed and rolled back. Each operation gets its
+  /// own transaction; a failing one is parked with its own single-operation
+  /// payload (never the whole batch — replaying a batch to retry one
+  /// operation would re-apply the other 63) and the rest still apply.
+  ///
+  /// This log's frontier/pull-tip are advanced past the commit at the end
+  /// regardless, exactly as the pre-M2.12 single-operation park did, and for
+  /// the same reason: the commit was OBSERVED (§ Architecture 2's frontier
+  /// records observation, not successful materialization), and not advancing
+  /// would re-read and re-fail it on every future sync.
+  Future<(int, int)> _applyCommitOperationByOperation(
+    Database db, {
+    required String deviceLogId,
+    required StoredCommit commit,
+    required List<WireOperation> wireOps,
+    required String ownAuthorId,
+    required List<(String, int, String)> failed,
+  }) async {
+    var applied = 0;
+    var blocked = 0;
+    for (final wireOp in wireOps) {
+      try {
+        final wasBlocked = await db.transaction(
+          (txn) => _applyOneOperation(
+            txn,
+            deviceLogId: deviceLogId,
+            wireOp: wireOp,
+            ownAuthorId: ownAuthorId,
+          ),
+        );
+        if (wasBlocked) {
+          blocked++;
+        } else {
+          applied++;
+        }
+      } catch (error, stack) {
+        LoggerService.error(
+          'PullPhase: parking operation '
+          '${wireOp.authorId}#${wireOp.authorSeq} (${wireOp.kind} '
+          '${wireOp.entityTable}/${wireOp.entityId}) from commit '
+          '$deviceLogId#${commit.deviceSeq} after its apply/materialize step '
+          'failed; the rest of this sync continues',
+          error: error,
+          stackTrace: stack,
+        );
+        await _parkFailedOperation(db, wireOp: wireOp, error: error);
+        failed.add((wireOp.authorId, wireOp.authorSeq, '$error'));
+        blocked++;
+      }
+    }
+
+    await db.transaction((txn) async {
+      await _writeFrontier(txn, deviceLogId, commit.deviceSeq);
+      await _writePullTip(txn, deviceLogId, commit.commitHash);
+    });
+
+    return (applied, blocked);
   }
 
   /// Re-attempts every parked operation that has attempts left, replaying it
@@ -652,27 +843,36 @@ class PullPhase {
     frontier: wireOp.frontier,
   );
 
-  /// Records a failed operation under [operationFailedBlockingReason] and
-  /// advances this log's own pointers past it, in one transaction — see the
-  /// per-operation guard's doc comment in [_pullOneLog] for why advancing is
-  /// correct and why not advancing would recreate the wedge.
+  /// Records a failed operation under [operationFailedBlockingReason].
   ///
-  /// **The stored record is the commit's own bytes, and that is
-  /// load-bearing rather than convenient.** An earlier version stored a
-  /// hand-picked subset (`kind`/`authorId`/`authorSeq`/`fieldName`/
-  /// `valueJson`/`hlcWallMs`) and claimed the operation stayed replayable.
-  /// It did not: `hlc.logical`, `contentKey`, `blobHash` and `frontier` were
-  /// all dropped, and `targetDots` with them — so a parked `set_remove`, the
-  /// one kind whose entire meaning is its target dots, could not be
-  /// reconstructed at all. Since decision (i) above rests on the parked
-  /// operation remaining recoverable, storing anything less than
-  /// `commit.commitBytes` makes that argument false. The bytes decode back
-  /// through the same `decodeCommitBytes` the live path uses, with the same
-  /// integrity check.
+  /// **The stored record is a complete, self-contained re-encoding of the
+  /// operation, and that is load-bearing rather than convenient.** An early
+  /// version stored a hand-picked subset (`kind`/`authorId`/`authorSeq`/
+  /// `fieldName`/`valueJson`/`hlcWallMs`) and claimed the operation stayed
+  /// replayable. It did not: `hlc.logical`, `contentKey`, `blobHash` and
+  /// `frontier` were all dropped, and `targetDots` with them — so a parked
+  /// `set_remove`, the one kind whose entire meaning is its target dots,
+  /// could not be reconstructed at all. Since the whole park-and-continue
+  /// decision rests on the parked operation remaining recoverable, storing
+  /// anything less makes that argument false.
+  ///
+  /// **M2.12 stores a re-encoded SINGLE-operation (`v: 1`) envelope rather
+  /// than the commit's raw bytes**, which a batched commit made necessary
+  /// rather than merely tidier: raw batch bytes would replay all N of a
+  /// commit's operations to retry the one that failed, re-applying 63
+  /// already-applied operations every sweep. The re-encoding is lossless
+  /// (`encodeCommitBytes` is the exact inverse of the decode that produced
+  /// [wireOp], over every field of every kind) and decodes back through the
+  /// same `decodeCommitBytes` the replay has always used, with the same
+  /// integrity check — now against the operation's own dot, which is the
+  /// thing it was always meant to check.
+  ///
+  /// The log's frontier/pull-tip are NOT advanced here — the caller
+  /// ([_applyCommitOperationByOperation]) advances them once for the whole
+  /// commit after every operation has had its turn, since `deviceSeq` counts
+  /// commits.
   Future<void> _parkFailedOperation(
     Database db, {
-    required String deviceLogId,
-    required StoredCommit commit,
     required WireOperation wireOp,
     required Object error,
     int attempts = 1,
@@ -685,15 +885,14 @@ class PullPhase {
         'fieldName': wireOp.fieldName,
         'operationJson': jsonEncode({
           'kind': wireOp.kind,
-          'authorId': deviceLogId,
-          'authorSeq': commit.deviceSeq,
+          'authorId': wireOp.authorId,
+          'authorSeq': wireOp.authorSeq,
           // The complete, verbatim operation — every field, for every kind.
-          'commitBytes': base64Encode(commit.commitBytes),
-          'commitHash': commit.commitHash,
+          'commitBytes': base64Encode(encodeCommitBytes(wireOp)),
           'attempts': attempts,
           'error': '$error',
         }),
-        'blockingKey': '$deviceLogId#${commit.deviceSeq}',
+        'blockingKey': '${wireOp.authorId}#${wireOp.authorSeq}',
         'enqueuedAt': DateTime.now().millisecondsSinceEpoch,
       });
 
@@ -701,8 +900,6 @@ class PullPhase {
       // performs. The operation was observed; only its effect was not
       // applied.
       await _hlc.merge(wireOp.hlc.wallMs, wireOp.hlc.logical, executor: txn);
-      await _writeFrontier(txn, deviceLogId, commit.deviceSeq);
-      await _writePullTip(txn, deviceLogId, commit.commitHash);
     });
   }
 
@@ -962,12 +1159,18 @@ class _LogPullOutcome {
     required this.blocked,
     required this.gapped,
     this.failed = const [],
+    this.unreadable = const [],
   });
   final int applied;
   final int blocked;
   final bool gapped;
 
   /// Operations parked under [operationFailedBlockingReason] while pulling
-  /// this one log — `(deviceLogId, deviceSeq, error)`.
+  /// this one log — `(authorId, authorSeq, error)`, the operation's own dot.
   final List<(String, int, String)> failed;
+
+  /// Commits this build could not decode at all — `(deviceLogId, deviceSeq,
+  /// error)`, a commit position rather than a dot, which is exactly why it
+  /// is a separate list.
+  final List<(String, int, String)> unreadable;
 }

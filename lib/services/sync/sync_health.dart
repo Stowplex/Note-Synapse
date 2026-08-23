@@ -26,7 +26,10 @@
 // this file introduces the missing third state and gives every detector one
 // place to report into.
 //
-// **The four detectors, all of which now terminate here:**
+// **The detectors, all of which now terminate here.** M2.13 added the
+// first block below (a fifth and sixth condition sharing one read), so the
+// numbered section headers in `recomputeSyncHealth` count BLOCKS of code —
+// four of them — not the detector list that follows:
 //   1. `DrainResult.nonPortableTablesSkipped` / `SeedScanResult
 //      .nonPortableTablesSkipped` — local rows deliberately not minted.
 //   2. `PullResult.failedOperations` — remote operations parked after their
@@ -51,6 +54,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../database_service.dart';
 import '../logger_service.dart';
+import 'dataset_bootstrap.dart';
 import 'materializer.dart';
 import 'pull_phase.dart';
 import 'sync_table_shape.dart';
@@ -128,6 +132,24 @@ class SyncHealthIssue {
 }
 
 enum SyncHealthIssueKind {
+  /// **M2.13.** This device has joined a dataset that no longer exists on
+  /// the backend — the reported failure. Ranked first everywhere it is
+  /// rendered because it is the only kind that means *nothing* is syncing,
+  /// and the only one with a single, concrete user action attached (reset).
+  datasetMissing,
+
+  /// **M2.13.** One or more of this device's own `authorId` logs diverged
+  /// from the backend: a push halted on `ParentMismatch`
+  /// (§ Architecture 3's halt-not-retarget). [SyncHealthIssue.subjects]
+  /// holds the affected namespaces.
+  ///
+  /// Distinct from [datasetMissing] because the dataset can be perfectly
+  /// present while one log is not — a partially-deleted folder, or an
+  /// identity reused after a reinstall — and because the two are detected
+  /// completely differently (a marker read vs. a push outcome), even though
+  /// today they share one remedy.
+  deviceLogDiverged,
+
   /// Entity tables whose rows are deliberately not minted at all, because a
   /// receiving device could never build them (`entitySyncability`).
   tablesNotSynced,
@@ -185,6 +207,19 @@ class SyncHealth {
 /// `sync_state` key holding the JSON-encoded [SyncHealth].
 const String syncHealthStateKey = 'sync_health';
 
+/// **M2.13.** `sync_state` key holding a JSON array of this device's own
+/// `authorId`s whose push halted on `ParentMismatch` during the last round.
+///
+/// Durable, and rewritten in full by every `SyncSession.run` (empty -> the
+/// key is deleted), for the same reason `PullResult.failedOperations` had to
+/// stop being transient: a divergence is a persistent condition reported by
+/// a single round, so a purely in-memory signal would show the user a
+/// problem once and then a clean bill of health forever after while nothing
+/// had been fixed. Recomputing health from this row keeps the snapshot true
+/// across restarts, and makes "the divergence went away" require an actual
+/// successful push rather than a screen refresh.
+const String divergedAuthorLogsStateKey = 'diverged_author_logs';
+
 /// Recomputes [SyncHealth] from durable state plus this round's transient
 /// results, and persists it.
 ///
@@ -194,13 +229,69 @@ const String syncHealthStateKey = 'sync_health';
 /// a later read even though the transient inputs are gone.
 Future<SyncHealth> recomputeSyncHealth(
   DatabaseService databaseService, {
-  List<(String deviceLogId, int deviceSeq, String error)> failedOperations =
+  List<(String authorId, int authorSeq, String error)> failedOperations =
+      const [],
+  List<(String deviceLogId, int deviceSeq, String error)> unreadableCommits =
       const [],
 }) async {
   final db = await databaseService.database;
   final issues = <SyncHealthIssue>[];
 
-  // ── 1/4: tables gated out of minting ─────────────────────────────────
+  // ── 1/4: M2.13's two engine-level states ─────────────────────────────
+  //
+  // Read from `sync_state` rather than passed in, exactly like the queue
+  // backlog below and for the same reason: both conditions persist until
+  // something is actually done about them, while the round that DETECTED
+  // either one is long over by the time anyone looks at a settings screen.
+  // Reported first because they subsume the rest — when the dataset is gone,
+  // "3 removals are waiting on a missing entity" is noise.
+  final stateRows = await db.query(
+    'sync_state',
+    columns: const ['key', 'value'],
+    where: 'key IN (?, ?)',
+    whereArgs: [datasetBootstrapStatusKey, divergedAuthorLogsStateKey],
+  );
+  String? valueFor(String key) => stateRows
+      .where((row) => row['key'] == key)
+      .map((row) => row['value'] as String?)
+      .firstOrNull;
+
+  if (valueFor(datasetBootstrapStatusKey) == needsResetStatusValue) {
+    issues.add(
+      const SyncHealthIssue(
+        kind: SyncHealthIssueKind.datasetMissing,
+        count: 1,
+        detail: '',
+      ),
+    );
+  }
+
+  final divergedRaw = valueFor(divergedAuthorLogsStateKey);
+  if (divergedRaw != null && divergedRaw.isNotEmpty) {
+    List<String> diverged;
+    try {
+      diverged = [
+        for (final entry in jsonDecode(divergedRaw) as List<dynamic>)
+          entry as String,
+      ];
+    } catch (_) {
+      // A corrupt row must not break the settings screen — same stance as
+      // `SyncHealth.fromJsonString`.
+      diverged = const [];
+    }
+    if (diverged.isNotEmpty) {
+      issues.add(
+        SyncHealthIssue(
+          kind: SyncHealthIssueKind.deviceLogDiverged,
+          count: diverged.length,
+          subjects: List.unmodifiable(diverged),
+          detail: diverged.join(', '),
+        ),
+      );
+    }
+  }
+
+  // ── 2/4: tables gated out of minting ─────────────────────────────────
   //
   // **Only reported when the user actually HAS rows there.** Eight of the
   // fourteen sync-scope tables cannot be built by a receiving device, so an
@@ -239,7 +330,7 @@ Future<SyncHealth> recomputeSyncHealth(
     );
   }
 
-  // ── 2/4: operations parked after a failure ───────────────────────────
+  // ── 3/4: operations parked after a failure ───────────────────────────
   // Read from the queue rather than trusting only this round's transient
   // list: a parked operation stays parked, but `failedOperations` is
   // non-empty for exactly the one round that parked it.
@@ -248,10 +339,22 @@ Future<SyncHealth> recomputeSyncHealth(
     where: 'blockingReason = ?',
     whereArgs: [operationFailedBlockingReason],
   );
-  if (failedRows.isNotEmpty || failedOperations.isNotEmpty) {
+  if (failedRows.isNotEmpty ||
+      failedOperations.isNotEmpty ||
+      unreadableCommits.isNotEmpty) {
     final dots = <String>{
       for (final row in failedRows) (row['blockingKey'] as String?) ?? '?',
       for (final failure in failedOperations) '${failure.$1}#${failure.$2}',
+      // M2.12: commits whose envelope version this build cannot read. Named
+      // by COMMIT POSITION (`log@N`), deliberately distinguishable at a
+      // glance from the `authorId#authorSeq` dots above — they are not
+      // operations, and nothing inside them was ever decoded. Folded into
+      // the same issue kind rather than a new one because the user-facing
+      // meaning is identical ("something from another device did not get
+      // through, and here is what") and a new kind would need its own
+      // localized string for a case that only arises when a peer is running
+      // a newer build.
+      for (final commit in unreadableCommits) '${commit.$1}@${commit.$2}',
     };
     issues.add(
       SyncHealthIssue(
@@ -262,7 +365,7 @@ Future<SyncHealth> recomputeSyncHealth(
     );
   }
 
-  // ── 3/4: the materialize-queue backlog, split by what it is waiting on
+  // ── 4/4: the materialize-queue backlog, split by what it is waiting on
   Future<void> addQueueIssue(String reason, SyncHealthIssueKind kind) async {
     final rows = await db.query(
       'sync_materialize_queue',

@@ -1178,6 +1178,19 @@
       "error": {"type": "String"}
     }
   },
+  "cloudSyncDatasetMissing": "Sync dataset is missing",
+  "cloudSyncDatasetMissingDetail": "This device is set up for a sync dataset that is no longer in your Drive. Reset sync on this device to start over — your notes stay on this device.",
+  "cloudSyncReset": "Reset sync",
+  "cloudSyncResetting": "Resetting…",
+  "cloudSyncResetTitle": "Reset sync on this device?",
+  "cloudSyncResetConfirm": "Your notes, tags, conversations and attachments stay on this device, and nothing already in Drive is deleted.\n\nThis device forgets what it has already synced: it takes a new sync identity and re-offers everything it holds. Where the cloud already has a different version, the cloud's wins — including versions this device itself uploaded earlier. Edits made here that were never uploaded are the exception: they are re-sent and kept.\n\nOne thing is lost: anything you deleted on this device but never managed to upload comes back on the next sync, because this device also forgets the deletion.\n\nAfter the reset, set up the dataset again to start syncing.",
+  "cloudSyncResetDone": "Sync state reset — set up the dataset again to start syncing",
+  "cloudSyncResetError": "Reset failed: {error}",
+  "@cloudSyncResetError": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
   "cloudSyncNowSection": "Sync",
   "cloudSyncNow": "Sync now",
   "cloudSyncNowRunning": "Syncing…",
@@ -1185,6 +1198,14 @@
   "@cloudSyncSeeding": {
     "placeholders": {
       "table": {"type": "String"},
+      "done": {"type": "int"},
+      "total": {"type": "int"},
+      "operations": {"type": "int"}
+    }
+  },
+  "cloudSyncPushing": "Uploading changes — {done} of {total} batches, {operations} changes sent",
+  "@cloudSyncPushing": {
+    "placeholders": {
       "done": {"type": "int"},
       "total": {"type": "int"},
       "operations": {"type": "int"}
@@ -1200,6 +1221,11 @@
     }
   },
   "cloudSyncDegraded": "Sync finished, but some data did not sync",
+  "cloudSyncHealthDatasetMissing": "The sync dataset this device joined is no longer in Drive, so nothing can sync. Reset sync on this device to start over.",
+  "cloudSyncHealthLogDiverged": "{count, plural, =1{This device's sync history no longer matches the copy in Drive, so its changes cannot be uploaded} other{{count} of this device's sync histories no longer match the copies in Drive, so its changes cannot be uploaded}}. Reset sync on this device to start over.",
+  "@cloudSyncHealthLogDiverged": {
+    "placeholders": {"count": {"type": "int"}}
+  },
   "cloudSyncHealthTablesNotSynced": "{count, plural, =1{1 kind of item does not sync yet} other{{count} kinds of item do not sync yet}}: {detail}",
   "@cloudSyncHealthTablesNotSynced": {
     "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}

@@ -3112,6 +3112,35 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get cloudSyncDatasetMissing => 'Sync dataset is missing';
+
+  @override
+  String get cloudSyncDatasetMissingDetail =>
+      'This device is set up for a sync dataset that is no longer in your Drive. Reset sync on this device to start over — your notes stay on this device.';
+
+  @override
+  String get cloudSyncReset => 'Reset sync';
+
+  @override
+  String get cloudSyncResetting => 'Resetting…';
+
+  @override
+  String get cloudSyncResetTitle => 'Reset sync on this device?';
+
+  @override
+  String get cloudSyncResetConfirm =>
+      'Your notes, tags, conversations and attachments stay on this device, and nothing already in Drive is deleted.\n\nThis device forgets what it has already synced: it takes a new sync identity and re-offers everything it holds. Where the cloud already has a different version, the cloud\'s wins — including versions this device itself uploaded earlier. Edits made here that were never uploaded are the exception: they are re-sent and kept.\n\nOne thing is lost: anything you deleted on this device but never managed to upload comes back on the next sync, because this device also forgets the deletion.\n\nAfter the reset, set up the dataset again to start syncing.';
+
+  @override
+  String get cloudSyncResetDone =>
+      'Sync state reset — set up the dataset again to start syncing';
+
+  @override
+  String cloudSyncResetError(String error) {
+    return 'Reset failed: $error';
+  }
+
+  @override
   String get cloudSyncNowSection => 'Sync';
 
   @override
@@ -3126,12 +3155,34 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String cloudSyncPushing(int done, int total, int operations) {
+    return 'Uploading changes — $done of $total batches, $operations changes sent';
+  }
+
+  @override
   String cloudSyncNowResult(int touches, int seeded, int pulled, int pushed) {
     return 'Sync complete — drained $touches, seeded $seeded, pulled $pulled, pushed $pushed';
   }
 
   @override
   String get cloudSyncDegraded => 'Sync finished, but some data did not sync';
+
+  @override
+  String get cloudSyncHealthDatasetMissing =>
+      'The sync dataset this device joined is no longer in Drive, so nothing can sync. Reset sync on this device to start over.';
+
+  @override
+  String cloudSyncHealthLogDiverged(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count of this device\'s sync histories no longer match the copies in Drive, so its changes cannot be uploaded',
+      one:
+          'This device\'s sync history no longer matches the copy in Drive, so its changes cannot be uploaded',
+    );
+    return '$_temp0. Reset sync on this device to start over.';
+  }
 
   @override
   String cloudSyncHealthTablesNotSynced(int count, String detail) {

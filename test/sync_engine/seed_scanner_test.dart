@@ -188,13 +188,29 @@ void main() {
         final scope = DatabaseService.syncEntityCaptureScopes.firstWhere(
           (s) => s.table == 'notes',
         );
+        // M2.12: only columns whose live value DIFFERS from what a receiving
+        // device's shell row already holds. This note sets title/content/
+        // type/updatedAt and leaves everything else at NULL or the column
+        // default, so nine of the thirteen sync-scope columns carry no
+        // information and are not seeded at all.
+        final seededFields = ops.skip(1).map((o) => o['fieldName']).toList();
         expect(
-          ops.skip(1).map((o) => o['fieldName']).toList(),
-          scope.syncScopeColumns,
+          seededFields,
+          ['title', 'content', 'type', 'updatedAt'],
           reason:
               'columns are minted in syncScopeColumns list order — the same '
-              'order OutboxDrainer uses, which materializer.dart depends on',
+              'order OutboxDrainer uses, which materializer.dart depends on — '
+              'and only for columns not already at the receiving shell row '
+              "value (M2.12's default-skip)",
         );
+        expect(
+          seededFields,
+          orderedEquals(
+            scope.syncScopeColumns.where(seededFields.contains).toList(),
+          ),
+          reason: 'the surviving columns keep syncScopeColumns list order',
+        );
+        expect(result.fieldsAtDefaultSkipped, 9);
 
         // ---- the GENESIS contentKey, byte for byte -------------------
         final titleOp = ops.firstWhere((o) => o['fieldName'] == 'title');
@@ -1665,7 +1681,7 @@ void main() {
         // retrying — reported throughout, never thrown, never forgotten.
         for (var round = 0; round < maxParkedOperationAttempts + 2; round++) {
           final again = await b.session.run(backend);
-          expect(again.pull.commitsApplied, greaterThanOrEqualTo(0));
+          expect(again.pull.operationsApplied, greaterThanOrEqualTo(0));
         }
         final parked = await dbB.query(
           'sync_materialize_queue',

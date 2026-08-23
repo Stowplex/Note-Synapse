@@ -32,6 +32,7 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
   bool _disconnecting = false;
   bool _settingUp = false;
   bool _syncing = false;
+  bool _resetting = false;
 
   /// Message from the most recent action taken *in this screen session*
   /// (dataset setup, or a status-read failure). Sync outcomes themselves are
@@ -41,12 +42,21 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
   String? _transientMessage;
   bool _transientIsError = false;
 
-  /// Live progress from M2.10's seed scan, shown only while a sync is
-  /// actually running. Without it, the FIRST sync of a pre-existing library
-  /// — the one that has the most work to do, because every row predates the
-  /// mutation-capture triggers and has to be seeded — is also the one that
-  /// shows nothing at all for the longest. Cleared when the sync ends.
-  String? _seedProgress;
+  /// Live progress from the phase currently running, shown only while a sync
+  /// is actually running. Without it, the FIRST sync of a pre-existing
+  /// library — the one that has the most work to do, because every row
+  /// predates the mutation-capture triggers and has to be seeded, and then
+  /// uploaded — is also the one that shows nothing at all for the longest.
+  /// Cleared when the sync ends.
+  ///
+  /// **One slot for both phases, updated in phase order (M2.12).** It used
+  /// to hold only M2.10's seed progress, which meant that once seeding
+  /// finished the screen kept showing its final message ("… 19 of 19
+  /// tables, 441 operations so far") for the whole of the much longer
+  /// upload — the phase that actually took the minutes reported nothing,
+  /// and the frozen line read as a hang. Push now writes over the same slot
+  /// as it goes.
+  String? _syncProgress;
 
   @override
   void initState() {
@@ -164,6 +174,48 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
     }
   }
 
+  /// M2.13's recovery action. Guarded against a double tap the same way
+  /// `_disconnect` is (two dialogs, two resets, the second minting a second
+  /// fresh identity over the first).
+  ///
+  /// The confirmation is not boilerplate: this is the one action in the app
+  /// that discards local sync operations, and it is offered precisely when
+  /// the user is already alarmed by an error, so it has to state plainly
+  /// what it does NOT touch as well as what it does.
+  Future<void> _resetSyncState() async {
+    final l10n = AppLocalizations.of(context)!;
+    if (_resetting || _syncing || _settingUp) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.cloudSyncResetTitle),
+        content: SingleChildScrollView(child: Text(l10n.cloudSyncResetConfirm)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l10n.cloudSyncReset),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    _beginAction(() => _resetting = true);
+    try {
+      await _service.resetSyncState();
+      _snack(l10n.cloudSyncResetDone);
+    } catch (e) {
+      _snack(l10n.cloudSyncResetError('$e'));
+      _setError(l10n.cloudSyncResetError('$e'));
+    } finally {
+      if (mounted) setState(() => _resetting = false);
+      await _refreshStatus();
+    }
+  }
+
   void _setError(String message) {
     if (!mounted) return;
     setState(() {
@@ -177,18 +229,28 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
     if (_syncing) return;
     _beginAction(() {
       _syncing = true;
-      _seedProgress = null;
+      _syncProgress = null;
     });
     try {
       final result = await _service.syncNow(
         onSeedProgress: (progress) {
           if (!mounted) return;
           setState(() {
-            _seedProgress = l10n.cloudSyncSeeding(
+            _syncProgress = l10n.cloudSyncSeeding(
               progress.table,
               progress.tablesDone,
               progress.tablesTotal,
               progress.operationsSeededSoFar,
+            );
+          });
+        },
+        onPushProgress: (progress) {
+          if (!mounted) return;
+          setState(() {
+            _syncProgress = l10n.cloudSyncPushing(
+              progress.commitsSent,
+              progress.commitsTotal,
+              progress.operationsPublished,
             );
           });
         },
@@ -200,17 +262,24 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
         l10n.cloudSyncNowResult(
           result.drain.touchesProcessed,
           result.seed.operationsSeeded,
-          result.pull.commitsApplied,
+          result.pull.operationsApplied,
           result.totalPublished,
         ),
       );
+    } on DatasetMissingException {
+      // Not shown as an exception: `CloudSyncService` has already recorded
+      // the stable sentinel and flipped the bootstrap status, so the
+      // `_refreshStatus()` below repaints the dataset card as "Sync dataset
+      // is missing" with the reset action on it. A snackbar quoting the
+      // exception would be the old behaviour in a new place.
+      _snack(l10n.cloudSyncDatasetMissing);
     } catch (e) {
       _snack(l10n.cloudSyncNowError('$e'));
     } finally {
       if (mounted) {
         setState(() {
           _syncing = false;
-          _seedProgress = null;
+          _syncProgress = null;
         });
       }
       await _refreshStatus();
@@ -351,6 +420,11 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
     final connected =
         _status?.canSync == true || _status?.needsDatasetSetup == true;
 
+    // M2.13: `needsReset` is why this card can no longer be trusted to read
+    // "Ready" forever. The status it renders used to be a purely local flag
+    // that nothing re-checked, so a user whose Drive folder had been deleted
+    // was told their device had joined a dataset that did not exist while
+    // every sync failed.
     final (
       String title,
       String detail,
@@ -371,7 +445,24 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
         l10n.cloudSyncDatasetReadyDetail,
         Icons.dataset,
       ),
+      DatasetBootstrapStatus.needsReset => (
+        l10n.cloudSyncDatasetMissing,
+        l10n.cloudSyncDatasetMissingDetail,
+        Icons.cloud_off,
+      ),
     };
+
+    final isMissing = bootstrapStatus == DatasetBootstrapStatus.needsReset;
+    // Offered ONLY in the two states a reset is the remedy for — dataset
+    // missing, or one of this device's own logs diverged. It used to be
+    // offered whenever there was any local sync state to clear, including on
+    // a healthy multi-device install; see `CloudSyncStatus.canReset` for the
+    // data loss that made reachable, and for why there is no "start over"
+    // escape hatch behind this button.
+    final canReset = _status?.canReset == true;
+    final showSetUp =
+        bootstrapStatus != DatasetBootstrapStatus.ready && !isMissing;
+    final busy = _settingUp || _resetting || _syncing;
 
     return Card(
       child: Column(
@@ -380,38 +471,58 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
           ListTile(
             leading: Icon(
               icon,
-              color: bootstrapStatus == DatasetBootstrapStatus.ready
+              color: isMissing
+                  ? theme.colorScheme.error
+                  : bootstrapStatus == DatasetBootstrapStatus.ready
                   ? theme.colorScheme.primary
                   : theme.colorScheme.onSurfaceVariant,
             ),
             title: Text(title),
             subtitle: Text(detail),
           ),
-          if (bootstrapStatus != DatasetBootstrapStatus.ready)
+          if (bootstrapStatus != DatasetBootstrapStatus.ready || canReset)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  FilledButton.icon(
-                    // Requires a connection: the bootstrap sequence talks to
-                    // Drive (read marker / create marker / re-read).
-                    onPressed: (!connected || _settingUp)
-                        ? null
-                        : _setUpDataset,
-                    icon: _settingUp
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.playlist_add_check),
-                    label: Text(
-                      _settingUp
-                          ? l10n.cloudSyncDatasetSettingUp
-                          : l10n.cloudSyncDatasetSetUp,
+                  if (canReset)
+                    TextButton(
+                      // Deliberately NOT gated on `connected`: the reset is a
+                      // purely local operation, and the state it recovers
+                      // from is one a user may well hit while offline.
+                      onPressed: busy ? null : _resetSyncState,
+                      child: Text(
+                        _resetting
+                            ? l10n.cloudSyncResetting
+                            : l10n.cloudSyncReset,
+                      ),
                     ),
-                  ),
+                  // Only between two buttons that both render — this row can
+                  // legitimately hold one button or none.
+                  if (canReset && showSetUp) const SizedBox(width: 8),
+                  // Hidden in the missing state: `setUpDataset` now throws
+                  // there rather than quietly creating a second dataset the
+                  // stale local logs still could not push to, so offering it
+                  // would offer a button that only produces an error.
+                  if (showSetUp)
+                    FilledButton.icon(
+                      // Requires a connection: the bootstrap sequence talks to
+                      // Drive (read marker / create marker / re-read).
+                      onPressed: (!connected || busy) ? null : _setUpDataset,
+                      icon: _settingUp
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.playlist_add_check),
+                      label: Text(
+                        _settingUp
+                            ? l10n.cloudSyncDatasetSettingUp
+                            : l10n.cloudSyncDatasetSetUp,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -429,17 +540,17 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
     // the user just triggered.
     String? body;
     var isError = false;
-    if (_syncing && _seedProgress != null) {
+    if (_syncing && _syncProgress != null) {
       // Live progress outranks everything while the sync is in flight: it is
       // the only thing on this card describing what is happening right now.
-      body = _seedProgress;
+      body = _syncProgress;
     } else if (_transientMessage != null) {
       body = _transientMessage;
       isError = _transientIsError;
     } else if (lastSync != null) {
       body = lastSync.succeeded
           ? _formatCounters(l10n, lastSync.detail)
-          : l10n.cloudSyncNowError(lastSync.detail);
+          : _formatFailure(l10n, lastSync.detail);
       isError = !lastSync.succeeded;
     }
 
@@ -535,8 +646,24 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
     );
   }
 
+  /// A failed round's stored `detail`. Known causes are stored as stable
+  /// sentinels (`syncFailureDatasetMissing`) rather than as messages, so
+  /// they re-render in the language active now; anything else is an
+  /// exception string, which is at least honest even when it is ugly.
+  String _formatFailure(AppLocalizations l10n, String detail) =>
+      switch (detail) {
+        syncFailureDatasetMissing => l10n.cloudSyncDatasetMissingDetail,
+        _ => l10n.cloudSyncNowError(detail),
+      };
+
   String _describeIssue(AppLocalizations l10n, SyncHealthIssue issue) {
     final line = switch (issue.kind) {
+      // M2.13's two: the only kinds that mean "nothing is getting through",
+      // and the only ones whose text names the action that fixes them.
+      SyncHealthIssueKind.datasetMissing => l10n.cloudSyncHealthDatasetMissing,
+      SyncHealthIssueKind.deviceLogDiverged => l10n.cloudSyncHealthLogDiverged(
+        issue.count,
+      ),
       // The one kind whose subjects are raw table names: rendered as
       // localized, non-technical labels rather than schema jargon. A user
       // reading "subnotes (1, unresolvable column noteId)" learns nothing

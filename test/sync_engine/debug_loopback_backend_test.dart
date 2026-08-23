@@ -41,7 +41,7 @@ void main() {
       expect(first.drain.touchesProcessed, greaterThan(0));
       expect(first.push.publishedCount, greaterThan(0));
       // Nothing else exists in the backend for this device to pull back.
-      expect(first.pull.commitsApplied, 0);
+      expect(first.pull.operationsApplied, 0);
 
       final titleRow = await db.query(
         'sync_field_state',
@@ -62,7 +62,7 @@ void main() {
       final second = await session.run(backend);
       expect(second.drain.touchesProcessed, 0);
       expect(second.push.publishedCount, 0);
-      expect(second.pull.commitsApplied, 0);
+      expect(second.pull.operationsApplied, 0);
     } finally {
       await databaseService.close();
     }

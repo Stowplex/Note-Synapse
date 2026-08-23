@@ -181,7 +181,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 60; // Target schema version
+  static const int DATABASE_VERSION = 61; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -966,7 +966,8 @@ class DatabaseService {
         parentCommitHash TEXT,
         payloadHash TEXT NOT NULL,
         authorId TEXT, -- M2.6: the authorId namespace this intent publishes to
-        deviceSeq INTEGER, -- M2.6: the deviceSeq this intent publishes at
+        deviceSeq INTEGER, -- M2.6: the COMMIT-CHAIN position this intent publishes at (never an authorSeq -- see push_phase.dart)
+        opAuthorSeqsJson TEXT, -- M2.12: JSON array of the sync_pending_ops.authorSeq values this commit carries; NULL on a pre-M2.12 (one-operation-per-commit) intent
         status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'confirmed'
         createdAt INTEGER NOT NULL,
         confirmedAt INTEGER
@@ -1841,10 +1842,29 @@ class DatabaseService {
     for (final group in _syncSetCaptureStatementGroups) ...group,
   ];
 
-  /// `clearAllData`'s own follow-up fix: which of the fifteen M1.1 sync
-  /// control-plane tables get wiped alongside the real entity/membership
-  /// data that function physically erases, and which are deliberately left
-  /// alone. `clearAllData` is documented as producing a "genuinely empty
+  /// Which of the fifteen M1.1 sync control-plane tables are ENTITY-SCOPED —
+  /// keyed by a specific entity/subject id, or by a dot-identity that only
+  /// ever arises from an operation about one — and which are instead
+  /// device/dataset-level or peer-relationship state.
+  ///
+  /// **Two consumers, and the partition means the same thing to both.**
+  ///  1. `clearAllData` (M1.13/M2.4), this list's original reason to exist:
+  ///     everything here describes content that call physically erases, so
+  ///     leaving it behind would break that function's "genuinely empty
+  ///     local database" promise.
+  ///  2. `DatasetReset` (M2.13, `lib/services/sync/dataset_reset.dart`):
+  ///     a sync reset must return this device to the protocol state of a
+  ///     fresh install that happens to already hold this content — which is
+  ///     exactly "drop every derived record ABOUT the content, keep the
+  ///     content." That is the same partition, read from the other side, so
+  ///     it reuses this list rather than maintaining a second one that
+  ///     could drift. (A reset additionally clears device/dataset-level
+  ///     `sync_state`, which `clearAllData` deliberately does not — see
+  ///     `dataset_reset.dart` for why the two differ there, and why
+  ///     `sync_field_state`/`sync_set_state`/`sync_materialize_queue` being
+  ///     in THIS list is what makes a post-reset seed scan actually re-run.)
+  ///
+  /// `clearAllData` is documented as producing a "genuinely empty
   /// local database" (a full local reset/debug tool) — that promise is
   /// broken if a sync control-plane table is left holding rows that
   /// reference an entity, subject, or dot the same call just erased, even
@@ -1916,7 +1936,7 @@ class DatabaseService {
   ///    (`intentHash`/`parentCommitHash`/`payloadHash`), not entity-id-keyed
   ///    at all; describes this device's own push-retry safety state, not
   ///    specific local content.
-  static const List<String> _syncEntityScopedControlPlaneTablesToWipe = [
+  static const List<String> syncEntityScopedControlPlaneTablesToWipe = [
     'sync_touch_log',
     'sync_field_state',
     'sync_set_state',
@@ -2601,7 +2621,67 @@ class DatabaseService {
           'the full finding-by-finding reasoning',
       execute: _migrateToVersion60,
     ),
+    61: MigrationStep(
+      description:
+          'Add opAuthorSeqsJson to sync_publish_intent — M2.12 (a commit now '
+          'carries a BATCH of operations, so the resume procedure has to know '
+          'exactly which sync_pending_ops rows a pending intent covers; '
+          're-deriving it by searching candidate batch layouts could not '
+          'answer the question for a batch formed under different size '
+          'constants, which would wedge the namespace permanently). NULL on '
+          'every pre-existing row, which is exactly right: those intents were '
+          'written when one commit meant one operation',
+      execute: _migrateToVersion61,
+    ),
   };
+
+  /// Adds `opAuthorSeqsJson` to `sync_publish_intent` (M2.12's batched
+  /// commits). Guarded with the same `PRAGMA table_info` existence check
+  /// every other `ADD COLUMN` migration in this file uses — and for the same
+  /// two concrete reasons `_migrateToVersion58`'s doc comment sets out at
+  /// length: `_migrateToVersion47` builds the sync tables from the *live*
+  /// `_syncControlPlaneTableStatements` list (which now already contains this
+  /// column, so an upgrade from <= 46 arrives here with it present), and a
+  /// mid-chain crash replays a step whose DDL SQLite already committed.
+  static Future<void> _migrateToVersion61(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    LoggerService.info(
+      'Starting migration to version 61: add opAuthorSeqsJson to '
+      'sync_publish_intent (M2.12 batched commits)',
+    );
+    try {
+      final tableExists = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        ['sync_publish_intent'],
+      );
+      if (tableExists.isEmpty) {
+        LoggerService.info(
+          'sync_publish_intent does not exist, skipping (fresh installs get '
+          'the current schema straight from _onCreate)',
+        );
+        return;
+      }
+      final columns = await db.rawQuery(
+        'PRAGMA table_info(sync_publish_intent)',
+      );
+      final columnNames = columns.map((c) => c['name'] as String).toSet();
+      if (!columnNames.contains('opAuthorSeqsJson')) {
+        await db.execute(
+          'ALTER TABLE sync_publish_intent ADD COLUMN opAuthorSeqsJson TEXT',
+        );
+      }
+      LoggerService.info('Successfully migrated to version 61');
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Failed to migrate to version 61',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
 
   /// Adds `authorId`/`deviceSeq` to `sync_publish_intent` (M2.6's push-phase
   /// resume procedure needs to know which namespace/position a pending intent
@@ -6177,11 +6257,11 @@ class DatabaseService {
       // several of them exists (`OutboxDrainer`,
       // `lib/services/sync/outbox_drainer.dart`).
       //
-      // `_syncEntityScopedControlPlaneTablesToWipe`'s own doc comment
+      // `syncEntityScopedControlPlaneTablesToWipe`'s own doc comment
       // (below `_syncMutationCaptureTriggerStatements`) gives the full
       // per-table reasoning for exactly which of the fifteen M1.1 tables
       // are wiped here vs. deliberately left alone.
-      for (final table in _syncEntityScopedControlPlaneTablesToWipe) {
+      for (final table in syncEntityScopedControlPlaneTablesToWipe) {
         await db.delete(table);
       }
     } finally {
