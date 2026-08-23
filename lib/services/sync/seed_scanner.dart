@@ -63,30 +63,43 @@
 // round 3, finding F1).**
 // ---------------------------------------------------------------------
 // `DatasetReset` writes `sync_state[postResetRecessiveSeedStateKey]`. While
-// it is set, every `field` operation minted here is stamped [Hlc.zero]
-// instead — deliberately the minimum representable value, so it LOSES every
-// field conflict it is in rather than winning on recency, and decides only
-// the content the dataset genuinely lacks (where it is uncontested and wins).
+// it is set, every `field` and `__exists__` operation minted here is stamped
+// [Hlc.zero] instead — deliberately the minimum representable value, so it
+// LOSES every conflict it is in rather than winning on recency, and decides
+// only the content the dataset genuinely lacks (where it is uncontested and
+// wins).
 //
-// **Two kinds are deliberately NOT recessive, and both exclusions were found
-// by review after the first version claimed dataset-wide coverage. State the
-// scope honestly rather than restating the slogan:**
+// **The exact scope, after three rounds of getting it wrong in both
+// directions. State it as a list of kinds, not as a slogan:**
 //
-//   * **`__exists__`** — its HLC is *also* the entity's creation timestamp on
-//     every receiving device (`materializer.dart`'s `_materializeExists`
-//     writes `op.hlc.wallMs` into the `syncEntityCreatedAtColumnByTable`
-//     column, which is outside `syncScopeColumns`, so nothing ever corrects
-//     it). A recessive `__exists__` dated the entire library 1970-01-01 on
-//     any device rebuilding from the backend. Safe to exclude because an
-//     `__exists__` seed's value is the constant `true`: whichever side of
-//     that conflict wins, the outcome is identical, so F1 cannot travel
-//     through it. See the mint site for the full argument.
-//   * **`set_add`** — `OrSetResolver` is add-wins plus `contentKey` dedup and
-//     never reads an HLC, so a recessive stamp buys nothing there. Membership
-//     is instead protected by an explicit rule in
-//     `causal/or_set_resolver.dart`: a `set_remove` naming an unseen dot
-//     supersedes a member whose live dots are *all* recessive. The stamp is
-//     still applied here, because it is what that rule keys off.
+//   * **`field` — recessive.** This is where F1 travels: a field operation
+//     carries a VALUE, and a dominant one republishes stale content over a
+//     peer edit this device has not observed yet.
+//   * **`__exists__` — recessive** (restored in round 5, after round 4
+//     excluded it). Round 3's version of this comment was right that the
+//     stamp reaches `materializer.dart`'s creation-timestamp write and
+//     wrong that excluding the kind was the remedy: the `__exists__`
+//     register also records the WINNER'S DOT, which `_creationDot` and
+//     `_generationDot` both read, so a dominant `__exists__` seed silently
+//     re-parents every entity's creation dot on every peer. The 1970-01-01
+//     problem is fixed in the materializer's own derivation instead. Full
+//     argument at the mint site and at `_createdAtFromHlcWall`.
+//   * **`set_add` — NOT recessive**, and this is a positive choice rather
+//     than an omission. `OrSetResolver` is add-wins plus `contentKey` dedup
+//     and never compares an HLC, so the stamp decides nothing there — but it
+//     is not inert either: a `set_add`'s `hlc.wallMs` is the fallback source
+//     for a membership table's `createdAt` in `_insertMembershipRow`, i.e.
+//     exactly the hazard `__exists__` had. A real HLC decides nothing and
+//     carries no hazard, so that is what is minted. See
+//     [SeedScanner._seedMembershipBatch].
+//   * **`set_remove` — not minted by this scanner at all** (a seed describes
+//     what exists, never what does not).
+//
+// The membership consequence of a reset is therefore handled by disclosure,
+// not by an HLC: a reset can re-assert a membership a peer deliberately
+// removed. That is convergent and lossless, and it is documented in
+// `causal/or_set_resolver.dart`, in `dataset_reset.dart`, and in the reset
+// confirmation dialog's own text.
 //
 // **Why the exception does not contradict the paragraph above.** That
 // paragraph is about a first-ever seed of content nobody has synced: its HLC
@@ -109,11 +122,11 @@
 // transaction that writes [seedScanCompletedAtKey] ([_markComplete]), so a
 // seed deferred by a `sync_materialize_queue` row stays recessive across
 // every round it takes. In recessive mode `generate()` is called only for
-// the `__exists__` exclusion above — one call per seeded entity, never per
-// field — so § 11.2 property (a), monotonicity of this device's own
-// successive GENERATED values, is unaffected either way: the clock only ever
-// moves forward, and a recessive `field` seed does not move it at all. See
-// [Hlc.zero]'s own doc comment.
+// `set_add` — one call per seeded membership, never per field or entity —
+// so § 11.2 property (a), monotonicity of this device's own successive
+// GENERATED values, is unaffected either way: the clock only ever moves
+// forward, and a recessive `field`/`__exists__` seed does not move it at
+// all. See [Hlc.zero]'s own doc comment.
 //
 // **Conversation-mapping ordering (round 14's deliberate exception).** For
 // `conversation_message_mapping` the local autoincrement `id` order IS the
@@ -131,9 +144,9 @@
 // for these tables) and HLCs are strictly increasing per `generate()` call,
 // so seed HLCs come out in real historical order. The same ordering is
 // applied uniformly to every membership table since it costs nothing. (This
-// is a property of ORDINARY seeds; a recessive post-reset seed calls no
-// `generate()` at all — see [SeedScanner._mintHlc] for why that costs
-// nothing either.)
+// property holds for a post-reset seed too, since round 5: membership seeds
+// keep a real, strictly increasing HLC even in recessive mode — see
+// [SeedScanner._seedMembershipBatch].)
 //
 // ---------------------------------------------------------------------
 // **`contentKey` with `baseContext = "GENESIS"` (round 14).**
@@ -715,7 +728,6 @@ class SeedScanner {
             authorId: authorId,
             scope: scope,
             batch: batch,
-            recessive: recessive,
           ),
         );
         memberships += batch.length;
@@ -786,38 +798,38 @@ class SeedScanner {
     );
     switch (existsState) {
       case _Pristine.yes:
-        // NOT recessive, even in recessive mode — and the exception is
-        // load-bearing rather than an oversight (M2.13, review round 3).
+        // RECESSIVE in recessive mode, like every other `field` operation
+        // this scan mints — and getting here took two rounds of being
+        // wrong in opposite directions, so both are recorded.
         //
-        // An `__exists__` operation's HLC has a SECOND consumer nobody
-        // enumerated when `Hlc.zero` was introduced: `materializer.dart`'s
-        // `_materializeExists` writes `op.hlc.wallMs` straight into the
-        // entity's creation-timestamp column (`syncEntityCreatedAtColumnByTable`),
-        // and `createdAt` is deliberately excluded from every scope's
-        // `syncScopeColumns`, so NO later operation ever corrects it. A
-        // recessive `__exists__` therefore materialized every note, tag,
-        // filter and conversation at 1970-01-01 on any device rebuilding
-        // from the backend — permanent, silent, and on exactly the flow
-        // this milestone exists to serve (delete folder -> reset ->
-        // republish -> a second device rebuilds). `createdAt` is the
-        // `ORDER BY` at ~13 query sites.
+        // **Round 3** made `__exists__` recessive along with everything
+        // else, and `materializer.dart`'s `_materializeExists` wrote the
+        // operation's `hlc.wallMs` straight into the entity's
+        // creation-timestamp column (`syncEntityCreatedAtColumnByTable`,
+        // outside every scope's `syncScopeColumns`, so nothing ever
+        // corrects it) — dating every rebuilt note, tag, filter and
+        // conversation 1970-01-01, permanently, on exactly the flow this
+        // milestone exists to serve.
         //
-        // Excluding `__exists__` from recessive mode cannot reopen F1,
-        // because F1 travels through field VALUES and an `__exists__`
-        // seed's value is the constant `true` (below): whichever side of
-        // an `__exists__` conflict wins, the materialized outcome is
-        // identical ("the entity exists"). Two devices seeding the same
-        // entity produce the same GENESIS `contentKey` here and dedup
-        // outright, so the conflict path is usually not even entered.
+        // **Round 4 fixed that by excluding `__exists__` from the stamp,
+        // and that was the wrong place.** The `__exists__` register records
+        // the WINNER'S DOT as well as its HLC, and `materializer.dart`
+        // reads that dot twice: `_creationDot` feeds § Architecture 10's
+        // tag name-collision tie-break, and `_generationDot` is folded into
+        // both `contentKey`s `_mintAutoMergeLoserPair` mints, where two
+        // devices must agree or the pair fails to dedup. A dominant
+        // `__exists__` seed therefore flipped the creation dot of EVERY
+        // entity on EVERY peer that pulled a post-reset seed. The round-4
+        // justification — "either side of that conflict materializes the
+        // identical outcome" — was true of the VALUE (a constant `true`)
+        // and silent about the dot.
         //
-        // Residual, pre-existing and NOT introduced here: the timestamp a
-        // rebuilding peer gets is the seeding device's seed time, not the
-        // entity's true creation time, because the real `createdAt` value
-        // is never transmitted. That is M2.10's shipped behaviour for an
-        // ordinary seed too; this restores parity with it rather than
-        // fixing it. Carrying the real value would be a wire-format
-        // change (the `__exists__` payload is a bare `true`) and belongs
-        // with whatever milestone brings `createdAt` into scope.
+        // **Round 5** puts the stamp back and fixes the timestamp where it
+        // is actually derived: `_materializeExists` now falls back to the
+        // receiving device's own clock for a wall-0 operation. See
+        // `_createdAtFromHlcWall` in `materializer.dart` for the full
+        // weighing, including why carrying the real `createdAt` on the wire
+        // was not chosen.
         await _mintAndApplyField(
           txn,
           authorId: authorId,
@@ -826,7 +838,7 @@ class SeedScanner {
           entityId: entityId,
           fieldName: _existsFieldSentinel,
           valueJson: jsonEncode(true),
-          recessive: false,
+          recessive: recessive,
         );
         minted++;
       case _Pristine.hasHistory:
@@ -911,12 +923,43 @@ class SeedScanner {
 
   // ── OR-Set membership rows: one set_add each ─────────────────────────
 
+  /// **Membership seeds are never recessive, even in recessive mode
+  /// (M2.13, review round 5) — and the reason is not "the stamp is
+  /// harmless", which is what an earlier version assumed.**
+  ///
+  /// Round 3 stamped `set_add` recessively and round 4 built a rule in
+  /// `causal/or_set_resolver.dart` that keyed off the stamp. Round 5
+  /// retracted that rule as non-convergent (see that file's "post-reset
+  /// re-add" section), which left the stamp with no reader at all as a
+  /// tie-break: `OrSetResolver` is add-wins plus `contentKey` dedup and
+  /// never compares an HLC.
+  ///
+  /// It does not follow that keeping it would be inert. A `set_add`'s
+  /// `hlc.wallMs` IS read — by `materializer.dart`'s `_insertMembershipRow`,
+  /// as the fallback source for a membership table's `createdAt` column. A
+  /// `Hlc.zero` stamp there is the same 1970-01-01 defect `__exists__` had,
+  /// one layer down, currently masked only by every createdAt-bearing
+  /// membership scope declaring `payloadColumns: ['createdAt']` so the
+  /// payload always wins first. So the choice is between a stamp that
+  /// decides nothing and carries a latent hazard, and a real HLC that
+  /// decides nothing and carries none.
+  ///
+  /// A real HLC is chosen. `generate()` is called once per seeded
+  /// membership, exactly as an ordinary (non-reset) seed does — which also
+  /// restores the round-14 ordering property (`rowid ASC` enumeration plus
+  /// strictly increasing HLCs preserves each device's real historical
+  /// membership order) for the post-reset seed rather than flattening it to
+  /// a tie. § 11.2 property (a) is untouched either way: the clock only ever
+  /// moves forward.
+  ///
+  /// The membership consequence of a reset is therefore not managed by an
+  /// HLC at all; it is the disclosed, convergent re-add residual documented
+  /// in `or_set_resolver.dart` and named in `cloudSyncResetConfirm`.
   Future<(int, int)> _seedMembershipBatch(
     DatabaseExecutor txn, {
     required String authorId,
     required SyncSetCaptureScope scope,
     required List<Map<String, Object?>> batch,
-    required bool recessive,
   }) async {
     var minted = 0;
     var deferred = 0;
@@ -939,7 +982,6 @@ class SeedScanner {
             entityId: entityId,
             memberUuid: memberUuid,
             valueJson: encodeSetAddPayloadJson(scope, row),
-            recessive: recessive,
           );
           minted++;
         case _Pristine.hasHistory:
@@ -1082,10 +1124,10 @@ class SeedScanner {
     required String entityId,
     required String memberUuid,
     required String valueJson,
-    required bool recessive,
   }) async {
     final authorSeq = await _seqCounter.mintNextSeq(authorId, executor: txn);
-    final hlc = await _mintHlc(txn, recessive);
+    // Always a real HLC — see [_seedMembershipBatch]'s doc comment.
+    final hlc = await _hlc.generate(executor: txn);
     final frontierJson = await currentFrontierJson(txn, authorId, authorSeq);
     final contentKey = genesisContentKey(
       entityTable: scope.entityTable,

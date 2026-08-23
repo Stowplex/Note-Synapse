@@ -620,6 +620,68 @@ class SyncMaterializer {
     );
   }
 
+  /// The creation timestamp an arriving operation's HLC wall component
+  /// stands for — with the one case that component cannot stand for anything
+  /// handled explicitly instead of being written through.
+  ///
+  /// ---------------------------------------------------------------------
+  /// **M2.13, review round 5.** A post-reset re-seed stamps [Hlc.zero] on
+  /// every operation it mints (`seed_scanner.dart`), including `__exists__`,
+  /// so that a re-statement of content this device already had loses every
+  /// conflict it enters rather than winning on recency. A wall component of
+  /// `0` is therefore a real, expected value on the wire — and writing it
+  /// into a `createdAt` column dates a rebuilt library `1970-01-01`,
+  /// permanently, since `createdAt` is outside every scope's
+  /// `syncScopeColumns` and no later operation ever corrects it.
+  ///
+  /// Round 4 addressed that by excluding `__exists__` from the recessive
+  /// stamp. **That fix was in the wrong place**, because the `__exists__`
+  /// register records the winner's DOT as well as its HLC, and
+  /// `_creationDot`/`_generationDot` both read it — so a dominant
+  /// `__exists__` seed flipped the creation dot of every entity on every
+  /// peer that pulled a post-reset seed, changing the input to § Architecture
+  /// 10's tag collision tie-break and to both `contentKey`s
+  /// `_mintAutoMergeLoserPair` mints. The stamp is back; the 1970 problem is
+  /// fixed here, at the one place that actually derives a timestamp from an
+  /// HLC.
+  ///
+  /// **Why the receiving device's own clock, rather than carrying the real
+  /// `createdAt` on the operation.** Both were weighed:
+  ///
+  ///  * Carrying it *inside* the `__exists__` payload is not available: that
+  ///    payload is the constant `true`, and it is hashed into the GENESIS
+  ///    `contentKey`. Two devices holding different `createdAt` values for
+  ///    the same entity (the ordinary case — a receiving device's value is
+  ///    already derived, not the origin's) would stop deduping their
+  ///    `__exists__` seeds and would each carry a permanently competing
+  ///    candidate. That is a strictly worse outcome than an approximate
+  ///    timestamp.
+  ///  * Carrying it *beside* the payload — a new envelope field — needs a
+  ///    `sync_pending_ops` column, its migration, and the matching
+  ///    `recovery_screen.dart` update, and it still would not make the value
+  ///    deterministic across peers: `contentKey` dedup plus this method's
+  ///    first-writer-wins guard mean whichever device's `__exists__` was
+  ///    observed first decides, which is observation order. It buys a
+  ///    genuinely better value (the entity's true creation time, closing a
+  ///    pre-existing residual M2.10 also has) at the cost of a schema change,
+  ///    and it belongs with the milestone that brings `createdAt` into sync
+  ///    scope properly, not with a recovery fix.
+  ///
+  /// **What this costs, stated rather than glossed.** For a wall-0 operation
+  /// the value becomes receiver-local: two peers rebuilding the same library
+  /// get different absolute timestamps, where a real HLC gives them the same
+  /// one. Relative ORDER is preserved, which is what the ~13 `ORDER BY
+  /// createdAt` sites actually consume — operations arrive in per-author seq
+  /// order, which for a seed scan is `rowid` order on the seeding device, and
+  /// each is stamped at materialization time. And `createdAt` was already
+  /// only an approximation on any rebuilding peer (it is the seeding
+  /// device's *seed* time, never the entity's true creation time). This
+  /// trades one inconsistent-but-plausible value for another; it does not
+  /// give up a guarantee that existed.
+  static int _createdAtFromHlcWall(int hlcWallMs) => hlcWallMs > 0
+      ? hlcWallMs
+      : DateTime.now().millisecondsSinceEpoch;
+
   /// Turns a resolved `__exists__` into a real `INSERT` — a shell row for
   /// any not-yet-arrived `syncScopeColumns` entry, corrected in place as
   /// each column's own field commit materializes. See this file's top doc
@@ -653,7 +715,7 @@ class SyncMaterializer {
       final name = col['name'] as String;
       if (name == scope.idColumn) continue;
       if (name == createdAtColumn) {
-        row[name] = existsHlcWallMs;
+        row[name] = _createdAtFromHlcWall(existsHlcWallMs);
         continue;
       }
       if (scope.syncScopeColumns.contains(name)) {
@@ -1275,7 +1337,27 @@ class SyncMaterializer {
         // and expected, not malformed, and parking them reproduced the very
         // "live sync_set_state row, empty mapping table" signature this
         // milestone set out to kill.
-        row[name] = hlcWallMs;
+        //
+        // **F5 (M2.13, review round 5): the wall-0 case is handled here too,
+        // and it was previously masked rather than absent.** A post-reset
+        // re-seed can stamp `Hlc.zero`, so `hlcWallMs` can legitimately be
+        // `0` — and this line would then date the mapping row 1970-01-01,
+        // the identical defect `_materializeExists` had one layer up. The
+        // only reason it was not reachable is that all three
+        // createdAt-bearing membership scopes declare
+        // `payloadColumns: ['createdAt']` and that column is `NOT NULL`, so
+        // the payload branch above always wins first — a masking nothing
+        // anywhere recorded, and one a single scope losing its payload
+        // column (or a pre-M2.10 `set_add`, which carries no payload at all,
+        // arriving in the same round as a reset) would remove. Routed
+        // through the same [_createdAtFromHlcWall] derivation as the entity
+        // path so the two can never disagree about what a wall-0 operation
+        // means. (`set_add` seeds are NOT recessive today — see
+        // `seed_scanner.dart`'s mint site for why — so this branch is belt
+        // and braces, not the live path. It is written anyway because
+        // "unreachable given today's scope declarations" is exactly the kind
+        // of claim this milestone has been wrong about four times.)
+        row[name] = _createdAtFromHlcWall(hlcWallMs);
         continue;
       }
       if (isNonPortableIntegerPrimaryKey(column)) {

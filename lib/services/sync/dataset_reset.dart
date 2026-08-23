@@ -257,43 +257,82 @@
 // backend genuinely lacks — which is exactly the deleted-folder case, where
 // the backend holds nothing and every seed is uncontested and wins.
 //
-// **CORRECTION (review round 3, findings F-A and F-B). The paragraph above
+// **CORRECTION (review round 3, findings F-A and F-B, then review round 5,
+// which found BOTH of round 4's remedies defective). The paragraph above
 // says "the seed only decides content the backend genuinely lacks". That is
 // true of `field` operations and was false of the other two kinds, because
-// "recessive" had been reasoned about only against the field-conflict path.**
-// Both holes were reproduced with controls, and both are closed — but by
-// *narrowing* the mechanism's claimed reach, not by widening the stamp:
+// "recessive" had been reasoned about only against the field-conflict
+// path.** Round 4 fixed the two holes by narrowing the stamp and adding an
+// OR-Set rule. Round 5 reproduced both fixes failing and replaced them. The
+// settled position, per kind:
 //
-//   * **`__exists__` is no longer stamped recessively at all.** An
-//     `__exists__` HLC has a second consumer nobody enumerated:
-//     `materializer.dart` writes its `wallMs` into the entity's `createdAt`,
-//     a column outside `syncScopeColumns` that no later operation corrects.
-//     A recessive `__exists__` dated every note, tag, filter and conversation
-//     1970-01-01 on any device rebuilding from the backend — permanent,
-//     silent, and on precisely the flow this file exists to serve. Safe to
-//     exclude because an `__exists__` seed's value is the constant `true`:
-//     either side of that conflict materializes the same outcome, so F1
-//     cannot travel through it. (`seed_scanner.dart`'s mint site carries the
-//     full argument.)
-//   * **A recessive `set_add` decides nothing by itself**, because
-//     `OrSetResolver` is add-wins plus `contentKey` dedup and never reads an
-//     HLC. So a reset re-minted every live membership under a fresh GENESIS
-//     dot, the peer's already-published `set_remove` targeting the *old* dot
-//     parked in `missing_referenced_dot` forever, and a tag assignment the
-//     user had deliberately removed came back — on both devices. Closed by an
-//     explicit rule in `causal/or_set_resolver.dart`: a `set_remove` naming an
-//     unseen dot supersedes a member whose live dots are *all* recessive. The
-//     stamp is still applied to `set_add` for exactly that reason — it is the
-//     marker the rule keys off, not a tie-break input.
+//   * **`__exists__` IS stamped recessively** (round 3 did this, round 4
+//     undid it, round 5 restored it). Round 3's defect was real: the HLC's
+//     `wallMs` is written into the entity's `createdAt`, a column outside
+//     `syncScopeColumns` that nothing corrects, so a recessive `__exists__`
+//     dated a rebuilt library 1970-01-01. But round 4's remedy — exempting
+//     the kind — was aimed at the wrong half of the register. The
+//     `__exists__` row in `sync_field_state` records the WINNER'S DOT as
+//     well as its HLC, and `materializer.dart` reads that dot twice
+//     (`_creationDot` for § Architecture 10's tag collision tie-break;
+//     `_generationDot`, folded into both auto-merge `contentKey`s, where two
+//     devices must agree or the pair fails to dedup). Measured: with the
+//     exemption shipped, the winner dot flipped from the peer's own
+//     `__exists__` to the seed's on every entity on every peer that pulled a
+//     post-reset seed. The timestamp is fixed at its own site instead —
+//     `materializer.dart`'s `_createdAtFromHlcWall` falls back to the
+//     receiving device's clock for a wall-0 operation.
+//   * **`set_add` is NOT stamped**, and this is a decision rather than an
+//     omission: `OrSetResolver` never compares an HLC, so the stamp decides
+//     nothing, while a `set_add`'s `wallMs` IS read as a membership row's
+//     `createdAt` fallback — the same 1970 hazard, one layer down, with no
+//     compensating benefit. See `seed_scanner.dart`'s
+//     `_seedMembershipBatch`.
 //
-// Read "recessive" as **recessive wherever the tie-break decides**, plus one
-// named rule where it does not. The two rounds it took to get this stated
-// accurately are the reason it is spelled out rather than summarised.
+// **The OR-Set rule round 4 added is RETRACTED, and the membership
+// consequence of a reset is a disclosed residual instead.** That rule was
+// "a `set_remove` whose targets do not resolve supersedes a member whose
+// live add-dots are all recessive". Three defects, each reproduced:
+//
+//   1. **Order-dependent, so replicas diverge permanently.** Both of its
+//      conjuncts were predicates over `sync_set_state` as it stood when the
+//      remove happened to be processed; add-then-remove and remove-then-add
+//      left different states, and nothing constrains delivery order. Two
+//      devices ended with a tag assignment present on one and absent on the
+//      other, forever.
+//   2. **Unrecoverable.** `pull_phase.dart`'s `missing_referenced_dot` sweep
+//      gates every replay behind `_referencedDotIsResolvable`, which
+//      implements the ordinary matching rule and returns `false` in exactly
+//      the shape the new rule was written for, so the parked remove was
+//      never retried.
+//   3. **It did not fix its target case in the `deviceLogDiverged` state** —
+//      one of the two states this reset is actually offered in. A reset
+//      re-pulls this device's retired logs by design, and an ordinary
+//      post-trigger `set_add` carries no `contentKey`, so it does not dedup
+//      against the GENESIS-keyed re-seed. Both dots are live, the peer's
+//      remove resolves the ordinary one, `applied` is non-empty, and the
+//      rule never fires.
+//
+// Removing the residual for real needs a durable ledger of applied removes,
+// which this schema does not have (`SetRemoveResult.missingTargets`'s own
+// doc comment discloses that absence), and every rule short of that ledger
+// is a predicate over current state — i.e. order-dependent. So:
+// **`RESIDUAL`: a reset can resurrect a membership a peer deliberately
+// removed** (a tag assignment, a note/conversation linkage). It is
+// convergent — every replica sees the same re-add and applies the same
+// add-wins rule — it loses nothing, and it is honest OR-Set semantics, since
+// the resetting device genuinely is re-asserting the membership. A
+// convergent surprise beats a non-convergent mechanism. Named in
+// `cloudSyncResetConfirm` so the user is told before they tap.
+//
+// Read "recessive" as **recessive wherever the tie-break decides, and
+// nowhere else**. The three rounds it took to get this stated accurately are
+// the reason it is spelled out per kind rather than summarised.
 //
 // **Why `Hlc.zero` specifically, and what it does NOT do.** § 11.2's
 // property (a), monotonicity, is about a device's successive *generated*
-// values. A recessive seed calls `generate()` only for the `__exists__`
-// exclusion above — once per seeded entity, never per field — so the durable
+// values. A recessive seed calls `generate()` only for `set_add` — once per
+// seeded membership, never per field or entity — so the durable
 // clock (`sync_state['hlc_wall_ms']`/`['hlc_logical']`) only ever moves
 // forward and
 // every later `generate()` on this device is unaffected. A peer that merges
@@ -433,8 +472,10 @@
 // gone, and `_processSetTouch`/`_processExistsTouch` mint from what exists
 // now — so a re-touch of a deleted membership or entity finds nothing to
 // describe, the delete is never published, and the pull resurrects it. This
-// is the one loss the confirmation dialog names explicitly
-// (`cloudSyncResetConfirm`).
+// is one of the two "it comes back" cases the confirmation dialog names
+// explicitly (`cloudSyncResetConfirm`); the other is the membership re-add
+// residual above, which is a different mechanism with the same user-visible
+// shape and is why the dialog names both rather than one.
 //
 // ---------------------------------------------------------------------
 // **What is preserved — a keep-list of four keys, not a delete-list.**

@@ -236,24 +236,107 @@ void main() {
     });
   });
 
-  // M2.13, review round 3 (finding F-B). `Hlc.zero`-stamped recessive seeds
-  // were introduced so a post-reset re-seed LOSES rather than wins — but that
-  // reaches only field conflicts, since this resolver is add-wins plus
-  // `contentKey` dedup and never reads the HLC. So a reset re-minted every
-  // live membership under a brand-new GENESIS dot, the peer's already-
-  // published `set_remove` targeting the OLD dot parked forever, and a tag
-  // assignment the user had deliberately removed came back on BOTH devices.
+  // =====================================================================
+  // M2.13, review round 5 — the post-reset membership question, and why
+  // this resolver answers it with ORDINARY add-wins rather than with a
+  // special rule.
+  // =====================================================================
   //
-  // Each test below is paired with a control that must keep the pre-existing
-  // add-wins behaviour, so the fix cannot pass by simply weakening removal.
-  group('set_remove — recessive (post-reset) adds are superseded', () {
+  // **History, because the shape of the mistake is the useful part.**
+  // Round 3 introduced `Hlc.zero` recessive seeds so a post-reset re-seed
+  // LOSES rather than wins. That reaches only field conflicts: this
+  // resolver is add-wins plus `contentKey` dedup and never reads an HLC.
+  // Round 4 tried to extend the mechanism here with an explicit rule — "a
+  // `set_remove` whose targets do not resolve supersedes a member whose
+  // live add-dots are all recessive" — aimed at the case where a reset
+  // re-mints a membership the peer had deliberately removed.
+  //
+  // **Round 5 removed that rule.** It was defective at the root, not at the
+  // edges, and the first test below is the reproduction: both of its
+  // conjuncts were predicates over `sync_set_state` *as it stands when the
+  // remove is processed*, so add-then-remove and remove-then-add left
+  // different states. Nothing constrains delivery order (`listDeviceLogIds`
+  // is unordered), so two replicas holding the identical operation set
+  // ended up permanently disagreeing about whether the membership exists.
+  // A convergent surprise beats a non-convergent mechanism, so the rule is
+  // gone and the surprise is pinned below as expected behaviour.
+  //
+  // See `or_set_resolver.dart`'s "post-reset re-add" section and
+  // `dataset_reset.dart`'s round-5 correction for the full argument,
+  // including the two further defects (the queue sweep could never retry
+  // the parked remove, and the rule did not fire at all in the
+  // `deviceLogDiverged` state, which is one of the two states a reset is
+  // actually offered in).
+  group('set_remove vs. a post-reset re-add (M2.13 round 5)', () {
     const recessiveHlc = 0; // `Hlc.zero`, what SeedScanner stamps post-reset.
 
-    test('a remove naming an unseen dot removes a member whose only live dot is recessive', () async {
+    /// One independent replica: its own database, its own engine.
+    Future<(DatabaseService, Database)> freshReplica() async {
+      final service = DatabaseService.createNew();
+      addTearDown(service.close);
+      return (service, await service.database);
+    }
+
+    Future<void> applyTo(Database target, IncomingOperation op) =>
+        target.transaction((txn) => engine.apply(txn, op));
+
+    /// The live add-dots for the member, as a comparable, order-independent
+    /// value — this is what "the two replicas agree" means concretely.
+    Future<Set<String>> liveDotSet(Database target) async {
+      final rows = await target.query(
+        'sync_set_state',
+        columns: const ['authorId', 'authorSeq'],
+        where: 'entityTable = ? AND entityId = ? AND fieldName = ? AND memberUuid = ?',
+        whereArgs: ['notes', 'n1', 'members', 'tag1'],
+      );
+      return {for (final r in rows) '${r['authorId']}#${r['authorSeq']}'};
+    }
+
+    test(
+        'F1: the same operation set delivered in either order leaves the two replicas in the SAME state '
+        '(the round-4 rule made this diverge permanently)', () async {
+      // One operation set, minted once, so the two replicas genuinely see
+      // identical operations and only the ORDER differs.
+      final reseeded = TestMintingDevice('A-after-reset');
+      final peer = TestMintingDevice('B');
+      final reseedAdd = reseeded.mintSetAdd(
+        table: 'notes',
+        entityId: 'n1',
+        memberUuid: 'tag1',
+        contentKey: 'genesis:n1:tag1',
+        authorNamespace: 'seed:A-after-reset',
+        hlcOverride: recessiveHlc,
+      );
+      final remove = peer.mintSetRemove(
+        table: 'notes',
+        entityId: 'n1',
+        memberUuid: 'tag1',
+        targetDots: [const Dot('A-before-reset', 7)],
+      );
+
+      final (_, addFirst) = await freshReplica();
+      await applyTo(addFirst, reseedAdd);
+      await applyTo(addFirst, remove);
+
+      final (_, removeFirst) = await freshReplica();
+      await applyTo(removeFirst, remove);
+      await applyTo(removeFirst, reseedAdd);
+
+      expect(
+        await liveDotSet(addFirst),
+        await liveDotSet(removeFirst),
+        reason: 'convergence is not negotiable: nothing constrains the order in which a replica pulls a '
+            'peer log versus completes its own re-seed, so a rule whose predicate reads the CURRENT '
+            'sync_set_state leaves two replicas permanently disagreeing about a tag assignment',
+      );
+    });
+
+    test(
+        'DISCLOSED RESIDUAL, pinned deliberately: a post-reset re-add resurrects a membership the peer '
+        'had removed — and that is the CORRECT, convergent outcome, not a bug to be fixed here', () async {
       final reseeded = TestMintingDevice('A-after-reset');
       final peer = TestMintingDevice('B');
 
-      // The reset device re-seeds the membership: fresh GENESIS dot, HLC 0.
       await apply(reseeded.mintSetAdd(
         table: 'notes',
         entityId: 'n1',
@@ -262,11 +345,7 @@ void main() {
         authorNamespace: 'seed:A-after-reset',
         hlcOverride: recessiveHlc,
       ));
-      expect(await liveDots('notes', 'n1', 'members', 'tag1'), hasLength(1));
 
-      // The peer's removal targets the PRE-reset dot, which this replica has
-      // no record of — before the fix this parked in `missing_referenced_dot`
-      // and the membership stayed live forever.
       final result = await apply(peer.mintSetRemove(
         table: 'notes',
         entityId: 'n1',
@@ -274,9 +353,93 @@ void main() {
         targetDots: [const Dot('A-before-reset', 7)],
       ));
 
-      expect(result.setRemoveResult!.blocked, isFalse,
-          reason: 'the removal is applied, not parked: nothing can ever arrive to clear that queue entry');
-      expect(await liveDots('notes', 'n1', 'members', 'tag1'), isEmpty);
+      // ── READ THIS BEFORE CHANGING THE EXPECTATION ────────────────────
+      // The membership staying live here is ordinary OR-Set add-wins: the
+      // resetting device is genuinely re-ASSERTING the membership under a
+      // brand-new dot, and the peer's remove observed only the retired dot.
+      // Round 4 tried to special-case it and produced a non-convergent
+      // engine (see the test above). Making this membership disappear again
+      // requires a durable ledger of applied removes, which this schema does
+      // not have — `SetRemoveResult.missingTargets`' own doc comment states
+      // that absence. Anything short of that ledger reintroduces an
+      // order-dependent predicate. If you are here to "fix" this, the fix is
+      // a schema, not a branch in `applySetRemove`.
+      expect(
+        result.setRemoveResult!.blocked,
+        isTrue,
+        reason: 'the remove names a dot this replica has never observed; reporting it as blocked is the '
+            'conservative direction the schema can actually support',
+      );
+      expect(
+        await liveDots('notes', 'n1', 'members', 'tag1'),
+        hasLength(1),
+        reason: 'DISCLOSED, CONVERGENT residual (M2.13 round 5): every replica sees the same re-add and '
+            'applies the same add-wins rule, so nobody diverges and nothing is lost — a membership '
+            'reappears, which is a surprise, not a corruption',
+      );
+    });
+
+    test(
+        'F3: the deviceLogDiverged shape — a retired ORDINARY add, a recessive re-seed of the same '
+        'member, and the peer\'s remove — converges under either delivery order', () async {
+      // The state a reset against a LIVE dataset actually produces: the
+      // device re-pulls its own retired log (by design), so the retired
+      // ordinary add-dot is live alongside the GENESIS-keyed re-seed. They
+      // do NOT dedup — an ordinary post-trigger `set_add` carries no
+      // `contentKey` at all.
+      final retired = TestMintingDevice('A-before-reset');
+      final reseeded = TestMintingDevice('A-after-reset');
+      final peer = TestMintingDevice('B');
+
+      final retiredAdd =
+          retired.mintSetAdd(table: 'notes', entityId: 'n1', memberUuid: 'tag1');
+      final reseedAdd = reseeded.mintSetAdd(
+        table: 'notes',
+        entityId: 'n1',
+        memberUuid: 'tag1',
+        contentKey: 'genesis:n1:tag1',
+        authorNamespace: 'seed:A-after-reset',
+        hlcOverride: recessiveHlc,
+      );
+      final remove = peer.mintSetRemove(
+        table: 'notes',
+        entityId: 'n1',
+        memberUuid: 'tag1',
+        targetDots: [retiredAdd.dot],
+      );
+
+      // Each replica ends its round the way `pull_phase.dart` does: one
+      // replay of the parked `set_remove`. That sweep is what makes the
+      // reverse order converge — a remove that arrives BEFORE the add it
+      // targets is reported `blocked`, parked as `missing_referenced_dot`,
+      // and retried once the add-dot is observed. (On the forward replica
+      // the replay finds nothing left to match and changes nothing, which is
+      // the ordinary idempotent-redelivery case two groups above.)
+      Future<void> deliver(Database target, List<IncomingOperation> ops) async {
+        for (final op in ops) {
+          await applyTo(target, op);
+        }
+        await applyTo(target, remove); // the missing_referenced_dot sweep
+      }
+
+      final (_, forward) = await freshReplica();
+      await deliver(forward, [retiredAdd, reseedAdd, remove]);
+
+      final (_, reversed) = await freshReplica();
+      await deliver(reversed, [remove, reseedAdd, retiredAdd]);
+
+      expect(
+        await liveDotSet(forward),
+        await liveDotSet(reversed),
+        reason: 'the two devices in a post-reset session see these three operations in whichever order '
+            'their pulls happen to land; they must still agree afterwards',
+      );
+      expect(
+        await liveDotSet(forward),
+        {'${reseedAdd.dot.authorId}#${reseedAdd.dot.authorSeq}'},
+        reason: 'the targeted retired dot is removed; the re-asserted one survives — the residual above, '
+            'in the state the reset is actually offered in',
+      );
     });
 
     test('CONTROL: an ordinary (non-recessive) live add still wins over a remove that never saw it', () async {
@@ -294,39 +457,11 @@ void main() {
 
       expect(result.setRemoveResult!.blocked, isTrue);
       expect(await liveDots('notes', 'n1', 'members', 'tag1'), hasLength(1),
-          reason: 'OR-Set add-wins is untouched outside a reset — no ordinary path ever stamps Hlc.zero');
+          reason: 'OR-Set add-wins, unchanged — the reference behaviour the round-4 rule departed from');
     });
 
-    test('CONTROL: a genuine concurrent re-add after the reset keeps the member live', () async {
-      final reseeded = TestMintingDevice('A-after-reset');
-      final peer = TestMintingDevice('B');
-
-      await apply(reseeded.mintSetAdd(
-        table: 'notes',
-        entityId: 'n1',
-        memberUuid: 'tag1',
-        contentKey: 'genesis:n1:tag1',
-        authorNamespace: 'seed:A-after-reset',
-        hlcOverride: recessiveHlc,
-      ));
-      // A real user action after the reset drains through the ordinary path
-      // with a generated HLC — so the member has a non-recessive live dot.
-      await apply(reseeded.mintSetAdd(table: 'notes', entityId: 'n1', memberUuid: 'tag1'));
-
-      final result = await apply(peer.mintSetRemove(
-        table: 'notes',
-        entityId: 'n1',
-        memberUuid: 'tag1',
-        targetDots: [const Dot('A-before-reset', 7)],
-      ));
-
-      expect(result.setRemoveResult!.blocked, isTrue);
-      expect(await liveDots('notes', 'n1', 'members', 'tag1'), isNotEmpty,
-          reason: 'the rule fires only when EVERY live dot is a re-statement; a real re-add must still beat '
-              'a remove that never observed it');
-    });
-
-    test('a remove that does resolve is unaffected by the recessive branch', () async {
+    test('CONTROL: a remove whose target DOES resolve still removes the recessive re-seed\'s own dot',
+        () async {
       final reseeded = TestMintingDevice('A-after-reset');
       final peer = TestMintingDevice('B');
 
@@ -349,7 +484,9 @@ void main() {
 
       expect(result.setRemoveResult!.blocked, isFalse);
       expect(result.setRemoveResult!.appliedTargets, hasLength(1));
-      expect(await liveDots('notes', 'n1', 'members', 'tag1'), isEmpty);
+      expect(await liveDots('notes', 'n1', 'members', 'tag1'), isEmpty,
+          reason: 'a recessive HLC is not a marker of any kind here — a resolved target removes the row '
+              'exactly as it does for any other add');
     });
   });
 

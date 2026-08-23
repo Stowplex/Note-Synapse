@@ -57,24 +57,32 @@ class Hlc implements Comparable<Hlc> {
   ///    `CausalEngine.apply` never reads. Nothing depends on the value.
   ///  * **Load-bearing, and a deliberate documented exception to § 11.2
   ///    (M2.13, review round 3).** `seed_scanner.dart` stamps this on the
-  ///    `field` and `set_add` operations of a POST-RESET re-seed, so that
-  ///    seed is *recessive*: it loses every field conflict it is in on the
+  ///    `field` and `__exists__` operations of a POST-RESET re-seed, so that
+  ///    seed is *recessive*: it loses every conflict it is in on the
   ///    `(hlc, authorId, authorSeq)` tie-break and decides only content the
   ///    dataset genuinely lacks.
   ///
-  ///    **Two scope limits, both found by review after an earlier version of
-  ///    this comment claimed dataset-wide coverage — a claim that was false
-  ///    for two of the four operation kinds.** `__exists__` is deliberately
-  ///    excluded, because an `__exists__` HLC has a THIRD consumer this list
-  ///    originally missed: `materializer.dart` writes its `wallMs` into the
-  ///    entity's `createdAt`, outside `syncScopeColumns`, so a recessive
-  ///    `__exists__` dated a rebuilt library 1970-01-01 permanently. And a
-  ///    recessive `set_add` decides nothing on its own, because
-  ///    `OrSetResolver` is add-wins and never reads an HLC — the stamp is
-  ///    still applied there, but only so that resolver's explicit
-  ///    "a remove supersedes an all-recessive member" rule has something to
-  ///    key off. Read this constant as "recessive where the tie-break
-  ///    decides", not "recessive everywhere".
+  ///    **The scope is per-KIND, and three review rounds moved its
+  ///    boundary — so read the list, not the slogan.** `field` and
+  ///    `__exists__` are stamped. `set_add` is NOT: `OrSetResolver` never
+  ///    compares an HLC, so the stamp would decide nothing there, while a
+  ///    `set_add`'s `wallMs` *is* read by `materializer.dart` as a
+  ///    membership row's `createdAt` fallback — a zero there is a hazard
+  ///    with no compensating benefit. `set_remove` is never seed-minted at
+  ///    all.
+  ///
+  ///    **Any consumer that reads a `wallMs` as a TIMESTAMP must handle
+  ///    zero explicitly.** That is not hypothetical: `materializer.dart`
+  ///    writes an `__exists__` HLC's wall component into the entity's
+  ///    `createdAt`, a column outside `syncScopeColumns` that nothing ever
+  ///    corrects, and a recessive seed dated a whole rebuilt library
+  ///    1970-01-01 until that derivation grew its own fallback
+  ///    (`_createdAtFromHlcWall`). Round 4 tried to fix it by exempting
+  ///    `__exists__` from the stamp instead, which silently re-parented
+  ///    every entity's creation DOT on every peer — the register stores the
+  ///    winner's dot as well as its HLC. Stamping is the correct behaviour;
+  ///    deriving a date from a value defined to be the minimum is what has
+  ///    to be handled.
   ///
   ///    § 11.2's rule that "seed operations must
   ///    get a real HLC value... never a placeholder" is about a first-ever

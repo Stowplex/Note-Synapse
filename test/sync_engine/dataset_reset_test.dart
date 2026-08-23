@@ -1203,12 +1203,12 @@ void main() {
       expect(scan.recessive, isTrue);
       expect(scan.operationsSeeded, greaterThan(0));
 
-      // The clock moves only by the `__exists__` seeds, which are
-      // deliberately NOT recessive (M2.13 review round 3, finding F-A: an
-      // `__exists__` HLC is also the creation timestamp a receiving device
-      // writes, and nothing ever corrects it). Every `field` seed still
-      // calls generate() zero times, which is what § 11.2 property (a)'s
-      // exception is scoped to.
+      // The clock moves only by the `set_add` seeds, which are deliberately
+      // NOT recessive (M2.13 review round 5: the stamp would decide nothing
+      // in `OrSetResolver`, which never compares an HLC, while a `set_add`'s
+      // wallMs IS read as a membership row's `createdAt` fallback). Every
+      // `field` and `__exists__` seed calls generate() zero times, which is
+      // what § 11.2 property (a)'s exception is scoped to.
       expect(
         int.parse(await device.stateValue(hlcWallStateKey) as String),
         greaterThanOrEqualTo(int.parse(wallBefore as String)),
@@ -1217,36 +1217,44 @@ void main() {
       expect(logicalBefore, isNotNull);
 
       final db = await device.db;
-      final fieldSeedOps = await db.query(
+      final tieBreakingSeedOps = await db.query(
         'sync_pending_ops',
-        columns: const ['hlc'],
-        where: "authorId LIKE 'seed:%' AND kind = 'field'",
+        columns: const ['hlc', 'kind'],
+        where: "authorId LIKE 'seed:%' AND kind IN ('field', '__exists__')",
       );
-      expect(fieldSeedOps, isNotEmpty);
       expect(
-        fieldSeedOps.map((r) => Hlc.parse(r['hlc'] as String)).toSet(),
+        tieBreakingSeedOps.map((r) => r['kind']).toSet(),
+        {'field', '__exists__'},
+        reason: 'both kinds must actually be present, or the assertion below '
+            'passes vacuously for whichever one is missing',
+      );
+      expect(
+        tieBreakingSeedOps.map((r) => Hlc.parse(r['hlc'] as String)).toSet(),
         {Hlc.zero},
-        reason: 'every FIELD operation of a post-reset seed, not merely some '
-            '— these are the ones that carry content and therefore the ones '
-            'F1 travels through',
+        reason: 'EVERY operation of a post-reset seed whose HLC is a '
+            'tie-break input, not merely some. `field` carries the content F1 '
+            'travels through; `__exists__` carries the creation DOT that '
+            'materializer._creationDot/_generationDot read, and round 4 '
+            'exempting it re-parented every entity on every peer (section 6d)',
       );
 
-      final existsSeedOps = await db.query(
+      final membershipSeedOps = await db.query(
         'sync_pending_ops',
         columns: const ['hlc'],
-        where: "authorId LIKE 'seed:%' AND kind = '__exists__'",
+        where: "authorId LIKE 'seed:%' AND kind = 'set_add'",
       );
-      expect(existsSeedOps, isNotEmpty);
+      expect(membershipSeedOps, isNotEmpty);
       expect(
-        existsSeedOps
+        membershipSeedOps
             .map((r) => Hlc.parse(r['hlc'] as String))
             .every((h) => h.wallMs > 0),
         isTrue,
-        reason: 'an __exists__ seed must carry a real wall clock: '
-            'materializer._materializeExists writes it into the entity\'s '
-            'createdAt column, and createdAt is outside syncScopeColumns so '
-            'no later operation corrects it. Its value is the constant `true`, '
-            'so it cannot carry stale content into a conflict.',
+        reason: 'a set_add seed keeps a REAL clock (M2.13 round 5). '
+            'OrSetResolver never compares an HLC, so a recessive stamp would '
+            'decide nothing there — while a set_add\'s wallMs IS read, by '
+            'materializer._insertMembershipRow, as a membership row\'s '
+            'createdAt fallback. A stamp with no reader and a live hazard is '
+            'strictly worse than a real value',
       );
 
       // And the clock still generates real, strictly-positive values
@@ -1268,6 +1276,172 @@ void main() {
       for (final row in ordinary) {
         expect(Hlc.parse(row['hlc'] as String) > Hlc.zero, isTrue);
       }
+    },
+  );
+
+  // =====================================================================
+  // 6d. F4 (review round 5) — the `__exists__` register records the
+  //     WINNER'S DOT as well as a timestamp, and two live consumers read
+  //     it. A post-reset seed must not move it.
+  // =====================================================================
+  //
+  // Round 4 excluded `__exists__` from the recessive stamp to stop a
+  // `Hlc.zero` seed dating a rebuilt library 1970-01-01, and justified the
+  // exclusion with "either side of that conflict materializes the identical
+  // outcome, so it cannot reopen the original defect". That is false about
+  // the VALUE (which is indeed the constant `true`) and silent about the
+  // DOT. `sync_field_state`'s row for `(table, id, '__exists__')` also
+  // stores the winner's `(authorId, authorSeq)`, and `materializer.dart`
+  // reads it twice: `_creationDot` feeds § Architecture 10's tag
+  // name-collision tie-break, and `_generationDot` is folded into BOTH
+  // `contentKey`s minted by `_mintAutoMergeLoserPair`, where two devices
+  // have to agree or the auto-merge pair fails to dedup and shows up as a
+  // spurious permanent conflict record.
+  //
+  // With the exclusion shipped, a dominant `__exists__` seed won the
+  // conflict on recency and flipped that dot on EVERY entity on EVERY peer
+  // that pulled a post-reset seed. Round 5 restores the recessive stamp and
+  // fixes the 1970 problem where it actually lives — in the materializer's
+  // derivation of `createdAt` — so both properties hold at once. Both are
+  // asserted here, permanently, because each was invisible to the other's
+  // test.
+
+  Future<String?> existsWinnerDot(_Device d, String table, String id) async {
+    final rows = await (await d.db).query(
+      'sync_field_state',
+      columns: const ['authorId', 'authorSeq'],
+      where: 'entityTable = ? AND entityId = ? AND fieldName = ?',
+      whereArgs: [table, id, '__exists__'],
+    );
+    return rows.isEmpty
+        ? null
+        : '${rows.first['authorId']}#${rows.first['authorSeq']}';
+  }
+
+  test(
+    'F4: a peer pulling a post-reset seed keeps the entity\'s creation dot AND '
+    'a non-zero createdAt',
+    () async {
+      final backend = MockSyncBackend();
+      final a = _Device(sharedBackend: backend);
+      final b = _Device(sharedBackend: backend);
+      addTearDown(a.close);
+      addTearDown(b.close);
+
+      await insertSharedNote(await a.db);
+      await a.service.setUpDataset();
+      await a.service.syncNow();
+      await b.service.setUpDataset();
+      for (var i = 0; i < 2; i++) {
+        await b.service.syncNow();
+      }
+      expect(await noteTitle(b), 'original title');
+
+      final dotBefore = await existsWinnerDot(b, 'notes', 'n1');
+      expect(dotBefore, isNotNull, reason: 'precondition: B resolved n1');
+      final createdAtBefore = (await (await b.db).query(
+        'notes',
+        columns: const ['createdAt'],
+        where: 'id = ?',
+        whereArgs: ['n1'],
+      )).single['createdAt'];
+
+      await a.service.resetSyncState();
+      await a.service.setUpDataset();
+      await a.service.syncNow();
+      for (var i = 0; i < 2; i++) {
+        await b.service.syncNow();
+      }
+
+      expect(
+        await existsWinnerDot(b, 'notes', 'n1'),
+        dotBefore,
+        reason: 'the creation dot is an INPUT to the tag collision tie-break '
+            'and to both auto-merge contentKeys. A post-reset re-seed is a '
+            're-statement, so it must lose the __exists__ conflict too — not '
+            'only the field conflicts',
+      );
+      expect(
+        (await (await b.db).query(
+          'notes',
+          columns: const ['createdAt'],
+          where: 'id = ?',
+          whereArgs: ['n1'],
+        )).single['createdAt'],
+        createdAtBefore,
+        reason: 'and the row it already had is not re-dated either',
+      );
+    },
+  );
+
+  test(
+    'F4: a device rebuilding from a post-reset seed dates the library from a '
+    'real clock, never epoch 0',
+    () async {
+      final device = _Device();
+      addTearDown(device.close);
+      await seedUserContent(await device.db);
+      await device.service.setUpDataset();
+      await device.service.syncNow();
+
+      device.replaceBackendWithEmptyOne();
+      await expectLater(
+        device.service.syncNow(),
+        throwsA(isA<DatasetMissingException>()),
+      );
+      await device.service.resetSyncState();
+      await device.service.setUpDataset();
+      await device.service.syncNow();
+
+      // Every `__exists__` on the wire is recessive, i.e. wall 0 — that is
+      // the whole point, and it is what makes the materializer's derivation
+      // (not the operation's HLC) responsible for a plausible `createdAt`.
+      final existsOps = await (await device.db).query(
+        'sync_pending_ops',
+        columns: const ['hlc'],
+        where: "authorId LIKE 'seed:%' AND kind = '__exists__'",
+      );
+      expect(existsOps, isNotEmpty);
+      expect(
+        existsOps.map((r) => Hlc.parse(r['hlc'] as String)).toSet(),
+        {Hlc.zero},
+        reason: 'precondition: this test is worthless unless the __exists__ '
+            'seeds really are recessive',
+      );
+
+      final peerDb = DatabaseService.createNew();
+      addTearDown(peerDb.close);
+      final peerSession = SyncSession(peerDb);
+      for (var i = 0; i < 3; i++) {
+        await peerSession.run(device.backend);
+      }
+      final peer = await peerDb.database;
+
+      for (final probe in [
+        ('notes', 'n1'),
+        ('tags', 't1'),
+        ('conversations', 'c1'),
+      ]) {
+        final row = (await peer.query(
+          probe.$1,
+          where: 'id = ?',
+          whereArgs: [probe.$2],
+        )).single;
+        expect(
+          row['createdAt'],
+          greaterThan(0),
+          reason: '${probe.$1}/${probe.$2}: a wall-0 __exists__ must not date '
+              'the rebuilt row 1970-01-01 — materializer._materializeExists '
+              'falls back to the receiving device\'s own clock',
+        );
+      }
+
+      // And the membership rows one layer down (F5): the same fallback shape
+      // exists in `_insertMembershipRow`, masked today only by every
+      // createdAt-bearing membership scope declaring `payloadColumns:
+      // ['createdAt']`. Asserted rather than trusted.
+      final mappings = await peer.query('note_tags');
+      expect(mappings, hasLength(1));
     },
   );
 

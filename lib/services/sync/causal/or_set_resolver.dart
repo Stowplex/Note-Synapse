@@ -9,6 +9,85 @@
 //
 // M2.5, § Architecture 11.4 ("local causal engine").
 //
+// ---------------------------------------------------------------------
+// **`test/sync_protocol/replica.dart` is the CORRECTNESS REFERENCE, not
+// merely the historical source of this code — and any future divergence
+// from it must be written down here.**
+// ---------------------------------------------------------------------
+// That model is the artifact the M0 abstract suite (`exhaustive_test.dart`,
+// `randomized_test.dart`, `regression_test.dart`) actually proves properties
+// about; this file is a port of it, and inherits those properties only for
+// as long as it agrees with it. The M0 suite does not execute this file, so
+// it cannot notice a divergence — which is exactly how the M2.13 round-4
+// divergence shipped: an extra rule was added to `applySetRemove` here
+// (a `set_remove` naming an unresolvable dot superseded a member whose live
+// add-dots were all `Hlc.zero`), nothing recorded that the port had stopped
+// being a port, the abstract suite stayed green because it never ran this
+// code, and the rule turned out to be non-convergent under reordering.
+// Round 5 removed it and restored ordinary add-wins (see "post-reset
+// re-add" below).
+//
+// So: a deliberate deviation from the model is allowed — the faithful-port
+// note below is itself one axis of that discussion — but it must be
+// STATED, here, with its reason, and it must come with a test in
+// `test/sync_engine/causal/` that pins the new behaviour, because no other
+// test in this repository is looking.
+//
+// ---------------------------------------------------------------------
+// **The post-reset re-add residual (M2.13, review rounds 3–5).**
+// ---------------------------------------------------------------------
+// A dataset reset (`dataset_reset.dart`) re-seeds this device's whole
+// library. `field` operations from that re-seed are stamped [Hlc.zero] so
+// they LOSE every conflict they enter. That mechanism cannot reach here:
+// membership is add-wins plus `contentKey` dedup, and this resolver stores
+// an add's HLC without ever reading it.
+//
+// The consequence, stated plainly rather than mechanised away: **a reset can
+// resurrect a membership a peer deliberately removed.** The re-seed mints a
+// brand-new add-dot; the peer's `set_remove` names the retired dot, which
+// this replica has no record of, so it resolves nothing and the re-asserted
+// membership stays live — and then the peer pulls the re-add and applies
+// add-wins too.
+//
+// **This is a disclosed residual, and it is the right answer for this
+// schema.** It is convergent (every replica sees the same re-add and applies
+// the same rule), it loses nothing (requirement 2 is about losing edits, and
+// this preserves), and it is honest OR-Set semantics — the resetting device
+// genuinely IS re-asserting the membership.
+//
+// **Round 4's attempt to remove it instead, and why it was retracted.** The
+// rule was "a `set_remove` whose targets do not resolve supersedes a member
+// whose live add-dots are all recessive". Three confirmed defects:
+//
+//   1. **Order-dependent, so replicas diverge permanently.** Both conjuncts
+//      (`applied.isEmpty && missing.isNotEmpty`, and "every live dot is
+//      `Hlc.zero`") were predicates over `sync_set_state` as it stood when
+//      the remove happened to be processed. Add-then-remove left 0 live
+//      dots; remove-then-add left 1. Nothing constrains delivery order, so
+//      two devices ended with the tag assignment present on one and absent
+//      on the other, forever.
+//   2. **Unrecoverable.** `pull_phase.dart`'s `missing_referenced_dot` sweep
+//      gates every replay behind `_referencedDotIsResolvable`, which
+//      implements the ordinary matching rule and returns `false` in exactly
+//      the shape the new rule was written for — so the parked remove was
+//      never retried.
+//   3. **It did not fix its own target case** in the `deviceLogDiverged`
+//      state. A reset re-pulls this device's retired logs by design, and an
+//      ordinary post-trigger `set_add` carries `contentKey: null`, so it
+//      does not dedup against the GENESIS-keyed re-seed. Both dots are live,
+//      the peer's remove resolves the ordinary one, `applied` is non-empty,
+//      and the rule is skipped.
+//
+// Removing the residual for real needs a durable ledger of applied removes
+// — a permanent record that dot `X` was once live and has been removed —
+// which this milestone's schema does not have (see
+// [SetRemoveResult.missingTargets], whose own doc comment discloses that
+// absence). Without it, every candidate rule is a predicate over current
+// state, and every predicate over current state is order-dependent. The
+// residual is therefore recorded in `dataset_reset.dart`, in the reset
+// confirmation dialog's user-facing text, and pinned by an explicitly
+// reasoned test in `test/sync_engine/causal/or_set_resolver_test.dart`.
+//
 // **The one subtle, faithfully-preserved behavior**: `replica.dart`'s
 // `apply()` only ever calls `_materialize` (which is what actually inserts
 // into `setState`) for the FIRST-seen operation sharing a given
@@ -241,81 +320,7 @@ class OrSetResolver {
       applied.add(target);
     }
 
-    if (applied.isEmpty && missing.isNotEmpty) {
-      final supersededRecessive = await _supersedeRecessiveAdds(
-        txn,
-        entityTable: entityTable,
-        entityId: entityId,
-        fieldName: fieldName,
-        memberUuid: memberUuid,
-      );
-      if (supersededRecessive) {
-        return SetRemoveResult(appliedTargets: targetDots, missingTargets: []);
-      }
-    }
-
     return SetRemoveResult(appliedTargets: applied, missingTargets: missing);
-  }
-
-  /// A `set_remove` supersedes a **recessive** (post-reset) add of the same
-  /// member, even though it names a dot this replica has never seen.
-  ///
-  /// Why this exception exists, and why it is safe (M2.13, review round 3):
-  /// `Hlc.zero`-stamped seeds were introduced so a post-reset re-seed LOSES
-  /// rather than wins — but that mechanism reaches only field conflicts,
-  /// because this resolver is add-wins plus `contentKey` dedup and stores
-  /// the HLC without ever reading it. So a reset re-minted every live
-  /// membership under a brand-new GENESIS dot, a peer's already-published
-  /// `set_remove` targeting the OLD dot parked in `missing_referenced_dot`
-  /// forever, and a tag assignment (or note/message linkage) the user had
-  /// deliberately removed came back — on both devices. Same defect class as
-  /// the one recessive seeds exist to close, surviving because "recessive"
-  /// had been reasoned about only against the field path.
-  ///
-  /// The rule fires only when **every** live add-dot for the member is
-  /// recessive, which is exactly the "all this replica has is its own
-  /// re-statement" case:
-  ///
-  ///  * Outside a reset no operation is ever stamped [Hlc.zero], so no
-  ///    ordinary path can reach this branch at all — add-wins is untouched.
-  ///  * A genuine concurrent re-add (post-reset or otherwise) is drained
-  ///    through the ordinary path with a real generated HLC, so the member
-  ///    has a non-recessive live dot and the rule does not fire. Add-wins
-  ///    still beats a remove that never saw it, as it must.
-  ///  * A remove whose target resolves through [DotRedirectResolver] never
-  ///    reaches here — `applied` is non-empty and the caller sees an
-  ///    ordinary removal.
-  ///
-  /// Returning every target as applied (rather than parking the unresolved
-  /// ones) is deliberate: the membership is gone, so re-attempting this
-  /// remove later has nothing left to act on, and leaving a
-  /// `missing_referenced_dot` entry behind would be a queue row no arrival
-  /// can ever clear.
-  Future<bool> _supersedeRecessiveAdds(
-    DatabaseExecutor txn, {
-    required String entityTable,
-    required String entityId,
-    required String fieldName,
-    required String memberUuid,
-  }) async {
-    const where =
-        'entityTable = ? AND entityId = ? AND fieldName = ? AND memberUuid = ?';
-    final args = [entityTable, entityId, fieldName, memberUuid];
-
-    final rows = await txn.query(
-      'sync_set_state',
-      columns: const ['hlc'],
-      where: where,
-      whereArgs: args,
-    );
-    if (rows.isEmpty) return false;
-
-    final recessiveHlc = Hlc.zero.toString();
-    final allRecessive = rows.every((r) => r['hlc'] == recessiveHlc);
-    if (!allRecessive) return false;
-
-    await txn.delete('sync_set_state', where: where, whereArgs: args);
-    return true;
   }
 
   /// Direct port of `setContains`: is there at least one live add-dot for
