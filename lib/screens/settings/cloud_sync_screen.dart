@@ -1092,11 +1092,18 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
         l10n.cloudSyncHealthWaitingOnDot(issue.count, issue.detail),
       SyncHealthIssueKind.membershipNotBuilt =>
         l10n.cloudSyncHealthMembershipNotBuilt(issue.count, issue.detail),
-      // The one backlog kind whose remedy is on THIS device rather than on
-      // another one, so its string names that remedy: the entity cannot be
-      // built because a duplicate local row already holds its identity (two
-      // installs of the same bundled mini app), and deleting that duplicate
-      // is what unblocks it. See `SyncHealthIssueKind.entityIdentityConflict`.
+      // The one backlog kind with NO remedy — and the string deliberately
+      // names none, which is what this comment used to get wrong (M2.14
+      // review round 3, finding M3). It claimed the remedy was "on THIS
+      // device… deleting that duplicate is what unblocks it". Both halves are
+      // false: the entity cannot be built because a duplicate local row holds
+      // its identity (two installs of the same bundled mini app), and
+      // `user_apps` is hard-delete guarded — so deleting it writes a
+      // tombstone and leaves the row, and its `uuid`, occupying the UNIQUE
+      // index. Verified: after the delete the queue and the health snapshot
+      // are byte-identical. The entry is retryable mechanically; no user
+      // action available today reaches that state, and real reconciliation is
+      // M4's identity mapping. See `SyncHealthIssueKind.entityIdentityConflict`.
       SyncHealthIssueKind.entityIdentityConflict =>
         l10n.cloudSyncHealthIdentityConflict(issue.count, issue.detail),
     };

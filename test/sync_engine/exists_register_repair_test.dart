@@ -39,6 +39,7 @@ import 'package:note_synapse/services/sync/device_identity.dart';
 import 'package:note_synapse/services/sync/hlc.dart';
 import 'package:note_synapse/services/sync/materializer.dart';
 import 'package:note_synapse/services/sync/outbox_drainer.dart';
+import 'package:note_synapse/services/sync/pull_phase.dart';
 import 'package:note_synapse/services/sync/seed_scanner.dart';
 import 'package:note_synapse/services/sync/seq_counter.dart';
 import 'package:note_synapse/services/sync/sync_health.dart';
@@ -70,6 +71,19 @@ class _Device {
     HybridLogicalClock(databaseService),
   );
   Future<void> close() => databaseService.close();
+
+  /// One `sync_state` value, or null. Used by the round-3 tests to assert
+  /// which repair arm actually completed.
+  Future<String?> stateKey(String key) async {
+    final rows = await (await db).query(
+      'sync_state',
+      columns: const ['value'],
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first['value'] as String?;
+  }
 }
 
 /// Marks this device as one that finished its seed scan long ago — the state
@@ -1212,5 +1226,220 @@ void main() {
       );
       expect(encodeExistsPayloadJson(const [], const {}), 'true');
     });
+  });
+
+  // ── M2.14 review round 3 ────────────────────────────────────────────────
+
+  group('round 3 — the seed gate applies to arm 2 no longer (H1)', () {
+    /// A device with one parked queue entry. `SeedScanner` withholds
+    /// `seedScanCompletedAtKey` whenever `_isPristine` returns `queued`, and
+    /// that state can be permanent — a `missing_referenced_dot` naming an
+    /// add-dot in a log a peer's reset retired never resolves, and the design
+    /// states retired logs are never reclaimed.
+    Future<void> parkAnEntry(Database db) => db.insert('sync_materialize_queue', {
+      'blockingReason': missingReferencedDotBlockingReason,
+      'entityTable': 'notes',
+      'entityId': 'n-parked',
+      'fieldName': 'title',
+      'operationJson': '{}',
+      'blockingKey': 'nope#1',
+      'enqueuedAt': 1,
+    });
+
+    test(
+      'arm 2 repairs an orphaned register even though the seed never completed',
+      () async {
+        final db = await a.db;
+        await parkAnEntry(db);
+        // A complete register with no local row — defect A's cohort.
+        await db.insert('sync_field_state', {
+          'entityTable': 'subnotes',
+          'entityId': 's-orphan',
+          'fieldName': '__exists__',
+          'valueJson': jsonEncode({'noteId': 'n1'}),
+          'hlc': Hlc(4321, 0).toString(),
+          'authorId': 'remote',
+          'authorSeq': 1,
+          'frontierJson': '{}',
+          'updatedAt': 1,
+        });
+        // NOT calling _markSeedComplete: this is the stuck-in-deferral device.
+
+        await a.drainer().drain();
+
+        final queued = await db.query(
+          'sync_materialize_queue',
+          where: 'entityTable = ? AND fieldName = ?',
+          whereArgs: ['subnotes', '__exists__'],
+        );
+        expect(
+          queued,
+          hasLength(1),
+          reason:
+              'arm 2 mints nothing — it enqueues a local materialization retry '
+              'for a register this device already holds — so the seed-scan '
+              'gate that protects arm 1 has no bearing on it. Gating both '
+              'together let one parked entry disable the repair forever.',
+        );
+        expect(
+          await a.stateKey(OutboxDrainer.existsOrphanRepairStateKey),
+          isNotNull,
+        );
+      },
+    );
+
+    test(
+      'CONTROL: arm 1 still waits for the seed, so it cannot preempt the '
+      'seed namespace',
+      () async {
+        final db = await a.db;
+        await parkAnEntry(db);
+        await db.insert('notes', {
+          'id': 'n1',
+          'title': 'T',
+          'content': '',
+          'type': 'note',
+          'createdAt': 1,
+          'updatedAt': 1,
+        });
+        await db.insert('subnotes', {
+          'id': 's1',
+          'noteId': 'n1',
+          'name': 'S',
+          'content': '',
+          'createdAt': 1,
+        });
+
+        await a.drainer().drain();
+
+        expect(
+          await a.stateKey(OutboxDrainer.existsRegisterRepairStateKey),
+          isNull,
+          reason:
+              'arm 1 MINTS through the ordinary namespace, so running it '
+              'before the seed finishes would preempt the seed`s own `seed:` '
+              'namespace and destroy its GENESIS contentKeys. Its marker must '
+              'stay unwritten so a later round retries it.',
+        );
+      },
+    );
+  });
+
+  group('round 3 — a NOT NULL FK with a DEFAULT fails closed (M1)', () {
+    test('a reference column is carried even when it has a SQL default', () async {
+      final db = await a.db;
+      await db.execute(
+        'CREATE TABLE probe_child('
+        '  id TEXT PRIMARY KEY,'
+        '  ownerId TEXT NOT NULL DEFAULT \'\' REFERENCES notes(id),'
+        '  createdAt INTEGER NOT NULL DEFAULT 0'
+        ')',
+      );
+      const scope = SyncEntityCaptureScope(
+        table: 'probe_child',
+        idColumn: 'id',
+        syncScopeColumns: [],
+      );
+
+      final syncability = await entitySyncability(db, scope);
+
+      expect(
+        syncability.existsCarriedColumns,
+        ['ownerId'],
+        reason:
+            'a default satisfies NOT NULL and names no existing row, so '
+            'omitting the column let SQLite write the default and the INSERT '
+            'threw FOREIGN KEY constraint failed inside sweepMissingExists — '
+            'escaping the whole session, the exact wedge the other three '
+            'guards exist to prevent. ConflictAlgorithm.ignore does not '
+            'swallow an FK failure.',
+      );
+      expect(syncability.canSync, isTrue);
+    });
+
+    test(
+      'CONTROL: a non-reference NOT NULL column with a default is still '
+      'excused, so nothing that syncs today stops',
+      () async {
+        final db = await a.db;
+        await db.execute(
+          'CREATE TABLE probe_plain('
+          '  id TEXT PRIMARY KEY,'
+          '  label TEXT NOT NULL DEFAULT \'x\','
+          '  createdAt INTEGER NOT NULL DEFAULT 0'
+          ')',
+        );
+        const scope = SyncEntityCaptureScope(
+          table: 'probe_plain',
+          idColumn: 'id',
+          syncScopeColumns: [],
+        );
+
+        final syncability = await entitySyncability(db, scope);
+        expect(syncability.existsCarriedColumns, isEmpty);
+        expect(syncability.canSync, isTrue);
+      },
+    );
+  });
+
+  group('round 3 — identity conflicts are reported once, not twelve times (H2)', () {
+    test(
+      'field operations parked behind an identity conflict are not ALSO '
+      'reported as waiting for an entity that will never arrive',
+      () async {
+        final db = await a.db;
+        Future<void> park(String reason, String field) =>
+            db.insert('sync_materialize_queue', {
+              'blockingReason': reason,
+              'entityTable': 'user_apps',
+              'entityId': 'app-peer',
+              'fieldName': field,
+              'operationJson': '{}',
+              'blockingKey': 'user_apps:app-peer',
+              'enqueuedAt': 1,
+            });
+        await park(existsIdentityConflictBlockingReason, '__exists__');
+        for (final f in ['name', 'description', 'steps']) {
+          await park(missingExistsBlockingReason, f);
+        }
+
+        final health = await recomputeSyncHealth(a.databaseService);
+        final kinds = health.issues.map((i) => i.kind).toSet();
+
+        expect(kinds, contains(SyncHealthIssueKind.entityIdentityConflict));
+        expect(
+          kinds,
+          isNot(contains(SyncHealthIssueKind.waitingOnMissingEntity)),
+          reason:
+              'two devices that installed the same bundled plugin land here, '
+              'and reporting eleven "waiting for user_apps/app-peer" rows '
+              'beside the one true cause reproduces the exact signature of '
+              'the pre-M2.14 bug this milestone fixed',
+        );
+      },
+    );
+
+    test(
+      'CONTROL: an ordinary missing-entity backlog with no identity conflict '
+      'is still reported',
+      () async {
+        final db = await a.db;
+        await db.insert('sync_materialize_queue', {
+          'blockingReason': missingExistsBlockingReason,
+          'entityTable': 'subnotes',
+          'entityId': 's1',
+          'fieldName': 'name',
+          'operationJson': '{}',
+          'blockingKey': 'notes:n1',
+          'enqueuedAt': 1,
+        });
+
+        final health = await recomputeSyncHealth(a.databaseService);
+        expect(
+          health.issues.map((i) => i.kind),
+          contains(SyncHealthIssueKind.waitingOnMissingEntity),
+        );
+      },
+    );
   });
 }

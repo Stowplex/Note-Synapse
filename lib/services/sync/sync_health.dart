@@ -550,13 +550,51 @@ Future<SyncHealth> recomputeSyncHealth(
   }
 
   // ── 4/4: the materialize-queue backlog, split by what it is waiting on
-  Future<void> addQueueIssue(String reason, SyncHealthIssueKind kind) async {
-    final rows = await db.query(
+  // Entities already reported under a MORE specific kind. A field operation
+  // parked on `missing_exists` for an entity whose `__exists__` is itself
+  // parked on an identity conflict is not independently waiting for anything
+  // — it is the same one fact, counted again per field.
+  //
+  // **This is not tidying; the double-report reproduced the exact symptom
+  // M2.14 was written to fix** (review round 3, finding H2). Two devices that
+  // installed the same bundled contrib plugin hold `user_apps` rows with an
+  // identical `uuid` and different `id`s, so M2.14's repair pass republishes
+  // both and each device lands on `entityIdentityConflict/1` PLUS
+  // `waitingOnMissingEntity/11` — eleven rows telling the user to wait for
+  // something that provably never arrives, in a state indistinguishable on
+  // this surface from the pre-M2.14 bug whose signature was "user_apps
+  // accumulated 11 permanent missing_exists entries". Saying one true thing
+  // beats saying twelve of which eleven mislead.
+  final identityConflictEntities = <String>{
+    for (final row in await db.query(
+      'sync_materialize_queue',
+      columns: const ['entityTable', 'entityId'],
+      where: 'blockingReason = ?',
+      whereArgs: [existsIdentityConflictBlockingReason],
+    ))
+      '${row['entityTable']}/${row['entityId']}',
+  };
+
+  Future<void> addQueueIssue(
+    String reason,
+    SyncHealthIssueKind kind, {
+    bool suppressIdentityConflicted = false,
+  }) async {
+    var rows = await db.query(
       'sync_materialize_queue',
       columns: const ['entityTable', 'entityId', 'enqueuedAt'],
       where: 'blockingReason = ?',
       whereArgs: [reason],
     );
+    if (suppressIdentityConflicted && identityConflictEntities.isNotEmpty) {
+      rows = rows
+          .where(
+            (row) => !identityConflictEntities.contains(
+              '${row['entityTable']}/${row['entityId']}',
+            ),
+          )
+          .toList();
+    }
     if (rows.isEmpty) return;
     final subjects = <String>{
       for (final row in rows) '${row['entityTable']}/${row['entityId']}',
@@ -582,6 +620,7 @@ Future<SyncHealth> recomputeSyncHealth(
   await addQueueIssue(
     missingExistsBlockingReason,
     SyncHealthIssueKind.waitingOnMissingEntity,
+    suppressIdentityConflicted: true,
   );
   await addQueueIssue(
     missingReferencedDotBlockingReason,

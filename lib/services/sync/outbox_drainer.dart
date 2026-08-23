@@ -351,6 +351,18 @@ class OutboxDrainer {
   static const String existsRegisterRepairStateKey =
       'exists_register_repair_v2_completed_at';
 
+  /// `sync_state` key marking that the ORPHAN half (arm 2 — a complete
+  /// register with no local row) has run.
+  ///
+  /// **Separate from [existsRegisterRepairStateKey] because the two arms have
+  /// different preconditions** (review round 3, finding H1). Arm 1 waits for
+  /// the seed scan; arm 2 must not, because a device whose seed is
+  /// indefinitely deferred is exactly the device whose orphaned registers
+  /// nothing else will ever rebuild. One shared marker meant a single parked
+  /// queue entry could disable the whole repair permanently.
+  static const String existsOrphanRepairStateKey =
+      'exists_orphan_repair_v1_completed_at';
+
   /// **One reconciliation of `__exists__` registers against real rows, in
   /// both directions — the single mechanism for defects that were reported
   /// as two.**
@@ -460,12 +472,44 @@ class OutboxDrainer {
     final markers = await db.query(
       'sync_state',
       columns: const ['key'],
-      where: 'key IN (?, ?)',
-      whereArgs: [existsRegisterRepairStateKey, seedScanCompletedAtKey],
+      where: 'key IN (?, ?, ?)',
+      whereArgs: [
+        existsRegisterRepairStateKey,
+        existsOrphanRepairStateKey,
+        seedScanCompletedAtKey,
+      ],
     );
     final keys = {for (final row in markers) row['key'] as String};
-    if (keys.contains(existsRegisterRepairStateKey)) return;
-    if (!keys.contains(seedScanCompletedAtKey)) return;
+
+    // **The seed gate applies to arm 1 ONLY, and the two arms therefore carry
+    // separate markers** (review round 3, finding H1). Gating the whole pass
+    // was this fix round introducing its own failure mode: `SeedScanner`
+    // withholds [seedScanCompletedAtKey] whenever ANY `sync_materialize_queue`
+    // row defers a local entity+field, and that state can be permanent — a
+    // `missing_referenced_dot` for an add-dot in a log a peer's reset retired
+    // never resolves, and retired logs are never reclaimed. Reproduced: one
+    // parked entry, three full rounds, neither marker ever written.
+    //
+    // The split is sound because the gate's own argument is arm-1-specific.
+    // Arm 1 MINTS, through the ordinary namespace, so running it mid-seed
+    // would preempt the seed's `seed:` namespace and its GENESIS
+    // `contentKey`s. Arm 2 mints NOTHING — it enqueues a `missing_exists` row
+    // for `sweepMissingExists`, which is pure local materialization of a
+    // register this device already holds. There is no namespace to preempt
+    // and no `contentKey` to destroy, so nothing about the seed's state makes
+    // it unsafe.
+    //
+    // The asymmetry also matters in the other direction: a device stuck in
+    // seed deferral does NOT need arm 1, because the seed scan itself walks
+    // local rows and mints their `__exists__`. It is arm 2 that has no
+    // substitute there — the seed only ever walks local rows, so a complete
+    // register with no row (defect A) would go unrepaired forever, which is
+    // precisely the cohort this whole mechanism exists for.
+    final arm1Done = keys.contains(existsRegisterRepairStateKey);
+    final arm2Done = keys.contains(existsOrphanRepairStateKey);
+    final runArm1 = !arm1Done && keys.contains(seedScanCompletedAtKey);
+    final runArm2 = !arm2Done;
+    if (!runArm1 && !runArm2) return;
 
     final now = DateTime.now().millisecondsSinceEpoch;
     for (final scope in DatabaseService.syncEntityCaptureScopes) {
@@ -484,6 +528,7 @@ class OutboxDrainer {
       if (!syncability.canSync) continue;
 
       // ── Arm 1: a local row with no complete register ──────────────────
+      if (runArm1) {
       final rowsWithoutRegister = await db.rawQuery(
         'SELECT CAST(t.${scope.idColumn} AS TEXT) AS entityId, '
         's.valueJson AS valueJson '
@@ -508,8 +553,10 @@ class OutboxDrainer {
           'touchedAt': now,
         });
       }
+      }
 
       // ── Arm 2: a complete register with no local row ──────────────────
+      if (!runArm2) continue;
       final registersWithoutRow = await db.rawQuery(
         'SELECT s.entityId AS entityId, s.valueJson AS valueJson, '
         's.hlc AS hlc '
@@ -563,10 +610,22 @@ class OutboxDrainer {
       }
     }
 
-    await db.insert('sync_state', {
-      'key': existsRegisterRepairStateKey,
-      'value': '$now',
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    // Each arm marks its own completion. Arm 1's marker is only written when
+    // it actually ran, so a device that drained while its seed scan was still
+    // deferred retries arm 1 on a later round rather than being permanently
+    // skipped — the H1 failure this split exists to remove.
+    if (runArm1) {
+      await db.insert('sync_state', {
+        'key': existsRegisterRepairStateKey,
+        'value': '$now',
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    if (runArm2) {
+      await db.insert('sync_state', {
+        'key': existsOrphanRepairStateKey,
+        'value': '$now',
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
   }
 
   /// The wall-clock component of a stored `sync_field_state.hlc`, or `0` when

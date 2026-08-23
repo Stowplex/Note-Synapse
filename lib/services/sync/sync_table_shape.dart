@@ -445,11 +445,28 @@ Future<EntitySyncability> _computeEntitySyncability(
       }
       continue;
     }
-    if (!notNull || hasDefault) continue;
+    if (!notNull) continue;
+    // **`hasDefault` is checked AFTER the reference test, not before** (review
+    // round 3, finding M1 — a fourth instance of the fail-open class the three
+    // guards above were added to close, found in the same commit that claimed
+    // to have closed it).
+    //
+    // A `NOT NULL` FOREIGN KEY column outside sync scope WITH a SQL default
+    // used to `continue` here, so the table classified as fully syncable with
+    // no carried columns and no blocker. `_materializeExists` then omitted the
+    // column, SQLite wrote the declared default, and the `INSERT` threw
+    // `FOREIGN KEY constraint failed` — inside `sweepMissingExists`, which
+    // escapes the whole session. `ConflictAlgorithm.ignore` does not swallow a
+    // foreign-key failure (verified: it throws), so there is no net under it.
+    //
+    // A default satisfies `NOT NULL`; it does not name an existing row. So a
+    // reference column is carried regardless of whether it has one, and only
+    // a genuinely non-reference column may be excused by a default.
     if (foreignKeys.containsKey(name) || singleColumnUniques.contains(name)) {
       carried.add(name);
       continue;
     }
+    if (hasDefault) continue;
     // Not a reference, not an identity — nothing this protocol carries can
     // supply it. Recorded rather than returned immediately so the carried
     // list is complete either way (see [EntitySyncability.existsCarried
@@ -667,7 +684,7 @@ const String bareExistsPayloadJson = 'true';
 ///  3. **Serialized as Dart's `jsonEncode` of a `Map<String, Object?>`
 ///     emits it: no whitespace anywhere, `"` string quoting, `:` and `,`
 ///     with nothing around them.** So one carried column named `noteId`
-///     with value `n1` is exactly the 17 bytes `{"noteId":"n1"}` — not
+///     with value `n1` is exactly the 15 bytes `{"noteId":"n1"}` — not
 ///     `{"noteId": "n1"}`, which is what Python's `json.dumps` defaults
 ///     produce and what a reimplementer would most naturally write. Pinned
 ///     against a byte-literal (not against `jsonEncode` of itself, which
