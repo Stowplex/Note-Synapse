@@ -682,7 +682,6 @@
       }
     }
   },
-  "attachmentMissing": "Attachment missing",
   "attachmentUnavailable": "Attachment unavailable",
   "pdfPreviewUnavailable": "PDF preview not available. Use the saved attachment to view.",
   "selectFileLocation": "Select file location",
@@ -1279,6 +1278,9 @@
   },
   "userAppNoRunnableCode": "This app's code hasn't arrived on this device",
   "userAppNoRunnableCodeDetail": "Its details synced, but app code isn't uploaded to cloud sync yet. Open it on the device where you created it.",
+  "userAppNoRunnableCodeLocal": "This app has no code yet",
+  "userAppNoRunnableCodeLocalDetail": "No version of its code was ever saved, so its creation probably didn't finish. Edit the app to generate it again.",
+  "aiToolCodeNotSynced": "Unavailable — this tool's code hasn't arrived on this device yet.",
   "cloudSyncHealthTablesNotSynced": "{count, plural, =1{1 kind of item does not sync yet} other{{count} kinds of item do not sync yet}}: {detail}",
   "@cloudSyncHealthTablesNotSynced": {
     "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
@@ -1297,6 +1299,10 @@
   },
   "cloudSyncHealthMembershipNotBuilt": "{count, plural, =1{1 link could not be recreated} other{{count} links could not be recreated}}: {detail}",
   "@cloudSyncHealthMembershipNotBuilt": {
+    "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
+  },
+  "cloudSyncHealthIdentityConflict": "{count, plural, =1{1 item from another device could not be added} other{{count} items from another device could not be added}}, because this device already has a copy of it: {detail}",
+  "@cloudSyncHealthIdentityConflict": {
     "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
   },
   "cloudSyncHealthSince": "waiting since {time}",

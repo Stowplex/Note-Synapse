@@ -3008,12 +3008,6 @@ abstract class AppLocalizations {
   /// **'Error generating PDF: {error}'**
   String errorGeneratingPdf(String error);
 
-  /// No description provided for @attachmentMissing.
-  ///
-  /// In en, this message translates to:
-  /// **'Attachment not found.'**
-  String get attachmentMissing;
-
   /// No description provided for @attachmentUnavailable.
   ///
   /// In en, this message translates to:
@@ -5810,6 +5804,24 @@ abstract class AppLocalizations {
   /// **'Its details synced, but app code isn\'t uploaded to cloud sync yet. Open it on the device where you created it.'**
   String get userAppNoRunnableCodeDetail;
 
+  /// No description provided for @userAppNoRunnableCodeLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'This app has no code yet'**
+  String get userAppNoRunnableCodeLocal;
+
+  /// No description provided for @userAppNoRunnableCodeLocalDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'No version of its code was ever saved, so its creation probably didn\'t finish. Edit the app to generate it again.'**
+  String get userAppNoRunnableCodeLocalDetail;
+
+  /// No description provided for @aiToolCodeNotSynced.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable — this tool\'s code hasn\'t arrived on this device yet.'**
+  String get aiToolCodeNotSynced;
+
   /// No description provided for @cloudSyncHealthTablesNotSynced.
   ///
   /// In en, this message translates to:
@@ -5839,6 +5851,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 link could not be recreated} other{{count} links could not be recreated}}: {detail}'**
   String cloudSyncHealthMembershipNotBuilt(int count, String detail);
+
+  /// No description provided for @cloudSyncHealthIdentityConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 item from another device could not be added} other{{count} items from another device could not be added}}, because this device already has a copy of it: {detail}'**
+  String cloudSyncHealthIdentityConflict(int count, String detail);
 
   /// No description provided for @cloudSyncHealthSince.
   ///
@@ -6865,6 +6883,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Start by asking the AI about your note.'**
   String get startConversationHint;
+
+  /// No description provided for @attachmentMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Attachment not found.'**
+  String get attachmentMissing;
 
   /// No description provided for @unsupportedAttachment.
   ///

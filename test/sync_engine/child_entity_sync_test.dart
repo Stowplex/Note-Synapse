@@ -829,7 +829,7 @@ void main() {
         await dbA.delete(
           'sync_state',
           where: 'key = ?',
-          whereArgs: [OutboxDrainer.existsPayloadUpgradeStateKey],
+          whereArgs: [OutboxDrainer.existsRegisterRepairStateKey],
         );
 
         // A fresh peer that has never seen this subnote.
@@ -880,7 +880,7 @@ void main() {
       await dbA.delete(
         'sync_state',
         where: 'key = ?',
-        whereArgs: [OutboxDrainer.existsPayloadUpgradeStateKey],
+        whereArgs: [OutboxDrainer.existsRegisterRepairStateKey],
       );
       await a.session.run(backend);
 

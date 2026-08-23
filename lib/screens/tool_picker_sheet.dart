@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../models/mcp_endpoint.dart';
 import '../models/user_app.dart';
 import '../services/service_locator.dart';
@@ -165,15 +166,29 @@ class _UserDefinedToolsTabState extends State<_UserDefinedToolsTab> {
 
     final entries = <_AppBundleEntry>[];
     for (final app in toolApps) {
-      if (app.selectedRevisionId == null) continue;
+      // M2.14: the `user_apps` row syncs but `app_revisions` (the code) does
+      // not, so on a second device an AI tool routinely exists with no
+      // runnable revision. Silently dropping it here made the tool look
+      // deleted; it is listed disabled instead, so the user can see that the
+      // tool exists and that only its code is missing.
+      if (app.selectedRevisionId == null) {
+        entries.add(_AppBundleEntry(app: app, bundle: null));
+        continue;
+      }
       final revision = await userAppService.getAppRevision(
         app.selectedRevisionId!,
       );
-      if (revision == null) continue;
+      if (revision == null) {
+        entries.add(_AppBundleEntry(app: app, bundle: null));
+        continue;
+      }
       final bundle = await AiToolService.loadAppBundle(
         app: app,
         revision: revision,
       );
+      // A null bundle here is a different failure — the code DID arrive but
+      // declares no tools — so it stays skipped rather than being reported
+      // as un-synced code.
       if (bundle == null) continue;
       entries.add(_AppBundleEntry(app: app, bundle: bundle));
     }
@@ -202,6 +217,21 @@ class _UserDefinedToolsTabState extends State<_UserDefinedToolsTab> {
             final entry = entries[index];
             final app = entry.app;
             final bundle = entry.bundle;
+            final l10n = AppLocalizations.of(context)!;
+            if (bundle == null) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ListTile(
+                    enabled: false,
+                    leading: const Icon(Icons.cloud_off_outlined),
+                    title: Text(app.name),
+                    subtitle: Text(l10n.aiToolCodeNotSynced),
+                  ),
+                  const Divider(height: 1),
+                ],
+              );
+            }
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -246,7 +276,10 @@ class _UserDefinedToolsTabState extends State<_UserDefinedToolsTab> {
 
 class _AppBundleEntry {
   final UserApp app;
-  final AiToolAppBundle bundle;
+
+  /// Null when the app has no runnable revision on this device — its code
+  /// has not arrived. Rendered as a disabled row rather than dropped.
+  final AiToolAppBundle? bundle;
 
   _AppBundleEntry({required this.app, required this.bundle});
 }

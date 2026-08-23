@@ -1092,6 +1092,13 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
         l10n.cloudSyncHealthWaitingOnDot(issue.count, issue.detail),
       SyncHealthIssueKind.membershipNotBuilt =>
         l10n.cloudSyncHealthMembershipNotBuilt(issue.count, issue.detail),
+      // The one backlog kind whose remedy is on THIS device rather than on
+      // another one, so its string names that remedy: the entity cannot be
+      // built because a duplicate local row already holds its identity (two
+      // installs of the same bundled mini app), and deleting that duplicate
+      // is what unblocks it. See `SyncHealthIssueKind.entityIdentityConflict`.
+      SyncHealthIssueKind.entityIdentityConflict =>
+        l10n.cloudSyncHealthIdentityConflict(issue.count, issue.detail),
     };
     final since = issue.oldestEntryAt;
     if (since == null) return line;

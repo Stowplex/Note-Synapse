@@ -8,6 +8,8 @@ import '../providers/app_provider.dart';
 import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import '../models/note.dart';
+import '../services/service_locator.dart';
+import '../services/sync/cloud_sync_service.dart';
 import '../services/user_app_service.dart';
 import '../services/logger_service.dart';
 import '../utils/file_utils.dart';
@@ -49,11 +51,37 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
   AppRevision? _selectedRevision;
   bool _showRevisionDetails = false;
 
+  /// Whether cloud sync is actually switched on and set up on THIS device.
+  ///
+  /// Read once, from [CloudSyncService.status] — which is deliberately
+  /// local-only (an auth-token read plus a couple of `sync_state` rows, no
+  /// backend call), so this costs no network and works offline. It exists
+  /// solely so [_buildNoRevisionState] can tell the two ways of reaching
+  /// "this app has no code" apart. Starts `false` so the local-only wording
+  /// is what a user sees if the read never completes: claiming "your other
+  /// device has it" to someone who has never enabled sync is the worse of
+  /// the two possible wrong answers.
+  bool _cloudSyncEnabled = false;
+
   @override
   void initState() {
     super.initState();
     _validateNoteActionApp();
     _loadRevisions();
+    _loadCloudSyncEnabled();
+  }
+
+  Future<void> _loadCloudSyncEnabled() async {
+    if (!getIt.isRegistered<CloudSyncService>()) return;
+    try {
+      final status = await getIt<CloudSyncService>().status();
+      if (!mounted) return;
+      setState(() => _cloudSyncEnabled = status.canSync);
+    } catch (e) {
+      LoggerService.warning(
+        'UserAppViewScreen: could not read cloud sync status: $e',
+      );
+    }
   }
 
   @override
@@ -513,9 +541,21 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
   /// inline field sync. A user opening a synced app would have got a silent
   /// white screen. Saying which of the two situations they are in is the
   /// least this can do until the code itself travels.
+  ///
+  /// The two situations are told apart by [_cloudSyncEnabled]: with sync on
+  /// and set up, the app row plausibly arrived from a peer and its code is
+  /// still to follow, so the remedy is "open it where you made it". With
+  /// sync off there is no peer and no code in flight — the creation simply
+  /// never finished — so pointing at another device would be a lie.
   Widget _buildNoRevisionState() {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
+    final title = _cloudSyncEnabled
+        ? l10n.userAppNoRunnableCode
+        : l10n.userAppNoRunnableCodeLocal;
+    final detail = _cloudSyncEnabled
+        ? l10n.userAppNoRunnableCodeDetail
+        : l10n.userAppNoRunnableCodeLocalDetail;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -523,19 +563,21 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.cloud_off_outlined,
+              _cloudSyncEnabled
+                  ? Icons.cloud_off_outlined
+                  : Icons.code_off_outlined,
               size: 48,
               color: theme.colorScheme.outline,
             ),
             const SizedBox(height: 16),
             Text(
-              l10n.userAppNoRunnableCode,
+              title,
               textAlign: TextAlign.center,
               style: theme.textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
             Text(
-              l10n.userAppNoRunnableCodeDetail,
+              detail,
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,

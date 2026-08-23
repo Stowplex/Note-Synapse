@@ -37,7 +37,8 @@
 //   3. The `sync_materialize_queue` backlog, by reason — operations waiting
 //      on a prerequisite, including ones whose prerequisite can never come.
 //   4. Tables gated out of minting entirely because a receiving device
-//      could never build their rows (`entitySyncability`).
+//      could never build their rows (`entitySyncability`) — reported when
+//      this device holds either those rows or the rows that own them.
 //
 // **Deliberately a snapshot, not an event log.** Health is recomputed from
 // durable state at the end of every sync and stored under one `sync_state`
@@ -183,10 +184,20 @@ enum SyncHealthIssueKind {
   ///
   /// The honest, actionable signal for a file that did not travel is
   /// per-attachment and already exists at the point of use: the note-detail
-  /// card greys the attachment and prints "File not found" in red with its
-  /// tap disabled, and the immersive viewer shows `l10n.attachmentMissing`.
-  /// `app_revisions` needs no sibling either — it is `canSync == false`, so
-  /// THIS kind already names it, with `appCode` as the reason.
+  /// card greys the attachment and shows `l10n.attachmentMissing` in red with
+  /// its tap disabled, and the immersive viewer shows the same string. (Both
+  /// were true of the immersive viewer only until review round 1 — the
+  /// note-detail card printed a hardcoded English literal, in a state M2.14
+  /// promoted from rare to routine on every second device. And
+  /// `attachmentMissing` was declared twice in `app_en.arb`, so the name this
+  /// sentence points a maintainer at did not resolve to one string; the dead
+  /// duplicate is gone.)
+  ///
+  /// `app_revisions` needs no sibling kind either — it is `canSync == false`,
+  /// so THIS kind names it, with `appCode` as the reason. That was true only
+  /// on the AUTHORING device until review round 1: see `recomputeSyncHealth`'s
+  /// own block 2 for the `count == 0` guard that made it silent on exactly
+  /// the receiving device M2.14 creates.
   tablesNotSynced,
 
   /// Remote operations parked after their apply/materialize step failed.
@@ -200,6 +211,24 @@ enum SyncHealthIssueKind {
 
   /// `set_add`s whose membership row could not be fully built.
   membershipNotBuilt,
+
+  /// **M2.14, review round 1.** An entity row could not be created because a
+  /// DIFFERENT local row already holds one of its carried identity values
+  /// under a `UNIQUE` constraint — see
+  /// [existsIdentityConflictBlockingReason] for the shape (two devices
+  /// installing the same bundled contrib plugin produce two `user_apps` rows
+  /// with the same `uuid` and different `id`s) and for why reconciling the
+  /// two rows is M4's identity-mapping work rather than this milestone's.
+  ///
+  /// Its own kind rather than folded into [waitingOnMissingEntity] because
+  /// the two say opposite things about what happens next. A
+  /// `waitingOnMissingEntity` row resolves when something arrives from
+  /// another device; this one never will, no matter how long the user waits
+  /// or how many times they sync — and today no local action reaches it
+  /// either, since `user_apps` is hard-delete guarded and "delete the
+  /// duplicate" leaves the row and its `uuid` in place. So the string states
+  /// what happened and prescribes nothing, and the honest fix is M4's.
+  entityIdentityConflict,
 }
 
 /// The whole picture, recomputed at the end of each sync.
@@ -405,29 +434,72 @@ Future<SyncHealth> recomputeSyncHealth(
 
   // ── 2/4: tables gated out of minting ─────────────────────────────────
   //
-  // **Only reported when the user actually HAS rows there.** Eight of the
-  // fourteen sync-scope tables cannot be built by a receiving device, so an
-  // unconditional report would mark every device on earth permanently
-  // degraded — which would train people to ignore the warning and defeat
-  // the entire point of building it. "You have data that is not syncing" is
-  // actionable; "this app does not sync attachments yet" is a release note.
+  // **Only reported when the user actually HAS the affected data.** Three of
+  // the fourteen sync-scope tables cannot be built by a receiving device
+  // (`app_revisions`, blocked by `appCode`; `user_app_libraries` and
+  // `user_app_library_dependencies`, blocked by non-portable integer ids), so
+  // an unconditional report would mark every device on earth permanently
+  // degraded — which would train people to ignore the warning and defeat the
+  // entire point of building it. "You have data that is not syncing" is
+  // actionable; "this app does not sync mini-app source code yet" is a
+  // release note.
+  //
+  // **"Has the data" is NOT the same as "has rows in that table", and
+  // assuming it was made this detector silent on the device that most needs
+  // it (M2.14 review round 1).** A RECEIVING device has zero `app_revisions`
+  // rows precisely BECAUSE the table cannot sync — so `count == 0` skipped
+  // it, and a device holding a screenful of mini apps with not one line of
+  // their code showed a green sync card. M2.14 is what manufactures that
+  // state in quantity: it made `user_apps` rows travel while their revisions
+  // stayed behind. So a blocked table is also reported when the table its
+  // `__exists__` OWNER reference points at is populated locally — for
+  // `app_revisions` that is `user_apps`, i.e. exactly "you have mini apps
+  // and none of their code". Tables blocked on a non-portable id have no
+  // owner references at all (`entitySyncability` rejects them before it
+  // looks at a single column), so their behaviour is unchanged: they are
+  // reported only when they hold local rows, which is the right rule for a
+  // condition that is about this device's own data.
+  //
+  // [entitySyncability] is memoized across the loop. Uncached it is four
+  // `PRAGMA` round trips per table, i.e. ~56 per recompute, on the one call
+  // site of the four that had not yet been given the cache its own doc
+  // comment asks every caller for.
   final gated = <String>[];
+  final syncabilityCache = <String, EntitySyncability>{};
+  Future<int> rowCount(String table) async =>
+      Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM $table')) ??
+      0;
   for (final scope in DatabaseService.syncEntityCaptureScopes) {
-    final syncability = await entitySyncability(db, scope);
+    final syncability = await entitySyncability(
+      db,
+      scope,
+      cache: syncabilityCache,
+    );
     if (syncability.canSync) continue;
-    final count =
-        Sqflite.firstIntValue(
-          await db.rawQuery('SELECT COUNT(*) FROM ${scope.table}'),
-        ) ??
-        0;
-    if (count == 0) continue;
+    final count = await rowCount(scope.table);
+    var ownerCount = 0;
+    String? ownerTable;
+    if (count == 0) {
+      for (final reference in syncability.existsOwnerReferences) {
+        final owned = await rowCount(reference.table);
+        if (owned == 0) continue;
+        ownerCount = owned;
+        ownerTable = reference.table;
+        break;
+      }
+      if (ownerTable == null) continue;
+    }
     gated.add(scope.table);
     // The technical reason belongs in the log, not on a settings screen —
-    // "unresolvable column noteId" tells an engineer everything and a user
+    // "unresolvable column appCode" tells an engineer everything and a user
     // nothing.
     LoggerService.info(
-      'SyncHealth: ${scope.table} holds $count row(s) that cannot sync '
-      '(${syncability.reasonLabel})',
+      ownerTable == null
+          ? 'SyncHealth: ${scope.table} holds $count row(s) that cannot sync '
+                '(${syncability.reasonLabel})'
+          : 'SyncHealth: ${scope.table} holds no rows and cannot sync '
+                '(${syncability.reasonLabel}); $ownerTable holds $ownerCount '
+                'row(s) that own one',
     );
   }
   if (gated.isNotEmpty) {
@@ -518,6 +590,10 @@ Future<SyncHealth> recomputeSyncHealth(
   await addQueueIssue(
     unfillableMembershipColumnBlockingReason,
     SyncHealthIssueKind.membershipNotBuilt,
+  );
+  await addQueueIssue(
+    existsIdentityConflictBlockingReason,
+    SyncHealthIssueKind.entityIdentityConflict,
   );
 
   final health = SyncHealth(issues: List.unmodifiable(issues));

@@ -1641,9 +1641,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get attachmentMissing => 'Attachment not found.';
-
-  @override
   String get attachmentUnavailable => 'Attachment unavailable';
 
   @override
@@ -3285,6 +3282,17 @@ class AppLocalizationsEn extends AppLocalizations {
       'Its details synced, but app code isn\'t uploaded to cloud sync yet. Open it on the device where you created it.';
 
   @override
+  String get userAppNoRunnableCodeLocal => 'This app has no code yet';
+
+  @override
+  String get userAppNoRunnableCodeLocalDetail =>
+      'No version of its code was ever saved, so its creation probably didn\'t finish. Edit the app to generate it again.';
+
+  @override
+  String get aiToolCodeNotSynced =>
+      'Unavailable — this tool\'s code hasn\'t arrived on this device yet.';
+
+  @override
   String cloudSyncHealthTablesNotSynced(int count, String detail) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -3338,6 +3346,17 @@ class AppLocalizationsEn extends AppLocalizations {
       one: '1 link could not be recreated',
     );
     return '$_temp0: $detail';
+  }
+
+  @override
+  String cloudSyncHealthIdentityConflict(int count, String detail) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items from another device could not be added',
+      one: '1 item from another device could not be added',
+    );
+    return '$_temp0, because this device already has a copy of it: $detail';
   }
 
   @override
@@ -3940,6 +3959,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get startConversationHint => 'Start by asking the AI about your note.';
+
+  @override
+  String get attachmentMissing => 'Attachment not found.';
 
   @override
   String unsupportedAttachment(String type) {

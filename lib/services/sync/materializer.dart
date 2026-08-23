@@ -102,7 +102,17 @@
 // `conversation_attachments` rows arrive complete while the FILES they
 // point at do not, for the same reason. `app_revisions` IS on the health
 // surface (it is `canSync == false`, so `tablesNotSynced` names it, with
-// `appCode` as the reason); the attachment tables deliberately are NOT —
+// `appCode` as the reason) — **and that claim was flatly false on the
+// one device that most needs it until review round 1 fixed the
+// detector.** `tablesNotSynced` guarded on `if (count == 0) continue`
+// over the blocked table's OWN rows, and a RECEIVING device has zero
+// `app_revisions` rows by construction — so M2.14 is precisely what
+// manufactures the state "this device holds mini apps and not one line
+// of their code, and its sync card is green." `sync_health.dart` now
+// also fires when a blocked table's OWNER table is populated locally,
+// which is what makes the sentence above true on the receiving device
+// and not only on the authoring one. The attachment tables
+// deliberately are NOT on that surface —
 // see `SyncHealthIssueKind.tablesNotSynced`'s own doc comment for why a
 // health kind for them was written and then removed, and where the
 // per-attachment "File not found" affordance lives instead. The SAME
@@ -277,6 +287,59 @@ const String missingExistsBlockingReason = 'missing_exists';
 const String unfillableMembershipColumnBlockingReason =
     'unfillable_membership_column';
 
+/// `sync_materialize_queue.blockingReason` for an `__exists__` whose shell
+/// row would violate a UNIQUE identity constraint already held by a
+/// DIFFERENT local row — M2.14, review round 1, finding C.
+///
+/// **The shape, because it is an ordinary distribution path and not an
+/// exotic one.** `import_app_screen.dart`'s `_createNewApp` keeps the YAML's
+/// `uuid` verbatim and mints a fresh `id` from the local wall clock, so
+/// installing the same bundled contrib plugin on two devices produces two
+/// rows with the SAME `user_apps.uuid` and DIFFERENT `user_apps.id`. When one
+/// device's row syncs to the other, the shell `INSERT` carries the remote
+/// `id` and the shared `uuid` and hits `uuid TEXT NOT NULL UNIQUE`.
+/// `user_apps.uuid` is also the one carried column in the schema that is an
+/// identity rather than a foreign key, so `_existsOwnerBlocker` — which only
+/// checks references — guards nothing for it.
+///
+/// **Retryable rather than unresolvable, and the distinction is mechanical,
+/// not aspirational.** The condition is a property of this device's CURRENT
+/// local rows, not of the protocol: the sweep re-derives it on every pull and
+/// inserts the row — draining the entity's parked field operations in the
+/// same pass — the moment nothing local holds that value any more. That is
+/// what makes parking it correct where
+/// [ExistsInsertOutcome.unresolvable]'s deliberate enqueue-nothing would be
+/// wrong.
+///
+/// **But no user action available today reaches that state, and saying so is
+/// the point of this paragraph.** `user_apps` is in
+/// `_hardDeleteGuardedTables`, so "delete the duplicate mini app" writes
+/// `__deleted__ = 1` and leaves the row — and its `uuid` — exactly where it
+/// was, still occupying the `UNIQUE` index. A dataset reset clears it; M4
+/// resolves it properly; nothing in between does. The user-facing string
+/// therefore states the fact and prescribes no remedy, because a health
+/// surface that tells people to do something that does not work is worse
+/// than one that tells them only what happened.
+///
+/// Reported on the health surface under
+/// [SyncHealthIssueKind.entityIdentityConflict], with the colliding column,
+/// value and local row id recorded on the entry: this parks ONE entry that
+/// explains the entity's other parked field operations, which park with or
+/// without it. "N operations are waiting" with nothing saying what for is
+/// the shape this engine's health spine exists to end.
+///
+/// **What it deliberately does NOT do: reconcile the two rows.** Deciding
+/// that the remote `app1` and the local `1724...` are the same app and
+/// picking a winning `id` means rewriting a live primary key and everything
+/// that points at it (`app_revisions.appId`, `user_apps.selectedRevisionId`,
+/// every `sync_field_state`/`sync_pending_ops` row keyed on the old id), and
+/// doing it convergently on both devices without either losing revisions.
+/// That is identity mapping, which this design assigns to **M4**
+/// ("Implement the fully identity-mapped User Apps + revision history") —
+/// and inventing a rule for it inside a materializer is how a milestone
+/// acquires a residual it cannot name.
+const String existsIdentityConflictBlockingReason = 'exists_identity_conflict';
+
 /// What one shell-row (`__exists__`) insert attempt actually did — M2.14.
 ///
 /// Returned rather than inferred for the same reason
@@ -310,7 +373,22 @@ enum ExistsInsertOutcome {
   /// locally yet — the ordinary cross-log ordering case. See
   /// [SyncMaterializer.sweepMissingExists].
   blockedOnOwner,
+
+  /// Every value is available and every reference is satisfied, but a
+  /// DIFFERENT local row already holds one of the carried identity values
+  /// under a `UNIQUE` constraint — see
+  /// [existsIdentityConflictBlockingReason]. Parked and retried, not dropped.
+  identityConflict,
 }
+
+/// Which carried identity value collided, and with which local row —
+/// recorded on the parked queue entry so the health surface can say what is
+/// actually wrong instead of counting anonymous blocked operations.
+typedef ExistsIdentityConflict = ({
+  String column,
+  String value,
+  String existingId,
+});
 
 /// What one membership-row insert attempt actually did. Returned rather
 /// than inferred so [SyncMaterializer.sweepMissingExists] can tell "this
@@ -440,10 +518,16 @@ class SyncMaterializer {
     var resolved = 0;
     final rows = await db.query(
       'sync_materialize_queue',
-      where: 'blockingReason IN (?, ?)',
+      where: 'blockingReason IN (?, ?, ?)',
       whereArgs: [
         missingExistsBlockingReason,
         unfillableMembershipColumnBlockingReason,
+        // M2.14 review round 1, finding C. Swept for the same reason the
+        // unfillable-membership rows are: the blocking condition is local
+        // state a user can change (delete the duplicate app), so an entry
+        // nothing ever retries would turn a recoverable collision into a
+        // permanent one.
+        existsIdentityConflictBlockingReason,
       ],
       // **`__exists__` entries first, then everything else in id order —
       // M2.14, and this ordering is load-bearing, not cosmetic.** A blocked
@@ -491,10 +575,17 @@ class SyncMaterializer {
           case ExistsInsertOutcome.blockedOnOwner:
             final blocker = result.blocker!;
             if (blocker.$1 != payload['waitingOnTable'] ||
-                blocker.$2 != payload['waitingOnId']) {
+                blocker.$2 != payload['waitingOnId'] ||
+                row['blockingReason'] != missingExistsBlockingReason) {
               await db.update(
                 'sync_materialize_queue',
                 {
+                  // An entry can arrive here having been parked under a
+                  // DIFFERENT reason (an identity conflict whose duplicate the
+                  // user deleted, uncovering a missing owner underneath). The
+                  // reason is rewritten with the record so the health surface
+                  // never names a condition that has already changed.
+                  'blockingReason': missingExistsBlockingReason,
                   'operationJson': jsonEncode({
                     ...payload,
                     'waitingOnTable': blocker.$1,
@@ -506,15 +597,33 @@ class SyncMaterializer {
                 whereArgs: [id],
               );
             }
+          case ExistsInsertOutcome.identityConflict:
+            // Still colliding — re-describe in place (the colliding local row
+            // may be a different one than last time) and leave it queued.
+            // `enqueuedAt` is untouched, which is the only aging signal the
+            // row has.
+            await db.transaction(
+              (txn) => _enqueueExistsIdentityConflict(
+                txn,
+                scope: scope,
+                entityId: entityId,
+                hlcWallMs: payload['hlcWallMs'] as int? ?? 0,
+                conflict: result.identityConflict,
+              ),
+            );
           case ExistsInsertOutcome.unresolvable:
-            // **Defensive, and not claimed reachable.** An entry only gets
-            // here having once been `blockedOnOwner`, which requires a
-            // COMPLETE payload, and a register's payload never regresses
-            // from complete to incomplete. (The two genuinely unresolvable
-            // cases — a pre-M2.14 `true` payload, and
+            // **Defensive, and not claimed reachable.** There are exactly
+            // two ways an entry gets into this branch, and both require a
+            // COMPLETE payload for a `canSync` table: it was once
+            // `blockedOnOwner` or `identityConflict`, or
+            // `OutboxDrainer._repairExistsRegisters` enqueued it after
+            // checking both conditions itself. A register's payload never
+            // regresses from complete to incomplete. (The two genuinely
+            // unresolvable cases — a pre-M2.14 `true` payload, and
             // `app_revisions.appCode` — are rejected on the FIRST attempt,
-            // which enqueues nothing at all, precisely so they cannot
-            // produce the permanent undrainable backlog M2.10 removed.)
+            // which enqueues nothing at all, and the repair pass skips them
+            // for the same reason, precisely so they cannot produce the
+            // permanent undrainable backlog M2.10 removed.)
             // Left queued rather than deleted if it ever does happen:
             // dropping a row on a state nobody predicted is how a change
             // becomes invisible, and the health surface counts what is
@@ -676,6 +785,18 @@ class SyncMaterializer {
           hlcWallMs: op.hlc.wallMs,
           waitingOnTable: blocker.$1,
           waitingOnId: blocker.$2,
+        );
+      } else if (result.outcome == ExistsInsertOutcome.identityConflict) {
+        // A different local row already holds this row's carried identity
+        // value — parked under its own retryable reason rather than silently
+        // reported as inserted. See
+        // [existsIdentityConflictBlockingReason].
+        await _enqueueExistsIdentityConflict(
+          txn,
+          scope: scope,
+          entityId: op.entityId,
+          hlcWallMs: op.hlc.wallMs,
+          conflict: result.identityConflict,
         );
       }
       return;
@@ -870,7 +991,13 @@ class SyncMaterializer {
   /// same row uuid under different owners: a uuid collision or a hand-edited
   /// database, not any flow the app can produce. Rewriting an owner FK
   /// underneath a live row would be a worse answer than declining to.
-  Future<({ExistsInsertOutcome outcome, (String, String)? blocker})>
+  Future<
+    ({
+      ExistsInsertOutcome outcome,
+      (String, String)? blocker,
+      ExistsIdentityConflict? identityConflict,
+    })
+  >
   _materializeExists(
     DatabaseExecutor txn,
     SyncEntityCaptureScope scope,
@@ -878,7 +1005,11 @@ class SyncMaterializer {
     int existsHlcWallMs,
   ) async {
     if (await _rowExists(txn, scope, entityId)) {
-      return (outcome: ExistsInsertOutcome.alreadyPresent, blocker: null);
+      return (
+        outcome: ExistsInsertOutcome.alreadyPresent,
+        blocker: null,
+        identityConflict: null,
+      );
     }
 
     final columns = await syncTableInfo(txn, scope.table);
@@ -886,13 +1017,13 @@ class SyncMaterializer {
         .where((c) => c['name'] == scope.idColumn)
         .firstOrNull;
     if (idColumnInfo == null) {
-      return (outcome: ExistsInsertOutcome.unresolvable, blocker: null);
+      return _unresolvable;
     }
     if (isNonPortableIntegerPrimaryKey(idColumnInfo)) {
       // e.g. user_app_libraries/user_app_library_dependencies — see top doc
       // comment, and `hasPortableEntityId` (`sync_table_shape.dart`), which
       // is the same predicate this and `_writeResolvedFieldValue` both use.
-      return (outcome: ExistsInsertOutcome.unresolvable, blocker: null);
+      return _unresolvable;
     }
 
     final syncability = await entitySyncability(
@@ -910,7 +1041,7 @@ class SyncMaterializer {
       // makes the row unbuildable anyway. Not reachable today (the same
       // predicate gates minting, so no such operation is produced), which is
       // why it is a guard rather than a fix.
-      return (outcome: ExistsInsertOutcome.unresolvable, blocker: null);
+      return _unresolvable;
     }
     final carried = syncability.existsCarriedColumns;
     final payload = decodeExistsPayload(
@@ -926,7 +1057,7 @@ class SyncMaterializer {
       // at all (`app_revisions.appCode`), or the winning `__exists__` was
       // minted by a build older than M2.14 and carries the constant `true`.
       // Both mean the same thing here: no row, no guess.
-      return (outcome: ExistsInsertOutcome.unresolvable, blocker: null);
+      return _unresolvable;
     }
 
     // Ordering. A child cannot be inserted before the row it references, and
@@ -941,6 +1072,7 @@ class SyncMaterializer {
       return (
         outcome: ExistsInsertOutcome.blockedOnOwner,
         blocker: ownerBlocker,
+        identityConflict: null,
       );
     }
 
@@ -977,8 +1109,22 @@ class SyncMaterializer {
         // Neither in sync scope nor carried — `app_revisions.appCode` is the
         // one column in the whole schema still in this position, and it is a
         // blob in a TEXT column awaiting M3 (`syncContentDeferredTables`).
-        // Skip the whole INSERT rather than write a row whose source code is
-        // a permanently-wrong empty string that nothing will ever correct.
+        //
+        // **Unreachable, and kept anyway — a deliberate, disclosed
+        // duplication of a predicate `entitySyncability` owns.** The
+        // `!syncability.canSync` guard above rejects every table that has
+        // such a column, using this exact condition, so no operation reaches
+        // this line. It stays because it is the last check before an
+        // unchecked `INSERT` into a schema with `PRAGMA foreign_keys = ON`
+        // and live `NOT NULL` constraints, and because of where the failure
+        // would land: `sweepMissingExists` calls this inside its own
+        // `db.transaction`, with nothing between it and `SyncSession.run`, so
+        // a thrown constraint failure aborts the user's entire sync session
+        // including their unrelated pending pushes — the precise wedge
+        // `_setAddBlocker`'s doc comment records as a reproduced outage.
+        // Deleting a fail-closed net because the predicate in front of it is
+        // currently equivalent trades a boolean for a session-level failure
+        // mode the moment the two drift.
         resolvable = false;
         break;
       }
@@ -986,7 +1132,7 @@ class SyncMaterializer {
     }
 
     if (!resolvable) {
-      return (outcome: ExistsInsertOutcome.unresolvable, blocker: null);
+      return _unresolvable;
     }
 
     // Forced shell-row overrides — `tags.__deleted__ = 1` today (forced
@@ -1024,12 +1170,97 @@ class SyncMaterializer {
       if (row.containsKey(entry.key)) row[entry.key] = entry.value;
     }
 
-    await txn.insert(
+    // **The returned rowid is checked, and not checking it was a real,
+    // silent data-loss bug (M2.14 review round 1, finding C).**
+    // `ConflictAlgorithm.ignore` turns a `UNIQUE` violation into a
+    // no-op that returns rowid `0` — so an `INSERT` that wrote nothing at
+    // all used to be reported as `inserted`, the queue entry was resolved (or
+    // never created), and every one of the entity's field operations then
+    // parked forever against a row that does not exist. That reproduces
+    // exactly the "11 permanent `missing_exists` entries on `user_apps`"
+    // symptom this file's own top doc comment cites as the pre-M2.14 bug.
+    //
+    // `ignore` is retained rather than dropped: the conflict has to be
+    // OBSERVED rather than thrown, because a throw here escapes
+    // `sweepMissingExists` and aborts the whole session (see the
+    // `resolvable` branch above for the same reasoning).
+    final rowId = await txn.insert(
       scope.table,
       row,
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
-    return (outcome: ExistsInsertOutcome.inserted, blocker: null);
+    if (rowId == 0) {
+      return (
+        outcome: ExistsInsertOutcome.identityConflict,
+        blocker: null,
+        identityConflict: await _existsIdentityConflict(
+          txn,
+          scope,
+          syncability,
+          payload,
+          entityId,
+        ),
+      );
+    }
+    return (
+      outcome: ExistsInsertOutcome.inserted,
+      blocker: null,
+      identityConflict: null,
+    );
+  }
+
+  /// The shorthand every "this row cannot be built" exit uses.
+  static const ({
+    ExistsInsertOutcome outcome,
+    (String, String)? blocker,
+    ExistsIdentityConflict? identityConflict,
+  })
+  _unresolvable = (
+    outcome: ExistsInsertOutcome.unresolvable,
+    blocker: null,
+    identityConflict: null,
+  );
+
+  /// Which carried IDENTITY value (a carried column that is not a declared
+  /// foreign key — `user_apps.uuid` is the only one in today's schema) is
+  /// already held by a different local row, and which row that is.
+  ///
+  /// Best-effort by design: it names the collision for the queue entry and
+  /// the health surface, and returns null when it cannot attribute one (a
+  /// `UNIQUE` constraint over a column this rule does not carry, a `CHECK`,
+  /// anything else `ConflictAlgorithm.ignore` swallowed). The caller parks
+  /// the operation either way — an unattributed conflict is still a
+  /// conflict, and reporting "an identity constraint rejected this row"
+  /// beats reporting a successful insert that never happened.
+  Future<ExistsIdentityConflict?> _existsIdentityConflict(
+    DatabaseExecutor txn,
+    SyncEntityCaptureScope scope,
+    EntitySyncability syncability,
+    Map<String, Object?> payload,
+    String entityId,
+  ) async {
+    final referenceColumns = {
+      for (final reference in syncability.existsOwnerReferences) reference.column,
+    };
+    for (final column in syncability.existsCarriedColumns) {
+      if (referenceColumns.contains(column)) continue;
+      final value = payload[column];
+      if (value == null) continue;
+      final rows = await txn.query(
+        scope.table,
+        columns: [scope.idColumn],
+        where: '$column = ? AND ${scope.idColumn} != ?',
+        whereArgs: [value, entityId],
+        limit: 1,
+      );
+      if (rows.isEmpty) continue;
+      return (
+        column: column,
+        value: '$value',
+        existingId: '${rows.first[scope.idColumn]}',
+      );
+    }
+    return null;
   }
 
   /// The first row an `__exists__` shell insert references that does not
@@ -1041,6 +1272,20 @@ class SyncMaterializer {
   /// at a column that is not that table's sync `idColumn` — and because a
   /// reference to a table with no capture scope at all still has to be
   /// checked before SQLite checks it for us.
+  ///
+  /// **The comparison is against the raw payload value, with no
+  /// `CAST(... AS TEXT)` around the column.** Wrapping a column in a
+  /// function makes the expression non-sargable, so SQLite cannot use the
+  /// index on the referenced key and scans the whole owner table — once per
+  /// carried reference, per `__exists__`, on a first sync that is one full
+  /// `notes` scan per arriving subnote. The cast bought nothing: SQLite
+  /// applies the COLUMN's own type affinity to the other operand of a
+  /// comparison, so an INTEGER key compared against the string `'5'` still
+  /// matches the row with `5`, and a TEXT key compared against `5` still
+  /// matches `'5'`. This is the identical treatment SQLite will apply when it
+  /// enforces the foreign key on the `INSERT` a moment later, which is the
+  /// property this check actually needs — a check that answers a different
+  /// question from the constraint it is pre-empting is worse than no check.
   Future<(String, String)?> _existsOwnerBlocker(
     DatabaseExecutor txn,
     EntitySyncability syncability,
@@ -1052,8 +1297,8 @@ class SyncMaterializer {
       final rows = await txn.query(
         reference.table,
         columns: [reference.toColumn],
-        where: 'CAST(${reference.toColumn} AS TEXT) = ?',
-        whereArgs: ['$ownerId'],
+        where: '${reference.toColumn} = ?',
+        whereArgs: [ownerId],
         limit: 1,
       );
       if (rows.isEmpty) return (reference.table, '$ownerId');
@@ -1772,9 +2017,10 @@ class SyncMaterializer {
     String? memberUuid,
     String? valueJson,
     int? hlcWallMs,
+    String blockingReason = missingExistsBlockingReason,
   }) async {
     await txn.insert('sync_materialize_queue', {
-      'blockingReason': missingExistsBlockingReason,
+      'blockingReason': blockingReason,
       'entityTable': entityTable,
       'entityId': entityId,
       'fieldName': fieldName,
@@ -1794,6 +2040,71 @@ class SyncMaterializer {
         'waitingOnId': waitingOnId,
       }),
       'blockingKey': '$waitingOnTable:$waitingOnId',
+      'enqueuedAt': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  /// Parks (or re-describes) one `__exists__` under
+  /// [existsIdentityConflictBlockingReason].
+  ///
+  /// Written through the same queue and swept by the same sweep as every
+  /// other deferral, deliberately: a reason with no reader is a wedge with
+  /// better paperwork (see [sweepMissingExists]'s own note on
+  /// [unfillableMembershipColumnBlockingReason]). `blockingKey` names the
+  /// colliding `table.column:value` so the health surface can say what is
+  /// actually wrong, and so a second arriving operation for the same
+  /// collision re-describes the existing entry instead of stacking a new one.
+  Future<void> _enqueueExistsIdentityConflict(
+    DatabaseExecutor txn, {
+    required SyncEntityCaptureScope scope,
+    required String entityId,
+    required int hlcWallMs,
+    required ExistsIdentityConflict? conflict,
+  }) async {
+    final existing = await txn.query(
+      'sync_materialize_queue',
+      columns: const ['id'],
+      where: 'entityTable = ? AND entityId = ? AND fieldName = ?',
+      whereArgs: [scope.table, entityId, existsFieldSentinel],
+      limit: 1,
+    );
+    final blockingKey = conflict == null
+        ? '${scope.table}:$entityId'
+        : '${scope.table}.${conflict.column}:${conflict.value}';
+    final operationJson = jsonEncode({
+      'kind': existsFieldSentinel,
+      'fieldName': existsFieldSentinel,
+      'hlcWallMs': hlcWallMs,
+      if (conflict != null) ...{
+        'conflictColumn': conflict.column,
+        'conflictValue': conflict.value,
+        'conflictExistingId': conflict.existingId,
+      },
+      // The sweep re-derives its blocker from scratch; these keep a queued
+      // row self-describing without re-running any of this logic.
+      'waitingOnTable': scope.table,
+      'waitingOnId': entityId,
+    });
+    if (existing.isNotEmpty) {
+      await txn.update(
+        'sync_materialize_queue',
+        {
+          'blockingReason': existsIdentityConflictBlockingReason,
+          'operationJson': operationJson,
+          'blockingKey': blockingKey,
+        },
+        where: 'id = ?',
+        whereArgs: [existing.first['id']],
+      );
+      return;
+    }
+    await txn.insert('sync_materialize_queue', {
+      'blockingReason': existsIdentityConflictBlockingReason,
+      'entityTable': scope.table,
+      'entityId': entityId,
+      'fieldName': existsFieldSentinel,
+      'operationJson': operationJson,
+      'blockingKey': blockingKey,
       'enqueuedAt': DateTime.now().millisecondsSinceEpoch,
     });
   }

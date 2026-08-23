@@ -404,6 +404,7 @@ Future<EntitySyncability> _computeEntitySyncability(
   }
 
   final foreignKeys = await _foreignKeyTargets(txn, scope.table);
+  final allForeignKeyColumns = await _allForeignKeyColumns(txn, scope.table);
   final singleColumnUniques = await _singleColumnUniqueColumns(txn, scope.table);
 
   final createdAtColumn = syncEntityCreatedAtColumnByTable[scope.table];
@@ -413,9 +414,37 @@ Future<EntitySyncability> _computeEntitySyncability(
     final name = column['name'] as String;
     if (name == scope.idColumn) continue;
     if (name == createdAtColumn) continue;
-    if (scope.syncScopeColumns.contains(name)) continue;
     final notNull = (column['notnull'] as int? ?? 0) != 0;
     final hasDefault = column['dflt_value'] != null;
+    if (scope.syncScopeColumns.contains(name)) {
+      // **A `NOT NULL` FOREIGN KEY that is ALSO in sync scope fails OPEN, and
+      // that is the one direction this predicate is not allowed to fail
+      // in.** The shell-row `INSERT` runs before any of the entity's field
+      // operations have arrived, so a sync-scope column with no resolved
+      // value yet gets `shellRowPlaceholderValue` — `''` for a `NOT NULL`
+      // TEXT column, or the column's own declared default. Neither is
+      // guaranteed to name an existing row, and this codebase runs with
+      // `PRAGMA foreign_keys = ON`, so the `INSERT` would throw
+      // `FOREIGN KEY constraint failed` out of `_materializeExists` — inside
+      // `sweepMissingExists` that escapes the whole session, which is the
+      // wedge `_setAddBlocker`'s doc comment records as a real outage.
+      //
+      // Carrying it on `__exists__` instead is NOT available: it is in sync
+      // scope, so it is reassignable, and a carried column is hashed into the
+      // GENESIS `contentKey` on the standing assumption that it never
+      // changes. So the table is blocked, loudly, exactly like any other
+      // column this protocol cannot supply at insert time.
+      //
+      // **No column in today's schema is in this position** — asserted by
+      // `seed_scanner_test.dart`'s syncability audit, not by this comment —
+      // so this costs nothing today and is one `CREATE TABLE` away from
+      // mattering. `hasDefault` is deliberately NOT an escape: a default of
+      // `''` satisfies `NOT NULL` and satisfies no foreign key.
+      if (notNull && allForeignKeyColumns.contains(name)) {
+        blockingColumn ??= name;
+      }
+      continue;
+    }
     if (!notNull || hasDefault) continue;
     if (foreignKeys.containsKey(name) || singleColumnUniques.contains(name)) {
       carried.add(name);
@@ -458,26 +487,54 @@ Future<EntitySyncability> _computeEntitySyncability(
 }
 
 /// `column -> (referenced table, referenced column)` for every declared
-/// `FOREIGN KEY` of [table].
+/// **single-column** `FOREIGN KEY` of [table] whose target column this
+/// function can name with certainty.
 ///
-/// A composite foreign key contributes one entry per column, which is
-/// deliberately imprecise in the safe direction: each column individually
-/// must still name a row that exists, and this codebase declares no
-/// composite foreign key today.
+/// ---------------------------------------------------------------------
+/// **Two shapes are deliberately EXCLUDED, and both used to fail open into
+/// the `FOREIGN KEY constraint failed` throw the ordering checks exist to
+/// prevent.** Neither exists in today's schema; each is one `CREATE TABLE`
+/// away, and an entry produced for either would have been carried on
+/// `__exists__` and then "checked" by an owner test that proves nothing.
 ///
-/// `PRAGMA foreign_key_list` reports `to` as NULL when the clause omits the
-/// referenced column (`REFERENCES notes` rather than `REFERENCES notes(id)`),
-/// which means the target's PRIMARY KEY; resolved here rather than left
-/// null, because the caller's owner-existence check needs a real column name
-/// and a skipped check would hand an unchecked `INSERT` to a live
-/// `FOREIGN KEY` constraint.
+///  * **A composite foreign key.** An earlier version contributed one entry
+///    per column and called that "imprecise in the safe direction". It is
+///    not: `FOREIGN KEY (a, b) REFERENCES T(x, y)` is satisfied only by a
+///    row of `T` where `x = a` AND `y = b` *in the same row*. Checking `a`
+///    against `T.x` and `b` against `T.y` independently passes whenever two
+///    DIFFERENT rows of `T` happen to match one column each — after which
+///    the `INSERT` runs and SQLite raises the very constraint failure the
+///    check was there to pre-empt. Excluded, so such a column is not a
+///    "reference" for the carried-column rule and its table blocks loudly
+///    instead ([EntitySyncBlocker.unresolvableColumn]).
+///  * **`REFERENCES T` with the column omitted, where `T` has a COMPOSITE
+///    primary key.** `PRAGMA foreign_key_list` reports `to` as NULL for the
+///    omitted form, meaning "the target's primary key". When that key is
+///    composite there is no single column to check, and returning the first
+///    one (which [_primaryKeyColumn] used to do) checks a fragment of a key
+///    and calls it a match. [_primaryKeyColumn] now returns null for that
+///    case and the whole reference is dropped here.
+///
+/// The ordinary omitted-column form (`REFERENCES notes` where `notes` has a
+/// single-column primary key) IS resolved, rather than left null, because
+/// the caller's owner-existence check needs a real column name and a skipped
+/// check would hand an unchecked `INSERT` to a live `FOREIGN KEY` constraint.
 Future<Map<String, (String, String)>> _foreignKeyTargets(
   DatabaseExecutor txn,
   String table,
 ) async {
   final rows = await txn.rawQuery('PRAGMA foreign_key_list($table)');
+  // `PRAGMA foreign_key_list` emits one row per COLUMN, with `id` shared by
+  // every column of the same constraint — the only way to tell a composite
+  // key from several single-column ones.
+  final columnsPerConstraint = <int, int>{};
+  for (final row in rows) {
+    final id = row['id'] as int? ?? 0;
+    columnsPerConstraint[id] = (columnsPerConstraint[id] ?? 0) + 1;
+  }
   final targets = <String, (String, String)>{};
   for (final row in rows) {
+    if ((columnsPerConstraint[row['id'] as int? ?? 0] ?? 1) > 1) continue;
     final from = row['from'] as String?;
     final toTable = row['table'] as String?;
     if (from == null || toTable == null) continue;
@@ -489,11 +546,39 @@ Future<Map<String, (String, String)>> _foreignKeyTargets(
   return targets;
 }
 
+/// Every column that appears on the `from` side of ANY declared foreign key
+/// of [table] — composite constraints and unresolvable targets included.
+///
+/// Separate from [_foreignKeyTargets] on purpose. That map answers "which
+/// single row must exist before this one can be inserted", and has to drop
+/// anything it cannot check exactly. This set answers "is writing a
+/// placeholder into this column capable of violating a foreign key", which
+/// is true for every FK column regardless of whether the constraint is
+/// composite or its target resolvable — so the sync-scope guard in
+/// [_computeEntitySyncability] must use the broader set, or a composite FK
+/// in sync scope would slip through both.
+Future<Set<String>> _allForeignKeyColumns(
+  DatabaseExecutor txn,
+  String table,
+) async {
+  final rows = await txn.rawQuery('PRAGMA foreign_key_list($table)');
+  return {
+    for (final row in rows)
+      if (row['from'] case final String from) from,
+  };
+}
+
+/// The SOLE primary-key column of [table], or null when it has none or when
+/// its primary key is COMPOSITE — see [_foreignKeyTargets] for why a
+/// composite key must not be reduced to its first column here.
 Future<String?> _primaryKeyColumn(DatabaseExecutor txn, String table) async {
+  String? found;
   for (final column in await syncTableInfo(txn, table)) {
-    if ((column['pk'] as int? ?? 0) != 0) return column['name'] as String;
+    if ((column['pk'] as int? ?? 0) == 0) continue;
+    if (found != null) return null; // composite — no single column to check
+    found = column['name'] as String;
   }
-  return null;
+  return found;
 }
 
 /// Every column that is the SOLE column of a non-partial `UNIQUE` index on
@@ -534,20 +619,59 @@ Future<Set<String>> _singleColumnUniqueColumns(
 /// constant `true` this operation has always carried, byte for byte.
 ///
 /// **Preserving it exactly is not tidiness, it is the compatibility
-/// argument.** Ten of the fourteen entity tables select no carried column,
-/// including every table that syncs today (`notes`, `tags`, `filters`,
-/// `conversations`, `conversation_messages`, `tag_workflow_bindings`). For
-/// those, M2.14 changes nothing on the wire: the same `true`, the same
-/// GENESIS `contentKey`, the same dedup classes as every operation already
-/// published to a backend. Only the tables that could never materialize
-/// anyway get a new payload shape, and no correct operation for them exists
-/// in the field to be compared against.
+/// argument.** **Eight** of the fourteen entity tables select no carried
+/// column and six do — counted against the live schema by
+/// `seed_scanner_test.dart`'s syncability audit, which is also where an
+/// earlier "ten and four" in this comment (and in M2.14's own commit
+/// message) was found to be wrong. The bare eight are `notes`, `tags`,
+/// `filters`, `conversations`, `conversation_messages`,
+/// `tag_workflow_bindings`, `user_app_libraries` and
+/// `user_app_library_dependencies`; the carried six are `subnotes`,
+/// `relationships`, `attachments`, `conversation_attachments`, `user_apps`
+/// and `app_revisions`.
+///
+/// **All six tables that already round-tripped before M2.14 are in the bare
+/// set**, which is the whole compatibility claim: for them M2.14 changes
+/// nothing on the wire — the same `true`, the same GENESIS `contentKey`, the
+/// same dedup classes as every operation already published to a backend, so
+/// no published key changes. Only tables that could never materialize anyway
+/// get a new payload shape, and no correct operation for them exists in the
+/// field to be compared against. (The two `user_app_*` tables are bare for a
+/// different reason from the other six: [entitySyncability] rejects them on
+/// [EntitySyncBlocker.nonPortableId] before it looks at any column, so they
+/// mint nothing at all.)
 const String bareExistsPayloadJson = 'true';
 
 /// Encodes one entity row's `__exists__` payload — the values of
 /// [EntitySyncability.existsCarriedColumns], as a JSON object keyed by
 /// column name in that list's (sorted) order, or [bareExistsPayloadJson]
 /// when the table has none.
+///
+/// ---------------------------------------------------------------------
+/// **The exact byte form is part of the interoperability contract, and this
+/// is the only place it is written down.** The `contentKey` formula hashes
+/// this string, so a reimplementation of this protocol that produces the
+/// same key/value pairs in the same order but a different SERIALIZATION
+/// stops deduping GENESIS seeds against this one — silently, because every
+/// individual operation still validates. Three facts, all load-bearing:
+///
+///  1. **Which columns.** [entitySyncability]'s carried-column rule: a
+///     `NOT NULL`, no-default column outside the id, the createdAt-
+///     equivalent and `syncScopeColumns`, that is additionally either the
+///     `from` side of a single-column `FOREIGN KEY` or the sole column of a
+///     non-partial, non-primary `UNIQUE` index.
+///  2. **In sorted (byte-wise ascending) key order** — NOT `PRAGMA
+///     table_info` order, because `ALTER TABLE ADD COLUMN` appends, so a
+///     migrated database and a freshly-created one report the same columns
+///     in different orders.
+///  3. **Serialized as Dart's `jsonEncode` of a `Map<String, Object?>`
+///     emits it: no whitespace anywhere, `"` string quoting, `:` and `,`
+///     with nothing around them.** So one carried column named `noteId`
+///     with value `n1` is exactly the 17 bytes `{"noteId":"n1"}` — not
+///     `{"noteId": "n1"}`, which is what Python's `json.dumps` defaults
+///     produce and what a reimplementer would most naturally write. Pinned
+///     against a byte-literal (not against `jsonEncode` of itself, which
+///     asserts only self-consistency) in `child_entity_sync_test.dart`.
 ///
 /// **This is what makes `subnotes`/`attachments`/`relationships`/
 /// `conversation_attachments`/`user_apps` materializable on a peer at all**:

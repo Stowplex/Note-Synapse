@@ -1603,9 +1603,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get attachmentMissing => '找不到附件。';
-
-  @override
   String get attachmentUnavailable => '附件不可用';
 
   @override
@@ -3174,6 +3171,16 @@ class AppLocalizationsZh extends AppLocalizations {
       '应用的信息已同步，但应用代码暂不支持云同步。请在创建它的设备上打开。';
 
   @override
+  String get userAppNoRunnableCodeLocal => '此应用还没有代码';
+
+  @override
+  String get userAppNoRunnableCodeLocalDetail =>
+      '从未保存过任何版本的代码，创建过程可能未完成。请编辑此应用以重新生成代码。';
+
+  @override
+  String get aiToolCodeNotSynced => '不可用——此工具的代码尚未同步到本设备。';
+
+  @override
   String cloudSyncHealthTablesNotSynced(int count, String detail) {
     return '有 $count 类内容暂不支持同步：$detail';
   }
@@ -3196,6 +3203,11 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String cloudSyncHealthMembershipNotBuilt(int count, String detail) {
     return '$count 个关联无法重建：$detail';
+  }
+
+  @override
+  String cloudSyncHealthIdentityConflict(int count, String detail) {
+    return '有 $count 项来自其他设备的内容无法添加，因为本设备上已有它的副本：$detail';
   }
 
   @override
@@ -3757,6 +3769,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get startConversationHint => '先向 AI 询问关于你的笔记。';
+
+  @override
+  String get attachmentMissing => '找不到附件。';
 
   @override
   String unsupportedAttachment(String type) {
