@@ -3021,6 +3021,95 @@ class AppLocalizationsZh extends AppLocalizations {
       '本设备关联的同步数据集已不在你的云端硬盘中。请重置本设备的同步以重新开始——你的笔记会保留在本设备上。';
 
   @override
+  String get cloudSyncFolderDialogTitle => '同步文件夹';
+
+  @override
+  String get cloudSyncFolderNameLabel => 'Google 云端硬盘中的文件夹名称';
+
+  @override
+  String get cloudSyncFolderNameHelp =>
+      '将在你的云端硬盘中创建一个使用该名称的文件夹。之后你可以随意重命名或移动它——本设备记住的是文件夹本身，而不是它的名称。另一台设备只有在使用完全相同的名称时才能按名称找到这个文件夹，所以下面的文件夹 ID 才是连接两台设备的可靠方式。';
+
+  @override
+  String get cloudSyncFolderNameRequired => '请输入文件夹名称';
+
+  @override
+  String get cloudSyncFolderJoinLabel => '或使用文件夹 ID 加入已有文件夹';
+
+  @override
+  String get cloudSyncFolderJoinHelp =>
+      '在已经在同步的设备上，从本页面复制文件夹 ID 并粘贴到这里。这是让第二台设备指向同一份数据最可靠的方式。留空则改为按名称查找文件夹。';
+
+  @override
+  String get cloudSyncFolderContinue => '继续';
+
+  @override
+  String cloudSyncFolderName(String name) {
+    return '文件夹：$name';
+  }
+
+  @override
+  String cloudSyncFolderId(String id) {
+    return '文件夹 ID：$id';
+  }
+
+  @override
+  String get cloudSyncFolderIdHint => '用这个 ID 来设置另一台设备。';
+
+  @override
+  String get cloudSyncFolderNameFollowsDrive =>
+      '文件夹名称现在以云端为准。要修改名称，请在云端硬盘中重命名。';
+
+  @override
+  String get cloudSyncFolderCreatedHere =>
+      '本设备创建了这个同步数据集。如果你本来想加入已有的数据集，请使用“更换文件夹”并粘贴那个文件夹的 ID。';
+
+  @override
+  String get cloudSyncFolderIdPending => '文件夹 ID：尚未记录——下次同步后会显示在这里。';
+
+  @override
+  String get cloudSyncFolderChange => '更换文件夹';
+
+  @override
+  String get cloudSyncFolderChangeTitle => '让本设备指向另一个文件夹？';
+
+  @override
+  String get cloudSyncFolderChangeConfirm =>
+      '你的笔记、标签、对话和附件都会保留在本设备上，云端硬盘中已有的内容也不会被删除。\n\n本设备将离开当前所在的数据集，加入你选择的文件夹中的数据集。为此它会重置自己的同步状态：获取一个新的同步身份，忘记已经同步过的内容，并把本机持有的全部内容重新提交给新文件夹。若新文件夹中已存在不同的版本，则以那个版本为准。\n\n你在本设备上删除但尚未上传的内容会重新出现，因为本设备同时也会忘记这些删除操作。本设备此前已上传到旧文件夹的内容会留在那里，不会被移动。';
+
+  @override
+  String get cloudSyncFolderPreviewTitle => '使用这个文件夹？';
+
+  @override
+  String cloudSyncFolderPreviewHolds(String name, String date) {
+    return '“$name”中存放着一个于 $date 创建的同步数据集。';
+  }
+
+  @override
+  String cloudSyncFolderPreviewEmpty(String name) {
+    return '“$name”是一个 Note Synapse 同步文件夹，但里面还没有任何同步数据。如果你以为笔记应该在这里，请到另一台设备上核对 ID。';
+  }
+
+  @override
+  String get cloudSyncFolderPreviewUse => '使用这个文件夹';
+
+  @override
+  String cloudSyncFolderAmbiguous(int count, String name) {
+    return '你的云端硬盘中有 $count 个名为“$name”的文件夹，本设备无法判断哪一个存放着你的同步数据。请打开 Google 云端硬盘，重命名或删除你不想用于同步的那些文件夹，然后重试。';
+  }
+
+  @override
+  String get cloudSyncFolderNotFound =>
+      '本应用无法访问该 ID 对应的文件夹。请确认你从另一台设备完整复制了 ID，并且两台设备使用的是同一个 Google 账号。';
+
+  @override
+  String get cloudSyncDatasetCreated =>
+      '已创建新的同步文件夹。要让另一台设备与本设备同步，请在设置那台设备时使用此处显示的文件夹 ID。';
+
+  @override
+  String get cloudSyncDatasetJoined => '已加入你云端硬盘中已有的同步数据集。';
+
+  @override
   String get cloudSyncReset => '重置同步';
 
   @override

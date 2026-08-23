@@ -437,10 +437,11 @@
 // (`cloudSyncResetConfirm`).
 //
 // ---------------------------------------------------------------------
-// **What is preserved — a deny-list of two keys, not an allow-list.**
+// **What is preserved — a keep-list of four keys, not a delete-list.**
 // ---------------------------------------------------------------------
 // `sync_state` is cleared by `DELETE ... WHERE key NOT IN (hlc_wall_ms,
-// hlc_logical)` rather than by enumerating the keys to remove. That
+// hlc_logical, drive_root_folder_id, drive_root_folder_name)` rather than
+// by enumerating the keys to remove. That
 // direction is deliberate: `sync_state` is a deliberately open key/value
 // store (`database_service.dart`), and it has already grown `pull_tip:` and
 // `commit_seq:` since this engine started. An enumerate-what-to-delete list
@@ -449,11 +450,18 @@
 // is cleared by default, which is the safe direction for an operation whose
 // whole purpose is "forget the sync state."
 //
-// The HLC is the sole exception because its two keys are the one piece of
-// sync state whose value must never go backwards: § 11.2's clock is
+// There are exactly two exceptions, and each has to earn its place.
+//
+// The HLC is the first, because its two keys are the one piece of sync
+// state whose value must never go backwards: § 11.2's clock is
 // per-physical-device, not per-identity, and resetting it would let a
 // post-reset operation carry an HLC earlier than one this same physical
 // device already published, inverting every tie-break that lands on it.
+//
+// The Drive folder identity (M2.11) is the second: a reset re-runs § 11.1's
+// create-or-join against the SAME dataset, and clearing the folder id would
+// send that re-run back to resolving by name — the failure mode M2.11 was
+// built to remove. Full reasoning on [DatasetReset.preservedSyncStateKeys].
 //
 // ---------------------------------------------------------------------
 // **What is NOT touched, and how that is guaranteed rather than asserted.**
@@ -520,6 +528,7 @@ import 'package:sqflite/sqflite.dart';
 import '../database_service.dart';
 import '../logger_service.dart';
 import 'device_identity.dart';
+import 'drive_folder_identity.dart';
 import 'hlc.dart';
 
 /// `sync_state` key written by [DatasetReset.reset] and consumed by
@@ -596,9 +605,46 @@ class DatasetReset {
   /// The only `sync_state` keys a reset preserves. See this file's top doc
   /// comment on why this is a keep-list rather than a delete-list, and why
   /// the HLC specifically must not regress.
+  ///
+  /// **M2.11 added the two Drive-folder keys, and that is a deliberate
+  /// exception to "a newly-added key is cleared by default", so it needs its
+  /// reason on the record.** A reset is "forget what this device has already
+  /// synced", not "leave the dataset" — `CloudSyncService.resetSyncState`'s
+  /// own contract is that the device afterwards re-runs § 11.1's
+  /// create-or-join "against whatever is actually in Drive". Clearing the
+  /// folder id would make that re-run resolve by NAME again, which is the
+  /// behaviour M2.11 exists to remove: a user who reset because one of their
+  /// logs diverged, and who had at some point renamed the folder in Drive,
+  /// would have a second, empty dataset built beside their real one and be
+  /// told it was Ready. Keeping the id means that reset rejoins the same
+  /// folder, by id, regardless of what it is called now.
+  ///
+  /// **The deleted-folder case is not stranded by this**, which is the
+  /// obvious worry: post-reset bootstrap re-reads the marker, the recorded
+  /// id resolves to a definitive 404, and `initializeDatasetOnce` — the one
+  /// caller entitled to (see
+  /// `GoogleDriveBackend._ensureRootFolderForDatasetCreation`) — builds a
+  /// fresh folder, reusing the preserved NAME so the user's choice is not
+  /// silently lost along with it.
+  ///
+  /// **What preservation must NOT be allowed to mean, found in M2.11's
+  /// second review round (finding F1).** "The reset rejoins the same folder"
+  /// is right when the recorded folder is the right one and wrong when it is
+  /// not — and the id can be wrong two ways (a device that created its own
+  /// folder because discovery found nothing; a valid-but-wrong pasted id).
+  /// As shipped, preservation combined with a setup dialog gated on
+  /// `folderId == null` meant the post-reset create-or-join silently skipped
+  /// the question and built *another* new folder, so a reset was not a way
+  /// out of either. Preservation is kept — it is still the right default —
+  /// but the reset is no longer the last word: `cloud_sync_screen.dart`
+  /// re-opens its folder dialog for any device that is not `ready`,
+  /// pre-filled with this preserved pair, so accepting it keeps the
+  /// behaviour described above and changing or clearing it is now possible.
   static const List<String> preservedSyncStateKeys = [
     hlcWallStateKey,
     hlcLogicalStateKey,
+    driveRootFolderIdStateKey,
+    driveRootFolderNameStateKey,
   ];
 
   Future<DatasetResetResult> reset() async {

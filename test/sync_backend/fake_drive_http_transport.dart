@@ -128,6 +128,16 @@ class _StoredFile {
   final DateTime createdTime;
   DateTime modifiedTime;
 
+  /// M2.11: Drive's `trashed` flag. Real Drive keeps a trashed file fully
+  /// addressable by id — `files.get` still returns 200 — and only hides it
+  /// from `trashed = false` listings, which is exactly why a backend that
+  /// addresses its root folder by id has to check the flag rather than rely
+  /// on a 404. This fake now models that instead of hard-deleting
+  /// everything, so `debugTrashFile` reproduces "the user moved the sync
+  /// folder to the bin" as distinct from `debugDeleteFile`'s "the user
+  /// emptied the bin".
+  bool trashed = false;
+
   /// When true, [omitMd5ChecksumInJson] suppresses the `md5Checksum` field
   /// from this file's JSON representation — simulating a Drive response
   /// that omits the field, whether or not that's known to happen for a
@@ -239,9 +249,7 @@ class _QueryMatcher {
 
   bool matches(_StoredFile f) {
     if (parentId != null && !f.parents.contains(parentId)) return false;
-    if (trashedEquals != null && trashedEquals == true) {
-      return false; // this fake hard-deletes; nothing is ever trashed=true
-    }
+    if (trashedEquals != null && f.trashed != trashedEquals) return false;
     if (mimeTypeEquals != null && f.mimeType != mimeTypeEquals) return false;
     if (nameEquals != null && f.name != nameEquals) return false;
     for (final entry in appProperties.entries) {
@@ -418,7 +426,99 @@ class FakeDriveHttpTransport extends http.BaseClient {
     _visibleAfterListCall[newest.id] = _listCallCount + forListCalls;
   }
 
+  /// Hides ONE named stored object from `files.list` results for the next
+  /// [forListCalls] listing calls.
+  ///
+  /// [debugHideNewestMatchingFromListings] can only ever hide a single
+  /// object (the newest match), which is enough to model "this device's own
+  /// brand-new commit has not indexed yet" but cannot model M2.11's root
+  /// folder cases at all: those need *several* pre-existing folders hidden
+  /// at once (review finding F4), or one specific peer's folder hidden from
+  /// one specific device (finding F3). Keyed off the same call counter, so
+  /// the two hooks compose.
+  void debugHideFromListings(String fileId, {required int forListCalls}) {
+    _visibleAfterListCall[fileId] = _listCallCount + forListCalls;
+  }
+
+  // ==========================================================================
+  // M2.11 test hooks: the things a user does to a folder in Drive's own UI,
+  // which the app has no API for and must nevertheless survive.
+  // ==========================================================================
+
+  /// Drive ids of every stored folder, oldest-created first.
+  List<String> get debugFolderIds =>
+      (_files.values
+              .where((f) => f.mimeType == 'application/vnd.google-apps.folder')
+              .toList()
+            ..sort((a, b) => a.createdTime.compareTo(b.createdTime)))
+          .map((f) => f.id)
+          .toList();
+
+  String debugNameOf(String fileId) => _files[fileId]!.name;
+
+  /// Renames a stored object, as a user renaming the sync folder in Drive
+  /// would. The whole of M2.11's "a rename must not orphan the dataset"
+  /// claim is tested through this.
+  void debugRenameFile(String fileId, String newName) {
+    _files[fileId]!.name = newName;
+  }
+
+  /// Moves an object to the trash: still resolvable by id (200 from
+  /// `files.get`), excluded from `trashed = false` listings.
+  void debugTrashFile(String fileId) {
+    _files[fileId]!.trashed = true;
+  }
+
+  /// Destroys an object outright — the state after emptying Drive's bin.
+  /// `files.get` on it 404s.
+  void debugDeleteFile(String fileId) {
+    _files.remove(fileId);
+  }
+
+  /// Plants a folder the app did not create in this session — how a test
+  /// stages "there are already two folders with this name", the ambiguity
+  /// pre-M2.11 resolved by silently taking one.
+  ///
+  /// [appProperties] defaults to the dataset-root tag `GoogleDriveBackend`
+  /// stamps on its own root folder, because a folder without it is invisible
+  /// to that backend's discovery query and would stage nothing.
+  String debugCreateFolder(
+    String name, {
+    Map<String, String> appProperties = const {
+      'synapseObjectType': 'datasetRoot',
+    },
+  }) {
+    final file = _storeNewFile(
+      metadata: {
+        'name': name,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'appProperties': appProperties,
+      },
+      content: null,
+    );
+    return file.id;
+  }
+
+  /// Freezes every subsequently-created object's `createdTime` at one
+  /// instant, so a test can stage the state this fake's monotonic
+  /// microsecond counter otherwise makes unreachable: **two files Drive
+  /// reports as created at the identical time.**
+  ///
+  /// Drive's `createdTime` is millisecond-resolution and two folders created
+  /// in the same millisecond by two devices is an ordinary outcome of the
+  /// § 8.4 create/create race, so a tie is not exotic. M2.11's reconciliation
+  /// tie-break shipped as a strict `isBefore`, which is a *partial* order:
+  /// under a tie each device keeps its own folder, which is precisely the
+  /// split-brain the reconciliation exists to prevent (review finding F3).
+  /// Pass null to resume the monotonic counter.
+  void debugFreezeCreatedTimeAt(DateTime? instant) {
+    _frozenCreatedTime = instant;
+  }
+
+  DateTime? _frozenCreatedTime;
+
   DateTime _nextTimestamp() =>
+      _frozenCreatedTime ??
       DateTime.utc(2026, 1, 1).add(Duration(microseconds: _timeCounter++));
 
   bool _isVisible(_StoredFile f) {
@@ -601,6 +701,7 @@ class FakeDriveHttpTransport extends http.BaseClient {
     'appProperties': f.appProperties,
     'createdTime': f.createdTime.toIso8601String(),
     'modifiedTime': f.modifiedTime.toIso8601String(),
+    'trashed': f.trashed,
     if (f.content != null && !f.omitMd5ChecksumInJson) 'md5Checksum': f.md5Checksum,
     if (f.content != null) 'size': '${f.content!.length}',
   };

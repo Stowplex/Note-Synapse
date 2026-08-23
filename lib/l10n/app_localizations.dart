@@ -5564,6 +5564,150 @@ abstract class AppLocalizations {
   /// **'This device is set up for a sync dataset that is no longer in your Drive. Reset sync on this device to start over — your notes stay on this device.'**
   String get cloudSyncDatasetMissingDetail;
 
+  /// No description provided for @cloudSyncFolderDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync folder'**
+  String get cloudSyncFolderDialogTitle;
+
+  /// No description provided for @cloudSyncFolderNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder name in Google Drive'**
+  String get cloudSyncFolderNameLabel;
+
+  /// No description provided for @cloudSyncFolderNameHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'A folder with this name is created in your Drive. You can rename or move it afterwards — this device remembers the folder itself, not its name. Another device can only FIND this folder by name if you give it the same name, so the folder ID below is the dependable way to connect two devices.'**
+  String get cloudSyncFolderNameHelp;
+
+  /// No description provided for @cloudSyncFolderNameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a folder name'**
+  String get cloudSyncFolderNameRequired;
+
+  /// No description provided for @cloudSyncFolderJoinLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Or join an existing folder by ID'**
+  String get cloudSyncFolderJoinLabel;
+
+  /// No description provided for @cloudSyncFolderJoinHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'On a device that is already syncing, copy the folder ID from this screen and paste it here. This is the reliable way to point a second device at the same data. Leave it empty to look the folder up by name instead.'**
+  String get cloudSyncFolderJoinHelp;
+
+  /// No description provided for @cloudSyncFolderContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get cloudSyncFolderContinue;
+
+  /// No description provided for @cloudSyncFolderName.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder: {name}'**
+  String cloudSyncFolderName(String name);
+
+  /// No description provided for @cloudSyncFolderId.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder ID: {id}'**
+  String cloudSyncFolderId(String id);
+
+  /// No description provided for @cloudSyncFolderIdHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Use this ID to set up another device.'**
+  String get cloudSyncFolderIdHint;
+
+  /// No description provided for @cloudSyncFolderNameFollowsDrive.
+  ///
+  /// In en, this message translates to:
+  /// **'The folder name now follows Drive. Rename the folder in Drive to change it.'**
+  String get cloudSyncFolderNameFollowsDrive;
+
+  /// No description provided for @cloudSyncFolderCreatedHere.
+  ///
+  /// In en, this message translates to:
+  /// **'This device created this sync dataset. If you meant to join one you already have, use Change folder and paste that folder’s ID.'**
+  String get cloudSyncFolderCreatedHere;
+
+  /// No description provided for @cloudSyncFolderIdPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder ID: not recorded yet — it appears here after the next sync.'**
+  String get cloudSyncFolderIdPending;
+
+  /// No description provided for @cloudSyncFolderChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change folder'**
+  String get cloudSyncFolderChange;
+
+  /// No description provided for @cloudSyncFolderChangeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Point this device at a different folder?'**
+  String get cloudSyncFolderChangeTitle;
+
+  /// No description provided for @cloudSyncFolderChangeConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Your notes, tags, conversations and attachments stay on this device, and nothing already in Drive is deleted.\n\nThis device leaves the dataset it is in now and joins the one in the folder you choose. To do that it resets its sync state: it takes a new sync identity, forgets what it has already synced, and re-offers everything it holds to the new folder. Where the new folder already has a different version, that version wins.\n\nAnything you deleted on this device but never managed to upload comes back, because this device also forgets the deletion. Whatever this device already uploaded to the OLD folder stays there and is not moved.'**
+  String get cloudSyncFolderChangeConfirm;
+
+  /// No description provided for @cloudSyncFolderPreviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Use this folder?'**
+  String get cloudSyncFolderPreviewTitle;
+
+  /// No description provided for @cloudSyncFolderPreviewHolds.
+  ///
+  /// In en, this message translates to:
+  /// **'“{name}” holds a sync dataset started on {date}.'**
+  String cloudSyncFolderPreviewHolds(String name, String date);
+
+  /// No description provided for @cloudSyncFolderPreviewEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'“{name}” is a Note Synapse sync folder, but it has no sync data in it yet. If you expected your notes to be there, check the ID on the other device.'**
+  String cloudSyncFolderPreviewEmpty(String name);
+
+  /// No description provided for @cloudSyncFolderPreviewUse.
+  ///
+  /// In en, this message translates to:
+  /// **'Use this folder'**
+  String get cloudSyncFolderPreviewUse;
+
+  /// No description provided for @cloudSyncFolderAmbiguous.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} folders in your Drive are called “{name}”, so this device cannot tell which one holds your sync data. Open Google Drive and rename or remove the ones you do not want to sync with, then try again.'**
+  String cloudSyncFolderAmbiguous(int count, String name);
+
+  /// No description provided for @cloudSyncFolderNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No folder with that ID is available to this app. Check that you copied the whole ID from the other device, and that both devices use the same Google account.'**
+  String get cloudSyncFolderNotFound;
+
+  /// No description provided for @cloudSyncDatasetCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Created a new sync folder. To sync another device with this one, set that device up with the folder ID shown here.'**
+  String get cloudSyncDatasetCreated;
+
+  /// No description provided for @cloudSyncDatasetJoined.
+  ///
+  /// In en, this message translates to:
+  /// **'Joined the sync dataset already in your Drive.'**
+  String get cloudSyncDatasetJoined;
+
   /// No description provided for @cloudSyncReset.
   ///
   /// In en, this message translates to:

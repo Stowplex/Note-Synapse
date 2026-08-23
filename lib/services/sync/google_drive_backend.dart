@@ -18,6 +18,100 @@
 // own visible files) can find them again. Nothing here is discoverable by
 // name alone; `appProperties` is the actual index.
 //
+// ---------------------------------------------------------------------
+// **M2.11: the root folder is addressed by ID, and what that turns on.**
+// ---------------------------------------------------------------------
+// Until M2.11 the root was resolved by NAME on every run, from a hardcoded
+// string, with `existing.first` on a tie. `drive_folder_identity.dart`'s
+// header states the three defects that produced; the resolution rules now
+// live in [_findRootFolder]. What matters at this level: the Drive file id
+// is the identity, it is persisted in `sync_state`, and a name is consulted
+// exactly once per dataset (first setup, or the upgrade of an install that
+// predates M2.11) and never again.
+//
+// **The one genuinely open question, and the honest state of it.** A second
+// device joining an existing dataset has no persisted id, so it has to
+// discover the folder by listing — which only works if files this app
+// created for a user on device A are visible, via `files.list`, to the same
+// app on device B after a separate OAuth consent. Google's published
+// documentation does **not** state this either way. What it does say
+// (verified 2026-08, https://developers.google.com/workspace/drive/api/
+// guides/api-specific-auth): the scope grants access to files "that you
+// open with an app", and the consent string in Drive v3's own discovery
+// document is "See, edit, create, and delete only the specific Google Drive
+// files you use with **this app**" — app-keyed language, not
+// session-keyed. `files.list` is documented as accepting `drive.file`, and
+// `appProperties has {...}` is a documented query form, so the mechanism
+// this file already relies on is not in question — only the corpus it sees
+// on a second device is.
+//
+// **The one explicit statement found, and why it is weaker support than it
+// was originally presented as.** An earlier version of this comment cited:
+//
+//     "Authorization is bound to the app/project, not the token. So yes,
+//      any time you get a new token during authorization or a refresh it'll
+//      be good for the cumulative set of files authorized."
+//     https://groups.google.com/g/google-apps-script-community/c/_W-NKbttfbo
+//
+// and attributed it to "Steven Bazyl, Drive API DevRel, 2019-07-30",
+// calling the resulting claim medium-high confidence. Review round 2
+// fetched that URL three times and **could not reproduce the
+// attribution**: the thread renders as six posts ending 2019-06-11, and
+// none of them is by that person — the Googler visible in it is Eric
+// Koleda, Apps Script DevRel. The quote does appear associated with the
+// thread in search indexes, so it is probably genuine text from somewhere
+// in that discussion, but neither the author nor the date can be verified
+// from the cited page, and the date given was later than the thread's last
+// visible post. Worse for the use it was put to: the thread is an **Apps
+// Script** discussion, where "the app/project" naturally means a *script
+// project* — precisely the client-id-versus-GCP-project ambiguity the quote
+// was cited to resolve, reintroduced by its own context. Treat it as a
+// **weak** corroborating data point for a native OAuth client, not as an
+// answer; the surrounding argument (the app-keyed consent string, the
+// documented query form) is doing more work than the quote is.
+//
+// **The client-id wrinkle, and the honest state of the defusal.** The quote
+// says "app/project" without disambiguating OAuth client id from GCP
+// project, and nothing found settles it. It would matter a great deal for
+// an app whose Android and iOS builds used different client ids — and M2.9
+// settled that this app *is designed to* use a single **iOS-type** client
+// for both platforms (`google_drive_client_config.dart`), so two release
+// devices would present the identical client id and the ambiguity would be
+// unreachable in production. **That is a property of the design, not an
+// observed fact**: `GoogleDriveClientConfig.releaseClientId` is still the
+// literal placeholder `replace-with-release-client-id`, no release client
+// exists in any Google Cloud project, and no two devices have ever
+// presented anything. The debug/release split is real and is the one place
+// the ambiguity is deliberately reachable: those builds use distinct
+// clients, so a debug build cannot expect to discover a release build's
+// folder by name.
+//
+// **Nothing above has been tested against a real Google server** — no
+// request in this entire effort ever has (see "What this file does NOT
+// prove" below). So the join path is built not to depend on the answer:
+// [adoptRootFolder] lets a user paste the folder id shown on the other
+// device's settings screen, and a device that ends up CREATING a folder
+// rather than joining one says so, rather than presenting an empty dataset
+// as a successful join. If cross-device listing turns out not to work, name
+// discovery finds nothing, that device creates its own folder, and the
+// settings screen tells the user it created one — loud and diagnosable,
+// with the paste-an-id remedy on the same screen.
+//
+// **That last clause was false as originally shipped, and what it took to
+// make it true (review round 2, finding F1).** The remedy existed as an API
+// and was unreachable as a flow: `cloud_sync_screen.dart` opened its folder
+// dialog only while no id was recorded, "Set up dataset" is hidden once the
+// device is Ready, "Reset sync" is offered only for a missing dataset or a
+// diverged log, and a reset deliberately *preserves* the recorded id — so
+// the very device this argument is about, the one that created a folder
+// when it meant to join, could never be re-pointed at all. Three changes
+// close it: the dialog re-opens pre-filled with the current name and id, a
+// "Change folder" action reaches it from the Ready state (resetting first,
+// with its own warning), and an emptied id field now clears the recorded id
+// instead of being silently merged over. [inspectRootFolder] additionally
+// shows *which* dataset a pasted folder holds before anything is recorded,
+// so a valid-but-wrong paste is visible while cancelling is still free.
+//
 // **Drive's non-atomic create, and the existence-check-before-create
 // mitigation this file implements for every write-once object type
 // (dataset marker, commits, blobs, snapshots) — reusing, not re-deriving,
@@ -76,6 +170,7 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
 import '../oauth_token_manager.dart';
+import 'drive_folder_identity.dart';
 import 'sync_backend.dart';
 import 'sync_backend_exceptions.dart';
 
@@ -95,30 +190,63 @@ class GoogleDriveApiException implements Exception {
   String toString() => 'GoogleDriveApiException(status: $statusCode): $message';
 }
 
+/// What a pasted folder id turns out to point at, read before anything is
+/// recorded — see [GoogleDriveBackend.inspectRootFolder].
+///
+/// Deliberately not a `SyncBackend` concept: joining by pasting a
+/// backend-native id is Drive-shaped, and § 8.1 keeps connection setup off
+/// the interface entirely.
+class DriveRootFolderPreview {
+  const DriveRootFolderPreview({required this.identity, this.marker});
+
+  /// The folder itself — id as pasted (trimmed), name as Drive reports it
+  /// now, which is what lets the UI show the user a name they recognise
+  /// instead of asking them to trust an opaque id.
+  final DriveFolderIdentity identity;
+
+  /// The dataset that folder holds, or null when it holds none yet. This is
+  /// the field that distinguishes "the folder you meant" from "a valid
+  /// Synapse folder that is not your dataset" — the case the tag check alone
+  /// cannot see.
+  final DatasetInitMarker? marker;
+}
+
 /// Lightweight typed view over one Drive `files` resource, as returned by
 /// `files.list`/`files.create`/`files.get` with the `fields` this backend
 /// always requests. Internal to this file — never exposed through
 /// `SyncBackend`.
 class _DriveFile {
   final String id;
+  final String name;
   final Map<String, String> appProperties;
   final DateTime createdTime;
   final String? md5Checksum;
 
+  /// Drive's own `trashed` flag. Only ever consulted for the root folder
+  /// (M2.11): a trashed folder is still addressable by id and still returns
+  /// 200 from `files.get`, so a device whose user "deleted" the sync folder
+  /// the ordinary way — which moves it to Drive's trash rather than
+  /// destroying it — would otherwise go on syncing into the bin.
+  final bool trashed;
+
   const _DriveFile({
     required this.id,
+    required this.name,
     required this.appProperties,
     required this.createdTime,
     this.md5Checksum,
+    this.trashed = false,
   });
 
   factory _DriveFile.fromJson(Map<String, dynamic> json) {
     final rawProps = json['appProperties'] as Map<String, dynamic>? ?? const {};
     return _DriveFile(
       id: json['id'] as String,
+      name: json['name'] as String? ?? '',
       appProperties: rawProps.map((k, v) => MapEntry(k, v as String)),
       createdTime: DateTime.parse(json['createdTime'] as String),
       md5Checksum: json['md5Checksum'] as String?,
+      trashed: json['trashed'] as bool? ?? false,
     );
   }
 }
@@ -131,27 +259,54 @@ class GoogleDriveBackend implements SyncBackend {
   GoogleDriveBackend({
     required OAuthTokenManager tokenManager,
     required http.Client httpClient,
-    String rootFolderName = 'Note Synapse Sync',
+    String rootFolderName = defaultDriveRootFolderName,
+    DriveFolderIdentityStore? folderIdentityStore,
   }) : _tokenManager = tokenManager,
        _http = httpClient,
-       _rootFolderName = rootFolderName;
+       _fallbackRootFolderName = rootFolderName,
+       _folderStore = folderIdentityStore ?? InMemoryDriveFolderIdentityStore();
 
   final OAuthTokenManager _tokenManager;
   final http.Client _http;
-  final String _rootFolderName;
+
+  /// The name to use when the durable store holds none — i.e. the default
+  /// for a fresh install, and the literal an install that predates M2.11
+  /// must be upgraded by. The user's own choice lives in
+  /// [DriveFolderIdentity.folderName] and takes precedence over this.
+  final String _fallbackRootFolderName;
+
+  /// Durable home for the resolved folder id (M2.11). Defaults to an
+  /// in-memory store, which reproduces this class's pre-M2.11 behaviour
+  /// exactly: resolve once per instance, cache, forget on restart.
+  final DriveFolderIdentityStore _folderStore;
 
   static const _apiBase = 'https://www.googleapis.com/drive/v3';
   static const _uploadBase = 'https://www.googleapis.com/upload/drive/v3';
   static const _listFields =
-      'nextPageToken,files(id,name,appProperties,createdTime,modifiedTime,md5Checksum,size)';
+      'nextPageToken,files(id,name,appProperties,createdTime,modifiedTime,md5Checksum,size,trashed)';
   static const _singleFileFields =
-      'id,name,appProperties,createdTime,modifiedTime,md5Checksum,size';
+      'id,name,appProperties,createdTime,modifiedTime,md5Checksum,size,trashed';
 
   /// Cached after first resolution for the lifetime of this instance — one
   /// `SyncBackend` instance is already scoped to "one dataset" (§ 8.1), and
   /// the root folder is this dataset's single root location on Drive, so
   /// there is no reason to re-resolve it on every call.
   String? _rootFolderId;
+
+  /// Set when a durably-recorded folder id was resolved and Drive
+  /// **definitively** reported it gone (404, or present-but-trashed) — M2.11.
+  ///
+  /// Kept as state rather than returned, because the two callers of
+  /// [_findRootFolder] want opposite things from the same answer: a read
+  /// ("is there a marker?") wants a plain `null`, which is what routes a
+  /// vanished folder into M2.13's existing missing-dataset recovery; a write
+  /// must not treat it as "no folder yet" and quietly create a replacement
+  /// underneath a device that still believes it is Ready.
+  ///
+  /// Never set by a transport failure. Those throw out of [_findRootFolder]
+  /// untouched — see [SyncRootFolderMissingException] for why that
+  /// distinction is the whole point.
+  String? _vanishedRootFolderId;
 
   /// M2.12: per-`deviceLogId` in-session tip cache — see [appendCommit]'s
   /// own doc comment for exactly which appends it skips queries for and
@@ -454,8 +609,8 @@ class GoogleDriveBackend implements SyncBackend {
   static const _rootTagKey = 'synapseObjectType';
   static const _rootTagValue = 'datasetRoot';
 
-  /// Resolves the root folder **without creating it** — `null` when the user
-  /// has no such folder.
+  /// Resolves the root folder **without creating it** — `null` when this
+  /// dataset has no root folder the app can reach.
   ///
   /// **Split out from [_ensureRootFolder] for M2.13, review finding F6.**
   /// `readDatasetInitMarker` called `_ensureRootFolder`, which creates the
@@ -466,40 +621,416 @@ class GoogleDriveBackend implements SyncBackend {
   /// deliberately deleted `Note Synapse Sync` from their Drive got an empty
   /// one silently recreated by the very sync that was supposed to be telling
   /// them the dataset was gone. "Is there a marker?" is a read; it must not
-  /// have a write as a side effect. Deliberately NOT expanded into M2.11's
-  /// folder-identity work — the folder is still name-and-tag addressed here,
-  /// exactly as before.
+  /// have a write as a side effect.
+  ///
+  /// ---------------------------------------------------------------------
+  /// **M2.11: three branches, and only the third one still looks at a name.**
+  /// ---------------------------------------------------------------------
+  /// 1. **In-memory cache** — one `SyncBackend` instance is scoped to one
+  ///    dataset (§ 8.1), so the folder cannot change under it.
+  /// 2. **A durably-recorded folder id** ([DriveFolderIdentity.folderId]).
+  ///    Addressed by id via `files.get`, never by name — which is precisely
+  ///    what makes renaming or moving the folder in Drive harmless, the
+  ///    behaviour a user would expect and the third of the three defects
+  ///    `drive_folder_identity.dart` opens by naming. A definitive 404 (or a
+  ///    `trashed: true` answer) records [_vanishedRootFolderId] and returns
+  ///    null so M2.13's missing-dataset recovery picks it up; **anything
+  ///    else throws**, because "I could not reach Drive" is not "your data
+  ///    was deleted".
+  /// 3. **Name resolution, exactly once in this dataset's life** — first
+  ///    setup, or the upgrade path for an install that predates M2.11 and
+  ///    whose folder is still the name-resolved one. Whatever it finds is
+  ///    persisted as an id immediately, so branch 3 never runs again. More
+  ///    than one match throws [SyncAmbiguousRootFolderException] rather than
+  ///    picking: see that type for why an arbitrary pick is a split-brain
+  ///    rather than a cosmetic wart.
   Future<String?> _findRootFolder() async {
     final cached = _rootFolderId;
     if (cached != null) return cached;
 
-    final query =
-        "mimeType = 'application/vnd.google-apps.folder' and trashed = false "
-        "and name = '${_escapeQueryValue(_rootFolderName)}' and "
-        "appProperties has { key='$_rootTagKey' and value='$_rootTagValue' }";
-    final existing = await _listAll(query);
+    final stored = await _folderStore.read();
+    final storedId = stored.folderId;
+    if (storedId != null) {
+      final folder = await _getFileIfPresent(storedId);
+      if (folder == null || folder.trashed) {
+        // Definitively gone. Recorded, not thrown, so that a plain read
+        // ("is there a marker?") answers null and flows into M2.13's
+        // existing recovery path instead of inventing a second one.
+        _vanishedRootFolderId = storedId;
+        return null;
+      }
+      _vanishedRootFolderId = null;
+      _rootFolderId = storedId;
+      // Refresh the recorded NAME from what Drive just said, when the two
+      // disagree — M2.11 review round 2. Nothing resolves by the name any
+      // more, but two things still read it: the settings screen shows it,
+      // and a folder rebuilt after a deletion is created under it. Without
+      // this, a folder renamed in Drive kept displaying its old name
+      // forever, which contradicted [DriveFolderIdentity.folderName]'s own
+      // documented meaning ("the name the folder was last seen under") and
+      // would have re-created a deleted folder under a name the user had
+      // deliberately moved away from. Conditional so the ordinary launch
+      // still costs zero writes.
+      if (folder.name.isNotEmpty && folder.name != stored.folderName) {
+        await _folderStore.write(stored.copyWith(folderName: folder.name));
+      }
+      return storedId;
+    }
+
+    final name = stored.folderName ?? _fallbackRootFolderName;
+    final existing = await _listAll(_rootFolderQuery(name));
     if (existing.isEmpty) return null;
-    // Same existence-check-before-create race as everything else in this
-    // file — oldest-wins keeps this deterministic across every device
-    // that might independently race to create the root folder on first
-    // run, without needing a second reconciliation pass.
-    existing.sort((a, b) => a.createdTime.compareTo(b.createdTime));
-    _rootFolderId = existing.first.id;
+    if (existing.length > 1) {
+      // Pre-M2.11 this sorted by `createdTime` and took `existing.first`,
+      // with a comment claiming oldest-wins "keeps this deterministic across
+      // every device". It does not: it is deterministic per listing, and a
+      // second device is free to see a different set (Drive's listing index
+      // is eventually consistent, and the folders may not even all be
+      // visible to it). Two devices picking two folders is a silent split-
+      // brain, so this refuses instead.
+      existing.sort(_oldestRootFolderFirst);
+      throw SyncAmbiguousRootFolderException(
+        folderName: name,
+        candidateCount: existing.length,
+        candidateIds: [for (final f in existing) f.id],
+      );
+    }
+    await _rememberRootFolder(existing.single.id, existing.single.name);
     return _rootFolderId!;
   }
 
+  /// `files.get` that answers `null` for a definitive not-found and rethrows
+  /// everything else.
+  ///
+  /// **The narrowness is the point.** Only a 404 counts as absence. A 5xx, a
+  /// 429, a timeout and a dropped connection all keep propagating as the
+  /// `SyncNetworkException`/`SyncRateLimitedException` they already map to,
+  /// so no transport failure can ever be rendered to a user as "your dataset
+  /// was deleted" — the distinction M2.13 built
+  /// `DatasetBootstrap.verifyDatasetStillExists` around, applied one layer
+  /// down at the folder itself.
+  ///
+  /// **A disclosed ambiguity in Drive's own answer**, stated here rather
+  /// than left to be discovered: under the `drive.file` scope a 404 also
+  /// covers "this folder exists but this app can no longer see it". Google's
+  /// documentation does not distinguish the two and the API gives the client
+  /// nothing to tell them apart with. See this file's M2.11 note on
+  /// `drive.file` visibility for when that case is believed to be reachable.
+  Future<_DriveFile?> _getFileIfPresent(String fileId) async {
+    final uri = Uri.parse(
+      '$_apiBase/files/$fileId',
+    ).replace(queryParameters: {'fields': _singleFileFields});
+    final response = await _authorizedRequest(
+      (token) =>
+          http.Request('GET', uri)..headers['Authorization'] = 'Bearer $token',
+    );
+    if (response.statusCode == 404) return null;
+    _throwIfError(response);
+    return _DriveFile.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+  }
+
+  /// Caches and durably records a resolved/created root folder.
+  Future<void> _rememberRootFolder(String folderId, String folderName) async {
+    _rootFolderId = folderId;
+    _vanishedRootFolderId = null;
+    await _folderStore.write(
+      DriveFolderIdentity(
+        folderId: folderId,
+        // Recorded even though nothing resolves by it any more: it is what
+        // the settings screen shows the user, and what a folder created
+        // after a reset is named so the user's choice is not silently lost.
+        folderName: folderName.isEmpty ? null : folderName,
+      ),
+    );
+  }
+
+  /// Adopts an existing folder by its Drive id — M2.11's join path for a
+  /// second device, and the escape hatch when name discovery cannot work.
+  ///
+  /// **Why this exists at all.** A second device has no recorded id, so it
+  /// must *discover* the folder, which means listing by name. Whether that
+  /// listing can succeed is a property of `drive.file` that this project has
+  /// never been able to test against a real Google server (see this file's
+  /// M2.11 note). If it works, this method is a convenience. If it does not,
+  /// it is the only way to join a dataset at all — and the difference is
+  /// visible to the user as "name discovery found nothing", not as a
+  /// silently empty dataset, because a device that creates rather than joins
+  /// says so on the settings screen.
+  ///
+  /// Validates before recording: an id that does not resolve throws
+  /// [SyncRootFolderMissingException] here, at the moment the user pasted
+  /// it, rather than being stored and turning into a fresh empty folder at
+  /// the next bootstrap.
+  /// A pasted id that resolves to something which is not one of this app's
+  /// dataset roots — a commit file's id, a folder from some other feature —
+  /// is refused with the same exception as an id that resolves to nothing,
+  /// because from the user's position the two mean the same thing ("that is
+  /// not the thing you meant to paste") and the remedy is identical.
+  ///
+  /// Implemented on top of [inspectRootFolder] so that what the settings
+  /// screen SHOWED the user and what this then accepts cannot diverge — the
+  /// alternative, two validation paths that "obviously" agree, is how a
+  /// preview stops meaning anything. The cost is that a join driven from
+  /// that screen reads the dataset marker twice (once to show it, once
+  /// here): two extra Drive round trips, on an explicit one-time user
+  /// action, in exchange for one definition of "usable folder".
+  Future<DriveFolderIdentity> adoptRootFolder(String folderId) async {
+    final preview = await inspectRootFolder(folderId);
+    final identity = preview.identity;
+    await _rememberRootFolder(identity.folderId!, identity.folderName ?? '');
+    return identity;
+  }
+
+  /// Everything [adoptRootFolder] validates, **without recording anything** —
+  /// M2.11 review round 2, finding F1.
+  ///
+  /// **Why validation alone was not enough.** [adoptRootFolder] checked that
+  /// a pasted id resolves, is not trashed, and carries the `datasetRoot`
+  /// tag. All three are true of a folder belonging to a completely different
+  /// dataset — the user's own abandoned one, a second household member's —
+  /// so a *valid but wrong* paste was accepted silently and only became
+  /// visible afterwards, as an empty library. The dataset marker is the one
+  /// thing that says WHICH dataset a folder holds, and reading it costs one
+  /// listing plus one download on a path the user is already waiting on.
+  ///
+  /// [DriveRootFolderPreview.marker] is null when the folder is a legitimate
+  /// Synapse root that simply has no dataset in it yet — a real and
+  /// perfectly joinable state (the other device created the folder but has
+  /// not finished bootstrap), and one worth showing rather than refusing,
+  /// because the user is the only one who can say whether that is what they
+  /// meant.
+  Future<DriveRootFolderPreview> inspectRootFolder(String folderId) async {
+    final trimmed = folderId.trim();
+    final folder = await _getFileIfPresent(trimmed);
+    if (folder == null ||
+        folder.trashed ||
+        folder.appProperties[_rootTagKey] != _rootTagValue) {
+      throw SyncRootFolderMissingException(trimmed);
+    }
+    final markers = await _listAll(_markerQuery(trimmed));
+    DatasetInitMarker? marker;
+    if (markers.isNotEmpty) {
+      markers.sort(_oldestRootFolderFirst);
+      marker = _decodeMarker(await _downloadContent(markers.first.id));
+    }
+    return DriveRootFolderPreview(
+      identity: DriveFolderIdentity(
+        folderId: trimmed,
+        folderName: folder.name.isEmpty ? null : folder.name,
+      ),
+      marker: marker,
+    );
+  }
+
+  /// Resolves the root folder for an ordinary operation (append, read,
+  /// upload, ...), creating it only when this dataset has never had one.
+  ///
+  /// **Creating when nothing is recorded is deliberate, not laziness**: the
+  /// § 8.6 conformance suite calls `appendCommit` without ever calling
+  /// `initializeDatasetOnce`, and that ordering is part of the interface's
+  /// contract, not a test artifact.
+  ///
+  /// **Refusing to create after a vanish is the M2.11 half.** A recorded id
+  /// that Drive says is gone means this device's dataset was deleted, not
+  /// that it never existed; silently building a replacement underneath a
+  /// device that still believes it is Ready is exactly the dead end M2.13
+  /// removed from `DatasetBootstrap`. In the production flow the user never
+  /// reaches this throw — `CloudSyncService.syncNow`'s pre-flight
+  /// `verifyDatasetStillExists` sees the same vanished folder one call
+  /// earlier and reports the missing dataset properly — so this is the
+  /// backstop for every path that does not pre-flight.
   Future<String> _ensureRootFolder() async {
     final found = await _findRootFolder();
     if (found != null) return found;
+    final vanished = _vanishedRootFolderId;
+    if (vanished != null) throw SyncRootFolderMissingException(vanished);
+    return _createRootFolder();
+  }
 
+  /// [_ensureRootFolder]'s create-anyway variant, for
+  /// [initializeDatasetOnce] only.
+  ///
+  /// Bootstrap is the one caller entitled to build a replacement for a
+  /// vanished folder, because `DatasetBootstrap.bootstrap()` only reaches
+  /// `initializeDatasetOnce` when this device is NOT locally 'ready' — a
+  /// fresh install, or a device the user has explicitly reset out of
+  /// `needsReset`. In both, "there is no dataset, make one" is what the user
+  /// asked for. A locally-'ready' device short-circuits on the marker read
+  /// long before this and can never get here.
+  Future<String> _ensureRootFolderForDatasetCreation() async {
+    final found = await _findRootFolder();
+    if (found != null) return found;
+    return _createRootFolder();
+  }
+
+  /// Creates the root folder, then reconciles against a concurrent creator.
+  ///
+  /// **Why the extra listing, which costs one request once per dataset.**
+  /// Recording an id is what makes M2.11 work, and it is also what removes
+  /// the only convergence story the pre-M2.11 code had. Before, two devices
+  /// that both created a folder named X would both re-list on every run and
+  /// both take the oldest, so a create/create race healed itself. Now each
+  /// would record the folder it personally created and neither would ever
+  /// list again: two datasets, forever, silently — the exact split-brain
+  /// this milestone exists to remove, reintroduced from the other end.
+  /// § 8.4's existence-check-before-create race is a real, disclosed
+  /// property of `files.create`, so this is not hypothetical.
+  ///
+  /// The reconciliation is deterministic oldest-wins over the union of what
+  /// the listing returned and the folder just created — the union, because
+  /// Drive's listing index is eventually consistent (§ 8.2 item 6) and may
+  /// not yet contain this device's own brand-new folder.
+  ///
+  /// **The comparison is `(createdTime, id)`, and the second component is
+  /// load-bearing rather than tidiness (review round 2, finding F3).** It
+  /// shipped as a strict `isBefore`, which is a *partial* order: Drive's
+  /// `createdTime` is millisecond-resolution, and two folders created in the
+  /// same millisecond by two racing devices tie, so neither beat the other
+  /// and each device kept its own — the reconciliation producing exactly the
+  /// split-brain it exists to prevent. Drive ids are unique, so ordering the
+  /// pair makes the winner total and identical on every device that sees the
+  /// same set.
+  ///
+  /// **More than one PRE-EXISTING candidate is refused, not reconciled
+  /// (review round 2, finding F4).** [_findRootFolder] throws
+  /// [SyncAmbiguousRootFolderException] when its listing returns several
+  /// same-named roots; before this, a listing that lagged and returned *zero*
+  /// routed the identical Drive state here instead, where oldest-wins
+  /// silently adopted a folder this device had neither created nor
+  /// discovered. One call earlier it stopped and asked; one call later it
+  /// guessed. The same rule now applies at both, counted over candidates
+  /// other than this call's own creation, so the answer no longer depends on
+  /// which side of a listing-index refresh the call landed on.
+  ///
+  /// **A retry CAN still multiply folders, and review round 3 disproved the
+  /// claim that stood here.** That claim was: "this device's own leftover is
+  /// visible to the next run's [_findRootFolder] listing, which throws before
+  /// reaching here." True only when the leftover has reached Drive's listing
+  /// index. Executed counterexample: the transport drops the connection on
+  /// the first request *after* a successful folder create, the user retries,
+  /// and the listing has not yet surfaced the leftover — so discovery sees
+  /// zero, this method creates a second folder, and the account ends up with
+  /// two same-named roots both carrying `datasetRoot`. The lag involved is
+  /// the same § 8.2 item 6 eventual consistency this comment invokes three
+  /// paragraphs down as the reason the reconciliation exists at all, so it is
+  /// not an exotic staging.
+  ///
+  /// What changed with the F4 rule is the *consequence*, and it got worse
+  /// rather than better: pre-M2.11 such a leftover was benign, because
+  /// oldest-wins resolved it on every launch. Now every future device that
+  /// must discover by name hard-fails with [SyncAmbiguousRootFolderException]
+  /// until a human deletes the extra folder in Drive. So a transient network
+  /// blip during one device's first setup can permanently poison name
+  /// discovery for the whole account — with no signal to the user who caused
+  /// it, since their own device resolves fine by recorded id. Refusing is
+  /// still the right call (the alternative is the silent wrong pick this rule
+  /// exists to remove), but the cost is real and is not mitigated anywhere;
+  /// the repair is manual, and the re-openable folder dialog is what makes it
+  /// reachable.
+  ///
+  /// ---------------------------------------------------------------------
+  /// **What it does NOT fix, stated accurately after review round 2 found
+  /// the earlier statement wrong in both halves.**
+  /// ---------------------------------------------------------------------
+  /// It said the split-brain needed the listing to lag on *both* devices,
+  /// and that this was "the same exposure the pre-M2.11 code had". Neither
+  /// is true:
+  ///
+  ///  * A lag on the **single** side that created the *newer* folder is
+  ///    enough. B records the globally-oldest folder; A's listings — the
+  ///    discovery one and the reconciliation one — both miss it; A creates
+  ///    and records its own. B never lists again either, because it already
+  ///    has an id. Two datasets, no error.
+  ///  * Pre-M2.11 this **healed on the next run**, because resolution was
+  ///    re-done from the name every launch and both devices re-took the
+  ///    oldest. Recording an id is what converts a transient divergence into
+  ///    a permanent one. That is a real cost of this milestone, not a
+  ///    pre-existing condition it inherited.
+  ///
+  /// **A bounded self-heal was considered and deliberately rejected** — the
+  /// candidate being "keep re-running the name reconciliation until this
+  /// device has observed a peer's log in its folder, and stop once it has",
+  /// which is exactly the window in which a split is undetectable. Three
+  /// reasons against, the first decisive:
+  ///
+  ///   1. **This method's own leftover poisons it.** The losing folder is
+  ///      left in place (below) carrying the same name *and* the
+  ///      `datasetRoot` tag, so a device that kept re-listing would see two
+  ///      candidates and, under the F4 rule above, refuse to sync — turning
+  ///      a healthy, converged single-device install into a hard error. The
+  ///      heal would fire most often on the installs that need it least.
+  ///   2. **It orphans commits.** Adopting a different folder after this
+  ///      device has already published leaves those commits in the old
+  ///      folder, and strands any third device that joined it. The failure
+  ///      it trades for is quieter, not smaller.
+  ///   3. A single-device user is *permanently* "alone", so the extra
+  ///      listing is not a bounded cost for them; it is every round forever.
+  ///
+  /// The permanence is therefore disclosed rather than mechanised, and the
+  /// remedy is the one M2.11 already builds: the settings screen says which
+  /// device CREATED a dataset rather than joining one, and the folder id and
+  /// the re-openable folder dialog on that same screen let the user point
+  /// this device at the other one's folder. `drive_folder_identity_test.dart`
+  /// pins the permanence explicitly, so adding a heal later means
+  /// consciously rewriting that test rather than silently changing behaviour.
+  ///
+  /// **The loser's now-empty folder is left in place**, and the reason
+  /// recorded here used to be wrong: it said "deleting a folder this code
+  /// cannot prove is unused". Unusedness is in fact the one thing it *can*
+  /// prove — the folder was created by this very call milliseconds earlier
+  /// and nothing has been written to it. The real reason is narrower: a
+  /// Drive-side delete is the one action here with no undo, this code has
+  /// only ever *inferred* which folder it created (from a create response it
+  /// may have retried), and a wrong delete destroys a user's data where a
+  /// wrong keep destroys nothing. The cost of keeping is worse than the
+  /// earlier text implied and is stated here rather than left to be found:
+  /// the leftover carries the chosen name **and** the `datasetRoot` tag, so
+  /// it makes name discovery permanently ambiguous for every future device —
+  /// which now means every such device stops with
+  /// [SyncAmbiguousRootFolderException] until the user removes it in Drive.
+  Future<String> _createRootFolder() async {
+    final stored = await _folderStore.read();
+    final name = stored.folderName ?? _fallbackRootFolderName;
     final created = await _createMetadataOnly({
-      'name': _rootFolderName,
+      'name': name,
       'mimeType': 'application/vnd.google-apps.folder',
       'appProperties': {_rootTagKey: _rootTagValue},
     });
-    _rootFolderId = created.id;
-    return _rootFolderId!;
+
+    final candidates = await _listAll(_rootFolderQuery(name));
+    final others = [for (final c in candidates) if (c.id != created.id) c];
+    if (others.length > 1) {
+      others.sort(_oldestRootFolderFirst);
+      throw SyncAmbiguousRootFolderException(
+        folderName: name,
+        candidateCount: others.length,
+        candidateIds: [for (final f in others) f.id],
+      );
+    }
+
+    var winner = created;
+    for (final candidate in others) {
+      if (_oldestRootFolderFirst(candidate, winner) < 0) winner = candidate;
+    }
+
+    await _rememberRootFolder(winner.id, name);
+    return winner.id;
   }
+
+  /// Total, stable order over root-folder candidates: oldest first, ties
+  /// broken by Drive's (unique) file id. See [_createRootFolder] for why the
+  /// tie-break is not cosmetic.
+  static int _oldestRootFolderFirst(_DriveFile a, _DriveFile b) {
+    final byTime = a.createdTime.compareTo(b.createdTime);
+    return byTime != 0 ? byTime : a.id.compareTo(b.id);
+  }
+
+  String _rootFolderQuery(String name) =>
+      "mimeType = 'application/vnd.google-apps.folder' and trashed = false "
+      "and name = '${_escapeQueryValue(name)}' and "
+      "appProperties has { key='$_rootTagKey' and value='$_rootTagValue' }";
 
   // ===========================================================================
   // Dataset lifecycle
@@ -509,7 +1040,11 @@ class GoogleDriveBackend implements SyncBackend {
 
   @override
   Future<void> initializeDatasetOnce(DatasetInitMarker marker) async {
-    final rootId = await _ensureRootFolder();
+    // The one caller allowed to build a root folder for a dataset whose
+    // recorded folder has vanished — see
+    // [_ensureRootFolderForDatasetCreation] for why bootstrap, and only
+    // bootstrap, is entitled to that.
+    final rootId = await _ensureRootFolderForDatasetCreation();
     final existing = await _listAll(_markerQuery(rootId));
     if (existing.isNotEmpty) {
       // First-writer-wins, racily — the disclosed existence-check race

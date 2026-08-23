@@ -150,6 +150,22 @@ enum SyncHealthIssueKind {
   /// today they share one remedy.
   deviceLogDiverged,
 
+  /// **M2.11, review round 2 (finding F2).** More than one folder in the
+  /// user's Drive answers to this dataset's folder name, and this device has
+  /// no recorded folder id to fall back on — so nothing syncs at all until a
+  /// human says which folder is theirs.
+  ///
+  /// **On the health spine rather than left as a thrown exception**, because
+  /// the population it fires for is an install that predates M2.11: already
+  /// `ready`, never `needsReset`, so the dataset card stays green, no reset
+  /// is offered, and the only thing that ever mentioned the condition was a
+  /// snackbar quoting `SyncAmbiguousRootFolderException.toString()`. That is
+  /// the precise shape M2.10's spine and M2.13's typed states were built to
+  /// end. The remedy is in Drive (rename or remove the duplicates) or on
+  /// this screen (paste the folder id from a device that is syncing), which
+  /// is why no reset button is attached to it — a reset would fix nothing.
+  rootFolderAmbiguous,
+
   /// Entity tables whose rows are deliberately not minted at all, because a
   /// receiving device could never build them (`entitySyncability`).
   tablesNotSynced,
@@ -220,6 +236,62 @@ const String syncHealthStateKey = 'sync_health';
 /// successful push rather than a screen refresh.
 const String divergedAuthorLogsStateKey = 'diverged_author_logs';
 
+/// **M2.11, review round 2.** `sync_state` key holding the JSON-encoded
+/// [RootFolderAmbiguity] this device last hit, or absent when there is none.
+///
+/// Durable for the same reason [divergedAuthorLogsStateKey] is: the
+/// condition persists until the user acts on it in Drive, while the round
+/// that detected it is long over by the time anyone opens a settings screen.
+/// Written and cleared by `CloudSyncService`; read here so the health
+/// snapshot and the sync card cannot disagree about whether it is still
+/// true.
+const String rootFolderAmbiguityStateKey = 'root_folder_ambiguity';
+
+/// `'1'` when this device CREATED the dataset it is currently in, `'0'` when
+/// it joined one; absent before any create-or-join has completed.
+///
+/// Lives beside the other durable sync-card facts rather than in a widget's
+/// `State` because it is the diagnosable half of M2.11's fail-loud design:
+/// if `drive.file` does not let a second device list the first's folder,
+/// that device silently creates its own dataset, and this is what tells the
+/// user it created rather than joined. A signal that only exists until the
+/// next tap is not a signal (M2.11 review round 3, finding 5).
+const String datasetCreatedHereStateKey = 'dataset_created_here';
+
+/// The two facts a user needs in order to act on an ambiguous folder name:
+/// how many folders answered to it, and what it is called.
+///
+/// Stored structured rather than as a rendered sentence, for the same reason
+/// `LastSyncOutcome.detail` stores raw counters — a persisted row has to
+/// re-render in whatever language is active *now*.
+class RootFolderAmbiguity {
+  const RootFolderAmbiguity({
+    required this.folderName,
+    required this.candidateCount,
+  });
+
+  final String folderName;
+  final int candidateCount;
+
+  String toJsonString() =>
+      jsonEncode({'folderName': folderName, 'candidateCount': candidateCount});
+
+  static RootFolderAmbiguity? fromJsonString(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final json = jsonDecode(raw) as Map<String, dynamic>;
+      final name = json['folderName'] as String?;
+      final count = json['candidateCount'] as int?;
+      if (name == null || count == null || count < 2) return null;
+      return RootFolderAmbiguity(folderName: name, candidateCount: count);
+    } catch (_) {
+      // A corrupt row must not break the settings screen — same stance as
+      // `SyncHealth.fromJsonString`.
+      return null;
+    }
+  }
+}
+
 /// Recomputes [SyncHealth] from durable state plus this round's transient
 /// results, and persists it.
 ///
@@ -237,19 +309,24 @@ Future<SyncHealth> recomputeSyncHealth(
   final db = await databaseService.database;
   final issues = <SyncHealthIssue>[];
 
-  // ── 1/4: M2.13's two engine-level states ─────────────────────────────
+  // ── 1/4: the engine-level states that mean "nothing is syncing" ──────
   //
   // Read from `sync_state` rather than passed in, exactly like the queue
-  // backlog below and for the same reason: both conditions persist until
-  // something is actually done about them, while the round that DETECTED
-  // either one is long over by the time anyone looks at a settings screen.
-  // Reported first because they subsume the rest — when the dataset is gone,
-  // "3 removals are waiting on a missing entity" is noise.
+  // backlog below and for the same reason: all three conditions persist
+  // until something is actually done about them, while the round that
+  // DETECTED any of them is long over by the time anyone looks at a settings
+  // screen. Reported first because they subsume the rest — when the dataset
+  // is gone, "3 removals are waiting on a missing entity" is noise. (M2.13
+  // added the first two; M2.11's review round 2 added the third.)
   final stateRows = await db.query(
     'sync_state',
     columns: const ['key', 'value'],
-    where: 'key IN (?, ?)',
-    whereArgs: [datasetBootstrapStatusKey, divergedAuthorLogsStateKey],
+    where: 'key IN (?, ?, ?)',
+    whereArgs: [
+      datasetBootstrapStatusKey,
+      divergedAuthorLogsStateKey,
+      rootFolderAmbiguityStateKey,
+    ],
   );
   String? valueFor(String key) => stateRows
       .where((row) => row['key'] == key)
@@ -262,6 +339,22 @@ Future<SyncHealth> recomputeSyncHealth(
         kind: SyncHealthIssueKind.datasetMissing,
         count: 1,
         detail: '',
+      ),
+    );
+  }
+
+  final ambiguity = RootFolderAmbiguity.fromJsonString(
+    valueFor(rootFolderAmbiguityStateKey),
+  );
+  if (ambiguity != null) {
+    issues.add(
+      SyncHealthIssue(
+        kind: SyncHealthIssueKind.rootFolderAmbiguous,
+        count: ambiguity.candidateCount,
+        // The folder NAME, structured as the issue's detail so the screen can
+        // render the localized sentence around it. Not a pre-rendered
+        // sentence, for the reason `LastSyncOutcome.detail` is not one.
+        detail: ambiguity.folderName,
       ),
     );
   }

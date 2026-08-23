@@ -77,6 +77,95 @@ class SyncNetworkException implements Exception {
   String toString() => 'SyncNetworkException: $message';
 }
 
+/// The dataset's root location cannot be resolved because more than one
+/// candidate answers to the configured name — M2.11.
+///
+/// **This exists to replace a silent `.first`.** `GoogleDriveBackend` used
+/// to sort same-named folders by creation time and take the oldest, which is
+/// deterministic on one device and says nothing about what a *second* device
+/// picks: two devices resolving to two different folders is a split-brain in
+/// which each syncs happily against a different dataset and neither reports
+/// anything wrong. Only the user can say which folder they meant, so the
+/// only correct behaviour is to stop and ask.
+///
+/// **Reachable only where a name is still the identity** — first setup, or
+/// the one-shot upgrade resolution for an install that predates M2.11. Once
+/// a folder id has been persisted, the name is never resolved again and this
+/// cannot be thrown.
+///
+/// Phrased in "folder" terms rather than something Drive-specific because
+/// every backend this interface targets (Drive, WebDAV, local folder) roots a
+/// dataset in a folder, and all three can be pointed at an ambiguous name.
+class SyncAmbiguousRootFolderException implements Exception {
+  /// The name that matched more than once.
+  final String folderName;
+
+  /// How many candidates matched.
+  final int candidateCount;
+
+  /// Backend-native ids of the candidates, when the backend has them —
+  /// diagnostic only, and deliberately not something a caller is expected to
+  /// choose from automatically. Picking for the user is the defect.
+  final List<String> candidateIds;
+
+  const SyncAmbiguousRootFolderException({
+    required this.folderName,
+    required this.candidateCount,
+    this.candidateIds = const [],
+  });
+
+  @override
+  String toString() =>
+      'SyncAmbiguousRootFolderException: $candidateCount locations are named '
+      '"$folderName" (${candidateIds.join(', ')}); refusing to guess which one '
+      'holds this dataset';
+}
+
+/// The dataset's root location was addressed by a durably-recorded id, and
+/// the backend definitively reports that id no longer exists — M2.11.
+///
+/// **"Definitively" is the whole content of this type.** A 404/`trashed`
+/// answer means the folder is gone; a timeout, a DNS failure, a 5xx or a
+/// rate-limit means nothing at all about whether it is gone, and those must
+/// keep surfacing as [SyncNetworkException]/[SyncRateLimitedException] so
+/// that an offline device is never told its data was deleted. That
+/// distinction is the one M2.13 fought for in
+/// `DatasetBootstrap.verifyDatasetStillExists`, and this exception exists so
+/// that a backend can honour it at the folder level too.
+///
+/// **Ordinarily the user never sees this**, because the path that matters
+/// reaches them through M2.13's existing recovery flow instead: a vanished
+/// root makes `readDatasetInitMarker()` return null, which
+/// `verifyDatasetStillExists` turns into `DatasetPresence.missing` and the
+/// settings screen renders as "Sync dataset is missing → Reset sync". This
+/// type is what the remaining, non-pre-flighted call paths throw rather than
+/// silently creating a replacement folder underneath a device that still
+/// believes it is Ready.
+///
+/// **And when they DO see it, here is what happens** — the half that was
+/// missing until review round 2, when "ordinarily" was doing all the work.
+/// The reachable path is a device whose bootstrap never finished:
+/// `verifyDatasetStillExists` returns `notBootstrapped` without a backend
+/// call (correctly — there is nothing yet to verify), so the round runs and
+/// the first call needing the root folder throws this. Before, it landed in
+/// `CloudSyncScreen._syncNow`'s generic `catch (e)` and was quoted at the
+/// user, and persisted as the quoted string. `CloudSyncService.syncNow` now
+/// catches it and reports it as [DatasetMissingException] with the same
+/// stable sentinel — because a definitively-gone root folder means exactly
+/// what a definitively-absent marker means, and inventing a second way of
+/// saying it would be inventing a second dead end.
+class SyncRootFolderMissingException implements Exception {
+  /// The recorded id that no longer resolves.
+  final String folderId;
+
+  const SyncRootFolderMissingException(this.folderId);
+
+  @override
+  String toString() =>
+      'SyncRootFolderMissingException: the recorded dataset root ($folderId) '
+      'no longer exists on the backend';
+}
+
 /// A downloaded blob's bytes do not hash to the requested `contentHash`, or
 /// a read commit's bytes do not hash to its recorded `commitHash` /
 /// correctly chain to its recorded `parentCommitHash`. Raised for both the

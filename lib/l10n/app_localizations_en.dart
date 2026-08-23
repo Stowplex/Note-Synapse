@@ -3119,6 +3119,98 @@ class AppLocalizationsEn extends AppLocalizations {
       'This device is set up for a sync dataset that is no longer in your Drive. Reset sync on this device to start over — your notes stay on this device.';
 
   @override
+  String get cloudSyncFolderDialogTitle => 'Sync folder';
+
+  @override
+  String get cloudSyncFolderNameLabel => 'Folder name in Google Drive';
+
+  @override
+  String get cloudSyncFolderNameHelp =>
+      'A folder with this name is created in your Drive. You can rename or move it afterwards — this device remembers the folder itself, not its name. Another device can only FIND this folder by name if you give it the same name, so the folder ID below is the dependable way to connect two devices.';
+
+  @override
+  String get cloudSyncFolderNameRequired => 'Enter a folder name';
+
+  @override
+  String get cloudSyncFolderJoinLabel => 'Or join an existing folder by ID';
+
+  @override
+  String get cloudSyncFolderJoinHelp =>
+      'On a device that is already syncing, copy the folder ID from this screen and paste it here. This is the reliable way to point a second device at the same data. Leave it empty to look the folder up by name instead.';
+
+  @override
+  String get cloudSyncFolderContinue => 'Continue';
+
+  @override
+  String cloudSyncFolderName(String name) {
+    return 'Folder: $name';
+  }
+
+  @override
+  String cloudSyncFolderId(String id) {
+    return 'Folder ID: $id';
+  }
+
+  @override
+  String get cloudSyncFolderIdHint => 'Use this ID to set up another device.';
+
+  @override
+  String get cloudSyncFolderNameFollowsDrive =>
+      'The folder name now follows Drive. Rename the folder in Drive to change it.';
+
+  @override
+  String get cloudSyncFolderCreatedHere =>
+      'This device created this sync dataset. If you meant to join one you already have, use Change folder and paste that folder’s ID.';
+
+  @override
+  String get cloudSyncFolderIdPending =>
+      'Folder ID: not recorded yet — it appears here after the next sync.';
+
+  @override
+  String get cloudSyncFolderChange => 'Change folder';
+
+  @override
+  String get cloudSyncFolderChangeTitle =>
+      'Point this device at a different folder?';
+
+  @override
+  String get cloudSyncFolderChangeConfirm =>
+      'Your notes, tags, conversations and attachments stay on this device, and nothing already in Drive is deleted.\n\nThis device leaves the dataset it is in now and joins the one in the folder you choose. To do that it resets its sync state: it takes a new sync identity, forgets what it has already synced, and re-offers everything it holds to the new folder. Where the new folder already has a different version, that version wins.\n\nAnything you deleted on this device but never managed to upload comes back, because this device also forgets the deletion. Whatever this device already uploaded to the OLD folder stays there and is not moved.';
+
+  @override
+  String get cloudSyncFolderPreviewTitle => 'Use this folder?';
+
+  @override
+  String cloudSyncFolderPreviewHolds(String name, String date) {
+    return '“$name” holds a sync dataset started on $date.';
+  }
+
+  @override
+  String cloudSyncFolderPreviewEmpty(String name) {
+    return '“$name” is a Note Synapse sync folder, but it has no sync data in it yet. If you expected your notes to be there, check the ID on the other device.';
+  }
+
+  @override
+  String get cloudSyncFolderPreviewUse => 'Use this folder';
+
+  @override
+  String cloudSyncFolderAmbiguous(int count, String name) {
+    return '$count folders in your Drive are called “$name”, so this device cannot tell which one holds your sync data. Open Google Drive and rename or remove the ones you do not want to sync with, then try again.';
+  }
+
+  @override
+  String get cloudSyncFolderNotFound =>
+      'No folder with that ID is available to this app. Check that you copied the whole ID from the other device, and that both devices use the same Google account.';
+
+  @override
+  String get cloudSyncDatasetCreated =>
+      'Created a new sync folder. To sync another device with this one, set that device up with the folder ID shown here.';
+
+  @override
+  String get cloudSyncDatasetJoined =>
+      'Joined the sync dataset already in your Drive.';
+
+  @override
   String get cloudSyncReset => 'Reset sync';
 
   @override

@@ -25,12 +25,14 @@ import '../network_provider.dart';
 import 'dataset_bootstrap.dart';
 import 'dataset_reset.dart';
 import 'device_identity.dart';
+import 'drive_folder_identity.dart';
 import 'google_drive_auth_service.dart';
 import 'google_drive_backend.dart';
 import 'push_phase.dart';
 import 'seed_scanner.dart';
 import 'sync_health.dart';
 import 'sync_backend.dart';
+import 'sync_backend_exceptions.dart';
 import 'sync_session.dart';
 
 /// The outcome of the last [CloudSyncService.syncNow] attempt on this device,
@@ -109,11 +111,48 @@ class CloudSyncStatus {
     required this.bootstrapStatus,
     this.lastSync,
     this.health = SyncHealth.healthy,
+    this.folder = DriveFolderIdentity.empty,
+    this.folderAmbiguity,
+    this.datasetCreatedHere = false,
   });
 
   final GoogleDriveConnectionState connection;
   final DatasetBootstrapStatus bootstrapStatus;
   final LastSyncOutcome? lastSync;
+
+  /// M2.11: which Drive folder this dataset lives in, read from `sync_state`
+  /// — no backend call, so the settings screen can render it offline like
+  /// everything else in this snapshot.
+  ///
+  /// The **id** is the part that matters to a user: it is what a second
+  /// device pastes to join this exact dataset, and it is the only join
+  /// mechanism that does not depend on the unverified `drive.file`
+  /// cross-device listing question (see `google_drive_backend.dart`). The
+  /// name is shown alongside it so the folder is findable by eye in Drive.
+  final DriveFolderIdentity folder;
+
+  /// **M2.11 review round 2 (finding F2).** Set when this device cannot
+  /// resolve its root folder because several folders answer to the name and
+  /// it has no recorded id — the state an install that predates M2.11 lands
+  /// in, where `bootstrapStatus` is still `ready` and nothing else on this
+  /// snapshot says anything is wrong.
+  ///
+  /// Carried alongside [health] (which reports the same condition) rather
+  /// than derived from it, because the two are used differently: the health
+  /// list is the "what is not syncing" surface, while this is what
+  /// `cloud_sync_screen.dart` needs in order to render the last *failed*
+  /// round's stored sentinel as the localized sentence with the count and
+  /// the name in it.
+  final RootFolderAmbiguity? folderAmbiguity;
+
+  /// Whether this device CREATED the dataset it is in, rather than joining
+  /// one — durable, so it survives leaving the screen. See
+  /// `CloudSyncService._readDatasetCreatedHere` for why a transient was not
+  /// good enough: this is the signal that distinguishes "joined device 1's
+  /// dataset" from "silently made a second one", which is the whole
+  /// diagnosability story for the unverified `drive.file` cross-device
+  /// listing question.
+  final bool datasetCreatedHere;
 
   /// What, if anything, is not syncing — recomputed at the end of every
   /// round and persisted, so it survives leaving the screen.
@@ -196,6 +235,18 @@ class CloudSyncStatus {
   /// working dataset anything. If one is ever added it needs its own
   /// explicit warning naming those costs, not `cloudSyncResetConfirm`, which
   /// is written for a device that is already broken.
+  ///
+  /// **M2.11 review round 2 added exactly one such path, under exactly that
+  /// condition.** `CloudSyncScreen._changeFolder` resets a `ready` device —
+  /// but only as the unavoidable second half of *leaving one dataset for
+  /// another*, which the screen has to offer because a device that failed to
+  /// discover its peer's folder is Ready, healthy-looking, and alone (finding
+  /// F1). It is not reachable as "start over here": it runs only after the
+  /// user has chosen a folder identity that differs from the recorded one,
+  /// and it carries `cloudSyncFolderChangeConfirm`, its own warning naming
+  /// its own costs, precisely as the paragraph above requires. [canReset]
+  /// itself is unchanged — the "Reset sync" button is still offered only for
+  /// the two states a reset is the remedy for.
   bool get canReset => needsReset;
 }
 
@@ -207,6 +258,13 @@ class CloudSyncStatus {
 /// whatever language is active *now*, not the one active when it was
 /// written. A sentinel round-trips through that; a sentence does not.
 const String syncFailureDatasetMissing = 'dataset_missing';
+
+/// **M2.11 review round 2.** The round could not resolve the dataset's root
+/// folder because more than one folder answers to its name. The count and
+/// the name are not in the sentinel — they live in
+/// [CloudSyncStatus.folderAmbiguity], which is durable for exactly as long
+/// as the condition is.
+const String syncFailureFolderAmbiguous = 'folder_ambiguous';
 
 class CloudSyncService {
   CloudSyncService(
@@ -260,8 +318,16 @@ class CloudSyncService {
     return _backend ??= GoogleDriveBackend(
       tokenManager: authService.tokenManager,
       httpClient: _httpClient ?? NetworkProvider.sharedClient,
+      folderIdentityStore: folderStore,
     );
   }
+
+  /// M2.11's durable folder identity, in `sync_state`. Owned here rather
+  /// than inside `GoogleDriveBackend` because the settings screen reads it
+  /// for display and writes the user's chosen name to it at setup, neither
+  /// of which involves the backend at all.
+  late final DriveFolderIdentityStore folderStore =
+      SyncStateDriveFolderIdentityStore(_databaseService);
 
   /// Drops the cached backend so the next call rebuilds it (and re-resolves
   /// the Drive root folder). Called after disconnecting.
@@ -286,7 +352,105 @@ class CloudSyncService {
       bootstrapStatus: bootstrapStatus,
       lastSync: await _readLastSync(),
       health: await readSyncHealth(_databaseService),
+      folder: await folderStore.read(),
+      folderAmbiguity: await _readFolderAmbiguity(),
+      datasetCreatedHere: await _readDatasetCreatedHere(),
     );
+  }
+
+  /// Whether the dataset in the recorded folder was created BY this device
+  /// rather than joined — read from a durable `sync_state` row, so it is a
+  /// standing property of the screen rather than a message.
+  ///
+  /// **This was a one-shot transient until M2.11 review round 3 (finding
+  /// 5).** It lived in a `State` field, so it was lost on the next tap and on
+  /// any genuine navigate-away-and-return — while three separate doc comments
+  /// (`google_drive_backend.dart`'s header, `_createRootFolder`, and
+  /// [datasetWasCreatedByThisDevice]) cited it in the present tense as *the*
+  /// diagnosable signal for the milestone's central unverified assumption. If
+  /// `drive.file` cross-device listing turns out not to work, a second device
+  /// silently creates its own dataset, and the only thing distinguishing that
+  /// from a successful join was a line the user saw once. Persisted here so
+  /// the claim those comments make is true.
+  ///
+  /// Written by [setUpDataset], which already holds the marker; not derived
+  /// at read time, because deriving it means a backend call and [status] is
+  /// deliberately local-only so the screen renders offline.
+  Future<bool> _readDatasetCreatedHere() async {
+    final db = await _databaseService.database;
+    final rows = await db.query(
+      'sync_state',
+      columns: const ['value'],
+      where: 'key = ?',
+      whereArgs: [datasetCreatedHereStateKey],
+      limit: 1,
+    );
+    return rows.isNotEmpty && rows.first['value'] == '1';
+  }
+
+  Future<RootFolderAmbiguity?> _readFolderAmbiguity() async {
+    final db = await _databaseService.database;
+    final rows = await db.query(
+      'sync_state',
+      columns: const ['value'],
+      where: 'key = ?',
+      whereArgs: [rootFolderAmbiguityStateKey],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return RootFolderAmbiguity.fromJsonString(rows.first['value'] as String?);
+  }
+
+  /// Records an ambiguous folder name durably and refreshes the health
+  /// snapshot, so the condition survives leaving the screen — M2.11 review
+  /// round 2, finding F2.
+  Future<void> _reportFolderAmbiguity(
+    SyncAmbiguousRootFolderException e,
+  ) async {
+    final db = await _databaseService.database;
+    await db.insert('sync_state', {
+      'key': rootFolderAmbiguityStateKey,
+      'value': RootFolderAmbiguity(
+        folderName: e.folderName,
+        candidateCount: e.candidateCount,
+      ).toJsonString(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _recomputeHealthBestEffort();
+  }
+
+  /// Clears a previously-recorded ambiguity. Called from every path that
+  /// *proves* it is over — a completed sync round, or a completed
+  /// create-or-join — rather than on a screen refresh, which proves nothing.
+  ///
+  /// **Recomputes health, symmetrically with the record path** (M2.11 review
+  /// round 3, finding 4). `recomputeSyncHealth` persists a snapshot; deleting
+  /// the durable row without re-deriving that snapshot left the issue latched
+  /// on. Concretely: ambiguity recorded, the user removes the duplicate in
+  /// Drive as instructed, the next round clears the row and then fails for an
+  /// unrelated reason (the connection drops) — the outer `catch` recomputes
+  /// nothing, so the screen kept telling a user who had already fixed Drive
+  /// to go fix Drive, and did so until some later round succeeded in full. A
+  /// health issue that latches on is the mirror image of one that never
+  /// fires, and this surface exists because of the second.
+  Future<void> _clearFolderAmbiguity() async {
+    final db = await _databaseService.database;
+    final removed = await db.delete(
+      'sync_state',
+      where: 'key = ?',
+      whereArgs: [rootFolderAmbiguityStateKey],
+    );
+    if (removed > 0) await _recomputeHealthBestEffort();
+  }
+
+  Future<void> _recomputeHealthBestEffort() async {
+    try {
+      await recomputeSyncHealth(_databaseService);
+    } catch (e) {
+      LoggerService.error(
+        'CloudSyncService: sync health recompute failed',
+        error: e,
+      );
+    }
   }
 
   Future<LastSyncOutcome?> _readLastSync() async {
@@ -310,6 +474,23 @@ class CloudSyncService {
   }
 
   /// Runs the Google consent flow. Throws on failure/cancellation.
+  ///
+  /// **A residual M2.11 makes concrete rather than introduces, recorded here
+  /// because this is the method a maintainer will be looking at when they
+  /// hit it: reconnecting as a DIFFERENT Google account is reported to the
+  /// user as "your sync dataset is missing".** The recorded folder id
+  /// belongs to the previous account, so `files.get` on it 404s under the
+  /// new grant, `verifyDatasetStillExists` sees no marker, and the settings
+  /// screen offers a reset — which is in fact the right remedy (the reset
+  /// re-runs create-or-join, the preserved id 404s once more, and a fresh
+  /// folder is built in the new account under the same chosen name). So it
+  /// recovers correctly; it just says something alarming and slightly untrue
+  /// on the way. The obvious "fix" — clearing the folder identity on
+  /// disconnect — is worse: a user who disconnects and reconnects the SAME
+  /// account (the common case, e.g. re-granting after a revoked refresh
+  /// token) would fall back to name resolution and lose exactly the
+  /// rename-tolerance this milestone bought. Distinguishing the two needs
+  /// the account identity, which nothing in this app records today.
   Future<void> connect() async {
     await authService.connect();
     // A new grant may be for a different Google account; force the backend
@@ -329,13 +510,144 @@ class CloudSyncService {
   /// Encryption is off: no AEAD implementation exists yet, and
   /// `DatasetBootstrap` deliberately throws rather than pretending to verify
   /// a passphrase, so requesting an encrypted dataset here would fail.
-  Future<DatasetInitMarker> setUpDataset() async {
+  ///
+  /// **M2.11's two optional inputs, and the asymmetry between them.**
+  /// [folderName] is a *creation-time convenience*: it names the folder this
+  /// device would create, and is the discovery key if this device has to
+  /// find one by name. It is recorded and then stops mattering — nothing
+  /// resolves by it once a folder id exists, so renaming the folder in Drive
+  /// afterwards is harmless. [folderId] is the opposite: it is an identity,
+  /// it is validated against Drive before anything is written down, and it
+  /// is the join path that works whether or not `drive.file` lets a second
+  /// device see the first device's folder in a listing (the open question
+  /// documented in `google_drive_backend.dart`).
+  ///
+  /// Passing both prefers [folderId] — an explicit identity beats a guess.
+  ///
+  /// ---------------------------------------------------------------------
+  /// **Review round 2, finding F1: this is also the RE-point path, and it
+  /// has to be able to undo a previous answer.**
+  /// ---------------------------------------------------------------------
+  /// As shipped, every route that could change the recorded folder was
+  /// welded shut once any id existed: the settings screen only opened its
+  /// folder dialog while `folderId == null`, a reset deliberately preserves
+  /// the id, and `DriveFolderIdentity.copyWith` could not express "clear
+  /// it". So a device that failed to discover its peer's folder and created
+  /// its own — the exact outcome the milestone's fail-loud argument is built
+  /// around — had no remedy but reinstalling, and a valid-but-wrong pasted
+  /// id was permanent. Three rules make it reversible:
+  ///
+  ///  * [folderId] **different** from the recorded one is adopted, which
+  ///    validates against Drive first (see [GoogleDriveBackend.adoptRootFolder]).
+  ///  * [folderId] **equal** to the recorded one is left exactly as it is
+  ///    and NOT re-validated. This is not an optimization: it is what the
+  ///    re-opened dialog submits when the user accepts what it was pre-filled
+  ///    with, and re-validating there would break the one flow that must
+  ///    work — a reset taken *because* the folder was deleted, where the
+  ///    recorded id 404s on purpose and `initializeDatasetOnce` is entitled
+  ///    to rebuild under the preserved name.
+  ///  * [forgetRecordedFolderId] clears the id and falls back to name
+  ///    resolution. Only the folder dialog passes it, and only when the user
+  ///    emptied the id field — an explicit "this is not my folder", which is
+  ///    the one thing no caller could previously say.
+  Future<DatasetInitMarker> setUpDataset({
+    String? folderName,
+    String? folderId,
+    bool forgetRecordedFolderId = false,
+  }) async {
+    final trimmedId = folderId?.trim();
+    final trimmedName = folderName?.trim();
+    final current = await folderStore.read();
+    final wantsId = trimmedId != null && trimmedId.isNotEmpty;
+
+    if (wantsId && trimmedId != current.folderId) {
+      final target = backend;
+      if (target is! GoogleDriveBackend) {
+        throw StateError(
+          'CloudSyncService: joining by folder id is a Google Drive concept; '
+          'the active backend is ${target.runtimeType}',
+        );
+      }
+      // Validates first and throws `SyncRootFolderMissingException` if the
+      // pasted id resolves to nothing — deliberately BEFORE it is recorded,
+      // so a typo cannot become a stored handle that quietly turns into a
+      // brand-new empty folder at the next bootstrap.
+      final adopted = await target.adoptRootFolder(trimmedId);
+      LoggerService.info(
+        'CloudSyncService: adopted existing Drive sync folder '
+        '${adopted.folderId} ("${adopted.folderName}")',
+      );
+    } else if (!wantsId && forgetRecordedFolderId && current.folderId != null) {
+      LoggerService.info(
+        'CloudSyncService: forgetting recorded Drive folder id '
+        '${current.folderId}; resolving by name again',
+      );
+      await folderStore.write(
+        DriveFolderIdentity(folderName: trimmedName ?? current.folderName),
+      );
+    } else if (trimmedName != null &&
+        trimmedName.isNotEmpty &&
+        trimmedName != current.folderName) {
+      // Only load-bearing before a folder exists; once `folderId` is set the
+      // backend never reads the name back for resolution. Recorded anyway so
+      // the settings screen shows what the user chose, and so a folder
+      // rebuilt after a deletion carries it.
+      await folderStore.write(current.copyWith(folderName: trimmedName));
+    }
+
     final marker = await _bootstrapFor(backend).bootstrap();
+    // Reaching here means the root folder resolved to exactly one thing, so
+    // any recorded ambiguity is over — proved, not assumed (M2.11 review
+    // round 2, finding F2).
+    await _clearFolderAmbiguity();
+    // Durable created-vs-joined (finding 5). Written on every completed
+    // create-or-join, including a re-point to a different folder, so it
+    // always describes the dataset this device is CURRENTLY in.
+    final createdHere = await datasetWasCreatedByThisDevice(marker);
+    await (await _databaseService.database).insert('sync_state', {
+      'key': datasetCreatedHereStateKey,
+      'value': createdHere ? '1' : '0',
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _recomputeHealthBestEffort();
     LoggerService.info(
       'CloudSyncService: dataset ready (created by ${marker.createdByDeviceId} '
       'at ${marker.createdAt.toIso8601String()})',
     );
     return marker;
+  }
+
+  /// What a pasted folder id actually points at, **without recording
+  /// anything** — the "look before you commit" half of finding F1.
+  ///
+  /// The settings screen calls this between the folder dialog and
+  /// [setUpDataset], so a user pointing a device at a folder can see whose
+  /// dataset is in it (or that it holds none yet) while cancelling is still
+  /// free. Throws exactly what [setUpDataset] would have thrown for an
+  /// unusable id, at the same moment the user would otherwise have hit it.
+  Future<DriveRootFolderPreview> inspectFolder(String folderId) async {
+    final target = backend;
+    if (target is! GoogleDriveBackend) {
+      throw StateError(
+        'CloudSyncService: inspecting a folder id is a Google Drive concept; '
+        'the active backend is ${target.runtimeType}',
+      );
+    }
+    return target.inspectRootFolder(folderId);
+  }
+
+  /// Whether [marker] describes a dataset THIS device created, as opposed to
+  /// one it joined — M2.11.
+  ///
+  /// **Not cosmetic.** A second device that fails to discover the first
+  /// device's folder does not error; it creates its own and reports a
+  /// perfectly successful setup against an empty dataset. That is the exact
+  /// "looks fine, is not" failure the join path has to be diagnosable
+  /// against, so the settings screen says which of the two happened and,
+  /// when it created one, points at the folder id as the way to join for
+  /// real instead.
+  Future<bool> datasetWasCreatedByThisDevice(DatasetInitMarker marker) async {
+    final deviceId = await DeviceIdentity(_databaseService).ensureDeviceId();
+    return marker.createdByDeviceId == deviceId;
   }
 
   /// Clears this device's local sync control plane so it can re-bootstrap
@@ -360,9 +672,12 @@ class CloudSyncService {
   /// now runs § 11.1's create-or-join against whatever is actually in Drive.
   Future<DatasetResetResult> resetSyncState() async {
     final result = await DatasetReset(_databaseService).reset();
-    // The cached backend holds a resolved Drive folder id from the previous
-    // dataset. Re-resolving costs one request and removes any chance of the
-    // next bootstrap writing its marker into a stale folder handle.
+    // The cached backend holds an in-memory resolved Drive folder id.
+    // Dropping it forces the next call to re-read the durable identity and
+    // re-verify it against Drive — which is the whole point after a reset,
+    // since the commonest reason to reset is that the folder is gone (M2.11:
+    // the id survives the wipe, so this re-verification is what turns a
+    // preserved-but-dead handle into a fresh folder at the next bootstrap).
     invalidateBackend();
     return result;
   }
@@ -372,14 +687,7 @@ class CloudSyncService {
   /// section agree. Best-effort by the same logic as the failure path below:
   /// reporting must not be able to fail louder than what it reports on.
   Future<void> _reportDatasetMissing() async {
-    try {
-      await recomputeSyncHealth(_databaseService);
-    } catch (e) {
-      LoggerService.error(
-        'CloudSyncService: sync health recompute failed',
-        error: e,
-      );
-    }
+    await _recomputeHealthBestEffort();
     try {
       await _writeLastSync(
         LastSyncOutcome(
@@ -454,6 +762,12 @@ class CloudSyncService {
         );
       }
 
+      // The root folder resolved to exactly one thing on the pre-flight, so
+      // a previously-recorded ambiguity is over (M2.11 review round 2).
+      // Cleared before the round rather than after, so the health recompute
+      // below sees the cleared state in the same pass.
+      await _clearFolderAmbiguity();
+
       final session = SyncSession(_databaseService)
         ..onSeedProgress = onSeedProgress
         ..onPushProgress = onPushProgress;
@@ -505,6 +819,52 @@ class CloudSyncService {
       // i.e. would put the raw exception text back on the screen, which is
       // the exact defect M2.13 exists to remove.
       rethrow;
+    } on SyncAmbiguousRootFolderException catch (e) {
+      // **M2.11 review round 2, finding F2.** This is not a hypothetical
+      // branch: an install that predates M2.11 has no recorded folder id, so
+      // its first sync on the new build resolves by name — and a second
+      // folder answering to that name (a Drive cleanup, an earlier run, the
+      // leftover of a create/create race) lands here. That device is
+      // `ready`, is not `needsReset`, and is offered no reset, so before
+      // this handler existed the snackbar AND the persisted outcome were
+      // both the raw exception string, re-rendered on every visit, with the
+      // one piece of actionable text the app owns (`cloudSyncFolderAmbiguous`)
+      // never shown. Recorded as a durable condition on M2.10's health spine
+      // plus a stable sentinel, exactly like the missing-dataset state.
+      await _reportFolderAmbiguity(e);
+      try {
+        await _writeLastSync(
+          LastSyncOutcome(
+            at: DateTime.now(),
+            succeeded: false,
+            degraded: true,
+            detail: syncFailureFolderAmbiguous,
+          ),
+        );
+      } catch (_) {}
+      rethrow;
+    } on SyncRootFolderMissingException catch (e) {
+      // The root folder was definitively gone at a point where the pre-flight
+      // could not have seen it — either because the pre-flight was skipped
+      // (a device that never finished bootstrap is not re-checked, correctly)
+      // or because the folder vanished mid-round. `SyncRootFolderMissingException`'s
+      // own doc calls this the case the user "ordinarily never sees"; when
+      // they do see it, it means precisely what `DatasetMissingException`
+      // means, so it is reported as that rather than quoted at them.
+      LoggerService.error(
+        'CloudSyncService: the recorded Drive root folder (${e.folderId}) is '
+        'gone; reporting it as a missing dataset',
+      );
+      try {
+        // Re-runs M2.13's own check so a locally-'ready' device is durably
+        // moved to `needsReset` and gets the reset button, rather than this
+        // path inventing a second status transition of its own. Best-effort:
+        // it makes one more backend call, and failing it must not replace
+        // the answer we already have.
+        await _bootstrapFor(backend).verifyDatasetStillExists();
+      } catch (_) {}
+      await _reportDatasetMissing();
+      throw const DatasetMissingException();
     } catch (e) {
       // Best-effort: a failure to record the failure must not replace the
       // real error the caller needs to see.
