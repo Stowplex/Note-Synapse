@@ -3136,6 +3136,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'On a device that is already syncing, copy the folder ID from this screen and paste it here. This is the reliable way to point a second device at the same data. Leave it empty to look the folder up by name instead.';
 
   @override
+  String get cloudSyncPassphraseLabel => 'Passphrase (optional)';
+
+  @override
+  String get cloudSyncPassphraseHelp =>
+      'Set one to encrypt this dataset. It is chosen once, when the dataset is created, and cannot be added or removed later. Every device needs the same passphrase — if you lose it, the data cannot be recovered. Leave empty to sync unencrypted.';
+
+  @override
   String get cloudSyncFolderContinue => 'Continue';
 
   @override

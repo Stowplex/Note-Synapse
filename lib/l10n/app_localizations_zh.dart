@@ -3038,6 +3038,13 @@ class AppLocalizationsZh extends AppLocalizations {
       '在已经在同步的设备上，从本页面复制文件夹 ID 并粘贴到这里。这是让第二台设备指向同一份数据最可靠的方式。留空则改为按名称查找文件夹。';
 
   @override
+  String get cloudSyncPassphraseLabel => '密码（可选）';
+
+  @override
+  String get cloudSyncPassphraseHelp =>
+      '设置密码即可加密该数据集。密码在创建数据集时确定一次，之后无法添加或移除。所有设备都需要使用相同的密码——一旦遗失，数据将无法恢复。留空则不加密同步。';
+
+  @override
   String get cloudSyncFolderContinue => '继续';
 
   @override

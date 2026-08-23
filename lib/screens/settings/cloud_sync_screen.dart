@@ -30,9 +30,19 @@ import '../../services/sync/sync_health.dart';
 /// is null exactly when the user left the id field empty, which is the
 /// explicit "resolve by name instead" answer.
 class _FolderChoice {
-  const _FolderChoice({required this.folderName, this.folderId});
+  const _FolderChoice({
+    required this.folderName,
+    this.folderId,
+    this.passphrase,
+  });
   final String folderName;
   final String? folderId;
+
+  /// **M3.5.** Empty/null means "no encryption" for a NEW dataset, and is
+  /// refused for an existing encrypted one. Requirement 5 makes the choice
+  /// immutable at creation, so this is only ever a creation choice or a
+  /// key to open with — never a toggle.
+  final String? passphrase;
 }
 
 class CloudSyncScreen extends StatefulWidget {
@@ -285,6 +295,7 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
       folderName: choice?.folderName,
       folderId: choice?.folderId,
       forgetRecordedFolderId: choice != null && choice.folderId == null,
+      passphrase: choice?.passphrase,
     );
     _snack(l10n.cloudSyncDatasetDone);
     // Created-vs-joined, spelled out rather than left to be inferred from
@@ -1224,11 +1235,13 @@ class _FolderSetupDialogState extends State<_FolderSetupDialog> {
   late final TextEditingController _idController = TextEditingController(
     text: widget.initialId,
   );
+  final TextEditingController _passphraseController = TextEditingController();
 
   @override
   void dispose() {
     _nameController.dispose();
     _idController.dispose();
+    _passphraseController.dispose();
     super.dispose();
   }
 
@@ -1247,9 +1260,18 @@ class _FolderSetupDialogState extends State<_FolderSetupDialog> {
     }
     // An ID is an identity and a name is a guess, so an ID still wins for
     // *resolution* whenever both are filled in.
+    final passphrase = _passphraseController.text;
     Navigator.pop(
       context,
-      _FolderChoice(folderName: name, folderId: id.isEmpty ? null : id),
+      _FolderChoice(
+        folderName: name,
+        folderId: id.isEmpty ? null : id,
+        // Deliberately NOT trimmed: leading and trailing spaces are part of
+        // a passphrase, and silently stripping them would derive a
+        // different key from the one the user typed — on the creating
+        // device and on every joining one, in ways neither could diagnose.
+        passphrase: passphrase.isEmpty ? null : passphrase,
+      ),
     );
   }
 
@@ -1282,6 +1304,19 @@ class _FolderSetupDialogState extends State<_FolderSetupDialog> {
             ),
             const SizedBox(height: 6),
             Text(l10n.cloudSyncFolderJoinHelp, style: theme.textTheme.bodySmall),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _passphraseController,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: l10n.cloudSyncPassphraseLabel,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              l10n.cloudSyncPassphraseHelp,
+              style: theme.textTheme.bodySmall,
+            ),
           ],
         ),
       ),

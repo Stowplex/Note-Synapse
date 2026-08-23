@@ -15,6 +15,7 @@
 // scheduling. Sync happens when the user taps Sync now.
 
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:sqflite/sqflite.dart';
@@ -33,6 +34,7 @@ import 'seed_scanner.dart';
 import 'sync_health.dart';
 import 'sync_backend.dart';
 import 'sync_backend_exceptions.dart';
+import 'sync_crypto.dart';
 import 'sync_session.dart';
 
 /// The outcome of the last [CloudSyncService.syncNow] attempt on this device,
@@ -101,6 +103,19 @@ class LastSyncOutcome {
       return null;
     }
   }
+}
+
+/// Thrown when an encrypted dataset is opened without a passphrase.
+///
+/// Its own type so the settings screen can ask for one rather than
+/// rendering a raw exception — the pattern M2.13 and M2.11 both had to fix
+/// after shipping the raw string first.
+class PassphraseRequiredException implements Exception {
+  const PassphraseRequiredException();
+  @override
+  String toString() =>
+      'PassphraseRequiredException: this dataset is encrypted and needs its '
+      'passphrase';
 }
 
 /// Everything the settings screen needs to render, in one snapshot so the UI
@@ -333,14 +348,40 @@ class CloudSyncService {
   /// the Drive root folder). Called after disconnecting.
   void invalidateBackend() => _backend = null;
 
-  DatasetBootstrap _bootstrapFor(SyncBackend backend) => DatasetBootstrap(
+  DatasetBootstrap _bootstrapFor(
+    SyncBackend backend, {
+    SyncCrypto? crypto,
+  }) => DatasetBootstrap(
     _databaseService,
     backend,
     DeviceIdentity(_databaseService),
+    // **M3.5 fills in the hook M2.3 deliberately left throwing.** That
+    // placeholder refused to claim a passphrase had been verified when
+    // nothing had verified it — the one behaviour that mattered while the
+    // KDF did not exist. The real verifier is a single closure so exactly
+    // one place decides: derive with the dataset's own recorded salt, open
+    // the canary, and let a mismatch be a WRONG PASSPHRASE rather than an
+    // integrity failure.
+    passphraseVerifier: crypto == null
+        ? null
+        : (marker) async {
+            try {
+              await crypto.verifyCanary(marker.passphraseCanary!);
+              return true;
+            } on WrongPassphraseException {
+              return false;
+            }
+          },
   );
 
   /// `sync_state` key holding the JSON-encoded [LastSyncOutcome].
   static const String lastSyncStateKey = 'last_sync_outcome';
+
+  /// The dataset's key material for this session, resolved by
+  /// [setUpDataset]. Memory-only and never persisted — § 8.5's whole point
+  /// is that the database is exactly what a backup or a stolen device
+  /// exposes, so a key living in it would make the passphrase decorative.
+  DatasetCrypto _crypto = const DatasetCrypto.plaintext();
 
   Future<CloudSyncStatus> status() async {
     final connection = await authService.connectionState();
@@ -550,10 +591,18 @@ class CloudSyncService {
   ///    resolution. Only the folder dialog passes it, and only when the user
   ///    emptied the id field — an explicit "this is not my folder", which is
   ///    the one thing no caller could previously say.
+  /// **[passphrase] (M3.5) turns encryption on for a NEW dataset, and opens
+  /// an existing encrypted one.** Requirement 5 makes the choice immutable
+  /// once the dataset exists, and this signature is what enforces that: the
+  /// marker is written once by whichever device creates the dataset, and
+  /// every later device only ever reads it. Passing a passphrase to a
+  /// plaintext dataset, or omitting one for an encrypted dataset, is
+  /// reported rather than silently ignored.
   Future<DatasetInitMarker> setUpDataset({
     String? folderName,
     String? folderId,
     bool forgetRecordedFolderId = false,
+    String? passphrase,
   }) async {
     final trimmedId = folderId?.trim();
     final trimmedName = folderName?.trim();
@@ -595,7 +644,41 @@ class CloudSyncService {
       await folderStore.write(current.copyWith(folderName: trimmedName));
     }
 
-    final marker = await _bootstrapFor(backend).bootstrap();
+    // Encryption is decided ONCE, by whoever creates the dataset. A new
+    // dataset gets a fresh salt and a canary sealed under the derived key;
+    // an existing one is opened with the salt it already recorded.
+    final existing = await backend.readDatasetInitMarker();
+    final wantsEncryption = passphrase != null && passphrase.isNotEmpty;
+    SyncCrypto? crypto;
+    Uint8List? salt;
+    Uint8List? canary;
+    if (existing == null && wantsEncryption) {
+      salt = SyncCrypto.newSalt();
+      crypto = await SyncCrypto.deriveFromPassphrase(
+        passphrase: passphrase,
+        salt: salt,
+      );
+      canary = await crypto.buildCanary();
+    } else if (existing != null && existing.encryptionEnabled) {
+      if (!wantsEncryption) throw const PassphraseRequiredException();
+      crypto = await SyncCrypto.deriveFromPassphrase(
+        passphrase: passphrase,
+        salt: existing.kdfSalt!,
+      );
+      // Verified by `DatasetBootstrap` through the injected verifier below,
+      // which is where the create-or-join sequence already checks it — one
+      // check, in the step § 11.1 assigns it to, rather than a second
+      // independent one here that could drift from it.
+    }
+
+    final marker = await _bootstrapFor(backend, crypto: crypto).bootstrap(
+      encryptionEnabled: existing == null && wantsEncryption,
+      kdfSalt: salt,
+      passphraseCanary: canary,
+    );
+    _crypto = crypto == null
+        ? const DatasetCrypto.plaintext()
+        : DatasetCrypto(crypto);
     // Reaching here means the root folder resolved to exactly one thing, so
     // any recorded ambiguity is over — proved, not assumed (M2.11 review
     // round 2, finding F2).
@@ -768,7 +851,7 @@ class CloudSyncService {
       // below sees the cleared state in the same pass.
       await _clearFolderAmbiguity();
 
-      final session = SyncSession(_databaseService)
+      final session = SyncSession(_databaseService, crypto: _crypto)
         ..onSeedProgress = onSeedProgress
         ..onPushProgress = onPushProgress;
       final result = await session.run(

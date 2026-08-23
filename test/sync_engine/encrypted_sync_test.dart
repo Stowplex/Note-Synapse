@@ -9,6 +9,9 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:note_synapse/services/database_service.dart';
+import 'package:note_synapse/services/sync/cloud_sync_service.dart';
+import 'package:note_synapse/services/sync/dataset_bootstrap.dart';
+import 'package:note_synapse/services/sync/google_drive_auth_service.dart';
 import 'package:note_synapse/services/sync/sync_crypto.dart';
 import 'package:note_synapse/services/sync/sync_session.dart';
 
@@ -246,4 +249,120 @@ void main() {
     },
     timeout: slow,
   );
+
+  // ── M3.5: the passphrase, through CloudSyncService ──────────────────────
+
+  test(
+    'setUpDataset(passphrase:) creates an encrypted dataset, and a second '
+    'device joins it with the same passphrase',
+    () async {
+      final a = DatabaseService.createNew();
+      final b = DatabaseService.createNew();
+      addTearDown(a.close);
+      addTearDown(b.close);
+      await seedNote(a);
+
+      final serviceA = CloudSyncService(
+        a,
+        authService: _AlwaysConnected(),
+        backendFactory: () => backend,
+      );
+      await serviceA.setUpDataset(passphrase: 'correct horse battery staple');
+      await serviceA.syncNow();
+
+      final serviceB = CloudSyncService(
+        b,
+        authService: _AlwaysConnected(),
+        backendFactory: () => backend,
+      );
+      await serviceB.setUpDataset(passphrase: 'correct horse battery staple');
+      for (var i = 0; i < 3; i++) {
+        await serviceB.syncNow();
+      }
+
+      expect(
+        (await (await b.database).query('notes')).single['title'],
+        'SECRET_TITLE_MARKER',
+      );
+      expect(
+        (await allCommitBytesAsText()).contains('SECRET_TITLE_MARKER'),
+        isFalse,
+      );
+    },
+    timeout: slow,
+  );
+
+  test(
+    'the WRONG passphrase is refused at setup, by the canary, before any '
+    'sync is attempted',
+    () async {
+      final a = DatabaseService.createNew();
+      final b = DatabaseService.createNew();
+      addTearDown(a.close);
+      addTearDown(b.close);
+      await seedNote(a);
+
+      final serviceA = CloudSyncService(
+        a,
+        authService: _AlwaysConnected(),
+        backendFactory: () => backend,
+      );
+      await serviceA.setUpDataset(passphrase: 'right');
+      await serviceA.syncNow();
+
+      final serviceB = CloudSyncService(
+        b,
+        authService: _AlwaysConnected(),
+        backendFactory: () => backend,
+      );
+      await expectLater(
+        serviceB.setUpDataset(passphrase: 'wrong'),
+        throwsA(isA<DatasetPassphraseVerificationFailedException>()),
+        reason:
+            'one clear failure at the moment the user typed it, rather than '
+            'an AEAD authentication failure deep inside a pull that the '
+            'engine cannot distinguish from tampering. The type is '
+            'DatasetBootstrap\'s rather than SyncCrypto\'s because § 11.1 '
+            'assigns canary verification to step 4 of the create-or-join '
+            'sequence — the crypto layer reports WHY, the bootstrap layer '
+            'owns WHEN.',
+      );
+    },
+    timeout: slow,
+  );
+
+  test(
+    'joining an encrypted dataset with NO passphrase is reported, not '
+    'silently treated as plaintext',
+    () async {
+      final a = DatabaseService.createNew();
+      final b = DatabaseService.createNew();
+      addTearDown(a.close);
+      addTearDown(b.close);
+
+      await CloudSyncService(
+        a,
+        authService: _AlwaysConnected(),
+        backendFactory: () => backend,
+      ).setUpDataset(passphrase: 'right');
+
+      await expectLater(
+        CloudSyncService(
+          b,
+          authService: _AlwaysConnected(),
+          backendFactory: () => backend,
+        ).setUpDataset(),
+        throwsA(isA<PassphraseRequiredException>()),
+      );
+    },
+    timeout: slow,
+  );
+}
+
+/// Reports a live connection so `CloudSyncService` proceeds; nothing else
+/// about auth is exercised here.
+class _AlwaysConnected extends GoogleDriveAuthService {
+  @override
+  Future<GoogleDriveConnectionState> connectionState() async =>
+      GoogleDriveConnectionState.connected;
 }

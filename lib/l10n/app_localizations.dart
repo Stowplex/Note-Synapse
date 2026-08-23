@@ -5594,6 +5594,18 @@ abstract class AppLocalizations {
   /// **'On a device that is already syncing, copy the folder ID from this screen and paste it here. This is the reliable way to point a second device at the same data. Leave it empty to look the folder up by name instead.'**
   String get cloudSyncFolderJoinHelp;
 
+  /// No description provided for @cloudSyncPassphraseLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Passphrase (optional)'**
+  String get cloudSyncPassphraseLabel;
+
+  /// No description provided for @cloudSyncPassphraseHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Set one to encrypt this dataset. It is chosen once, when the dataset is created, and cannot be added or removed later. Every device needs the same passphrase — if you lose it, the data cannot be recovered. Leave empty to sync unencrypted.'**
+  String get cloudSyncPassphraseHelp;
+
   /// No description provided for @cloudSyncFolderContinue.
   ///
   /// In en, this message translates to:
