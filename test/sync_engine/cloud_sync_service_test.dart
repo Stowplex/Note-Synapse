@@ -180,10 +180,14 @@ void main() {
       expect(status.health.isDegraded, isFalse);
 
       // Now give the device real data in a table no peer can build.
-      // **M2.14 moved which table that is.** `subnotes` used to be the
-      // example; its owner FK now rides on `__exists__` and it syncs. What is
-      // left is `app_revisions`, blocked by `appCode` — an app's whole source,
-      // deferred to M3's content-addressed blob mechanism.
+      //
+      // **Which table that is has moved twice, and the churn is the point.**
+      // `subnotes` was the example until M2.14 put its owner FK on
+      // `__exists__`; `app_revisions` was the example until M3.1 carried
+      // `appCode` as a blob. What is left is `user_app_libraries`, blocked
+      // on a non-portable `INTEGER PRIMARY KEY` — an identity problem an id
+      // migration has to solve, not a protocol one, so it will outlast the
+      // content deferrals.
       final raw = await db.database;
       await raw.insert('user_apps', {
         'id': 'app1',
@@ -196,14 +200,11 @@ void main() {
         'createdAt': 1000,
         'updatedAt': 1000,
       });
-      await raw.insert('app_revisions', {
-        'id': 'rev1',
-        'appId': 'app1',
-        'revisionNumber': 1,
-        'revisionTimestamp': 1000,
-        'userPrompt': 'p',
-        'aiResponse': 'a',
-        'appCode': '<html></html>',
+      await raw.insert('user_app_libraries', {
+        'app_uuid': 'uuid-app1',
+        'revision_id': 1,
+        'name': 'chart.js',
+        'usage_instructions': 'draws charts',
       });
 
       await service.syncNow();
@@ -223,7 +224,7 @@ void main() {
       final issue = status.health.issues.firstWhere(
         (i) => i.kind == SyncHealthIssueKind.tablesNotSynced,
       );
-      expect(issue.detail, contains('app_revisions'));
+      expect(issue.detail, contains('user_app_libraries'));
 
       // Persisted: a fresh service over the same database sees it, so the
       // signal survives leaving the screen and restarting the app.

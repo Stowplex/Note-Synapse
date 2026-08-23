@@ -543,8 +543,11 @@ class PushPhase {
   /// Withholding the row would be withholding the user's own data from their
   /// other device because of a file the app already renders as "not found".
   Future<void> _stampBlobHashes(DatabaseExecutor db, String authorId) async {
-    if (syncBlobBackedColumns.isEmpty) return;
-    final tables = syncBlobBackedColumns.keys.toList();
+    final tables = {
+      ...syncBlobBackedColumns.keys,
+      ...syncContentBlobColumns.keys,
+    }.toList();
+    if (tables.isEmpty) return;
     final placeholders = List.filled(tables.length, '?').join(',');
     final rows = await db.query(
       'sync_pending_ops',
@@ -557,6 +560,22 @@ class PushPhase {
     for (final row in rows) {
       final entityTable = row['entityTable'] as String;
       final fieldName = row['fieldName'] as String?;
+
+      // Content-backed (`app_revisions.appCode`): the column's own value IS
+      // the blob, so the hash is over the value the operation already holds
+      // — no file to resolve, nothing to read off disk.
+      if (isContentBlobColumn(entityTable, fieldName)) {
+        final value = BlobSyncPhase.decodeValue(row['valueJson'] as String?);
+        if (value is! String || value.isEmpty) continue;
+        await db.update(
+          'sync_pending_ops',
+          {'blobHash': BlobSyncPhase.hashString(value)},
+          where: 'authorId = ? AND authorSeq = ?',
+          whereArgs: [authorId, row['authorSeq']],
+        );
+        continue;
+      }
+
       if (syncBlobBackedColumns[entityTable] != fieldName) continue;
       final value = BlobSyncPhase.decodeValue(row['valueJson'] as String?);
       final hash = await _blobs.blobHashForMint(
@@ -581,6 +600,31 @@ class PushPhase {
     }
   }
 
+  /// Replaces a content-backed column's inline value with null, so the bytes
+  /// travel once as a blob rather than in every commit that touches the row.
+  ///
+  /// **Done at encode time and NOT by mutating the stored row**, which is
+  /// what keeps step 0's resume sound: stripping is a pure function of
+  /// `(entityTable, fieldName)`, so re-encoding a recorded intent from the
+  /// same rows produces byte-identical output, while the local row keeps the
+  /// content the uploader reads from. Mutating the row would have made the
+  /// upload's source disappear.
+  Map<String, Object?> _withoutInlinedBlobContent(Map<String, Object?> row) {
+    if (!isContentBlobColumn(
+      row['entityTable'] as String? ?? '',
+      row['fieldName'] as String?,
+    )) {
+      return row;
+    }
+    if (row['blobHash'] == null) {
+      // No hash means the upload never happened (an empty value, or a
+      // failure). Sending the value inline is the honest fallback: the row
+      // still syncs, at the cost of the bytes travelling in the commit.
+      return row;
+    }
+    return {...row, 'valueJson': null};
+  }
+
   /// Blob references carried by this namespace's still-unpublished
   /// operations — both the content hash and the path to read it from, since
   /// the register does not yet hold either on the sending device.
@@ -590,7 +634,18 @@ class PushPhase {
   ) async => BlobSyncPhase.referencesInPendingOps(
     await db.query(
       'sync_pending_ops',
-      columns: const ['blobHash', 'valueJson', 'entityTable', 'entityId'],
+      // `fieldName` is load-bearing, not decorative: it is what
+      // `referencesInPendingOps` uses to tell a content-backed column from a
+      // file-backed one. Omitting it silently classified every `appCode` as
+      // a PATH and sent the uploader looking for a file named after the
+      // source code, which failed as "missing locally" and uploaded nothing.
+      columns: const [
+        'blobHash',
+        'valueJson',
+        'entityTable',
+        'entityId',
+        'fieldName',
+      ],
       where: 'authorId = ? AND publishedAt IS NULL AND blobHash IS NOT NULL',
       whereArgs: [authorId],
     ),
@@ -616,7 +671,8 @@ class PushPhase {
       );
     }
     final bytes = encodeCommitBatchBytes([
-      for (final row in rows) WireOperation.fromPendingOpsRow(row),
+      for (final row in rows)
+        WireOperation.fromPendingOpsRow(_withoutInlinedBlobContent(row)),
     ]);
     return _CommitBatch(
       authorSeqs: [for (final row in rows) row['authorSeq'] as int],

@@ -253,4 +253,123 @@ void main() {
           'sees and the work the fetch does cannot drift apart',
     );
   });
+
+  // ── M3.1 second half: a mini app's CODE ───────────────────────────────
+  //
+  // `app_revisions.appCode` was the last column blocking `app_revisions`
+  // from syncing at all, so a mini app reached a second device with its
+  // metadata and no runnable source. It is a blob whose bytes live in a
+  // database column rather than in a file, which is the only way it differs
+  // from an attachment.
+
+  Future<void> createMiniApp(_Device device, {required String code}) async {
+    final db = await device.db;
+    await db.insert('user_apps', {
+      'id': 'app1',
+      'uuid': 'uuid-app1',
+      'name': 'Counter',
+      'description': 'counts',
+      'steps': '[]',
+      'htmlContent': '',
+      'type': 'normal',
+      'selectedRevisionId': 'rev1',
+      'createdAt': 1000,
+      'updatedAt': 1000,
+    });
+    await db.insert('app_revisions', {
+      'id': 'rev1',
+      'appId': 'app1',
+      'revisionNumber': 1,
+      'revisionTimestamp': 1000,
+      'userPrompt': 'make a counter',
+      'aiResponse': 'done',
+      'appCode': code,
+    });
+  }
+
+  test(
+    'a mini app arrives on a second device WITH its code — app_revisions '
+    'was the last table blocked by an unresolvable column',
+    () async {
+      const code = '<html><body>counter</body></html>';
+      await createMiniApp(a, code: code);
+      await syncFully(a);
+      await syncFully(b);
+
+      final revision = (await (await b.db).query(
+        'app_revisions',
+        where: 'id = ?',
+        whereArgs: ['rev1'],
+      )).single;
+      expect(revision['appId'], 'app1');
+      expect(revision['userPrompt'], 'make a counter');
+      expect(
+        revision['appCode'],
+        code,
+        reason:
+            'the metadata used to arrive without this, so the app rendered '
+            'as "code hasn\'t arrived on this device" forever',
+      );
+    },
+  );
+
+  test('the code does NOT travel inline in the commit log', () async {
+    const code = 'UNIQUE_MARKER_THAT_MUST_NOT_APPEAR_INLINE';
+    await createMiniApp(a, code: code);
+    await syncFully(a);
+
+    final logIds = await backend.listDeviceLogIds();
+    var sawMarkerInAnyCommit = false;
+    for (final logId in logIds) {
+      final page = await backend.readCommits(deviceLogId: logId, afterSeq: 0);
+      for (final commit in page.commits) {
+        if (String.fromCharCodes(commit.commitBytes).contains(code)) {
+          sawMarkerInAnyCommit = true;
+        }
+      }
+    }
+    expect(
+      sawMarkerInAnyCommit,
+      isFalse,
+      reason:
+          'appCode is stripped at encode time and carried as a blobHash — '
+          'inlining a mini app source into every commit that touches the row '
+          'is what the blob mechanism exists to avoid',
+    );
+
+    // And it is genuinely on the backend as a blob, not simply dropped.
+    await syncFully(b);
+    expect(
+      (await (await b.db).query('app_revisions')).single['appCode'],
+      code,
+    );
+  });
+
+  test(
+    'a revision whose code has not arrived yet is reported, not silently '
+    'blank',
+    () async {
+      await createMiniApp(a, code: 'some code');
+      await syncFully(a);
+
+      backend.failNextDownload = true;
+      await syncFully(b, rounds: 2);
+
+      final outstanding = await b.blobs.outstandingReferences();
+      expect(outstanding.map((r) => r.entityTable), contains('app_revisions'));
+      expect(
+        (await (await b.db).query('app_revisions')).single['appCode'],
+        '',
+        reason: 'the shell row placeholder, which the UI renders as "code '
+            'hasn\'t arrived" rather than as a blank app',
+      );
+
+      backend.failNextDownload = false;
+      await syncFully(b, rounds: 2);
+      expect(
+        (await (await b.db).query('app_revisions')).single['appCode'],
+        'some code',
+      );
+    },
+  );
 }

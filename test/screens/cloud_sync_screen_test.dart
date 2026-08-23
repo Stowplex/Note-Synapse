@@ -436,11 +436,13 @@ void main() {
           'createdAt': 1000,
           'updatedAt': 1000,
         });
-        // Real data in a table no receiving device can build. **M2.14
-        // moved which table that is**: `subnotes` now syncs (its owner FK
-        // rides on `__exists__`), and what is left is `app_revisions`,
-        // blocked by `appCode` — a mini app's whole source, deferred to M3's
-        // content-addressed blob mechanism.
+        // Real data in a table no receiving device can build. **Which table
+        // that is has moved twice**: `subnotes` until M2.14 put its owner FK
+        // on `__exists__`, then `app_revisions` until M3.1 carried `appCode`
+        // as a blob. What is left is `user_app_libraries`, blocked on a
+        // non-portable `INTEGER PRIMARY KEY` — an identity problem an id
+        // migration has to solve rather than a content one, so it will
+        // outlast the blob deferrals.
         await raw.insert('user_apps', {
           'id': 'app1',
           'uuid': 'uuid-app1',
@@ -452,14 +454,11 @@ void main() {
           'createdAt': 1000,
           'updatedAt': 1000,
         });
-        await raw.insert('app_revisions', {
-          'id': 'rev1',
-          'appId': 'app1',
-          'revisionNumber': 1,
-          'revisionTimestamp': 1000,
-          'userPrompt': 'p',
-          'aiResponse': 'a',
-          'appCode': '<html></html>',
+        await raw.insert('user_app_libraries', {
+          'app_uuid': 'uuid-app1',
+          'revision_id': 1,
+          'name': 'chart.js',
+          'usage_instructions': 'draws charts',
         });
       });
       await pumpScreen(tester);
@@ -476,17 +475,17 @@ void main() {
             'nobody reads is the exact defect this surface exists to fix',
       );
       expect(
-        find.textContaining('Mini app versions'),
+        find.textContaining('Mini app libraries'),
         findsWidgets,
         reason: 'and it must say WHAT did not sync',
       );
       expect(
-        find.textContaining('app_revisions'),
+        find.textContaining('user_app_libraries'),
         findsNothing,
         reason:
-            'in the user\'s language, not schema jargon — "app_revisions (1, '
-            'unresolvable column appCode)" tells an engineer everything and a '
-            'user nothing',
+            'in the user\'s language, not schema jargon — "user_app_libraries '
+            '(1, non-portable id)" tells an engineer everything and a user '
+            'nothing',
       );
     },
   );

@@ -2155,6 +2155,8 @@ void main() {
           'conversation_attachments',
           'attachments',
           'user_apps',
+          // M3.1: appCode's CONTENT is a blob, so the last blocker is gone.
+          'app_revisions',
         ],
         reason:
             'exactly these eleven can be built by a receiving device today. '
@@ -2169,7 +2171,6 @@ void main() {
         // `revisionTimestamp`, which was never really unresolvable at all
         // (it is this table's createdAt-equivalent; see
         // `syncEntityCreatedAtColumnByTable`).
-        'app_revisions': 'unresolvable column appCode',
         'user_app_libraries': 'non-portable id',
         'user_app_library_dependencies': 'non-portable id',
       });
@@ -2518,8 +2519,10 @@ void main() {
         final seedResult = await a.scanner.scan();
         expect(
           seedResult.nonPortableTablesSkipped,
-          contains('app_revisions (unresolvable column appCode)'),
-          reason: 'the gate names the table AND the column responsible',
+          isNot(contains(startsWith('app_revisions'))),
+          reason:
+              'M3.1 closed the last blocker: appCode is in sync scope and its '
+              'CONTENT is a blob, so the table is no longer gated out',
         );
 
         for (var round = 0; round < 3; round++) {
@@ -2528,35 +2531,27 @@ void main() {
         }
 
         expect(
-          await dbA.query(
-            'sync_pending_ops',
-            where: 'entityTable = ?',
-            whereArgs: ['app_revisions'],
-          ),
-          isEmpty,
-          reason:
-              'nothing is minted for a table no peer can build — this used to '
-              'mint, push, occupy backend log space, and leave a permanent '
-              'per-field missing_exists row on every peer forever',
-        );
-        expect(
           await dbB.query(
             'sync_materialize_queue',
             where: 'entityTable = ?',
             whereArgs: ['app_revisions'],
           ),
           isEmpty,
-          reason: 'and therefore no undrainable backlog on the receiver',
+          reason: 'and no undrainable backlog on the receiver',
         );
-        expect(await dbB.query('app_revisions'), isEmpty);
+        final revision = (await dbB.query('app_revisions')).single;
+        expect(revision['userPrompt'], 'make a counter');
         expect(
-          (await dbB.query('user_apps')).single['name'],
-          'Counter',
+          revision['appCode'],
+          '<html>lots of code</html>',
           reason:
-              'the app row itself DOES sync as of M2.14 (uuid is carried on '
-              '__exists__) — only its revisions, and therefore its runnable '
-              'source, wait for M3',
+              'the whole point of M3.1: the revision arrives WITH its source, '
+              'carried as a blob rather than inline in the commit log. This '
+              'assertion used to read `expect(await dbB.query(\'app_revisions\'), '
+              'isEmpty)` and was correct at the time — it pinned a disclosed '
+              'residual, and the residual is now closed.',
         );
+        expect((await dbB.query('user_apps')).single['name'], 'Counter');
 
         // The tables that CAN sync are untouched by the gate.
         expect(
@@ -2569,13 +2564,23 @@ void main() {
         );
 
         // And the user can find out, rather than wondering.
+        //
+        // **This used to assert `app_revisions` was reported as not syncing,
+        // and that was correct until M3.1 closed it.** With nothing left
+        // unsyncable in this fixture the round is clean, which is the whole
+        // point — the assertion now pins that the surface stops accusing the
+        // user once the reason is gone, rather than pinning the accusation.
         final health = await recomputeSyncHealth(a.databaseService);
-        expect(health.isDegraded, isTrue);
-        final issue = health.issues
-            .firstWhere((i) => i.kind == SyncHealthIssueKind.tablesNotSynced);
-        expect(issue.detail, contains('app_revisions'));
+        final tablesNotSynced = health.issues
+            .where((i) => i.kind == SyncHealthIssueKind.tablesNotSynced)
+            .toList();
         expect(
-          issue.detail,
+          tablesNotSynced.map((i) => i.detail).join(','),
+          isNot(contains('app_revisions')),
+          reason: 'M3.1: appCode is a blob now, so the table syncs',
+        );
+        expect(
+          tablesNotSynced.map((i) => i.detail).join(','),
           isNot(contains('user_app_libraries')),
           reason:
               'only tables the user actually HAS rows in are reported — an '

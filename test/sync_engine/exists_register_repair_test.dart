@@ -969,8 +969,8 @@ void main() {
   // ══════════════════════════════════════════════════════════════════════
   group('the health surface fires on the RECEIVING device', () {
     test(
-      'a device holding mini apps and zero app_revisions is reported, which '
-      'is the state M2.14 manufactures and the count == 0 guard hid',
+      'M3.1 made this rule unreachable in the live schema, and that is '
+      'recorded rather than deleted',
       () async {
         final dbA = await a.db;
         final dbB = await b.db;
@@ -1000,25 +1000,30 @@ void main() {
           await b.session.run(backend);
         }
 
-        expect((await dbB.query('user_apps')).single['name'], 'Counter');
+        // **What this test was written for no longer exists, and the reason
+        // is a fix rather than a regression.** M2.14's review found that
+        // `tablesNotSynced` guarded on the table's OWN row count, so a
+        // receiving device — which had zero `app_revisions` — was never told
+        // its mini apps had no code. The remedy was to fire when a blocked
+        // table's OWNER is populated locally. `app_revisions` was that
+        // rule's only beneficiary in the live schema, and M3.1 unblocked it.
+        //
+        // So the rule is now unreachable, and this pins that honestly: the
+        // receiving device is clean because there is genuinely nothing
+        // wrong, not because the detector went quiet again. The rule stays
+        // for the next table that is blocked AND has an owner reference; if
+        // this assertion ever flips, that is the case arriving.
         expect(
-          await dbB.query('app_revisions'),
-          isEmpty,
-          reason: 'appCode belongs to M3 — the row cannot be built',
-        );
-
-        final health = await recomputeSyncHealth(b.databaseService);
-        final gated = health.issues.where(
-          (i) => i.kind == SyncHealthIssueKind.tablesNotSynced,
-        );
-        expect(
-          gated,
+          (await dbB.query('app_revisions')).single['appCode'],
           isNotEmpty,
-          reason:
-              'the receiving device reported a clean bill of health while '
-              'holding a mini app with none of its code',
         );
-        expect(gated.first.subjects, contains('app_revisions'));
+        final health = await recomputeSyncHealth(b.databaseService);
+        expect(
+          health.issues
+              .where((i) => i.kind == SyncHealthIssueKind.tablesNotSynced)
+              .expand((i) => i.subjects),
+          isNot(contains('app_revisions')),
+        );
       },
     );
 
@@ -1160,7 +1165,6 @@ void main() {
           blocked[scope.table] = syncability.reasonLabel;
         }
         expect(blocked, {
-          'app_revisions': 'unresolvable column appCode',
           'user_app_libraries': 'non-portable id',
           'user_app_library_dependencies': 'non-portable id',
         });

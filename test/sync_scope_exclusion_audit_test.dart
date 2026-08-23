@@ -329,13 +329,6 @@ final List<TableAudit> kTableAudits = [
       ExcludedColumn('appId', 'owner FK, never reassigned in place'),
       ExcludedColumn('revisionTimestamp', 'this table\'s createdAt-equivalent — derived from the __exists__ HLC'),
       ExcludedColumn(
-        'appCode',
-        'the revision\'s full HTML/JS source — a genuinely large-data column (CLAUDE.md\'s "Database Columns '
-            '(Large Data)" note singles this table out) belonging to the content-addressed-blob sync mechanism '
-            '§ Architecture 4 designs for exactly this content class, not ordinary inline field sync — '
-            'deferred to M3, not this milestone',
-      ),
-      ExcludedColumn(
         'deletedAt',
         'fallback-selection tie-break bookkeeping (computeAppRevisionVisibility), always written in the same '
             'local transaction as __deleted__ and fully derivable from it plus that operation\'s own HLC — not '

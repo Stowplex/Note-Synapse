@@ -115,6 +115,37 @@ const Map<String, String> syncBlobBackedColumns = {
   'conversation_attachments': 'filePath',
 };
 
+/// Columns whose OWN CONTENT is the blob — as opposed to
+/// [syncBlobBackedColumns], where the content is a path naming a file.
+///
+/// `app_revisions.appCode` is an entire mini-app's HTML/JS source living in
+/// a `TEXT NOT NULL` column. It is the last thing blocking `app_revisions`
+/// from syncing at all, and it is exactly the content class CLAUDE.md's
+/// "Database Columns (Large Data)" note singles out and § Architecture 4's
+/// blob mechanism exists for.
+///
+/// **The two kinds share a transport and differ in one place only: where
+/// the bytes live locally.** A file-backed column reads and writes a file;
+/// a content-backed column reads and writes the database column itself. Both
+/// address the bytes by their hash, both upload once per distinct content,
+/// and both leave the row usable before the bytes arrive — an attachment
+/// renders as "file not found", a revision renders as "code hasn't arrived
+/// on this device".
+///
+/// **The value does not travel inline.** A content-backed column's operation
+/// carries its `blobHash` and a null value, stripped deterministically at
+/// encode time (`push_phase.dart`'s `_encodeBatch`) rather than by mutating
+/// the stored row — so step 0's resume re-encodes the identical bytes while
+/// the local row keeps the content the upload reads from.
+const Map<String, String> syncContentBlobColumns = {
+  'app_revisions': 'appCode',
+};
+
+/// Whether [fieldName] on [entityTable] is a column whose value is replaced
+/// by a blob reference on the wire.
+bool isContentBlobColumn(String entityTable, String? fieldName) =>
+    fieldName != null && syncContentBlobColumns[entityTable] == fieldName;
+
 /// The companion column recording whether the path is relative to the app
 /// documents directory. Absent means "always relative".
 const Map<String, String> syncBlobPathIsRelativeColumns = {
@@ -182,15 +213,29 @@ class BlobReference {
     required this.blobHash,
     required this.entityTable,
     required this.entityId,
-    required this.storedPath,
-    required this.isRelative,
+    this.storedPath,
+    this.isRelative = true,
+    this.contentColumn,
+    this.inlineContent,
   });
 
   final String blobHash;
   final String entityTable;
   final String entityId;
-  final String storedPath;
+
+  /// File-backed only: the path stored in the row.
+  final String? storedPath;
   final bool isRelative;
+
+  /// Content-backed only: the column whose value IS the blob.
+  final String? contentColumn;
+
+  /// Content-backed only, and only while pushing: the bytes as the pending
+  /// operation still holds them, so the uploader never has to go back to the
+  /// entity row for content the operation already carries.
+  final String? inlineContent;
+
+  bool get isContentBacked => contentColumn != null;
 }
 
 /// Uploads blobs referenced by outgoing operations, and fetches blobs
@@ -212,6 +257,11 @@ class BlobSyncPhase {
   /// which hashing after a non-deterministic AEAD could never guarantee.
   /// When § 8.5's encryption lands, the ciphertext is what is stored at this
   /// address, not what defines it.
+  /// sha256 of a string's UTF-8 bytes — the content-backed counterpart of
+  /// [hashFile], used for `app_revisions.appCode`.
+  static String hashString(String content) =>
+      sha256.convert(utf8.encode(content)).toString();
+
   static Future<String> hashFile(File file) async {
     final digest = await file.openRead().transform(sha256).first;
     return digest.toString();
@@ -284,8 +334,23 @@ class BlobSyncPhase {
           present++;
           continue;
         }
+        if (reference.isContentBacked) {
+          final content = reference.inlineContent;
+          if (content == null) {
+            missing.add(hash);
+            continue;
+          }
+          final bytes = utf8.encode(content);
+          await backend.uploadBlob(
+            contentHash: hash,
+            data: Stream.value(bytes),
+            length: bytes.length,
+          );
+          uploaded++;
+          continue;
+        }
         final path = await _resolver.absolutePath(
-          reference.storedPath,
+          reference.storedPath!,
           reference.isRelative,
         );
         final file = File(path);
@@ -330,8 +395,31 @@ class BlobSyncPhase {
 
     for (final reference in wanted) {
       try {
+        if (reference.isContentBacked) {
+          if (!await backend.blobExists(reference.blobHash)) {
+            stillMissing.add(reference.blobHash);
+            continue;
+          }
+          final stream = await backend.downloadBlob(reference.blobHash);
+          final bytes = <int>[];
+          await for (final chunk in stream) {
+            bytes.addAll(chunk);
+          }
+          // Written straight into the column. `downloadBlob`'s contract is
+          // that it never returns bytes that mismatch the hash, so what
+          // lands here is exactly what the authoring device had.
+          final db = await _databaseService.database;
+          await db.update(
+            reference.entityTable,
+            {reference.contentColumn!: utf8.decode(bytes)},
+            where: '${_idColumnFor(reference.entityTable)} = ?',
+            whereArgs: [reference.entityId],
+          );
+          downloaded++;
+          continue;
+        }
         final path = await _resolver.absolutePath(
-          reference.storedPath,
+          reference.storedPath!,
           reference.isRelative,
         );
         // **Asked, not inferred from an exception type.** No backend in this
@@ -388,8 +476,19 @@ class BlobSyncPhase {
     final outstanding = <BlobReference>[];
     for (final reference in all) {
       try {
+        if (reference.isContentBacked) {
+          // The shell row wrote `shellRowPlaceholderValue` ('' for TEXT) and
+          // the field write was skipped because the operation carries no
+          // inline value — so an empty column IS the outstanding work, with
+          // nothing to record and nothing to age. Deliberately not a hash
+          // comparison: `appCode` is megabytes, and re-hashing every
+          // revision on every health recompute would cost more than the
+          // download it is checking for.
+          if (await _contentColumnIsEmpty(reference)) outstanding.add(reference);
+          continue;
+        }
         final path = await _resolver.absolutePath(
-          reference.storedPath,
+          reference.storedPath!,
           reference.isRelative,
         );
         if (!await File(path).exists()) outstanding.add(reference);
@@ -398,6 +497,25 @@ class BlobSyncPhase {
       }
     }
     return outstanding;
+  }
+
+  static String _idColumnFor(String table) =>
+      DatabaseService.syncEntityCaptureScopes
+          .firstWhere((s) => s.table == table)
+          .idColumn;
+
+  Future<bool> _contentColumnIsEmpty(BlobReference reference) async {
+    final db = await _databaseService.database;
+    final rows = await db.query(
+      reference.entityTable,
+      columns: [reference.contentColumn!],
+      where: '${_idColumnFor(reference.entityTable)} = ?',
+      whereArgs: [reference.entityId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return false; // no row yet — not this phase's problem
+    final value = rows.first[reference.contentColumn!];
+    return value == null || (value is String && value.isEmpty);
   }
 
   /// Every (row, blobHash) pair this device knows about, read from the
@@ -442,6 +560,34 @@ class BlobSyncPhase {
         );
       }
     }
+
+    for (final entry in syncContentBlobColumns.entries) {
+      final table = entry.key;
+      final column = entry.value;
+      final scope = DatabaseService.syncEntityCaptureScopes
+          .where((s) => s.table == table)
+          .firstOrNull;
+      if (scope == null) continue;
+      final rows = await db.rawQuery(
+        'SELECT s.blobHash AS blobHash, '
+        'CAST(t.${scope.idColumn} AS TEXT) AS entityId '
+        'FROM sync_field_state s '
+        'JOIN $table t ON CAST(t.${scope.idColumn} AS TEXT) = s.entityId '
+        'WHERE s.entityTable = ? AND s.fieldName = ? '
+        'AND s.blobHash IS NOT NULL',
+        [table, column],
+      );
+      for (final row in rows) {
+        references.add(
+          BlobReference(
+            blobHash: row['blobHash'] as String,
+            entityTable: table,
+            entityId: row['entityId'] as String,
+            contentColumn: column,
+          ),
+        );
+      }
+    }
     return references;
   }
 
@@ -457,10 +603,24 @@ class BlobSyncPhase {
       if (hash is! String) continue;
       final value = decodeValue(row['valueJson'] as String?);
       if (value is! String || value.isEmpty) continue;
+      final entityTable = row['entityTable'] as String? ?? '';
+      final fieldName = row['fieldName'] as String?;
+      if (isContentBlobColumn(entityTable, fieldName)) {
+        references.add(
+          BlobReference(
+            blobHash: hash,
+            entityTable: entityTable,
+            entityId: row['entityId'] as String? ?? '',
+            contentColumn: fieldName,
+            inlineContent: value,
+          ),
+        );
+        continue;
+      }
       references.add(
         BlobReference(
           blobHash: hash,
-          entityTable: row['entityTable'] as String? ?? '',
+          entityTable: entityTable,
           entityId: row['entityId'] as String? ?? '',
           storedPath: value,
           isRelative: !value.startsWith('/'),

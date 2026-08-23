@@ -289,14 +289,14 @@ void main() {
         expect(app['author'], 'me');
         expect(app['license'], 'MIT');
 
-        // ---- and the honest half of the mini-app story ----------------
+        // ---- and its revision, with the source, as of M3.1 -------------
         expect(
-          await dbB.query('app_revisions'),
-          isEmpty,
+          (await dbB.query('app_revisions')).single['appCode'],
+          isNotEmpty,
           reason:
-              'app_revisions is still blocked by appCode, which is an entire '
-              'app source and belongs to M3 blob sync — the app row syncs, '
-              'its runnable code does not',
+              'this asserted `isEmpty` through M2.14 and was right then: '
+              'appCode blocked the table. M3.1 carries it as a blob, so the '
+              'app arrives runnable.',
         );
       },
     );
@@ -966,47 +966,53 @@ void main() {
   });
 
   // ══════════════════════════════════════════════════════════════════════
-  group('what is still not synced, stated so it stays true', () {
-    test('an attachment row arrives without its file, and a mini app without '
-        'its code — the two disclosed halves of this milestone', () async {
+  group('what M3.1 closed, and what is still not synced', () {
+    test('the attachment FILE and the mini app CODE both arrive now — the '
+        'two residuals M2.14 disclosed and M3.1 closed', () async {
       final dbA = await a.db;
       await _buildLibrary(dbA);
       await syncBoth();
       final dbB = await b.db;
 
-      // The row is complete; the file it names has never been part of any
-      // operation (it lives on disk). What a user sees is the existing
-      // per-attachment affordance at the point of use — a greyed card
-      // reading "File not found", tap disabled — not a global sync badge;
-      // see `SyncHealthIssueKind.tablesNotSynced`'s doc comment for why a
-      // second health kind for this was written and then removed.
+      // **This test used to assert the opposite, and was correct then.** It
+      // pinned M2.14's two disclosed residuals — an attachment row without
+      // its bytes, a mini app without its source — so that they could not be
+      // quietly forgotten. M3.1's blob transport closed both, so the pin now
+      // records the closure instead. (The BYTES themselves are covered by
+      // `blob_sync_test.dart`, which drives real files through a temp-dir
+      // resolver; this file has no file storage, so it checks the half that
+      // lives in the database.)
       final attachment = (await dbB.query('attachments')).single;
       expect(attachment['filePath'], 'attachments/diagram.png');
-      expect(syncContentDeferredTables.keys, contains('attachments'));
+
+      final revision = (await dbB.query('app_revisions')).single;
+      expect(
+        revision['appCode'],
+        isNotEmpty,
+        reason:
+            'app_revisions was the last table blocked by an unresolvable '
+            'column; appCode is now carried as a blob rather than inline',
+      );
+
+      // Nothing left to accuse the user of for these two.
+      final health = await recomputeSyncHealth(a.databaseService);
+      final gated = health.issues
+          .where((i) => i.kind == SyncHealthIssueKind.tablesNotSynced)
+          .expand((i) => i.subjects)
+          .toList();
+      expect(gated, isNot(contains('app_revisions')));
+      expect(gated, isNot(contains('attachments')));
+    });
+
+    test('the two library tables are still blocked, on non-portable ids '
+        'rather than on content', () async {
       expect(
         syncContentDeferredTables.keys,
-        contains('conversation_attachments'),
-      );
-
-      // The mini app arrives with no revision, so it has no runnable code.
-      // `user_app_view_screen.dart` renders an explicit "code has not synced
-      // yet" state for exactly this, rather than the blank body it used to.
-      expect(await dbB.query('app_revisions'), isEmpty);
-      expect(syncContentDeferredTables['app_revisions'], contains('appCode'));
-
-      // And app_revisions is on the health surface with the true reason.
-      final health = await recomputeSyncHealth(a.databaseService);
-      final gated = health.issues.firstWhere(
-        (i) => i.kind == SyncHealthIssueKind.tablesNotSynced,
-      );
-      expect(gated.subjects, contains('app_revisions'));
-      expect(
-        gated.subjects,
-        isNot(contains('attachments')),
+        contains('user_app_library_dependencies'),
         reason:
-            'attachments now sync — reporting them here would be false, and '
-            'reporting every device with an attachment as degraded is what '
-            'trains people to ignore the warning',
+            'its `bytes` column is the remaining content deferral, and its '
+            'INTEGER PRIMARY KEY blocks the table regardless — an id port, '
+            'not a protocol change',
       );
     });
   });

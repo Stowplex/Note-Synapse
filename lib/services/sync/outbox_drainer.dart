@@ -47,6 +47,7 @@ import 'hlc.dart';
 // a queue row for `SyncMaterializer.sweepMissingExists` to retry, and naming
 // the reason from the file that owns it is what stops the two spelling it
 // differently — the drift class `sync_table_shape.dart` was extracted to end.
+import 'blob_sync.dart';
 import 'materializer.dart';
 import 'seed_scanner.dart';
 import 'seq_counter.dart';
@@ -799,6 +800,23 @@ class OutboxDrainer {
     );
   }
 
+  /// The `blobHash` recorded on a field's winning register, or null.
+  Future<String?> _readFieldStateBlobHash(
+    DatabaseExecutor txn, {
+    required String entityTable,
+    required String entityId,
+    required String fieldName,
+  }) async {
+    final rows = await txn.query(
+      'sync_field_state',
+      columns: const ['blobHash'],
+      where: 'entityTable = ? AND entityId = ? AND fieldName = ?',
+      whereArgs: [entityTable, entityId, fieldName],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first['blobHash'] as String?;
+  }
+
   /// Shared by both entity-touch paths: mint a `kind: 'field'` operation
   /// and update `sync_field_state` IFF `currentValueJson` differs from (or
   /// no row exists for) `sync_field_state`'s currently-recorded value.
@@ -822,6 +840,35 @@ class OutboxDrainer {
       // before drain" case -- the live value now matches what was already
       // recorded from before this batch of touches.
       return null;
+    }
+
+    // **A content-blob column compares by HASH, not by value, and skipping
+    // this would push an empty mini app over a real one** (M3.1, found by a
+    // test rather than by reading).
+    //
+    // The chain: a peer's `appCode` operation carries a `blobHash` and a
+    // null value, so `_writeResolvedFieldValue` leaves the shell row's
+    // placeholder `''` in place until Phase C downloads the bytes. That
+    // INSERT fires this device's own capture triggers, and the ordinary
+    // value comparison above sees live `''` against a recorded null, calls
+    // them different, and mints `appCode = ''` — which then wins on recency
+    // and replaces the real source on every other device with nothing.
+    //
+    // The register's `blobHash` is what the live content must be compared
+    // against, and an empty column while a hash is recorded means the bytes
+    // simply have not arrived yet — never a local edit to publish.
+    if (isContentBlobColumn(entityTable, fieldName)) {
+      final recordedHash = await _readFieldStateBlobHash(
+        txn,
+        entityTable: entityTable,
+        entityId: entityId,
+        fieldName: fieldName,
+      );
+      if (recordedHash != null) {
+        final live = BlobSyncPhase.decodeValue(currentValueJson);
+        if (live is! String || live.isEmpty) return null;
+        if (BlobSyncPhase.hashString(live) == recordedHash) return null;
+      }
     }
 
     return _mintFieldOperation(

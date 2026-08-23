@@ -113,7 +113,7 @@ void main() {
   }
 
   group('trigger installation — fresh install has exactly the expected set', () {
-    test('104 sync_touch_ triggers exist: 14 entity AFTER INSERT + 80 field '
+    test('105 sync_touch_ triggers exist: 14 entity AFTER INSERT + 80 field '
         'AFTER UPDATE + 5*2 OR-Set AFTER INSERT/DELETE', () async {
       // 80 field triggers = the pre-M2.7 61, plus M2.7's tags.name/
       // tags.color (design doc § Architecture 11.6(e) needs a remote tag's
@@ -132,7 +132,7 @@ void main() {
         "SELECT name FROM sqlite_master WHERE type='trigger' "
         "AND name LIKE 'sync_touch_%'",
       );
-      expect(triggers.length, 104);
+      expect(triggers.length, 105);
     });
 
     test('running _onCreate-installed statements again is a safe no-op '
@@ -148,13 +148,13 @@ void main() {
         "SELECT name FROM sqlite_master WHERE type='trigger' "
         "AND name LIKE 'sync_touch_%'",
       );
-      expect(triggers.length, 104);
+      expect(triggers.length, 105);
       await second.close();
     });
   });
 
   group('migration round-trip (v56 -> v57)', () {
-    test('migrating an existing v56 database installs all 104 triggers, '
+    test('migrating an existing v56 database installs all 105 triggers, '
         'twice, safely', () async {
       // M2.7/M2.8 finding: _migrateToVersion57 (database_service.dart)
       // reuses the CURRENT, live `_syncMutationCaptureTriggerStatements`
@@ -169,7 +169,7 @@ void main() {
       // user_app_libraries' name/usage_instructions;
       // user_app_library_dependencies' original_url/local_path — see each
       // one's own SyncEntityCaptureScope doc comment), a v56->57 migration
-      // installs all 104 triggers, not the 85 a purely historical snapshot
+      // installs all 105 triggers, not the 85 a purely historical snapshot
       // would have. This is harmless (idempotent CREATE TRIGGER IF NOT
       // EXISTS, no data touched) — the separate v59/v60 migrations below
       // exist for the real upgrade path this test doesn't cover: a device
@@ -230,7 +230,7 @@ void main() {
         "SELECT name FROM sqlite_master WHERE type='trigger' "
         "AND name LIKE 'sync_touch_%'",
       );
-      expect(after.length, 104);
+      expect(after.length, 105);
 
       // Running it again must be a safe no-op (CREATE TRIGGER IF NOT
       // EXISTS throughout).
@@ -239,7 +239,7 @@ void main() {
         "SELECT name FROM sqlite_master WHERE type='trigger' "
         "AND name LIKE 'sync_touch_%'",
       );
-      expect(afterTwice.length, 104);
+      expect(afterTwice.length, 105);
 
       await service.close();
       await preMigrationDb.close();
@@ -247,7 +247,7 @@ void main() {
   });
 
   group('migration round-trip (v56 -> v59, M2.7 tags.name/color addendum)', () {
-    test('migrating an existing v56 database all the way to v59 installs all 104 triggers '
+    test('migrating an existing v56 database all the way to v59 installs all 105 triggers '
         '(v57 alone already installs the live/current full set, including the M2.8 findings — '
         'see the v56->v57 test above), including tags.name/tags.color, twice, safely', () async {
       final preMigrationDb = await databaseFactoryFfi.openDatabase(
@@ -288,7 +288,7 @@ void main() {
         "SELECT name FROM sqlite_master WHERE type='trigger' "
         "AND name LIKE 'sync_touch_%'",
       );
-      expect(after.length, 104);
+      expect(after.length, 105);
       final names = after.map((r) => r['name'] as String).toSet();
       expect(names, containsAll(['sync_touch_tags_au_name', 'sync_touch_tags_au_color']));
 
@@ -316,7 +316,7 @@ void main() {
         "SELECT name FROM sqlite_master WHERE type='trigger' "
         "AND name LIKE 'sync_touch_%'",
       );
-      expect(afterTwice.length, 104);
+      expect(afterTwice.length, 105);
 
       await service.close();
       await preMigrationDb.close();
@@ -324,7 +324,7 @@ void main() {
   });
 
   group('migration round-trip (v56 -> v60, M2.8 sync-scope-exclusion-reasoning audit findings)', () {
-    test('migrating an existing v56 database all the way to v60 installs all 104 triggers, '
+    test('migrating an existing v56 database all the way to v60 installs all 105 triggers, '
         'including every M2.8 audit finding, twice, safely', () async {
       final preMigrationDb = await databaseFactoryFfi.openDatabase(
         inMemoryDatabasePath,
@@ -364,7 +364,7 @@ void main() {
         "SELECT name FROM sqlite_master WHERE type='trigger' "
         "AND name LIKE 'sync_touch_%'",
       );
-      expect(after.length, 104);
+      expect(after.length, 105);
       final names = after.map((r) => r['name'] as String).toSet();
       expect(
         names,
@@ -422,7 +422,7 @@ void main() {
         "SELECT name FROM sqlite_master WHERE type='trigger' "
         "AND name LIKE 'sync_touch_%'",
       );
-      expect(afterTwice.length, 104);
+      expect(afterTwice.length, 105);
 
       await service.close();
       await preMigrationDb.close();

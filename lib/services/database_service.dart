@@ -1690,7 +1690,14 @@ class DatabaseService {
     SyncEntityCaptureScope(
       table: 'app_revisions',
       idColumn: 'id',
-      syncScopeColumns: ['revisionNumber', 'userPrompt', 'aiResponse', 'attachmentPaths', '__deleted__'],
+      // `appCode` joined sync scope in M3.1's second half: its CONTENT is
+      // a blob (`syncContentBlobColumns`), so the operation carries a
+      // `blobHash` and a null value rather than a megabyte of HTML inline,
+      // and `app_revisions` stops being the last table blocked by an
+      // unresolvable column. Being in scope is what makes the column
+      // captured, minted and materialized at all; the blob layer is what
+      // keeps it off the commit log.
+      syncScopeColumns: ['revisionNumber', 'userPrompt', 'aiResponse', 'attachmentPaths', 'appCode', '__deleted__'],
     ),
     // user_app_libraries: `id`/`app_uuid`/`revision_id` (owner FKs)
     // excluded — same "immutable content, no update function anywhere in
