@@ -3211,6 +3211,16 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String cloudSyncHealthAttachmentBytesMissing(int count, String detail) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个附件文件尚未同步到本设备：$detail',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String cloudSyncHealthSince(String time) {
     return '自 $time 起等待中';
   }

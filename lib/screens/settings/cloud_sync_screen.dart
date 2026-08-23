@@ -1106,6 +1106,12 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
       // M4's identity mapping. See `SyncHealthIssueKind.entityIdentityConflict`.
       SyncHealthIssueKind.entityIdentityConflict =>
         l10n.cloudSyncHealthIdentityConflict(issue.count, issue.detail),
+      // M3.1. Transient by construction — the transport exists, so this
+      // clears itself the round the bytes land. No remedy named because
+      // none is needed: the peer that owns the file uploads it on its own
+      // next sync.
+      SyncHealthIssueKind.attachmentBytesMissing =>
+        l10n.cloudSyncHealthAttachmentBytesMissing(issue.count, issue.detail),
     };
     final since = issue.oldestEntryAt;
     if (since == null) return line;

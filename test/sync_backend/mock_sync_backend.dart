@@ -485,8 +485,17 @@ class MockSyncBackend implements SyncBackend {
     }
   }
 
+  /// Fails every `downloadBlob` while set — a blunter hook than
+  /// [faultSource] for the one case that needs no particular fault KIND, only
+  /// "this transfer did not complete" (M3.1's partial-write test, which
+  /// asserts a failed download leaves no truncated file behind).
+  bool failNextDownload = false;
+
   @override
   Future<Stream<List<int>>> downloadBlob(String contentHash) async {
+    if (failNextDownload) {
+      throw StateError('downloadBlob: injected failure for $contentHash');
+    }
     final fault = faultSource?.next(SyncOp.downloadBlob);
     _throwForGenericFault(fault);
 

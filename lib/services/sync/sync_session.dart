@@ -34,6 +34,7 @@ import 'dataset_reset.dart';
 import 'device_identity.dart';
 import 'hlc.dart';
 import 'outbox_drainer.dart';
+import 'blob_sync.dart';
 import 'pull_phase.dart';
 import 'push_phase.dart';
 import 'seed_scanner.dart';
@@ -52,6 +53,7 @@ class SyncSessionResult {
     required this.push,
     required this.seedPush,
     this.divergedAuthorIds = const [],
+    this.blobs = const BlobSyncResult(),
   });
 
   final DrainResult drain;
@@ -78,6 +80,12 @@ class SyncSessionResult {
   /// append and therefore produces no mismatch to observe.
   final List<String> divergedAuthorIds;
 
+  /// **M3.1.** What Phase C moved: attachment bytes downloaded for rows this
+  /// device received, and the blobs still outstanding because the peer that
+  /// owns them has not uploaded them yet. Upload counts live on
+  /// [PushPhase.lastBlobResult], since uploading happens inside Phase A.
+  final BlobSyncResult blobs;
+
   /// Total operations published this round across both owned namespaces —
   /// what a "pushed N" UI counter should show.
   int get totalPublished => push.publishedCount + seedPush.publishedCount;
@@ -97,7 +105,9 @@ class SyncSession {
     SeedScanner? seedScanner,
     PullPhase? pullPhase,
     PushPhase? pushPhase,
+    BlobSyncPhase? blobs,
   }) : _databaseService = databaseService,
+       _blobs = blobs ?? BlobSyncPhase(databaseService),
        _deviceIdentity = deviceIdentity ?? DeviceIdentity(databaseService),
        _hlc = hlc ?? HybridLogicalClock(databaseService),
        _drainer =
@@ -122,7 +132,8 @@ class SyncSession {
              databaseService,
              hlc ?? HybridLogicalClock(databaseService),
            ),
-       _pushPhase = pushPhase ?? PushPhase(databaseService);
+       _pushPhase =
+           pushPhase ?? PushPhase(databaseService, blobs: blobs);
 
   final DatabaseService _databaseService;
   final DeviceIdentity _deviceIdentity;
@@ -132,6 +143,7 @@ class SyncSession {
   final SeedScanner _seedScanner;
   final PullPhase _pullPhase;
   final PushPhase _pushPhase;
+  final BlobSyncPhase _blobs;
 
   /// Optional progress callback for the M2.10 seed scan — the one phase
   /// that can take a while on a large pre-existing library, and the one a
@@ -354,6 +366,23 @@ class SyncSession {
     // anything having to remember to.
     await _recordDivergedNamespaces(diverged);
 
+    // ── Phase C — blob fetch (M3.1, § Architecture 4) ──────────────────
+    //
+    // LAST, and outside every transaction. A pulled attachment row names a
+    // file this device does not have yet; the bytes are fetched only once
+    // the row that references them exists, so the work is derived from
+    // durable state rather than queued — an interrupted fetch simply finds
+    // the same gap next round. Deliberately after push as well as pull: a
+    // device that has just uploaded its own blobs is the device a peer is
+    // about to fetch from, and doing our own downloads first would delay
+    // that for no benefit.
+    //
+    // Its failures are reported, never thrown: a download that fails leaves
+    // the row intact and the file absent, which is the state the app
+    // already renders per attachment, and taking the whole round down for
+    // it would discard a successful drain, seed, pull and push.
+    final blobResult = await _blobs.fetchMissing(backend);
+
     return SyncSessionResult(
       drain: drainResult,
       seed: seedResult,
@@ -361,6 +390,7 @@ class SyncSession {
       push: pushResult,
       seedPush: seedPushResult,
       divergedAuthorIds: List.unmodifiable(diverged),
+      blobs: blobResult,
     );
   }
 

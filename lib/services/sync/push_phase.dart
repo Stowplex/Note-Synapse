@@ -117,6 +117,7 @@ import 'package:crypto/crypto.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../database_service.dart';
+import 'blob_sync.dart';
 import 'sync_backend.dart';
 import 'wire_format.dart';
 
@@ -243,9 +244,14 @@ class PushPhase {
     this._databaseService, {
     this.maxOperationsPerCommit = defaultMaxOperationsPerCommit,
     this.maxPayloadBytesPerCommit = defaultMaxPayloadBytesPerCommit,
-  });
+    BlobSyncPhase? blobs,
+  }) : _blobs = blobs ?? BlobSyncPhase(_databaseService);
 
   final DatabaseService _databaseService;
+  final BlobSyncPhase _blobs;
+
+  /// Blobs uploaded (or found already present) by the most recent [push].
+  BlobSyncResult lastBlobResult = const BlobSyncResult();
 
   static const int _maxAmbiguousResolutionAttempts = 5;
 
@@ -304,6 +310,27 @@ class PushPhase {
     var resumed = 0;
     var published = 0;
     var commits = 0;
+
+    // ── Blobs first — M3.1, § Architecture 4 ───────────────────────────
+    //
+    // "Uploaded blobs are verified before any referencing commit is
+    // written." The ordering is the whole guarantee: a commit naming bytes
+    // no peer can fetch is a permanent dangling reference on every device,
+    // whereas bytes nobody references yet are unreclaimed storage that
+    // § Architecture 4's GC already exists to sweep. Cheap direction first.
+    //
+    // The hash is STAMPED ONTO THE PENDING ROW rather than computed while
+    // encoding, and that is load-bearing rather than tidy: `_encodeBatch`
+    // must be able to re-encode a recorded intent to the byte-identical
+    // payload during step 0's resume, and a file the user edited between
+    // the two attempts would hash differently. Storing it once makes the
+    // re-encode a pure function of durable state, which is what the
+    // intent's `payloadHash` check already assumes.
+    await _stampBlobHashes(db, authorId);
+    lastBlobResult = await _blobs.uploadReferenced(
+      backend,
+      await _pendingBlobReferences(db, authorId),
+    );
 
     // Planned once, over EVERY unpublished operation (including the ones a
     // pending intent already covers, which are still unpublished by
@@ -501,6 +528,74 @@ class PushPhase {
 
   /// Reads the named operations in full and encodes them as one `v: 2`
   /// commit payload.
+  /// Fills in `sync_pending_ops.blobHash` for every unpublished, blob-backed
+  /// field operation of this namespace that does not have one yet.
+  ///
+  /// Runs OUTSIDE any transaction, deliberately: hashing streams a whole file
+  /// off disk, and doing that while holding SQLite's write lock would block
+  /// every other writer for the length of the largest attachment. The mint
+  /// path is where a hash would most naturally belong and is exactly where it
+  /// cannot go, because minting happens inside the same transaction as the
+  /// touch-log bookkeeping it must be atomic with.
+  ///
+  /// A row whose file is absent is left with a null `blobHash` and syncs as
+  /// it does today — the metadata travels, the bytes are reported missing.
+  /// Withholding the row would be withholding the user's own data from their
+  /// other device because of a file the app already renders as "not found".
+  Future<void> _stampBlobHashes(DatabaseExecutor db, String authorId) async {
+    if (syncBlobBackedColumns.isEmpty) return;
+    final tables = syncBlobBackedColumns.keys.toList();
+    final placeholders = List.filled(tables.length, '?').join(',');
+    final rows = await db.query(
+      'sync_pending_ops',
+      columns: const ['authorSeq', 'entityTable', 'fieldName', 'valueJson'],
+      where:
+          'authorId = ? AND publishedAt IS NULL AND blobHash IS NULL '
+          'AND kind = ? AND entityTable IN ($placeholders)',
+      whereArgs: [authorId, 'field', ...tables],
+    );
+    for (final row in rows) {
+      final entityTable = row['entityTable'] as String;
+      final fieldName = row['fieldName'] as String?;
+      if (syncBlobBackedColumns[entityTable] != fieldName) continue;
+      final value = BlobSyncPhase.decodeValue(row['valueJson'] as String?);
+      final hash = await _blobs.blobHashForMint(
+        entityTable: entityTable,
+        fieldName: fieldName!,
+        value: value,
+        // Read off the path itself rather than joined from the row's own
+        // `isRelativePath` column. The two agree — `FileUtils
+        // .resolvePortableAttachmentPath` already classifies by leading `/`
+        // for exactly this reason — and the path is the thing that will be
+        // resolved, so deriving from it cannot disagree with what the
+        // resolver does, whereas a stale flag on the row could.
+        isRelative: !(value is String && value.startsWith('/')),
+      );
+      if (hash == null) continue;
+      await db.update(
+        'sync_pending_ops',
+        {'blobHash': hash},
+        where: 'authorId = ? AND authorSeq = ?',
+        whereArgs: [authorId, row['authorSeq']],
+      );
+    }
+  }
+
+  /// Blob references carried by this namespace's still-unpublished
+  /// operations — both the content hash and the path to read it from, since
+  /// the register does not yet hold either on the sending device.
+  Future<List<BlobReference>> _pendingBlobReferences(
+    DatabaseExecutor db,
+    String authorId,
+  ) async => BlobSyncPhase.referencesInPendingOps(
+    await db.query(
+      'sync_pending_ops',
+      columns: const ['blobHash', 'valueJson', 'entityTable', 'entityId'],
+      where: 'authorId = ? AND publishedAt IS NULL AND blobHash IS NOT NULL',
+      whereArgs: [authorId],
+    ),
+  );
+
   Future<_CommitBatch> _encodeBatch(
     DatabaseExecutor db,
     String authorId,

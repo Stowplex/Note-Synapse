@@ -1169,6 +1169,7 @@
   "cloudSyncHealthWaitingOnDot": "{count} 项删除正在等待本设备尚未看到的更改：{detail}",
   "cloudSyncHealthMembershipNotBuilt": "{count} 个关联无法重建：{detail}",
   "cloudSyncHealthIdentityConflict": "有 {count} 项来自其他设备的内容无法添加，因为本设备上已有它的副本：{detail}",
+  "cloudSyncHealthAttachmentBytesMissing": "{count, plural, other{{count} 个附件文件尚未同步到本设备：{detail}}}",
   "cloudSyncHealthSince": "自 {time} 起等待中",
   "syncItemsSubnotes": "子任务",
   "syncItemsRelationships": "笔记关联",

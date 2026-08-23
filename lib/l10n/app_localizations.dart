@@ -5858,6 +5858,12 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 item from another device could not be added} other{{count} items from another device could not be added}}, because this device already has a copy of it: {detail}'**
   String cloudSyncHealthIdentityConflict(int count, String detail);
 
+  /// No description provided for @cloudSyncHealthAttachmentBytesMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 attachment file has not arrived yet: {detail}} other{{count} attachment files have not arrived yet: {detail}}}'**
+  String cloudSyncHealthAttachmentBytesMissing(int count, String detail);
+
   /// No description provided for @cloudSyncHealthSince.
   ///
   /// In en, this message translates to:

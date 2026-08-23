@@ -55,6 +55,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../database_service.dart';
 import '../logger_service.dart';
+import 'blob_sync.dart';
 import 'dataset_bootstrap.dart';
 import 'materializer.dart';
 import 'pull_phase.dart';
@@ -229,6 +230,20 @@ enum SyncHealthIssueKind {
   /// duplicate" leaves the row and its `uuid` in place. So the string states
   /// what happened and prescribes nothing, and the honest fix is M4's.
   entityIdentityConflict,
+
+  /// **M3.1.** Attachment rows this device holds whose FILE has not arrived
+  /// yet — the peer that owns the bytes has not uploaded them, or a download
+  /// failed.
+  ///
+  /// **On the health spine, unlike the M2.14 kind that was written and
+  /// deliberately deleted.** That one (`fileContentNotSynced`) would have
+  /// fired for every attachment on every device, permanently, because the
+  /// transport did not exist — "this app does not sync attachments yet" is a
+  /// release note, not a health issue. This one is the opposite: the
+  /// transport exists, so an outstanding file is genuinely transient work,
+  /// and a set that never empties is genuinely something wrong. It clears
+  /// itself the round the bytes land.
+  attachmentBytesMissing,
 }
 
 /// The whole picture, recomputed at the end of each sync.
@@ -634,6 +649,32 @@ Future<SyncHealth> recomputeSyncHealth(
     existsIdentityConflictBlockingReason,
     SyncHealthIssueKind.entityIdentityConflict,
   );
+
+  // ── M3.1: attachment files named by a row this device holds, but absent
+  //
+  // Derived from the same query the fetch phase drives (`BlobSyncPhase
+  // .outstandingReferences`), deliberately — one definition of "still
+  // missing", so the count a user reads and the work the next round will do
+  // cannot disagree. Guarded so a failure to resolve a path can never take
+  // the health recompute down with it, matching every other detector here.
+  try {
+    final outstanding = await BlobSyncPhase(databaseService)
+        .outstandingReferences();
+    if (outstanding.isNotEmpty) {
+      issues.add(
+        SyncHealthIssue(
+          kind: SyncHealthIssueKind.attachmentBytesMissing,
+          count: outstanding.length,
+          detail: outstanding
+              .take(5)
+              .map((r) => '${r.entityTable}/${r.entityId}')
+              .join(', '),
+        ),
+      );
+    }
+  } catch (e) {
+    LoggerService.warning('recomputeSyncHealth: blob check failed: $e');
+  }
 
   final health = SyncHealth(issues: List.unmodifiable(issues));
   await db.insert('sync_state', {

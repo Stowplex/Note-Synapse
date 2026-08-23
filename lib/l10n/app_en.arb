@@ -1302,6 +1302,8 @@
     "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
   },
   "cloudSyncHealthIdentityConflict": "{count, plural, =1{1 item from another device could not be added} other{{count} items from another device could not be added}}, because this device already has a copy of it: {detail}",
+  "cloudSyncHealthAttachmentBytesMissing": "{count, plural, =1{1 attachment file has not arrived yet: {detail}} other{{count} attachment files have not arrived yet: {detail}}}",
+  "@cloudSyncHealthAttachmentBytesMissing": {"placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}},
   "@cloudSyncHealthIdentityConflict": {
     "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
   },

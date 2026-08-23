@@ -3360,6 +3360,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String cloudSyncHealthAttachmentBytesMissing(int count, String detail) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count attachment files have not arrived yet: $detail',
+      one: '1 attachment file has not arrived yet: $detail',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String cloudSyncHealthSince(String time) {
     return 'waiting since $time';
   }
