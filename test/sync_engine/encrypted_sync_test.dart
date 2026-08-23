@@ -185,4 +185,65 @@ void main() {
     },
     timeout: slow,
   );
+
+  test(
+    'blob bytes are sealed too, addressed by the PLAINTEXT hash, and the '
+    'backend holds no readable file',
+    () async {
+      final crypto = await keyFor('pass');
+      final a = DatabaseService.createNew();
+      final b = DatabaseService.createNew();
+      addTearDown(a.close);
+      addTearDown(b.close);
+
+      // A mini app's source is a content-backed blob, so this exercises the
+      // blob path without needing file storage.
+      final dbA = await a.database;
+      await dbA.insert('user_apps', {
+        'id': 'app1',
+        'uuid': 'uuid-app1',
+        'name': 'Counter',
+        'description': 'd',
+        'steps': '[]',
+        'htmlContent': '',
+        'type': 'normal',
+        'selectedRevisionId': 'rev1',
+        'createdAt': 1000,
+        'updatedAt': 1000,
+      });
+      await dbA.insert('app_revisions', {
+        'id': 'rev1',
+        'appId': 'app1',
+        'revisionNumber': 1,
+        'revisionTimestamp': 1000,
+        'userPrompt': 'p',
+        'aiResponse': 'r',
+        'appCode': 'SECRET_APP_SOURCE_MARKER',
+      });
+
+      for (var i = 0; i < 3; i++) {
+        await SyncSession(a, crypto: crypto).run(backend);
+      }
+      for (var i = 0; i < 3; i++) {
+        await SyncSession(b, crypto: crypto).run(backend);
+      }
+
+      expect(
+        (await (await b.database).query('app_revisions')).single['appCode'],
+        'SECRET_APP_SOURCE_MARKER',
+        reason: 'a peer with the passphrase gets the real source back',
+      );
+
+      final storedBlobs = backend.debugAllBlobBytes();
+      expect(storedBlobs, isNotEmpty);
+      for (final bytes in storedBlobs) {
+        expect(
+          String.fromCharCodes(bytes).contains('SECRET_APP_SOURCE_MARKER'),
+          isFalse,
+          reason: 'blob bytes are sealed on the backend',
+        );
+      }
+    },
+    timeout: slow,
+  );
 }

@@ -446,10 +446,23 @@ abstract class SyncBackend {
   /// ambiguity (§ 8.2 items 1-2), this throws rather than returning — there
   /// is no `Ambiguous` outcome type for blobs; the resolution mechanism is
   /// [blobExists], called again by the caller before retrying.
+  ///
+  /// **[sealed] (M3.4) is what an encrypted dataset needs, and it narrows
+  /// this contract rather than weakening it.** When encryption is on,
+  /// `contentHash` is still the PLAINTEXT hash — content addressing depends
+  /// on two devices computing the same address for the same file, which a
+  /// non-deterministic AEAD can never give over ciphertext — but `data`
+  /// carries the sealed bytes, so the backend cannot re-hash them to
+  /// anything meaningful. It therefore stores them opaquely, and the
+  /// verification § Architecture 4 requires moves to the one layer that
+  /// holds the key: `blob_sync.dart` re-hashes after decrypting, which is a
+  /// STRICTER check than the backend's, since AEAD authentication has
+  /// already rejected any modified byte before the hash is even computed.
   Future<void> uploadBlob({
     required String contentHash,
     required Stream<List<int>> data,
     required int length,
+    bool sealed = false,
   });
 
   /// "Downloaded blobs are always hash-verified" (§ Architecture 4) —
@@ -457,7 +470,12 @@ abstract class SyncBackend {
   /// `contentHash`; it throws instead (after fully reading and checking,
   /// not lazily mid-stream, so a caller cannot observe a partially-
   /// consumed, unverified stream as if it were trustworthy).
-  Future<Stream<List<int>>> downloadBlob(String contentHash);
+  /// With [sealed], the returned bytes are ciphertext and cannot hash to
+  /// `contentHash`; the caller decrypts and verifies. See [uploadBlob].
+  Future<Stream<List<int>>> downloadBlob(
+    String contentHash, {
+    bool sealed = false,
+  });
 
   // --- Conditional deletion (§ Architecture 4/6's uniform GC mechanism) -
 

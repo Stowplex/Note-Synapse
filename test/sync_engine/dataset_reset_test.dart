@@ -196,11 +196,15 @@ class _LaggyListingBackend implements SyncBackend {
     required String contentHash,
     required Stream<List<int>> data,
     required int length,
+    bool sealed = false,
   }) =>
       inner.uploadBlob(contentHash: contentHash, data: data, length: length);
 
   @override
-  Future<Stream<List<int>>> downloadBlob(String contentHash) =>
+  Future<Stream<List<int>>> downloadBlob(
+    String contentHash, {
+    bool sealed = false,
+  }) =>
       inner.downloadBlob(contentHash);
 
   @override

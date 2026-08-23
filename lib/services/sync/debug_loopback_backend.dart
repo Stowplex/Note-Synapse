@@ -172,14 +172,16 @@ class DebugLoopbackSyncBackend implements SyncBackend {
     required String contentHash,
     required Stream<List<int>> data,
     required int length,
+    bool sealed = false,
   }) => throw UnimplementedError(
     'DebugLoopbackSyncBackend: blob support is out of scope (M3) — never called by SyncSession.run()',
   );
 
   @override
   Future<Stream<List<int>>> downloadBlob(
-    String contentHash,
-  ) => throw UnimplementedError(
+    String contentHash, {
+    bool sealed = false,
+  }) => throw UnimplementedError(
     'DebugLoopbackSyncBackend: blob support is out of scope (M3) — never called by SyncSession.run()',
   );
 

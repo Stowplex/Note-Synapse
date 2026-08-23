@@ -446,6 +446,7 @@ class MockSyncBackend implements SyncBackend {
     required String contentHash,
     required Stream<List<int>> data,
     required int length,
+    bool sealed = false,
   }) async {
     final fault = faultSource?.next(SyncOp.uploadBlob);
     final bytes = await _collect(data);
@@ -466,7 +467,13 @@ class MockSyncBackend implements SyncBackend {
       storedBytes = _corrupt(storedBytes);
     }
 
-    final actualHash = _sha256Hex(storedBytes);
+    // **Sealed bytes cannot be re-hashed to `contentHash`** (M3.4): the
+    // address is the PLAINTEXT hash, by design, so this check is only
+    // meaningful for an unencrypted dataset. The verification does not
+    // disappear — it moves to `blob_sync.dart`, which holds the key, and
+    // becomes strictly stronger there because AEAD authentication rejects a
+    // modified byte before the hash is even computed.
+    final actualHash = sealed ? contentHash : _sha256Hex(storedBytes);
     if (actualHash != contentHash) {
       final caughtHere = fault is! TornWrite || fault.manifestsOnUploadCheck;
       if (caughtHere) {
@@ -492,7 +499,10 @@ class MockSyncBackend implements SyncBackend {
   bool failNextDownload = false;
 
   @override
-  Future<Stream<List<int>>> downloadBlob(String contentHash) async {
+  Future<Stream<List<int>>> downloadBlob(
+    String contentHash, {
+    bool sealed = false,
+  }) async {
     if (failNextDownload) {
       throw StateError('downloadBlob: injected failure for $contentHash');
     }
@@ -503,7 +513,7 @@ class MockSyncBackend implements SyncBackend {
     if (record == null) {
       throw ArgumentError('downloadBlob: no blob stored for contentHash $contentHash');
     }
-    final actualHash = _sha256Hex(record.bytes);
+    final actualHash = sealed ? contentHash : _sha256Hex(record.bytes);
     if (actualHash != contentHash) {
       // "Downloaded blobs are always hash-verified" — catches both
       // ordinary corruption (item 2/9) and external tampering (item 15a),
@@ -513,6 +523,11 @@ class MockSyncBackend implements SyncBackend {
     }
     return Stream.value(record.bytes);
   }
+
+  /// Every stored blob's bytes, exactly as the backend holds them — used to
+  /// assert that an encrypted dataset leaves nothing readable at rest.
+  List<Uint8List> debugAllBlobBytes() =>
+      [for (final record in _blobs.values) record.bytes];
 
   // -- conditional deletion -----------------------------------------------
 

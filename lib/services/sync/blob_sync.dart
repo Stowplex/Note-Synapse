@@ -86,6 +86,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -94,6 +95,7 @@ import '../../utils/file_utils.dart';
 import '../database_service.dart';
 import '../logger_service.dart';
 import 'sync_backend.dart';
+import 'sync_crypto.dart';
 
 /// The sync-scope columns whose value NAMES A LOCAL FILE, per table.
 ///
@@ -244,10 +246,23 @@ class BlobSyncPhase {
   BlobSyncPhase(
     this._databaseService, {
     BlobFileResolver resolver = const AppDocumentsBlobFileResolver(),
-  }) : _resolver = resolver;
+    DatasetCrypto crypto = const DatasetCrypto.plaintext(),
+  }) : _resolver = resolver,
+       _crypto = crypto;
 
   final DatabaseService _databaseService;
   final BlobFileResolver _resolver;
+
+  /// **M3.4.** Blob bytes are sealed on upload and opened on download, while
+  /// the ADDRESS stays the plaintext hash — see this file's header for why
+  /// content addressing cannot survive hashing ciphertext.
+  ///
+  /// The verification § Architecture 4 requires does not disappear when the
+  /// backend can no longer perform it; it moves here, and gets stronger:
+  /// AEAD authentication rejects any modified byte before the plaintext hash
+  /// is computed at all, so a tampered blob fails on the tag rather than on
+  /// a hash comparison.
+  final DatasetCrypto _crypto;
 
   /// sha256 of a file's bytes, streamed.
   ///
@@ -340,11 +355,12 @@ class BlobSyncPhase {
             missing.add(hash);
             continue;
           }
-          final bytes = utf8.encode(content);
+          final bytes = await _crypto.seal(utf8.encode(content), 'blob');
           await backend.uploadBlob(
             contentHash: hash,
             data: Stream.value(bytes),
             length: bytes.length,
+            sealed: _crypto.isEncrypted,
           );
           uploaded++;
           continue;
@@ -358,11 +374,26 @@ class BlobSyncPhase {
           missing.add(hash);
           continue;
         }
-        await backend.uploadBlob(
-          contentHash: hash,
-          data: file.openRead(),
-          length: await file.length(),
-        );
+        if (_crypto.isEncrypted) {
+          // Read whole rather than streamed: AEAD authenticates a message as
+          // a unit, so a streaming seal would need a chunked construction
+          // this milestone does not define. Attachments are phone-sized;
+          // when that stops being true the fix is a framed multi-chunk
+          // format, not a lazier tag.
+          final sealed = await _crypto.seal(await file.readAsBytes(), 'blob');
+          await backend.uploadBlob(
+            contentHash: hash,
+            data: Stream.value(sealed),
+            length: sealed.length,
+            sealed: true,
+          );
+        } else {
+          await backend.uploadBlob(
+            contentHash: hash,
+            data: file.openRead(),
+            length: await file.length(),
+          );
+        }
         uploaded++;
       } catch (e) {
         LoggerService.error('BlobSyncPhase: upload of $hash failed: $e');
@@ -400,11 +431,11 @@ class BlobSyncPhase {
             stillMissing.add(reference.blobHash);
             continue;
           }
-          final stream = await backend.downloadBlob(reference.blobHash);
-          final bytes = <int>[];
-          await for (final chunk in stream) {
-            bytes.addAll(chunk);
-          }
+          final stream = await backend.downloadBlob(
+            reference.blobHash,
+            sealed: _crypto.isEncrypted,
+          );
+          final bytes = await _openAndVerify(stream, reference.blobHash);
           // Written straight into the column. `downloadBlob`'s contract is
           // that it never returns bytes that mismatch the hash, so what
           // lands here is exactly what the authoring device had.
@@ -435,7 +466,10 @@ class BlobSyncPhase {
           stillMissing.add(reference.blobHash);
           continue;
         }
-        final stream = await backend.downloadBlob(reference.blobHash);
+        final stream = await backend.downloadBlob(
+          reference.blobHash,
+          sealed: _crypto.isEncrypted,
+        );
         // Written to a sibling temp file and renamed, so an interrupted
         // download can never leave a truncated file sitting at a path the
         // app treats as present — which would be indistinguishable from a
@@ -443,13 +477,10 @@ class BlobSyncPhase {
         final target = File(path);
         await target.parent.create(recursive: true);
         final temp = File('$path.part');
-        final sink = temp.openWrite();
-        try {
-          await sink.addStream(stream);
-          await sink.flush();
-        } finally {
-          await sink.close();
-        }
+        await temp.writeAsBytes(
+          await _openAndVerify(stream, reference.blobHash),
+          flush: true,
+        );
         await temp.rename(path);
         downloaded++;
       } catch (e) {
@@ -497,6 +528,35 @@ class BlobSyncPhase {
       }
     }
     return outstanding;
+  }
+
+  /// Collects a downloaded stream, decrypts it if the dataset is encrypted,
+  /// and verifies the PLAINTEXT hash.
+  ///
+  /// This is the verification § Architecture 4 assigns to `downloadBlob`,
+  /// relocated to the only layer that can perform it once the stored bytes
+  /// are ciphertext. It is not a weakening: for an encrypted dataset the AEAD
+  /// tag has already rejected any modified byte before this hash is computed,
+  /// so a tampered blob fails earlier and more precisely than a hash
+  /// comparison would have caught it.
+  Future<List<int>> _openAndVerify(
+    Stream<List<int>> stream,
+    String expectedHash,
+  ) async {
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in stream) {
+      builder.add(chunk);
+    }
+    final opened = await _crypto.open(builder.toBytes(), 'blob $expectedHash');
+    if (_crypto.isEncrypted) {
+      final actual = sha256.convert(opened).toString();
+      if (actual != expectedHash) {
+        throw SyncDecryptionFailedException(
+          'blob $expectedHash (decrypted bytes hash to $actual)',
+        );
+      }
+    }
+    return opened;
   }
 
   static String _idColumnFor(String table) =>

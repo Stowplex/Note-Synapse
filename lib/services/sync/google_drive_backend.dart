@@ -1447,6 +1447,7 @@ class GoogleDriveBackend implements SyncBackend {
     required String contentHash,
     required Stream<List<int>> data,
     required int length,
+    bool sealed = false,
   }) async {
     final bytes = await _collectStream(data);
     if (bytes.length != length) {
@@ -1461,7 +1462,11 @@ class GoogleDriveBackend implements SyncBackend {
     // matching MockSyncBackend's pattern. Catches a caller bug (wrong hash
     // declared for the bytes actually provided) without ever touching the
     // network.
-    final actualHash = sha256.convert(bytes).toString();
+    // Sealed bytes are ciphertext and cannot hash to the plaintext address
+    // (M3.4) — `blob_sync.dart` verifies after decrypting instead. The md5
+    // cross-check below still runs, since it compares what Drive says it
+    // stored against what we actually sent, which is key-independent.
+    final actualHash = sealed ? contentHash : sha256.convert(bytes).toString();
     if (actualHash != contentHash) {
       throw SyncHashMismatchException(
         expectedHash: contentHash,
@@ -1556,7 +1561,10 @@ class GoogleDriveBackend implements SyncBackend {
   }
 
   @override
-  Future<Stream<List<int>>> downloadBlob(String contentHash) async {
+  Future<Stream<List<int>>> downloadBlob(
+    String contentHash, {
+    bool sealed = false,
+  }) async {
     final rootId = await _ensureRootFolder();
     final blob = await _findBlob(rootId, contentHash);
     if (blob == null) {
@@ -1565,7 +1573,9 @@ class GoogleDriveBackend implements SyncBackend {
       );
     }
     final bytes = await _downloadContent(blob.id);
-    final actualHash = sha256.convert(bytes).toString();
+    // Sealed: ciphertext, so the plaintext address cannot match. The
+    // caller decrypts and re-hashes (M3.4).
+    final actualHash = sealed ? contentHash : sha256.convert(bytes).toString();
     if (actualHash != contentHash) {
       // "Downloaded blobs are always hash-verified" — catches ordinary
       // corruption and external tampering alike (§ 8.2 items 2/9/15a),

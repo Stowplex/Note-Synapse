@@ -108,8 +108,39 @@ class SyncSession {
     PushPhase? pushPhase,
     BlobSyncPhase? blobs,
     DatasetCrypto crypto = const DatasetCrypto.plaintext(),
+  }) : this._(
+         databaseService,
+         deviceIdentity: deviceIdentity,
+         seqCounter: seqCounter,
+         hlc: hlc,
+         drainer: drainer,
+         seedScanner: seedScanner,
+         pullPhase: pullPhase,
+         pushPhase: pushPhase,
+         crypto: crypto,
+         // **One blob phase, shared by push and fetch.** Built here rather
+         // than defaulted independently in each: `PushPhase` used to
+         // construct its own, which meant an encrypted dataset uploaded
+         // PLAINTEXT bytes (push's phase had no key) while Phase C tried to
+         // decrypt them (the session's phase did), so every blob failed to
+         // open and no attachment or mini-app source ever arrived. Two
+         // defaults for one collaborator is the bug; one is the fix.
+         blobs: blobs ?? BlobSyncPhase(databaseService, crypto: crypto),
+       );
+
+  SyncSession._(
+    DatabaseService databaseService, {
+    DeviceIdentity? deviceIdentity,
+    SeqCounter? seqCounter,
+    HybridLogicalClock? hlc,
+    OutboxDrainer? drainer,
+    SeedScanner? seedScanner,
+    PullPhase? pullPhase,
+    PushPhase? pushPhase,
+    required DatasetCrypto crypto,
+    required BlobSyncPhase blobs,
   }) : _databaseService = databaseService,
-       _blobs = blobs ?? BlobSyncPhase(databaseService),
+       _blobs = blobs,
        _deviceIdentity = deviceIdentity ?? DeviceIdentity(databaseService),
        _hlc = hlc ?? HybridLogicalClock(databaseService),
        _drainer =
