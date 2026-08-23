@@ -981,6 +981,42 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'the storage cleanup card shows pending and eligible SEPARATELY, and '
+    'offers deletion only when something is actually eligible',
+    (tester) async {
+      await tester.runAsync(setUpService);
+      await pumpScreen(tester);
+      await setUpDatasetViaUi(tester);
+
+      // The card sits below the fold on a test-sized viewport.
+      await tester.scrollUntilVisible(
+        find.text('Check for reclaimable files'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Check for reclaimable files'));
+      await settle(tester);
+
+      expect(
+        find.textContaining('Nothing to reclaim'),
+        findsOneWidget,
+        reason:
+            'a fresh dataset has nothing unreferenced, and saying so beats '
+            'an empty card the user cannot interpret',
+      );
+      expect(
+        find.text('Delete now'),
+        findsNothing,
+        reason:
+            'the delete action appears only when the grace period has '
+            'actually elapsed for something — requirement 10 makes the human '
+            'checkpoint the last layer, not the only one',
+      );
+    },
+  );
+
 }
 
 /// Creates a second device's dataset in its own Drive folder, and returns

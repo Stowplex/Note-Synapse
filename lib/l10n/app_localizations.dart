@@ -5606,6 +5606,60 @@ abstract class AppLocalizations {
   /// **'Set one to encrypt this dataset. It is chosen once, when the dataset is created, and cannot be added or removed later. Every device needs the same passphrase — if you lose it, the data cannot be recovered. Leave empty to sync unencrypted.'**
   String get cloudSyncPassphraseHelp;
 
+  /// No description provided for @cloudSyncStorageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage cleanup'**
+  String get cloudSyncStorageTitle;
+
+  /// No description provided for @cloudSyncStorageScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for reclaimable files'**
+  String get cloudSyncStorageScan;
+
+  /// No description provided for @cloudSyncStorageNone.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to reclaim — every stored file is still in use.'**
+  String get cloudSyncStorageNone;
+
+  /// No description provided for @cloudSyncStoragePending.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file is no longer used and is waiting out its safety period} other{{count} files are no longer used and are waiting out their safety period}}'**
+  String cloudSyncStoragePending(int count);
+
+  /// No description provided for @cloudSyncStorageEligible.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file can be deleted now} other{{count} files can be deleted now}}'**
+  String cloudSyncStorageEligible(int count);
+
+  /// No description provided for @cloudSyncStorageBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'These files can only be deleted while this is the only device in the dataset. Another device is a member, and there is no way yet to know it will not need them.'**
+  String get cloudSyncStorageBlocked;
+
+  /// No description provided for @cloudSyncStorageDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete now'**
+  String get cloudSyncStorageDelete;
+
+  /// No description provided for @cloudSyncStorageConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete these files from Drive permanently? They are no longer used by any note, tag or mini app on this device, and have been unused long enough to be safe to remove. This cannot be undone.'**
+  String get cloudSyncStorageConfirm;
+
+  /// No description provided for @cloudSyncStorageDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Deleted 1 file} other{Deleted {count} files}}'**
+  String cloudSyncStorageDeleted(int count);
+
   /// No description provided for @cloudSyncFolderContinue.
   ///
   /// In en, this message translates to:

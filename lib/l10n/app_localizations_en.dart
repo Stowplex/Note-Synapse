@@ -3143,6 +3143,61 @@ class AppLocalizationsEn extends AppLocalizations {
       'Set one to encrypt this dataset. It is chosen once, when the dataset is created, and cannot be added or removed later. Every device needs the same passphrase — if you lose it, the data cannot be recovered. Leave empty to sync unencrypted.';
 
   @override
+  String get cloudSyncStorageTitle => 'Storage cleanup';
+
+  @override
+  String get cloudSyncStorageScan => 'Check for reclaimable files';
+
+  @override
+  String get cloudSyncStorageNone =>
+      'Nothing to reclaim — every stored file is still in use.';
+
+  @override
+  String cloudSyncStoragePending(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count files are no longer used and are waiting out their safety period',
+      one: '1 file is no longer used and is waiting out its safety period',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String cloudSyncStorageEligible(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files can be deleted now',
+      one: '1 file can be deleted now',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cloudSyncStorageBlocked =>
+      'These files can only be deleted while this is the only device in the dataset. Another device is a member, and there is no way yet to know it will not need them.';
+
+  @override
+  String get cloudSyncStorageDelete => 'Delete now';
+
+  @override
+  String get cloudSyncStorageConfirm =>
+      'Delete these files from Drive permanently? They are no longer used by any note, tag or mini app on this device, and have been unused long enough to be safe to remove. This cannot be undone.';
+
+  @override
+  String cloudSyncStorageDeleted(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Deleted $count files',
+      one: 'Deleted 1 file',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get cloudSyncFolderContinue => 'Continue';
 
   @override

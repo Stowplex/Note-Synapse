@@ -3045,6 +3045,56 @@ class AppLocalizationsZh extends AppLocalizations {
       '设置密码即可加密该数据集。密码在创建数据集时确定一次，之后无法添加或移除。所有设备都需要使用相同的密码——一旦遗失，数据将无法恢复。留空则不加密同步。';
 
   @override
+  String get cloudSyncStorageTitle => '存储清理';
+
+  @override
+  String get cloudSyncStorageScan => '检查可回收的文件';
+
+  @override
+  String get cloudSyncStorageNone => '没有可回收的内容——所有已存储的文件仍在使用中。';
+
+  @override
+  String cloudSyncStoragePending(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个文件已不再使用，正在等待安全期结束',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String cloudSyncStorageEligible(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个文件现在可以删除',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cloudSyncStorageBlocked =>
+      '只有当本设备是数据集中唯一的设备时才能删除这些文件。目前还有其他设备是成员，而且暂时无法确认它们是否还需要这些文件。';
+
+  @override
+  String get cloudSyncStorageDelete => '立即删除';
+
+  @override
+  String get cloudSyncStorageConfirm =>
+      '要从云端硬盘中永久删除这些文件吗？本设备上已没有任何笔记、标签或小应用在使用它们，并且它们闲置的时间已足够长，可以安全移除。此操作无法撤销。';
+
+  @override
+  String cloudSyncStorageDeleted(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已删除 $count 个文件',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get cloudSyncFolderContinue => '继续';
 
   @override

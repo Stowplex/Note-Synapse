@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../services/service_locator.dart';
+import '../../services/sync/blob_gc.dart';
 import '../../services/sync/cloud_sync_service.dart';
 import '../../services/sync/dataset_bootstrap.dart';
 import '../../services/sync/drive_folder_identity.dart';
@@ -628,10 +629,138 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
                   _sectionLabel(theme, l10n.cloudSyncNowSection),
                   _syncCard(l10n, theme),
                   const SizedBox(height: 16),
+                  // The plaintext-storage warning stays directly under the
+                  // sync card: it is the one thing on this screen a user
+                  // needs before deciding to sync at all, and storage
+                  // cleanup is housekeeping. Ordering here is the only thing
+                  // that decides which of the two a user actually reads.
                   _noticeCard(l10n, theme),
+                  const SizedBox(height: 16),
+                  _sectionLabel(theme, l10n.cloudSyncStorageTitle),
+                  _storageCard(l10n, theme),
                 ],
               ),
             ),
+    );
+  }
+
+  // ── § Architecture 4 / requirement 10: manual-only storage cleanup ──
+  //
+  // **Pending and eligible are shown SEPARATELY**, per § Architecture 9,
+  // and that is not cosmetic: the grace period is the whole mitigation, so
+  // a user who can see "3 files are waiting" understands that the app is
+  // deliberately not deleting them yet, rather than concluding it found
+  // nothing. Collapsing the two into one number would hide the mechanism
+  // that makes this bounded-risk rather than a guess.
+  BlobGcReport? _storage;
+  bool _scanningStorage = false;
+
+  Future<void> _scanStorage() async {
+    final l10n = AppLocalizations.of(context)!;
+    if (_scanningStorage) return;
+    setState(() => _scanningStorage = true);
+    try {
+      final report = await _service.scanReclaimableStorage();
+      if (mounted) setState(() => _storage = report);
+    } catch (e) {
+      _snack(l10n.cloudSyncNowError('$e'));
+    } finally {
+      if (mounted) setState(() => _scanningStorage = false);
+    }
+  }
+
+  Future<void> _deleteStorage() async {
+    final l10n = AppLocalizations.of(context)!;
+    final report = _storage;
+    if (report == null || !report.canDelete) return;
+    // The explicit human checkpoint requirement 10 makes the final layer.
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.cloudSyncStorageTitle),
+        content: SingleChildScrollView(
+          child: Text(l10n.cloudSyncStorageConfirm),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l10n.cloudSyncStorageDelete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final deleted = await _service.deleteReclaimableStorage(
+        [for (final c in report.eligible) c.blobHash],
+      );
+      _snack(l10n.cloudSyncStorageDeleted(deleted));
+      await _scanStorage();
+    } catch (e) {
+      _snack(l10n.cloudSyncNowError('$e'));
+    }
+  }
+
+  Widget _storageCard(AppLocalizations l10n, ThemeData theme) {
+    final report = _storage;
+    final pending = report == null
+        ? 0
+        : report.candidates.length - report.eligible.length;
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.cleaning_services_outlined),
+            title: Text(l10n.cloudSyncStorageTitle),
+            subtitle: report == null
+                ? null
+                : Text(
+                    report.candidates.isEmpty
+                        ? l10n.cloudSyncStorageNone
+                        : [
+                            if (pending > 0)
+                              l10n.cloudSyncStoragePending(pending),
+                            if (report.eligible.isNotEmpty)
+                              l10n.cloudSyncStorageEligible(
+                                report.eligible.length,
+                              ),
+                          ].join('\n'),
+                  ),
+          ),
+          if (report?.blocker != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                l10n.cloudSyncStorageBlocked,
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: _scanningStorage ? null : _scanStorage,
+                  child: Text(l10n.cloudSyncStorageScan),
+                ),
+                if (report?.canDelete == true) ...[
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: _deleteStorage,
+                    child: Text(l10n.cloudSyncStorageDelete),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

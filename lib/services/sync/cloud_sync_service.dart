@@ -23,6 +23,7 @@ import 'package:sqflite/sqflite.dart';
 import '../database_service.dart';
 import '../logger_service.dart';
 import '../network_provider.dart';
+import 'blob_gc.dart';
 import 'dataset_bootstrap.dart';
 import 'dataset_reset.dart';
 import 'device_identity.dart';
@@ -376,6 +377,20 @@ class CloudSyncService {
 
   /// `sync_state` key holding the JSON-encoded [LastSyncOutcome].
   static const String lastSyncStateKey = 'last_sync_outcome';
+
+  /// § Architecture 4/requirement 10's manual-only storage cleanup.
+  ///
+  /// Two calls rather than one, deliberately: the scan is what the UI shows
+  /// (pending versus eligible, separately, per § Architecture 9), and the
+  /// delete takes the hashes the user actually confirmed. Collapsing them
+  /// into "clean up now" would remove the human checkpoint that
+  /// requirement 10 makes the final layer of a mechanism it explicitly
+  /// declines to call a proof.
+  Future<BlobGcReport> scanReclaimableStorage() async =>
+      BlobGc(_databaseService).scan(backend);
+
+  Future<int> deleteReclaimableStorage(List<String> blobHashes) async =>
+      BlobGc(_databaseService).deleteConfirmed(backend, blobHashes);
 
   /// The dataset's key material for this session, resolved by
   /// [setUpDataset]. Memory-only and never persisted — § 8.5's whole point
