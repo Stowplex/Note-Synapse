@@ -94,6 +94,7 @@ import 'package:crypto/crypto.dart';
 import '../../utils/file_utils.dart';
 import '../database_service.dart';
 import '../logger_service.dart';
+import 'blob_gc.dart';
 import 'sync_backend.dart';
 import 'sync_crypto.dart';
 
@@ -247,8 +248,10 @@ class BlobSyncPhase {
     this._databaseService, {
     BlobFileResolver resolver = const AppDocumentsBlobFileResolver(),
     DatasetCrypto crypto = const DatasetCrypto.plaintext(),
+    BlobGc? gc,
   }) : _resolver = resolver,
-       _crypto = crypto;
+       _crypto = crypto,
+       _gc = gc ?? BlobGc(_databaseService);
 
   final DatabaseService _databaseService;
   final BlobFileResolver _resolver;
@@ -263,6 +266,11 @@ class BlobSyncPhase {
   /// is computed at all, so a tampered blob fails on the tag rather than on
   /// a hash comparison.
   final DatasetCrypto _crypto;
+
+  /// Records every blob this device puts on or takes off the backend, so
+  /// `blob_gc.dart` has something to age. Nullable only so a test can turn
+  /// the bookkeeping off; production always has one.
+  final BlobGc? _gc;
 
   /// sha256 of a file's bytes, streamed.
   ///
@@ -347,6 +355,9 @@ class BlobSyncPhase {
       try {
         if (await backend.blobExists(hash)) {
           present++;
+          // Already on the backend — still this dataset's blob, so it needs
+          // a `sync_blob_refs` row or GC would have nothing to age.
+          await _gc?.noteBlobPresent(hash);
           continue;
         }
         if (reference.isContentBacked) {
@@ -363,6 +374,7 @@ class BlobSyncPhase {
             sealed: _crypto.isEncrypted,
           );
           uploaded++;
+          await _gc?.noteBlobPresent(hash);
           continue;
         }
         final path = await _resolver.absolutePath(
@@ -395,6 +407,7 @@ class BlobSyncPhase {
           );
         }
         uploaded++;
+        await _gc?.noteBlobPresent(hash);
       } catch (e) {
         LoggerService.error('BlobSyncPhase: upload of $hash failed: $e');
         failed.add(hash);
@@ -447,6 +460,7 @@ class BlobSyncPhase {
             whereArgs: [reference.entityId],
           );
           downloaded++;
+          await _gc?.noteBlobPresent(reference.blobHash);
           continue;
         }
         final path = await _resolver.absolutePath(
@@ -483,6 +497,7 @@ class BlobSyncPhase {
         );
         await temp.rename(path);
         downloaded++;
+        await _gc?.noteBlobPresent(reference.blobHash);
       } catch (e) {
         LoggerService.error(
           'BlobSyncPhase: download of ${reference.blobHash} failed: $e',
@@ -580,6 +595,12 @@ class BlobSyncPhase {
 
   /// Every (row, blobHash) pair this device knows about, read from the
   /// winning registers joined to the real rows.
+  /// Every (row, blobHash) pair this device knows about — public so
+  /// `blob_gc.dart` decides "referenced" with the same query the fetch phase
+  /// uses. Two definitions of liveness is how a GC deletes something that
+  /// was in use.
+  Future<List<BlobReference>> allReferences() => _allReferences();
+
   Future<List<BlobReference>> _allReferences() async {
     final db = await _databaseService.database;
     final references = <BlobReference>[];

@@ -566,7 +566,13 @@ class PushPhase {
     final placeholders = List.filled(tables.length, '?').join(',');
     final rows = await db.query(
       'sync_pending_ops',
-      columns: const ['authorSeq', 'entityTable', 'fieldName', 'valueJson'],
+      columns: const [
+        'authorSeq',
+        'entityTable',
+        'entityId',
+        'fieldName',
+        'valueJson',
+      ],
       where:
           'authorId = ? AND publishedAt IS NULL AND blobHash IS NULL '
           'AND kind = ? AND entityTable IN ($placeholders)',
@@ -606,13 +612,58 @@ class PushPhase {
         isRelative: !(value is String && value.startsWith('/')),
       );
       if (hash == null) continue;
-      await db.update(
-        'sync_pending_ops',
-        {'blobHash': hash},
-        where: 'authorId = ? AND authorSeq = ?',
-        whereArgs: [authorId, row['authorSeq']],
+      await _recordBlobHash(
+        db,
+        authorId: authorId,
+        authorSeq: row['authorSeq'] as int,
+        entityTable: entityTable,
+        entityId: row['entityId'] as String,
+        fieldName: fieldName,
+        valueJson: row['valueJson'] as String?,
+        hash: hash,
       );
     }
+  }
+
+  /// Stamps a computed hash onto the pending operation AND onto the winning
+  /// register, when the register still reflects this exact value.
+  ///
+  /// **The register half is not bookkeeping tidiness — without it the
+  /// authoring device would garbage-collect its own live blob.** A register
+  /// is written when the operation is minted and the hash is computed
+  /// afterwards, so on the device that OWNS a file the register's `blobHash`
+  /// is null. `blob_gc.dart` reads exactly those registers to decide what is
+  /// still referenced, so every blob this device had uploaded looked
+  /// unreferenced to it, aged out, and became eligible for deletion — the
+  /// bytes of its own attachments.
+  ///
+  /// Guarded on the register still holding this operation's value, so a
+  /// later edit that has already won the field is never re-tagged with a
+  /// hash describing content it no longer names.
+  Future<void> _recordBlobHash(
+    DatabaseExecutor db, {
+    required String authorId,
+    required int authorSeq,
+    required String entityTable,
+    required String entityId,
+    required String? fieldName,
+    required String? valueJson,
+    required String hash,
+  }) async {
+    await db.update(
+      'sync_pending_ops',
+      {'blobHash': hash},
+      where: 'authorId = ? AND authorSeq = ?',
+      whereArgs: [authorId, authorSeq],
+    );
+    await db.update(
+      'sync_field_state',
+      {'blobHash': hash},
+      where:
+          'entityTable = ? AND entityId = ? AND fieldName = ? '
+          'AND blobHash IS NULL AND valueJson IS ?',
+      whereArgs: [entityTable, entityId, fieldName, valueJson],
+    );
   }
 
   /// Replaces a content-backed column's inline value with null, so the bytes
