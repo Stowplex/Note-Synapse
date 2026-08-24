@@ -176,3 +176,95 @@ Future<int> syncColumnLength(
   );
   return rows.isEmpty ? 0 : (rows.first['len'] as int? ?? 0);
 }
+
+/// The where-clause form of [readSyncRow], for tables the sync engine keys
+/// by something other than a single entity id.
+///
+/// **Added in M3.8's second half, for the push path.** The commit encoder
+/// reads `sync_pending_ops` by `(authorId, authorSeq)` and the register
+/// reader keys `sync_field_state` by three columns — neither fits the
+/// single-`CAST(id AS TEXT)` shape, and both carry `valueJson`, which since
+/// M3.2 can hold an entire mini app. Batching bounds a BATCH at 256 KiB but
+/// deliberately sends a single oversized operation alone, so exactly the row
+/// that cannot fit through a CursorWindow is the one push is guaranteed to
+/// read on its own.
+Future<List<Map<String, Object?>>> readSyncRowsWhere(
+  DatabaseExecutor txn, {
+  required String table,
+  required List<String> columns,
+  required String where,
+  required List<Object?> whereArgs,
+  String? orderBy,
+  required List<String> keyColumns,
+}) async {
+  final select = <String>[];
+  for (final column in {...columns, ...keyColumns}) {
+    select.add(
+      'CASE WHEN length("$column") > $syncLargeColumnThreshold '
+      'THEN NULL ELSE "$column" END AS "$column"',
+    );
+    select.add('length("$column") AS "${column}__len"');
+  }
+  final rows = await txn.rawQuery(
+    'SELECT ${select.join(', ')} FROM "$table" WHERE $where'
+    '${orderBy == null ? '' : ' ORDER BY $orderBy'}',
+    whereArgs,
+  );
+
+  final out = <Map<String, Object?>>[];
+  for (final raw in rows) {
+    final result = <String, Object?>{};
+    for (final column in {...columns, ...keyColumns}) {
+      final value = raw[column];
+      final length = raw['${column}__len'] as int? ?? 0;
+      if (value == null && length > syncLargeColumnThreshold) {
+        // Re-read this one column for this one row, addressed by the key
+        // columns the caller named — the same substr walk as the entity
+        // reader, without needing the table to have a single id column.
+        result[column] = await _readLargeWhere(
+          txn,
+          table: table,
+          column: column,
+          where: [for (final k in keyColumns) '"$k" = ?'].join(' AND '),
+          whereArgs: [for (final k in keyColumns) raw[k]],
+          totalLength: length,
+        );
+      } else {
+        result[column] = value;
+      }
+    }
+    out.add(result);
+  }
+  return out;
+}
+
+Future<String> _readLargeWhere(
+  DatabaseExecutor txn, {
+  required String table,
+  required String column,
+  required String where,
+  required List<Object?> whereArgs,
+  required int totalLength,
+  int chunkSize = 1024 * 1024,
+}) async {
+  final buffer = StringBuffer();
+  try {
+    for (var offset = 0; offset < totalLength; offset += chunkSize) {
+      final size = (offset + chunkSize > totalLength)
+          ? totalLength - offset
+          : chunkSize;
+      final chunk = await txn.rawQuery(
+        'SELECT substr("$column", ?, ?) AS chunk FROM "$table" WHERE $where',
+        [offset + 1, size, ...whereArgs],
+      );
+      if (chunk.isEmpty) break;
+      buffer.write(chunk.first['chunk'] as String? ?? '');
+    }
+  } catch (e) {
+    LoggerService.error(
+      'readSyncRowsWhere: $table.$column failed at '
+      '${buffer.length}/$totalLength chars: $e',
+    );
+  }
+  return buffer.toString();
+}

@@ -204,4 +204,85 @@ void main() {
       );
     },
   );
+
+  // ── The push path (M3.8, second half) ──────────────────────────────────
+  //
+  // Batching bounds a BATCH at 256 KiB but deliberately sends a single
+  // oversized operation ALONE, so the row the encoder is guaranteed to meet
+  // on its own is exactly the one that cannot fit through a CursorWindow.
+
+  test(
+    'an oversized operation is encoded, published and re-read without ever '
+    'selecting the whole row inline',
+    () async {
+      final backend = MockSyncBackend();
+      final db = await svc.database;
+      final code = vendoredWasm();
+      await db.insert('notes', {
+        'id': 'n1',
+        'title': 'has a big body',
+        // notes.content is ordinary sync scope — not a blob — so this is
+        // the plain "one operation larger than the batch budget" case.
+        'content': code,
+        'type': 'note',
+        'createdAt': 1,
+        'updatedAt': 1,
+      });
+
+      for (var i = 0; i < 3; i++) {
+        await SyncSession(svc).run(backend);
+      }
+
+      final b = DatabaseService.createNew();
+      addTearDown(b.close);
+      for (var i = 0; i < 3; i++) {
+        await SyncSession(b).run(backend);
+      }
+
+      expect(
+        (await (await b.database).query(
+          'notes',
+          columns: const ['content'],
+        )).single['content'],
+        code,
+        reason:
+            'the operation is larger than the batch byte budget, so it is '
+            'sent alone — encode, publish and materialize all have to read '
+            'it one row at a time',
+      );
+    },
+  );
+
+  test(
+    'a pending publish intent covering an oversized operation still '
+    'resolves on resume — payloadHash re-derivation reads it too',
+    () async {
+      final backend = MockSyncBackend();
+      final db = await svc.database;
+      await db.insert('notes', {
+        'id': 'n1',
+        'title': 't',
+        'content': vendoredWasm(),
+        'type': 'note',
+        'createdAt': 1,
+        'updatedAt': 1,
+      });
+
+      for (var i = 0; i < 3; i++) {
+        await SyncSession(svc).run(backend);
+      }
+
+      expect(
+        await db.query(
+          'sync_publish_intent',
+          where: 'status = ?',
+          whereArgs: ['pending'],
+        ),
+        isEmpty,
+        reason:
+            'an intent left pending is what an unresolvable re-encode looks '
+            'like, and the resume path re-reads the same oversized row',
+      );
+    },
+  );
 }

@@ -118,6 +118,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../database_service.dart';
 import 'blob_sync.dart';
+import 'large_row_reader.dart';
 import 'sync_backend.dart';
 import 'sync_crypto.dart';
 import 'wire_format.dart';
@@ -564,8 +565,12 @@ class PushPhase {
     }.toList();
     if (tables.isEmpty) return;
     final placeholders = List.filled(tables.length, '?').join(',');
-    final rows = await db.query(
-      'sync_pending_ops',
+    // Chunked: this is where a content-backed column's value is read in
+    // order to hash it, and `appCode`/`htmlContent` are precisely the values
+    // that do not fit a CursorWindow (M3.8).
+    final rows = await readSyncRowsWhere(
+      db,
+      table: 'sync_pending_ops',
       columns: const [
         'authorSeq',
         'entityTable',
@@ -573,6 +578,7 @@ class PushPhase {
         'fieldName',
         'valueJson',
       ],
+      keyColumns: const ['authorId', 'authorSeq'],
       where:
           'authorId = ? AND publishedAt IS NULL AND blobHash IS NULL '
           'AND kind = ? AND entityTable IN ($placeholders)',
@@ -717,14 +723,43 @@ class PushPhase {
     ),
   );
 
+  /// The `sync_pending_ops` columns the wire encoder reads. Named
+  /// explicitly rather than taken via `SELECT *`, so a large `valueJson`
+  /// goes through the chunked path (M3.8) instead of a CursorWindow that
+  /// cannot hold it.
+  static const List<String> _pendingOpColumns = [
+    'authorId',
+    'authorSeq',
+    'hlc',
+    'contentKey',
+    'kind',
+    'entityTable',
+    'entityId',
+    'fieldName',
+    'memberUuid',
+    'valueJson',
+    'blobHash',
+    'targetDotsJson',
+    'frontierJson',
+  ];
+
   Future<_CommitBatch> _encodeBatch(
     DatabaseExecutor db,
     String authorId,
     List<int> authorSeqs,
   ) async {
     final placeholders = List.filled(authorSeqs.length, '?').join(',');
-    final rows = await db.query(
-      'sync_pending_ops',
+    // **Chunked, because this is the one read guaranteed to meet the row
+    // that cannot fit** (M3.8). Batching bounds a BATCH at 256 KiB but
+    // deliberately sends a single oversized operation ALONE — so a mini app
+    // that inline-vendors a WebAssembly build is read here as a row of its
+    // own, which on Android is exactly the `Row too big to fit into
+    // CursorWindow` failure a device reported from the seed path.
+    final rows = await readSyncRowsWhere(
+      db,
+      table: 'sync_pending_ops',
+      columns: _pendingOpColumns,
+      keyColumns: const ['authorId', 'authorSeq'],
       where: 'authorId = ? AND authorSeq IN ($placeholders)',
       whereArgs: [authorId, ...authorSeqs],
       orderBy: 'authorSeq ASC',
@@ -801,11 +836,15 @@ class PushPhase {
       return batch.payloadHash == payloadHash ? batch : null;
     }
 
-    final legacyRows = await db.query(
-      'sync_pending_ops',
+    // The v1 resume path re-encodes one whole operation, so it meets the
+    // same oversized row as `_encodeBatch` (M3.8).
+    final legacyRows = await readSyncRowsWhere(
+      db,
+      table: 'sync_pending_ops',
+      columns: _pendingOpColumns,
+      keyColumns: const ['authorId', 'authorSeq'],
       where: 'authorId = ? AND authorSeq = ?',
       whereArgs: [authorId, deviceSeq],
-      limit: 1,
     );
     if (legacyRows.isNotEmpty) {
       final bytes = encodeCommitBytes(

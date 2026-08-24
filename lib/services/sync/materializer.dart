@@ -265,6 +265,7 @@ import 'causal/or_set_resolver.dart';
 import 'frontier.dart';
 import 'hlc.dart';
 import 'seq_counter.dart';
+import 'large_row_reader.dart';
 import 'sync_table_shape.dart';
 
 /// `sync_materialize_queue.blockingReason` for a field/set_add operation
@@ -2132,12 +2133,18 @@ class SyncMaterializer {
     String entityId,
     String fieldName,
   ) async {
-    final rows = await txn.query(
-      'sync_field_state',
+    // **Chunked (M3.8).** A register holds the same values the wire does,
+    // so `app_revisions.appCode` and `user_apps.htmlContent` land here at
+    // whatever size the authoring device had them — this is the read that
+    // writes a mini app's source into the real row, and on Android an
+    // oversized one is an exception rather than a truncation.
+    final rows = await readSyncRowsWhere(
+      txn,
+      table: 'sync_field_state',
       columns: const ['valueJson'],
+      keyColumns: const ['entityTable', 'entityId', 'fieldName'],
       where: 'entityTable = ? AND entityId = ? AND fieldName = ?',
       whereArgs: [entityTable, entityId, fieldName],
-      limit: 1,
     );
     if (rows.isEmpty) return null;
     return rows.first['valueJson'] as String?;
