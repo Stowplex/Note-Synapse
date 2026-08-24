@@ -48,6 +48,7 @@ import 'hlc.dart';
 // the reason from the file that owns it is what stops the two spelling it
 // differently — the drift class `sync_table_shape.dart` was extracted to end.
 import 'blob_sync.dart';
+import 'large_row_reader.dart';
 import 'materializer.dart';
 import 'seed_scanner.dart';
 import 'seq_counter.dart';
@@ -1177,13 +1178,30 @@ class OutboxDrainer {
     SyncEntityCaptureScope scope,
     String entityId,
   ) async {
-    final rows = await txn.query(
-      scope.table,
-      where: 'CAST(${scope.idColumn} AS TEXT) = ?',
-      whereArgs: [entityId],
-      limit: 1,
+    // **Not `SELECT *`** (M3.8). The doc comment above has always claimed
+    // "every excluded BLOB/large column stays excluded"; `SELECT *` had
+    // been quietly making that false, and on a device with a large mini app
+    // Android refused the read outright with `Row too big to fit into
+    // CursorWindow`. `readSyncRow` asks only for what this scope syncs and
+    // chunks anything oversized.
+    final syncability = await entitySyncability(
+      txn,
+      scope,
+      cache: _syncabilityCache,
     );
-    if (rows.isEmpty) return null;
-    return rows.first;
+    final info = await syncTableInfo(txn, scope.table);
+    return readSyncRow(
+      txn,
+      table: scope.table,
+      idColumn: scope.idColumn,
+      entityId: entityId,
+      columns: [
+        for (final column in info)
+          if (column['name'] == scope.idColumn ||
+              scope.syncScopeColumns.contains(column['name']) ||
+              syncability.existsCarriedColumns.contains(column['name']))
+            column['name'] as String,
+      ],
+    );
   }
 }

@@ -413,6 +413,7 @@ import 'dataset_reset.dart';
 import 'device_identity.dart';
 import 'frontier.dart';
 import 'hlc.dart';
+import 'large_row_reader.dart';
 import 'seq_counter.dart';
 import 'sync_table_shape.dart';
 
@@ -776,17 +777,29 @@ class SeedScanner {
     required String entityId,
     required bool recessive,
   }) async {
-    final rows = await txn.query(
-      scope.table,
-      where: 'CAST(${scope.idColumn} AS TEXT) = ?',
-      whereArgs: [entityId],
-      limit: 1,
+    final columns = await _tableInfo(txn, scope.table);
+    // **Never `SELECT *`** (M3.8, from a field failure). A `SELECT *` here
+    // pulled `user_apps.htmlContent` — a dead legacy column holding a whole
+    // app's HTML — into every mini-app seed, and Android answered with
+    // `Row too big to fit into CursorWindow`, which is an exception rather
+    // than a truncation and took the whole round with it. Ask for the
+    // columns this scope actually syncs, and let `readSyncRow` chunk any
+    // that are large on their own (`app_revisions.appCode` can inline a
+    // vendored WebAssembly build).
+    final row = await readSyncRow(
+      txn,
+      table: scope.table,
+      idColumn: scope.idColumn,
+      entityId: entityId,
+      columns: [
+        for (final column in columns)
+          if (_isNeededForSeed(scope, syncability, column['name'] as String))
+            column['name'] as String,
+      ],
     );
-    if (rows.isEmpty) {
+    if (row == null) {
       return (0, 0, 0); // deleted between enumeration and now
     }
-    final row = rows.first;
-    final columns = await _tableInfo(txn, scope.table);
 
     var minted = 0;
     var deferred = 0;
@@ -1062,6 +1075,22 @@ class SeedScanner {
   }
 
   // ── Mint + local apply ───────────────────────────────────────────────
+
+  /// Whether the seed scan needs to READ this column's value.
+  ///
+  /// The id and the carried reference columns go on the `__exists__`
+  /// payload; the sync-scope columns become field operations. Everything
+  /// else — `htmlContent`, `deletedAt`, the createdAt-equivalent — is
+  /// derived, excluded, or dead, and reading it costs CursorWindow budget
+  /// the large columns need.
+  bool _isNeededForSeed(
+    SyncEntityCaptureScope scope,
+    EntitySyncability syncability,
+    String column,
+  ) =>
+      column == scope.idColumn ||
+      scope.syncScopeColumns.contains(column) ||
+      syncability.existsCarriedColumns.contains(column);
 
   /// Mints one `field`/`__exists__` seed operation into `sync_pending_ops`
   /// and applies it locally through [CausalEngine] — the same

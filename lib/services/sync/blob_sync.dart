@@ -95,6 +95,7 @@ import '../../utils/file_utils.dart';
 import '../database_service.dart';
 import '../logger_service.dart';
 import 'blob_gc.dart';
+import 'large_row_reader.dart';
 import 'sync_backend.dart';
 import 'sync_crypto.dart';
 
@@ -142,6 +143,18 @@ const Map<String, String> syncBlobBackedColumns = {
 /// the local row keeps the content the upload reads from.
 const Map<String, String> syncContentBlobColumns = {
   'app_revisions': 'appCode',
+  // **M3.8, found while fixing the CursorWindow failure.** `htmlContent` is
+  // a mini app's whole HTML — CLAUDE.md says the column "should NOT be
+  // used" and M2.14 recorded it as always `''` — but it has been in
+  // `user_apps`' sync scope since M2.4, so a legacy app that still holds
+  // content there shipped megabytes inline in the commit log and was one
+  // half of the row that would not fit through Android's CursorWindow.
+  //
+  // Blobbed rather than dropped from scope: excluding it would stop a
+  // legacy app's content reaching a second device at all, which is a
+  // silent data loss for exactly the users who have it. As a blob it
+  // travels once, addressed by content, and never touches a commit.
+  'user_apps': 'htmlContent',
 };
 
 /// Whether [fieldName] on [entityTable] is a column whose value is replaced
@@ -579,18 +592,21 @@ class BlobSyncPhase {
           .firstWhere((s) => s.table == table)
           .idColumn;
 
+  /// **Asks for the LENGTH, never the value** (M3.8). This decides "is
+  /// `appCode` still the empty placeholder?", and reading the column to
+  /// answer it means pulling a whole vendored WebAssembly build through
+  /// Android's CursorWindow in order to compare it against `''` — the
+  /// failure a real device reported.
   Future<bool> _contentColumnIsEmpty(BlobReference reference) async {
     final db = await _databaseService.database;
-    final rows = await db.query(
-      reference.entityTable,
-      columns: [reference.contentColumn!],
-      where: '${_idColumnFor(reference.entityTable)} = ?',
-      whereArgs: [reference.entityId],
-      limit: 1,
-    );
-    if (rows.isEmpty) return false; // no row yet — not this phase's problem
-    final value = rows.first[reference.contentColumn!];
-    return value == null || (value is String && value.isEmpty);
+    return await syncColumnLength(
+          db,
+          table: reference.entityTable,
+          column: reference.contentColumn!,
+          idColumn: _idColumnFor(reference.entityTable),
+          entityId: reference.entityId,
+        ) ==
+        0;
   }
 
   /// Every (row, blobHash) pair this device knows about, read from the
