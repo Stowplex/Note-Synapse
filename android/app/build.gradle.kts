@@ -50,7 +50,7 @@ if (keystorePropertiesFile.exists()) {
 // package, so it moved to the debug value below. See `releaseClientId` in
 // google_drive_client_config.dart for how to create a release one.
 val googleReversedClientIdRelease =
-    "com.googleusercontent.apps.replace-with-release-client-id"
+    "com.googleusercontent.apps.438894533578-g0tpgg76soku9srh76hj21p14to3kc4c"
 val googleReversedClientIdDebug =
     "com.googleusercontent.apps.438894533578-i9ecrp6g518tdenpq5fo4dkv90ce2rig"
 
