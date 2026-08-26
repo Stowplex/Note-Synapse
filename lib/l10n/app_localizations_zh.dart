@@ -4972,6 +4972,62 @@ class AppLocalizationsZh extends AppLocalizations {
   String get requestMobileSite => '请求移动版网站';
 
   @override
+  String get done => '完成';
+
+  @override
+  String get refreshLogin => '刷新登录';
+
+  @override
+  String get webLoginRefreshHint => '重新登录以刷新此登录信息，已授权应用的权限会保留。';
+
+  @override
+  String webLoginRefreshed(String domain) {
+    return '已刷新 $domain 的登录';
+  }
+
+  @override
+  String get webLoginRefreshDiscarded => '已取消刷新，原有登录已恢复。';
+
+  @override
+  String get clearSiteCookies => '清除此站点的 Cookie';
+
+  @override
+  String get webLoginCookiesCleared => 'Cookie 已清除。请重新登录，然后点按“保存登录”。';
+
+  @override
+  String get webLoginExpired => '已过期 — 刷新以重新登录';
+
+  @override
+  String webLoginExpiresInDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days 天后过期 — 请尽快刷新',
+      one: '明天过期 — 请尽快刷新',
+      zero: '今天过期 — 请尽快刷新',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String webLoginValidUntil(String date) {
+    return '有效期至 $date';
+  }
+
+  @override
+  String get webLoginNoExpiry => '站点未设置过期时间';
+
+  @override
+  String webLoginSavedAgo(String time) {
+    return '保存于 $time';
+  }
+
+  @override
+  String webLoginRefreshedAgo(String time) {
+    return '刷新于 $time';
+  }
+
+  @override
   String get webLoginAppsWithAccess => '有访问权限的应用';
 
   @override

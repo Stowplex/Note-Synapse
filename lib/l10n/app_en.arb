@@ -2259,6 +2259,44 @@
   "webLoginCaptureFailed": "Could not capture a login session. Make sure you are signed in before saving. This feature is unavailable on the web build.",
   "requestDesktopSite": "Request desktop site",
   "requestMobileSite": "Request mobile site",
+  "done": "Done",
+  "refreshLogin": "Refresh login",
+  "webLoginRefreshHint": "Sign in again to refresh this login. Your saved app permissions are kept.",
+  "webLoginRefreshed": "Login refreshed for {domain}",
+  "@webLoginRefreshed": {
+    "placeholders": {
+      "domain": {"type": "String"}
+    }
+  },
+  "webLoginRefreshDiscarded": "Refresh cancelled — your previous login was restored.",
+  "clearSiteCookies": "Clear cookies for this site",
+  "webLoginCookiesCleared": "Cookies cleared. Sign in again, then tap Save login.",
+  "webLoginExpired": "Expired — refresh to sign in again",
+  "webLoginExpiresInDays": "{days, plural, =0{Expires today — refresh soon} =1{Expires tomorrow — refresh soon} other{Expires in {days} days — refresh soon}}",
+  "@webLoginExpiresInDays": {
+    "placeholders": {
+      "days": {"type": "int"}
+    }
+  },
+  "webLoginValidUntil": "Valid until {date}",
+  "@webLoginValidUntil": {
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  "webLoginNoExpiry": "No expiry set by the site",
+  "webLoginSavedAgo": "Saved {time}",
+  "@webLoginSavedAgo": {
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+  "webLoginRefreshedAgo": "Refreshed {time}",
+  "@webLoginRefreshedAgo": {
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
   "webLoginAppsWithAccess": "Apps with access",
   "revoke": "Revoke",
   "revokeAppAccessTitle": "Revoke access",

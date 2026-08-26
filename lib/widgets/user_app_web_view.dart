@@ -16,8 +16,10 @@ import '../services/approval_service.dart';
 import '../services/database_service.dart';
 import '../services/global_library_service.dart';
 import '../services/logger_service.dart';
+import '../services/service_locator.dart';
 import '../services/sql_query_service.dart';
 import '../services/user_app_runtime_bridge.dart';
+import '../services/web_session_service.dart';
 import '../screens/settings/web_login_browser_screen.dart';
 import '../screens/note_selection_dialog.dart';
 import 'approval_dialog.dart';
@@ -232,11 +234,24 @@ class _UserAppWebViewState extends State<UserAppWebView> {
       },
       onWebLoginRequest: (source, url) async {
         if (!mounted) return false;
+        // A plugin asking for a login almost always means the one it had has
+        // gone stale, so when a session already exists open the browser in
+        // refresh mode: it clears the dead cookies first (otherwise the site
+        // replays them and never shows its login form) and keeps the app's
+        // existing grant.
+        final domain = WebSessionService.domainKeyFor(url);
+        final existing = domain.isEmpty
+            ? null
+            : await getIt<WebSessionService>().getSession(domain);
+        if (!mounted) return false;
         // Open the in-app login browser; it captures + persists the session
         // and pops `true` once the user saves their login.
         final result = await Navigator.of(context).push<bool>(
           MaterialPageRoute(
-            builder: (_) => WebLoginBrowserScreen(initialUrl: url),
+            builder: (_) => WebLoginBrowserScreen(
+              initialUrl: url,
+              refreshDomain: existing != null ? domain : null,
+            ),
           ),
         );
         return result == true;

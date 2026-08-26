@@ -705,6 +705,29 @@ class UserAppRuntimeBridge {
           }
 
           final response = await request.close();
+
+          // Roll the saved login forward with whatever cookies the site just
+          // rotated. Without this the stored session is a frozen snapshot that
+          // only decays, even though every authenticated request is handing us
+          // a fresh one. Confined to the request's own registrable domain so a
+          // cross-domain redirect can never write into another site's login.
+          if (rawOptions['session'] == true) {
+            final setCookies =
+                response.headers[HttpHeaders.setCookieHeader] ?? const [];
+            if (setCookies.isNotEmpty) {
+              final effectiveUrl = response.redirects.isEmpty
+                  ? urlRaw
+                  : uri.resolveUri(response.redirects.last.location).toString();
+              if (WebSessionService.domainKeyFor(effectiveUrl) ==
+                  WebSessionService.domainKeyFor(urlRaw)) {
+                await _webSessionService.mergeSetCookieHeaders(
+                  effectiveUrl,
+                  setCookies,
+                );
+              }
+            }
+          }
+
           final bytesBuilder = BytesBuilder(copy: false);
           await for (final chunk in response) {
             bytesBuilder.add(chunk);
@@ -1080,11 +1103,20 @@ class UserAppRuntimeBridge {
           final domain = WebSessionService.domainKeyFor(input);
           final session = await _webSessionService.getSession(domain);
           final loggedIn = session != null && session.liveCookies.isNotEmpty;
+          final expiresAt = session?.lastExpiry;
           return {
             'success': true,
             'loggedIn': loggedIn,
             'domain': domain,
             'savedAt': session?.savedAt.toIso8601String(),
+            if (session?.refreshedAt != null)
+              'refreshedAt': session!.refreshedAt!.toIso8601String(),
+            if (expiresAt != null) 'expiresAt': expiresAt.toIso8601String(),
+            // Lets an app offer a re-login before a request actually fails.
+            'expiringSoon':
+                loggedIn &&
+                expiresAt != null &&
+                expiresAt.difference(DateTime.now()).inDays < 3,
           };
         } catch (e) {
           LoggerService.error('[Synapse.session.status] Error: $e', error: e);
@@ -1241,6 +1273,20 @@ class UserAppRuntimeBridge {
               } catch (_) {}
             });
             final resp = await request.close();
+            // Same roll-forward as proxyFetch, per hop, and only for hops that
+            // stayed on the domain whose login was actually granted.
+            if (authorized &&
+                WebSessionService.domainKeyFor(currentUri.toString()) ==
+                    downloadDomain) {
+              final setCookies =
+                  resp.headers[HttpHeaders.setCookieHeader] ?? const [];
+              if (setCookies.isNotEmpty) {
+                await _webSessionService.mergeSetCookieHeaders(
+                  currentUri.toString(),
+                  setCookies,
+                );
+              }
+            }
             if (resp.isRedirect) {
               final loc = resp.headers.value(HttpHeaders.locationHeader);
               await resp.drain<void>();

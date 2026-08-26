@@ -5233,6 +5233,65 @@ class AppLocalizationsEn extends AppLocalizations {
   String get requestMobileSite => 'Request mobile site';
 
   @override
+  String get done => 'Done';
+
+  @override
+  String get refreshLogin => 'Refresh login';
+
+  @override
+  String get webLoginRefreshHint =>
+      'Sign in again to refresh this login. Your saved app permissions are kept.';
+
+  @override
+  String webLoginRefreshed(String domain) {
+    return 'Login refreshed for $domain';
+  }
+
+  @override
+  String get webLoginRefreshDiscarded =>
+      'Refresh cancelled — your previous login was restored.';
+
+  @override
+  String get clearSiteCookies => 'Clear cookies for this site';
+
+  @override
+  String get webLoginCookiesCleared =>
+      'Cookies cleared. Sign in again, then tap Save login.';
+
+  @override
+  String get webLoginExpired => 'Expired — refresh to sign in again';
+
+  @override
+  String webLoginExpiresInDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Expires in $days days — refresh soon',
+      one: 'Expires tomorrow — refresh soon',
+      zero: 'Expires today — refresh soon',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String webLoginValidUntil(String date) {
+    return 'Valid until $date';
+  }
+
+  @override
+  String get webLoginNoExpiry => 'No expiry set by the site';
+
+  @override
+  String webLoginSavedAgo(String time) {
+    return 'Saved $time';
+  }
+
+  @override
+  String webLoginRefreshedAgo(String time) {
+    return 'Refreshed $time';
+  }
+
+  @override
   String get webLoginAppsWithAccess => 'Apps with access';
 
   @override

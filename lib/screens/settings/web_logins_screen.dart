@@ -39,7 +39,7 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
       for (var i = 0; i < domains.length; i++)
         _WebLoginEntry(
           domain: domains[i],
-          savedAt: sessions[i]?.savedAt,
+          session: sessions[i],
           apps: grantedApps[i],
         ),
     ];
@@ -94,6 +94,25 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
       MaterialPageRoute(builder: (_) => const WebLoginBrowserScreen()),
     );
     if (added == true) {
+      _refresh();
+    }
+  }
+
+  /// Re-authenticates an existing login in place. Unlike delete-then-add, the
+  /// domain's app grants survive, because the session key is simply overwritten.
+  Future<void> _refreshLogin(_WebLoginEntry entry) async {
+    final savedUrl = entry.session?.savedUrl;
+    final refreshed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => WebLoginBrowserScreen(
+          initialUrl: (savedUrl == null || savedUrl.isEmpty)
+              ? 'https://${entry.domain}'
+              : savedUrl,
+          refreshDomain: entry.domain,
+        ),
+      ),
+    );
+    if (refreshed == true) {
       _refresh();
     }
   }
@@ -160,6 +179,49 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
     return '${savedAt.year}-${savedAt.month.toString().padLeft(2, '0')}-${savedAt.day.toString().padLeft(2, '0')}';
   }
 
+  /// The line under the domain: when it was captured, when it last rolled
+  /// forward on its own, and how much life the cookies claim to have left.
+  String _statusLine(AppLocalizations l10n, _WebLoginEntry entry) {
+    final savedAt = entry.savedAt;
+    final parts = <String>[
+      if (savedAt != null) l10n.webLoginSavedAgo(_formatSavedAt(savedAt)),
+    ];
+    final refreshedAt = entry.session?.refreshedAt;
+    if (refreshedAt != null) {
+      parts.add(l10n.webLoginRefreshedAgo(_formatSavedAt(refreshedAt)));
+    }
+    return parts.join(' · ');
+  }
+
+  /// Expiry state, or `null` when there is nothing worth saying. The date shown
+  /// is the furthest-out cookie expiry (see [WebSession.lastExpiry]).
+  ({String text, bool isWarning})? _expiryStatus(
+    AppLocalizations l10n,
+    _WebLoginEntry entry,
+  ) {
+    final session = entry.session;
+    if (session == null || session.cookies.isEmpty) {
+      return null;
+    }
+    if (session.isFullyExpired) {
+      return (text: l10n.webLoginExpired, isWarning: true);
+    }
+    final expiry = session.lastExpiry;
+    if (expiry == null) {
+      return (text: l10n.webLoginNoExpiry, isWarning: false);
+    }
+    final days = expiry.difference(DateTime.now()).inDays;
+    if (days < 3) {
+      return (text: l10n.webLoginExpiresInDays(days), isWarning: true);
+    }
+    return (
+      text: l10n.webLoginValidUntil(
+        '${expiry.year}-${expiry.month.toString().padLeft(2, '0')}-${expiry.day.toString().padLeft(2, '0')}',
+      ),
+      isWarning: false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -214,11 +276,29 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
                       ListTile(
                         leading: const Icon(Icons.cookie_outlined),
                         title: Text(entry.domain),
-                        subtitle: Text(_formatSavedAt(entry.savedAt)),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline),
-                          tooltip: l10n.deleteLogin,
-                          onPressed: () => _deleteLogin(entry.domain),
+                        isThreeLine: _expiryStatus(l10n, entry) != null,
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(_statusLine(l10n, entry)),
+                            ?_buildExpiryLine(context, l10n, entry),
+                          ],
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.refresh),
+                              tooltip: l10n.refreshLogin,
+                              onPressed: () => _refreshLogin(entry),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              tooltip: l10n.deleteLogin,
+                              onPressed: () => _deleteLogin(entry.domain),
+                            ),
+                          ],
                         ),
                       ),
                       if (entry.apps.isNotEmpty) ...[
@@ -253,6 +333,24 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
     );
   }
 
+  Widget? _buildExpiryLine(
+    BuildContext context,
+    AppLocalizations l10n,
+    _WebLoginEntry entry,
+  ) {
+    final status = _expiryStatus(l10n, entry);
+    if (status == null) {
+      return null;
+    }
+    final scheme = Theme.of(context).colorScheme;
+    return Text(
+      status.text,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: status.isWarning ? scheme.error : null,
+      ),
+    );
+  }
+
   Widget _buildNotice(
     BuildContext context, {
     required IconData icon,
@@ -278,13 +376,15 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
 class _WebLoginEntry {
   const _WebLoginEntry({
     required this.domain,
-    required this.savedAt,
+    required this.session,
     this.apps = const [],
   });
 
   final String domain;
-  final DateTime? savedAt;
+  final WebSession? session;
   final List<_GrantedApp> apps;
+
+  DateTime? get savedAt => session?.savedAt;
 }
 
 class _GrantedApp {

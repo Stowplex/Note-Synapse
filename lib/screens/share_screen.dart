@@ -2193,6 +2193,19 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     });
   }
 
+  Future<void> _syncSessionCookies(String? loadedUrl) async {
+    try {
+      final service = getIt<WebSessionService>();
+      if (service.isSupported) {
+        await service.syncFromLiveJar(loadedUrl ?? widget.url);
+      }
+    } catch (e) {
+      LoggerService.warning(
+        '[ShareScreen] Failed to sync session cookies: $e',
+      );
+    }
+  }
+
   Future<void> _restoreSessionCookies() async {
     try {
       final service = getIt<WebSessionService>();
@@ -2901,6 +2914,11 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           _status = l10n.webExtractionStatusReady;
           _errorMessage = null;
         });
+
+        // The site almost certainly rotated its session cookie while serving
+        // this page. Fold that back into the saved login so it rolls forward
+        // instead of decaying into an expired snapshot.
+        await _syncSessionCookies(url?.toString());
 
         if (_readabilityEnabled) {
           await _applyReadabilityMode();
