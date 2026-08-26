@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 import '../models/note.dart';
@@ -6,7 +7,6 @@ import '../models/relationship.dart';
 import 'data_change_notifier.dart';
 import 'database_service.dart';
 import '../utils/file_utils.dart';
-import '../utils/file_type_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 import 'logger_service.dart';
 import 'service_locator.dart';
@@ -536,6 +536,14 @@ class NoteModificationService {
     return match?.group(1)?.length;
   }
 
+  // M1.11: subnote/attachment diffing now delegates to
+  // `DatabaseService.diffAndPersistSubNotes`/`diffAndPersistAttachments` --
+  // the single shared implementation `updateNote`
+  // (database_service.dart) also calls, instead of this class maintaining
+  // its own independently-duplicated copy of the diff logic (which is what
+  // made `updateNote`/`_persistNote` a drift risk in the first place; see
+  // both functions' own doc comments in database_service.dart for the full
+  // id-/filePath-diff design).
   Future<void> _persistNote(DatabaseExecutor db, Note note) async {
     final json = note.toJson();
     json['createdAt'] = note.createdAt.millisecondsSinceEpoch;
@@ -550,88 +558,98 @@ class NoteModificationService {
     // null here would wipe the column on every modification.
     json.remove('metadata');
 
+    // M1.10: `AND __deleted__ = 0` -- a tombstoned note's row still
+    // physically exists, so without this guard `updatedRows` would be 1
+    // even though the note is meant to be gone, and the subnote/tag/
+    // attachment writes below would incorrectly revive child rows for a
+    // deleted note.
     final updatedRows = await db.update(
       'notes',
       json,
-      where: 'id = ?',
+      where: 'id = ? AND __deleted__ = 0',
       whereArgs: [note.id],
     );
     if (updatedRows == 0) {
-      // Note deleted between the read and this write; creating child rows
-      // for a nonexistent note would orphan them.
+      // Note deleted (or tombstoned) between the read and this write;
+      // creating child rows for a nonexistent/deleted note would orphan
+      // them.
       throw Exception('Note no longer exists: ${note.id}');
     }
 
-    await db.delete('subnotes', where: 'noteId = ?', whereArgs: [note.id]);
-    for (final subNote in note.subNotes) {
-      await db.insert('subnotes', {
-        'id': subNote.id,
-        'noteId': note.id,
-        'name': subNote.name,
-        'content': subNote.content,
-        'createdAt': subNote.createdAt.millisecondsSinceEpoch,
-        'isCompleted': subNote.isCompleted ? 1 : 0,
-      });
-    }
+    // **M1.10-disclosed race with `deleteNote`, re-assessed by M1.11 --
+    // likely already closed, not newly fixed here.** M1.10 recorded a race
+    // between this liveness check and the child-row writes below,
+    // reasoning conservatively that even though `_persistNote` always runs
+    // inside a caller-supplied transaction (`applyModifications`/
+    // `applyBatchModifications`'s `db.transaction`), that only protected
+    // against a partial write of *this* call, not interleaving with a
+    // concurrent `deleteNote`. Investigating this for M1.11 (see
+    // `updateNote`'s own doc comment in database_service.dart, which cites
+    // the actual sqflite source): `sqflite_common`'s
+    // `DatabaseMixin.transaction()` acquires the single per-connection
+    // write lock (`_rawLock`) for its *entire* callback duration, and every
+    // statement run via the `txn`/`db` executor it hands out reuses that
+    // same held lock rather than re-acquiring it -- so two `db.transaction`
+    // calls against the same open `Database` (which `deleteNote` and
+    // `applyModifications`/`applyBatchModifications` both are, via the
+    // shared `DatabaseService` singleton) cannot actually interleave at
+    // the statement level; one fully commits or rolls back before the
+    // other's callback can start. Under that reading, the race M1.10
+    // disclosed for `_persistNote` specifically was likely never
+    // reachable in practice, even before this milestone -- unlike
+    // `updateNote`, which issued each statement as its own separate,
+    // un-transactioned call and so genuinely could interleave with a
+    // concurrent `deleteNote` (see that function's doc comment for why,
+    // and how M1.11 closes it there). This function's own atomicity
+    // envelope is unchanged by M1.11: it still simply runs inside whatever
+    // transaction its caller already opened. Recorded here, not silently
+    // upgraded to "fixed", since this reasoning has not been independently
+    // stress-tested against real concurrent callers the way `updateNote`'s
+    // closure was reasoned through structurally -- if sqflite's locking
+    // behavior above is ever wrong or changes, this residual reopens.
+    await DatabaseService.diffAndPersistSubNotes(db, note.id, note.subNotes);
 
     await db.delete('note_tags', where: 'noteId = ?', whereArgs: [note.id]);
     for (final tagName in note.tags) {
       await _linkNoteToTag(db, note.id, tagName);
     }
 
-    final existingAttachmentsRows = await db.query(
-      'attachments',
-      columns: ['filePath', 'includeInAIContext'],
-      where: 'noteId = ?',
-      whereArgs: [note.id],
+    await DatabaseService.diffAndPersistAttachments(
+      db,
+      note.id,
+      note.attachmentPaths,
     );
-    final existingPaths = <String>{};
-    final existingContextMap = <String, bool>{};
-    for (final row in existingAttachmentsRows) {
-      final path = row['filePath'] as String;
-      existingPaths.add(path);
-      existingContextMap[path] = (row['includeInAIContext'] as int?) != 0;
-    }
-
-    final pathsToKeep = <String>{};
-    for (final attachmentPath in note.attachmentPaths) {
-      var isRelativePath = attachmentPath.startsWith('attachments/');
-      var finalPath = attachmentPath;
-      if (!isRelativePath) {
-        final relativePath = await FileUtils.getRelativePath(attachmentPath);
-        if (relativePath != null) {
-          finalPath = relativePath;
-          isRelativePath = true;
-        }
-      }
-
-      if (existingPaths.contains(finalPath)) {
-        pathsToKeep.add(finalPath);
-      } else {
-        final includeInAIContext =
-            existingContextMap[finalPath] ??
-            existingContextMap[attachmentPath] ??
-            true;
-        await _insertAttachment(
-          db,
-          note.id,
-          finalPath,
-          isRelativePath: isRelativePath,
-          includeInAIContext: includeInAIContext,
-        );
-      }
-    }
-
-    for (final existingPath in existingPaths) {
-      if (!pathsToKeep.contains(existingPath)) {
-        await db.delete(
-          'attachments',
-          where: 'noteId = ? AND filePath = ?',
-          whereArgs: [note.id, existingPath],
-        );
-      }
-    }
   }
+
+  /// Test-only hook onto the private [_persistNote] above -- both callers
+  /// in this file (`applyModifications`/`applyBatchModifications`) always
+  /// reach it via a `db.transaction` callback after their own
+  /// `getNoteById`/`_buildUpdatedNote` machinery, none of which M1.11's
+  /// parity requirement (`updateNote` and `_persistNote` must behave
+  /// identically for the same subnote/attachment diff) actually needs
+  /// exercised. Lets tests drive `_persistNote` directly against a plain
+  /// executor, exactly the same way `applyLinkModificationsForTest` (M1.8)
+  /// already does for `_applyLinkModifications`.
+  @visibleForTesting
+  Future<void> persistNoteForTest(DatabaseExecutor db, Note note) =>
+      _persistNote(db, note);
+
+  /// Test-only hook onto the private [_applyLinkModifications] below --
+  /// both callers in this file (`applyModifications`/
+  /// `applyBatchModifications`) always pass a non-null `txn`, so the
+  /// `txn == null` branch is otherwise unreachable from outside this class.
+  /// Exists so M1.8's soft-delete conversion of both the `txn`- and
+  /// non-`txn`-based relationship-removal paths can be exercised and
+  /// verified directly (see
+  /// test/relationships_conversation_attachments_soft_delete_test.dart),
+  /// per the scoping pass flagging this pair as the most likely place for
+  /// the two paths to drift.
+  @visibleForTesting
+  Future<void> applyLinkModificationsForTest(
+    String noteId,
+    dynamic linkData, {
+    DatabaseExecutor? txn,
+  }) => _applyLinkModifications(noteId, linkData, txn: txn);
 
   Future<void> _applyLinkModifications(
     String noteId,
@@ -675,8 +693,15 @@ class NoteModificationService {
 
     for (final targetId in removedTargets) {
       if (txn != null) {
-        await txn.delete(
+        // M1.8: tombstone write, not a real delete -- mirrors
+        // DatabaseService.deleteRelationshipBetween's own conversion
+        // exactly (same where clause, same "removes all types between
+        // these two notes, in either direction" semantics), since this is
+        // the txn-based sibling of that call used when a transaction was
+        // already passed in.
+        await txn.update(
           'relationships',
+          {'__deleted__': 1},
           where:
               '(fromNoteId = ? AND toNoteId = ?) OR (fromNoteId = ? AND toNoteId = ?)',
           whereArgs: [noteId, targetId, targetId, noteId],
@@ -692,7 +717,12 @@ class NoteModificationService {
     String noteId,
     String tagName,
   ) async {
-    final tagId = await _getOrCreateTagId(db, tagName);
+    // M1.3: delegates to DatabaseService.getOrCreateLiveTagId — the single
+    // shared, liveness-aware replacement for this method's own previously
+    // independently-duplicated `_getOrCreateTagId` (this class held its own
+    // copy of the exact same unguarded-lookup bug database_service.dart's
+    // version had; see DatabaseService.findLiveTagByName's doc comment).
+    final tagId = await DatabaseService.getOrCreateLiveTagId(db, tagName);
     final existingLink = await db.query(
       'note_tags',
       where: 'noteId = ? AND tagId = ?',
@@ -704,55 +734,6 @@ class NoteModificationService {
         'tagId': tagId,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
-  }
-
-  Future<String> _getOrCreateTagId(DatabaseExecutor db, String tagName) async {
-    final existing = await db.query(
-      'tags',
-      columns: ['id'],
-      where: 'name = ?',
-      whereArgs: [tagName],
-      limit: 1,
-    );
-    if (existing.isNotEmpty) {
-      return existing.first['id'] as String;
-    }
-
-    final tagId = _uuid.v4();
-    final now = DateTime.now().millisecondsSinceEpoch;
-    await db.insert('tags', {
-      'id': tagId,
-      'name': tagName,
-      'color': '#2196F3',
-      'createdAt': now,
-      'usageCount': 0,
-    });
-    return tagId;
-  }
-
-  Future<void> _insertAttachment(
-    DatabaseExecutor db,
-    String noteId,
-    String filePath, {
-    bool isRelativePath = false,
-    bool includeInAIContext = true,
-  }) async {
-    final fileName = filePath.split('/').last;
-    final fileType = FileTypeUtils.getFileExtension(fileName);
-    final isHtml =
-        fileType.toLowerCase() == 'html' || fileType.toLowerCase() == 'htm';
-    final finalIncludeInAIContext = isHtml ? false : includeInAIContext;
-
-    await db.insert('attachments', {
-      'id': _uuid.v4(),
-      'noteId': noteId,
-      'filePath': filePath,
-      'fileName': fileName,
-      'fileType': fileType,
-      'isRelativePath': isRelativePath ? 1 : 0,
-      'createdAt': DateTime.now().millisecondsSinceEpoch,
-      'includeInAIContext': finalIncludeInAIContext ? 1 : 0,
-    });
   }
 
   /// Processes an attachment, promoting temporary files or handling base64.

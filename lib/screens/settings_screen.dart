@@ -29,6 +29,8 @@ import '../services/network_settings_service.dart';
 import '../services/network_provider.dart';
 import 'settings/about_screen.dart';
 import 'package:flutter/foundation.dart';
+import '../services/sync/google_drive_auth_service.dart';
+import 'settings/cloud_sync_screen.dart';
 import 'settings/debug_menu_screen.dart';
 import 'settings/web_logins_screen.dart';
 import 'search_settings_screen.dart';
@@ -71,9 +73,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               leading: const Icon(Icons.movie_creation_outlined),
               title: Text(l10n.worldClipProjects),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => const WorldClipProjectsScreen(),
-              )),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const WorldClipProjectsScreen(),
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -157,6 +161,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
+          // Android/iOS only, not merely non-web: the OAuth redirect is a
+          // private-use URL scheme that only those two platforms register
+          // (Android intent-filter / iOS CFBundleURLSchemes). On desktop the
+          // consent flow would open a browser and then wait five minutes for
+          // a callback that can never arrive. `GoogleDriveAuthService.connect`
+          // also fails fast for the same reason; this just keeps the entry
+          // point from being offered at all.
+          if (GoogleDriveAuthService.isSupportedPlatform) ...[
+            const SizedBox(height: 8),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.cloud_sync),
+                title: Text(l10n.cloudSync),
+                subtitle: Text(l10n.cloudSyncSubtitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CloudSyncScreen(),
+                  ),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Card(
             child: ListTile(

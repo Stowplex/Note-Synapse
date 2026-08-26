@@ -1682,9 +1682,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get attachmentMissing => 'Attachment not found.';
-
-  @override
   String get attachmentUnavailable => 'Attachment unavailable';
 
   @override
@@ -3032,6 +3029,497 @@ class AppLocalizationsEn extends AppLocalizations {
   String get resetOnboardingSuccess => 'Onboarding flag reset';
 
   @override
+  String get triggerSyncTitle => 'Trigger Sync';
+
+  @override
+  String get triggerSyncSubtitle =>
+      'Run one sync round against an in-memory debug backend (no real device pairing)';
+
+  @override
+  String get triggerSyncRunning => 'Syncing…';
+
+  @override
+  String triggerSyncResult(int touches, int seeded, int pulled, int pushed) {
+    return 'Sync complete — drained $touches, seeded $seeded, pulled $pulled, pushed $pushed';
+  }
+
+  @override
+  String triggerSyncError(String error) {
+    return 'Sync failed: $error';
+  }
+
+  @override
+  String get cloudSync => 'Cloud Sync';
+
+  @override
+  String get cloudSyncSubtitle =>
+      'Sync your notes across devices using Google Drive';
+
+  @override
+  String get cloudSyncAccountSection => 'Google Drive account';
+
+  @override
+  String get cloudSyncStateNotConfigured => 'Not available in this build';
+
+  @override
+  String get cloudSyncStateNotConfiguredDetail =>
+      'This build has no Google OAuth client configured, so it cannot connect to Google Drive.';
+
+  @override
+  String get cloudSyncStateDisconnected => 'Not connected';
+
+  @override
+  String get cloudSyncStateDisconnectedDetail =>
+      'Connect a Google account to store your sync data in its Drive.';
+
+  @override
+  String get cloudSyncStateConnected => 'Connected';
+
+  @override
+  String get cloudSyncStateConnectedDetail =>
+      'Note Synapse can read and write only the files it creates in your Drive.';
+
+  @override
+  String get cloudSyncStateNoRefreshToken =>
+      'Connected, but the session will expire';
+
+  @override
+  String get cloudSyncStateNoRefreshTokenDetail =>
+      'Google did not return a long-lived token. Disconnect and connect again; if it keeps happening, sync will stop working about an hour after each connection.';
+
+  @override
+  String get cloudSyncConnect => 'Connect Google Drive';
+
+  @override
+  String get cloudSyncConnecting => 'Waiting for Google sign-in…';
+
+  @override
+  String get cloudSyncConnected => 'Connected to Google Drive';
+
+  @override
+  String cloudSyncConnectError(String error) {
+    return 'Could not connect: $error';
+  }
+
+  @override
+  String get cloudSyncDisconnect => 'Disconnect';
+
+  @override
+  String get cloudSyncDisconnectConfirm =>
+      'Remove the stored Google Drive credentials from this device? Nothing already synced to Drive is deleted, and you can connect again at any time.';
+
+  @override
+  String get cloudSyncDisconnected => 'Disconnected from Google Drive';
+
+  @override
+  String get cloudSyncDatasetSection => 'Sync dataset';
+
+  @override
+  String get cloudSyncDatasetPending => 'Not set up yet';
+
+  @override
+  String get cloudSyncDatasetPendingDetail =>
+      'Create a sync dataset in your Drive, or join the one that is already there.';
+
+  @override
+  String get cloudSyncDatasetInProgress => 'Setup was interrupted';
+
+  @override
+  String get cloudSyncDatasetInProgressDetail =>
+      'The last setup attempt did not finish. Running it again is safe.';
+
+  @override
+  String get cloudSyncDatasetReady => 'Ready';
+
+  @override
+  String get cloudSyncDatasetReadyDetail =>
+      'This device has joined the sync dataset.';
+
+  @override
+  String get cloudSyncDatasetSetUp => 'Set up dataset';
+
+  @override
+  String get cloudSyncDatasetSettingUp => 'Setting up…';
+
+  @override
+  String get cloudSyncDatasetDone => 'Sync dataset ready';
+
+  @override
+  String cloudSyncDatasetError(String error) {
+    return 'Dataset setup failed: $error';
+  }
+
+  @override
+  String get cloudSyncDatasetMissing => 'Sync dataset is missing';
+
+  @override
+  String get cloudSyncDatasetMissingDetail =>
+      'This device is set up for a sync dataset that is no longer in your Drive. Reset sync on this device to start over — your notes stay on this device.';
+
+  @override
+  String get cloudSyncFolderDialogTitle => 'Sync folder';
+
+  @override
+  String get cloudSyncFolderNameLabel => 'Folder name in Google Drive';
+
+  @override
+  String get cloudSyncFolderNameHelp =>
+      'A folder with this name is created in your Drive. You can rename or move it afterwards — this device remembers the folder itself, not its name. Another device can only FIND this folder by name if you give it the same name, so the folder ID below is the dependable way to connect two devices.';
+
+  @override
+  String get cloudSyncFolderNameRequired => 'Enter a folder name';
+
+  @override
+  String get cloudSyncFolderJoinLabel => 'Or join an existing folder by ID';
+
+  @override
+  String get cloudSyncFolderJoinHelp =>
+      'On a device that is already syncing, copy the folder ID from this screen and paste it here. This is the reliable way to point a second device at the same data. Leave it empty to look the folder up by name instead.';
+
+  @override
+  String get cloudSyncPassphraseLabel => 'Passphrase (optional)';
+
+  @override
+  String get cloudSyncPassphraseHelp =>
+      'Set one to encrypt this dataset. It is chosen once, when the dataset is created, and cannot be added or removed later. Every device needs the same passphrase — if you lose it, the data cannot be recovered. Leave empty to sync unencrypted.';
+
+  @override
+  String get cloudSyncStorageTitle => 'Storage cleanup';
+
+  @override
+  String get cloudSyncStorageScan => 'Check for reclaimable files';
+
+  @override
+  String get cloudSyncStorageNone =>
+      'Nothing to reclaim — every stored file is still in use.';
+
+  @override
+  String cloudSyncStoragePending(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count files are no longer used and are waiting out their safety period',
+      one: '1 file is no longer used and is waiting out its safety period',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String cloudSyncStorageEligible(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files can be deleted now',
+      one: '1 file can be deleted now',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cloudSyncStorageBlocked =>
+      'These files can only be deleted while this is the only device in the dataset. Another device is a member, and there is no way yet to know it will not need them.';
+
+  @override
+  String get cloudSyncStorageDelete => 'Delete now';
+
+  @override
+  String get cloudSyncStorageConfirm =>
+      'Delete these files from Drive permanently? They are no longer used by any note, tag or mini app on this device, and have been unused long enough to be safe to remove. This cannot be undone.';
+
+  @override
+  String cloudSyncStorageDeleted(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Deleted $count files',
+      one: 'Deleted 1 file',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cloudSyncFolderContinue => 'Continue';
+
+  @override
+  String cloudSyncFolderName(String name) {
+    return 'Folder: $name';
+  }
+
+  @override
+  String cloudSyncFolderId(String id) {
+    return 'Folder ID: $id';
+  }
+
+  @override
+  String get cloudSyncFolderIdHint => 'Use this ID to set up another device.';
+
+  @override
+  String get cloudSyncFolderNameFollowsDrive =>
+      'The folder name now follows Drive. Rename the folder in Drive to change it.';
+
+  @override
+  String get cloudSyncFolderCreatedHere =>
+      'This device created this sync dataset. If you meant to join one you already have, use Change folder and paste that folder’s ID.';
+
+  @override
+  String get cloudSyncFolderIdPending =>
+      'Folder ID: not recorded yet — it appears here after the next sync.';
+
+  @override
+  String get cloudSyncFolderChange => 'Change folder';
+
+  @override
+  String get cloudSyncFolderChangeTitle =>
+      'Point this device at a different folder?';
+
+  @override
+  String get cloudSyncFolderChangeConfirm =>
+      'Your notes, tags, conversations and attachments stay on this device, and nothing already in Drive is deleted.\n\nThis device leaves the dataset it is in now and joins the one in the folder you choose. To do that it resets its sync state: it takes a new sync identity, forgets what it has already synced, and re-offers everything it holds to the new folder. Where the new folder already has a different version, that version wins.\n\nAnything you deleted on this device but never managed to upload comes back, because this device also forgets the deletion. Whatever this device already uploaded to the OLD folder stays there and is not moved.';
+
+  @override
+  String get cloudSyncFolderPreviewTitle => 'Use this folder?';
+
+  @override
+  String cloudSyncFolderPreviewHolds(String name, String date) {
+    return '“$name” holds a sync dataset started on $date.';
+  }
+
+  @override
+  String cloudSyncFolderPreviewEmpty(String name) {
+    return '“$name” is a Note Synapse sync folder, but it has no sync data in it yet. If you expected your notes to be there, check the ID on the other device.';
+  }
+
+  @override
+  String get cloudSyncFolderPreviewUse => 'Use this folder';
+
+  @override
+  String cloudSyncFolderAmbiguous(int count, String name) {
+    return '$count folders in your Drive are called “$name”, so this device cannot tell which one holds your sync data. Open Google Drive and rename or remove the ones you do not want to sync with, then try again.';
+  }
+
+  @override
+  String get cloudSyncFolderNotFound =>
+      'No folder with that ID is available to this app. Check that you copied the whole ID from the other device, and that both devices use the same Google account.';
+
+  @override
+  String get cloudSyncDatasetCreated =>
+      'Created a new sync folder. To sync another device with this one, set that device up with the folder ID shown here.';
+
+  @override
+  String get cloudSyncDatasetJoined =>
+      'Joined the sync dataset already in your Drive.';
+
+  @override
+  String get cloudSyncReset => 'Reset sync';
+
+  @override
+  String get cloudSyncResetting => 'Resetting…';
+
+  @override
+  String get cloudSyncResetTitle => 'Reset sync on this device?';
+
+  @override
+  String get cloudSyncResetConfirm =>
+      'Your notes, tags, conversations and attachments stay on this device, and nothing already in Drive is deleted.\n\nThis device forgets what it has already synced: it takes a new sync identity and re-offers everything it holds. Where the cloud already has a different version of a note, the cloud\'s wins — including versions this device itself uploaded earlier. Edits made here that were never uploaded are the exception: they are re-sent and kept.\n\nTwo things can come back. Anything you deleted on this device but never managed to upload returns on the next sync, because this device also forgets the deletion. And a tag assignment or link that was removed on another device returns if this device still has it: the reset makes this device offer every connection it holds as new, and adding always wins over a removal it never saw.\n\nAfter the reset, set up the dataset again to start syncing.';
+
+  @override
+  String get cloudSyncResetDone =>
+      'Sync state reset — set up the dataset again to start syncing';
+
+  @override
+  String cloudSyncResetError(String error) {
+    return 'Reset failed: $error';
+  }
+
+  @override
+  String get cloudSyncNowSection => 'Sync';
+
+  @override
+  String get cloudSyncNow => 'Sync now';
+
+  @override
+  String get cloudSyncNowRunning => 'Syncing…';
+
+  @override
+  String cloudSyncSeeding(String table, int done, int total, int operations) {
+    return 'Preparing existing data — $table ($done of $total tables), $operations operations so far';
+  }
+
+  @override
+  String cloudSyncPushing(int done, int total, int operations) {
+    return 'Uploading changes — $done of $total batches, $operations changes sent';
+  }
+
+  @override
+  String cloudSyncNowResult(int touches, int seeded, int pulled, int pushed) {
+    return 'Sync complete — drained $touches, seeded $seeded, pulled $pulled, pushed $pushed';
+  }
+
+  @override
+  String get cloudSyncDegraded => 'Sync finished, but some data did not sync';
+
+  @override
+  String get cloudSyncHealthDatasetMissing =>
+      'The sync dataset this device joined is no longer in Drive, so nothing can sync. Reset sync on this device to start over.';
+
+  @override
+  String cloudSyncHealthLogDiverged(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count of this device\'s sync histories no longer match the copies in Drive, so its changes cannot be uploaded',
+      one:
+          'This device\'s sync history no longer matches the copy in Drive, so its changes cannot be uploaded',
+    );
+    return '$_temp0. Reset sync on this device to start over.';
+  }
+
+  @override
+  String get userAppNoRunnableCode =>
+      'This app\'s code hasn\'t arrived on this device';
+
+  @override
+  String get userAppNoRunnableCodeDetail =>
+      'Its details synced, but app code isn\'t uploaded to cloud sync yet. Open it on the device where you created it.';
+
+  @override
+  String get userAppNoRunnableCodeLocal => 'This app has no code yet';
+
+  @override
+  String get userAppNoRunnableCodeLocalDetail =>
+      'No version of its code was ever saved, so its creation probably didn\'t finish. Edit the app to generate it again.';
+
+  @override
+  String get aiToolCodeNotSynced =>
+      'Unavailable — this tool\'s code hasn\'t arrived on this device yet.';
+
+  @override
+  String cloudSyncHealthTablesNotSynced(int count, String detail) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kinds of item do not sync yet',
+      one: '1 kind of item does not sync yet',
+    );
+    return '$_temp0: $detail';
+  }
+
+  @override
+  String cloudSyncHealthOperationsFailed(int count, String detail) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count changes from other devices could not be applied',
+      one: '1 change from another device could not be applied',
+    );
+    return '$_temp0: $detail';
+  }
+
+  @override
+  String cloudSyncHealthWaitingOnEntity(int count, String detail) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count changes are waiting for items that have not arrived',
+      one: '1 change is waiting for an item that has not arrived',
+    );
+    return '$_temp0: $detail';
+  }
+
+  @override
+  String cloudSyncHealthWaitingOnDot(int count, String detail) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count removals are waiting for changes this device has not seen yet',
+      one: '1 removal is waiting for a change this device has not seen yet',
+    );
+    return '$_temp0: $detail';
+  }
+
+  @override
+  String cloudSyncHealthMembershipNotBuilt(int count, String detail) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count links could not be recreated',
+      one: '1 link could not be recreated',
+    );
+    return '$_temp0: $detail';
+  }
+
+  @override
+  String cloudSyncHealthIdentityConflict(int count, String detail) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items from another device could not be added',
+      one: '1 item from another device could not be added',
+    );
+    return '$_temp0, because this device already has a copy of it: $detail';
+  }
+
+  @override
+  String cloudSyncHealthAttachmentBytesMissing(int count, String detail) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count attachment files have not arrived yet: $detail',
+      one: '1 attachment file has not arrived yet: $detail',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String cloudSyncHealthSince(String time) {
+    return 'waiting since $time';
+  }
+
+  @override
+  String get syncItemsSubnotes => 'Sub-tasks';
+
+  @override
+  String get syncItemsRelationships => 'Note links';
+
+  @override
+  String get syncItemsAttachments => 'Note attachments';
+
+  @override
+  String get syncItemsConversationAttachments => 'Chat attachments';
+
+  @override
+  String get syncItemsUserApps => 'Mini apps';
+
+  @override
+  String get syncItemsAppRevisions => 'Mini app versions';
+
+  @override
+  String get syncItemsUserAppLibraries => 'Mini app libraries';
+
+  @override
+  String get syncItemsUserAppLibraryDependencies => 'Mini app library files';
+
+  @override
+  String cloudSyncNowError(String error) {
+    return 'Sync failed: $error';
+  }
+
+  @override
+  String cloudSyncLastRun(String time) {
+    return 'Last run: $time';
+  }
+
+  @override
+  String get cloudSyncNeverRun => 'Not synced on this device yet';
+
+  @override
+  String get cloudSyncEncryptionNotice =>
+      'Sync data is stored in your Google Drive without end-to-end encryption in this version. That means Google, anyone with access to your Google account, and anyone you share these files with can read it.';
+
+  @override
   String get dependencyLicenses => 'Dependency Library Licenses';
 
   @override
@@ -3585,6 +4073,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get startConversationHint => 'Start by asking the AI about your note.';
+
+  @override
+  String get attachmentMissing => 'Attachment not found.';
 
   @override
   String unsupportedAttachment(String type) {

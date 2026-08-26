@@ -182,6 +182,7 @@ void main() {
     EmbeddingProviderRegistry registry, {
     Set<String> consented = const {},
     Future<bool> Function()? networkAllowed,
+    Future<bool> Function()? figuresEnabledLoader,
     int? scanPageSize,
   }) {
     revokedConsent.clear();
@@ -193,6 +194,7 @@ void main() {
       debounceDelay: const Duration(milliseconds: 20),
       ocrExtractor: stubOcrExtractor(db),
       figureExtractor: stubFigureExtractor(),
+      figuresEnabledLoader: figuresEnabledLoader,
       embeddingRegistry: registry,
       vectorSearch: vectorSearch,
       embedConsentCheck: (key) async =>
@@ -203,6 +205,20 @@ void main() {
       embedScanPageSize: scanPageSize ?? 1000,
     );
     return indexer;
+  }
+
+  /// Writes the tombstone a deletion leaves behind — the exact shape
+  /// `DatabaseService.deleteNote` and the sync materializer use. The row
+  /// SURVIVES, which is the whole point: every "is this attachment still
+  /// there?" check has to ask `__deleted__`, not row presence.
+  Future<void> tombstoneAttachment(String attachmentId) async {
+    final raw = await db.database;
+    await raw.update(
+      'attachments',
+      {'__deleted__': 1},
+      where: 'id = ?',
+      whereArgs: [attachmentId],
+    );
   }
 
   Note buildNote(String id, {String? content}) => Note(
@@ -463,8 +479,9 @@ void main() {
   /// Seeds n1 with two attachment-derived chunks (a1, a2) and embeds them,
   /// with the matrix loaded so later patches are what change it.
   Future<({int a1, int a2, Float32List a1Vector})> seedTwoEmbedded(
-    EmbeddingProviderRegistry registry,
-  ) async {
+    EmbeddingProviderRegistry registry, {
+    Future<bool> Function()? figuresEnabledLoader,
+  }) async {
     await db.insertNote(buildNote('n1'));
     final raw = await db.database;
     await insertAttachmentRow(raw, id: 'a1');
@@ -483,7 +500,11 @@ void main() {
         'updatedAt': 0,
       });
     }
-    buildIndexer(registry, consented: {configA.providerKey});
+    buildIndexer(
+      registry,
+      consented: {configA.providerKey},
+      figuresEnabledLoader: figuresEnabledLoader,
+    );
     // Load the (empty) matrix FIRST: everything it serves from here on got
     // there by patch, never by a reload from sqlite.
     await vectorSearch.topK(configA.providerKey, Float32List(4)..[0] = 1);
@@ -612,6 +633,145 @@ void main() {
     expect(ids, isNot(contains(seeded.a1)));
     expect(ids, contains(seeded.a2));
     expect(await reachable(seeded.a1Vector), isNot(contains(seeded.a1)));
+  });
+
+  // ── Deleted attachments (tombstones) ───────────────────────────────────────
+  //
+  // Deletion is a TOMBSTONE write (`__deleted__ = 1`), so the `attachments`
+  // row outlives the attachment. Both embed scans LEFT JOIN `attachments`, and
+  // a tombstoned row joins exactly like a live one — so without the liveness
+  // filter on the join, `_passesEmbedPolicy`'s "no attachment row" branch is
+  // dead code for a deleted attachment and its includeInAIContext / embed
+  // flags are read off a row that no longer exists.
+  //
+  // Both tests land the tombstone MID-BACKFILL, after `_purgeOrphanRows` has
+  // already run: that is not a contrivance but the window a remote deletion
+  // materialized by cloud sync actually arrives in, and the only one where the
+  // orphan sweep is not standing in front of the bug.
+
+  test('an attachment tombstoned mid-pass never has its text handed to the '
+      'provider', () async {
+    final registry = buildRegistry();
+    await registry.setActiveConfig(configA);
+    await db.insertNote(buildNote('n1'));
+    final raw = await db.database;
+    await insertAttachmentRow(raw, id: 'a1');
+    await insertAttachmentRow(raw, id: 'a2');
+    for (final entry in [
+      ('a1', 'deleted on the other device'),
+      ('a2', 'still attached'),
+    ]) {
+      await raw.insert('search_chunks', {
+        'chunkKey': 'n1:attachment_text:${entry.$1}:1',
+        'noteId': 'n1',
+        'sourceType': 'attachment_text',
+        'sourceId': entry.$1,
+        'page': 1,
+        'seq': 1,
+        'text': entry.$2,
+        'meta': null,
+        'contentHash': 'h_${entry.$1}',
+        'updatedAt': 0,
+      });
+    }
+
+    // The wifi-only gate is consulted between the policy purge and the gap
+    // scan, so tombstoning here reproduces a sync deletion landing after this
+    // pass's own purge — the gap scan itself is then the last line of defence.
+    var landed = false;
+    buildIndexer(
+      registry,
+      consented: {configA.providerKey},
+      networkAllowed: () async {
+        if (!landed) {
+          landed = true;
+          await tombstoneAttachment('a1');
+        }
+        return true;
+      },
+    );
+    await indexer.backfillAll();
+    expect(landed, isTrue, reason: 'the tombstone seam has to have fired');
+
+    final provider = providers[configA.providerKey]!;
+    expect(
+      provider.embeddedTexts,
+      isNot(contains('deleted on the other device')),
+      reason: 'a deleted attachment must never reach an embedding provider',
+    );
+    expect(
+      provider.embeddedTexts,
+      contains('still attached'),
+      reason: 'the live attachment still embeds — this is a filter, not a halt',
+    );
+
+    // And nothing was stored for it either, so a later query cannot serve it.
+    final a1Chunk = (await raw.query(
+      'search_chunks',
+      columns: ['id'],
+      where: 'sourceId = ?',
+      whereArgs: ['a1'],
+    )).single['id'];
+    expect(
+      (await embeddingRows()).map((row) => row['chunkId']),
+      isNot(contains(a1Chunk)),
+    );
+  });
+
+  test('the purge reclaims a tombstoned attachment\'s stored vectors and '
+      'patches them out of the matrix', () async {
+    final registry = buildRegistry();
+    await registry.setActiveConfig(configA);
+    // Armed only for the SECOND sweep: the first one has to embed a1
+    // normally, or there would be no stored vector left to reclaim.
+    var arm = false;
+    var landed = false;
+    final seeded = await seedTwoEmbedded(
+      registry,
+      // The figures policy hash is read inside the figures backfill — after
+      // the orphan sweep, before the embed pass. A tombstone landing there
+      // survives into the pass, so the embed policy purge is the only thing
+      // that can still reclaim the vectors.
+      figuresEnabledLoader: () async {
+        if (arm && !landed) {
+          landed = true;
+          await tombstoneAttachment('a1');
+        }
+        return true;
+      },
+    );
+    expect(await reachable(seeded.a1Vector), contains(seeded.a1));
+
+    arm = true;
+    await indexer.backfillAll();
+    await Future<void>.delayed(Duration.zero);
+    expect(landed, isTrue, reason: 'the tombstone seam has to have fired');
+
+    final ids = (await embeddingRows()).map((row) => row['chunkId']);
+    expect(
+      ids,
+      isNot(contains(seeded.a1)),
+      reason: 'the deleted attachment keeps no stored vector',
+    );
+    expect(ids, contains(seeded.a2), reason: 'only the deleted one goes');
+    expect(
+      await reachable(seeded.a1Vector),
+      isNot(contains(seeded.a1)),
+      reason: 'the matrix is patched incrementally, not left to a reload',
+    );
+
+    // The chunk row itself is still here: this sweep's orphan pass ran before
+    // the tombstone landed. That is what makes the assertions above about the
+    // POLICY purge and not about the orphan sweep deleting the chunk wholesale.
+    final rawDb = await db.database;
+    expect(
+      await rawDb.query(
+        'search_chunks',
+        where: 'id = ?',
+        whereArgs: [seeded.a1],
+      ),
+      hasLength(1),
+    );
   });
 
   test('note-born chunks are never touched by the purge', () async {

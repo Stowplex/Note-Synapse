@@ -49,6 +49,12 @@ dependencies:
   rhttp:
     path: third_party/rhttp/rhttp
   crypto: ^3.0.3
+  # M3.3 — end-to-end encryption (requirement 5, § 8.5's "audited AEAD").
+  # Pure Dart: AES-GCM, ChaCha20-Poly1305, Argon2id and PBKDF2, with no
+  # platform channels and no native build step, so it cannot pull in Google
+  # Play Services (requirement 12). Its own dependencies (collection, crypto,
+  # ffi, meta, typed_data) are all already in this tree.
+  cryptography: ^2.9.0
 
   # Local AI inference
   flutter_gemma: ^0.16.4

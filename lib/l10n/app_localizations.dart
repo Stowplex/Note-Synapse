@@ -3080,12 +3080,6 @@ abstract class AppLocalizations {
   /// **'Error generating PDF: {error}'**
   String errorGeneratingPdf(String error);
 
-  /// No description provided for @attachmentMissing.
-  ///
-  /// In en, this message translates to:
-  /// **'Attachment not found.'**
-  String get attachmentMissing;
-
   /// No description provided for @attachmentUnavailable.
   ///
   /// In en, this message translates to:
@@ -5420,6 +5414,672 @@ abstract class AppLocalizations {
   /// **'Onboarding flag reset'**
   String get resetOnboardingSuccess;
 
+  /// No description provided for @triggerSyncTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Trigger Sync'**
+  String get triggerSyncTitle;
+
+  /// No description provided for @triggerSyncSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Run one sync round against an in-memory debug backend (no real device pairing)'**
+  String get triggerSyncSubtitle;
+
+  /// No description provided for @triggerSyncRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing…'**
+  String get triggerSyncRunning;
+
+  /// No description provided for @triggerSyncResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync complete — drained {touches}, seeded {seeded}, pulled {pulled}, pushed {pushed}'**
+  String triggerSyncResult(int touches, int seeded, int pulled, int pushed);
+
+  /// No description provided for @triggerSyncError.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync failed: {error}'**
+  String triggerSyncError(String error);
+
+  /// No description provided for @cloudSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud Sync'**
+  String get cloudSync;
+
+  /// No description provided for @cloudSyncSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync your notes across devices using Google Drive'**
+  String get cloudSyncSubtitle;
+
+  /// No description provided for @cloudSyncAccountSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Google Drive account'**
+  String get cloudSyncAccountSection;
+
+  /// No description provided for @cloudSyncStateNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available in this build'**
+  String get cloudSyncStateNotConfigured;
+
+  /// No description provided for @cloudSyncStateNotConfiguredDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'This build has no Google OAuth client configured, so it cannot connect to Google Drive.'**
+  String get cloudSyncStateNotConfiguredDetail;
+
+  /// No description provided for @cloudSyncStateDisconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected'**
+  String get cloudSyncStateDisconnected;
+
+  /// No description provided for @cloudSyncStateDisconnectedDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect a Google account to store your sync data in its Drive.'**
+  String get cloudSyncStateDisconnectedDetail;
+
+  /// No description provided for @cloudSyncStateConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get cloudSyncStateConnected;
+
+  /// No description provided for @cloudSyncStateConnectedDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Note Synapse can read and write only the files it creates in your Drive.'**
+  String get cloudSyncStateConnectedDetail;
+
+  /// No description provided for @cloudSyncStateNoRefreshToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected, but the session will expire'**
+  String get cloudSyncStateNoRefreshToken;
+
+  /// No description provided for @cloudSyncStateNoRefreshTokenDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Google did not return a long-lived token. Disconnect and connect again; if it keeps happening, sync will stop working about an hour after each connection.'**
+  String get cloudSyncStateNoRefreshTokenDetail;
+
+  /// No description provided for @cloudSyncConnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Google Drive'**
+  String get cloudSyncConnect;
+
+  /// No description provided for @cloudSyncConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for Google sign-in…'**
+  String get cloudSyncConnecting;
+
+  /// No description provided for @cloudSyncConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected to Google Drive'**
+  String get cloudSyncConnected;
+
+  /// No description provided for @cloudSyncConnectError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect: {error}'**
+  String cloudSyncConnectError(String error);
+
+  /// No description provided for @cloudSyncDisconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect'**
+  String get cloudSyncDisconnect;
+
+  /// No description provided for @cloudSyncDisconnectConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove the stored Google Drive credentials from this device? Nothing already synced to Drive is deleted, and you can connect again at any time.'**
+  String get cloudSyncDisconnectConfirm;
+
+  /// No description provided for @cloudSyncDisconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnected from Google Drive'**
+  String get cloudSyncDisconnected;
+
+  /// No description provided for @cloudSyncDatasetSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync dataset'**
+  String get cloudSyncDatasetSection;
+
+  /// No description provided for @cloudSyncDatasetPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set up yet'**
+  String get cloudSyncDatasetPending;
+
+  /// No description provided for @cloudSyncDatasetPendingDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a sync dataset in your Drive, or join the one that is already there.'**
+  String get cloudSyncDatasetPendingDetail;
+
+  /// No description provided for @cloudSyncDatasetInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Setup was interrupted'**
+  String get cloudSyncDatasetInProgress;
+
+  /// No description provided for @cloudSyncDatasetInProgressDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'The last setup attempt did not finish. Running it again is safe.'**
+  String get cloudSyncDatasetInProgressDetail;
+
+  /// No description provided for @cloudSyncDatasetReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get cloudSyncDatasetReady;
+
+  /// No description provided for @cloudSyncDatasetReadyDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'This device has joined the sync dataset.'**
+  String get cloudSyncDatasetReadyDetail;
+
+  /// No description provided for @cloudSyncDatasetSetUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up dataset'**
+  String get cloudSyncDatasetSetUp;
+
+  /// No description provided for @cloudSyncDatasetSettingUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Setting up…'**
+  String get cloudSyncDatasetSettingUp;
+
+  /// No description provided for @cloudSyncDatasetDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync dataset ready'**
+  String get cloudSyncDatasetDone;
+
+  /// No description provided for @cloudSyncDatasetError.
+  ///
+  /// In en, this message translates to:
+  /// **'Dataset setup failed: {error}'**
+  String cloudSyncDatasetError(String error);
+
+  /// No description provided for @cloudSyncDatasetMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync dataset is missing'**
+  String get cloudSyncDatasetMissing;
+
+  /// No description provided for @cloudSyncDatasetMissingDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'This device is set up for a sync dataset that is no longer in your Drive. Reset sync on this device to start over — your notes stay on this device.'**
+  String get cloudSyncDatasetMissingDetail;
+
+  /// No description provided for @cloudSyncFolderDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync folder'**
+  String get cloudSyncFolderDialogTitle;
+
+  /// No description provided for @cloudSyncFolderNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder name in Google Drive'**
+  String get cloudSyncFolderNameLabel;
+
+  /// No description provided for @cloudSyncFolderNameHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'A folder with this name is created in your Drive. You can rename or move it afterwards — this device remembers the folder itself, not its name. Another device can only FIND this folder by name if you give it the same name, so the folder ID below is the dependable way to connect two devices.'**
+  String get cloudSyncFolderNameHelp;
+
+  /// No description provided for @cloudSyncFolderNameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a folder name'**
+  String get cloudSyncFolderNameRequired;
+
+  /// No description provided for @cloudSyncFolderJoinLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Or join an existing folder by ID'**
+  String get cloudSyncFolderJoinLabel;
+
+  /// No description provided for @cloudSyncFolderJoinHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'On a device that is already syncing, copy the folder ID from this screen and paste it here. This is the reliable way to point a second device at the same data. Leave it empty to look the folder up by name instead.'**
+  String get cloudSyncFolderJoinHelp;
+
+  /// No description provided for @cloudSyncPassphraseLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Passphrase (optional)'**
+  String get cloudSyncPassphraseLabel;
+
+  /// No description provided for @cloudSyncPassphraseHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Set one to encrypt this dataset. It is chosen once, when the dataset is created, and cannot be added or removed later. Every device needs the same passphrase — if you lose it, the data cannot be recovered. Leave empty to sync unencrypted.'**
+  String get cloudSyncPassphraseHelp;
+
+  /// No description provided for @cloudSyncStorageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage cleanup'**
+  String get cloudSyncStorageTitle;
+
+  /// No description provided for @cloudSyncStorageScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for reclaimable files'**
+  String get cloudSyncStorageScan;
+
+  /// No description provided for @cloudSyncStorageNone.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to reclaim — every stored file is still in use.'**
+  String get cloudSyncStorageNone;
+
+  /// No description provided for @cloudSyncStoragePending.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file is no longer used and is waiting out its safety period} other{{count} files are no longer used and are waiting out their safety period}}'**
+  String cloudSyncStoragePending(int count);
+
+  /// No description provided for @cloudSyncStorageEligible.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file can be deleted now} other{{count} files can be deleted now}}'**
+  String cloudSyncStorageEligible(int count);
+
+  /// No description provided for @cloudSyncStorageBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'These files can only be deleted while this is the only device in the dataset. Another device is a member, and there is no way yet to know it will not need them.'**
+  String get cloudSyncStorageBlocked;
+
+  /// No description provided for @cloudSyncStorageDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete now'**
+  String get cloudSyncStorageDelete;
+
+  /// No description provided for @cloudSyncStorageConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete these files from Drive permanently? They are no longer used by any note, tag or mini app on this device, and have been unused long enough to be safe to remove. This cannot be undone.'**
+  String get cloudSyncStorageConfirm;
+
+  /// No description provided for @cloudSyncStorageDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Deleted 1 file} other{Deleted {count} files}}'**
+  String cloudSyncStorageDeleted(int count);
+
+  /// No description provided for @cloudSyncFolderContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get cloudSyncFolderContinue;
+
+  /// No description provided for @cloudSyncFolderName.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder: {name}'**
+  String cloudSyncFolderName(String name);
+
+  /// No description provided for @cloudSyncFolderId.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder ID: {id}'**
+  String cloudSyncFolderId(String id);
+
+  /// No description provided for @cloudSyncFolderIdHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Use this ID to set up another device.'**
+  String get cloudSyncFolderIdHint;
+
+  /// No description provided for @cloudSyncFolderNameFollowsDrive.
+  ///
+  /// In en, this message translates to:
+  /// **'The folder name now follows Drive. Rename the folder in Drive to change it.'**
+  String get cloudSyncFolderNameFollowsDrive;
+
+  /// No description provided for @cloudSyncFolderCreatedHere.
+  ///
+  /// In en, this message translates to:
+  /// **'This device created this sync dataset. If you meant to join one you already have, use Change folder and paste that folder’s ID.'**
+  String get cloudSyncFolderCreatedHere;
+
+  /// No description provided for @cloudSyncFolderIdPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder ID: not recorded yet — it appears here after the next sync.'**
+  String get cloudSyncFolderIdPending;
+
+  /// No description provided for @cloudSyncFolderChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change folder'**
+  String get cloudSyncFolderChange;
+
+  /// No description provided for @cloudSyncFolderChangeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Point this device at a different folder?'**
+  String get cloudSyncFolderChangeTitle;
+
+  /// No description provided for @cloudSyncFolderChangeConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Your notes, tags, conversations and attachments stay on this device, and nothing already in Drive is deleted.\n\nThis device leaves the dataset it is in now and joins the one in the folder you choose. To do that it resets its sync state: it takes a new sync identity, forgets what it has already synced, and re-offers everything it holds to the new folder. Where the new folder already has a different version, that version wins.\n\nAnything you deleted on this device but never managed to upload comes back, because this device also forgets the deletion. Whatever this device already uploaded to the OLD folder stays there and is not moved.'**
+  String get cloudSyncFolderChangeConfirm;
+
+  /// No description provided for @cloudSyncFolderPreviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Use this folder?'**
+  String get cloudSyncFolderPreviewTitle;
+
+  /// No description provided for @cloudSyncFolderPreviewHolds.
+  ///
+  /// In en, this message translates to:
+  /// **'“{name}” holds a sync dataset started on {date}.'**
+  String cloudSyncFolderPreviewHolds(String name, String date);
+
+  /// No description provided for @cloudSyncFolderPreviewEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'“{name}” is a Note Synapse sync folder, but it has no sync data in it yet. If you expected your notes to be there, check the ID on the other device.'**
+  String cloudSyncFolderPreviewEmpty(String name);
+
+  /// No description provided for @cloudSyncFolderPreviewUse.
+  ///
+  /// In en, this message translates to:
+  /// **'Use this folder'**
+  String get cloudSyncFolderPreviewUse;
+
+  /// No description provided for @cloudSyncFolderAmbiguous.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} folders in your Drive are called “{name}”, so this device cannot tell which one holds your sync data. Open Google Drive and rename or remove the ones you do not want to sync with, then try again.'**
+  String cloudSyncFolderAmbiguous(int count, String name);
+
+  /// No description provided for @cloudSyncFolderNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No folder with that ID is available to this app. Check that you copied the whole ID from the other device, and that both devices use the same Google account.'**
+  String get cloudSyncFolderNotFound;
+
+  /// No description provided for @cloudSyncDatasetCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Created a new sync folder. To sync another device with this one, set that device up with the folder ID shown here.'**
+  String get cloudSyncDatasetCreated;
+
+  /// No description provided for @cloudSyncDatasetJoined.
+  ///
+  /// In en, this message translates to:
+  /// **'Joined the sync dataset already in your Drive.'**
+  String get cloudSyncDatasetJoined;
+
+  /// No description provided for @cloudSyncReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset sync'**
+  String get cloudSyncReset;
+
+  /// No description provided for @cloudSyncResetting.
+  ///
+  /// In en, this message translates to:
+  /// **'Resetting…'**
+  String get cloudSyncResetting;
+
+  /// No description provided for @cloudSyncResetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset sync on this device?'**
+  String get cloudSyncResetTitle;
+
+  /// No description provided for @cloudSyncResetConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Your notes, tags, conversations and attachments stay on this device, and nothing already in Drive is deleted.\n\nThis device forgets what it has already synced: it takes a new sync identity and re-offers everything it holds. Where the cloud already has a different version of a note, the cloud\'s wins — including versions this device itself uploaded earlier. Edits made here that were never uploaded are the exception: they are re-sent and kept.\n\nTwo things can come back. Anything you deleted on this device but never managed to upload returns on the next sync, because this device also forgets the deletion. And a tag assignment or link that was removed on another device returns if this device still has it: the reset makes this device offer every connection it holds as new, and adding always wins over a removal it never saw.\n\nAfter the reset, set up the dataset again to start syncing.'**
+  String get cloudSyncResetConfirm;
+
+  /// No description provided for @cloudSyncResetDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync state reset — set up the dataset again to start syncing'**
+  String get cloudSyncResetDone;
+
+  /// No description provided for @cloudSyncResetError.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset failed: {error}'**
+  String cloudSyncResetError(String error);
+
+  /// No description provided for @cloudSyncNowSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync'**
+  String get cloudSyncNowSection;
+
+  /// No description provided for @cloudSyncNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync now'**
+  String get cloudSyncNow;
+
+  /// No description provided for @cloudSyncNowRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing…'**
+  String get cloudSyncNowRunning;
+
+  /// No description provided for @cloudSyncSeeding.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing existing data — {table} ({done} of {total} tables), {operations} operations so far'**
+  String cloudSyncSeeding(String table, int done, int total, int operations);
+
+  /// No description provided for @cloudSyncPushing.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading changes — {done} of {total} batches, {operations} changes sent'**
+  String cloudSyncPushing(int done, int total, int operations);
+
+  /// No description provided for @cloudSyncNowResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync complete — drained {touches}, seeded {seeded}, pulled {pulled}, pushed {pushed}'**
+  String cloudSyncNowResult(int touches, int seeded, int pulled, int pushed);
+
+  /// No description provided for @cloudSyncDegraded.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync finished, but some data did not sync'**
+  String get cloudSyncDegraded;
+
+  /// No description provided for @cloudSyncHealthDatasetMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The sync dataset this device joined is no longer in Drive, so nothing can sync. Reset sync on this device to start over.'**
+  String get cloudSyncHealthDatasetMissing;
+
+  /// No description provided for @cloudSyncHealthLogDiverged.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{This device\'s sync history no longer matches the copy in Drive, so its changes cannot be uploaded} other{{count} of this device\'s sync histories no longer match the copies in Drive, so its changes cannot be uploaded}}. Reset sync on this device to start over.'**
+  String cloudSyncHealthLogDiverged(int count);
+
+  /// No description provided for @userAppNoRunnableCode.
+  ///
+  /// In en, this message translates to:
+  /// **'This app\'s code hasn\'t arrived on this device'**
+  String get userAppNoRunnableCode;
+
+  /// No description provided for @userAppNoRunnableCodeDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Its details synced, but app code isn\'t uploaded to cloud sync yet. Open it on the device where you created it.'**
+  String get userAppNoRunnableCodeDetail;
+
+  /// No description provided for @userAppNoRunnableCodeLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'This app has no code yet'**
+  String get userAppNoRunnableCodeLocal;
+
+  /// No description provided for @userAppNoRunnableCodeLocalDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'No version of its code was ever saved, so its creation probably didn\'t finish. Edit the app to generate it again.'**
+  String get userAppNoRunnableCodeLocalDetail;
+
+  /// No description provided for @aiToolCodeNotSynced.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable — this tool\'s code hasn\'t arrived on this device yet.'**
+  String get aiToolCodeNotSynced;
+
+  /// No description provided for @cloudSyncHealthTablesNotSynced.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 kind of item does not sync yet} other{{count} kinds of item do not sync yet}}: {detail}'**
+  String cloudSyncHealthTablesNotSynced(int count, String detail);
+
+  /// No description provided for @cloudSyncHealthOperationsFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 change from another device could not be applied} other{{count} changes from other devices could not be applied}}: {detail}'**
+  String cloudSyncHealthOperationsFailed(int count, String detail);
+
+  /// No description provided for @cloudSyncHealthWaitingOnEntity.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 change is waiting for an item that has not arrived} other{{count} changes are waiting for items that have not arrived}}: {detail}'**
+  String cloudSyncHealthWaitingOnEntity(int count, String detail);
+
+  /// No description provided for @cloudSyncHealthWaitingOnDot.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 removal is waiting for a change this device has not seen yet} other{{count} removals are waiting for changes this device has not seen yet}}: {detail}'**
+  String cloudSyncHealthWaitingOnDot(int count, String detail);
+
+  /// No description provided for @cloudSyncHealthMembershipNotBuilt.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 link could not be recreated} other{{count} links could not be recreated}}: {detail}'**
+  String cloudSyncHealthMembershipNotBuilt(int count, String detail);
+
+  /// No description provided for @cloudSyncHealthIdentityConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 item from another device could not be added} other{{count} items from another device could not be added}}, because this device already has a copy of it: {detail}'**
+  String cloudSyncHealthIdentityConflict(int count, String detail);
+
+  /// No description provided for @cloudSyncHealthAttachmentBytesMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 attachment file has not arrived yet: {detail}} other{{count} attachment files have not arrived yet: {detail}}}'**
+  String cloudSyncHealthAttachmentBytesMissing(int count, String detail);
+
+  /// No description provided for @cloudSyncHealthSince.
+  ///
+  /// In en, this message translates to:
+  /// **'waiting since {time}'**
+  String cloudSyncHealthSince(String time);
+
+  /// No description provided for @syncItemsSubnotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Sub-tasks'**
+  String get syncItemsSubnotes;
+
+  /// No description provided for @syncItemsRelationships.
+  ///
+  /// In en, this message translates to:
+  /// **'Note links'**
+  String get syncItemsRelationships;
+
+  /// No description provided for @syncItemsAttachments.
+  ///
+  /// In en, this message translates to:
+  /// **'Note attachments'**
+  String get syncItemsAttachments;
+
+  /// No description provided for @syncItemsConversationAttachments.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat attachments'**
+  String get syncItemsConversationAttachments;
+
+  /// No description provided for @syncItemsUserApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Mini apps'**
+  String get syncItemsUserApps;
+
+  /// No description provided for @syncItemsAppRevisions.
+  ///
+  /// In en, this message translates to:
+  /// **'Mini app versions'**
+  String get syncItemsAppRevisions;
+
+  /// No description provided for @syncItemsUserAppLibraries.
+  ///
+  /// In en, this message translates to:
+  /// **'Mini app libraries'**
+  String get syncItemsUserAppLibraries;
+
+  /// No description provided for @syncItemsUserAppLibraryDependencies.
+  ///
+  /// In en, this message translates to:
+  /// **'Mini app library files'**
+  String get syncItemsUserAppLibraryDependencies;
+
+  /// No description provided for @cloudSyncNowError.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync failed: {error}'**
+  String cloudSyncNowError(String error);
+
+  /// No description provided for @cloudSyncLastRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Last run: {time}'**
+  String cloudSyncLastRun(String time);
+
+  /// No description provided for @cloudSyncNeverRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Not synced on this device yet'**
+  String get cloudSyncNeverRun;
+
+  /// No description provided for @cloudSyncEncryptionNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync data is stored in your Google Drive without end-to-end encryption in this version. That means Google, anyone with access to your Google account, and anyone you share these files with can read it.'**
+  String get cloudSyncEncryptionNotice;
+
   /// No description provided for @dependencyLicenses.
   ///
   /// In en, this message translates to:
@@ -6367,6 +7027,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Start by asking the AI about your note.'**
   String get startConversationHint;
+
+  /// No description provided for @attachmentMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Attachment not found.'**
+  String get attachmentMissing;
 
   /// No description provided for @unsupportedAttachment.
   ///

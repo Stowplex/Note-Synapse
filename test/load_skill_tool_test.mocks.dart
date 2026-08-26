@@ -41,9 +41,15 @@ class _FakeDatabase_0 extends _i1.SmartFake implements _i2.Database {
     : super(parent, parentInvocation);
 }
 
-class _FakeRawWriteResult_1 extends _i1.SmartFake
+class _FakeAppRevisionVisibility_1 extends _i1.SmartFake
+    implements _i3.AppRevisionVisibility {
+  _FakeAppRevisionVisibility_1(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeRawWriteResult_2 extends _i1.SmartFake
     implements _i3.RawWriteResult {
-  _FakeRawWriteResult_1(Object parent, Invocation parentInvocation)
+  _FakeRawWriteResult_2(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
@@ -509,9 +515,16 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i4.Future<void>);
 
   @override
-  _i4.Future<void> deleteRelationshipsForNote(String? noteId) =>
+  _i4.Future<void> deleteRelationshipsForNote(
+    String? noteId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#deleteRelationshipsForNote, [noteId]),
+            Invocation.method(
+              #deleteRelationshipsForNote,
+              [noteId],
+              {#executor: executor},
+            ),
             returnValue: _i4.Future<void>.value(),
             returnValueForMissingStub: _i4.Future<void>.value(),
           )
@@ -672,6 +685,90 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
             ),
           )
           as _i4.Future<List<Map<String, dynamic>>>);
+
+  @override
+  _i4.Future<_i3.AppRevisionVisibility> computeAppRevisionVisibility(
+    String? appId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #computeAppRevisionVisibility,
+              [appId],
+              {#executor: executor},
+            ),
+            returnValue: _i4.Future<_i3.AppRevisionVisibility>.value(
+              _FakeAppRevisionVisibility_1(
+                this,
+                Invocation.method(
+                  #computeAppRevisionVisibility,
+                  [appId],
+                  {#executor: executor},
+                ),
+              ),
+            ),
+          )
+          as _i4.Future<_i3.AppRevisionVisibility>);
+
+  @override
+  _i4.Future<String?> fallbackRevisionIdForApp(
+    String? appId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #fallbackRevisionIdForApp,
+              [appId],
+              {#executor: executor},
+            ),
+            returnValue: _i4.Future<String?>.value(),
+          )
+          as _i4.Future<String?>);
+
+  @override
+  _i4.Future<bool> isAppRevisionEffectivelyVisible(
+    String? revisionId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isAppRevisionEffectivelyVisible,
+              [revisionId],
+              {#executor: executor},
+            ),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
+
+  @override
+  _i4.Future<bool> isUserAppLibraryEffectivelyVisible(
+    int? libraryId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isUserAppLibraryEffectivelyVisible,
+              [libraryId],
+              {#executor: executor},
+            ),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
+
+  @override
+  _i4.Future<bool> isUserAppLibraryDependencyEffectivelyVisible(
+    int? dependencyId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #isUserAppLibraryDependencyEffectivelyVisible,
+              [dependencyId],
+              {#executor: executor},
+            ),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
 
   @override
   _i4.Future<String> insertUserApp(_i12.UserApp? app) =>
@@ -854,15 +951,6 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i4.Future<void>);
 
   @override
-  _i4.Future<void> deleteUserAppLibrariesForRevision(int? revisionId) =>
-      (super.noSuchMethod(
-            Invocation.method(#deleteUserAppLibrariesForRevision, [revisionId]),
-            returnValue: _i4.Future<void>.value(),
-            returnValueForMissingStub: _i4.Future<void>.value(),
-          )
-          as _i4.Future<void>);
-
-  @override
   _i4.Future<int> insertUserAppLibraryDependency({
     String? originalUrl,
     required String? localPath,
@@ -999,6 +1087,21 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
             returnValueForMissingStub: _i4.Future<void>.value(),
           )
           as _i4.Future<void>);
+
+  @override
+  _i4.Future<bool> computeConversationMessageVisibility(
+    String? messageId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #computeConversationMessageVisibility,
+              [messageId],
+              {#executor: executor},
+            ),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
 
   @override
   _i4.Future<String> insertConversationMessage(
@@ -1296,9 +1399,16 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i4.Future<void>);
 
   @override
-  _i4.Future<void> deleteNoteConversationMappings(String? noteId) =>
+  _i4.Future<void> deleteNoteConversationMappings(
+    String? noteId, {
+    _i2.DatabaseExecutor? executor,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#deleteNoteConversationMappings, [noteId]),
+            Invocation.method(
+              #deleteNoteConversationMappings,
+              [noteId],
+              {#executor: executor},
+            ),
             returnValue: _i4.Future<void>.value(),
             returnValueForMissingStub: _i4.Future<void>.value(),
           )
@@ -1469,6 +1579,17 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
           as _i4.Future<Map<String, List<String>>>);
 
   @override
+  _i4.Future<List<_i5.Note>> searchNotesFTS(
+    String? query, {
+    List<String>? tags,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#searchNotesFTS, [query], {#tags: tags}),
+            returnValue: _i4.Future<List<_i5.Note>>.value(<_i5.Note>[]),
+          )
+          as _i4.Future<List<_i5.Note>>);
+
+  @override
   _i4.Future<List<_i3.ChunkFtsMatch>> searchChunksLexical(
     String? ftsQuery, {
     int? limit = 5000,
@@ -1529,13 +1650,21 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
       (super.noSuchMethod(
             Invocation.method(#runRawWriteWithChangeCapture, [sql]),
             returnValue: _i4.Future<_i3.RawWriteResult>.value(
-              _FakeRawWriteResult_1(
+              _FakeRawWriteResult_2(
                 this,
                 Invocation.method(#runRawWriteWithChangeCapture, [sql]),
               ),
             ),
           )
           as _i4.Future<_i3.RawWriteResult>);
+
+  @override
+  _i4.Future<List<_i5.Note>> searchNotes(String? query) =>
+      (super.noSuchMethod(
+            Invocation.method(#searchNotes, [query]),
+            returnValue: _i4.Future<List<_i5.Note>>.value(<_i5.Note>[]),
+          )
+          as _i4.Future<List<_i5.Note>>);
 
   @override
   _i4.Future<String?> getTagExtractionPrompt(String? tagId) =>

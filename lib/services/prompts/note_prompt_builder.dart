@@ -354,8 +354,23 @@ class NotePromptBuilder {
       if (validAttachments.isNotEmpty) {
         buffer.writeln('$indent  Attachments:');
         for (final attachment in validAttachments) {
+          // **The file's presence is checked HERE too, and saying so
+          // matters.** `_addNoteAttachments` below skips any attachment whose
+          // file is not on disk — silently, with no log line — while this
+          // block listed it by name regardless. The model was told
+          // "report.pdf is attached" and given nothing, which is a
+          // hallucination the prompt itself invites.
+          //
+          // Rare until M2.14, routine after it: cloud sync now replicates
+          // `attachments` ROWS to a second device while the files stay behind
+          // (they live on disk and are not part of any operation — M3's blob
+          // mechanism is what will carry them). On a second device, every
+          // synced attachment hits this path.
+          final missing = !await attachment.exists();
           buffer.writeln(
-            '$indent    - ${attachment.fileName} (ID: ${attachment.id})',
+            '$indent    - ${attachment.fileName} (ID: ${attachment.id})'
+            '${missing ? ' [file not available on this device; its contents '
+                  'were NOT provided]' : ''}',
           );
         }
       }

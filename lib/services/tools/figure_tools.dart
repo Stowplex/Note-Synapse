@@ -824,13 +824,20 @@ class _LookupSession {
   }
 
   /// Title only — never loads `notes.content`, which can be very large.
+  ///
+  /// `__deleted__ = 0` for the same reason [FigureResolver] filters it:
+  /// deletion is a tombstone write, so the row survives and an unfiltered
+  /// lookup would hand a deleted note's title back to the model. The chunkKeys
+  /// reaching here come from an already-filtered search, so this is a second
+  /// guard rather than the only one — but it is the one that keeps the two
+  /// lookups saying the same thing.
   Future<String?> noteTitle(String noteId) async {
     if (_titles.containsKey(noteId)) return _titles[noteId];
     final db = await _db.database;
     final rows = await db.query(
       'notes',
       columns: ['title'],
-      where: 'id = ?',
+      where: 'id = ? AND __deleted__ = 0',
       whereArgs: [noteId],
       limit: 1,
     );

@@ -39,6 +39,8 @@ import 'web_session_service.dart';
 import 'app_domain_grant_service.dart';
 import 'crypto_service.dart';
 import 'plugin_task_service.dart';
+import 'sync/cloud_sync_service.dart';
+import 'sync/google_drive_auth_service.dart';
 import 'world_clip/frame_correction.dart';
 import 'world_clip/video_source.dart';
 import 'world_clip/screen_capture_service.dart';
@@ -347,6 +349,28 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<MarkerChatSendService>()) {
     getIt.registerLazySingleton<MarkerChatSendService>(
       () => MarkerChatSendService(),
+    );
+  }
+
+  // ============================================================
+  // WAVE 7: Cloud sync (M2.9)
+  // ============================================================
+  // Registered as lazy singletons so the OAuth token manager (and with it
+  // `OAuthTokenManager`'s per-instance in-flight-refresh de-duplication) and
+  // the cached Drive root-folder ID inside `GoogleDriveBackend` are shared
+  // by every caller, rather than each screen/tap building its own.
+  if (!getIt.isRegistered<GoogleDriveAuthService>()) {
+    getIt.registerLazySingleton<GoogleDriveAuthService>(
+      () => GoogleDriveAuthService(),
+    );
+  }
+
+  if (!getIt.isRegistered<CloudSyncService>()) {
+    getIt.registerLazySingleton<CloudSyncService>(
+      () => CloudSyncService(
+        getIt<DatabaseService>(),
+        authService: getIt<GoogleDriveAuthService>(),
+      ),
     );
   }
 

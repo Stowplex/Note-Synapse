@@ -557,7 +557,14 @@ void main() {
       );
       await writeDerivedAsset('att1', 1, 0);
       final raw = await db.database;
-      await raw.delete('notes', where: 'id = ?', whereArgs: ['n1']);
+      // Tombstone write: `notes` is hard-delete-guarded (M1.13), so a
+      // deleted owning note is a tombstoned row, not a missing one.
+      await raw.update(
+        'notes',
+        {'__deleted__': 1},
+        where: 'id = ?',
+        whereArgs: ['n1'],
+      );
 
       final resolution = await FigureResolver(db).resolve(figureId);
 

@@ -20,9 +20,18 @@ void main() {
       await databaseService.close();
     });
 
-    Future<void> createTestApp(String appUuid) async {
+    // M1.4: a library's owning revision must actually exist as an
+    // app_revisions row for the library to be effectively visible (see
+    // DatabaseService.computeAppRevisionVisibility's doc comment) — real
+    // production code (UserAppService) always inserts the revision before
+    // ever adding a library to it (see e.g.
+    // UserAppService.generateUserApp: insertAppRevision, THEN
+    // _downloadAndStoreLibraries -> addLibrary), so this fixture now does
+    // the same instead of only inserting the app.
+    Future<void> createTestApp(String appUuid, {int revisionNumber = 1}) async {
+      final appId = 'id-$appUuid';
       final app = UserApp(
-        id: 'id-$appUuid',
+        id: appId,
         uuid: appUuid,
         name: 'Test App $appUuid',
         description: 'Test Description',
@@ -33,6 +42,17 @@ void main() {
         type: UserAppType.normal,
       );
       await databaseService.insertUserApp(app);
+      await databaseService.insertAppRevision(
+        AppRevision(
+          id: '$appId-rev-$revisionNumber',
+          appId: appId,
+          revisionNumber: revisionNumber,
+          revisionTimestamp: DateTime.now(),
+          userPrompt: 'Test prompt',
+          aiResponse: 'Test response',
+          appCode: '<div>Test</div>',
+        ),
+      );
     }
 
     test('should create user app library', () async {

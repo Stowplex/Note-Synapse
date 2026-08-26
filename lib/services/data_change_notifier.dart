@@ -36,6 +36,22 @@ class DataChangeEvent {
   /// capture). Consumers should schedule a full reload.
   final bool bulk;
 
+  /// Above this many ids, publishing [bulk] beats publishing [noteIds].
+  ///
+  /// This is a property of the CONSUMERS, not of the notifier (which merges
+  /// ids for free): `AppProvider` re-fetches every id through a chunked
+  /// `WHERE id IN (...)` while holding its cache lock, and `NoteIndexService`
+  /// arms one debounce timer per id. Past a few hundred notes both cost more
+  /// than the single debounced reload / fingerprint-skipping completeness
+  /// sweep a `bulk` event triggers — and a very large targeted refresh also
+  /// walks straight into the SQLite variable limit on older Android sqlite.
+  ///
+  /// Lives here rather than on any one publisher so every producer degrades
+  /// at the same count: `SqlQueryService` (captured raw DML) and
+  /// `SyncChangePublisher` (a pulled sync round) are answering the identical
+  /// question and must not answer it differently.
+  static const int maxTargetedNoteIds = 200;
+
   bool get isEmpty =>
       noteIds.isEmpty &&
       !tagsChanged &&

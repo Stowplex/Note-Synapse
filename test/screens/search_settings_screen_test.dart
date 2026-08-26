@@ -17,6 +17,7 @@ import 'package:note_synapse/l10n/app_localizations.dart';
 import 'package:note_synapse/models/attachment.dart';
 import 'package:note_synapse/models/model_config.dart';
 import 'package:note_synapse/models/model_type.dart';
+import 'package:note_synapse/models/note.dart';
 import 'package:note_synapse/screens/search_settings_screen.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/model_storage_service.dart';
@@ -27,6 +28,7 @@ import 'package:note_synapse/services/search/embedding/local_embedding_model_man
 import 'package:note_synapse/services/search/note_index_service.dart';
 import 'package:note_synapse/services/search_settings_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 // ── Fakes ────────────────────────────────────────────────────────────────
 
@@ -1802,6 +1804,172 @@ void main() {
       await tester.pump(const Duration(seconds: 3));
       await _settle(tester);
       expect(find.text('OpenAI Small · semantic search on'), findsOneWidget);
+    });
+  });
+
+  // ── The default (production) loaders ───────────────────────────────────
+  //
+  // Every test above injects largePdfLoader/scopeLoader, so the SQL they
+  // default to is otherwise unexercised — and that SQL is the thing at risk
+  // now that deletion is a TOMBSTONE write. A deleted note's row and a
+  // deleted attachment's row both survive `deleteNote` and join exactly like
+  // live ones, so a query that leans on row presence keeps reporting them:
+  // the large-PDF card would name a deleted note and offer to index a
+  // deleted attachment, and the counts shown BEFORE consent — the one place
+  // an over-count is least acceptable — would promise to upload chunks the
+  // embed scan will skip.
+  //
+  // These run against a real sqlite database with the loaders omitted.
+
+  group('default loaders count only live rows', () {
+    late DatabaseService realDb;
+
+    setUp(() async {
+      realDb = DatabaseService.createNew();
+      // AFTER createNew (which installs the isolate-backed ffi factory on
+      // desktop): the no-isolate factory resolves every query on this
+      // isolate's microtask queue, which is what `tester.pump` drains. With
+      // the isolate factory the screen's own _load() would still be in
+      // flight when the assertions run.
+      databaseFactory = databaseFactoryFfiNoIsolate;
+      await realDb.database;
+      await getIt.unregister<DatabaseService>();
+      getIt.registerSingleton<DatabaseService>(realDb);
+    });
+
+    tearDown(() async {
+      await realDb.close();
+    });
+
+    /// One live note with an over-cap PDF, one DELETED note with an over-cap
+    /// PDF of its own, and one chunk per attachment plus a note chunk.
+    /// `deleteNote` is the real deletion path — it tombstones the note AND
+    /// its attachments, leaving every row physically present.
+    Future<void> seed() async {
+      final raw = await realDb.database;
+      for (final id in ['live', 'gone']) {
+        await realDb.insertNote(
+          Note(
+            id: id,
+            title: id == 'live' ? 'Live note' : 'Deleted note',
+            content: 'body',
+            type: NoteType.note,
+            createdAt: DateTime(2026, 1, 1),
+            updatedAt: DateTime(2026, 1, 1),
+          ),
+        );
+      }
+      for (final id in ['live', 'gone']) {
+        await raw.insert('attachments', {
+          'id': 'att-$id',
+          'noteId': id,
+          'filePath': '/tmp/$id.pdf',
+          'fileName': '$id.pdf',
+          'fileType': 'application/pdf',
+          'isRelativePath': 0,
+          'createdAt': DateTime(2026, 1, 1).millisecondsSinceEpoch,
+          'includeInAIContext': 1,
+        });
+        await raw.insert('search_index_state', {
+          'scopeType': 'attachment',
+          'scopeId': 'att-$id',
+          'stage': NoteIndexService.stagePdfText,
+          'contentHash': 'h|text=auto|cap=100|pages=512',
+          'status': NoteIndexService.statusSkippedTooLarge,
+          'updatedAt': 0,
+        });
+        await raw.insert('search_chunks', {
+          'chunkKey': '$id:attachment_text:att-$id:1',
+          'noteId': id,
+          'sourceType': 'attachment_text',
+          'sourceId': 'att-$id',
+          'page': 1,
+          'seq': 1,
+          'text': '$id pdf text',
+          'contentHash': 'c_$id',
+          'updatedAt': 0,
+        });
+      }
+      // A note-born chunk: no attachment join at all, so it is uploadable
+      // regardless and proves the filter is scoped to attachment chunks.
+      await raw.insert('search_chunks', {
+        'chunkKey': 'live:note:-:1',
+        'noteId': 'live',
+        'sourceType': 'note',
+        'sourceId': null,
+        'seq': 1,
+        'text': 'note body text',
+        'contentHash': 'c_note',
+        'updatedAt': 0,
+      });
+      await realDb.deleteNote('gone');
+    }
+
+    /// The screen with BOTH data loaders omitted — the point of this group.
+    Widget screen() => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: SearchSettingsScreen(
+        settingsService: _settings,
+        presetService: _presetService(),
+        figureSkillLoader: () async => null,
+      ),
+    );
+
+    testWidgets('the large-PDF card lists neither a deleted attachment nor '
+        'a deleted note title', (tester) async {
+      await tester.runAsync(seed);
+      await _pumpScreen(tester, screen());
+
+      expect(find.text('live.pdf'), findsOneWidget);
+      expect(find.text('Live note · 512 pages'), findsOneWidget);
+      expect(
+        find.text('gone.pdf'),
+        findsNothing,
+        reason: 'the deleted attachment is still a row, but not an attachment',
+      );
+      expect(
+        find.textContaining('Deleted note'),
+        findsNothing,
+        reason: 'a deleted note must not have its title rendered anywhere',
+      );
+      // The count comes from _defaultScope, the list from _defaultLargePdfs:
+      // they have to agree, or the card invents an "N more not shown".
+      expect(find.text('1 large PDF not indexed — review'), findsOneWidget);
+      expect(find.textContaining('more not shown'), findsNothing);
+    });
+
+    testWidgets('the rebuild scope counts live notes only', (tester) async {
+      await tester.runAsync(seed);
+      await _pumpScreen(tester, screen());
+
+      await tester.tap(find.text('Rebuild index'));
+      await tester.pumpAndSettle();
+      // 1 live note of the 2 rows in `notes`; all 3 chunks are still there
+      // (chunks are hard-deleted by the indexer's sweep, not tombstoned).
+      expect(
+        find.text('1 notes and 3 chunks will be re-checked.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the consent disclosure excludes a deleted attachment\'s '
+        'chunks', (tester) async {
+      await tester.runAsync(seed);
+      await _pumpScreen(tester, screen());
+
+      await _openPresetConfig(tester);
+      await tester.tap(find.text('Test connection'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Enable'));
+      await tester.pumpAndSettle();
+
+      // 3 chunks exist; the deleted attachment's is not one the embed scan
+      // would upload, so it must not be one this dialog promises either —
+      // the comment on _defaultScope's query says it mirrors
+      // NoteIndexService._scanEmbedGapIds, and this is that mirror held up.
+      expect(find.textContaining('About 2 chunks'), findsOneWidget);
+      expect(find.textContaining('About 3 chunks'), findsNothing);
     });
   });
 }

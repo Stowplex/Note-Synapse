@@ -217,6 +217,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   // AI tool support
   Map<String, AiToolAppBundle> _aiToolBundles = {};
   Map<String, List<McpTool>> _aiToolMcpMap = {};
+
+  /// Names of AI-tool apps that exist on this device but have no runnable
+  /// revision — their code has not arrived (M2.14 syncs the `user_apps` row
+  /// but not `app_revisions`). Kept so they can be listed disabled instead
+  /// of disappearing from the tool sheet with no explanation.
+  List<String> _unavailableAiToolNames = const [];
   final Set<String> _selectedAiToolServices = {};
   final Map<String, AiToolRuntime> _aiToolRuntimes = {};
   String? _toolExecutionStatus;
@@ -545,12 +551,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     final bundles = <String, AiToolAppBundle>{};
     final mcpMap = <String, List<McpTool>>{};
+    final unavailable = <String>[];
 
     for (final app in aiApps) {
       if (app.selectedRevisionId == null) {
         LoggerService.warning(
           'AI tool "${app.name}" has no selected revision.',
         );
+        unavailable.add(app.name);
         continue;
       }
 
@@ -562,6 +570,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           LoggerService.warning(
             'AI tool "${app.name}" selected revision not found.',
           );
+          unavailable.add(app.name);
           continue;
         }
 
@@ -592,6 +601,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     setState(() {
       _aiToolBundles = bundles;
       _aiToolMcpMap = mcpMap;
+      _unavailableAiToolNames = List.unmodifiable(unavailable);
       _selectedAiToolServices.removeWhere(
         (service) => !mcpMap.containsKey(service),
       );
@@ -2555,7 +2565,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
             ),
           // MCP Selection (Only show if not in scratchpad mode)
           if (!_isScratchpadMode &&
-              (_availableMcpEndpoints.isNotEmpty || _aiToolBundles.isNotEmpty))
+              (_availableMcpEndpoints.isNotEmpty ||
+                  _aiToolBundles.isNotEmpty ||
+                  _unavailableAiToolNames.isNotEmpty))
             _buildMcpSelectionSection(l10n),
           Expanded(
             child: Padding(
@@ -2834,7 +2846,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       ),
                     ],
 
-                    if (_aiToolBundles.isNotEmpty) ...[
+                    if (_aiToolBundles.isNotEmpty ||
+                        _unavailableAiToolNames.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Row(
                         children: [
@@ -2865,29 +2878,64 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                       Wrap(
                         spacing: 8,
                         runSpacing: 4,
-                        children: _aiToolBundles.entries.map((entry) {
-                          final serviceName = entry.key;
-                          final bundle = entry.value;
-                          final selected = _selectedAiToolServices.contains(
-                            serviceName,
-                          );
-                          return FilterChip(
-                            label: Text(bundle.displayName),
-                            selected: selected,
-                            onSelected: (value) {
-                              _toggleAiToolService(serviceName, value);
-                            },
-                            avatar: Icon(
-                              Icons.smart_toy,
-                              size: 16,
-                              color: selected
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurface.withOpacity(
-                                      0.6,
-                                    ),
+                        children: [
+                          ..._aiToolBundles.entries.map((entry) {
+                            final serviceName = entry.key;
+                            final bundle = entry.value;
+                            final selected = _selectedAiToolServices.contains(
+                              serviceName,
+                            );
+                            return FilterChip(
+                              label: Text(bundle.displayName),
+                              selected: selected,
+                              onSelected: (value) {
+                                _toggleAiToolService(serviceName, value);
+                              },
+                              avatar: Icon(
+                                Icons.smart_toy,
+                                size: 16,
+                                color: selected
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurface.withOpacity(
+                                        0.6,
+                                      ),
+                              ),
+                            );
+                          }),
+                          // Tools whose code has not arrived on this device.
+                          // Shown greyed out rather than omitted, so a
+                          // second device does not silently present a
+                          // shorter list; tapping explains why.
+                          ..._unavailableAiToolNames.map(
+                            (name) => ActionChip(
+                              label: Text(
+                                name,
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurface
+                                      .withValues(alpha: 0.4),
+                                ),
+                              ),
+                              backgroundColor: theme
+                                  .colorScheme
+                                  .surfaceContainerHighest
+                                  .withValues(alpha: 0.4),
+                              avatar: Icon(
+                                Icons.cloud_off_outlined,
+                                size: 16,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.4,
+                                ),
+                              ),
+                              onPressed: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(l10n.aiToolCodeNotSynced),
+                                  ),
+                                );
+                              },
                             ),
-                          );
-                        }).toList(),
+                          ),
+                        ],
                       ),
                     ],
                     // System Tools (native tools from AgentService)

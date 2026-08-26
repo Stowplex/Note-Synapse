@@ -99,6 +99,32 @@
                     android:host="oauth"
                     android:path="/callback"/>
             </intent-filter>
+
+            <!-- Google Drive sync OAuth redirect (M2.9).
+
+                 The scheme is substituted per build variant from
+                 `manifestPlaceholders["googleReversedClientId"]` in
+                 android/app/build.gradle.kts, so a debug install registers
+                 ONLY the debug client's scheme and a release install ONLY
+                 the release client's. Both variants can be installed side
+                 by side (debug carries applicationIdSuffix ".debug"), and
+                 with distinct schemes neither can intercept the other's
+                 authorization code.
+
+                 Scheme only, no host/path: Google's private-use redirect is
+                 `<scheme>:/oauth2redirect` — a scheme followed by a path,
+                 with no authority — and an Android <data> element that
+                 declares a path must also declare a host, which such a URI
+                 does not have. The scheme is already unique to this app's
+                 OAuth client, so scheme-only matching is unambiguous. The
+                 exact path is still verified in Dart by
+                 `OAuthRedirectHelper.matchesRedirect`. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="${googleReversedClientId}"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

@@ -667,14 +667,22 @@ class _SearchSettingsScreenState extends State<SearchSettingsScreen> {
 
   // ── Default (production) data loaders ──────────────────────────────────
 
+  /// `__deleted__ = 0` on both joins: deletion is a tombstone write, so the
+  /// `attachments`/`notes` rows survive it and the state row lingers until the
+  /// indexer's next orphan sweep. Without the filters this card keeps
+  /// advertising a deleted note's TITLE next to a deleted attachment's
+  /// fileName, and offers an "Index anyway" whose sweep
+  /// (`NoteIndexService._liveRowsPredicate`) would skip the attachment anyway.
+  /// The notes join stays OUTER — an attachment whose note row is simply
+  /// absent still lists, it just contributes no title.
   Future<List<LargePdfEntry>> _defaultLargePdfs() async {
     final db = await getIt<DatabaseService>().database;
     final rows = await db.rawQuery(
       'SELECT s.scopeId AS attachmentId, s.contentHash AS stateHash, '
       'a.fileName AS fileName, a.noteId AS noteId, n.title AS noteTitle '
       'FROM search_index_state s '
-      'JOIN attachments a ON a.id = s.scopeId '
-      'LEFT JOIN notes n ON n.id = a.noteId '
+      'JOIN attachments a ON a.id = s.scopeId AND a.__deleted__ = 0 '
+      'LEFT JOIN notes n ON n.id = a.noteId AND n.__deleted__ = 0 '
       "WHERE s.scopeType = 'attachment' AND s.status = ? "
       'GROUP BY s.scopeId '
       'ORDER BY a.fileName '
@@ -702,10 +710,13 @@ class _SearchSettingsScreenState extends State<SearchSettingsScreen> {
 
     // What the embed pass would actually upload, mirroring
     // NoteIndexService._scanEmbedGapIds' exclusions: empty-text chunks,
-    // orphaned attachment chunks, includeInAIContext = false, and
-    // `searchIndex.embed = false`. The last one is matched as a substring
-    // rather than json_extract: SQLite's JSON1 functions are not guaranteed
-    // on every Android system library this ships to, and the writer
+    // orphaned attachment chunks, DELETED attachments (the join carries the
+    // same `__deleted__ = 0` filter the scan does — a tombstoned row still
+    // joins, so without it this number promises to upload chunks the scan
+    // skips), includeInAIContext = false, and `searchIndex.embed = false`.
+    // The last one is matched as a substring rather than json_extract:
+    // SQLite's JSON1 functions are not guaranteed on every Android system
+    // library this ships to, and the writer
     // (AttachmentSearchIndexConfig.toJson through jsonEncode) always emits
     // the compact `"embed":false` form. Figures come back from the same
     // scan so the two numbers cannot disagree.
@@ -718,6 +729,7 @@ class _SearchSettingsScreenState extends State<SearchSettingsScreen> {
       LEFT JOIN attachments a
         ON a.id = c.sourceId
         AND c.sourceType IN ('attachment_text', 'attachment_ocr', 'figure')
+        AND a.__deleted__ = 0
       WHERE trim(c.text) != ''
         AND (a.id IS NOT NULL
              OR c.sourceType NOT IN
@@ -727,13 +739,22 @@ class _SearchSettingsScreenState extends State<SearchSettingsScreen> {
       ''');
 
     return SearchIndexScope(
-      notes: await count('SELECT COUNT(*) FROM notes'),
+      // `__deleted__ = 0`: a deleted note is a tombstone, not a removed row,
+      // so an unfiltered COUNT(*) over-reports "N notes will be sent" forever
+      // after the first deletion — and this number is the pre-consent
+      // disclosure, the one place an over-count is least acceptable.
+      notes: await count('SELECT COUNT(*) FROM notes WHERE __deleted__ = 0'),
       chunks: await count('SELECT COUNT(*) FROM search_chunks'),
       uploadableChunks: (uploadRows.first['chunks'] as int?) ?? 0,
       imageChunks: (uploadRows.first['figures'] as int?) ?? 0,
+      // Kept in lockstep with _defaultLargePdfs' own liveness filter: the
+      // card renders that LIST and subtracts it from this COUNT to say
+      // "N more not shown", so a tombstoned attachment counted here but
+      // absent there would invent a phantom remainder.
       largePdfs: await count(
-        'SELECT COUNT(DISTINCT scopeId) FROM search_index_state '
-        "WHERE scopeType = 'attachment' AND status = ?",
+        'SELECT COUNT(DISTINCT s.scopeId) FROM search_index_state s '
+        'JOIN attachments a ON a.id = s.scopeId AND a.__deleted__ = 0 '
+        "WHERE s.scopeType = 'attachment' AND s.status = ?",
         [NoteIndexService.statusSkippedTooLarge],
       ),
     );

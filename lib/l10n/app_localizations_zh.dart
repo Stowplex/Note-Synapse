@@ -1643,9 +1643,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get attachmentMissing => '找不到附件。';
-
-  @override
   String get attachmentUnavailable => '附件不可用';
 
   @override
@@ -2940,6 +2937,433 @@ class AppLocalizationsZh extends AppLocalizations {
   String get resetOnboardingSuccess => '引导页标志已重置';
 
   @override
+  String get triggerSyncTitle => '触发同步';
+
+  @override
+  String get triggerSyncSubtitle => '对内存中的调试后端运行一次同步（不进行真实设备配对）';
+
+  @override
+  String get triggerSyncRunning => '同步中…';
+
+  @override
+  String triggerSyncResult(int touches, int seeded, int pulled, int pushed) {
+    return '同步完成——已收集 $touches 项、已初始化 $seeded 项、拉取 $pulled 项、推送 $pushed 项';
+  }
+
+  @override
+  String triggerSyncError(String error) {
+    return '同步失败：$error';
+  }
+
+  @override
+  String get cloudSync => '云同步';
+
+  @override
+  String get cloudSyncSubtitle => '通过 Google 云端硬盘在多台设备间同步笔记';
+
+  @override
+  String get cloudSyncAccountSection => 'Google 云端硬盘账号';
+
+  @override
+  String get cloudSyncStateNotConfigured => '此版本不可用';
+
+  @override
+  String get cloudSyncStateNotConfiguredDetail =>
+      '此版本未配置 Google OAuth 客户端，无法连接 Google 云端硬盘。';
+
+  @override
+  String get cloudSyncStateDisconnected => '未连接';
+
+  @override
+  String get cloudSyncStateDisconnectedDetail => '连接 Google 账号，将同步数据保存到其云端硬盘中。';
+
+  @override
+  String get cloudSyncStateConnected => '已连接';
+
+  @override
+  String get cloudSyncStateConnectedDetail =>
+      'Note Synapse 只能读写它自己在你的云端硬盘中创建的文件。';
+
+  @override
+  String get cloudSyncStateNoRefreshToken => '已连接，但会话即将过期';
+
+  @override
+  String get cloudSyncStateNoRefreshTokenDetail =>
+      'Google 未返回长期令牌。请断开后重新连接；若反复出现，同步将在每次连接约一小时后停止工作。';
+
+  @override
+  String get cloudSyncConnect => '连接 Google 云端硬盘';
+
+  @override
+  String get cloudSyncConnecting => '等待 Google 登录…';
+
+  @override
+  String get cloudSyncConnected => '已连接到 Google 云端硬盘';
+
+  @override
+  String cloudSyncConnectError(String error) {
+    return '连接失败：$error';
+  }
+
+  @override
+  String get cloudSyncDisconnect => '断开连接';
+
+  @override
+  String get cloudSyncDisconnectConfirm =>
+      '要从本设备删除已保存的 Google 云端硬盘凭据吗？已同步到云端硬盘的数据不会被删除，你随时可以重新连接。';
+
+  @override
+  String get cloudSyncDisconnected => '已断开与 Google 云端硬盘的连接';
+
+  @override
+  String get cloudSyncDatasetSection => '同步数据集';
+
+  @override
+  String get cloudSyncDatasetPending => '尚未设置';
+
+  @override
+  String get cloudSyncDatasetPendingDetail => '在你的云端硬盘中创建同步数据集，或加入已存在的数据集。';
+
+  @override
+  String get cloudSyncDatasetInProgress => '设置被中断';
+
+  @override
+  String get cloudSyncDatasetInProgressDetail => '上次设置未完成。重新运行是安全的。';
+
+  @override
+  String get cloudSyncDatasetReady => '就绪';
+
+  @override
+  String get cloudSyncDatasetReadyDetail => '本设备已加入同步数据集。';
+
+  @override
+  String get cloudSyncDatasetSetUp => '设置数据集';
+
+  @override
+  String get cloudSyncDatasetSettingUp => '正在设置…';
+
+  @override
+  String get cloudSyncDatasetDone => '同步数据集已就绪';
+
+  @override
+  String cloudSyncDatasetError(String error) {
+    return '数据集设置失败：$error';
+  }
+
+  @override
+  String get cloudSyncDatasetMissing => '同步数据集已不存在';
+
+  @override
+  String get cloudSyncDatasetMissingDetail =>
+      '本设备关联的同步数据集已不在你的云端硬盘中。请重置本设备的同步以重新开始——你的笔记会保留在本设备上。';
+
+  @override
+  String get cloudSyncFolderDialogTitle => '同步文件夹';
+
+  @override
+  String get cloudSyncFolderNameLabel => 'Google 云端硬盘中的文件夹名称';
+
+  @override
+  String get cloudSyncFolderNameHelp =>
+      '将在你的云端硬盘中创建一个使用该名称的文件夹。之后你可以随意重命名或移动它——本设备记住的是文件夹本身，而不是它的名称。另一台设备只有在使用完全相同的名称时才能按名称找到这个文件夹，所以下面的文件夹 ID 才是连接两台设备的可靠方式。';
+
+  @override
+  String get cloudSyncFolderNameRequired => '请输入文件夹名称';
+
+  @override
+  String get cloudSyncFolderJoinLabel => '或使用文件夹 ID 加入已有文件夹';
+
+  @override
+  String get cloudSyncFolderJoinHelp =>
+      '在已经在同步的设备上，从本页面复制文件夹 ID 并粘贴到这里。这是让第二台设备指向同一份数据最可靠的方式。留空则改为按名称查找文件夹。';
+
+  @override
+  String get cloudSyncPassphraseLabel => '密码（可选）';
+
+  @override
+  String get cloudSyncPassphraseHelp =>
+      '设置密码即可加密该数据集。密码在创建数据集时确定一次，之后无法添加或移除。所有设备都需要使用相同的密码——一旦遗失，数据将无法恢复。留空则不加密同步。';
+
+  @override
+  String get cloudSyncStorageTitle => '存储清理';
+
+  @override
+  String get cloudSyncStorageScan => '检查可回收的文件';
+
+  @override
+  String get cloudSyncStorageNone => '没有可回收的内容——所有已存储的文件仍在使用中。';
+
+  @override
+  String cloudSyncStoragePending(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个文件已不再使用，正在等待安全期结束',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String cloudSyncStorageEligible(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个文件现在可以删除',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cloudSyncStorageBlocked =>
+      '只有当本设备是数据集中唯一的设备时才能删除这些文件。目前还有其他设备是成员，而且暂时无法确认它们是否还需要这些文件。';
+
+  @override
+  String get cloudSyncStorageDelete => '立即删除';
+
+  @override
+  String get cloudSyncStorageConfirm =>
+      '要从云端硬盘中永久删除这些文件吗？本设备上已没有任何笔记、标签或小应用在使用它们，并且它们闲置的时间已足够长，可以安全移除。此操作无法撤销。';
+
+  @override
+  String cloudSyncStorageDeleted(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已删除 $count 个文件',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cloudSyncFolderContinue => '继续';
+
+  @override
+  String cloudSyncFolderName(String name) {
+    return '文件夹：$name';
+  }
+
+  @override
+  String cloudSyncFolderId(String id) {
+    return '文件夹 ID：$id';
+  }
+
+  @override
+  String get cloudSyncFolderIdHint => '用这个 ID 来设置另一台设备。';
+
+  @override
+  String get cloudSyncFolderNameFollowsDrive =>
+      '文件夹名称现在以云端为准。要修改名称，请在云端硬盘中重命名。';
+
+  @override
+  String get cloudSyncFolderCreatedHere =>
+      '本设备创建了这个同步数据集。如果你本来想加入已有的数据集，请使用“更换文件夹”并粘贴那个文件夹的 ID。';
+
+  @override
+  String get cloudSyncFolderIdPending => '文件夹 ID：尚未记录——下次同步后会显示在这里。';
+
+  @override
+  String get cloudSyncFolderChange => '更换文件夹';
+
+  @override
+  String get cloudSyncFolderChangeTitle => '让本设备指向另一个文件夹？';
+
+  @override
+  String get cloudSyncFolderChangeConfirm =>
+      '你的笔记、标签、对话和附件都会保留在本设备上，云端硬盘中已有的内容也不会被删除。\n\n本设备将离开当前所在的数据集，加入你选择的文件夹中的数据集。为此它会重置自己的同步状态：获取一个新的同步身份，忘记已经同步过的内容，并把本机持有的全部内容重新提交给新文件夹。若新文件夹中已存在不同的版本，则以那个版本为准。\n\n你在本设备上删除但尚未上传的内容会重新出现，因为本设备同时也会忘记这些删除操作。本设备此前已上传到旧文件夹的内容会留在那里，不会被移动。';
+
+  @override
+  String get cloudSyncFolderPreviewTitle => '使用这个文件夹？';
+
+  @override
+  String cloudSyncFolderPreviewHolds(String name, String date) {
+    return '“$name”中存放着一个于 $date 创建的同步数据集。';
+  }
+
+  @override
+  String cloudSyncFolderPreviewEmpty(String name) {
+    return '“$name”是一个 Note Synapse 同步文件夹，但里面还没有任何同步数据。如果你以为笔记应该在这里，请到另一台设备上核对 ID。';
+  }
+
+  @override
+  String get cloudSyncFolderPreviewUse => '使用这个文件夹';
+
+  @override
+  String cloudSyncFolderAmbiguous(int count, String name) {
+    return '你的云端硬盘中有 $count 个名为“$name”的文件夹，本设备无法判断哪一个存放着你的同步数据。请打开 Google 云端硬盘，重命名或删除你不想用于同步的那些文件夹，然后重试。';
+  }
+
+  @override
+  String get cloudSyncFolderNotFound =>
+      '本应用无法访问该 ID 对应的文件夹。请确认你从另一台设备完整复制了 ID，并且两台设备使用的是同一个 Google 账号。';
+
+  @override
+  String get cloudSyncDatasetCreated =>
+      '已创建新的同步文件夹。要让另一台设备与本设备同步，请在设置那台设备时使用此处显示的文件夹 ID。';
+
+  @override
+  String get cloudSyncDatasetJoined => '已加入你云端硬盘中已有的同步数据集。';
+
+  @override
+  String get cloudSyncReset => '重置同步';
+
+  @override
+  String get cloudSyncResetting => '正在重置…';
+
+  @override
+  String get cloudSyncResetTitle => '重置本设备的同步？';
+
+  @override
+  String get cloudSyncResetConfirm =>
+      '你的笔记、标签、对话和附件会保留在本设备上，云端硬盘中已有的内容也不会被删除。\n\n本设备将忘记已同步的记录：它会启用新的同步身份，并重新提交本地全部内容。若云端已有该笔记的不同版本，以云端为准——包括本设备此前自己上传的版本。唯一的例外是本设备上尚未上传的修改：它们会被重新发送并保留。\n\n有两类内容会重新出现。一是你在本设备上删除、但尚未上传的内容，会在下次同步时回来，因为本设备同样忘记了这个删除操作。二是在其他设备上取消的标签关联或链接：只要本设备仍保留着它，重置后本设备会把持有的所有关联当作新增重新提交，而新增总是会胜过它未曾看到的那次取消。\n\n重置后，请重新设置数据集以开始同步。';
+
+  @override
+  String get cloudSyncResetDone => '同步状态已重置——请重新设置数据集以开始同步';
+
+  @override
+  String cloudSyncResetError(String error) {
+    return '重置失败：$error';
+  }
+
+  @override
+  String get cloudSyncNowSection => '同步';
+
+  @override
+  String get cloudSyncNow => '立即同步';
+
+  @override
+  String get cloudSyncNowRunning => '同步中…';
+
+  @override
+  String cloudSyncSeeding(String table, int done, int total, int operations) {
+    return '正在准备已有数据——$table（第 $done / $total 张表），已生成 $operations 项操作';
+  }
+
+  @override
+  String cloudSyncPushing(int done, int total, int operations) {
+    return '正在上传更改——第 $done / $total 批，已发送 $operations 项更改';
+  }
+
+  @override
+  String cloudSyncNowResult(int touches, int seeded, int pulled, int pushed) {
+    return '同步完成——已收集 $touches 项、已初始化 $seeded 项、拉取 $pulled 项、推送 $pushed 项';
+  }
+
+  @override
+  String get cloudSyncDegraded => '同步已完成，但部分数据未能同步';
+
+  @override
+  String get cloudSyncHealthDatasetMissing =>
+      '本设备加入的同步数据集已不在云端硬盘中，因此无法同步任何内容。请重置本设备的同步以重新开始。';
+
+  @override
+  String cloudSyncHealthLogDiverged(int count) {
+    return '本设备的 $count 条同步记录与云端硬盘中的副本不再一致，其更改无法上传。请重置本设备的同步以重新开始。';
+  }
+
+  @override
+  String get userAppNoRunnableCode => '此应用的代码尚未同步到本设备';
+
+  @override
+  String get userAppNoRunnableCodeDetail =>
+      '应用的信息已同步，但应用代码暂不支持云同步。请在创建它的设备上打开。';
+
+  @override
+  String get userAppNoRunnableCodeLocal => '此应用还没有代码';
+
+  @override
+  String get userAppNoRunnableCodeLocalDetail =>
+      '从未保存过任何版本的代码，创建过程可能未完成。请编辑此应用以重新生成代码。';
+
+  @override
+  String get aiToolCodeNotSynced => '不可用——此工具的代码尚未同步到本设备。';
+
+  @override
+  String cloudSyncHealthTablesNotSynced(int count, String detail) {
+    return '有 $count 类内容暂不支持同步：$detail';
+  }
+
+  @override
+  String cloudSyncHealthOperationsFailed(int count, String detail) {
+    return '来自其他设备的 $count 项更改无法应用：$detail';
+  }
+
+  @override
+  String cloudSyncHealthWaitingOnEntity(int count, String detail) {
+    return '$count 项更改正在等待尚未到达的条目：$detail';
+  }
+
+  @override
+  String cloudSyncHealthWaitingOnDot(int count, String detail) {
+    return '$count 项删除正在等待本设备尚未看到的更改：$detail';
+  }
+
+  @override
+  String cloudSyncHealthMembershipNotBuilt(int count, String detail) {
+    return '$count 个关联无法重建：$detail';
+  }
+
+  @override
+  String cloudSyncHealthIdentityConflict(int count, String detail) {
+    return '有 $count 项来自其他设备的内容无法添加，因为本设备上已有它的副本：$detail';
+  }
+
+  @override
+  String cloudSyncHealthAttachmentBytesMissing(int count, String detail) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个附件文件尚未同步到本设备：$detail',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String cloudSyncHealthSince(String time) {
+    return '自 $time 起等待中';
+  }
+
+  @override
+  String get syncItemsSubnotes => '子任务';
+
+  @override
+  String get syncItemsRelationships => '笔记关联';
+
+  @override
+  String get syncItemsAttachments => '笔记附件';
+
+  @override
+  String get syncItemsConversationAttachments => '对话附件';
+
+  @override
+  String get syncItemsUserApps => '小应用';
+
+  @override
+  String get syncItemsAppRevisions => '小应用版本';
+
+  @override
+  String get syncItemsUserAppLibraries => '小应用库';
+
+  @override
+  String get syncItemsUserAppLibraryDependencies => '小应用库文件';
+
+  @override
+  String cloudSyncNowError(String error) {
+    return '同步失败：$error';
+  }
+
+  @override
+  String cloudSyncLastRun(String time) {
+    return '上次运行：$time';
+  }
+
+  @override
+  String get cloudSyncNeverRun => '本设备尚未同步过';
+
+  @override
+  String get cloudSyncEncryptionNotice =>
+      '此版本中，同步数据以未端到端加密的形式存储在你的 Google 云端硬盘中。这意味着 Google、能访问你 Google 账号的人，以及你分享这些文件的对象都可以读取其内容。';
+
+  @override
   String get dependencyLicenses => '依赖库许可证';
 
   @override
@@ -3452,6 +3876,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get startConversationHint => '先向 AI 询问关于你的笔记。';
+
+  @override
+  String get attachmentMissing => '找不到附件。';
 
   @override
   String unsupportedAttachment(String type) {

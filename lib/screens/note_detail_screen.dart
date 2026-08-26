@@ -3147,7 +3147,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                         SelectableText(
                           fileExists
                               ? _formatFileSize(file.lengthSync())
-                              : 'File not found',
+                              : l10n.attachmentMissing,
                           style: TextStyle(
                             color: fileExists ? Colors.grey[600] : Colors.red,
                             fontSize: 12,

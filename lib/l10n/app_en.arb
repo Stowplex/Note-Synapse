@@ -704,7 +704,6 @@
       }
     }
   },
-  "attachmentMissing": "Attachment missing",
   "attachmentUnavailable": "Attachment unavailable",
   "pdfPreviewUnavailable": "PDF preview not available. Use the saved attachment to view.",
   "selectFileLocation": "Select file location",
@@ -1142,6 +1141,235 @@
   "resetOnboarding": "Reset Onboarding Flag",
   "resetOnboardingTitle": "Reset Onboarding Flag",
   "resetOnboardingSuccess": "Onboarding flag reset",
+  "triggerSyncTitle": "Trigger Sync",
+  "triggerSyncSubtitle": "Run one sync round against an in-memory debug backend (no real device pairing)",
+  "triggerSyncRunning": "Syncing…",
+  "triggerSyncResult": "Sync complete — drained {touches}, seeded {seeded}, pulled {pulled}, pushed {pushed}",
+  "@triggerSyncResult": {
+    "placeholders": {
+      "touches": {"type": "int"},
+      "seeded": {"type": "int"},
+      "pulled": {"type": "int"},
+      "pushed": {"type": "int"}
+    }
+  },
+  "triggerSyncError": "Sync failed: {error}",
+  "@triggerSyncError": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+
+  "cloudSync": "Cloud Sync",
+  "cloudSyncSubtitle": "Sync your notes across devices using Google Drive",
+  "cloudSyncAccountSection": "Google Drive account",
+  "cloudSyncStateNotConfigured": "Not available in this build",
+  "cloudSyncStateNotConfiguredDetail": "This build has no Google OAuth client configured, so it cannot connect to Google Drive.",
+  "cloudSyncStateDisconnected": "Not connected",
+  "cloudSyncStateDisconnectedDetail": "Connect a Google account to store your sync data in its Drive.",
+  "cloudSyncStateConnected": "Connected",
+  "cloudSyncStateConnectedDetail": "Note Synapse can read and write only the files it creates in your Drive.",
+  "cloudSyncStateNoRefreshToken": "Connected, but the session will expire",
+  "cloudSyncStateNoRefreshTokenDetail": "Google did not return a long-lived token. Disconnect and connect again; if it keeps happening, sync will stop working about an hour after each connection.",
+  "cloudSyncConnect": "Connect Google Drive",
+  "cloudSyncConnecting": "Waiting for Google sign-in…",
+  "cloudSyncConnected": "Connected to Google Drive",
+  "cloudSyncConnectError": "Could not connect: {error}",
+  "@cloudSyncConnectError": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "cloudSyncDisconnect": "Disconnect",
+  "cloudSyncDisconnectConfirm": "Remove the stored Google Drive credentials from this device? Nothing already synced to Drive is deleted, and you can connect again at any time.",
+  "cloudSyncDisconnected": "Disconnected from Google Drive",
+  "cloudSyncDatasetSection": "Sync dataset",
+  "cloudSyncDatasetPending": "Not set up yet",
+  "cloudSyncDatasetPendingDetail": "Create a sync dataset in your Drive, or join the one that is already there.",
+  "cloudSyncDatasetInProgress": "Setup was interrupted",
+  "cloudSyncDatasetInProgressDetail": "The last setup attempt did not finish. Running it again is safe.",
+  "cloudSyncDatasetReady": "Ready",
+  "cloudSyncDatasetReadyDetail": "This device has joined the sync dataset.",
+  "cloudSyncDatasetSetUp": "Set up dataset",
+  "cloudSyncDatasetSettingUp": "Setting up…",
+  "cloudSyncDatasetDone": "Sync dataset ready",
+  "cloudSyncDatasetError": "Dataset setup failed: {error}",
+  "@cloudSyncDatasetError": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "cloudSyncDatasetMissing": "Sync dataset is missing",
+  "cloudSyncDatasetMissingDetail": "This device is set up for a sync dataset that is no longer in your Drive. Reset sync on this device to start over — your notes stay on this device.",
+  "cloudSyncFolderDialogTitle": "Sync folder",
+  "cloudSyncFolderNameLabel": "Folder name in Google Drive",
+  "cloudSyncFolderNameHelp": "A folder with this name is created in your Drive. You can rename or move it afterwards — this device remembers the folder itself, not its name. Another device can only FIND this folder by name if you give it the same name, so the folder ID below is the dependable way to connect two devices.",
+  "cloudSyncFolderNameRequired": "Enter a folder name",
+  "cloudSyncFolderJoinLabel": "Or join an existing folder by ID",
+  "cloudSyncFolderJoinHelp": "On a device that is already syncing, copy the folder ID from this screen and paste it here. This is the reliable way to point a second device at the same data. Leave it empty to look the folder up by name instead.",
+  "cloudSyncPassphraseLabel": "Passphrase (optional)",
+  "cloudSyncPassphraseHelp": "Set one to encrypt this dataset. It is chosen once, when the dataset is created, and cannot be added or removed later. Every device needs the same passphrase — if you lose it, the data cannot be recovered. Leave empty to sync unencrypted.",
+  "cloudSyncStorageTitle": "Storage cleanup",
+  "cloudSyncStorageScan": "Check for reclaimable files",
+  "cloudSyncStorageNone": "Nothing to reclaim — every stored file is still in use.",
+  "cloudSyncStoragePending": "{count, plural, =1{1 file is no longer used and is waiting out its safety period} other{{count} files are no longer used and are waiting out their safety period}}",
+  "@cloudSyncStoragePending": {"placeholders": {"count": {"type": "int"}}},
+  "cloudSyncStorageEligible": "{count, plural, =1{1 file can be deleted now} other{{count} files can be deleted now}}",
+  "@cloudSyncStorageEligible": {"placeholders": {"count": {"type": "int"}}},
+  "cloudSyncStorageBlocked": "These files can only be deleted while this is the only device in the dataset. Another device is a member, and there is no way yet to know it will not need them.",
+  "cloudSyncStorageDelete": "Delete now",
+  "cloudSyncStorageConfirm": "Delete these files from Drive permanently? They are no longer used by any note, tag or mini app on this device, and have been unused long enough to be safe to remove. This cannot be undone.",
+  "cloudSyncStorageDeleted": "{count, plural, =1{Deleted 1 file} other{Deleted {count} files}}",
+  "@cloudSyncStorageDeleted": {"placeholders": {"count": {"type": "int"}}},
+  "cloudSyncFolderContinue": "Continue",
+  "cloudSyncFolderName": "Folder: {name}",
+  "@cloudSyncFolderName": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "cloudSyncFolderId": "Folder ID: {id}",
+  "@cloudSyncFolderId": {
+    "placeholders": {
+      "id": {"type": "String"}
+    }
+  },
+  "cloudSyncFolderIdHint": "Use this ID to set up another device.",
+  "cloudSyncFolderNameFollowsDrive": "The folder name now follows Drive. Rename the folder in Drive to change it.",
+  "cloudSyncFolderCreatedHere": "This device created this sync dataset. If you meant to join one you already have, use Change folder and paste that folder’s ID.",
+  "cloudSyncFolderIdPending": "Folder ID: not recorded yet — it appears here after the next sync.",
+  "cloudSyncFolderChange": "Change folder",
+  "cloudSyncFolderChangeTitle": "Point this device at a different folder?",
+  "cloudSyncFolderChangeConfirm": "Your notes, tags, conversations and attachments stay on this device, and nothing already in Drive is deleted.\n\nThis device leaves the dataset it is in now and joins the one in the folder you choose. To do that it resets its sync state: it takes a new sync identity, forgets what it has already synced, and re-offers everything it holds to the new folder. Where the new folder already has a different version, that version wins.\n\nAnything you deleted on this device but never managed to upload comes back, because this device also forgets the deletion. Whatever this device already uploaded to the OLD folder stays there and is not moved.",
+  "cloudSyncFolderPreviewTitle": "Use this folder?",
+  "cloudSyncFolderPreviewHolds": "“{name}” holds a sync dataset started on {date}.",
+  "@cloudSyncFolderPreviewHolds": {
+    "placeholders": {
+      "name": {"type": "String"},
+      "date": {"type": "String"}
+    }
+  },
+  "cloudSyncFolderPreviewEmpty": "“{name}” is a Note Synapse sync folder, but it has no sync data in it yet. If you expected your notes to be there, check the ID on the other device.",
+  "@cloudSyncFolderPreviewEmpty": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "cloudSyncFolderPreviewUse": "Use this folder",
+  "cloudSyncFolderAmbiguous": "{count} folders in your Drive are called “{name}”, so this device cannot tell which one holds your sync data. Open Google Drive and rename or remove the ones you do not want to sync with, then try again.",
+  "@cloudSyncFolderAmbiguous": {
+    "placeholders": {
+      "count": {"type": "int"},
+      "name": {"type": "String"}
+    }
+  },
+  "cloudSyncFolderNotFound": "No folder with that ID is available to this app. Check that you copied the whole ID from the other device, and that both devices use the same Google account.",
+  "cloudSyncDatasetCreated": "Created a new sync folder. To sync another device with this one, set that device up with the folder ID shown here.",
+  "cloudSyncDatasetJoined": "Joined the sync dataset already in your Drive.",
+  "cloudSyncReset": "Reset sync",
+  "cloudSyncResetting": "Resetting…",
+  "cloudSyncResetTitle": "Reset sync on this device?",
+  "cloudSyncResetConfirm": "Your notes, tags, conversations and attachments stay on this device, and nothing already in Drive is deleted.\n\nThis device forgets what it has already synced: it takes a new sync identity and re-offers everything it holds. Where the cloud already has a different version of a note, the cloud's wins — including versions this device itself uploaded earlier. Edits made here that were never uploaded are the exception: they are re-sent and kept.\n\nTwo things can come back. Anything you deleted on this device but never managed to upload returns on the next sync, because this device also forgets the deletion. And a tag assignment or link that was removed on another device returns if this device still has it: the reset makes this device offer every connection it holds as new, and adding always wins over a removal it never saw.\n\nAfter the reset, set up the dataset again to start syncing.",
+  "cloudSyncResetDone": "Sync state reset — set up the dataset again to start syncing",
+  "cloudSyncResetError": "Reset failed: {error}",
+  "@cloudSyncResetError": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "cloudSyncNowSection": "Sync",
+  "cloudSyncNow": "Sync now",
+  "cloudSyncNowRunning": "Syncing…",
+  "cloudSyncSeeding": "Preparing existing data — {table} ({done} of {total} tables), {operations} operations so far",
+  "@cloudSyncSeeding": {
+    "placeholders": {
+      "table": {"type": "String"},
+      "done": {"type": "int"},
+      "total": {"type": "int"},
+      "operations": {"type": "int"}
+    }
+  },
+  "cloudSyncPushing": "Uploading changes — {done} of {total} batches, {operations} changes sent",
+  "@cloudSyncPushing": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"},
+      "operations": {"type": "int"}
+    }
+  },
+  "cloudSyncNowResult": "Sync complete — drained {touches}, seeded {seeded}, pulled {pulled}, pushed {pushed}",
+  "@cloudSyncNowResult": {
+    "placeholders": {
+      "touches": {"type": "int"},
+      "seeded": {"type": "int"},
+      "pulled": {"type": "int"},
+      "pushed": {"type": "int"}
+    }
+  },
+  "cloudSyncDegraded": "Sync finished, but some data did not sync",
+  "cloudSyncHealthDatasetMissing": "The sync dataset this device joined is no longer in Drive, so nothing can sync. Reset sync on this device to start over.",
+  "cloudSyncHealthLogDiverged": "{count, plural, =1{This device's sync history no longer matches the copy in Drive, so its changes cannot be uploaded} other{{count} of this device's sync histories no longer match the copies in Drive, so its changes cannot be uploaded}}. Reset sync on this device to start over.",
+  "@cloudSyncHealthLogDiverged": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "userAppNoRunnableCode": "This app's code hasn't arrived on this device",
+  "userAppNoRunnableCodeDetail": "Its details synced, but app code isn't uploaded to cloud sync yet. Open it on the device where you created it.",
+  "userAppNoRunnableCodeLocal": "This app has no code yet",
+  "userAppNoRunnableCodeLocalDetail": "No version of its code was ever saved, so its creation probably didn't finish. Edit the app to generate it again.",
+  "aiToolCodeNotSynced": "Unavailable — this tool's code hasn't arrived on this device yet.",
+  "cloudSyncHealthTablesNotSynced": "{count, plural, =1{1 kind of item does not sync yet} other{{count} kinds of item do not sync yet}}: {detail}",
+  "@cloudSyncHealthTablesNotSynced": {
+    "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
+  },
+  "cloudSyncHealthOperationsFailed": "{count, plural, =1{1 change from another device could not be applied} other{{count} changes from other devices could not be applied}}: {detail}",
+  "@cloudSyncHealthOperationsFailed": {
+    "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
+  },
+  "cloudSyncHealthWaitingOnEntity": "{count, plural, =1{1 change is waiting for an item that has not arrived} other{{count} changes are waiting for items that have not arrived}}: {detail}",
+  "@cloudSyncHealthWaitingOnEntity": {
+    "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
+  },
+  "cloudSyncHealthWaitingOnDot": "{count, plural, =1{1 removal is waiting for a change this device has not seen yet} other{{count} removals are waiting for changes this device has not seen yet}}: {detail}",
+  "@cloudSyncHealthWaitingOnDot": {
+    "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
+  },
+  "cloudSyncHealthMembershipNotBuilt": "{count, plural, =1{1 link could not be recreated} other{{count} links could not be recreated}}: {detail}",
+  "@cloudSyncHealthMembershipNotBuilt": {
+    "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
+  },
+  "cloudSyncHealthIdentityConflict": "{count, plural, =1{1 item from another device could not be added} other{{count} items from another device could not be added}}, because this device already has a copy of it: {detail}",
+  "cloudSyncHealthAttachmentBytesMissing": "{count, plural, =1{1 attachment file has not arrived yet: {detail}} other{{count} attachment files have not arrived yet: {detail}}}",
+  "@cloudSyncHealthAttachmentBytesMissing": {"placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}},
+  "@cloudSyncHealthIdentityConflict": {
+    "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
+  },
+  "cloudSyncHealthSince": "waiting since {time}",
+  "@cloudSyncHealthSince": {
+    "placeholders": {"time": {"type": "String"}}
+  },
+  "syncItemsSubnotes": "Sub-tasks",
+  "syncItemsRelationships": "Note links",
+  "syncItemsAttachments": "Note attachments",
+  "syncItemsConversationAttachments": "Chat attachments",
+  "syncItemsUserApps": "Mini apps",
+  "syncItemsAppRevisions": "Mini app versions",
+  "syncItemsUserAppLibraries": "Mini app libraries",
+  "syncItemsUserAppLibraryDependencies": "Mini app library files",
+  "cloudSyncNowError": "Sync failed: {error}",
+  "@cloudSyncNowError": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "cloudSyncLastRun": "Last run: {time}",
+  "@cloudSyncLastRun": {
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+  "cloudSyncNeverRun": "Not synced on this device yet",
+  "cloudSyncEncryptionNotice": "Sync data is stored in your Google Drive without end-to-end encryption in this version. That means Google, anyone with access to your Google account, and anyone you share these files with can read it.",
+
   "dependencyLicenses": "Dependency Library Licenses",
 
   "refreshedToolsFor": "Refreshed tools for {name}",

@@ -2,8 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:note_synapse/services/database_service.dart';
 
-/// Tests for migration 46 -> 47: search_chunks, chunk_embeddings,
+/// Tests for migration 61 -> 62: search_chunks, chunk_embeddings,
 /// search_index_state tables + chunks_fts FTS4 virtual table + indexes.
+///
+/// 62, not 47: the layered-search migration was renumbered when this branch
+/// merged with cloud sync, which had already consumed 47..61. The upgrade
+/// these tests exercise is therefore the real one a shipped device performs
+/// — off the full cloud-sync schema (61) onto 62 — not a synthetic 46 -> 47
+/// hop that no database can ever be in.
 void main() {
   setUpAll(() {
     sqfliteFfiInit();
@@ -99,12 +105,14 @@ void main() {
   }
 
   test(
-    'migrating a v46 database to v47 creates the search index schema',
+    'migrating a v61 database to v62 creates the search index schema',
     () async {
       final dbName =
           'search_index_migration_test_${DateTime.now().microsecondsSinceEpoch}.db';
 
-      // 1. Create a fresh (v47) database, then strip it back to the v46 schema
+      // 1. Create a fresh (v62) database, then strip it back to the v61
+      // schema — every other table, including the fifteen sync_* control-
+      // plane tables and their triggers, stays exactly as v61 left it.
       final freshService = DatabaseService.createNew(databaseName: dbName);
       final freshDb = await freshService.database;
 
@@ -119,10 +127,10 @@ void main() {
       await freshDb.execute('DROP TABLE IF EXISTS chunk_embeddings');
       await freshDb.execute('DROP TABLE IF EXISTS search_index_state');
       await freshDb.execute('DROP INDEX IF EXISTS idx_attachments_noteId');
-      await freshDb.update('_schema_version', {'version': 46});
+      await freshDb.update('_schema_version', {'version': 61});
       await freshService.close();
 
-      // 2. Reopen: _handleCustomMigrations should run migration 47
+      // 2. Reopen: _handleCustomMigrations should run migration 62
       final migratedService = DatabaseService.createNew(databaseName: dbName);
       final migratedDb = await migratedService.database;
 
@@ -139,18 +147,35 @@ void main() {
       ]);
       expect(migratedSql, expectedSql);
 
+      // 4. Migration 62 is purely additive on top of the cloud-sync schema:
+      // the v61 control-plane tables it upgraded from are untouched.
+      final syncTables = await migratedDb.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' "
+        "AND name LIKE 'sync\\_%' ESCAPE '\\'",
+      );
+      expect(
+        syncTables.map((r) => r['name']),
+        containsAll(<String>[
+          'sync_field_state',
+          'sync_set_state',
+          'sync_pending_ops',
+          'sync_materialize_queue',
+        ]),
+        reason: 'the v61 sync control plane must survive migration 62',
+      );
+
       await migratedService.close();
     },
   );
 
   test(
-    'partially-applied migration 47 (crash mid-migration) completes on reopen',
+    'partially-applied migration 62 (crash mid-migration) completes on reopen',
     () async {
       final dbName =
           'search_index_partial_test_${DateTime.now().microsecondsSinceEpoch}.db';
 
-      // Simulate a crash after the first CREATE of migration 47: only
-      // search_chunks exists, version still 46.
+      // Simulate a crash after the first CREATE of migration 62: only
+      // search_chunks exists, version still 61.
       final freshService = DatabaseService.createNew(databaseName: dbName);
       final freshDb = await freshService.database;
       await freshDb.execute('DROP TABLE IF EXISTS chunks_fts');
@@ -160,10 +185,10 @@ void main() {
       await freshDb.execute('DROP INDEX IF EXISTS idx_search_chunks_key');
       await freshDb.execute('DROP INDEX IF EXISTS idx_search_chunks_noteId');
       await freshDb.execute('DROP INDEX IF EXISTS idx_search_chunks_source');
-      await freshDb.update('_schema_version', {'version': 46});
+      await freshDb.update('_schema_version', {'version': 61});
       await freshService.close();
 
-      // Reopen: migration 47 must re-run idempotently (IF NOT EXISTS) and
+      // Reopen: migration 62 must re-run idempotently (IF NOT EXISTS) and
       // create the missing objects instead of throwing on search_chunks.
       final migratedService = DatabaseService.createNew(databaseName: dbName);
       final migratedDb = await migratedService.database;

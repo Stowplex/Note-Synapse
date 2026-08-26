@@ -924,10 +924,16 @@ class SearchService {
     }
     final db = await _db.database;
     final placeholders = List.filled(missing.length, '?').join(',');
+    // `t.__deleted__ = 0`, matching DatabaseService.searchNotesFTS' tag
+    // EXISTS: a deleted tag is a tombstone, and `note_tags` is an OR-Set
+    // membership table that `deleteTag` hard-deletes alongside it — so the
+    // in-app path never produces a live membership row for a dead tag. One
+    // written out of band (sync, raw SQL) would, and the names loaded here
+    // decide a `requiredTags` scope, so a deleted tag must not satisfy it.
     final rows = await db.rawQuery('''
       SELECT nt.noteId, t.name
       FROM note_tags nt
-      JOIN tags t ON t.id = nt.tagId
+      JOIN tags t ON t.id = nt.tagId AND t.__deleted__ = 0
       WHERE nt.noteId IN ($placeholders)
     ''', missing);
     for (final row in rows) {

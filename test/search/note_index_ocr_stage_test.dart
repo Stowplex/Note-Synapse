@@ -415,7 +415,14 @@ void main() {
     expect(await ocrChunks('a1'), hasLength(1));
 
     final raw = await db.database;
-    await raw.delete('attachments', where: 'id = ?', whereArgs: ['a1']);
+    // Tombstone write: `attachments` is hard-delete-guarded (M1.13), so
+    // this is how an attachment actually goes away.
+    await raw.update(
+      'attachments',
+      {'__deleted__': 1},
+      where: 'id = ?',
+      whereArgs: ['a1'],
+    );
     await indexer.reindexNote('n1');
     await indexer.flushPending();
     expect(await ocrChunks('a1'), isEmpty);

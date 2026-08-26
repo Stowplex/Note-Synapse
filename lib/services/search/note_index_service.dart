@@ -1833,7 +1833,8 @@ class NoteIndexService {
     final policyHash = await _ocrPolicyHash();
     final rows = await db.rawQuery(
       'SELECT a.*, n.metadata AS _noteMetadata FROM attachments a '
-      'JOIN notes n ON n.id = a.noteId',
+      'JOIN notes n ON n.id = a.noteId '
+      '$_liveRowsPredicate',
     );
     final pending = <(Attachment, bool)>[];
     final pageTotals = <String, int>{};
@@ -2071,7 +2072,7 @@ class NoteIndexService {
     final rows = await db.query(
       'notes',
       columns: ['content'],
-      where: 'id = ?',
+      where: 'id = ? AND __deleted__ = 0',
       whereArgs: [noteId],
       limit: 1,
     );
@@ -2627,7 +2628,8 @@ class NoteIndexService {
     final policyHash = await _figuresPolicyHash();
     final rows = await db.rawQuery(
       'SELECT a.*, n.metadata AS _noteMetadata FROM attachments a '
-      'JOIN notes n ON n.id = a.noteId',
+      'JOIN notes n ON n.id = a.noteId '
+      '$_liveRowsPredicate',
     );
     final byNote = <String, List<(Attachment, bool)>>{};
     var total = 0;
@@ -3052,6 +3054,7 @@ class NoteIndexService {
         LEFT JOIN attachments a
           ON a.id = c.sourceId
           AND c.sourceType IN ('attachment_text','attachment_ocr','figure')
+          $_liveAttachmentJoinFilter
         LEFT JOIN search_index_state s
           ON s.scopeType = 'chunk' AND s.scopeId = CAST(c.id AS TEXT)
           AND s.stage = ?
@@ -3089,11 +3092,18 @@ class NoteIndexService {
   /// extends to embedding uploads), and one whose
   /// `metadata.searchIndex.embed` is false are never embedded. Rows must
   /// carry `sourceType`, `attachmentId`, `aiInclude` and `attachmentMetadata`.
+  ///
+  /// Every caller's `attachments` join carries [_liveAttachmentJoinFilter], so
+  /// a null `attachmentId` means "no LIVE attachment" — absent OR tombstoned.
+  /// Without that filter this null check is dead for a deleted attachment (the
+  /// tombstoned row still joins) and the `aiInclude`/`attachmentMetadata`
+  /// decisions below are read off a row that no longer exists.
   bool _passesEmbedPolicy(Map<String, Object?> row) {
     final sourceType = row['sourceType'] as String? ?? '';
     if (!_attachmentSourceTypes.contains(sourceType)) return true;
     if (row['attachmentId'] == null) {
-      return false; // Orphaned attachment chunk: the orphan sweep purges it.
+      // Orphaned or deleted attachment chunk: the orphan sweep purges it.
+      return false;
     }
     if ((row['aiInclude'] as int? ?? 1) == 0) {
       return false; // includeInAIContext = false: never uploaded (§2.3).
@@ -3149,7 +3159,8 @@ class NoteIndexService {
                a.metadata AS attachmentMetadata
         FROM chunk_embeddings e
         JOIN search_chunks c ON c.id = e.chunkId
-        LEFT JOIN attachments a ON a.id = c.sourceId
+        LEFT JOIN attachments a
+          ON a.id = c.sourceId $_liveAttachmentJoinFilter
         WHERE c.sourceType IN ('attachment_text','attachment_ocr','figure')
           AND c.id > ?
           ${scopeNoteId != null ? 'AND c.noteId = ?' : ''}
@@ -3233,7 +3244,8 @@ class NoteIndexService {
         JOIN chunk_embeddings e
           ON e.chunkId = c.id AND e.providerKey = ?
           AND e.contentHash = c.contentHash AND e.modality = 'text'
-        LEFT JOIN attachments a ON a.id = c.sourceId
+        LEFT JOIN attachments a
+          ON a.id = c.sourceId $_liveAttachmentJoinFilter
         LEFT JOIN search_index_state s
           ON s.scopeType = 'chunk' AND s.scopeId = CAST(c.id AS TEXT)
           AND s.stage = ?
@@ -3343,8 +3355,8 @@ class NoteIndexService {
         'a.fileName AS attFileName, a.filePath AS attFilePath, '
         'a.isRelativePath AS attIsRelative '
         'FROM search_chunks c '
-        "LEFT JOIN attachments a ON a.id = c.sourceId "
-        "AND c.sourceType = 'figure' "
+        'LEFT JOIN attachments a ON a.id = c.sourceId '
+        "AND c.sourceType = 'figure' $_liveAttachmentJoinFilter "
         'WHERE c.id IN ($placeholders)',
         slice,
       );
@@ -3958,7 +3970,8 @@ class NoteIndexService {
     await _purgeOrphanRows(db);
 
     final idRows = await db.rawQuery(
-      'SELECT id, metadata, length(content) AS contentLength FROM notes',
+      'SELECT id, metadata, length(content) AS contentLength FROM notes '
+      'WHERE __deleted__ = 0',
     );
     final noteIds = [for (final row in idRows) row['id'] as String];
     final metadataById = {
@@ -4204,7 +4217,8 @@ class NoteIndexService {
     final policyHash = await _pdfTextPolicyHash();
     final rows = await db.rawQuery(
       'SELECT a.*, n.metadata AS _noteMetadata FROM attachments a '
-      'JOIN notes n ON n.id = a.noteId',
+      'JOIN notes n ON n.id = a.noteId '
+      '$_liveRowsPredicate',
     );
     final work = <(Attachment, bool)>[];
     for (final row in rows) {
@@ -4303,14 +4317,14 @@ class NoteIndexService {
   Future<void> _purgeOrphanRows(Database db) async {
     final orphanRows = await db.rawQuery(
       'SELECT DISTINCT noteId FROM search_chunks '
-      'WHERE noteId NOT IN (SELECT id FROM notes)',
+      'WHERE noteId NOT IN ($_liveNoteIdsSql)',
     );
     for (final row in orphanRows) {
       await _serialized(() => _removeNoteNow(row['noteId'] as String));
     }
     await db.rawDelete(
       "DELETE FROM search_index_state WHERE scopeType = 'note' "
-      'AND scopeId NOT IN (SELECT id FROM notes)',
+      'AND scopeId NOT IN ($_liveNoteIdsSql)',
     );
     // Per-chunk embed error states whose chunk vanished via raw SQL, plus
     // orphaned embedding rows themselves.
@@ -4329,7 +4343,8 @@ class NoteIndexService {
     final orphanAttachmentChunks = await db.rawQuery(
       "SELECT id FROM search_chunks WHERE sourceType = 'attachment_text' "
       'AND sourceId NOT IN '
-      "(SELECT id FROM attachments WHERE fileName LIKE '%.pdf')",
+      "(SELECT id FROM attachments WHERE __deleted__ = 0 "
+      "AND fileName LIKE '%.pdf')",
     );
     if (orphanAttachmentChunks.isNotEmpty) {
       final ids = [for (final row in orphanAttachmentChunks) row['id'] as int];
@@ -4352,7 +4367,8 @@ class NoteIndexService {
     final orphanOcrChunks = await db.rawQuery(
       "SELECT id FROM search_chunks WHERE sourceType = 'attachment_ocr' "
       'AND sourceId NOT IN '
-      '(SELECT id FROM attachments WHERE $_ocrEligibleFileNameSql)',
+      '(SELECT id FROM attachments WHERE __deleted__ = 0 '
+      'AND ($_ocrEligibleFileNameSql))',
     );
     if (orphanOcrChunks.isNotEmpty) {
       final ids = [for (final row in orphanOcrChunks) row['id'] as int];
@@ -4374,7 +4390,8 @@ class NoteIndexService {
     final orphanFigureChunks = await db.rawQuery(
       "SELECT id, sourceId FROM search_chunks WHERE sourceType = 'figure' "
       'AND (sourceId IS NULL OR sourceId NOT IN '
-      '(SELECT id FROM attachments WHERE $_figureEligibleFileNameSql))',
+      '(SELECT id FROM attachments WHERE __deleted__ = 0 '
+      'AND ($_figureEligibleFileNameSql)))',
     );
     if (orphanFigureChunks.isNotEmpty) {
       final ids = [for (final row in orphanFigureChunks) row['id'] as int];
@@ -4398,7 +4415,8 @@ class NoteIndexService {
     }
     await db.rawDelete(
       "DELETE FROM search_index_state WHERE scopeType = 'attachment' "
-      'AND scopeId NOT IN (SELECT id FROM attachments)',
+      'AND scopeId NOT IN '
+      '(SELECT id FROM attachments WHERE __deleted__ = 0)',
     );
     // pdf_text state of attachments renamed away from .pdf: the stage no
     // longer applies to them (their chunks were purged above).
@@ -4423,6 +4441,33 @@ class NoteIndexService {
       [stageFigures],
     );
   }
+
+  /// Liveness predicates for the cloud-sync soft-delete model: `notes`,
+  /// `subnotes` and `attachments` are tombstoned (`__deleted__ = 1`), never
+  /// physically deleted, so "the row is still in the table" no longer means
+  /// "the note/attachment still exists". Everywhere this file used to lean
+  /// on row presence, it must lean on liveness instead — otherwise a deleted
+  /// note keeps its chunks forever and stays searchable.
+  ///
+  /// [_liveRowsPredicate] closes the `attachments a JOIN notes n` enumerations
+  /// the pdf_text/ocr/figures stages run; [_liveNoteIdsSql] is the id set the
+  /// orphan sweep compares `search_chunks.noteId` against.
+  ///
+  /// [_liveAttachmentJoinFilter] closes the embed stage's four
+  /// `LEFT JOIN attachments a ON a.id = c.sourceId` joins
+  /// ([_scanEmbedGapIds], [_purgeEmbedPolicyViolations],
+  /// [_scanFigureModalityUpgradeIds], [_loadEmbedGapBatch]). It belongs on the
+  /// JOIN and not in the WHERE: these are OUTER joins whose non-attachment
+  /// chunks must survive with a null `a` — a WHERE clause would drop every
+  /// note chunk instead. Filtering here is what makes
+  /// [_passesEmbedPolicy]'s null-`attachmentId` branch mean "no live
+  /// attachment"; without it a deleted attachment's chunk text reaches the
+  /// embedding provider, and the policy purge stops reclaiming its vectors.
+  static const String _liveRowsPredicate =
+      'WHERE a.__deleted__ = 0 AND n.__deleted__ = 0';
+  static const String _liveNoteIdsSql =
+      'SELECT id FROM notes WHERE __deleted__ = 0';
+  static const String _liveAttachmentJoinFilter = 'AND a.__deleted__ = 0';
 
   /// SQL predicate matching OCR-eligible fileNames (PDF + raster images).
   ///

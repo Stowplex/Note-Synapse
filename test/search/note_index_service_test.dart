@@ -256,7 +256,11 @@ void main() {
       expect(await chunksFor('n1'), isNotEmpty);
 
       final raw = await db.database;
-      await raw.delete('notes', where: "id = 'n1'"); // bypasses hooks
+      // Tombstone write, not a real DELETE: `notes` is hard-delete-guarded
+      // (M1.13) and deletion is soft-delete everywhere, so this IS the
+      // "row went away behind the indexer's back" case. Written straight to
+      // the connection, so it bypasses the hooks the same way.
+      await raw.update('notes', {'__deleted__': 1}, where: "id = 'n1'");
       await indexer.reindexNote('n1');
       expect(await chunksFor('n1'), isEmpty);
       expect(await noteState('n1'), isNull);
@@ -517,7 +521,9 @@ void main() {
       expect(await chunksFor('gone'), isNotEmpty);
 
       final raw = await db.database;
-      await raw.delete('notes', where: "id = 'gone'");
+      // Tombstone write: see the reindexNote case above — a real DELETE on
+      // `notes` is refused by the M1.13 hard-delete guard.
+      await raw.update('notes', {'__deleted__': 1}, where: "id = 'gone'");
       await indexer.backfillAll();
       expect(await chunksFor('gone'), isEmpty);
       expect(await noteState('gone'), isNull);
@@ -1160,7 +1166,14 @@ void main() {
       expect(await attachmentChunks('a1'), hasLength(1));
 
       final raw = await db.database;
-      await raw.delete('attachments', where: 'id = ?', whereArgs: ['a1']);
+      // Tombstone write: `attachments` is hard-delete-guarded (M1.13), so
+      // this is how an attachment actually goes away.
+      await raw.update(
+        'attachments',
+        {'__deleted__': 1},
+        where: 'id = ?',
+        whereArgs: ['a1'],
+      );
       await indexer.reindexNote('n1');
       await indexer.flushPending();
 

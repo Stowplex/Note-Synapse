@@ -22,13 +22,13 @@ Three pain points drive this work:
 - Vector search: sqflite can't load sqlite-vec (platform-channel sqlite). At mobile scale (<10k chunks × 768 dims ≈ 30 MB) a brute-force dot-product scan is <50 ms. Store L2-normalized float32 BLOBs; cosine = dot. No ANN needed.
 - Gemini embeddings: `gemini-embedding-001` (text, `task_type` RETRIEVAL_QUERY/DOCUMENT, needs re-normalization after Matryoshka truncation); `gemini-embedding-2` (multimodal: text/images/PDF≤6pp in one vector space, `output_dimensionality`, outputs already L2-normalized — normalize-if-needed per model). REST `:batchEmbedContents` on `generativelanguage.googleapis.com/v1beta` (same base URL `gemini_model.dart` already targets). Verify batch endpoint support for the embedding-2 preview model during implementation; fall back to per-item `:embedContent` if unsupported.
 
-**Platform risk (FTS4)**: Android system sqlite ships FTS3/4; iOS system sqlite currently has FTS4 (the shipped `notes_fts` proves it), but Apple already removed FTS3/4 from macOS 15+ — the repo compiles its own sqlite3 amalgamation for desktop/tests for exactly this reason (`pubspec.yaml:179-207`). Mitigation: a startup capability probe (`CREATE VIRTUAL TABLE temp.fts_probe USING fts4(x)` in try/catch) that flips search to the substring fallback if FTS4 is missing; named escape hatch if iOS ever drops FTS4: move mobile to `sqflite_common_ffi` riding the existing custom sqlite3 native-asset build (keeps FTS4 — consistent with the no-FTS5 decision). Web (`databaseFactoryFfiWeb`, wasm build is FTS5-only): migration 47 must wrap the FTS4 CREATE in try/catch and degrade to substring search, never hard-fail the upgrade.
+**Platform risk (FTS4)**: Android system sqlite ships FTS3/4; iOS system sqlite currently has FTS4 (the shipped `notes_fts` proves it), but Apple already removed FTS3/4 from macOS 15+ — the repo compiles its own sqlite3 amalgamation for desktop/tests for exactly this reason (`pubspec.yaml:179-207`). Mitigation: a startup capability probe (`CREATE VIRTUAL TABLE temp.fts_probe USING fts4(x)` in try/catch) that flips search to the substring fallback if FTS4 is missing; named escape hatch if iOS ever drops FTS4: move mobile to `sqflite_common_ffi` riding the existing custom sqlite3 native-asset build (keeps FTS4 — consistent with the no-FTS5 decision). Web (`databaseFactoryFfiWeb`, wasm build is FTS5-only): migration 62 (renumbered from 47 when this branch merged with cloud sync, which had already consumed 47..61) must wrap the FTS4 CREATE in try/catch and degrade to substring search, never hard-fail the upgrade.
 
 ---
 
 ## Phase 1 — Chunk index + lexical BM25 + search UX
 
-### 1.1 Schema (migration 46→47, `database_service.dart:94`)
+### 1.1 Schema (migration 61→62, `database_service.dart:94`)
 
 ```sql
 CREATE TABLE search_chunks (
@@ -104,7 +104,7 @@ CREATE INDEX idx_attachments_noteId ON attachments(noteId);  -- currently missin
 - `NoteSearchTool` (`note_tools.dart:27-86`) → `searchFused` with real snippets. Delete dead `searchNotes` LIKE method (`database_service.dart:5428-5439`).
 - l10n (en + zh) for all new strings.
 
-**Verify:** unit tests — normalizer (CJK bigrams, lone-char unigrams, CJK punctuation run-breaking, script-boundary limitation documented), `buildFtsQuery` (prefix/phrase/escaping/single-CJK-char), chunker, BM25 vs hand-computed matchinfo fixtures (including unaligned-buffer case), per-layer grouping + RRF; integration — Chinese fixture notes assert substring-equivalent recall, hook coverage test (note edit via AppProvider path → chunks update; note delete → chunks gone), migration 46→47, FTS4-probe-failure degradation; manual — latency, recovery round-trip re-backfills.
+**Verify:** unit tests — normalizer (CJK bigrams, lone-char unigrams, CJK punctuation run-breaking, script-boundary limitation documented), `buildFtsQuery` (prefix/phrase/escaping/single-CJK-char), chunker, BM25 vs hand-computed matchinfo fixtures (including unaligned-buffer case), per-layer grouping + RRF; integration — Chinese fixture notes assert substring-equivalent recall, hook coverage test (note edit via AppProvider path → chunks update; note delete → chunks gone), migration 61→62, FTS4-probe-failure degradation; manual — latency, recovery round-trip re-backfills.
 
 ---
 

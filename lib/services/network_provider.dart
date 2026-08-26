@@ -95,9 +95,29 @@ class NetworkProvider {
     _connectTimeout = await NetworkSettingsService.getConnectTimeout();
   }
 
+  /// How long a replaced HTTP/1.1 client is kept alive before being closed,
+  /// so requests already in flight on it can finish. See
+  /// [_createHttp11Client].
+  static const Duration _retiredClientGrace = Duration(seconds: 30);
+
+  /// Builds a new HTTP/1.1 client and swaps it in **before** retiring the
+  /// old one.
+  ///
+  /// The previous implementation closed first and awaited the replacement
+  /// second, which opened a window with two distinct problems: (a)
+  /// `_http11Client` was null while the new client was being created, so
+  /// `_getClientForHost`'s `_http11Client!` and [http11Client] could throw;
+  /// and (b) `RhttpCompatibleClient.close()` is
+  /// `dispose(cancelRunningRequests: true)` — it actively aborts in-flight
+  /// requests, so any request already running (a Drive blob upload, say)
+  /// died as a `ClientException` the moment the user changed an unrelated
+  /// network setting. Building first, swapping, then retiring the old
+  /// client after [_retiredClientGrace] closes both: new requests get the
+  /// new client immediately, and in-flight ones get a bounded window to
+  /// finish on the old one instead of being killed mid-transfer.
   Future<void> _createHttp11Client() async {
-    _http11Client?.close();
-    _http11Client = await RhttpCompatibleClient.create(
+    final previous = _http11Client;
+    final replacement = await RhttpCompatibleClient.create(
       settings: ClientSettings(
         httpVersionPref: HttpVersionPref.http1_1,
         timeoutSettings: TimeoutSettings(
@@ -108,6 +128,25 @@ class NetworkProvider {
         ),
       ),
     );
+    _http11Client = replacement;
+    if (previous != null) {
+      _retireClient(previous);
+    }
+  }
+
+  final Set<Timer> _retirementTimers = {};
+
+  void _retireClient(RhttpCompatibleClient client) {
+    late final Timer timer;
+    timer = Timer(_retiredClientGrace, () {
+      _retirementTimers.remove(timer);
+      try {
+        client.close();
+      } catch (_) {
+        // Already disposed — nothing to do.
+      }
+    });
+    _retirementTimers.add(timer);
   }
 
   Future<RhttpCompatibleClient> _getHttp3Client() async {
@@ -177,6 +216,72 @@ class NetworkProvider {
       }
     }
   }
+
+  /// The shared HTTP/1.1 [RhttpCompatibleClient], for callers that need a
+  /// real `http.Client` object rather than this class's static
+  /// `get`/`post`/... convenience methods — i.e. anything that hands an
+  /// `http.Client` to a third party (`GoogleDriveBackend`, M2.9) or needs
+  /// `Client.send()` and a `StreamedResponse`.
+  ///
+  /// Prefer [sharedClient] over this raw accessor: this one returns the
+  /// client object that exists *right now*, and [reloadSettings] closes and
+  /// replaces it whenever the user changes a network setting, so a
+  /// long-lived holder of this reference would end up using a closed client.
+  ///
+  /// Throws [StateError] if [init] has not run.
+  RhttpCompatibleClient get http11Client {
+    final client = _http11Client;
+    if (client == null) {
+      throw StateError(
+        'NetworkProvider HTTP/1.1 client is not available. Call '
+        'NetworkProvider.init() first.',
+      );
+    }
+    return client;
+  }
+
+  /// A stable, long-lived `http.Client` that routes through this provider's
+  /// rhttp stack — the thing to inject into anything that takes an
+  /// `http.Client`.
+  ///
+  /// Why a delegating wrapper rather than the client object itself:
+  ///  * [reloadSettings] disposes and recreates `_http11Client`. A consumer
+  ///    that captured the old object at wiring time would silently start
+  ///    failing after any network-settings change; this wrapper resolves
+  ///    the current client per request instead.
+  ///  * `close()` is a deliberate no-op. The underlying clients are owned
+  ///    by this provider and shared app-wide; a consumer calling `close()`
+  ///    on what it reasonably believes is "its" client must not take down
+  ///    every other caller's HTTP.
+  ///
+  /// **What this client does NOT do — read before using it.** Everything in
+  /// [_performRequest] is bypassed, because `send()` does not go through it.
+  /// Concretely, compared to `NetworkProvider.get/post/put/delete/head`:
+  ///
+  ///  * **No automatic retries.** [retriableStatusCodes] (408/425/429/500/
+  ///    502/503/504) are returned to the caller as ordinary responses, and
+  ///    transport exceptions propagate on the first failure. There is no
+  ///    exponential backoff. A consumer that wants retries must implement
+  ///    them itself.
+  ///  * **No HTTP/3.** Always the HTTP/1.1 client: the alt-svc-driven
+  ///    upgrade and, more importantly, its fallback-on-failure handling
+  ///    also live in [_performRequest]. Handing out a client that could
+  ///    silently switch to HTTP/3 with no fallback would turn an unrelated
+  ///    transport failure into what looks like an API error.
+  ///  * **No alt-svc probing and no AI-console request logging.**
+  ///
+  /// This is a deliberate division of labour, not an omission: the sole
+  /// consumer today, `GoogleDriveBackend`, already owns richer versions of
+  /// exactly these concerns — it maps 429/`rateLimitExceeded` to
+  /// `SyncRateLimitedException` (carrying Drive's own `Retry-After`), 5xx to
+  /// `SyncNetworkException`, and retries 401 once after forcing a token
+  /// refresh. A blind retry layer underneath that would replay
+  /// non-idempotent Drive creates and fight the backend's own semantics.
+  /// **If a future consumer needs generic retry/backoff, it must add it
+  /// itself (or wrap this client) — it will not get it from here.**
+  static http.Client get sharedClient => _sharedClient ??= _SharedRhttpClient();
+
+  static _SharedRhttpClient? _sharedClient;
 
   /// Perform a GET request with retry logic.
   static Future<http.Response> get(
@@ -406,9 +511,40 @@ class NetworkProvider {
   /// Dispose all resources.
   static void dispose() {
     _instance?._idleCleanupTimer?.cancel();
+    for (final timer in _instance?._retirementTimers ?? const <Timer>{}) {
+      timer.cancel();
+    }
+    _instance?._retirementTimers.clear();
     _instance?._http11Client?.close();
     _instance?._http3Client?.close();
     _instance = null;
+    // Deliberately NOT cleared: `_SharedRhttpClient` holds no state of its
+    // own — it resolves `NetworkProvider.instance` per request — so the
+    // same wrapper stays valid across an init/dispose/init cycle, and
+    // anything that captured it keeps working.
     LoggerService.info('NetworkProvider disposed');
   }
+}
+
+/// See [NetworkProvider.sharedClient] for why this indirection exists.
+///
+/// Streaming note (verified against `RhttpCompatibleClient.send`,
+/// `third_party/rhttp/rhttp/lib/src/client/compatible_client.dart`): rhttp's
+/// `send` issues `client.requestStream(...)` and returns a real
+/// [http.StreamedResponse] whose body is the live response stream, so
+/// `http.Response.fromStream(...)` and direct stream consumption both work.
+/// It also forces `throwOnStatusCode: false`, so non-2xx responses arrive as
+/// responses (which is what `GoogleDriveBackend`'s status-code mapping
+/// requires) rather than as thrown exceptions, and wraps every transport
+/// error in an [http.ClientException] subclass, which is exactly what
+/// `GoogleDriveBackend._send` already catches.
+class _SharedRhttpClient extends http.BaseClient {
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    return NetworkProvider.instance.http11Client.send(request);
+  }
+
+  /// No-op by design — see [NetworkProvider.sharedClient].
+  @override
+  void close() {}
 }

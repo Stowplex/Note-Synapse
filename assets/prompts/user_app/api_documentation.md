@@ -6,9 +6,12 @@
        * Read-only queries execute immediately: SELECT, bare PRAGMAs (e.g. PRAGMA user_version),
          and inspection PRAGMAs with arguments (table_info, table_list, index_list,
          foreign_key_list, integrity_check, ...)
-       * Write operations (INSERT, UPDATE, DELETE, REPLACE, CREATE, DROP, ALTER, and PRAGMA
-         assignments like `PRAGMA x = y`) require user approval — avoid settings PRAGMAs
-         unless the user's task genuinely needs them
+       * Write operations (INSERT, UPDATE, DELETE, REPLACE, and PRAGMA assignments like
+         `PRAGMA x = y`) require user approval — avoid settings PRAGMAs unless the user's
+         task genuinely needs them
+       * Schema-changing statements (CREATE, DROP, ALTER, and any other DDL) are always
+         rejected, even with user approval — use Synapse.storeAppState for structured data
+         instead of creating your own tables
        * Users can choose to "Allow for this session" to skip approval for subsequent write queries
        * IMPORTANT: Results are capped at 100 rows. When a query produces more, `data` contains
          only the first 100 rows, `truncated` is true, and `totalRows` is the full row count.

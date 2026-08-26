@@ -32,9 +32,13 @@ void main() {
   }
 
   Future<Set<String>> relationshipTargets(String fromId) async {
+    // M1.8: relationships is now soft-delete only -- a removed relationship
+    // row still physically exists (tombstoned), so this helper must filter
+    // to live rows the same way every real read path
+    // (DatabaseService.getRelationships et al.) now does.
     final rows = await (await db.database).query(
       'relationships',
-      where: 'fromNoteId = ? OR toNoteId = ?',
+      where: '(fromNoteId = ? OR toNoteId = ?) AND __deleted__ = 0',
       whereArgs: [fromId, fromId],
     );
     return rows

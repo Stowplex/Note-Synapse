@@ -449,10 +449,12 @@ class FigureResolver {
     }
 
     final noteId = row['noteId'] as String;
+    // `__deleted__ = 0`: deletion is a tombstone write, so the row survives —
+    // a figure whose owning note was deleted must still dangle as unknown.
     final noteRows = await db.query(
       'notes',
       columns: ['title'],
-      where: 'id = ?',
+      where: 'id = ? AND __deleted__ = 0',
       whereArgs: [noteId],
       limit: 1,
     );
