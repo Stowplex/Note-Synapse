@@ -93,6 +93,7 @@ class WebSession {
     required this.savedUrl,
     required this.savedAt,
     required this.cookies,
+    this.refreshedAt,
   });
 
   /// Registrable domain key this session is filed under (e.g. `example.com`).
@@ -103,14 +104,63 @@ class WebSession {
   final DateTime savedAt;
   final List<WebSessionCookie> cookies;
 
+  /// When the stored cookies were last rolled forward without a fresh
+  /// interactive login — a `Set-Cookie` rotation merged in, or a re-sync from
+  /// the live jar. `null` means nothing has rotated since [savedAt].
+  final DateTime? refreshedAt;
+
   /// Cookies that are not expired and therefore worth restoring.
   List<WebSessionCookie> get liveCookies =>
       cookies.where((c) => !c.isExpired).toList();
+
+  /// The furthest-out explicit expiry among the live cookies, or `null` when
+  /// every live cookie is a session cookie.
+  ///
+  /// This is the *latest* rather than the earliest expiry on purpose: sites
+  /// routinely pair a long-lived auth cookie with short-lived CSRF cookies, so
+  /// the earliest expiry would read as "expires in an hour" for a login that
+  /// stays good for months. There is no reliable way to pick out the auth
+  /// cookie, so this is reported as the optimistic outer bound.
+  DateTime? get lastExpiry {
+    int? furthest;
+    for (final c in liveCookies) {
+      final exp = c.expiresDate;
+      if (exp == null || exp <= 0) {
+        continue;
+      }
+      if (furthest == null || exp > furthest) {
+        furthest = exp;
+      }
+    }
+    return furthest == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(furthest);
+  }
+
+  /// `true` when every stored cookie has expired, so the login is certainly
+  /// dead and only a re-login can bring it back.
+  bool get isFullyExpired => cookies.isNotEmpty && liveCookies.isEmpty;
+
+  WebSession copyWith({
+    String? savedUrl,
+    DateTime? savedAt,
+    DateTime? refreshedAt,
+    List<WebSessionCookie>? cookies,
+  }) {
+    return WebSession(
+      domain: domain,
+      savedUrl: savedUrl ?? this.savedUrl,
+      savedAt: savedAt ?? this.savedAt,
+      refreshedAt: refreshedAt ?? this.refreshedAt,
+      cookies: cookies ?? this.cookies,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'domain': domain,
     'savedUrl': savedUrl,
     'savedAt': savedAt.toIso8601String(),
+    if (refreshedAt != null) 'refreshedAt': refreshedAt!.toIso8601String(),
     'cookies': cookies.map((c) => c.toJson()).toList(),
   };
 
@@ -122,11 +172,23 @@ class WebSession {
       savedAt:
           DateTime.tryParse(json['savedAt'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
+      refreshedAt: DateTime.tryParse(json['refreshedAt'] as String? ?? ''),
       cookies: rawCookies
           .map((c) => WebSessionCookie.fromJson(c as Map<String, dynamic>))
           .toList(),
     );
   }
+}
+
+/// One parsed `Set-Cookie` response header.
+class ParsedSetCookie {
+  const ParsedSetCookie({required this.cookie, required this.isDeletion});
+
+  final WebSessionCookie cookie;
+
+  /// `true` when the header asks for the cookie to be removed (`Max-Age=0`, an
+  /// `Expires` in the past, or a blank value).
+  final bool isDeletion;
 }
 
 /// Abstracts reading and writing cookies in the platform [CookieManager] so the
@@ -449,15 +511,71 @@ class WebSessionService {
       cookies: collected.values.toList(),
     );
 
-    await _storage.write(
-      '$_sessionPrefix$domain',
-      jsonEncode(session.toJson()),
-    );
-    await _addToIndex(domain);
+    await saveSession(session);
     LoggerService.info(
       'WebSessionService: saved session for $domain (${session.cookies.length} cookies)',
     );
     return session;
+  }
+
+  /// Writes [session] to storage under its own domain and makes sure the domain
+  /// is indexed.
+  ///
+  /// App grants live in a separate store keyed by app + domain, so overwriting a
+  /// session here deliberately leaves them intact: re-authenticating a login the
+  /// user already approved apps for must not silently revoke that approval.
+  Future<void> saveSession(WebSession session) async {
+    await _storage.write(
+      '$_sessionPrefix${session.domain}',
+      jsonEncode(session.toJson()),
+    );
+    await _addToIndex(session.domain);
+  }
+
+  /// Puts [session] back exactly as it was — into storage *and* the live cookie
+  /// jar. Used to undo a refresh attempt the user abandoned, so a failed
+  /// re-login never costs a still-working session.
+  Future<void> restoreSession(WebSession session) async {
+    await saveSession(session);
+    if (isSupported) {
+      await restoreCookies(session.savedUrl.isEmpty
+          ? 'https://${session.domain}'
+          : session.savedUrl);
+    }
+  }
+
+  /// Clears the live cookies for [domain] without touching the saved session or
+  /// any app grants.
+  ///
+  /// This is what makes an in-place re-login work: a session the server has
+  /// invalidated usually has *not* passed its `Expires`, so the WebView keeps
+  /// sending it and the site answers with a broken half-logged-in page instead
+  /// of a login form. Wiping just this domain's jar forces a clean sign-in.
+  Future<void> clearLiveCookies(String domain, {String? savedUrl}) async {
+    if (!isSupported || domain.isEmpty) {
+      return;
+    }
+    await _clearLiveCookiesFor(domain, savedUrl);
+  }
+
+  Future<void> _clearLiveCookiesFor(String domain, String? savedUrl) async {
+    // Clear at the registrable-domain URL (domain-wide cookies) and at the exact
+    // host the session was captured on (host-only cookies set on a subdomain),
+    // so a subdomain session cookie is not left behind.
+    final urls = <String>{'https://$domain'};
+    final hostUrl = _hostUrlFor(savedUrl);
+    if (hostUrl != null) {
+      urls.add(hostUrl);
+    }
+    for (final url in urls) {
+      try {
+        await _cookies.deleteCookies(url);
+      } catch (e) {
+        LoggerService.warning(
+          'WebSessionService: failed to clear live cookies at $url: $e',
+        );
+      }
+    }
   }
 
   /// Deletes the saved session for [domain] and clears the matching cookies
@@ -482,20 +600,7 @@ class WebSessionService {
     await _removeFromIndex(domain);
 
     if (isSupported) {
-      final urls = <String>{'https://$domain'};
-      final savedHost = _hostUrlFor(session?.savedUrl);
-      if (savedHost != null) {
-        urls.add(savedHost);
-      }
-      for (final url in urls) {
-        try {
-          await _cookies.deleteCookies(url);
-        } catch (e) {
-          LoggerService.warning(
-            'WebSessionService: failed to clear live cookies at $url: $e',
-          );
-        }
-      }
+      await _clearLiveCookiesFor(domain, session?.savedUrl);
     }
     LoggerService.info('WebSessionService: deleted session for $domain');
   }
@@ -685,6 +790,429 @@ class WebSessionService {
       return aHostOnly; // host-only beats domain cookie
     }
     return (a.path?.length ?? 1) > (b.path?.length ?? 1);
+  }
+
+  // --------------------------------------------------------------------------
+  // Keeping a saved session alive
+  // --------------------------------------------------------------------------
+
+  /// Parses one `Set-Cookie` response header received from [requestUrl].
+  ///
+  /// Returns `null` when the header is malformed or asks for a scope the
+  /// request is not allowed to set. The scope check is the important part: a
+  /// `Domain=` attribute is accepted only when it covers the request host *and*
+  /// stays inside the same registrable domain, so a response can never widen a
+  /// cookie onto a parent domain or a public suffix.
+  static ParsedSetCookie? parseSetCookie(String header, String requestUrl) {
+    final uri = Uri.tryParse(requestUrl.trim());
+    if (uri == null || uri.host.isEmpty) {
+      return null;
+    }
+    final parts = header.split(';');
+    final first = parts.isEmpty ? '' : parts.first;
+    final eq = first.indexOf('=');
+    if (eq <= 0) {
+      return null;
+    }
+    final name = first.substring(0, eq).trim();
+    final value = first.substring(eq + 1).trim();
+    if (name.isEmpty) {
+      return null;
+    }
+
+    String? domain;
+    String? path;
+    int? expiresMillis;
+    int? maxAge;
+    var isSecure = false;
+    var isHttpOnly = false;
+    String? sameSite;
+
+    for (final attr in parts.skip(1)) {
+      final trimmed = attr.trim();
+      if (trimmed.isEmpty) {
+        continue;
+      }
+      final sep = trimmed.indexOf('=');
+      final key = (sep < 0 ? trimmed : trimmed.substring(0, sep))
+          .trim()
+          .toLowerCase();
+      final attrValue = sep < 0 ? '' : trimmed.substring(sep + 1).trim();
+      if (key == 'domain') {
+        if (attrValue.isNotEmpty) {
+          domain = attrValue.toLowerCase();
+        }
+      } else if (key == 'path') {
+        if (attrValue.startsWith('/')) {
+          path = attrValue;
+        }
+      } else if (key == 'expires') {
+        try {
+          expiresMillis = HttpDate.parse(attrValue).millisecondsSinceEpoch;
+        } catch (_) {
+          // An unparseable Expires is ignored, matching browser behaviour: the
+          // cookie is kept as a session cookie rather than dropped.
+        }
+      } else if (key == 'max-age') {
+        maxAge = int.tryParse(attrValue);
+      } else if (key == 'secure') {
+        isSecure = true;
+      } else if (key == 'httponly') {
+        isHttpOnly = true;
+      } else if (key == 'samesite' && attrValue.isNotEmpty) {
+        sameSite = _normalizeSameSite(attrValue);
+      }
+    }
+
+    final host = uri.host.toLowerCase();
+    if (domain != null) {
+      final bare = domain.replaceAll(RegExp(r'^\.+|\.+$'), '');
+      final coversHost = host == bare || host.endsWith('.$bare');
+      final sameRegistrable = domainKeyFor(bare) == domainKeyFor(host);
+      if (bare.isEmpty || !coversHost || !sameRegistrable) {
+        return null;
+      }
+      domain = '.$bare';
+    }
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    int? expiresDate;
+    var isDeletion = false;
+    // Max-Age wins over Expires per RFC 6265.
+    if (maxAge != null) {
+      if (maxAge <= 0) {
+        isDeletion = true;
+      } else {
+        expiresDate = now + maxAge * 1000;
+      }
+    } else if (expiresMillis != null) {
+      expiresDate = expiresMillis;
+      isDeletion = expiresMillis <= now;
+    }
+    // A blank value is how sites clear a cookie when they omit the expiry
+    // attributes; storing it would leave a useless empty credential behind.
+    if (value.isEmpty) {
+      isDeletion = true;
+    }
+
+    return ParsedSetCookie(
+      cookie: WebSessionCookie(
+        name: name,
+        value: value,
+        domain: domain,
+        path: path ?? _defaultPath(uri.path),
+        expiresDate: expiresDate,
+        isSecure: isSecure ? true : null,
+        isHttpOnly: isHttpOnly ? true : null,
+        sameSite: sameSite,
+      ),
+      isDeletion: isDeletion,
+    );
+  }
+
+  /// RFC 6265 default-path: the directory portion of the request path.
+  static String _defaultPath(String requestPath) {
+    if (requestPath.isEmpty || !requestPath.startsWith('/')) {
+      return '/';
+    }
+    final lastSlash = requestPath.lastIndexOf('/');
+    return lastSlash <= 0 ? '/' : requestPath.substring(0, lastSlash);
+  }
+
+  /// Normalises a `SameSite` attribute to the casing [HTTPCookieSameSitePolicy]
+  /// expects, so a restored cookie keeps the policy the site asked for.
+  static String? _normalizeSameSite(String raw) {
+    switch (raw.trim().toLowerCase()) {
+      case 'lax':
+        return 'Lax';
+      case 'strict':
+        return 'Strict';
+      case 'none':
+        return 'None';
+    }
+    return null;
+  }
+
+  /// Merges `Set-Cookie` headers returned for [url] into the saved session for
+  /// that URL's registrable domain, so the stored login rolls forward the way a
+  /// browser's would instead of decaying into an expired snapshot.
+  ///
+  /// Only *existing* sessions are updated — a rotation never creates a login
+  /// the user did not explicitly save, which would mean holding credentials for
+  /// a site they never opted into. A rotation also never re-scopes a cookie the
+  /// user already has: the stored `domain`/`path` are kept and only the value
+  /// and expiry are taken from the response.
+  ///
+  /// Returns `true` if the stored session changed.
+  Future<bool> mergeSetCookieHeaders(
+    String url,
+    List<String> setCookieHeaders,
+  ) async {
+    if (!isSupported || setCookieHeaders.isEmpty) {
+      return false;
+    }
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null || uri.host.isEmpty) {
+      return false;
+    }
+    final domain = domainKeyFor(url);
+    if (domain.isEmpty) {
+      return false;
+    }
+    final session = await getSession(domain);
+    if (session == null) {
+      return false;
+    }
+
+    final host = uri.host.toLowerCase();
+    final requestPath = uri.path.isEmpty ? '/' : uri.path;
+    final savedHost = Uri.tryParse(session.savedUrl)?.host.toLowerCase();
+
+    final cookies = [...session.cookies];
+    final rotated = <WebSessionCookie>[];
+    var changed = false;
+
+    for (final header in setCookieHeaders) {
+      final parsed = parseSetCookie(header, url);
+      if (parsed == null) {
+        continue;
+      }
+      final incoming = parsed.cookie;
+      // Match the cookie the response is actually replacing: same name, and a
+      // stored scope that this request would have sent the cookie under.
+      final index = cookies.indexWhere(
+        (c) =>
+            c.name == incoming.name &&
+            _hostMatches(host, c.domain, savedHost) &&
+            _pathMatches(requestPath, c.path),
+      );
+
+      if (parsed.isDeletion) {
+        if (index >= 0) {
+          cookies.removeAt(index);
+          changed = true;
+        }
+        continue;
+      }
+
+      if (index < 0) {
+        cookies.add(incoming);
+        rotated.add(incoming);
+        changed = true;
+        continue;
+      }
+
+      final existing = cookies[index];
+      if (existing.value == incoming.value &&
+          existing.expiresDate == incoming.expiresDate) {
+        continue;
+      }
+      final updated = WebSessionCookie(
+        name: existing.name,
+        value: incoming.value,
+        // Keep the captured scope — see the doc comment.
+        domain: existing.domain,
+        path: existing.path,
+        expiresDate: incoming.expiresDate,
+        isSecure: existing.isSecure,
+        isHttpOnly: existing.isHttpOnly,
+        sameSite: existing.sameSite,
+      );
+      cookies[index] = updated;
+      rotated.add(updated);
+      changed = true;
+    }
+
+    if (!changed) {
+      return false;
+    }
+
+    await saveSession(
+      session.copyWith(cookies: cookies, refreshedAt: DateTime.now()),
+    );
+
+    // Mirror rotations into the live jar too. `downloadFile` builds its headers
+    // from the jar rather than from storage, so leaving the jar behind would
+    // have it replay a cookie the server has already rotated away.
+    final domainUrl = 'https://$domain';
+    // Host-only cookies belong to the host that just set them — which for an
+    // updated cookie is also the host it was captured on, since _hostMatches
+    // only pairs a host-only cookie with its own host.
+    final hostUrl = _hostUrlFor(url) ?? domainUrl;
+    for (final cookie in rotated) {
+      final isHostOnly = cookie.domain == null || cookie.domain!.isEmpty;
+      try {
+        await _cookies.setCookie(isHostOnly ? hostUrl : domainUrl, cookie);
+      } catch (e) {
+        LoggerService.warning(
+          'WebSessionService: failed to mirror a rotated cookie for $domain: $e',
+        );
+      }
+    }
+
+    LoggerService.info(
+      'WebSessionService: rolled $domain forward '
+      '(${rotated.length} cookies rotated)',
+    );
+    return true;
+  }
+
+  /// Re-captures the live cookie jar into the saved session for [url]'s domain.
+  ///
+  /// Cookies also rotate inside the WebView — a clip that loads an authenticated
+  /// page will usually be handed a fresh session cookie — and without this the
+  /// stored copy would fall behind the jar and eventually stop working.
+  ///
+  /// This only ever adds or updates: a jar read can come back partial, and
+  /// dropping a stored cookie because it was missing from one read would break
+  /// the login it is trying to protect. Returns `true` if anything changed.
+  Future<bool> syncFromLiveJar(String url) async {
+    if (!isSupported) {
+      return false;
+    }
+    final domain = domainKeyFor(url);
+    if (domain.isEmpty) {
+      return false;
+    }
+    final session = await getSession(domain);
+    if (session == null) {
+      return false;
+    }
+
+    final live = await _readLiveCookies(url, domain);
+    if (live.isEmpty) {
+      return false;
+    }
+
+    final cookies = [...session.cookies];
+    var changed = false;
+    for (final incoming in live) {
+      if (incoming.value.isEmpty) {
+        continue;
+      }
+      final index = _indexOfSameCookie(cookies, incoming);
+      if (index < 0) {
+        cookies.add(incoming);
+        changed = true;
+        continue;
+      }
+      final existing = cookies[index];
+      if (existing.value == incoming.value &&
+          existing.expiresDate == incoming.expiresDate) {
+        continue;
+      }
+      cookies[index] = WebSessionCookie(
+        name: existing.name,
+        value: incoming.value,
+        domain: existing.domain,
+        path: existing.path,
+        expiresDate: incoming.expiresDate,
+        isSecure: existing.isSecure,
+        isHttpOnly: existing.isHttpOnly,
+        sameSite: existing.sameSite,
+      );
+      changed = true;
+    }
+
+    if (!changed) {
+      return false;
+    }
+    await saveSession(
+      session.copyWith(cookies: cookies, refreshedAt: DateTime.now()),
+    );
+    LoggerService.debug('WebSessionService: synced $domain from the live jar');
+    return true;
+  }
+
+  /// Whether the live jar now looks like a completed re-login against
+  /// [previous]: every cookie the old session still had in play is back with a
+  /// non-empty value, and at least one of those values has changed.
+  ///
+  /// Requiring the full set (rather than "any auth-looking cookie") is what
+  /// makes this safe to run automatically after every page load: a login page
+  /// that sets only some of the cookies cannot pass, so a half-finished sign-in
+  /// never overwrites a session the user might still want back. Already-expired
+  /// cookies are excluded — they are not part of the working login and the site
+  /// has no reason to reissue them.
+  Future<bool> looksReauthenticated(String url, WebSession previous) async {
+    if (!isSupported) {
+      return false;
+    }
+    final expected = previous.liveCookies
+        .where((c) => c.value.isNotEmpty)
+        .toList();
+    if (expected.isEmpty) {
+      return false;
+    }
+    final domain = domainKeyFor(url);
+    if (domain.isEmpty || domain != previous.domain) {
+      return false;
+    }
+
+    final live = await _readLiveCookies(url, domain);
+    if (live.isEmpty) {
+      return false;
+    }
+    final liveByName = <String, String>{
+      for (final c in live)
+        if (c.value.isNotEmpty) c.name: c.value,
+    };
+
+    var anyChanged = false;
+    for (final cookie in expected) {
+      final value = liveByName[cookie.name];
+      if (value == null) {
+        return false;
+      }
+      if (value != cookie.value) {
+        anyChanged = true;
+      }
+    }
+    return anyChanged;
+  }
+
+  /// Reads the live jar for both the exact URL and the registrable domain, so
+  /// host-only and domain-wide cookies are both seen.
+  Future<List<WebSessionCookie>> _readLiveCookies(
+    String url,
+    String domain,
+  ) async {
+    final collected = <String, WebSessionCookie>{};
+    for (final forUrl in {'https://$domain', url}) {
+      try {
+        for (final cookie in await _cookies.getCookies(forUrl)) {
+          collected['${cookie.name}|${cookie.domain}|${cookie.path}'] = cookie;
+        }
+      } catch (e) {
+        LoggerService.warning('WebSessionService: live getCookies failed: $e');
+      }
+    }
+    return collected.values.toList();
+  }
+
+  /// Index of the stored cookie [incoming] represents: an exact scope match
+  /// first, then the same name under an equivalent domain, since platforms
+  /// differ on whether they report a leading dot.
+  static int _indexOfSameCookie(
+    List<WebSessionCookie> cookies,
+    WebSessionCookie incoming,
+  ) {
+    String bare(String? domain) =>
+        (domain ?? '').replaceAll(RegExp(r'^\.+'), '').toLowerCase();
+    final wanted = bare(incoming.domain);
+    final wantedPath = incoming.path ?? '/';
+    final exact = cookies.indexWhere(
+      (c) =>
+          c.name == incoming.name &&
+          bare(c.domain) == wanted &&
+          (c.path ?? '/') == wantedPath,
+    );
+    if (exact >= 0) {
+      return exact;
+    }
+    return cookies.indexWhere(
+      (c) => c.name == incoming.name && bare(c.domain) == wanted,
+    );
   }
 
   /// Restores the saved session (if any) for the registrable domain of [url]

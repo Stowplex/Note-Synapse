@@ -2293,6 +2293,44 @@
   "showDetails": "显示详情",
   "forceRefetchImages": "强制重新获取图片",
   "fetchingImage": "正在获取图片...",
+  "done": "完成",
+  "refreshLogin": "刷新登录",
+  "webLoginRefreshHint": "重新登录以刷新此登录信息，已授权应用的权限会保留。",
+  "webLoginRefreshed": "已刷新 {domain} 的登录",
+  "@webLoginRefreshed": {
+    "placeholders": {
+      "domain": {"type": "String"}
+    }
+  },
+  "webLoginRefreshDiscarded": "已取消刷新，原有登录已恢复。",
+  "clearSiteCookies": "清除此站点的 Cookie",
+  "webLoginCookiesCleared": "Cookie 已清除。请重新登录，然后点按“保存登录”。",
+  "webLoginExpired": "已过期 — 刷新以重新登录",
+  "webLoginExpiresInDays": "{days, plural, =0{今天过期 — 请尽快刷新} =1{明天过期 — 请尽快刷新} other{{days} 天后过期 — 请尽快刷新}}",
+  "@webLoginExpiresInDays": {
+    "placeholders": {
+      "days": {"type": "int"}
+    }
+  },
+  "webLoginValidUntil": "有效期至 {date}",
+  "@webLoginValidUntil": {
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  "webLoginNoExpiry": "站点未设置过期时间",
+  "webLoginSavedAgo": "保存于 {time}",
+  "@webLoginSavedAgo": {
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+  "webLoginRefreshedAgo": "刷新于 {time}",
+  "@webLoginRefreshedAgo": {
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
   "webLoginAppsWithAccess": "有访问权限的应用",
   "revoke": "撤销",
   "revokeAppAccessTitle": "撤销访问权限",

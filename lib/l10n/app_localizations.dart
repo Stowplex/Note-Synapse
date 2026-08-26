@@ -9506,6 +9506,84 @@ abstract class AppLocalizations {
   /// **'Request mobile site'**
   String get requestMobileSite;
 
+  /// No description provided for @done.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get done;
+
+  /// No description provided for @refreshLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh login'**
+  String get refreshLogin;
+
+  /// No description provided for @webLoginRefreshHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in again to refresh this login. Your saved app permissions are kept.'**
+  String get webLoginRefreshHint;
+
+  /// No description provided for @webLoginRefreshed.
+  ///
+  /// In en, this message translates to:
+  /// **'Login refreshed for {domain}'**
+  String webLoginRefreshed(String domain);
+
+  /// No description provided for @webLoginRefreshDiscarded.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh cancelled — your previous login was restored.'**
+  String get webLoginRefreshDiscarded;
+
+  /// No description provided for @clearSiteCookies.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear cookies for this site'**
+  String get clearSiteCookies;
+
+  /// No description provided for @webLoginCookiesCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Cookies cleared. Sign in again, then tap Save login.'**
+  String get webLoginCookiesCleared;
+
+  /// No description provided for @webLoginExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired — refresh to sign in again'**
+  String get webLoginExpired;
+
+  /// No description provided for @webLoginExpiresInDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =0{Expires today — refresh soon} =1{Expires tomorrow — refresh soon} other{Expires in {days} days — refresh soon}}'**
+  String webLoginExpiresInDays(int days);
+
+  /// No description provided for @webLoginValidUntil.
+  ///
+  /// In en, this message translates to:
+  /// **'Valid until {date}'**
+  String webLoginValidUntil(String date);
+
+  /// No description provided for @webLoginNoExpiry.
+  ///
+  /// In en, this message translates to:
+  /// **'No expiry set by the site'**
+  String get webLoginNoExpiry;
+
+  /// No description provided for @webLoginSavedAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved {time}'**
+  String webLoginSavedAgo(String time);
+
+  /// No description provided for @webLoginRefreshedAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Refreshed {time}'**
+  String webLoginRefreshedAgo(String time);
+
   /// No description provided for @webLoginAppsWithAccess.
   ///
   /// In en, this message translates to:
