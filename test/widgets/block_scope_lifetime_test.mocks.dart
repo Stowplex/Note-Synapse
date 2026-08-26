@@ -99,6 +99,15 @@ class MockAppProvider extends _i1.Mock implements _i7.AppProvider {
           as List<_i8.Note>);
 
   @override
+  bool get hasLoadedOnce =>
+      (super.noSuchMethod(
+            Invocation.getter(#hasLoadedOnce),
+            returnValue: false,
+            returnValueForMissingStub: false,
+          )
+          as bool);
+
+  @override
   List<_i9.Tag> get tags =>
       (super.noSuchMethod(
             Invocation.getter(#tags),
@@ -1097,6 +1106,15 @@ class MockAppProvider extends _i1.Mock implements _i7.AppProvider {
 /// See the documentation for Mockito's code generation for more information.
 class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
   @override
+  bool get chunksFtsAvailable =>
+      (super.noSuchMethod(
+            Invocation.getter(#chunksFtsAvailable),
+            returnValue: false,
+            returnValueForMissingStub: false,
+          )
+          as bool);
+
+  @override
   _i11.Future<_i5.Database> get database =>
       (super.noSuchMethod(
             Invocation.getter(#database),
@@ -1108,6 +1126,18 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
             ),
           )
           as _i11.Future<_i5.Database>);
+
+  @override
+  set onNoteContentChanged(void Function(String)? value) => super.noSuchMethod(
+    Invocation.setter(#onNoteContentChanged, value),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set onNoteDeleted(void Function(String)? value) => super.noSuchMethod(
+    Invocation.setter(#onNoteDeleted, value),
+    returnValueForMissingStub: null,
+  );
 
   @override
   _i11.Future<void> insertConversationMessageMappingsBatch(
@@ -2752,18 +2782,49 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i11.Future<Map<String, List<String>>>);
 
   @override
-  _i11.Future<List<_i8.Note>> searchNotesFTS(
-    String? query, {
-    List<String>? tags,
+  _i11.Future<List<_i6.ChunkFtsMatch>> searchChunksLexical(
+    String? ftsQuery, {
+    int? limit = 5000,
+    Set<String>? sourceTypes,
+    String? noteId,
   }) =>
       (super.noSuchMethod(
-            Invocation.method(#searchNotesFTS, [query], {#tags: tags}),
-            returnValue: _i11.Future<List<_i8.Note>>.value(<_i8.Note>[]),
-            returnValueForMissingStub: _i11.Future<List<_i8.Note>>.value(
-              <_i8.Note>[],
+            Invocation.method(
+              #searchChunksLexical,
+              [ftsQuery],
+              {#limit: limit, #sourceTypes: sourceTypes, #noteId: noteId},
             ),
+            returnValue: _i11.Future<List<_i6.ChunkFtsMatch>>.value(
+              <_i6.ChunkFtsMatch>[],
+            ),
+            returnValueForMissingStub:
+                _i11.Future<List<_i6.ChunkFtsMatch>>.value(
+                  <_i6.ChunkFtsMatch>[],
+                ),
           )
-          as _i11.Future<List<_i8.Note>>);
+          as _i11.Future<List<_i6.ChunkFtsMatch>>);
+
+  @override
+  _i11.Future<List<_i6.SearchChunkRow>> getSearchChunksByIds(
+    List<int>? chunkIds, {
+    Set<String>? sourceTypes,
+    String? noteId,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #getSearchChunksByIds,
+              [chunkIds],
+              {#sourceTypes: sourceTypes, #noteId: noteId},
+            ),
+            returnValue: _i11.Future<List<_i6.SearchChunkRow>>.value(
+              <_i6.SearchChunkRow>[],
+            ),
+            returnValueForMissingStub:
+                _i11.Future<List<_i6.SearchChunkRow>>.value(
+                  <_i6.SearchChunkRow>[],
+                ),
+          )
+          as _i11.Future<List<_i6.SearchChunkRow>>);
 
   @override
   _i11.Future<List<Map<String, dynamic>>> runRawQuery(
@@ -2806,17 +2867,6 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
             ),
           )
           as _i11.Future<_i6.RawWriteResult>);
-
-  @override
-  _i11.Future<List<_i8.Note>> searchNotes(String? query) =>
-      (super.noSuchMethod(
-            Invocation.method(#searchNotes, [query]),
-            returnValue: _i11.Future<List<_i8.Note>>.value(<_i8.Note>[]),
-            returnValueForMissingStub: _i11.Future<List<_i8.Note>>.value(
-              <_i8.Note>[],
-            ),
-          )
-          as _i11.Future<List<_i8.Note>>);
 
   @override
   _i11.Future<String?> getTagExtractionPrompt(String? tagId) =>

@@ -1,14 +1,17 @@
 import '../models/note.dart';
+import '../utils/note_text_match.dart';
 
 /// Service for handling note selection and filtering logic.
 /// This service is extracted to make the logic testable.
 class NoteSelectionService {
   /// Filters and sorts notes based on a search query.
   ///
-  /// The search matches against:
-  /// - Note title (case-insensitive)
-  /// - Note content (case-insensitive)
-  /// - Note tags (case-insensitive)
+  /// The search matches against title, content, and tags via the shared
+  /// [matchesSubstringQuery] predicate (case-insensitive, NFKC-folded — so
+  /// full-width characters compare equal, matching the search index).
+  /// The API stays synchronous substring filtering: the note pickers this
+  /// serves don't need ranked SearchService results (plan §1.6 keeps full
+  /// SearchService integration to the notes screen).
   ///
   /// Returns a list of notes that match the search query, sorted by:
   /// - Pinned notes first
@@ -24,12 +27,9 @@ class NoteSelectionService {
     if (searchQuery.isEmpty) {
       filteredNotes = List.from(allNotes);
     } else {
-      final query = searchQuery.toLowerCase();
-      filteredNotes = allNotes.where((note) {
-        return note.title.toLowerCase().contains(query) ||
-            note.content.toLowerCase().contains(query) ||
-            note.tags.any((tag) => tag.toLowerCase().contains(query));
-      }).toList();
+      filteredNotes = allNotes
+          .where((note) => matchesSubstringQuery(note, searchQuery))
+          .toList();
     }
 
     // Sort by pinned status first, then by creation date (newest first)

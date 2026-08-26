@@ -66,7 +66,11 @@ class RawWriteResult {
 /// Immutable and connection-keyed so per-call reads never race with
 /// close()/reopen resetting mutable service fields.
 class _CaptureState {
-  const _CaptureState(this.db, {required this.journalReady, required this.complete});
+  const _CaptureState(
+    this.db, {
+    required this.journalReady,
+    required this.complete,
+  });
 
   final Database db;
 
@@ -91,7 +95,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 46; // Target schema version
+  static const int DATABASE_VERSION = 47; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -432,6 +436,74 @@ class DatabaseService {
       END;
   ''';
 
+  // Search index tables (v47). Hold data derived from notes/attachments —
+  // rebuilt by the indexer and never merged during recovery. NOTE: DB backups
+  // are whole-file copies, so these tables DO ship in backups today; size
+  // impact is evaluated when the indexer lands. All v47 DDL uses IF NOT
+  // EXISTS: migration 47 runs outside a transaction (custom-migration path),
+  // so a mid-migration crash must be re-runnable, not a permanent recovery
+  // loop.
+  static const String _createSearchChunksTable = '''
+      CREATE TABLE IF NOT EXISTS search_chunks(
+        id INTEGER PRIMARY KEY, -- rowid alias: stable under VACUUM (raw SQL/VACUUM is exposed to user+AI)
+        chunkKey TEXT NOT NULL, -- "{noteId}:{sourceType}:{sourceId|-}:{seq}" logical identity
+        noteId TEXT NOT NULL, -- Owning note ID
+        sourceType TEXT NOT NULL, -- meta|note_body|subnote|annotation|attachment_text|attachment_ocr|figure
+        sourceId TEXT, -- Source row ID (subnote/annotation/attachment), NULL for note body
+        page INTEGER, -- Page number for attachment-derived chunks (1-based)
+        seq INTEGER NOT NULL, -- Chunk sequence within the source
+        text TEXT NOT NULL, -- RAW chunk text (snippets + embedding input); can be very large
+        meta TEXT, -- JSON: figure chunks {caption, rect, derivedAssetPath}; attachment_ocr chunks {blockBounds, renderScale}
+        contentHash TEXT NOT NULL, -- Hash of source content for incremental diffing
+        updatedAt INTEGER NOT NULL -- Last update timestamp
+      )
+  ''';
+
+  static const String _createChunkEmbeddingsTable = '''
+      CREATE TABLE IF NOT EXISTS chunk_embeddings(
+        chunkId INTEGER NOT NULL, -- search_chunks.id
+        providerKey TEXT NOT NULL, -- "{type}:{model}:{dims}"
+        modality TEXT NOT NULL, -- 'text' or 'image'
+        dims INTEGER NOT NULL, -- Vector dimensions
+        vector BLOB NOT NULL, -- float32 little-endian, L2-normalized
+        contentHash TEXT NOT NULL, -- Hash of the embedded content
+        PRIMARY KEY (chunkId, providerKey)
+      )
+  ''';
+
+  static const String _createSearchIndexStateTable = '''
+      CREATE TABLE IF NOT EXISTS search_index_state(
+        scopeType TEXT NOT NULL, -- note|attachment|chunk|global
+        scopeId TEXT NOT NULL, -- Note/attachment ID, or 'all' for global scope
+        stage TEXT NOT NULL, -- chunks|pdf_text|ocr|embed:<key>|figures:<key>
+        contentHash TEXT, -- Content hash the stage last completed against
+        status TEXT NOT NULL, -- Stage status
+        errorMessage TEXT, -- Last error message, if any
+        updatedAt INTEGER NOT NULL, -- Last update timestamp
+        PRIMARY KEY (scopeType, scopeId, stage)
+      )
+  ''';
+
+  // FTS4 (never FTS5 — Android/iOS consistency, same reason as notes_fts).
+  // Holds NORMALIZED chunk text; docid = search_chunks.id. Deliberately no
+  // triggers: the indexer writes content explicitly (CJK bigrams are computed
+  // in Dart). Creation is wrapped in try/catch — FTS4 may be missing (web
+  // wasm sqlite is FTS5-only; possible future iOS removal) and search then
+  // degrades to substring matching; see [chunksFtsAvailable].
+  static const String _createChunksFtsTable = '''
+      CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts4(content);
+  ''';
+
+  // Search index indexes (v47) - shared by _createIndexes and migration 47
+  static const String _createIdxSearchChunksKey =
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_search_chunks_key ON search_chunks(chunkKey)';
+  static const String _createIdxSearchChunksNoteId =
+      'CREATE INDEX IF NOT EXISTS idx_search_chunks_noteId ON search_chunks(noteId)';
+  static const String _createIdxSearchChunksSource =
+      'CREATE INDEX IF NOT EXISTS idx_search_chunks_source ON search_chunks(sourceType, sourceId)';
+  static const String _createIdxAttachmentsNoteId =
+      'CREATE INDEX IF NOT EXISTS idx_attachments_noteId ON attachments(noteId)';
+
   // Index creation constants
   static const List<String> _createIndexes = [
     'CREATE INDEX idx_notes_type ON notes(type)',
@@ -458,6 +530,10 @@ class DatabaseService {
     'CREATE INDEX idx_conversation_note_mapping_noteId ON conversation_note_mapping(noteId)',
     'CREATE INDEX idx_conversation_tags_conversationId ON conversation_tags(conversationId)',
     'CREATE INDEX idx_conversation_tags_tagId ON conversation_tags(tagId)',
+    _createIdxSearchChunksKey,
+    _createIdxSearchChunksNoteId,
+    _createIdxSearchChunksSource,
+    _createIdxAttachmentsNoteId,
   ];
 
   final Uuid _uuid = const Uuid();
@@ -490,6 +566,11 @@ class DatabaseService {
       _createMessageParentsTable,
       _createConversationNoteMappingTable,
       _createMultiFunctionAppsTable,
+      _createSearchChunksTable,
+      _createChunkEmbeddingsTable,
+      _createSearchIndexStateTable,
+      // chunks_fts is deliberately omitted (virtual table, derivable —
+      // mirrors the notes_fts omission).
       ..._createIndexes,
     ];
   }
@@ -507,6 +588,43 @@ class DatabaseService {
   }
 
   Database? _database;
+
+  /// Whether the chunks_fts FTS4 virtual table exists on this database.
+  /// The FTS4 CREATE is allowed to fail (web wasm sqlite is FTS5-only;
+  /// possible future iOS removal) — when false, chunk search must degrade
+  /// to substring matching. Probed in _onOpen so the value survives
+  /// restarts on databases whose migration ran (and failed) earlier.
+  bool _chunksFtsAvailable = false;
+  bool get chunksFtsAvailable => _chunksFtsAvailable;
+
+  /// Post-write hooks for derived-data maintainers (the search indexer).
+  ///
+  /// The main UI write path (AppProvider) calls DatabaseService directly and
+  /// never publishes DataChangeEvents, so these mutation-method hooks are the
+  /// single choke point that covers AppProvider, tools, and services alike.
+  /// Inversion of control keeps this file free of indexer imports: the
+  /// indexer (NoteIndexService) registers itself here at construction.
+  ///
+  /// Invoked after the mutation completes. Exceptions are swallowed — a hook
+  /// must never break a write.
+  void Function(String noteId)? onNoteContentChanged;
+  void Function(String noteId)? onNoteDeleted;
+
+  void _notifyNoteContentChanged(String noteId) {
+    try {
+      onNoteContentChanged?.call(noteId);
+    } catch (e) {
+      LoggerService.warning('onNoteContentChanged hook failed: $e');
+    }
+  }
+
+  void _notifyNoteDeleted(String noteId) {
+    try {
+      onNoteDeleted?.call(noteId);
+    } catch (e) {
+      LoggerService.warning('onNoteDeleted hook failed: $e');
+    }
+  }
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -662,6 +780,22 @@ class DatabaseService {
     await db.execute(_createNotesFtsDeleteTrigger);
     await db.execute(_createNotesFtsUpdateTrigger);
 
+    // Create search index tables (v47)
+    await db.execute(_createSearchChunksTable);
+    await db.execute(_createChunkEmbeddingsTable);
+    await db.execute(_createSearchIndexStateTable);
+
+    // chunks_fts may fail where FTS4 is unavailable (e.g. web wasm sqlite) —
+    // never fail database creation over it; availability is recorded in
+    // _onOpen (see chunksFtsAvailable).
+    try {
+      await db.execute(_createChunksFtsTable);
+    } catch (e) {
+      LoggerService.warning(
+        'chunks_fts FTS4 creation failed, search will degrade to substring matching: $e',
+      );
+    }
+
     // Create all indexes
     for (final indexSql in _createIndexes) {
       await db.execute(indexSql);
@@ -675,6 +809,13 @@ class DatabaseService {
 
     // Custom schema version tracking - migrations only run onOpen, not onUpgrade
     await _handleCustomMigrations(db);
+
+    // Record chunks_fts availability (its FTS4 CREATE in _onCreate/migration
+    // 47 is allowed to fail on platforms without FTS4).
+    final chunksFtsCheck = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'",
+    );
+    _chunksFtsAvailable = chunksFtsCheck.isNotEmpty;
   }
 
   /// Handles migrations using custom _schema_version table
@@ -787,6 +928,15 @@ class DatabaseService {
       "SELECT name FROM sqlite_master WHERE type='table' AND name='tag_images'",
     );
     if (tagImagesCheck.isNotEmpty) detected = 41;
+
+    // Check for the v47 search index tables. Require ALL three: a crash
+    // mid-migration can leave a partial set, and stamping 47 then would skip
+    // the (idempotent) re-run that creates the missing objects.
+    final searchChunksCheck = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' "
+      "AND name IN ('search_chunks', 'chunk_embeddings', 'search_index_state')",
+    );
+    if (searchChunksCheck.length == 3) detected = 47;
 
     // Check for notes_fts table (v31/v36)
     if (detected < 36) {
@@ -919,6 +1069,11 @@ class DatabaseService {
           'Create tag_workflow_bindings table for tag-to-workflow binding infrastructure',
       execute: _migrateToVersion45,
     ),
+    47: MigrationStep(
+      description:
+          'Create search_chunks, chunk_embeddings, search_index_state tables and chunks_fts virtual table for layered search',
+      execute: _migrateToVersion47,
+    ),
   };
 
   static Future<void> _migrateToVersion43(
@@ -1001,6 +1156,31 @@ class DatabaseService {
     required bool isBackupMigration,
   }) async {
     await db.execute(_createTagWorkflowBindingsTable);
+  }
+
+  static Future<void> _migrateToVersion47(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    await db.execute(_createSearchChunksTable);
+    await db.execute(_createChunkEmbeddingsTable);
+    await db.execute(_createSearchIndexStateTable);
+
+    await db.execute(_createIdxSearchChunksKey);
+    await db.execute(_createIdxSearchChunksNoteId);
+    await db.execute(_createIdxSearchChunksSource);
+    await db.execute(_createIdxAttachmentsNoteId);
+
+    // FTS4 may be unavailable (web wasm sqlite is FTS5-only; possible future
+    // iOS removal). Degrade to substring search instead of failing the
+    // upgrade — availability is probed on every open (chunksFtsAvailable).
+    try {
+      await db.execute(_createChunksFtsTable);
+    } catch (e) {
+      LoggerService.warning(
+        'chunks_fts FTS4 creation failed, search will degrade to substring matching: $e',
+      );
+    }
   }
 
   static Future<void> _migrateToVersion28(
@@ -1643,6 +1823,7 @@ class DatabaseService {
       );
     }
 
+    _notifyNoteContentChanged(note.id);
     return note.id;
   }
 
@@ -1930,16 +2111,27 @@ class DatabaseService {
     if (noteIds.isEmpty) return [];
 
     final db = await database;
-    // Use WHERE IN clause for efficient batch retrieval
-    final placeholders = List.filled(noteIds.length, '?').join(',');
-    final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT 
+    // Batched WHERE IN retrieval, chunked to avoid the "too many variables"
+    // SQLite error (limit is usually 999) — same pattern as _batchLoadNotes.
+    const chunkSize = 500;
+    final maps = <Map<String, dynamic>>[];
+    for (var i = 0; i < noteIds.length; i += chunkSize) {
+      final end = (i + chunkSize < noteIds.length)
+          ? i + chunkSize
+          : noteIds.length;
+      final chunkIds = noteIds.sublist(i, end);
+      final placeholders = List.filled(chunkIds.length, '?').join(',');
+      maps.addAll(
+        await db.rawQuery('''
+      SELECT
         id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived, recurrenceRule,
         CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
         length(content) as _contentLength
       FROM notes
       WHERE id IN ($placeholders)
-      ''', noteIds);
+      ''', chunkIds),
+      );
+    }
 
     return await _batchLoadNotes(maps);
   }
@@ -1996,6 +2188,9 @@ class DatabaseService {
       LoggerService.warning(
         'updateNote skipped: note ${note.id} no longer exists',
       );
+      // Still notify: the indexer self-heals by purging chunks of a note
+      // that turns out to be gone.
+      _notifyNoteContentChanged(note.id);
       return;
     }
 
@@ -2076,6 +2271,8 @@ class DatabaseService {
         );
       }
     }
+
+    _notifyNoteContentChanged(note.id);
   }
 
   /// Updates the includeInAIContext flag for a specific attachment
@@ -2091,6 +2288,7 @@ class DatabaseService {
       where: 'noteId = ? AND filePath = ?',
       whereArgs: [noteId, filePath],
     );
+    _notifyNoteContentChanged(noteId);
   }
 
   /// Updates the metadata JSON for a specific attachment
@@ -2099,12 +2297,77 @@ class DatabaseService {
     Map<String, dynamic>? metadata,
   ) async {
     final db = await database;
+    // Read the old row up front (only when a hook is registered, so the
+    // common path stays a single UPDATE): if the only difference is
+    // lastViewedPage, this is a page-view bookmark, not indexable content —
+    // skip the indexer notification so page flips never trigger re-chunking.
+    String? noteIdToNotify;
+    if (onNoteContentChanged != null) {
+      final rows = await db.query(
+        'attachments',
+        columns: ['noteId', 'metadata'],
+        where: 'id = ?',
+        whereArgs: [attachmentId],
+      );
+      if (rows.isNotEmpty) {
+        Map<String, dynamic>? oldMetadata;
+        final raw = rows.first['metadata'] as String?;
+        if (raw != null && raw.isNotEmpty) {
+          try {
+            oldMetadata = jsonDecode(raw) as Map<String, dynamic>?;
+          } catch (_) {
+            oldMetadata = null;
+          }
+        }
+        if (!_metadataEqualIgnoringLastViewedPage(oldMetadata, metadata)) {
+          noteIdToNotify = rows.first['noteId'] as String;
+        }
+      }
+    }
     await db.update(
       'attachments',
       {'metadata': metadata != null ? jsonEncode(metadata) : null},
       where: 'id = ?',
       whereArgs: [attachmentId],
     );
+    if (noteIdToNotify != null) {
+      _notifyNoteContentChanged(noteIdToNotify);
+    }
+  }
+
+  /// Whether two attachment metadata maps are deep-equal once the
+  /// lastViewedPage bookmark (not indexable content) is ignored.
+  static bool _metadataEqualIgnoringLastViewedPage(
+    Map<String, dynamic>? a,
+    Map<String, dynamic>? b,
+  ) {
+    Map<String, dynamic> strip(Map<String, dynamic>? m) {
+      final copy = Map<String, dynamic>.from(m ?? const {});
+      copy.remove('lastViewedPage');
+      return copy;
+    }
+
+    return _jsonDeepEquals(strip(a), strip(b));
+  }
+
+  static bool _jsonDeepEquals(dynamic a, dynamic b) {
+    if (a is Map && b is Map) {
+      if (a.length != b.length) return false;
+      for (final key in a.keys) {
+        if (!b.containsKey(key) || !_jsonDeepEquals(a[key], b[key])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (a is List && b is List) {
+      if (a.length != b.length) return false;
+      for (var i = 0; i < a.length; i++) {
+        if (!_jsonDeepEquals(a[i], b[i])) return false;
+      }
+      return true;
+    }
+    return a == b;
   }
 
   /// Updates the metadata JSON for a specific note
@@ -2119,6 +2382,9 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [noteId],
     );
+    // Metadata carries index policy (searchIndex.exclude), so the indexer
+    // must re-evaluate the note.
+    _notifyNoteContentChanged(noteId);
   }
 
   /// Gets the metadata JSON for a specific note
@@ -2140,11 +2406,45 @@ class DatabaseService {
 
   Future<void> saveNoteAnnotation(NoteAnnotation annotation) async {
     final db = await database;
+    // ConflictAlgorithm.replace can re-parent an existing annotation to a
+    // different note/attachment; resolve the current owner BEFORE the write
+    // so the old owner can be reindexed too (only when a hook is listening).
+    String? previousOwnerNoteId;
+    if (onNoteContentChanged != null) {
+      final existing = await getNoteAnnotation(annotation.id);
+      if (existing != null) {
+        previousOwnerNoteId = await _resolveAnnotationNoteId(existing);
+      }
+    }
     await db.insert(
       'note_annotations',
       annotation.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    if (onNoteContentChanged != null) {
+      final owningNoteId = await _resolveAnnotationNoteId(annotation);
+      if (owningNoteId != null) _notifyNoteContentChanged(owningNoteId);
+      if (previousOwnerNoteId != null && previousOwnerNoteId != owningNoteId) {
+        _notifyNoteContentChanged(previousOwnerNoteId);
+      }
+    }
+  }
+
+  /// Owning note of an annotation: direct note_id, or the note of the
+  /// attachment it is scoped to.
+  Future<String?> _resolveAnnotationNoteId(NoteAnnotation annotation) async {
+    if (annotation.noteId != null) return annotation.noteId;
+    final attachmentId = annotation.attachmentId;
+    if (attachmentId == null) return null;
+    final db = await database;
+    final rows = await db.query(
+      'attachments',
+      columns: ['noteId'],
+      where: 'id = ?',
+      whereArgs: [attachmentId],
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['noteId'] as String;
   }
 
   Future<NoteAnnotation?> getNoteAnnotation(String id) async {
@@ -2185,7 +2485,17 @@ class DatabaseService {
 
   Future<void> deleteNoteAnnotation(String id) async {
     final db = await database;
+    // Resolve the owning note before the row disappears (only when a hook
+    // is listening).
+    String? owningNoteId;
+    if (onNoteContentChanged != null) {
+      final annotation = await getNoteAnnotation(id);
+      if (annotation != null) {
+        owningNoteId = await _resolveAnnotationNoteId(annotation);
+      }
+    }
     await db.delete('note_annotations', where: 'id = ?', whereArgs: [id]);
+    if (owningNoteId != null) _notifyNoteContentChanged(owningNoteId);
   }
 
   // ────────────────────────────────────────────────────────────────────────
@@ -2249,6 +2559,7 @@ class DatabaseService {
     await deleteNoteConversationMappings(id);
     // CASCADE will handle note_tags deletion automatically
     await db.delete('notes', where: 'id = ?', whereArgs: [id]);
+    _notifyNoteDeleted(id);
   }
 
   // SubNotes CRUD
@@ -2259,6 +2570,7 @@ class DatabaseService {
     json['createdAt'] = subNote.createdAt.millisecondsSinceEpoch;
     json['isCompleted'] = subNote.isCompleted ? 1 : 0;
     await db.insert('subnotes', json);
+    _notifyNoteContentChanged(noteId);
     return subNote.id;
   }
 
@@ -2357,6 +2669,22 @@ class DatabaseService {
 
     final tagId = tagMaps.first['id'] as String;
 
+    // Collect the owning notes BEFORE the join rows disappear: the tag name
+    // is part of each note's indexed meta chunk, so the indexer must
+    // re-chunk them or the deleted tag stays searchable forever.
+    List<String> affectedNoteIds = const [];
+    if (onNoteContentChanged != null) {
+      final noteTagRows = await db.query(
+        'note_tags',
+        columns: ['noteId'],
+        where: 'tagId = ?',
+        whereArgs: [tagId],
+      );
+      affectedNoteIds = [
+        for (final row in noteTagRows) row['noteId'] as String,
+      ];
+    }
+
     // Delete all note-tag relationships for this tag
     await db.delete('note_tags', where: 'tagId = ?', whereArgs: [tagId]);
     await db.delete(
@@ -2367,6 +2695,10 @@ class DatabaseService {
 
     // Delete the tag itself
     await db.delete('tags', where: 'id = ?', whereArgs: [tagId]);
+
+    for (final noteId in affectedNoteIds) {
+      _notifyNoteContentChanged(noteId);
+    }
   }
 
   /// Set or update the image for a tag.
@@ -2534,6 +2866,15 @@ class DatabaseService {
 
     // Delete the old tag
     await db.delete('tags', where: 'id = ?', whereArgs: [oldTagId]);
+
+    // Every note that carried the old tag now has different indexed tag
+    // metadata (meta chunk) — notify the indexer per note.
+    final affectedNoteIds = <String>{
+      for (final noteTagMap in noteTagMaps) noteTagMap['noteId'] as String,
+    };
+    for (final noteId in affectedNoteIds) {
+      _notifyNoteContentChanged(noteId);
+    }
   }
 
   // Relationships CRUD
@@ -2894,6 +3235,7 @@ class DatabaseService {
       'createdAt': DateTime.now().millisecondsSinceEpoch,
       'includeInAIContext': finalIncludeInAIContext ? 1 : 0,
     });
+    _notifyNoteContentChanged(noteId);
   }
 
   // Get all attachments from database
@@ -2952,6 +3294,18 @@ class DatabaseService {
   // Clear all data
   Future<void> clearAllData() async {
     final db = await database;
+
+    // Derived search-index rows go FIRST (self-healing order): if the wipe is
+    // interrupted here, the cleared global flag makes the next backfill
+    // rebuild the index; the reverse order could leave ghost chunks for
+    // deleted notes behind a still-set "done" flag.
+    if (_chunksFtsAvailable) {
+      await db.delete('chunks_fts');
+    }
+    await db.delete('chunk_embeddings');
+    await db.delete('search_chunks');
+    // Includes the global ('global','all','chunks') backfill-complete row.
+    await db.delete('search_index_state');
 
     // Delete all data from all tables
     await db.delete('relationships');
@@ -5087,45 +5441,140 @@ class DatabaseService {
   }
   // --- Agent / AI Features ---
 
-  /// Search notes using Full-Text Search
-  Future<List<Note>> searchNotesFTS(String query, {List<String>? tags}) async {
+  /// Chunk-level lexical search, step (a) of plan §1.4: returns docid +
+  /// matchinfo('pcnalx') blob for every chunks_fts row matching [ftsQuery]
+  /// (an expression built by `buildFtsQuery` — never raw user input).
+  ///
+  /// No ranking or ordering happens here: matchinfo blobs are tiny, so ALL
+  /// matches are returned (capped at [limit] rows as a runaway guard — a
+  /// plain LIMIT, deliberately unordered) and the caller ranks them in Dart
+  /// via `bm25FromMatchinfo`, then fetches full rows for only the top slice
+  /// with [getSearchChunksByIds]. This avoids rank truncation: the cap
+  /// bounds pathological corpora, not the ranking pool.
+  ///
+  /// [sourceTypes] / [noteId] narrow the candidate pool IN SQL. That is not an
+  /// optimization but a correctness requirement for scoped callers: the LIMIT
+  /// is deliberately unordered, so FTS4's doclist scan keeps the LOWEST
+  /// docids. Chunk kinds written LAST by the indexer (figures follow the
+  /// chunk/pdf_text/ocr stages, so they hold the HIGHEST `search_chunks.id`)
+  /// would be cut away wholesale on any corpus where a common term matches
+  /// more than [limit] chunks, and a figure-scoped search would report "no
+  /// figures" while matching figures exist. Filtering here applies the cap to
+  /// in-scope rows instead. Callers still re-apply the same predicates during
+  /// accumulation — this narrows, it never replaces the visibility pass.
+  ///
+  /// Throws if chunks_fts is unavailable ([chunksFtsAvailable] is false) or
+  /// the MATCH expression is invalid — callers gate on availability first.
+  Future<List<ChunkFtsMatch>> searchChunksLexical(
+    String ftsQuery, {
+    int limit = 5000,
+    Set<String>? sourceTypes,
+    String? noteId,
+  }) async {
     final db = await database;
-    // Wrap the query as a phrase to avoid accidental FTS syntax errors.
-    final sanitizedQuery = '"$query"';
-    final hasTags = tags != null && tags.isNotEmpty;
-
-    try {
-      String sql = '''
-        SELECT n.* 
-        FROM notes_fts fts
-        JOIN notes n ON fts.rowid = n.rowid
-        WHERE notes_fts MATCH ?
-      ''';
-
-      List<Object?> args = [sanitizedQuery];
-
-      if (hasTags) {
-        for (final tag in tags) {
-          sql += '''
-            AND EXISTS (
-              SELECT 1
-              FROM note_tags nt
-              JOIN tags t ON t.id = nt.tagId
-              WHERE nt.noteId = n.id AND t.name = ?
-            )
-          ''';
-          args.add(tag);
-        }
-      }
-
-      sql += ' LIMIT 50';
-
-      final results = await db.rawQuery(sql, args);
-      return await _batchLoadNotes(results);
-    } catch (e) {
-      LoggerService.error('FTS Search failed: $e');
-      return [];
+    final predicates = <String>[];
+    final args = <Object?>[ftsQuery];
+    if (sourceTypes != null && sourceTypes.isNotEmpty) {
+      final types = sourceTypes.toList();
+      final placeholders = List.filled(types.length, '?').join(',');
+      predicates.add('c.sourceType IN ($placeholders)');
+      args.addAll(types);
     }
+    if (noteId != null) {
+      predicates.add('c.noteId = ?');
+      args.add(noteId);
+    }
+    args.add(limit);
+    // The unscoped form stays a bare FTS scan: joining search_chunks for every
+    // match would make ordinary note search pay for a filter it does not use.
+    final sql = predicates.isEmpty
+        ? "SELECT docid, matchinfo(chunks_fts, 'pcnalx') AS mi "
+              'FROM chunks_fts WHERE content MATCH ? LIMIT ?'
+        : "SELECT chunks_fts.docid AS docid, matchinfo(chunks_fts, 'pcnalx') "
+              'AS mi FROM chunks_fts '
+              'JOIN search_chunks c ON c.id = chunks_fts.docid '
+              'WHERE chunks_fts.content MATCH ? AND ${predicates.join(' AND ')} '
+              'LIMIT ?';
+    final rows = await db.rawQuery(sql, args);
+    return [
+      for (final row in rows)
+        ChunkFtsMatch(
+          docid: row['docid'] as int,
+          matchinfo: row['mi'] as Uint8List,
+        ),
+    ];
+  }
+
+  /// Fetches full search_chunks rows for [chunkIds] (step (b) of plan §1.4),
+  /// joined with the owning note's isArchived flag and — for attachment-
+  /// derived chunks — the source attachment's includeInAIContext flag, so the
+  /// caller can apply visibility/audience filters without extra queries.
+  ///
+  /// Chunks whose note no longer exists are dropped by the INNER JOIN.
+  /// Returned in no particular order; callers reorder by their own ranking.
+  ///
+  /// [sourceTypes] / [noteId] drop out-of-scope rows in SQL. `c.text` can be a
+  /// kilobyte or more per row, so a scoped caller (`search_figures`, whose
+  /// candidate list is ranked over every chunk kind) would otherwise haul the
+  /// full text of hundreds of rows it is about to discard in Dart.
+  Future<List<SearchChunkRow>> getSearchChunksByIds(
+    List<int> chunkIds, {
+    Set<String>? sourceTypes,
+    String? noteId,
+  }) async {
+    if (chunkIds.isEmpty) return [];
+    final db = await database;
+    const chunkSize = 500; // SQLite variable-limit-safe IN() size.
+    final scopeSql = StringBuffer();
+    final scopeArgs = <Object?>[];
+    if (sourceTypes != null && sourceTypes.isNotEmpty) {
+      final types = sourceTypes.toList();
+      scopeSql.write(
+        ' AND c.sourceType IN (${List.filled(types.length, '?').join(',')})',
+      );
+      scopeArgs.addAll(types);
+    }
+    if (noteId != null) {
+      scopeSql.write(' AND c.noteId = ?');
+      scopeArgs.add(noteId);
+    }
+    final results = <SearchChunkRow>[];
+    for (var i = 0; i < chunkIds.length; i += chunkSize) {
+      final slice = chunkIds.sublist(
+        i,
+        i + chunkSize > chunkIds.length ? chunkIds.length : i + chunkSize,
+      );
+      final placeholders = List.filled(slice.length, '?').join(',');
+      final args = [...slice, ...scopeArgs];
+      final rows = await db.rawQuery('''
+        SELECT c.id, c.chunkKey, c.noteId, c.sourceType, c.sourceId, c.page,
+               c.seq, c.text,
+               n.isArchived AS noteIsArchived,
+               a.includeInAIContext AS attachmentIncludeInAIContext
+        FROM search_chunks c
+        JOIN notes n ON n.id = c.noteId
+        LEFT JOIN attachments a ON a.id = c.sourceId
+        WHERE c.id IN ($placeholders)$scopeSql
+      ''', args);
+      for (final row in rows) {
+        final aiFlag = row['attachmentIncludeInAIContext'] as int?;
+        results.add(
+          SearchChunkRow(
+            id: row['id'] as int,
+            chunkKey: row['chunkKey'] as String,
+            noteId: row['noteId'] as String,
+            sourceType: row['sourceType'] as String,
+            sourceId: row['sourceId'] as String?,
+            page: row['page'] as int?,
+            seq: row['seq'] as int,
+            text: row['text'] as String,
+            noteIsArchived: (row['noteIsArchived'] as int? ?? 0) != 0,
+            attachmentIncludeInAIContext: aiFlag == null ? null : aiFlag != 0,
+          ),
+        );
+      }
+    }
+    return results;
   }
 
   /// Executes a raw SQL query. USE WITH CAUTION.
@@ -5198,6 +5647,13 @@ class DatabaseService {
     String notesWithTag(String tagRef) =>
         "INSERT INTO $journal(kind, note_id) "
         "SELECT 'notes', noteId FROM note_tags WHERE tagId = $tagRef;";
+    // Annotations belong to a note directly (note_id) or through an
+    // attachment (attachment_id). A NULL note_id journal row is ignored on
+    // read, so both inserts are always safe to emit.
+    String annotationNote(String noteRef, String attachmentRef) =>
+        "INSERT INTO $journal(kind, note_id) VALUES ('notes', $noteRef); "
+        "INSERT INTO $journal(kind, note_id) "
+        "SELECT 'notes', noteId FROM attachments WHERE id = $attachmentRef;";
 
     switch (table) {
       case 'notes':
@@ -5268,6 +5724,27 @@ class DatabaseService {
           trigger('filters_au', 'AFTER UPDATE', domain('filters')),
           trigger('filters_ad', 'AFTER DELETE', domain('filters')),
         ];
+      case 'note_annotations':
+        // Annotation text feeds the search index, so raw-SQL annotation
+        // writes must reach the indexer via the owning note's id.
+        return [
+          trigger(
+            'note_annotations_ai',
+            'AFTER INSERT',
+            annotationNote('NEW.note_id', 'NEW.attachment_id'),
+          ),
+          trigger(
+            'note_annotations_au',
+            'AFTER UPDATE',
+            '${annotationNote('OLD.note_id', 'OLD.attachment_id')} '
+                '${annotationNote('NEW.note_id', 'NEW.attachment_id')}',
+          ),
+          trigger(
+            'note_annotations_ad',
+            'AFTER DELETE',
+            annotationNote('OLD.note_id', 'OLD.attachment_id'),
+          ),
+        ];
       default:
         // A table listed in _capturedTables without a trigger spec would be
         // silently uncaptured — fail loudly instead.
@@ -5283,6 +5760,7 @@ class DatabaseService {
     'relationships',
     'tags',
     'filters',
+    'note_annotations',
   ];
 
   Future<_CaptureState> _installCaptureObjects(Database db) async {
@@ -5425,19 +5903,6 @@ class DatabaseService {
     );
   }
 
-  /// Fallback search using LIKE
-  Future<List<Note>> searchNotes(String query) async {
-    final db = await database;
-    final results = await db.query(
-      'notes',
-      where: 'title LIKE ? OR content LIKE ?',
-      whereArgs: ['%$query%', '%$query%'],
-      orderBy: 'updatedAt DESC',
-      limit: 50,
-    );
-    return await _batchLoadNotes(results);
-  }
-
   /// Get the AI extraction prompt for a specific tag
   Future<String?> getTagExtractionPrompt(String tagId) async {
     final db = await database;
@@ -5547,4 +6012,52 @@ class DatabaseService {
   }
 
   // --- End Agent / AI Features ---
+}
+
+/// One chunks_fts MATCH hit: the search_chunks rowid ([docid]) and its
+/// matchinfo('pcnalx') blob, ready for `bm25FromMatchinfo`.
+class ChunkFtsMatch {
+  const ChunkFtsMatch({required this.docid, required this.matchinfo});
+
+  final int docid;
+  final Uint8List matchinfo;
+}
+
+/// A search_chunks row with the joined visibility flags SearchService needs
+/// (owning note's archived state; source attachment's includeInAIContext).
+class SearchChunkRow {
+  const SearchChunkRow({
+    required this.id,
+    required this.chunkKey,
+    required this.noteId,
+    required this.sourceType,
+    required this.sourceId,
+    required this.page,
+    required this.seq,
+    required this.text,
+    required this.noteIsArchived,
+    required this.attachmentIncludeInAIContext,
+  });
+
+  final int id;
+  final String chunkKey;
+  final String noteId;
+
+  /// meta | note_body | subnote | annotation | attachment_text |
+  /// attachment_ocr | figure
+  final String sourceType;
+  final String? sourceId;
+
+  /// 1-based page for attachment-derived chunks.
+  final int? page;
+  final int seq;
+
+  /// RAW chunk text (snippet + embedding input).
+  final String text;
+  final bool noteIsArchived;
+
+  /// includeInAIContext of the attachment joined via sourceId; null when
+  /// sourceId is not an existing attachment id (note-body/meta/subnote/
+  /// annotation chunks, or a dangling attachment reference).
+  final bool? attachmentIncludeInAIContext;
 }

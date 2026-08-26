@@ -5,17 +5,23 @@
 /// apps.
 ///
 /// URI Format:
-/// - synapseresource://note/<note_id>
-/// - synapseresource://conversation/<conversation_id>
-/// - synapseresource://attachment/<attachment_id>
-/// - synapseresource://attachment/<attachment_id>?page=5
-/// - synapseresource://app/<app_uuid>?note=current&key=value
+/// - `synapseresource://note/<note_id>`
+/// - `synapseresource://conversation/<conversation_id>`
+/// - `synapseresource://attachment/<attachment_id>`
+/// - `synapseresource://attachment/<attachment_id>?page=5`
+/// - `synapseresource://app/<app_uuid>?note=current&key=value`
+/// - `synapseresource://figure/<figureId>`
+///
+/// `figureId` is the content-addressed id of an extracted figure region:
+/// `<chunkKey>~<contentHash prefix>` (see `services/search/figure_resolver.dart`
+/// for the full contract). It contains `:` characters, which are legal inside
+/// a URI path segment.
 library;
 
 import 'package:flutter/foundation.dart';
 
 /// The type of resource a SynapseResourceLink points to.
-enum SynapseResourceType { note, conversation, attachment, app }
+enum SynapseResourceType { note, conversation, attachment, app, figure }
 
 /// A parsed synapseresource:// link.
 class SynapseResourceLink {
@@ -94,6 +100,8 @@ class SynapseResourceUri {
           type = SynapseResourceType.attachment;
         case 'app':
           type = SynapseResourceType.app;
+        case 'figure':
+          type = SynapseResourceType.figure;
         default:
           return null;
       }
@@ -125,6 +133,19 @@ class SynapseResourceUri {
       return '$base?page=$page';
     }
     return base;
+  }
+
+  /// Generates a synapseresource:// URI for an extracted figure region.
+  ///
+  /// [figureId] is `<chunkKey>~<contentHash prefix>`; its `:` and `~` are kept
+  /// literal (both are legal path-segment characters and keep AI-embedded URIs
+  /// readable), everything else is percent-encoded so an exotic id can never
+  /// break out of the path segment.
+  static String figureUri(String figureId) {
+    final encoded = Uri.encodeComponent(
+      figureId,
+    ).replaceAll('%3A', ':').replaceAll('%7E', '~');
+    return '$scheme://figure/$encoded';
   }
 
   /// Generates a synapseresource:// URI for an embedded user app.

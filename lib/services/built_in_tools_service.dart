@@ -48,6 +48,15 @@ class BuiltInToolsService {
       color: Colors.blue,
     ),
     const BuiltInTool(
+      id: 'search_figures',
+      name: 'Search Figures',
+      description:
+          'Find figures, diagrams, tables and images already stored in notes, '
+          'ready to embed in a reply.',
+      icon: Icons.image_search,
+      color: Colors.purple,
+    ),
+    const BuiltInTool(
       id: 'read_note',
       name: 'Read Note',
       description:

@@ -1,0 +1,10 @@
+model_type: gemini
+model_endpoint: https://generativelanguage.googleapis.com/v1beta
+model_name: gemini-embedding-2
+model_display_name: Gemini Embedding 2 (Multimodal)
+api_key_url: https://aistudio.google.com/app/apikey
+dimensions: 768
+supports_images: true
+# Batch endpoint support unverified for this preview model — per-item
+# :embedContent fallback is used until confirmed (plan §2, verified facts).
+supports_batch: false

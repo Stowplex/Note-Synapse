@@ -844,6 +844,46 @@ class AppLocalizationsZh extends AppLocalizations {
   String get createFirstNote => '创建您的第一条笔记';
 
   @override
+  String get searchInProgress => '搜索中…';
+
+  @override
+  String get searchTryAdjustingTerms => '尝试调整搜索关键词';
+
+  @override
+  String get searchTryDifferentTags => '尝试选择其他标签';
+
+  @override
+  String get createFirstNoteHint => '点击 + 按钮创建您的第一条笔记';
+
+  @override
+  String buildingSearchIndex(int percent) {
+    return '正在构建搜索索引… $percent%';
+  }
+
+  @override
+  String searchBadgePdfPage(int page) {
+    return 'PDF · 第 $page 页';
+  }
+
+  @override
+  String get searchBadgeAttachment => '附件';
+
+  @override
+  String get searchBadgeImage => '图片';
+
+  @override
+  String get searchBadgeSubnote => '子笔记';
+
+  @override
+  String get searchBadgeTag => '标签';
+
+  @override
+  String get searchBadgeAnnotation => '批注';
+
+  @override
+  String get dismiss => '忽略';
+
+  @override
   String get timeline => '时间线';
 
   @override
@@ -4984,4 +5024,523 @@ class AppLocalizationsZh extends AppLocalizations {
   String revokeAppAccessConfirm(String appName, String domain) {
     return '移除“$appName”对你 $domain 登录的访问权限？';
   }
+
+  @override
+  String get figureUnavailable => '此图已不可用 — 来源笔记或图片已被删除';
+
+  @override
+  String figureSourcePage(String title, int page) {
+    return '$title · 第$page页';
+  }
+
+  @override
+  String get figureOpenSource => '打开来源';
+
+  @override
+  String get searchSettings => '搜索与索引';
+
+  @override
+  String get searchSettingsSubtitle => '语义搜索、文字识别与索引维护';
+
+  @override
+  String get searchSubtitleLexicalOnly => '仅关键词搜索';
+
+  @override
+  String searchSubtitleReady(String provider) {
+    return '$provider · 语义搜索已开启';
+  }
+
+  @override
+  String searchSubtitleIndexing(String provider, int percent) {
+    return '$provider · 正在索引 $percent%';
+  }
+
+  @override
+  String searchSubtitleSwitching(String provider, int percent) {
+    return '正在切换到 $provider — 已重建 $percent%';
+  }
+
+  @override
+  String searchSubtitleRevoked(String provider) {
+    return '语义搜索已停用 — 重新启用 $provider 以恢复';
+  }
+
+  @override
+  String get searchProviderReEnable => '重新启用';
+
+  @override
+  String searchSubtitleErrors(String provider, int count) {
+    return '$provider · $count 个错误';
+  }
+
+  @override
+  String get searchIndexStatus => '索引状态';
+
+  @override
+  String searchIndexIdle(int chunks) {
+    return '已是最新 — 已索引 $chunks 个片段';
+  }
+
+  @override
+  String searchStageChunks(int done, int total) {
+    return '正在索引笔记 — $done/$total';
+  }
+
+  @override
+  String searchStagePdfText(int done, int total) {
+    return '正在读取 PDF 文字 — $done/$total 个附件';
+  }
+
+  @override
+  String searchStageOcr(int done, int total) {
+    return '正在识别 PDF 中的文字 — $done/$total 页';
+  }
+
+  @override
+  String searchStageEmbed(int done, int total) {
+    return '正在生成向量 — $done/$total 个片段';
+  }
+
+  @override
+  String get searchEmbeddingProvider => '向量模型服务';
+
+  @override
+  String get searchProviderNone => '不使用（仅关键词）';
+
+  @override
+  String get searchProviderNoneSubtitle => '仅关键词搜索 — 数据不会离开设备';
+
+  @override
+  String get searchProviderCustom => '自定义（OpenAI 兼容）';
+
+  @override
+  String get searchProviderCustomSubtitle => '自建服务或任何 OpenAI 兼容接口';
+
+  @override
+  String get searchProviderCloud => '云端';
+
+  @override
+  String get searchProviderOnDevice => '设备本地';
+
+  @override
+  String searchProviderDimensions(int dims) {
+    return '$dims 维';
+  }
+
+  @override
+  String searchProviderServedBy(String provider) {
+    return '搜索仍由 $provider 提供';
+  }
+
+  @override
+  String get searchProviderEndpoint => '接口地址';
+
+  @override
+  String get searchProviderEndpointHelp =>
+      '完整的基础 URL，例如 http://localhost:11434/v1';
+
+  @override
+  String get searchProviderModelName => '模型名称';
+
+  @override
+  String get searchProviderDimensionsField => '维度';
+
+  @override
+  String get searchProviderDimensionsHelp => '由连接测试验证';
+
+  @override
+  String get searchProviderApiKey => 'API 密钥';
+
+  @override
+  String get searchProviderApiKeyHelp => '可选 — 自建的免密钥接口可留空';
+
+  @override
+  String searchProviderApiKeyFromChat(String model) {
+    return '已从你的 $model 对话模型填入 — 若此接口需要不同密钥请替换。';
+  }
+
+  @override
+  String get searchProviderFieldsRequired => '请先填写接口地址和模型名称，然后再测试。';
+
+  @override
+  String get searchGetApiKey => '获取 API 密钥';
+
+  @override
+  String get searchTestConnection => '测试连接';
+
+  @override
+  String searchTestOk(int dims) {
+    return '连接正常 — 向量为 $dims 维';
+  }
+
+  @override
+  String searchTestDimensionsCorrected(int dims) {
+    return '维度已更正为 $dims，与接口返回一致';
+  }
+
+  @override
+  String searchTestFailed(String error) {
+    return '连接失败：$error';
+  }
+
+  @override
+  String get searchTestRequired => '启用之前请先测试连接。';
+
+  @override
+  String get searchProviderEnable => '启用';
+
+  @override
+  String searchProviderEnabled(String provider) {
+    return '已启用 $provider';
+  }
+
+  @override
+  String get searchProviderTurnedOff => '语义搜索已关闭 — 已存储的向量仍保留';
+
+  @override
+  String searchConsentTitle(String provider) {
+    return '将笔记文本发送到 $provider？';
+  }
+
+  @override
+  String searchConsentBody(int chunks, String provider) {
+    return '约 $chunks 个笔记文本片段将发送到 $provider 以建立语义索引。';
+  }
+
+  @override
+  String searchConsentBodyWithImages(int chunks, int images, String provider) {
+    return '约 $chunks 个笔记文本片段和 $images 张图片将发送到 $provider 以建立语义索引。';
+  }
+
+  @override
+  String searchConsentBodyUnknown(String provider) {
+    return '笔记会在建立索引的过程中发送到 $provider，用于建立语义索引。';
+  }
+
+  @override
+  String searchConsentLargePdfsExcluded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个大型 PDF 仍被排除，不会发送。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get searchConsentWifiOnly => '批量索引默认仅在 Wi-Fi 下进行；搜索查询可使用任意网络。';
+
+  @override
+  String searchConsentSwitchDisclosure(String provider) {
+    return '在重建索引完成之前，搜索将继续使用 $provider。';
+  }
+
+  @override
+  String searchConsentStopServing(String provider) {
+    return '立即停用 $provider';
+  }
+
+  @override
+  String searchConsentStoppedServing(String provider) {
+    return '已停用 $provider — 在重建索引完成前仅使用关键词搜索';
+  }
+
+  @override
+  String get searchConsentAccept => '发送并索引';
+
+  @override
+  String searchErrorAuth(String provider) {
+    return '$provider 拒绝了密钥 — 索引已暂停，请先修正密钥';
+  }
+
+  @override
+  String searchErrorNotInstalled(String provider) {
+    return '$provider 尚未下载到本设备';
+  }
+
+  @override
+  String get searchErrorDimensions => '接口返回的向量维度与配置的维度不一致';
+
+  @override
+  String get searchErrorHalted => '向量生成已暂停';
+
+  @override
+  String searchErrorFailedChunks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个片段无法生成向量',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get searchErrorFailedChunksHint => '这些片段只能通过重建索引重试 — 其他操作不会重新检查它们。';
+
+  @override
+  String get searchFixKey => '修正密钥';
+
+  @override
+  String get searchDownloadModel => '下载模型';
+
+  @override
+  String get searchDownloadModelHint => '请先在下方下载模型，然后重新测试。';
+
+  @override
+  String get searchRetryStarted => '正在重试索引…';
+
+  @override
+  String get searchWifiOnly => '仅在 Wi-Fi 下索引';
+
+  @override
+  String get searchWifiOnlySubtitle => '批量生成向量会等待 Wi-Fi。搜索始终可用。';
+
+  @override
+  String get searchLocalModelSection => '设备本地模型';
+
+  @override
+  String get searchLocalModelInstalled => '已下载到本设备';
+
+  @override
+  String get searchLocalModelNotInstalled => '尚未下载';
+
+  @override
+  String get searchHuggingFaceToken => 'HuggingFace 访问令牌';
+
+  @override
+  String get searchHuggingFaceTokenHelp => '必填 — 该模型仓库需要授权';
+
+  @override
+  String get searchGetHfToken => '获取令牌';
+
+  @override
+  String get searchInstallModel => '下载';
+
+  @override
+  String get searchUninstallModel => '删除';
+
+  @override
+  String searchInstallProgress(int percent) {
+    return '正在下载 — $percent%';
+  }
+
+  @override
+  String searchInstallAuthFailed(String error) {
+    return '下载被拒绝 — 请在 HuggingFace 上接受模型许可并检查令牌。$error';
+  }
+
+  @override
+  String searchInstallTransientFailed(String error) {
+    return '下载失败 — 请检查网络后重试。$error';
+  }
+
+  @override
+  String searchInstallFailed(String error) {
+    return '下载失败：$error';
+  }
+
+  @override
+  String get searchModelInstalled => '模型已下载';
+
+  @override
+  String get searchModelRemoved => '模型已删除';
+
+  @override
+  String get searchRebuildIndex => '重建索引';
+
+  @override
+  String get searchRebuildSubtitle => '重新检查所有笔记和附件';
+
+  @override
+  String searchRebuildRunning(int percent) {
+    return '正在重建 — $percent%';
+  }
+
+  @override
+  String get searchRebuildConfirmTitle => '重建搜索索引？';
+
+  @override
+  String searchRebuildConfirmBody(int notes, int chunks) {
+    return '将重新检查 $notes 篇笔记和 $chunks 个片段。';
+  }
+
+  @override
+  String searchRebuildConfirmCost(String provider) {
+    return '文本有变化的片段会再次发送到 $provider；未变化的片段不会重新生成向量。';
+  }
+
+  @override
+  String get searchRebuildStarted => '正在重建搜索索引…';
+
+  @override
+  String get searchDeleteEmbeddings => '删除已存储的向量';
+
+  @override
+  String get searchDeleteEmbeddingsSubtitle => '释放存储空间并清除全部向量。关闭服务商则会保留它们。';
+
+  @override
+  String get searchDeleteEmbeddingsConfirm =>
+      '删除全部已存储的向量？这同时会关闭向量模型服务，因此不会在你不知情的情况下重新上传 — 在你再次选择服务之前，搜索将回退到关键词。';
+
+  @override
+  String get searchEmbeddingsDeleted => '已删除存储的向量 — 服务已关闭';
+
+  @override
+  String get searchOcrEnabled => '识别 PDF 和图片中的文字';
+
+  @override
+  String get searchOcrOnDevice => '在设备本地运行 — 不会上传任何内容';
+
+  @override
+  String get searchOcrScript => '文种';
+
+  @override
+  String get searchOcrScriptAuto => '自动（跟随设备语言）';
+
+  @override
+  String get searchOcrScriptLatin => '拉丁文';
+
+  @override
+  String get searchOcrScriptChinese => '中文';
+
+  @override
+  String get searchFigureIndexing => '索引图表';
+
+  @override
+  String get searchFigureIndexingSubtitle => '从 PDF 中提取图表，便于搜索并在对话中展示';
+
+  @override
+  String get searchFigureSkillHint => '安装「Figure Answers」技能以获得更好的图表回复';
+
+  @override
+  String get searchPdfPageCap => '大型 PDF 上限';
+
+  @override
+  String get searchPdfPageCapField => '页数';
+
+  @override
+  String searchPdfPageCapSubtitle(int pages) {
+    return '超过 $pages 页的 PDF 不会自动索引，除非你手动开启';
+  }
+
+  @override
+  String searchLargePdfsSkipped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个大型 PDF 未被索引 — 请检查',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String searchLargePdfsMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '还有 $count 个未显示',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String searchLargePdfPages(String title, int pages) {
+    return '$title · $pages 页';
+  }
+
+  @override
+  String get searchIndexAnyway => '仍然索引';
+
+  @override
+  String searchLargePdfQueued(String name) {
+    return '将开始索引 $name';
+  }
+
+  @override
+  String get searchNoLargePdfs => '没有因体积被跳过的 PDF';
+
+  @override
+  String get searchIndexOptions => '搜索索引';
+
+  @override
+  String get searchIndexOptionsCustom => '搜索索引：已自定义';
+
+  @override
+  String searchIndexOptionsSubtitle(String name) {
+    return '选择可以从 $name 中提取哪些内容用于搜索。';
+  }
+
+  @override
+  String get searchIndexPurgeWarning =>
+      '关闭某项后，它已为该文件生成的内容会被删除——包括它的搜索片段、由它渲染出的图表截图，以及为语义搜索存储的向量。';
+
+  @override
+  String get searchIndexEmbedPurgeWarning =>
+      '关闭后，已为该文件存储的向量会被删除，它将不再出现在语义搜索结果中。';
+
+  @override
+  String get searchIndexExtractText => '提取文本层';
+
+  @override
+  String get searchIndexExtractTextSubtitle => '索引此 PDF 中已内嵌的文本。';
+
+  @override
+  String get searchIndexAnywayOverCap => '忽略页数上限并索引';
+
+  @override
+  String searchIndexOverCapSubtitle(int pages, int cap) {
+    return '共 $pages 页，超过 $cap 页的上限，除非手动开启，否则会被跳过。';
+  }
+
+  @override
+  String get searchIndexAnywaySubtitle => '即使此 PDF 超过页数上限也继续索引。';
+
+  @override
+  String get searchIndexDeriveOnDevice => '在本机提取内容';
+
+  @override
+  String get searchIndexDeriveOnDeviceSubtitle => '文字识别与图表截图均在本机完成，不会上传。';
+
+  @override
+  String get searchIndexEmbed => '用于语义搜索';
+
+  @override
+  String get searchIndexEmbedSubtitle =>
+      '将此文件已索引的文本发送给嵌入模型提供方；若提供方支持图像，发送的则是图像本身：由它渲染出的图表截图，或图片文件本身。';
+
+  @override
+  String get searchIndexSvgOnly =>
+      'SVG 附件只按文件名和替代文本索引：没有可提取的文本层，也没有可在本机识别或截取的内容。除非在下方关闭语义搜索，这段文本仍会发送给嵌入模型提供方。';
+
+  @override
+  String get searchIndexNotIndexable =>
+      'Note Synapse 不会从此类文件中提取内容。它仍可通过所属笔记被找到。';
+
+  @override
+  String get searchIndexUpdated => '已更新搜索索引设置';
+
+  @override
+  String get searchIndexUpdateFailed => '无法更新搜索索引设置';
+
+  @override
+  String get searchExcludeNote => '从搜索中排除';
+
+  @override
+  String get searchExcludeNoteConfirmTitle => '将此笔记从搜索中排除？';
+
+  @override
+  String get searchExcludeNoteConfirmBody =>
+      '该笔记及其附件会从搜索索引中移除，包括从附件提取的文本以及由它们渲染出的图表截图。取消排除后会重新索引。';
+
+  @override
+  String get searchExcludeNoteConfirm => '排除';
+
+  @override
+  String get searchExcludeNoteExcluded => '已将笔记从搜索中排除';
+
+  @override
+  String get searchExcludeNoteIncluded => '笔记将重新被搜索索引';
+
+  @override
+  String get searchExcludeNoteFailed => '无法更新搜索排除设置';
 }

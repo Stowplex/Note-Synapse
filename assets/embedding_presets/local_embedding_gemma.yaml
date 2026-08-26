@@ -1,0 +1,22 @@
+# On-device embedding via flutter_gemma's LiteRT embedder. STRICTLY OPT-IN:
+# selecting this preset never downloads anything — the ~180 MB model +
+# tokenizer download is an explicit user action in search settings
+# (LocalEmbeddingModelManager).
+#
+# NOTE: the litert-community HuggingFace repo is GATED — the user must accept
+# the Gemma license and supply a HuggingFace access token (api_key_url below)
+# for the download to succeed.
+model_type: local
+model_name: embeddinggemma-300m
+model_display_name: EmbeddingGemma (on-device)
+# Official EmbeddingGemma LiteRT conversion named by flutter_gemma's docs.
+# seq512 variant: our note chunks target ~1200 chars (roughly 300-400
+# tokens), which overflows the seq256 variant's input window.
+model_url: https://huggingface.co/litert-community/embeddinggemma-300m/resolve/main/embeddinggemma-300M_seq512_mixed-precision.tflite
+tokenizer_url: https://huggingface.co/litert-community/embeddinggemma-300m/resolve/main/sentencepiece.model
+# HuggingFace access token page (gated download), not a cloud API key.
+api_key_url: https://huggingface.co/settings/tokens
+# EmbeddingGemma always outputs 768-dim vectors (seq length varies by file,
+# not dimensionality).
+dimensions: 768
+supports_images: false

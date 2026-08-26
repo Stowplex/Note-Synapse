@@ -114,9 +114,7 @@ void main() {
       });
 
       test('existing note/conversation URIs have empty queryParameters', () {
-        final noteLink = SynapseResourceUri.parse(
-          'synapseresource://note/abc',
-        );
+        final noteLink = SynapseResourceUri.parse('synapseresource://note/abc');
         expect(noteLink!.queryParameters, isEmpty);
 
         final convoLink = SynapseResourceUri.parse(
@@ -184,6 +182,49 @@ void main() {
           SynapseResourceUri.attachmentUri('att-1', page: 5),
           'synapseresource://attachment/att-1?page=5',
         );
+      });
+    });
+
+    group('figureUri', () {
+      test('generates a figure URI with the chunkKey colons intact', () {
+        expect(
+          SynapseResourceUri.figureUri('n1:figure:att1:2000~abcdef012345'),
+          'synapseresource://figure/n1:figure:att1:2000~abcdef012345',
+        );
+      });
+
+      test('parses a figureId containing colons', () {
+        final link = SynapseResourceUri.parse(
+          'synapseresource://figure/note-1:figure:att-1:3000~aabbccddeeff',
+        );
+        expect(link, isNotNull);
+        expect(link!.type, SynapseResourceType.figure);
+        expect(link.id, 'note-1:figure:att-1:3000~aabbccddeeff');
+        expect(link.queryParameters, isEmpty);
+      });
+
+      test('round-trips a figureId whose chunkKey contains a tilde', () {
+        // chunkKeys are not expected to contain `~`, but the split-on-LAST-`~`
+        // contract must survive one if a note id ever does.
+        const figureId = 'no~te:figure:att-1:0~aabbccddeeff';
+        final parsed = SynapseResourceUri.parse(
+          SynapseResourceUri.figureUri(figureId),
+        );
+        expect(parsed!.type, SynapseResourceType.figure);
+        expect(parsed.id, figureId);
+        expect(
+          parsed.id.substring(parsed.id.lastIndexOf('~') + 1),
+          'aabbccddeeff',
+        );
+      });
+
+      test('round-trips ids with characters that need encoding', () {
+        const figureId = 'note a/b:figure:att 1:0~aabbccddeeff';
+        final uri = SynapseResourceUri.figureUri(figureId);
+        expect(uri.contains(' '), isFalse);
+        final parsed = SynapseResourceUri.parse(uri);
+        expect(parsed!.type, SynapseResourceType.figure);
+        expect(parsed.id, figureId);
       });
     });
 

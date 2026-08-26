@@ -51,15 +51,19 @@ void main() {
     getIt.registerLazySingleton<ModelSelector>(() => mockModelSelector);
     getIt.registerLazySingleton<AIService>(() => mockAIService);
     getIt.registerLazySingleton<DatabaseService>(() => mockDatabaseService);
-    getIt.registerLazySingleton<PromptTemplateService>(() => mockPromptTemplateService);
-    getIt.registerLazySingleton<SkillService>(() => SkillService(mockDatabaseService));
-    
-    when(mockDatabaseService.getNotesByTag('agent-skill'))
-        .thenAnswer((_) async => []);
-    when(mockDatabaseService.searchNotesFTS(any, tags: anyNamed('tags')))
-        .thenAnswer((_) async => []);
-    when(mockPromptTemplateService.renderSync(any, any))
-        .thenReturn('Mock Template Content');
+    getIt.registerLazySingleton<PromptTemplateService>(
+      () => mockPromptTemplateService,
+    );
+    getIt.registerLazySingleton<SkillService>(
+      () => SkillService(mockDatabaseService),
+    );
+
+    when(
+      mockDatabaseService.getNotesByTag('agent-skill'),
+    ).thenAnswer((_) async => []);
+    when(
+      mockPromptTemplateService.renderSync(any, any),
+    ).thenReturn('Mock Template Content');
 
     agentService = AgentService(
       mockContextManager,
@@ -107,9 +111,6 @@ void main() {
     when(mockContextManager.getContext(any)).thenReturn(null);
 
     // Default DatabaseService stubs
-    when(
-      mockDatabaseService.searchNotesFTS(any, tags: anyNamed('tags')),
-    ).thenAnswer((_) async => []);
     when(mockDatabaseService.getNoteById(any)).thenAnswer((_) async => null);
     when(mockDatabaseService.getRelationships(any)).thenAnswer((_) async => []);
 

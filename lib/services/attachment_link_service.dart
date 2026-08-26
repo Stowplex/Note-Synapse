@@ -9,15 +9,12 @@ class AttachmentLinkResult {
   final Attachment attachment;
   final Note note;
 
-  const AttachmentLinkResult({
-    required this.attachment,
-    required this.note,
-  });
+  const AttachmentLinkResult({required this.attachment, required this.note});
 }
 
 /// Service for generating and resolving attachment links in notes.
 ///
-/// Attachment links use the synapseresource://attachment/<id> URI scheme
+/// Attachment links use the `synapseresource://attachment/<id>` URI scheme
 /// and can be embedded in markdown content as clickable links.
 class AttachmentLinkService {
   final DatabaseService _db;
@@ -28,7 +25,8 @@ class AttachmentLinkService {
   ///
   /// Returns null if the attachment or its parent note cannot be found.
   Future<AttachmentLinkResult?> resolveAttachmentLink(
-      String attachmentId) async {
+    String attachmentId,
+  ) async {
     final attachment = await _db.getAttachmentById(attachmentId);
     if (attachment == null) return null;
 
@@ -48,6 +46,39 @@ class AttachmentLinkService {
   }) {
     final uri = SynapseResourceUri.attachmentUri(attachmentId, page: page);
     return '[$linkText]($uri)';
+  }
+
+  /// Generates a markdown IMAGE embed for an extracted figure region.
+  ///
+  /// Example output: `![Figure 3: pipeline](synapseresource://figure/<id>)`.
+  /// [figureId] is the content-addressed `<chunkKey>~<contentHash prefix>`
+  /// built by `FigureResolver.buildFigureId` — the renderer verifies the hash
+  /// before displaying anything, so a stale id degrades to the dangling
+  /// placeholder instead of a wrong figure.
+  ///
+  /// Whole PDF pages are NEVER embedded as images; use
+  /// [generateMarkdownLink] with a `page` for those.
+  String generateFigureMarkdownImage({
+    required String figureId,
+    required String caption,
+  }) => _markdownImage(SynapseResourceUri.figureUri(figureId), caption);
+
+  /// Generates a markdown IMAGE embed for an attachment that IS the image —
+  /// a raster image file, which has no derived crop of its own.
+  ///
+  /// Example output: `![whiteboard](synapseresource://attachment/att-1)`.
+  /// Vector images (SVG) cannot be rendered inline; link to those with
+  /// [generateMarkdownLink] instead.
+  String generateAttachmentMarkdownImage({
+    required String attachmentId,
+    required String caption,
+  }) => _markdownImage(SynapseResourceUri.attachmentUri(attachmentId), caption);
+
+  /// `![alt](uri)` with [caption] made safe as alt text: newlines and
+  /// brackets would break out of the syntax.
+  String _markdownImage(String uri, String caption) {
+    final altText = caption.replaceAll(RegExp(r'[\r\n\[\]]'), ' ').trim();
+    return '![$altText]($uri)';
   }
 
   /// Returns a smart default link text for an attachment.

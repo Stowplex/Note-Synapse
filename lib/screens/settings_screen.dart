@@ -31,6 +31,7 @@ import 'settings/about_screen.dart';
 import 'package:flutter/foundation.dart';
 import 'settings/debug_menu_screen.dart';
 import 'settings/web_logins_screen.dart';
+import 'search_settings_screen.dart';
 import 'world_clip/world_clip_projects_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -75,6 +76,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               )),
             ),
           ),
+          const SizedBox(height: 8),
+          // Live subtitle: "Lexical only" / "<Provider> · indexing NN%" /
+          // "<Provider> · N errors" / "Switching to B — NN% re-indexed".
+          const SearchSettingsTile(),
           const SizedBox(height: 8),
           Card(
             child: ListTile(

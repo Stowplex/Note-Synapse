@@ -20,6 +20,7 @@ import 'package:re_highlight/styles/atom-one-dark.dart';
 import 'package:re_highlight/styles/atom-one-light.dart';
 
 import 'package:crypto/crypto.dart';
+import '../l10n/app_localizations.dart';
 import '../models/note.dart';
 import '../utils/synapse_app_block_syntax.dart';
 import '../utils/synapse_temp_utils.dart';
@@ -27,6 +28,8 @@ import '../utils/synapse_resource_uri.dart';
 import '../services/attachment_link_service.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
+import '../services/search/figure_resolver.dart';
+import '../services/service_locator.dart';
 import 'embedded_user_app_view.dart';
 import '../services/network_provider.dart';
 import '../screens/immersive_note_screen.dart';
@@ -268,6 +271,26 @@ class _InteractiveCheckboxMarkdownState
   final Map<String, Future<_LocalImageSource?>> _localImageFutures = {};
   final Map<String, Future<SynapseTempFile>> _synapseTempFutures = {};
 
+  /// Permanent copies of `synapsetemp:///` images whose cache entry was
+  /// evicted, keyed by URI. Negative results are cached too, and this map is
+  /// deliberately NOT cleared when the content changes: the mapping is
+  /// URI→file (independent of the markdown around it), and a streaming AI
+  /// reply rebuilds on every token — clearing it made every rebuild re-scan
+  /// the whole flat attachments directory.
+  final Map<String, Future<_LocalImageSource?>> _promotedTempFutures = {};
+
+  /// Resolved `synapseresource://figure|attachment` images, keyed by URI.
+  /// Deliberately independent of [InteractiveCheckboxMarkdown.noteId]: these
+  /// URIs also render inside AI chat bubbles, which have no host note.
+  final Map<String, Future<_ResourceResolution>> _resourceImageFutures = {};
+
+  /// The DatabaseService used by resource resolution. Falls back to the
+  /// process singleton when GetIt has not been initialised (some widget
+  /// hosts/tests render markdown without the service locator).
+  DatabaseService get _db => getIt.isRegistered<DatabaseService>()
+      ? getIt<DatabaseService>()
+      : DatabaseService();
+
   /// Map to track image versions and force rebuilds on edit
   final Map<String, int> _imageVersions = {};
 
@@ -330,6 +353,37 @@ class _InteractiveCheckboxMarkdownState
             context,
           ).showSnackBar(const SnackBar(content: Text('Attachment not found')));
         }
+      case SynapseResourceType.figure:
+        // Figures render inline; a figure LINK (or the provenance chip) opens
+        // the region's source attachment at its page.
+        //
+        // METADATA-ONLY lookup on purpose: the route is fully determined by
+        // the index (attachment + page). Calling resolve() here would
+        // re-rasterize the PDF just to compute a route, and would then REFUSE
+        // to navigate whenever that render failed — the normal state after a
+        // restore, since derived assets are excluded from export/backup.
+        final target = (await FigureResolver(
+          _db,
+        ).resolveTarget(link.id)).target;
+        if (!mounted) return;
+        final figureAttachmentId = target?.attachmentId;
+        if (figureAttachmentId != null) {
+          await _handleSynapseResourceLink(
+            SynapseResourceUri.attachmentUri(
+              figureAttachmentId,
+              page: target!.page,
+            ),
+          );
+        } else if (target != null) {
+          // A figure chunk with no owning attachment still has a note.
+          await _handleSynapseResourceLink(
+            SynapseResourceUri.noteUri(target.noteId),
+          );
+        } else {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(_figureUnavailableText())));
+        }
       case SynapseResourceType.app:
         // App URIs are rendered inline via _AppEmbedFromUri; clicking the
         // rendered widget is not expected to route here.
@@ -342,6 +396,105 @@ class _InteractiveCheckboxMarkdownState
       url,
       () => _resolveLocalImageSource(url),
     );
+  }
+
+  Future<_ResourceResolution> _resolveResourceImageCached(
+    String url,
+    SynapseResourceLink link,
+  ) {
+    return _resourceImageFutures.putIfAbsent(
+      url,
+      () => _resolveResourceImage(link),
+    );
+  }
+
+  /// Resolves an inline `synapseresource://` image URI to a file on disk plus
+  /// its provenance (owning note / attachment / page).
+  ///
+  /// - `figure/<figureId>`: the derived crop, after content-hash verification,
+  ///   regenerated on demand when the asset is missing (see [FigureResolver]).
+  /// - `attachment/<id>` (no `page`): a raster image attachment.
+  ///
+  /// Three outcomes, deliberately distinct (a live resource must never claim
+  /// it was deleted):
+  /// - [_ResourceResolution.image] — render it inline.
+  /// - [_ResourceResolution.link] — the target is alive but is not an inline
+  ///   raster (a non-image attachment, an SVG attachment, or a figure whose
+  ///   REGENERABLE crop is unavailable). Degrades to the same tap-link a
+  ///   `?page=N` reference uses, so the user can still open the source.
+  /// - [_ResourceResolution.missing] — genuinely dangling (deleted
+  ///   note/attachment, stale figureId): the placeholder.
+  ///
+  /// Never requires a noteId.
+  Future<_ResourceResolution> _resolveResourceImage(
+    SynapseResourceLink link,
+  ) async {
+    try {
+      switch (link.type) {
+        case SynapseResourceType.figure:
+          final resolution = await FigureResolver(_db).resolve(link.id);
+          final figure = resolution.figure;
+          if (figure == null) {
+            LoggerService.info(
+              'InteractiveCheckboxMarkdown: figure ${link.id} is dangling '
+              '(${resolution.status.name})',
+            );
+            final target = resolution.target;
+            // The chunk verified; only the regenerable crop is missing (the
+            // normal state after a restore). The note + PDF + page are all
+            // still there, so offer the tap-through instead of lying about a
+            // deletion.
+            if (target != null) {
+              return _ResourceResolution.link(
+                label: target.caption ?? target.noteTitle,
+              );
+            }
+            return const _ResourceResolution.missing();
+          }
+          return _ResourceResolution.image(
+            _ResourceImage(
+              path: figure.assetPath,
+              caption: figure.caption,
+              noteTitle: figure.noteTitle,
+              attachmentId: figure.attachmentId,
+              page: figure.page,
+            ),
+          );
+        case SynapseResourceType.attachment:
+          final result = await AttachmentLinkService(
+            _db,
+          ).resolveAttachmentLink(link.id);
+          if (result == null) return const _ResourceResolution.missing();
+          final attachment = result.attachment;
+          final extension = FileTypeUtils.getFileExtension(attachment.fileName);
+          final path = await attachment.getAbsolutePath();
+          if (!await File(path).exists()) {
+            return const _ResourceResolution.missing();
+          }
+          // Image.file cannot render SVG, and a non-image attachment is not an
+          // inline figure — but both still EXIST, so they become tap-links.
+          if (!FileTypeUtils.isImage(extension) || extension == 'svg') {
+            return _ResourceResolution.link(label: attachment.fileName);
+          }
+          return _ResourceResolution.image(
+            _ResourceImage(
+              path: path,
+              noteTitle: result.note.title,
+              attachmentId: attachment.id,
+            ),
+          );
+        case SynapseResourceType.note:
+        case SynapseResourceType.conversation:
+        case SynapseResourceType.app:
+          return const _ResourceResolution.missing();
+      }
+    } catch (e) {
+      LoggerService.warning(
+        'InteractiveCheckboxMarkdown: failed to resolve resource image '
+        '${link.type.name}/${link.id}: $e',
+      );
+      return const _ResourceResolution.missing();
+    }
   }
 
   Future<SynapseTempFile> _resolveSynapseTempFileCached(String url) {
@@ -445,6 +598,127 @@ class _InteractiveCheckboxMarkdownState
     return result;
   }
 
+  /// Renders the permanent copy of a `synapsetemp:///` image whose cache entry
+  /// is gone.
+  ///
+  /// Both the note path
+  /// ([ConversationAttachmentService.processContentForAttachments]) and the
+  /// chat path (ConversationService.addAIResponse) copy these files to
+  /// `attachments/<ownerId>_<sha256(uri)><ext>` while KEEPING the URI in the
+  /// text. The owner prefix is unknown here (chat bubbles have no noteId), so
+  /// the per-URI hash is matched instead.
+  Widget _buildPromotedTempImage(
+    BuildContext context,
+    String url,
+    double? width,
+    double? height, {
+    BoxFit fit = BoxFit.contain,
+  }) {
+    return FutureBuilder<_LocalImageSource?>(
+      future: _promotedTempFutures.putIfAbsent(
+        url,
+        () => _findPromotedTempCopy(url),
+      ),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return _buildLoadingPlaceholder(width, height);
+        }
+        final source = snapshot.data;
+        if (source == null) {
+          return _buildPlaceholder(
+            width,
+            height,
+            'Unable to load temporary image',
+          );
+        }
+        // A promoted `.svg` is markup, not a bitmap: Image.file would only
+        // ever show a broken image for it.
+        if (source.svgContent != null) {
+          widget.hasWebViewNotifier?.value = true;
+          return _SvgWebViewWithInfoBar(
+            svgContent: source.svgContent!,
+            imageUrl: url,
+            width: width,
+            height: height,
+            noteId: widget.noteId,
+          );
+        }
+        final file = File(source.path);
+        final imageWidget = Image.file(
+          file,
+          key: ValueKey('$url${_imageVersions[url] ?? 0}'),
+          fit: fit,
+          errorBuilder: (context, error, stackTrace) =>
+              _buildPlaceholder(width, height, 'Failed to render image'),
+        );
+        return _wrapImageWithInfoBar(
+          image: SizedBox(width: width, height: height, child: imageWidget),
+          imageUrl: url,
+          isSvg: false,
+          onFullscreen: () {
+            _FullscreenViewer.show(
+              context,
+              imageWidget: Image.file(
+                file,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) =>
+                    _buildFullscreenError('Failed to render image'),
+              ),
+              title: 'Image',
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Finds the permanent copy of a `synapsetemp:///` file, written as
+  /// `attachments/<ownerId>_<sha256(uri)><ext>` by both promotion paths
+  /// (ConversationAttachmentService.processContentForAttachments for notes,
+  /// ConversationService.addAIResponse for chat).
+  ///
+  /// [ownerId] pins the owner when it is known (the note path); chat bubbles
+  /// have no noteId, so any owner matches there. Returns the file plus its
+  /// extension/SVG markup so callers route SVG to the SVG renderer.
+  ///
+  /// The attachments directory is FLAT and can be large, so the scan stops at
+  /// the first hit (returning from `await for` cancels the listing) and
+  /// callers cache the result — including misses.
+  Future<_LocalImageSource?> _findPromotedTempCopy(
+    String url, {
+    String? ownerId,
+  }) async {
+    try {
+      final hash = sha256.convert(utf8.encode(url)).toString();
+      final dir = await FileUtils.getPrivateStorageDirectory();
+      if (!await dir.exists()) return null;
+      final expected = ownerId == null ? null : '${ownerId}_$hash';
+      await for (final entity in dir.list(followLinks: false)) {
+        if (entity is! File) continue;
+        final base = p.basenameWithoutExtension(entity.path);
+        final matches = expected == null
+            ? base.endsWith('_$hash')
+            : base == expected;
+        if (matches) return _localImageSourceFor(entity.path);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Describes an existing file for the image pipeline, reading SVG markup so
+  /// the caller can hand it to the WebView renderer instead of `Image.file`.
+  Future<_LocalImageSource> _localImageSourceFor(String path) async {
+    final extension = p.extension(path).toLowerCase();
+    if (extension == '.svg') {
+      return _LocalImageSource(
+        path: path,
+        extension: extension,
+        svgContent: await File(path).readAsString(),
+      );
+    }
+    return _LocalImageSource(path: path, extension: extension);
+  }
+
   Widget _buildGenericSynapseTempImage(
     BuildContext context,
     String url,
@@ -460,11 +734,10 @@ class _InteractiveCheckboxMarkdownState
         }
 
         if (snapshot.hasError || !snapshot.hasData) {
-          return _buildPlaceholder(
-            width,
-            height,
-            'Unable to load temporary image',
-          );
+          // The temp cache can be evicted by the OS; note saves and AI
+          // replies promote these files into attachment storage, so try the
+          // permanent copy before giving up.
+          return _buildPromotedTempImage(context, url, width, height, fit: fit);
         }
 
         final tempFile = snapshot.data!;
@@ -672,6 +945,37 @@ class _InteractiveCheckboxMarkdownState
       }
     }
 
+    // synapseresource:// images are resolved BEFORE the noteId gate below:
+    // retrieved figures also render inside AI chat bubbles, which have no
+    // host note (ChipAwareAiMessageContent is built without a noteId).
+    if (SynapseResourceUri.isSynapseResourceUri(url)) {
+      final link = SynapseResourceUri.parse(url);
+      if (link != null) {
+        final isAttachment = link.type == SynapseResourceType.attachment;
+        // A whole PDF page is never shown as an inline image — it stays a
+        // tap-link (plan §4.3).
+        final isPageRef =
+            isAttachment && link.queryParameters.containsKey('page');
+        if (link.type == SynapseResourceType.figure ||
+            (isAttachment && !isPageRef)) {
+          return wrapWithDragTarget(
+            _buildResourceImage(
+              context,
+              url,
+              link,
+              effectiveWidth,
+              effectiveHeight,
+              fit: effectiveFit,
+              alt: alt,
+            ),
+          );
+        }
+        if (isPageRef) {
+          return wrapWithDragTarget(_buildResourceTapLink(url, alt, link));
+        }
+      }
+    }
+
     if (widget.noteId != null &&
         (SynapseTempUtils.isSynapseTempUri(url) ||
             _isHttpUrl(url) ||
@@ -823,6 +1127,153 @@ class _InteractiveCheckboxMarkdownState
     );
   }
 
+  /// Renders a `synapseresource://figure|attachment` image with a provenance
+  /// info bar (owning note title + "p.N").
+  ///
+  /// A target that is alive but not an inline raster degrades to a tap-link;
+  /// only a genuinely dangling reference gets the l10n'd placeholder. No
+  /// network fallback and no retry — an unresolvable figure is simply gone.
+  Widget _buildResourceImage(
+    BuildContext context,
+    String url,
+    SynapseResourceLink link,
+    double? width,
+    double? height, {
+    BoxFit fit = BoxFit.contain,
+    String? alt,
+  }) {
+    return FutureBuilder<_ResourceResolution>(
+      future: _resolveResourceImageCached(url, link),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return _buildLoadingPlaceholder(width, height);
+        }
+        final resolution = snapshot.data ?? const _ResourceResolution.missing();
+        if (resolution.isLink) {
+          // Alive, just not an inline raster — a tap-link, never a claim that
+          // the source was removed.
+          return _buildResourceTapLink(
+            url,
+            alt,
+            link,
+            fallbackLabel: resolution.linkLabel ?? _figureOpenSourceText(),
+          );
+        }
+        final resource = resolution.image;
+        if (resource == null) {
+          return _buildPlaceholder(width, height, _figureUnavailableText());
+        }
+
+        final file = File(resource.path);
+        final unavailableText = _figureUnavailableText();
+        final imageWidget = Image.file(
+          file,
+          key: ValueKey('$url${_imageVersions[url] ?? 0}'),
+          fit: fit,
+          errorBuilder: (context, error, stackTrace) =>
+              _buildPlaceholder(width, height, unavailableText),
+        );
+
+        final attachmentId = resource.attachmentId;
+        return _wrapImageWithInfoBar(
+          image: SizedBox(width: width, height: height, child: imageWidget),
+          imageUrl: url,
+          isSvg: false,
+          allowEdit: false,
+          provenanceLabel: _provenanceLabel(resource, alt),
+          onProvenanceTap: attachmentId == null
+              ? null
+              : () => _handleSynapseResourceLink(
+                  SynapseResourceUri.attachmentUri(
+                    attachmentId,
+                    page: resource.page,
+                  ),
+                ),
+          onFullscreen: () {
+            _FullscreenViewer.show(
+              context,
+              // The file can vanish between resolve and tap (a derived crop is
+              // regenerable and gets rewritten); never throw into the viewer.
+              imageWidget: Image.file(
+                file,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) =>
+                    _buildFullscreenError(unavailableText),
+              ),
+              title: resource.caption ?? alt ?? 'Image',
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// A `synapseresource://` reference used in image position that is NOT an
+  /// inline image — a whole PDF page (`?page=N`), a non-raster attachment, or
+  /// a figure whose regenerable crop is unavailable. All degrade to the
+  /// tap-link they really are.
+  Widget _buildResourceTapLink(
+    String url,
+    String? alt,
+    SynapseResourceLink link, {
+    String? fallbackLabel,
+  }) {
+    final pageStr = link.queryParameters['page'];
+    final fallback = fallbackLabel?.trim();
+    final label = (alt != null && alt.trim().isNotEmpty)
+        ? alt.trim()
+        : (fallback != null && fallback.isNotEmpty)
+        ? fallback
+        : (pageStr != null ? 'p.$pageStr' : url);
+    return GestureDetector(
+      onTap: () => _handleSynapseResourceLink(url),
+      child: Text(
+        label,
+        style: (widget.style ?? const TextStyle()).copyWith(
+          color: Theme.of(context).colorScheme.primary,
+          decoration: TextDecoration.underline,
+        ),
+      ),
+    );
+  }
+
+  /// "Note title · p.N" for the provenance bar, degrading to whatever
+  /// identifying text is available.
+  String _provenanceLabel(_ResourceImage resource, String? alt) {
+    final l10n = AppLocalizations.of(context);
+    final title = resource.noteTitle?.trim();
+    final page = resource.page;
+    if (title != null && title.isNotEmpty) {
+      if (page == null) return title;
+      return l10n?.figureSourcePage(title, page) ?? '$title · p.$page';
+    }
+    final fallback = resource.caption?.trim() ?? alt?.trim() ?? '';
+    if (page == null) return fallback;
+    return fallback.isEmpty ? 'p.$page' : '$fallback · p.$page';
+  }
+
+  String _figureUnavailableText() =>
+      AppLocalizations.of(context)?.figureUnavailable ??
+      'Figure no longer available — the source note or figure was removed';
+
+  /// Label for the "open this figure's source" affordance (the provenance chip
+  /// and the degraded tap-link).
+  String _figureOpenSourceText() =>
+      AppLocalizations.of(context)?.figureOpenSource ?? 'Open source';
+
+  /// Error widget for an image that fails to decode inside the fullscreen
+  /// viewer, which paints on black and has no access to this State's theme.
+  static Widget _buildFullscreenError(String message) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: Colors.white70, fontSize: 14),
+      ),
+    ),
+  );
+
   /// Builds a placeholder widget for unsupported or error cases.
   Widget _buildPlaceholder(double? width, double? height, String message) {
     return SizedBox(
@@ -904,6 +1355,11 @@ class _InteractiveCheckboxMarkdownState
   }
 
   /// Wraps an image widget with an info bar
+  ///
+  /// [provenanceLabel] / [onProvenanceTap] add the retrieved-figure
+  /// provenance chip ("Note title · p.N", tapping opens the source
+  /// attachment). [allowEdit] is false for derived figure crops: they are
+  /// regenerable assets, so edits would be silently overwritten.
   Widget _wrapImageWithInfoBar({
     required Widget image,
     required String imageUrl,
@@ -911,6 +1367,9 @@ class _InteractiveCheckboxMarkdownState
     VoidCallback? onBackgroundToggle,
     VoidCallback? onFullscreen,
     VoidCallback? onFetch,
+    String? provenanceLabel,
+    VoidCallback? onProvenanceTap,
+    bool allowEdit = true,
   }) {
     return FutureBuilder<_ImageSourceType>(
       future: _determineImageSourceTypeCached(imageUrl),
@@ -922,85 +1381,93 @@ class _InteractiveCheckboxMarkdownState
           isSvg: isSvg,
           onBackgroundToggle: onBackgroundToggle,
           onFullscreen: onFullscreen,
-          onEdit: () async {
-            if (sourceType == _ImageSourceType.remote) {
-              await _handleNetworkImageEdit(imageUrl);
-            } else {
-              // Local handling
-              File? file;
-              if (SynapseTempUtils.isSynapseTempUri(imageUrl)) {
-                try {
-                  final synapseFile = await _resolveSynapseTempFileCached(
-                    imageUrl,
-                  );
-                  file = synapseFile.file;
-                } catch (_) {}
-              } else {
-                final source = await _resolveLocalImageSource(imageUrl);
-                if (source != null) {
-                  file = File(source.path);
-                }
-              }
-
-              if (file != null && await file.exists()) {
-                final editedFile = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        DrawingEditor(initialImagePath: file!.path),
-                  ),
-                );
-
-                if (editedFile != null && editedFile is File) {
-                  await file.writeAsBytes(
-                    await editedFile.readAsBytes(),
-                    flush: true,
-                  );
-                  if (kDebugMode) {
-                    debugPrint(
-                      'InteractiveCheckboxMarkdown: Overwrote local file ${file.path} with edited content (flushed)',
-                    );
-                  }
-
-                  if (mounted) {
-                    _localImageFutures.remove(imageUrl);
-                    _synapseTempFutures.remove(imageUrl);
-                    if (kDebugMode) {
-                      debugPrint(
-                        'InteractiveCheckboxMarkdown: Cleared futures cache for $imageUrl',
-                      );
+          provenanceLabel: provenanceLabel,
+          onProvenanceTap: onProvenanceTap,
+          onEdit: !allowEdit
+              ? null
+              : () async {
+                  if (sourceType == _ImageSourceType.remote) {
+                    await _handleNetworkImageEdit(imageUrl);
+                  } else {
+                    // Local handling
+                    File? file;
+                    if (SynapseTempUtils.isSynapseTempUri(imageUrl)) {
+                      try {
+                        final synapseFile = await _resolveSynapseTempFileCached(
+                          imageUrl,
+                        );
+                        file = synapseFile.file;
+                      } catch (_) {}
+                    } else {
+                      final source = await _resolveLocalImageSource(imageUrl);
+                      if (source != null) {
+                        file = File(source.path);
+                      }
                     }
 
-                    await FileImage(file).evict();
-                    await FileImage(editedFile).evict();
-                    PaintingBinding.instance.imageCache.clear();
-                    PaintingBinding.instance.imageCache.clearLiveImages();
-
-                    // Wait for navigation animation
-                    await Future.delayed(const Duration(milliseconds: 350));
-
-                    // Increment version to force keyed rebuild
-                    _imageVersions[imageUrl] =
-                        (_imageVersions[imageUrl] ?? 0) + 1;
-                    if (kDebugMode) {
-                      debugPrint(
-                        'InteractiveCheckboxMarkdown: Updated version for $imageUrl to ${_imageVersions[imageUrl]}',
+                    if (file != null && await file.exists()) {
+                      final editedFile = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              DrawingEditor(initialImagePath: file!.path),
+                        ),
                       );
+
+                      if (editedFile != null && editedFile is File) {
+                        await file.writeAsBytes(
+                          await editedFile.readAsBytes(),
+                          flush: true,
+                        );
+                        if (kDebugMode) {
+                          debugPrint(
+                            'InteractiveCheckboxMarkdown: Overwrote local file ${file.path} with edited content (flushed)',
+                          );
+                        }
+
+                        if (mounted) {
+                          _localImageFutures.remove(imageUrl);
+                          _synapseTempFutures.remove(imageUrl);
+                          if (kDebugMode) {
+                            debugPrint(
+                              'InteractiveCheckboxMarkdown: Cleared futures cache for $imageUrl',
+                            );
+                          }
+
+                          await FileImage(file).evict();
+                          await FileImage(editedFile).evict();
+                          PaintingBinding.instance.imageCache.clear();
+                          PaintingBinding.instance.imageCache.clearLiveImages();
+
+                          // Wait for navigation animation
+                          await Future.delayed(
+                            const Duration(milliseconds: 350),
+                          );
+
+                          // Increment version to force keyed rebuild
+                          _imageVersions[imageUrl] =
+                              (_imageVersions[imageUrl] ?? 0) + 1;
+                          if (kDebugMode) {
+                            debugPrint(
+                              'InteractiveCheckboxMarkdown: Updated version for $imageUrl to ${_imageVersions[imageUrl]}',
+                            );
+                          }
+                          setState(() {});
+                        }
+                      }
+                    } else {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Cannot edit this image (file not found)',
+                            ),
+                          ),
+                        );
+                      }
                     }
-                    setState(() {});
                   }
-                }
-              } else {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Cannot edit this image (file not found)'),
-                    ),
-                  );
-                }
-              }
-            }
-          },
+                },
           onFetch: onFetch,
         );
       },
@@ -1117,6 +1584,10 @@ class _InteractiveCheckboxMarkdownState
       _localImageFutures.clear();
       _synapseTempFutures.clear();
       _imageSourceTypeFutures.clear();
+      _resourceImageFutures.clear();
+      // _promotedTempFutures is intentionally kept: it maps URI→promoted file
+      // and is independent of the surrounding content, so clearing it would
+      // re-scan the attachments directory on every streamed token.
     }
     if (oldWidget.noteId != widget.noteId) {
       _localImageFutures.clear();
@@ -1139,40 +1610,15 @@ class _InteractiveCheckboxMarkdownState
     }
 
     try {
-      // Check if it's a synapsetemp URI and try to resolve via hash
+      // A synapsetemp URI whose cache entry may already be gone: the promoted
+      // copy lives under this note's owner prefix (same scan as the chat-side
+      // fallback, which cannot pin an owner).
       if (SynapseTempUtils.isSynapseTempUri(url)) {
-        final hash = sha256.convert(utf8.encode(url)).toString();
-        // We don't know the extension, so we might need to search or try common ones.
-        // However, RemoteImageStorage.resolveAbsolutePath might handle this if we pass the "virtual" path?
-        // No, RemoteImageStorage expects a relative path or uses its own hashing for remote URLs.
-
-        // Let's manually check for the file in attachments dir
-        final dir = await FileUtils.getPrivateStorageDirectory();
-        final prefix = '${widget.noteId}_$hash';
-
-        // List files to find the one with matching prefix
-        if (await dir.exists()) {
-          await for (final entity in dir.list()) {
-            if (entity is File) {
-              final name = p.basename(entity.path);
-              if (name.startsWith(prefix)) {
-                final extension = p.extension(name).toLowerCase();
-                if (extension == '.svg') {
-                  final content = await entity.readAsString();
-                  return _LocalImageSource(
-                    path: entity.path,
-                    extension: extension,
-                    svgContent: content,
-                  );
-                }
-                return _LocalImageSource(
-                  path: entity.path,
-                  extension: extension,
-                );
-              }
-            }
-          }
-        }
+        final promoted = await _findPromotedTempCopy(
+          url,
+          ownerId: widget.noteId,
+        );
+        if (promoted != null) return promoted;
       }
 
       // Check if it's a simple filename (local attachment)
@@ -1180,19 +1626,8 @@ class _InteractiveCheckboxMarkdownState
       if (!url.contains(':') && !url.contains('/') && !url.contains('\\')) {
         final dir = await FileUtils.getPrivateStorageDirectory();
         final filePath = p.join(dir.path, url);
-        final file = File(filePath);
-
-        if (await file.exists()) {
-          final extension = p.extension(filePath).toLowerCase();
-          if (extension == '.svg') {
-            final content = await file.readAsString();
-            return _LocalImageSource(
-              path: filePath,
-              extension: extension,
-              svgContent: content,
-            );
-          }
-          return _LocalImageSource(path: filePath, extension: extension);
+        if (await File(filePath).exists()) {
+          return _localImageSourceFor(filePath);
         }
       }
 
@@ -1201,18 +1636,8 @@ class _InteractiveCheckboxMarkdownState
         final filePath = url.startsWith('file://')
             ? Uri.parse(url).toFilePath()
             : url;
-        final file = File(filePath);
-        if (await file.exists()) {
-          final extension = p.extension(filePath).toLowerCase();
-          if (extension == '.svg') {
-            final content = await file.readAsString();
-            return _LocalImageSource(
-              path: filePath,
-              extension: extension,
-              svgContent: content,
-            );
-          }
-          return _LocalImageSource(path: filePath, extension: extension);
+        if (await File(filePath).exists()) {
+          return _localImageSourceFor(filePath);
         }
       }
 
@@ -1223,20 +1648,10 @@ class _InteractiveCheckboxMarkdownState
       if (absolutePath == null) {
         return null;
       }
-      final file = File(absolutePath);
-      if (!await file.exists()) {
+      if (!await File(absolutePath).exists()) {
         return null;
       }
-      final extension = p.extension(absolutePath).toLowerCase();
-      if (extension == '.svg') {
-        final content = await file.readAsString();
-        return _LocalImageSource(
-          path: absolutePath,
-          extension: extension,
-          svgContent: content,
-        );
-      }
-      return _LocalImageSource(path: absolutePath, extension: extension);
+      return _localImageSourceFor(absolutePath);
     } catch (_) {
       return null;
     }
@@ -2448,6 +2863,8 @@ class _ImageInfoBar extends StatelessWidget {
     this.onFullscreen,
     this.onEdit,
     this.onFetch,
+    this.provenanceLabel,
+    this.onProvenanceTap,
   });
 
   final _ImageSourceType sourceType;
@@ -2456,6 +2873,28 @@ class _ImageInfoBar extends StatelessWidget {
   final VoidCallback? onFullscreen;
   final VoidCallback? onEdit;
   final VoidCallback? onFetch;
+
+  /// Where a retrieved figure came from ("Note title · p.N").
+  final String? provenanceLabel;
+
+  /// Opens the figure's source attachment (page-deep-linked when known).
+  final VoidCallback? onProvenanceTap;
+
+  /// Gives the provenance chip its accessible name ("Open source" —
+  /// `figureOpenSource` exists for exactly this) when it is actually tappable.
+  Widget _maybeTooltip(
+    BuildContext context, {
+    required bool enabled,
+    required Widget child,
+  }) {
+    if (!enabled) return child;
+    final label =
+        AppLocalizations.of(context)?.figureOpenSource ?? 'Open source';
+    return Tooltip(
+      message: label,
+      child: Semantics(button: true, label: label, child: child),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2519,6 +2958,50 @@ class _ImageInfoBar extends StatelessWidget {
                 ),
               ),
             ],
+            if (provenanceLabel != null && provenanceLabel!.isNotEmpty) ...[
+              const SizedBox(width: 12),
+              Flexible(
+                child: _maybeTooltip(
+                  context,
+                  enabled: onProvenanceTap != null,
+                  child: GestureDetector(
+                    onTap: onProvenanceTap,
+                    child: ConstrainedBox(
+                      // Bounds the bar's intrinsic width so a long note title
+                      // cannot stretch the image column.
+                      constraints: const BoxConstraints(maxWidth: 220),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.description_outlined,
+                            size: 16,
+                            color: onProvenanceTap != null
+                                ? colorScheme.primary
+                                : colorScheme.onSurfaceVariant.withValues(
+                                    alpha: 0.5,
+                                  ),
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              provenanceLabel!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: onProvenanceTap != null
+                                    ? colorScheme.primary
+                                    : colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
             const Spacer(),
             if (onEdit != null) ...[
               const SizedBox(width: 12),
@@ -2549,6 +3032,8 @@ class _ImageWithInfoBar extends StatefulWidget {
     this.onFullscreen,
     this.onEdit,
     this.onFetch,
+    this.provenanceLabel,
+    this.onProvenanceTap,
   });
 
   final Widget image;
@@ -2558,6 +3043,8 @@ class _ImageWithInfoBar extends StatefulWidget {
   final VoidCallback? onFullscreen;
   final VoidCallback? onEdit;
   final VoidCallback? onFetch;
+  final String? provenanceLabel;
+  final VoidCallback? onProvenanceTap;
 
   @override
   State<_ImageWithInfoBar> createState() => _ImageWithInfoBarState();
@@ -2610,11 +3097,69 @@ class _ImageWithInfoBarState extends State<_ImageWithInfoBar> {
             onFullscreen: widget.onFullscreen,
             onEdit: widget.onEdit,
             onFetch: widget.onFetch,
+            provenanceLabel: widget.provenanceLabel,
+            onProvenanceTap: widget.onProvenanceTap,
           ),
         ],
       ),
     );
   }
+}
+
+/// Outcome of resolving a `synapseresource://` URI used in image position.
+///
+/// Distinguishes "render it" from "it is alive but not an inline raster"
+/// (tap-link) from "it is gone" (placeholder) — conflating the last two is
+/// what made a perfectly healthy PDF figure claim its note had been deleted.
+class _ResourceResolution {
+  const _ResourceResolution._({
+    this.image,
+    this.linkLabel,
+    this.isLink = false,
+  });
+
+  const _ResourceResolution.image(_ResourceImage image) : this._(image: image);
+
+  const _ResourceResolution.link({String? label})
+    : this._(linkLabel: label, isLink: true);
+
+  const _ResourceResolution.missing() : this._();
+
+  /// Non-null exactly when the URI resolved to an inline raster.
+  final _ResourceImage? image;
+
+  /// Preferred link text when [isLink] (caption, note title, file name…).
+  final String? linkLabel;
+
+  /// The target exists but must render as a tap-link.
+  final bool isLink;
+}
+
+/// A `synapseresource://figure|attachment` image resolved to a file on disk,
+/// with the provenance shown in its info bar.
+class _ResourceImage {
+  const _ResourceImage({
+    required this.path,
+    this.caption,
+    this.noteTitle,
+    this.attachmentId,
+    this.page,
+  });
+
+  /// Absolute path of the derived crop / attachment file.
+  final String path;
+
+  /// Figure caption, when the index captured one.
+  final String? caption;
+
+  /// Owning note title (provenance bar).
+  final String? noteTitle;
+
+  /// Owning attachment id (tap-through target).
+  final String? attachmentId;
+
+  /// 1-based source page, when the figure came from a PDF page.
+  final int? page;
 }
 
 class _LocalImageSource {

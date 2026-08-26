@@ -35,6 +35,7 @@ import '../widgets/block_selection_menu.dart';
 import '../widgets/block_selection_count_popup.dart';
 
 import '../utils/date_utils.dart';
+import '../utils/note_text_match.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
 import 'ai_action_screen.dart';
@@ -54,6 +55,9 @@ import '../services/skill_service.dart';
 import '../models/conversation.dart';
 import '../widgets/approval_dialog.dart';
 import '../widgets/pdf_ai_context_dialog.dart';
+import '../widgets/search_index_options_dialog.dart';
+import '../services/search/attachment_text_extractor.dart';
+import '../services/search/note_index_service.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -119,6 +123,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Map<String, Attachment> _attachmentsMap = {};
   Future<ApprovalResult> Function(ApprovalRequest)? _approvalCallback;
 
+  /// `notes.metadata.searchIndex.exclude` for this note. Cached in state
+  /// because [Note.metadata] is a JSON *string* — the flag cannot be read off
+  /// the in-memory note synchronously, and the overflow menu needs it while
+  /// building.
+  bool _noteSearchExcluded = false;
+
   // Multi-block selection state
   bool _isSelectionMode = false;
   Set<int> _selectedBlockIndices = {};
@@ -156,6 +166,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         _attachmentsMap = tempMap;
       });
     }
+  }
+
+  Future<void> _loadNoteSearchExclusion() async {
+    if (widget.isNewNote) return;
+    final metadata = await _databaseService.getNoteMetadata(widget.note.id);
+    if (!mounted) return;
+    final excluded = NoteIndexService.isNoteSearchExcluded(metadata);
+    if (excluded == _noteSearchExcluded) return;
+    setState(() {
+      _noteSearchExcluded = excluded;
+    });
   }
 
   @override
@@ -200,6 +221,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
     // Load attachment metadata
     _loadAttachments();
+
+    // Load the note-level search exclusion flag (async: it lives in the
+    // note's JSON metadata column)
+    _loadNoteSearchExclusion();
 
     // Initialize audio service on all platforms (including Linux)
     _initializeAudioService();
@@ -987,6 +1012,23 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                           ],
                         ),
                       ),
+                      PopupMenuItem(
+                        value: 'search_exclude',
+                        child: Row(
+                          children: [
+                            Icon(
+                              _noteSearchExcluded
+                                  ? Icons.check_box
+                                  : Icons.check_box_outline_blank,
+                              color: _noteSearchExcluded
+                                  ? Theme.of(context).colorScheme.primary
+                                  : null,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(l10n.searchExcludeNote)),
+                          ],
+                        ),
+                      ),
                     ],
                     onSelected: (value) {
                       if (value == 'share') {
@@ -1001,6 +1043,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                         _convertNoteType();
                       } else if (value == 'archive') {
                         _toggleArchive();
+                      } else if (value == 'search_exclude') {
+                        // Fire-and-forget like its neighbours: onSelected is
+                        // not async.
+                        _toggleNoteSearchExclusion();
                       }
                     },
                   ),
@@ -2888,6 +2934,51 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     );
   }
 
+  /// Flips `notes.metadata.searchIndex.exclude` (plan §1.3). Excluding purges
+  /// the note's chunks AND everything derived from its attachments, so the
+  /// confirmation says so before the derived data goes.
+  Future<void> _toggleNoteSearchExclusion() async {
+    final l10n = AppLocalizations.of(context)!;
+    final exclude = !_noteSearchExcluded;
+
+    if (exclude) {
+      final confirmed = await showSearchExcludeNoteConfirmation(context);
+      if (!confirmed || !mounted) return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    // Optimistic: setNoteSearchExclusion also reindexes the note, which can
+    // outlast the menu animation.
+    setState(() => _noteSearchExcluded = exclude);
+    try {
+      await getIt<NoteIndexService>().setNoteSearchExclusion(
+        widget.note.id,
+        exclude,
+      );
+    } catch (e) {
+      LoggerService.error('Failed to update note search exclusion: $e');
+      if (!mounted) return;
+      setState(() => _noteSearchExcluded = !exclude);
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.searchExcludeNoteFailed)),
+      );
+      return;
+    }
+    if (!mounted) return;
+    // Re-read rather than trusting the optimistic flip.
+    await _loadNoteSearchExclusion();
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          exclude
+              ? l10n.searchExcludeNoteExcluded
+              : l10n.searchExcludeNoteIncluded,
+        ),
+      ),
+    );
+  }
+
   void _toggleSubNoteCompletion(SubNote subNote) {
     context.read<AppProvider>().toggleSubNoteCompletion(
       widget.note.id,
@@ -3135,6 +3226,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                             case 'configure_ai_range':
                               await _showPdfAiContextDialog(attachmentPath);
                               break;
+                            case 'search_index':
+                              await _showSearchIndexOptionsDialog(
+                                attachmentPath,
+                              );
+                              break;
                             case 'delete':
                               await _removeAttachment(
                                 attachmentPath,
@@ -3153,6 +3249,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                               _attachmentsMap[attachmentPath]
                                   ?.getAiContextConfig() !=
                               null;
+                          final searchIndexConfig =
+                              _attachmentsMap[attachmentPath]
+                                  ?.getSearchIndexConfig() ??
+                              const AttachmentSearchIndexConfig();
+                          final hasCustomSearchIndex =
+                              searchIndexConfigIsCustomized(
+                                fileName,
+                                searchIndexConfig,
+                              );
 
                           return [
                             if (fileExists && !isAudioFile)
@@ -3224,6 +3329,27 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                                   ],
                                 ),
                               ),
+                            PopupMenuItem<String>(
+                              value: 'search_index',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.manage_search,
+                                    color: hasCustomSearchIndex
+                                        ? Theme.of(context).colorScheme.primary
+                                        : null,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      hasCustomSearchIndex
+                                          ? l10n.searchIndexOptionsCustom
+                                          : l10n.searchIndexOptions,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             const PopupMenuDivider(),
                             PopupMenuItem<String>(
                               value: 'delete',
@@ -3423,9 +3549,104 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     await _loadAttachments();
   }
 
+  /// Opens the per-attachment search index policy editor (plan §1.3).
+  ///
+  /// The page count is looked up only for PDFs, and only to tell the user WHY
+  /// a long document is being skipped — a failure to open it just drops the
+  /// size row, it never blocks the dialog. The CAP is read separately so that
+  /// failure still leaves the dialog able to offer the over-cap opt-in: with
+  /// no count we cannot rule the cap out, and an unopenable PDF that the
+  /// indexer skips for size would otherwise have no way past it.
+  ///
+  /// Opening a large PDF is slow enough to read as a dead tap, so the read is
+  /// covered by the same spinner [_showPdfAiContextDialog] uses.
+  Future<void> _showSearchIndexOptionsDialog(String attachmentPath) async {
+    final cached = _attachmentsMap[attachmentPath];
+    if (cached == null) return;
+    // The stored row, not the cache: the immersive viewer can have rewritten
+    // this policy (and other metadata keys) since this screen last loaded.
+    final attachment =
+        await _databaseService.getAttachmentById(cached.id) ?? cached;
+    if (!mounted) return;
+
+    int? pageCount;
+    int? pageCap;
+    if (searchIndexFileKindFor(attachment.fileName) ==
+        SearchIndexFileKind.pdf) {
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+      final extractor = AttachmentTextExtractor(_databaseService);
+      try {
+        // The extractor's own opener installs Pdfrx.getCacheDirectory.
+        pageCount = await extractor.getPdfPageCount(attachment);
+      } catch (e) {
+        LoggerService.warning('Failed to read PDF page count: $e');
+      }
+      try {
+        pageCap = await extractor.effectivePageCap();
+      } catch (e) {
+        LoggerService.warning('Failed to read the PDF page cap: $e');
+      }
+      if (mounted) Navigator.pop(context);
+    }
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => SearchIndexOptionsDialog(
+        fileName: attachment.fileName,
+        config: attachment.getSearchIndexConfig(),
+        pageCount: pageCount,
+        pageCap: pageCap,
+        onSave: (config) => _saveSearchIndexConfig(attachment, config),
+      ),
+    );
+  }
+
+  /// Read-modify-write of `metadata.searchIndex`, preserving every other
+  /// metadata key. The write itself is what makes the indexer reindex (or
+  /// purge) the attachment.
+  Future<void> _saveSearchIndexConfig(
+    Attachment attachment,
+    AttachmentSearchIndexConfig config,
+  ) async {
+    final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      // Merged onto the STORED row, never onto _attachmentsMap: that cache is
+      // not refreshed when a pushed route returns, so a bookmark or marker
+      // written by the immersive viewer since this screen last loaded would
+      // be deleted by this save (see buildSearchIndexMetadata).
+      final metadata = await buildSearchIndexMetadata(
+        attachment: attachment,
+        config: config,
+        reload: _databaseService.getAttachmentById,
+      );
+      await _databaseService.updateAttachmentMetadata(attachment.id, metadata);
+    } catch (e) {
+      LoggerService.error('Failed to update search index config: $e');
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.searchIndexUpdateFailed)),
+      );
+      return;
+    }
+    await _loadAttachments();
+    if (!mounted) return;
+    messenger.showSnackBar(SnackBar(content: Text(l10n.searchIndexUpdated)));
+  }
+
   Future<void> _showPdfAiContextDialog(String attachmentPath) async {
-    final attachment = _attachmentsMap[attachmentPath];
-    if (attachment == null) return;
+    final cached = _attachmentsMap[attachmentPath];
+    if (cached == null) return;
+    // Same reason as _showSearchIndexOptionsDialog: this cache goes stale
+    // while a pushed route is on top of this screen.
+    final attachment =
+        await _databaseService.getAttachmentById(cached.id) ?? cached;
+    if (!mounted) return;
 
     final currentConfig = attachment.getAiContextConfig();
 
@@ -3479,9 +3700,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         outline: outline,
         totalPages: totalPages,
         onSave: (config) async {
-          // Build new metadata
+          // Read-modify-write on the STORED row, not on _attachmentsMap:
+          // that cache is not refreshed when a pushed route returns, so
+          // merging onto it drops whatever the immersive viewer (bookmarks)
+          // or NoteMarkerService (markers) wrote in the meantime.
+          final stored =
+              await _databaseService.getAttachmentById(attachment.id) ??
+              attachment;
           final currentMetadata = Map<String, dynamic>.from(
-            attachment.metadata ?? {},
+            stored.metadata ?? {},
           );
           if (config == null) {
             currentMetadata.remove('aiContextConfig');
@@ -4411,6 +4638,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     const toolDocs = {
       'search_notes':
           'Search notes by keyword with optional tag filters.\n\nParams:\n- query (string): search terms\n- tags (list, optional): filter by tags',
+      'search_figures':
+          'Find figures, diagrams, tables and images already stored in notes, with the markdown to embed them.\n\nParams:\n- query (string): what the figure shows\n- noteId (string, optional): restrict to one note\n- limit (int, optional): max hits (default 5, max 20)',
       'read_note':
           'Read note content progressively.\n\nParams:\n- noteId (string): note ID\n- mode (string): stat | toc | summary | lines | full | pdf_pages',
       'run_sql':
@@ -4536,12 +4765,15 @@ class _ReparentSubNoteDialogState extends State<_ReparentSubNoteDialog> {
         .where((note) => note.id != widget.currentNote.id)
         .toList();
 
-    // Filter by search query
+    // Filter by search query (shared predicate; this picker historically
+    // matched title/content only, so tags stay excluded).
     if (_searchQuery.isNotEmpty) {
-      notes = notes.where((note) {
-        return note.title.toLowerCase().contains(_searchQuery) ||
-            note.content.toLowerCase().contains(_searchQuery);
-      }).toList();
+      notes = notes
+          .where(
+            (note) =>
+                matchesSubstringQuery(note, _searchQuery, includeTags: false),
+          )
+          .toList();
     }
 
     // Filter by selected tag

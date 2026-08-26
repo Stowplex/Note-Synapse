@@ -17,8 +17,17 @@ import 'subnote_edit_screen.dart';
 import 'note_action_app_selection_screen.dart';
 import 'conversation_chat_screen.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/import_service.dart';
 import '../services/logger_service.dart';
+import '../services/service_locator.dart';
+import '../services/attachment_link_service.dart';
+import '../services/database_service.dart';
+import '../services/search/bm25.dart';
+import '../services/search/note_index_service.dart';
+import '../services/search/notes_search_controller.dart';
+import '../services/search/search_service.dart';
+import '../utils/search_result_presentation.dart';
 import 'immersive_note_screen.dart';
 
 class NotesScreen extends StatefulWidget {
@@ -29,7 +38,16 @@ class NotesScreen extends StatefulWidget {
 }
 
 class _NotesScreenState extends State<NotesScreen> {
+  static const String _indexBannerDismissedPrefKey =
+      'search_index_banner_dismissed';
+
   final _searchController = TextEditingController();
+  late final NotesSearchController _search;
+
+  /// Persisted index-banner dismissal, or null while the (async)
+  /// SharedPreferences read is still in flight. Null keeps the banner hidden
+  /// so an already-dismissed banner does not flash on the first frame(s).
+  bool? _indexBannerDismissed;
   List<Note> _selectedNotes = [];
   bool _isMultiSelectMode = false;
   Set<String> _selectedTags = {};
@@ -39,14 +57,49 @@ class _NotesScreenState extends State<NotesScreen> {
     'default',
   }; // 'default', 'pinned', 'archived', 'all', or custom filter IDs
 
+  /// Note ids of the search results as last rendered, and a counter bumped
+  /// whenever the SAME notes come back in a DIFFERENT order — i.e. a landed
+  /// semantic re-rank (plan §2.3). It keys the results list so that re-rank
+  /// cross-fades instead of snapping rows into new positions.
+  List<String>? _renderedResultOrder;
+  int _rerankGeneration = 0;
+
+  /// Whether the results list is scrolled to the top. A re-rank is dropped
+  /// once the user starts scrolling, so this is normally true; when it is
+  /// not, the cross-fade is skipped (rebuilding the list would reset the
+  /// scroll offset).
+  bool _resultsAtTop = true;
+
   @override
   void initState() {
     super.initState();
-    // _loadTags removed - tags are now derived directly from provider
+    _search = NotesSearchController(getIt<SearchService>());
+    _search.addListener(_onSearchStateChanged);
+    _loadIndexBannerDismissed();
+  }
+
+  void _onSearchStateChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadIndexBannerDismissed() async {
+    final prefs = await SharedPreferences.getInstance();
+    final dismissed = prefs.getBool(_indexBannerDismissedPrefKey) ?? false;
+    if (mounted && dismissed != _indexBannerDismissed) {
+      setState(() => _indexBannerDismissed = dismissed);
+    }
+  }
+
+  Future<void> _dismissIndexBanner() async {
+    setState(() => _indexBannerDismissed = true);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_indexBannerDismissedPrefKey, true);
   }
 
   @override
   void dispose() {
+    _search.removeListener(_onSearchStateChanged);
+    _search.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -113,7 +166,23 @@ class _NotesScreenState extends State<NotesScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final appProvider = context.watch<AppProvider>();
-    final notes = _filterNotes(appProvider.notes, appProvider);
+    // Browse pipeline (tab/tag scopes + pinned-first/newest order). Text
+    // search no longer runs here (plan §1.6: off the build path): for a
+    // non-empty query the ranked async results are intersected with this
+    // list, so tab/tags/type act as post-filters on the search results.
+    final browseNotes = _filterNotes(appProvider.notes, appProvider);
+    final searchActive = _search.hasActiveQuery;
+    List<_SearchRow>? searchRows;
+    if (searchActive && _search.results != null) {
+      final byId = {for (final n in browseNotes) n.id: n};
+      searchRows = [
+        for (final r in _search.results!)
+          if (byId.containsKey(r.noteId)) _SearchRow(byId[r.noteId]!, r),
+      ];
+    }
+    final notes = searchActive
+        ? [for (final row in searchRows ?? const <_SearchRow>[]) row.note]
+        : browseNotes;
 
     final allSelected =
         notes.isNotEmpty &&
@@ -353,9 +422,9 @@ class _NotesScreenState extends State<NotesScreen> {
                             vertical: 8,
                           ),
                         ),
-                        onChanged: (value) {
-                          setState(() {});
-                        },
+                        textInputAction: TextInputAction.search,
+                        onChanged: _search.onQueryChanged,
+                        onSubmitted: _search.submit,
                       ),
                       const SizedBox(height: 8),
                       // Filter tab strip
@@ -415,72 +484,418 @@ class _NotesScreenState extends State<NotesScreen> {
           // final notes = _filterNotes(appProvider.notes, appProvider);
           // Already calculated in build method
 
-          if (notes.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.note_add, size: 64, color: Colors.grey[400]),
-                  const SizedBox(height: 16),
-                  Text(
-                    _searchController.text.isNotEmpty ||
-                            _selectedTags.isNotEmpty
-                        ? l10n.noNotesFound
-                        : l10n.createFirstNote,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _searchController.text.isNotEmpty ||
-                            _selectedTags.isNotEmpty
-                        ? _searchController.text.isNotEmpty
-                              ? 'Try adjusting your search terms'
-                              : 'Try selecting different tags'
-                        : 'Tap the + button to create your first note',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+          return Column(
+            children: [
+              _buildIndexBanner(l10n),
+              Expanded(
+                child: _buildNotesBody(l10n, searchActive, notes, searchRows),
               ),
-            );
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: notes.length,
-            itemBuilder: (context, index) {
-              final note = notes[index];
-              final isSelected = _selectedNotes.contains(note);
-
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: GestureDetector(
-                  onTap: () => _handleNoteTap(note),
-                  onLongPress: () => _handleNoteLongPress(note),
-                  child: NoteCard(
-                    note: note,
-                    isSelected: isSelected,
-                    onTap: () => _handleNoteTap(note),
-                    onLongPress: () => _handleNoteLongPress(note),
-                    onStatusChanged: note.isTask
-                        ? (status) => _updateTaskStatus(note.id, status)
-                        : null,
-                    onAddSubNote: () => _addSubNote(note),
-                    onPinToggle: () => _toggleNotePin(note.id),
-                    onArchiveToggle: () => _toggleNoteArchive(note.id),
-                    onShare: () => _shareNote(note),
-                    onContentChanged: (newContent) =>
-                        _updateNoteContent(note.id, newContent),
-                  ),
-                ),
-              );
-            },
+            ],
           );
         },
       ),
     );
+  }
+
+  /// First-run "Building search index…" strip (plan §1.6): visible while the
+  /// backfill runs and the user has not dismissed it; auto-hides at
+  /// completion. Dismissal persists across launches (SharedPreferences).
+  Widget _buildIndexBanner(AppLocalizations l10n) {
+    return ValueListenableBuilder<IndexProgress>(
+      valueListenable: getIt<NoteIndexService>().progress,
+      builder: (context, progress, _) {
+        if (!shouldShowIndexBanner(
+          progress: progress,
+          dismissed: _indexBannerDismissed,
+        )) {
+          return const SizedBox.shrink();
+        }
+        final theme = Theme.of(context);
+        return Material(
+          color: theme.colorScheme.secondaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 16, right: 4),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    l10n.buildingSearchIndex(indexProgressPercent(progress)),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSecondaryContainer,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  tooltip: l10n.dismiss,
+                  onPressed: _dismissIndexBanner,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Note list / pending / empty states. The no-results empty state renders
+  /// ONLY after the active search completed empty (plan §1.6: no empty-state
+  /// flash while a search is in flight).
+  Widget _buildNotesBody(
+    AppLocalizations l10n,
+    bool searchActive,
+    List<Note> notes,
+    List<_SearchRow>? searchRows,
+  ) {
+    if (searchActive && _search.isSearching && _search.results == null) {
+      // First search for this query still in flight: nothing to show yet.
+      return _buildSearchingIndicator(l10n);
+    }
+
+    if (notes.isEmpty) {
+      if (searchActive && _search.isSearching) {
+        // A refinement is in flight; don't flash "no notes found".
+        return _buildSearchingIndicator(l10n);
+      }
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.note_add, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              searchActive || _selectedTags.isNotEmpty
+                  ? l10n.noNotesFound
+                  : l10n.createFirstNote,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              searchActive || _selectedTags.isNotEmpty
+                  ? searchActive
+                        ? l10n.searchTryAdjustingTerms
+                        : l10n.searchTryDifferentTags
+                  : l10n.createFirstNoteHint,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    final Widget list = NotificationListener<ScrollNotification>(
+      // Fusion UX (plan §2.3): once the user scrolls, a pending semantic
+      // re-rank is dropped rather than moving rows under their finger.
+      onNotification: (notification) {
+        if (notification is ScrollStartNotification) {
+          _search.notifyUserInteraction();
+        }
+        _resultsAtTop = notification.metrics.pixels <= 0;
+        return false;
+      },
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: notes.length,
+        itemBuilder: (context, index) {
+          if (searchActive) {
+            final row = searchRows![index];
+            return Padding(
+              key: ValueKey('search-${row.note.id}'),
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _buildSearchResultRow(row),
+            );
+          }
+          final note = notes[index];
+          return Padding(
+            key: ValueKey('note-${note.id}'),
+            padding: const EdgeInsets.only(bottom: 8),
+            child: GestureDetector(
+              onTap: () => _handleNoteTap(note),
+              onLongPress: () => _handleNoteLongPress(note),
+              child: _buildNoteCard(note),
+            ),
+          );
+        },
+      ),
+    );
+    final Widget body = searchActive
+        // A landed re-rank reorders rows that are already on screen; cross-
+        // fading is the cheap way to make that legible instead of abrupt.
+        // The key only changes on a reorder, so a new query (different
+        // result set) still rebuilds in place, scroll position included.
+        ? AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            switchInCurve: Curves.easeOut,
+            switchOutCurve: Curves.easeIn,
+            child: KeyedSubtree(
+              key: ValueKey<int>(_trackResultOrder(searchRows)),
+              child: list,
+            ),
+          )
+        : list;
+    if (searchActive && (_search.isSearching || _search.isRefining)) {
+      // Search or semantic refinement in flight over existing results:
+      // lightweight indicator, results keep standing.
+      return Column(
+        children: [
+          const LinearProgressIndicator(minHeight: 2),
+          Expanded(child: body),
+        ],
+      );
+    }
+    return body;
+  }
+
+  /// Records the rendered result order and returns the cross-fade key for
+  /// the results list: it changes ONLY when the same notes come back in a
+  /// different order (a landed semantic re-rank) while the list is at the
+  /// top. Every other change — new query, added/removed notes, a scrolled
+  /// list — keeps the key and rebuilds the list in place.
+  int _trackResultOrder(List<_SearchRow>? rows) {
+    final order = [for (final row in rows ?? const <_SearchRow>[]) row.note.id];
+    final previous = _renderedResultOrder;
+    _renderedResultOrder = order;
+    if (previous == null || previous.length != order.length || !_resultsAtTop) {
+      return _rerankGeneration;
+    }
+    var reordered = false;
+    for (var i = 0; i < order.length; i++) {
+      if (previous[i] != order[i]) {
+        reordered = true;
+        break;
+      }
+    }
+    if (!reordered) return _rerankGeneration;
+    // A re-rank permutes the notes it was handed; anything with different
+    // membership is a new result set, not a reorder.
+    if (!previous.toSet().containsAll(order)) return _rerankGeneration;
+    return ++_rerankGeneration;
+  }
+
+  Widget _buildSearchingIndicator(AppLocalizations l10n) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            l10n.searchInProgress,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Today's browse card, shared by the browse list and degraded search rows.
+  Widget _buildNoteCard(Note note) {
+    return NoteCard(
+      note: note,
+      isSelected: _selectedNotes.contains(note),
+      onTap: () => _handleNoteTap(note),
+      onLongPress: () => _handleNoteLongPress(note),
+      onStatusChanged: note.isTask
+          ? (status) => _updateTaskStatus(note.id, status)
+          : null,
+      onAddSubNote: () => _addSubNote(note),
+      onPinToggle: () => _toggleNotePin(note.id),
+      onArchiveToggle: () => _toggleNoteArchive(note.id),
+      onShare: () => _shareNote(note),
+      onContentChanged: (newContent) => _updateNoteContent(note.id, newContent),
+    );
+  }
+
+  /// One ranked search hit: title + highlighted snippet + provenance badge.
+  /// Rows without a snippet (substring-fallback results can carry none)
+  /// degrade to today's card rendering.
+  Widget _buildSearchResultRow(_SearchRow row) {
+    final snippet = row.result.best.snippet;
+    if (snippet.text.trim().isEmpty) {
+      return GestureDetector(
+        onTap: () => _handleNoteTap(row.note),
+        onLongPress: () => _handleNoteLongPress(row.note),
+        child: _buildNoteCard(row.note),
+      );
+    }
+
+    final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final note = row.note;
+    final isSelected = _selectedNotes.contains(note);
+    final badge = deriveSearchBadge(
+      sourceType: row.result.best.sourceType,
+      page: row.result.best.page,
+    );
+    final badgeLabel = _badgeLabel(badge, l10n);
+
+    return Card(
+      shape: isSelected
+          ? RoundedRectangleBorder(
+              side: BorderSide(color: theme.colorScheme.primary, width: 2),
+              borderRadius: BorderRadius.circular(12),
+            )
+          : null,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _handleSearchResultTap(row),
+        onLongPress: () => _handleNoteLongPress(note),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      note.title,
+                      style: theme.textTheme.titleMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (isSelected)
+                    Icon(
+                      Icons.check_circle,
+                      color: theme.colorScheme.primary,
+                      size: 20,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              RichText(
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                text: TextSpan(
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  children: _snippetSpans(snippet, theme),
+                ),
+              ),
+              if (badgeLabel != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(badgeLabel, style: theme.textTheme.labelSmall),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// TextSpans for [snippet] with bold-highlighted match ranges
+  /// (Snippet.matches are UTF-16 ranges). Every whitespace CHARACTER is
+  /// replaced by one space so the snippet renders on a single line; runs are
+  /// not collapsed (`\n\n` becomes two spaces), which keeps the replacement
+  /// 1:1 and match offsets valid.
+  List<TextSpan> _snippetSpans(Snippet snippet, ThemeData theme) {
+    final text = snippet.text.replaceAll(RegExp(r'\s'), ' ');
+    final highlight = TextStyle(
+      fontWeight: FontWeight.bold,
+      color: theme.colorScheme.primary,
+    );
+    final spans = <TextSpan>[];
+    if (snippet.truncatedStart) spans.add(const TextSpan(text: '…'));
+    var cursor = 0;
+    for (final match in snippet.matches) {
+      if (match.start > cursor) {
+        spans.add(TextSpan(text: text.substring(cursor, match.start)));
+      }
+      spans.add(
+        TextSpan(
+          text: text.substring(match.start, match.end),
+          style: highlight,
+        ),
+      );
+      cursor = match.end;
+    }
+    if (cursor < text.length) {
+      spans.add(TextSpan(text: text.substring(cursor)));
+    }
+    if (snippet.truncatedEnd) spans.add(const TextSpan(text: '…'));
+    return spans;
+  }
+
+  String? _badgeLabel(SearchSourceBadge badge, AppLocalizations l10n) {
+    switch (badge.kind) {
+      case SearchBadgeKind.none:
+        return null;
+      case SearchBadgeKind.pdfPage:
+        return l10n.searchBadgePdfPage(badge.page!);
+      case SearchBadgeKind.attachment:
+        return l10n.searchBadgeAttachment;
+      case SearchBadgeKind.image:
+        return l10n.searchBadgeImage;
+      case SearchBadgeKind.subnote:
+        return l10n.searchBadgeSubnote;
+      case SearchBadgeKind.tag:
+        return l10n.searchBadgeTag;
+      case SearchBadgeKind.annotation:
+        return l10n.searchBadgeAnnotation;
+    }
+  }
+
+  /// Attachment-derived hits deep-link into the attachment (at its 1-based
+  /// [NoteSearchResult.page], converted to the screen's 0-based initialPage)
+  /// instead of opening the note editor. Everything else falls through to
+  /// the normal note tap (which also handles multi-select toggling).
+  Future<void> _handleSearchResultTap(_SearchRow row) async {
+    // Fusion UX (plan §2.3): a tap drops any pending semantic re-rank.
+    _search.notifyUserInteraction();
+    final result = row.result;
+    if (!_isMultiSelectMode && result.attachmentId != null) {
+      try {
+        final resolved = await AttachmentLinkService(
+          getIt<DatabaseService>(),
+        ).resolveAttachmentLink(result.attachmentId!);
+        if (resolved != null) {
+          final path = await resolved.attachment.getAbsolutePath();
+          if (!mounted) return;
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => ImmersiveNoteScreen(
+                notes: [resolved.note],
+                initialAttachmentPath: path,
+                initialPage: result.page != null && result.page! > 0
+                    ? result.page! - 1
+                    : null,
+              ),
+            ),
+          );
+          return;
+        }
+      } catch (e) {
+        LoggerService.error('Search deep link failed: $e', error: e);
+      }
+    }
+    _handleNoteTap(row.note);
   }
 
   void _onFilterSelected(Set<String> filterIds) {
@@ -567,15 +982,8 @@ class _NotesScreenState extends State<NotesScreen> {
       }).toList();
     }
 
-    // Filter by search query
-    if (_searchController.text.isNotEmpty) {
-      final query = _searchController.text.toLowerCase();
-      filteredNotes = filteredNotes.where((note) {
-        return note.title.toLowerCase().contains(query) ||
-            note.content.toLowerCase().contains(query) ||
-            note.tags.any((tag) => tag.toLowerCase().contains(query));
-      }).toList();
-    }
+    // Text search is handled by NotesSearchController (SearchService) — this
+    // pipeline only applies the non-text scopes and the browse order.
 
     // Sort by pinned status first, then by creation date
     filteredNotes.sort((a, b) {
@@ -588,6 +996,7 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 
   void _handleNoteTap(Note note) {
+    _search.notifyUserInteraction();
     if (_isMultiSelectMode) {
       setState(() {
         if (_selectedNotes.contains(note)) {
@@ -937,6 +1346,14 @@ class _NotesScreenState extends State<NotesScreen> {
       ),
     );
   }
+}
+
+/// A ranked search hit paired with its (post-filter-visible) note.
+class _SearchRow {
+  const _SearchRow(this.note, this.result);
+
+  final Note note;
+  final NoteSearchResult result;
 }
 
 class _LinkNotesDialog extends StatefulWidget {

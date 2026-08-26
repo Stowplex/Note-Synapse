@@ -14,8 +14,10 @@ import '../service_locator.dart';
 import '../../utils/file_utils.dart';
 
 import '../ai_service.dart';
+import '../search/search_service.dart';
 import '../../models/generation_context.dart';
 import '../../models/filter.dart';
+import '../../models/note.dart';
 
 abstract class NativeTool {
   String get name;
@@ -26,13 +28,26 @@ abstract class NativeTool {
 
 class NoteSearchTool implements NativeTool {
   DatabaseService get _db => getIt<DatabaseService>();
+  SearchService get _searchService => getIt<SearchService>();
+
+  /// Result cap, mirroring the LIMIT 50 of the pre-layered FTS path.
+  static const int _maxResults = 50;
+
+  /// Candidate caps applied BEFORE loading full note rows (the substring
+  /// fallback can return the entire corpus, and notes.content can be huge).
+  /// Only [_maxResults] entries can reach the output; the caps leave slack
+  /// for notes deleted between search and load — extra slack when tags were
+  /// requested, even though [NoteFilterContext.requiredTags] already
+  /// filtered the results inside the search.
+  static const int _maxCandidatesWithoutTags = 200;
+  static const int _maxCandidatesWithTags = 500;
 
   @override
   String get name => 'search_notes';
 
   @override
   String get description => '''
-Search for notes using full-text search. Returns matching notes with titles, IDs, snippets, and tags.
+Search for notes using ranked full-text search (BM25). Matches note titles, bodies, subnotes, and annotations — and indexed attachment content as extraction layers come online. Returns matching notes with titles, IDs, best-match snippets, and tags, best matches first.
 Supports optional tag filtering for more targeted results.
 
 DISCOVERY TIP: Use this for keyword-based filtering across notes.
@@ -63,28 +78,79 @@ Priority order for exploring user's notes:
     final tags = (args['tags'] as List?)?.cast<String>();
 
     final trimmedQuery = query.trim();
-    late final List notes;
-    if (trimmedQuery.isEmpty && tags != null && tags.isNotEmpty) {
+    if (trimmedQuery.isEmpty) {
+      // Tag-only lookup (AND semantics), unchanged from the pre-layered path.
+      if (tags == null || tags.isEmpty) return <Map<String, dynamic>>[];
       final firstTagNotes = await _db.getNotesByTag(tags.first);
-      notes = firstTagNotes
-          .where((note) => tags.every(note.tags.contains))
-          .toList();
-    } else {
-      notes = await _db.searchNotesFTS(query, tags: tags);
+      return [
+        for (final note in firstTagNotes)
+          if (tags.every(note.tags.contains)) _entry(note, _head(note.content)),
+      ];
     }
 
-    return notes
-        .map(
-          (n) => {
-            'id': n.id,
-            'title': n.title,
-            'snippet': n.content.length > 200
-                ? '${n.content.substring(0, 200)}...'
-                : n.content,
-            'tags': n.tags,
-          },
-        )
-        .toList();
+    final hasTags = tags != null && tags.isNotEmpty;
+    final response = await _searchService.searchFused(
+      query,
+      // The AI audience excludes chunks from attachments with
+      // includeInAIContext = false.
+      audience: SearchAudience.ai,
+      // The pre-layered FTS path never filtered archived notes; preserve that
+      // so agents keep finding archived material. The tag filter (AND
+      // semantics, exact tag-name match — the old SQL EXISTS-per-tag) runs
+      // INSIDE the search, during result accumulation, so tagged notes
+      // ranked below untagged material are still found rather than being
+      // truncated away with the top slice.
+      filter: NoteFilterContext(
+        includeArchived: true,
+        requiredTags: hasTags ? tags : null,
+      ),
+    );
+    if (response.results.isEmpty) return <Map<String, dynamic>>[];
+
+    // Cap the candidate list BEFORE fetching notes: the fallback path can
+    // return the whole corpus, and each note load pulls full content.
+    final cap = hasTags ? _maxCandidatesWithTags : _maxCandidatesWithoutTags;
+    final candidates = response.results.length > cap
+        ? response.results.sublist(0, cap)
+        : response.results;
+
+    final notesById = {
+      for (final note in await _db.getNotesByIds([
+        for (final result in candidates) result.noteId,
+      ]))
+        note.id: note,
+    };
+
+    final output = <Map<String, dynamic>>[];
+    for (final result in candidates) {
+      final note = notesById[result.noteId];
+      if (note == null) continue; // Deleted between search and load.
+      output.add(_entry(note, _rankedSnippet(result, note)));
+      if (output.length >= _maxResults) break;
+    }
+    return output;
+  }
+
+  /// Output schema kept identical to the pre-layered tool: id / title /
+  /// snippet / tags (AI-facing contract).
+  static Map<String, dynamic> _entry(Note note, String snippet) => {
+    'id': note.id,
+    'title': note.title,
+    'snippet': snippet,
+    'tags': note.tags,
+  };
+
+  static String _head(String content) =>
+      content.length > 200 ? '${content.substring(0, 200)}...' : content;
+
+  /// The ranked best-chunk snippet, with ellipses marking truncation; falls
+  /// back to the head of the note body when the search produced no snippet
+  /// text (e.g. a title-only substring match on an empty body).
+  static String _rankedSnippet(NoteSearchResult result, Note note) {
+    final snippet = result.best.snippet;
+    if (snippet.text.isEmpty) return _head(note.content);
+    return '${snippet.truncatedStart ? '…' : ''}${snippet.text}'
+        '${snippet.truncatedEnd ? '…' : ''}';
   }
 }
 

@@ -8,6 +8,7 @@ import '../models/mcp_endpoint.dart';
 import '../models/note.dart';
 import '../models/tag.dart';
 import '../utils/conversation_title_directive.dart';
+import '../utils/file_type_utils.dart';
 import 'agent_service.dart';
 import 'ai_tool_service.dart';
 import 'conversation_attachment_service.dart';
@@ -19,6 +20,14 @@ import 'skill_service.dart';
 import 'tools/load_skill_tool.dart';
 import 'tools/note_tools.dart';
 import 'user_app_service.dart';
+
+/// A markdown image whose target is a `synapsetemp:///` URI:
+/// `![alt](synapsetemp:///…)`, optionally followed by a title. The URI stops
+/// at whitespace or `)` — the same delimiter set
+/// [ConversationAttachmentService.processContentForAttachments] uses.
+final RegExp _markdownTempImagePattern = RegExp(
+  r'!\[[^\]]*\]\(\s*(synapsetemp://[^\s)]+)',
+);
 
 class ConversationService {
   final DatabaseService _databaseService;
@@ -569,9 +578,86 @@ class ConversationService {
       );
     }
 
+    await _promoteTempImagesInAiResponse(conversationId, persistedContent);
+
     LoggerService.info('Added AI response to conversation: $conversationId');
 
     return message;
+  }
+
+  /// Copies the `synapsetemp:///` IMAGES referenced by an AI response into
+  /// permanent attachment storage (plan §4.3 hardening).
+  ///
+  /// Mirrors the note-side path
+  /// ([ConversationAttachmentService.processContentForAttachments]): the URI
+  /// STAYS in the message text — the renderer resolves it by hash — but the
+  /// bytes survive OS cache eviction, so a figure in an old conversation does
+  /// not turn into a broken image.
+  ///
+  /// Scope: only URIs used in markdown IMAGE position (`![alt](uri)`) and only
+  /// with an image (or absent) extension. A tool that hands back a temp CSV or
+  /// PDF must not get a permanent copy out of it — plan §4.3 promotes images,
+  /// and the renderer only ever resolves the promoted copy from image
+  /// position.
+  ///
+  /// `allowLocalFilePaths: false` — that second pass copies arbitrary
+  /// `![alt](/abs/path)` targets and rewrites the text; both are wrong for
+  /// model-authored content (it must not be able to pull any readable file
+  /// into attachments, and the persisted message must match what was shown).
+  ///
+  /// LIFECYCLE — deliberately no rows, and no GC today:
+  /// the copy is `attachments/<conversationId>_<sha256(uri)><ext>` and NOTHING
+  /// references it: no `conversation_attachments` row, no attachment row, no
+  /// change to the message (id/metadata semantics stay identical), because the
+  /// renderer finds it purely by hashing the URI. The owner is therefore
+  /// encoded in the file NAME: everything before the first `_` is the owning
+  /// conversation id, so a future cleanup can delete a conversation's promoted
+  /// images by prefix without any schema. Until such a cleanup exists these
+  /// files outlive their conversation.
+  Future<void> _promoteTempImagesInAiResponse(
+    String conversationId,
+    String content,
+  ) async {
+    if (!content.contains('synapsetemp://')) return;
+    final imageUris = tempImageUrisInMarkdown(content);
+    if (imageUris.isEmpty) return;
+    try {
+      await ConversationAttachmentService.processContentForAttachments(
+        // Only the image URIs, one per line: the shared helper scans whatever
+        // text it is handed for `synapsetemp://…`, so the filtering happens by
+        // handing it a filtered document rather than by duplicating the copy
+        // logic here.
+        content: imageUris.join('\n'),
+        noteId: conversationId,
+        allowLocalFilePaths: false,
+      );
+    } catch (e) {
+      // Never fail a reply over a cache-hardening copy.
+      LoggerService.warning(
+        'Failed to promote temp images in AI response for $conversationId: $e',
+      );
+    }
+  }
+
+  /// `synapsetemp:///` URIs used in markdown IMAGE position in [content],
+  /// de-duplicated, in document order, excluding non-image extensions.
+  ///
+  /// An extension-less URI is kept: `SynapseTempUtils.saveTempData` always
+  /// appends one, so the only way to lose it is an odd hand-written URI, and
+  /// the renderer sniffs the MIME type anyway.
+  @visibleForTesting
+  static List<String> tempImageUrisInMarkdown(String content) {
+    final uris = <String>{};
+    for (final match in _markdownTempImagePattern.allMatches(content)) {
+      final uri = match.group(1);
+      if (uri == null) continue;
+      final extension = FileTypeUtils.getFileExtension(
+        Uri.tryParse(uri)?.path ?? uri,
+      );
+      if (extension.isNotEmpty && !FileTypeUtils.isImage(extension)) continue;
+      uris.add(uri);
+    }
+    return uris.toList();
   }
 
   // Update an existing conversation message

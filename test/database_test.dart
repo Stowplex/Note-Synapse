@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:note_synapse/services/database_service.dart';
@@ -102,49 +104,6 @@ void main() {
       expect(retrievedNote.tags, contains('sample'));
       expect(retrievedNote.subNotes.length, 1);
       expect(retrievedNote.subNotes.first.name, 'Sub-note 1');
-    });
-
-    test('should search FTS results filtered by normalized tags', () async {
-      final notes = [
-        Note(
-          id: 'fts-note-1',
-          title: 'AI index',
-          content: 'wiki source overview for machine learning',
-          type: NoteType.note,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          tags: ['wiki-source-ai'],
-        ),
-        Note(
-          id: 'fts-note-2',
-          title: 'AI index without workflow tag',
-          content: 'wiki source overview for neural networks',
-          type: NoteType.note,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          tags: ['reference'],
-        ),
-        Note(
-          id: 'fts-note-3',
-          title: 'Different content',
-          content: 'meeting notes and project planning',
-          type: NoteType.note,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          tags: ['wiki-source-ai'],
-        ),
-      ];
-
-      for (final note in notes) {
-        await databaseService.insertNote(note);
-      }
-
-      final results = await databaseService.searchNotesFTS(
-        'wiki source',
-        tags: ['wiki-source-ai'],
-      );
-
-      expect(results.map((note) => note.id), ['fts-note-1']);
     });
 
     test('should insert and retrieve task', () async {
@@ -329,6 +288,73 @@ void main() {
       final deletedNote = await databaseService.getNote('note-to-delete');
       expect(deletedNote, isNull);
     });
+
+    test(
+      'clearAllData wipes derived search index tables and the global flag',
+      () async {
+        final note = Note(
+          id: 'note-1',
+          title: 'Indexed note',
+          content: 'content',
+          type: NoteType.note,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+        await databaseService.insertNote(note);
+
+        final db = await databaseService.database;
+        final chunkId = await db.insert('search_chunks', {
+          'chunkKey': 'note-1:note_body:-:0',
+          'noteId': 'note-1',
+          'sourceType': 'note_body',
+          'seq': 0,
+          'text': 'content',
+          'contentHash': 'hash',
+          'updatedAt': 1,
+        });
+        await db.rawInsert(
+          'INSERT INTO chunks_fts(docid, content) VALUES(?, ?)',
+          [chunkId, 'content'],
+        );
+        await db.insert('chunk_embeddings', {
+          'chunkId': chunkId,
+          'providerKey': 'test:model:2',
+          'modality': 'text',
+          'dims': 2,
+          'vector': Uint8List.fromList([0, 0]),
+          'contentHash': 'hash',
+        });
+        await db.insert('search_index_state', {
+          'scopeType': 'note',
+          'scopeId': 'note-1',
+          'stage': 'chunks',
+          'contentHash': 'hash',
+          'status': 'done',
+          'updatedAt': 1,
+        });
+        // The global backfill-complete flag must be wiped too, or search
+        // would trust an index that no longer matches the (empty) notes.
+        await db.insert('search_index_state', {
+          'scopeType': 'global',
+          'scopeId': 'all',
+          'stage': 'chunks',
+          'status': 'done',
+          'updatedAt': 1,
+        });
+
+        await databaseService.clearAllData();
+
+        expect(await db.query('notes'), isEmpty);
+        expect(await db.query('search_chunks'), isEmpty);
+        expect(await db.query('chunk_embeddings'), isEmpty);
+        expect(
+          await db.query('search_index_state'),
+          isEmpty,
+          reason: 'includes the global backfill-complete flag row',
+        );
+        expect(await db.rawQuery('SELECT rowid FROM chunks_fts'), isEmpty);
+      },
+    );
 
     test(
       'should handle attachment AI context toggle and preservation',

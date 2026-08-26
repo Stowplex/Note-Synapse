@@ -14,6 +14,7 @@ import '../models/model_config.dart';
 import '../models/model_type.dart';
 import '../models/note.dart';
 import 'tag_workflow_service.dart';
+import 'tools/figure_tools.dart';
 import 'tools/load_skill_tool.dart';
 import 'tools/note_tools.dart';
 import 'tools/read_task_result_tool.dart';
@@ -1171,6 +1172,7 @@ If no findings worth preserving, return: []
   // Tools
   final List<NativeTool> _nativeTools = [
     NoteSearchTool(),
+    FigureSearchTool(),
     NoteReadTool(),
     RunSqlTool(),
     ListFiltersTool(),

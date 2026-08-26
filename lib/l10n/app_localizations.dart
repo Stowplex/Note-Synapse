@@ -1610,6 +1610,78 @@ abstract class AppLocalizations {
   /// **'Create your first note'**
   String get createFirstNote;
 
+  /// No description provided for @searchInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching…'**
+  String get searchInProgress;
+
+  /// No description provided for @searchTryAdjustingTerms.
+  ///
+  /// In en, this message translates to:
+  /// **'Try adjusting your search terms'**
+  String get searchTryAdjustingTerms;
+
+  /// No description provided for @searchTryDifferentTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Try selecting different tags'**
+  String get searchTryDifferentTags;
+
+  /// No description provided for @createFirstNoteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap the + button to create your first note'**
+  String get createFirstNoteHint;
+
+  /// No description provided for @buildingSearchIndex.
+  ///
+  /// In en, this message translates to:
+  /// **'Building search index… {percent}%'**
+  String buildingSearchIndex(int percent);
+
+  /// No description provided for @searchBadgePdfPage.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF · p.{page}'**
+  String searchBadgePdfPage(int page);
+
+  /// No description provided for @searchBadgeAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Attachment'**
+  String get searchBadgeAttachment;
+
+  /// No description provided for @searchBadgeImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Image'**
+  String get searchBadgeImage;
+
+  /// No description provided for @searchBadgeSubnote.
+  ///
+  /// In en, this message translates to:
+  /// **'Sub-note'**
+  String get searchBadgeSubnote;
+
+  /// No description provided for @searchBadgeTag.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag'**
+  String get searchBadgeTag;
+
+  /// No description provided for @searchBadgeAnnotation.
+  ///
+  /// In en, this message translates to:
+  /// **'Annotation'**
+  String get searchBadgeAnnotation;
+
+  /// No description provided for @dismiss.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get dismiss;
+
   /// No description provided for @timeline.
   ///
   /// In en, this message translates to:
@@ -9073,6 +9145,816 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Remove \"{appName}\" access to your {domain} login?'**
   String revokeAppAccessConfirm(String appName, String domain);
+
+  /// Placeholder shown in place of an image when a synapseresource://figure or attachment URI cannot be resolved
+  ///
+  /// In en, this message translates to:
+  /// **'Figure no longer available — the source note or figure was removed'**
+  String get figureUnavailable;
+
+  /// Provenance label under a retrieved figure: owning note title and 1-based page
+  ///
+  /// In en, this message translates to:
+  /// **'{title} · p.{page}'**
+  String figureSourcePage(String title, int page);
+
+  /// Tooltip/semantics label for the provenance button that opens the figure's source attachment
+  ///
+  /// In en, this message translates to:
+  /// **'Open source'**
+  String get figureOpenSource;
+
+  /// Title of the search/index settings screen and of its Settings entry tile
+  ///
+  /// In en, this message translates to:
+  /// **'Search & indexing'**
+  String get searchSettings;
+
+  /// No description provided for @searchSettingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Semantic search, OCR, and index maintenance'**
+  String get searchSettingsSubtitle;
+
+  /// Settings tile subtitle when no embedding provider is configured — keyword search only
+  ///
+  /// In en, this message translates to:
+  /// **'Lexical only'**
+  String get searchSubtitleLexicalOnly;
+
+  /// No description provided for @searchSubtitleReady.
+  ///
+  /// In en, this message translates to:
+  /// **'{provider} · semantic search on'**
+  String searchSubtitleReady(String provider);
+
+  /// No description provided for @searchSubtitleIndexing.
+  ///
+  /// In en, this message translates to:
+  /// **'{provider} · indexing {percent}%'**
+  String searchSubtitleIndexing(String provider, int percent);
+
+  /// No description provided for @searchSubtitleSwitching.
+  ///
+  /// In en, this message translates to:
+  /// **'Switching to {provider} — {percent}% re-indexed'**
+  String searchSubtitleSwitching(String provider, int percent);
+
+  /// Subtitle when the configured provider was explicitly stopped ("Stop using X now"): it stays unserved across sweeps and restarts until re-enabled, so reporting backfill progress would imply it comes back on its own
+  ///
+  /// In en, this message translates to:
+  /// **'Semantic search off — re-enable {provider} to resume'**
+  String searchSubtitleRevoked(String provider);
+
+  /// Action on the revoked-provider row: re-selecting the same provider lifts the revocation
+  ///
+  /// In en, this message translates to:
+  /// **'Re-enable'**
+  String get searchProviderReEnable;
+
+  /// No description provided for @searchSubtitleErrors.
+  ///
+  /// In en, this message translates to:
+  /// **'{provider} · {count} errors'**
+  String searchSubtitleErrors(String provider, int count);
+
+  /// No description provided for @searchIndexStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Index status'**
+  String get searchIndexStatus;
+
+  /// No description provided for @searchIndexIdle.
+  ///
+  /// In en, this message translates to:
+  /// **'Up to date — {chunks} indexed chunks'**
+  String searchIndexIdle(int chunks);
+
+  /// No description provided for @searchStageChunks.
+  ///
+  /// In en, this message translates to:
+  /// **'Indexing notes — {done}/{total}'**
+  String searchStageChunks(int done, int total);
+
+  /// No description provided for @searchStagePdfText.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading PDF text — {done}/{total} attachments'**
+  String searchStagePdfText(int done, int total);
+
+  /// No description provided for @searchStageOcr.
+  ///
+  /// In en, this message translates to:
+  /// **'Recognizing text in PDFs — {done}/{total} pages'**
+  String searchStageOcr(int done, int total);
+
+  /// No description provided for @searchStageEmbed.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating embeddings — {done}/{total} chunks'**
+  String searchStageEmbed(int done, int total);
+
+  /// No description provided for @searchEmbeddingProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Embedding provider'**
+  String get searchEmbeddingProvider;
+
+  /// No description provided for @searchProviderNone.
+  ///
+  /// In en, this message translates to:
+  /// **'None (lexical only)'**
+  String get searchProviderNone;
+
+  /// No description provided for @searchProviderNoneSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Keyword search only — nothing leaves the device'**
+  String get searchProviderNoneSubtitle;
+
+  /// No description provided for @searchProviderCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom (OpenAI-compatible)'**
+  String get searchProviderCustom;
+
+  /// No description provided for @searchProviderCustomSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Self-hosted or any OpenAI-compatible endpoint'**
+  String get searchProviderCustomSubtitle;
+
+  /// No description provided for @searchProviderCloud.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud'**
+  String get searchProviderCloud;
+
+  /// No description provided for @searchProviderOnDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'On-device'**
+  String get searchProviderOnDevice;
+
+  /// No description provided for @searchProviderDimensions.
+  ///
+  /// In en, this message translates to:
+  /// **'{dims} dimensions'**
+  String searchProviderDimensions(int dims);
+
+  /// No description provided for @searchProviderServedBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Searches are still served by {provider}'**
+  String searchProviderServedBy(String provider);
+
+  /// No description provided for @searchProviderEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Endpoint URL'**
+  String get searchProviderEndpoint;
+
+  /// No description provided for @searchProviderEndpointHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Full base URL, e.g. http://localhost:11434/v1'**
+  String get searchProviderEndpointHelp;
+
+  /// No description provided for @searchProviderModelName.
+  ///
+  /// In en, this message translates to:
+  /// **'Model name'**
+  String get searchProviderModelName;
+
+  /// No description provided for @searchProviderDimensionsField.
+  ///
+  /// In en, this message translates to:
+  /// **'Dimensions'**
+  String get searchProviderDimensionsField;
+
+  /// No description provided for @searchProviderDimensionsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified by the connection test'**
+  String get searchProviderDimensionsHelp;
+
+  /// No description provided for @searchProviderApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'API key'**
+  String get searchProviderApiKey;
+
+  /// No description provided for @searchProviderApiKeyHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional — leave empty for keyless self-hosted endpoints'**
+  String get searchProviderApiKeyHelp;
+
+  /// Shown when the key field was prefilled from an already-configured chat model that talks to the same provider
+  ///
+  /// In en, this message translates to:
+  /// **'Prefilled from your {model} chat model — replace it if this endpoint needs a different key.'**
+  String searchProviderApiKeyFromChat(String model);
+
+  /// Validation hint for the custom-provider form: an empty endpoint or model name cannot be probed or stored
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an endpoint URL and a model name before testing.'**
+  String get searchProviderFieldsRequired;
+
+  /// No description provided for @searchGetApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Get an API key'**
+  String get searchGetApiKey;
+
+  /// No description provided for @searchTestConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Test connection'**
+  String get searchTestConnection;
+
+  /// No description provided for @searchTestOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection OK — {dims}-dimensional vectors'**
+  String searchTestOk(int dims);
+
+  /// No description provided for @searchTestDimensionsCorrected.
+  ///
+  /// In en, this message translates to:
+  /// **'Dimensions corrected to {dims} to match the endpoint'**
+  String searchTestDimensionsCorrected(int dims);
+
+  /// No description provided for @searchTestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection failed: {error}'**
+  String searchTestFailed(String error);
+
+  /// No description provided for @searchTestRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Run the connection test before enabling this provider.'**
+  String get searchTestRequired;
+
+  /// No description provided for @searchProviderEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable'**
+  String get searchProviderEnable;
+
+  /// No description provided for @searchProviderEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'{provider} enabled'**
+  String searchProviderEnabled(String provider);
+
+  /// No description provided for @searchProviderTurnedOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Semantic search off — stored vectors were kept'**
+  String get searchProviderTurnedOff;
+
+  /// No description provided for @searchConsentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Send note text to {provider}?'**
+  String searchConsentTitle(String provider);
+
+  /// No description provided for @searchConsentBody.
+  ///
+  /// In en, this message translates to:
+  /// **'About {chunks} chunks of note text will be sent to {provider} to build the semantic index.'**
+  String searchConsentBody(int chunks, String provider);
+
+  /// No description provided for @searchConsentBodyWithImages.
+  ///
+  /// In en, this message translates to:
+  /// **'About {chunks} chunks of note text and {images} images will be sent to {provider} to build the semantic index.'**
+  String searchConsentBodyWithImages(int chunks, int images, String provider);
+
+  /// Consent body when nothing is chunked yet (fresh install): an estimate of 0 would understate what actually uploads once chunking runs
+  ///
+  /// In en, this message translates to:
+  /// **'Your notes will be sent to {provider} as they are indexed, to build the semantic index.'**
+  String searchConsentBodyUnknown(String provider);
+
+  /// No description provided for @searchConsentLargePdfsExcluded.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 large PDF stays excluded and is not sent.} other{{count} large PDFs stay excluded and are not sent.}}'**
+  String searchConsentLargePdfsExcluded(int count);
+
+  /// No description provided for @searchConsentWifiOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Bulk indexing runs on Wi-Fi only by default; search queries may use any network.'**
+  String get searchConsentWifiOnly;
+
+  /// No description provided for @searchConsentSwitchDisclosure.
+  ///
+  /// In en, this message translates to:
+  /// **'Until re-indexing completes, searches will continue to use {provider}.'**
+  String searchConsentSwitchDisclosure(String provider);
+
+  /// No description provided for @searchConsentStopServing.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop using {provider} now'**
+  String searchConsentStopServing(String provider);
+
+  /// No description provided for @searchConsentStoppedServing.
+  ///
+  /// In en, this message translates to:
+  /// **'{provider} is no longer used — keyword search until re-indexing completes'**
+  String searchConsentStoppedServing(String provider);
+
+  /// No description provided for @searchConsentAccept.
+  ///
+  /// In en, this message translates to:
+  /// **'Send and index'**
+  String get searchConsentAccept;
+
+  /// No description provided for @searchErrorAuth.
+  ///
+  /// In en, this message translates to:
+  /// **'{provider} rejected the key — indexing is halted until it is fixed'**
+  String searchErrorAuth(String provider);
+
+  /// No description provided for @searchErrorNotInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'{provider} is not on this device yet'**
+  String searchErrorNotInstalled(String provider);
+
+  /// No description provided for @searchErrorDimensions.
+  ///
+  /// In en, this message translates to:
+  /// **'The endpoint\'s vector size does not match the configured dimensions'**
+  String get searchErrorDimensions;
+
+  /// No description provided for @searchErrorHalted.
+  ///
+  /// In en, this message translates to:
+  /// **'Embedding halted'**
+  String get searchErrorHalted;
+
+  /// No description provided for @searchErrorFailedChunks.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 chunk could not be embedded} other{{count} chunks could not be embedded}}'**
+  String searchErrorFailedChunks(int count);
+
+  /// Explains why the per-chunk failure tile offers Rebuild index rather than a plain Retry: the retry path only clears stage-level halts
+  ///
+  /// In en, this message translates to:
+  /// **'These are retried by a rebuild — nothing else re-checks them.'**
+  String get searchErrorFailedChunksHint;
+
+  /// No description provided for @searchFixKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Fix key'**
+  String get searchFixKey;
+
+  /// No description provided for @searchDownloadModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Download model'**
+  String get searchDownloadModel;
+
+  /// No description provided for @searchDownloadModelHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Download the model below, then test again.'**
+  String get searchDownloadModelHint;
+
+  /// No description provided for @searchRetryStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Retrying indexing…'**
+  String get searchRetryStarted;
+
+  /// No description provided for @searchWifiOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Index on Wi-Fi only'**
+  String get searchWifiOnly;
+
+  /// No description provided for @searchWifiOnlySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bulk embedding waits for Wi-Fi. Searching always works.'**
+  String get searchWifiOnlySubtitle;
+
+  /// No description provided for @searchLocalModelSection.
+  ///
+  /// In en, this message translates to:
+  /// **'On-device model'**
+  String get searchLocalModelSection;
+
+  /// No description provided for @searchLocalModelInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed on this device'**
+  String get searchLocalModelInstalled;
+
+  /// No description provided for @searchLocalModelNotInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'Not downloaded yet'**
+  String get searchLocalModelNotInstalled;
+
+  /// No description provided for @searchHuggingFaceToken.
+  ///
+  /// In en, this message translates to:
+  /// **'HuggingFace access token'**
+  String get searchHuggingFaceToken;
+
+  /// No description provided for @searchHuggingFaceTokenHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Required — this model\'s repository is gated'**
+  String get searchHuggingFaceTokenHelp;
+
+  /// No description provided for @searchGetHfToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Get a token'**
+  String get searchGetHfToken;
+
+  /// No description provided for @searchInstallModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get searchInstallModel;
+
+  /// No description provided for @searchUninstallModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get searchUninstallModel;
+
+  /// No description provided for @searchInstallProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading — {percent}%'**
+  String searchInstallProgress(int percent);
+
+  /// No description provided for @searchInstallAuthFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Download rejected — accept the model licence on HuggingFace and check your token. {error}'**
+  String searchInstallAuthFailed(String error);
+
+  /// No description provided for @searchInstallTransientFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed — check the connection and try again. {error}'**
+  String searchInstallTransientFailed(String error);
+
+  /// No description provided for @searchInstallFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed: {error}'**
+  String searchInstallFailed(String error);
+
+  /// No description provided for @searchModelInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'Model downloaded'**
+  String get searchModelInstalled;
+
+  /// No description provided for @searchModelRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Model removed'**
+  String get searchModelRemoved;
+
+  /// No description provided for @searchRebuildIndex.
+  ///
+  /// In en, this message translates to:
+  /// **'Rebuild index'**
+  String get searchRebuildIndex;
+
+  /// No description provided for @searchRebuildSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Re-check every note and attachment'**
+  String get searchRebuildSubtitle;
+
+  /// No description provided for @searchRebuildRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Rebuilding — {percent}%'**
+  String searchRebuildRunning(int percent);
+
+  /// No description provided for @searchRebuildConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rebuild the search index?'**
+  String get searchRebuildConfirmTitle;
+
+  /// No description provided for @searchRebuildConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{notes} notes and {chunks} chunks will be re-checked.'**
+  String searchRebuildConfirmBody(int notes, int chunks);
+
+  /// No description provided for @searchRebuildConfirmCost.
+  ///
+  /// In en, this message translates to:
+  /// **'Chunks whose text changed are sent to {provider} again; unchanged chunks are not re-embedded.'**
+  String searchRebuildConfirmCost(String provider);
+
+  /// No description provided for @searchRebuildStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Rebuilding the search index…'**
+  String get searchRebuildStarted;
+
+  /// No description provided for @searchDeleteEmbeddings.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete stored embeddings'**
+  String get searchDeleteEmbeddings;
+
+  /// No description provided for @searchDeleteEmbeddingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Frees storage and erases every vector. Turning a provider off keeps them.'**
+  String get searchDeleteEmbeddingsSubtitle;
+
+  /// No description provided for @searchDeleteEmbeddingsConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete every stored embedding? This also turns the embedding provider off, so nothing is re-uploaded behind your back — search falls back to keywords until you pick a provider again.'**
+  String get searchDeleteEmbeddingsConfirm;
+
+  /// No description provided for @searchEmbeddingsDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Stored embeddings deleted — provider turned off'**
+  String get searchEmbeddingsDeleted;
+
+  /// No description provided for @searchOcrEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Recognize text in PDFs and images'**
+  String get searchOcrEnabled;
+
+  /// No description provided for @searchOcrOnDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Runs on-device — nothing is uploaded'**
+  String get searchOcrOnDevice;
+
+  /// No description provided for @searchOcrScript.
+  ///
+  /// In en, this message translates to:
+  /// **'Script'**
+  String get searchOcrScript;
+
+  /// No description provided for @searchOcrScriptAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic (follow device language)'**
+  String get searchOcrScriptAuto;
+
+  /// No description provided for @searchOcrScriptLatin.
+  ///
+  /// In en, this message translates to:
+  /// **'Latin'**
+  String get searchOcrScriptLatin;
+
+  /// No description provided for @searchOcrScriptChinese.
+  ///
+  /// In en, this message translates to:
+  /// **'Chinese'**
+  String get searchOcrScriptChinese;
+
+  /// No description provided for @searchFigureIndexing.
+  ///
+  /// In en, this message translates to:
+  /// **'Index figures and tables'**
+  String get searchFigureIndexing;
+
+  /// No description provided for @searchFigureIndexingSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Extracts figures from PDFs so they can be found and shown in chat'**
+  String get searchFigureIndexingSubtitle;
+
+  /// No description provided for @searchFigureSkillHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Install the Figure Answers skill for better figure replies'**
+  String get searchFigureSkillHint;
+
+  /// No description provided for @searchPdfPageCap.
+  ///
+  /// In en, this message translates to:
+  /// **'Large PDF limit'**
+  String get searchPdfPageCap;
+
+  /// No description provided for @searchPdfPageCapField.
+  ///
+  /// In en, this message translates to:
+  /// **'Pages'**
+  String get searchPdfPageCapField;
+
+  /// No description provided for @searchPdfPageCapSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'PDFs longer than {pages} pages are skipped unless you opt them in'**
+  String searchPdfPageCapSubtitle(int pages);
+
+  /// No description provided for @searchLargePdfsSkipped.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 large PDF not indexed — review} other{{count} large PDFs not indexed — review}}'**
+  String searchLargePdfsSkipped(int count);
+
+  /// Overflow row when more skipped PDFs exist than the list renders
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 more not shown} other{{count} more not shown}}'**
+  String searchLargePdfsMore(int count);
+
+  /// No description provided for @searchLargePdfPages.
+  ///
+  /// In en, this message translates to:
+  /// **'{title} · {pages} pages'**
+  String searchLargePdfPages(String title, int pages);
+
+  /// No description provided for @searchIndexAnyway.
+  ///
+  /// In en, this message translates to:
+  /// **'Index anyway'**
+  String get searchIndexAnyway;
+
+  /// No description provided for @searchLargePdfQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} will be indexed'**
+  String searchLargePdfQueued(String name);
+
+  /// No description provided for @searchNoLargePdfs.
+  ///
+  /// In en, this message translates to:
+  /// **'No PDFs are being skipped for size'**
+  String get searchNoLargePdfs;
+
+  /// Menu entry and dialog title for the per-attachment search index policy
+  ///
+  /// In en, this message translates to:
+  /// **'Search indexing'**
+  String get searchIndexOptions;
+
+  /// Menu entry label when the attachment's search index policy differs from the defaults
+  ///
+  /// In en, this message translates to:
+  /// **'Search indexing: customized'**
+  String get searchIndexOptionsCustom;
+
+  /// No description provided for @searchIndexOptionsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose what may be extracted from {name} for search.'**
+  String searchIndexOptionsSubtitle(String name);
+
+  /// No description provided for @searchIndexPurgeWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Turning an option off deletes what it already produced for this file — its search chunks, any figure crops rendered from it, and the vectors stored for semantic search.'**
+  String get searchIndexPurgeWarning;
+
+  /// No description provided for @searchIndexEmbedPurgeWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Turning this off deletes the vectors already stored for this file, so it stops appearing in semantic search results.'**
+  String get searchIndexEmbedPurgeWarning;
+
+  /// No description provided for @searchIndexExtractText.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract the text layer'**
+  String get searchIndexExtractText;
+
+  /// No description provided for @searchIndexExtractTextSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Index the text already embedded in this PDF.'**
+  String get searchIndexExtractTextSubtitle;
+
+  /// No description provided for @searchIndexAnywayOverCap.
+  ///
+  /// In en, this message translates to:
+  /// **'Index despite the page limit'**
+  String get searchIndexAnywayOverCap;
+
+  /// No description provided for @searchIndexOverCapSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{pages} pages — longer than the {cap}-page limit, so this PDF is skipped unless you opt it in.'**
+  String searchIndexOverCapSubtitle(int pages, int cap);
+
+  /// No description provided for @searchIndexAnywaySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep indexing this PDF even when it is longer than the page limit.'**
+  String get searchIndexAnywaySubtitle;
+
+  /// No description provided for @searchIndexDeriveOnDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract content on this device'**
+  String get searchIndexDeriveOnDevice;
+
+  /// No description provided for @searchIndexDeriveOnDeviceSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Text recognition and figure crops, computed locally. Nothing is uploaded.'**
+  String get searchIndexDeriveOnDeviceSubtitle;
+
+  /// No description provided for @searchIndexEmbed.
+  ///
+  /// In en, this message translates to:
+  /// **'Use for semantic search'**
+  String get searchIndexEmbed;
+
+  /// No description provided for @searchIndexEmbedSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Send this file\'s indexed text to the embedding provider — or, when the provider accepts images, the images themselves: the figure crops rendered from it, or the image file.'**
+  String get searchIndexEmbedSubtitle;
+
+  /// No description provided for @searchIndexSvgOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'SVG attachments are indexed by file name and alt text only: there is no text layer to extract, and nothing to recognize or crop on this device. That text is still sent to the embedding provider unless you turn semantic search off below.'**
+  String get searchIndexSvgOnly;
+
+  /// No description provided for @searchIndexNotIndexable.
+  ///
+  /// In en, this message translates to:
+  /// **'Note Synapse does not extract content from this file type. It stays findable through the note it is attached to.'**
+  String get searchIndexNotIndexable;
+
+  /// No description provided for @searchIndexUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Search indexing updated'**
+  String get searchIndexUpdated;
+
+  /// No description provided for @searchIndexUpdateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not update search indexing'**
+  String get searchIndexUpdateFailed;
+
+  /// No description provided for @searchExcludeNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude from search'**
+  String get searchExcludeNote;
+
+  /// No description provided for @searchExcludeNoteConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude this note from search?'**
+  String get searchExcludeNoteConfirmTitle;
+
+  /// No description provided for @searchExcludeNoteConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The note and its attachments are removed from the search index, including text extracted from attachments and any figure crops rendered from them. Everything is indexed again if you turn this off.'**
+  String get searchExcludeNoteConfirmBody;
+
+  /// No description provided for @searchExcludeNoteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude'**
+  String get searchExcludeNoteConfirm;
+
+  /// No description provided for @searchExcludeNoteExcluded.
+  ///
+  /// In en, this message translates to:
+  /// **'Note excluded from search'**
+  String get searchExcludeNoteExcluded;
+
+  /// No description provided for @searchExcludeNoteIncluded.
+  ///
+  /// In en, this message translates to:
+  /// **'Note will be indexed for search again'**
+  String get searchExcludeNoteIncluded;
+
+  /// No description provided for @searchExcludeNoteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not update the search exclusion'**
+  String get searchExcludeNoteFailed;
 }
 
 class _AppLocalizationsDelegate

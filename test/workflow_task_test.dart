@@ -11,6 +11,7 @@ import 'package:note_synapse/services/ai_service.dart';
 import 'package:note_synapse/services/context_manager_service.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/model_selector.dart';
+import 'package:note_synapse/services/search/search_service.dart';
 import 'package:note_synapse/services/tag_workflow_service.dart';
 import 'package:note_synapse/models/model_config.dart';
 import 'package:note_synapse/models/model_type.dart';
@@ -66,11 +67,24 @@ ResolvedBinding _makeBinding({
   contentImmutable: contentImmutable,
 );
 
+/// SearchTicket's constructor is private to search_service.dart; a fake
+/// standalone marker satisfies SearchResponse in stubs.
+class _FakeSearchTicket implements SearchTicket {
+  const _FakeSearchTicket();
+
+  @override
+  int get seq => 0;
+
+  @override
+  bool get standalone => true;
+}
+
 @GenerateMocks([
   DatabaseService,
   AIService,
   ModelSelector,
   ContextManagerService,
+  SearchService,
 ])
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -80,6 +94,7 @@ void main() {
   late MockAIService mockAIService;
   late MockModelSelector mockModelSelector;
   late MockContextManagerService mockContextManager;
+  late MockSearchService mockSearchService;
   late AgentService agentService;
 
   setUp(() async {
@@ -89,8 +104,10 @@ void main() {
     mockAIService = MockAIService();
     mockModelSelector = MockModelSelector();
     mockContextManager = MockContextManagerService();
+    mockSearchService = MockSearchService();
 
     getIt.registerLazySingleton<DatabaseService>(() => mockDb);
+    getIt.registerLazySingleton<SearchService>(() => mockSearchService);
     getIt.registerLazySingleton<AIService>(() => mockAIService);
     getIt.registerLazySingleton<ModelSelector>(() => mockModelSelector);
     getIt.registerLazySingleton<ContextManagerService>(
@@ -108,8 +125,19 @@ void main() {
 
     // Default stubs
     when(
-      mockDb.searchNotesFTS(any, tags: anyNamed('tags')),
-    ).thenAnswer((_) async => []);
+      mockSearchService.searchFused(
+        any,
+        filter: anyNamed('filter'),
+        audience: anyNamed('audience'),
+        ticket: anyNamed('ticket'),
+      ),
+    ).thenAnswer(
+      (_) async => const SearchResponse(
+        results: [],
+        ticket: _FakeSearchTicket(),
+        usedSubstringFallback: false,
+      ),
+    );
     when(mockDb.getNotesByTag(any)).thenAnswer((_) async => []);
     when(mockDb.getNote(any)).thenAnswer(
       (inv) async => _makeSkillNote(inv.positionalArguments.first as String),
@@ -364,10 +392,15 @@ Use [search_notes](notesynapse://tool/builtin/search_notes) to find the workspac
           agentService.tasks.single.executionHistory.first,
           contains('Bootstrap: preloaded bound workflow skill skill-1'),
         );
+        // The skill-discovered builtin executed: the layered search ran (the
+        // agent substitutes a fallback query for the empty one, so the tool
+        // takes the search path and applies the tag filter over its results).
         verify(
-          mockDb.searchNotesFTS(
+          mockSearchService.searchFused(
             any,
-            tags: argThat(contains('wiki-index-ai-research'), named: 'tags'),
+            filter: anyNamed('filter'),
+            audience: anyNamed('audience'),
+            ticket: anyNamed('ticket'),
           ),
         ).called(1);
       },
@@ -503,77 +536,71 @@ Use [search_notes](notesynapse://tool/builtin/search_notes) to find the workspac
   });
 
   group('native function calling for local models', () {
-    test(
-      'uses generateWithToolsAndMessages when model is localMnn',
-      () async {
-        // Configure a local model override so _useNativeFunctionCalling()
-        // returns true.
-        final localConfig = ModelConfig(
-          type: ModelType.localMnn,
-          modelName: 'Gemma 4 E2B',
-        );
-        when(mockModelSelector.currentModelConfig).thenReturn(localConfig);
+    test('uses generateWithToolsAndMessages when model is localMnn', () async {
+      // Configure a local model override so _useNativeFunctionCalling()
+      // returns true.
+      final localConfig = ModelConfig(
+        type: ModelType.localMnn,
+        modelName: 'Gemma 4 E2B',
+      );
+      when(mockModelSelector.currentModelConfig).thenReturn(localConfig);
 
-        // Stub generateWithToolsAndMessages to return a text-only answer
-        when(
-          mockModelSelector.generateWithToolsAndMessages(
-            any,
-            any,
-            generationContext: anyNamed('generationContext'),
-          ),
-        ).thenAnswer(
-          (_) async => {
-            'text': 'The answer is 42.',
-            'function_calls': null,
-            'modelUsed': 'Gemma 4 E2B',
-          },
-        );
+      // Stub generateWithToolsAndMessages to return a text-only answer
+      when(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer(
+        (_) async => {
+          'text': 'The answer is 42.',
+          'function_calls': null,
+          'modelUsed': 'Gemma 4 E2B',
+        },
+      );
 
-        final note = _makeNote('note-native');
-        final binding = _makeBinding(
-          prompt: 'Process note {note_id}',
-          matchedTag: 'test-tag',
-        );
-        agentService.modelOverride = localConfig;
+      final note = _makeNote('note-native');
+      final binding = _makeBinding(
+        prompt: 'Process note {note_id}',
+        matchedTag: 'test-tag',
+      );
+      agentService.modelOverride = localConfig;
 
-        await agentService.runWorkflowTask(binding: binding, note: note);
-        await Future.delayed(const Duration(milliseconds: 50));
+      await agentService.runWorkflowTask(binding: binding, note: note);
+      await Future.delayed(const Duration(milliseconds: 50));
 
-        // Verify native path was used (generateWithToolsAndMessages) and NOT
-        // the XML path (generateWithAttachments).
-        verify(
-          mockModelSelector.generateWithToolsAndMessages(
-            any,
-            any,
-            generationContext: anyNamed('generationContext'),
-          ),
-        ).called(greaterThanOrEqualTo(1));
-      },
-    );
+      // Verify native path was used (generateWithToolsAndMessages) and NOT
+      // the XML path (generateWithAttachments).
+      verify(
+        mockModelSelector.generateWithToolsAndMessages(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).called(greaterThanOrEqualTo(1));
+    });
 
-    test(
-      'uses generateWithAttachments when model is not localMnn',
-      () async {
-        // Default config is null (non-local). Verify XML path is used.
-        when(mockModelSelector.currentModelConfig).thenReturn(null);
+    test('uses generateWithAttachments when model is not localMnn', () async {
+      // Default config is null (non-local). Verify XML path is used.
+      when(mockModelSelector.currentModelConfig).thenReturn(null);
 
-        final note = _makeNote('note-xml');
-        final binding = _makeBinding(
-          prompt: 'Process note {note_id}',
-          matchedTag: 'test-tag',
-        );
+      final note = _makeNote('note-xml');
+      final binding = _makeBinding(
+        prompt: 'Process note {note_id}',
+        matchedTag: 'test-tag',
+      );
 
-        await agentService.runWorkflowTask(binding: binding, note: note);
-        await Future.delayed(const Duration(milliseconds: 50));
+      await agentService.runWorkflowTask(binding: binding, note: note);
+      await Future.delayed(const Duration(milliseconds: 50));
 
-        verify(
-          mockAIService.generateWithAttachments(
-            any,
-            any,
-            generationContext: anyNamed('generationContext'),
-          ),
-        ).called(greaterThanOrEqualTo(1));
-      },
-    );
+      verify(
+        mockAIService.generateWithAttachments(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).called(greaterThanOrEqualTo(1));
+    });
   });
 }

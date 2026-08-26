@@ -869,6 +869,47 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createFirstNote => 'Create your first note';
 
   @override
+  String get searchInProgress => 'Searching…';
+
+  @override
+  String get searchTryAdjustingTerms => 'Try adjusting your search terms';
+
+  @override
+  String get searchTryDifferentTags => 'Try selecting different tags';
+
+  @override
+  String get createFirstNoteHint =>
+      'Tap the + button to create your first note';
+
+  @override
+  String buildingSearchIndex(int percent) {
+    return 'Building search index… $percent%';
+  }
+
+  @override
+  String searchBadgePdfPage(int page) {
+    return 'PDF · p.$page';
+  }
+
+  @override
+  String get searchBadgeAttachment => 'Attachment';
+
+  @override
+  String get searchBadgeImage => 'Image';
+
+  @override
+  String get searchBadgeSubnote => 'Sub-note';
+
+  @override
+  String get searchBadgeTag => 'Tag';
+
+  @override
+  String get searchBadgeAnnotation => 'Annotation';
+
+  @override
+  String get dismiss => 'Dismiss';
+
+  @override
   String get timeline => 'Timeline';
 
   @override
@@ -5245,4 +5286,549 @@ class AppLocalizationsEn extends AppLocalizations {
   String revokeAppAccessConfirm(String appName, String domain) {
     return 'Remove \"$appName\" access to your $domain login?';
   }
+
+  @override
+  String get figureUnavailable =>
+      'Figure no longer available — the source note or figure was removed';
+
+  @override
+  String figureSourcePage(String title, int page) {
+    return '$title · p.$page';
+  }
+
+  @override
+  String get figureOpenSource => 'Open source';
+
+  @override
+  String get searchSettings => 'Search & indexing';
+
+  @override
+  String get searchSettingsSubtitle =>
+      'Semantic search, OCR, and index maintenance';
+
+  @override
+  String get searchSubtitleLexicalOnly => 'Lexical only';
+
+  @override
+  String searchSubtitleReady(String provider) {
+    return '$provider · semantic search on';
+  }
+
+  @override
+  String searchSubtitleIndexing(String provider, int percent) {
+    return '$provider · indexing $percent%';
+  }
+
+  @override
+  String searchSubtitleSwitching(String provider, int percent) {
+    return 'Switching to $provider — $percent% re-indexed';
+  }
+
+  @override
+  String searchSubtitleRevoked(String provider) {
+    return 'Semantic search off — re-enable $provider to resume';
+  }
+
+  @override
+  String get searchProviderReEnable => 'Re-enable';
+
+  @override
+  String searchSubtitleErrors(String provider, int count) {
+    return '$provider · $count errors';
+  }
+
+  @override
+  String get searchIndexStatus => 'Index status';
+
+  @override
+  String searchIndexIdle(int chunks) {
+    return 'Up to date — $chunks indexed chunks';
+  }
+
+  @override
+  String searchStageChunks(int done, int total) {
+    return 'Indexing notes — $done/$total';
+  }
+
+  @override
+  String searchStagePdfText(int done, int total) {
+    return 'Reading PDF text — $done/$total attachments';
+  }
+
+  @override
+  String searchStageOcr(int done, int total) {
+    return 'Recognizing text in PDFs — $done/$total pages';
+  }
+
+  @override
+  String searchStageEmbed(int done, int total) {
+    return 'Creating embeddings — $done/$total chunks';
+  }
+
+  @override
+  String get searchEmbeddingProvider => 'Embedding provider';
+
+  @override
+  String get searchProviderNone => 'None (lexical only)';
+
+  @override
+  String get searchProviderNoneSubtitle =>
+      'Keyword search only — nothing leaves the device';
+
+  @override
+  String get searchProviderCustom => 'Custom (OpenAI-compatible)';
+
+  @override
+  String get searchProviderCustomSubtitle =>
+      'Self-hosted or any OpenAI-compatible endpoint';
+
+  @override
+  String get searchProviderCloud => 'Cloud';
+
+  @override
+  String get searchProviderOnDevice => 'On-device';
+
+  @override
+  String searchProviderDimensions(int dims) {
+    return '$dims dimensions';
+  }
+
+  @override
+  String searchProviderServedBy(String provider) {
+    return 'Searches are still served by $provider';
+  }
+
+  @override
+  String get searchProviderEndpoint => 'Endpoint URL';
+
+  @override
+  String get searchProviderEndpointHelp =>
+      'Full base URL, e.g. http://localhost:11434/v1';
+
+  @override
+  String get searchProviderModelName => 'Model name';
+
+  @override
+  String get searchProviderDimensionsField => 'Dimensions';
+
+  @override
+  String get searchProviderDimensionsHelp => 'Verified by the connection test';
+
+  @override
+  String get searchProviderApiKey => 'API key';
+
+  @override
+  String get searchProviderApiKeyHelp =>
+      'Optional — leave empty for keyless self-hosted endpoints';
+
+  @override
+  String searchProviderApiKeyFromChat(String model) {
+    return 'Prefilled from your $model chat model — replace it if this endpoint needs a different key.';
+  }
+
+  @override
+  String get searchProviderFieldsRequired =>
+      'Enter an endpoint URL and a model name before testing.';
+
+  @override
+  String get searchGetApiKey => 'Get an API key';
+
+  @override
+  String get searchTestConnection => 'Test connection';
+
+  @override
+  String searchTestOk(int dims) {
+    return 'Connection OK — $dims-dimensional vectors';
+  }
+
+  @override
+  String searchTestDimensionsCorrected(int dims) {
+    return 'Dimensions corrected to $dims to match the endpoint';
+  }
+
+  @override
+  String searchTestFailed(String error) {
+    return 'Connection failed: $error';
+  }
+
+  @override
+  String get searchTestRequired =>
+      'Run the connection test before enabling this provider.';
+
+  @override
+  String get searchProviderEnable => 'Enable';
+
+  @override
+  String searchProviderEnabled(String provider) {
+    return '$provider enabled';
+  }
+
+  @override
+  String get searchProviderTurnedOff =>
+      'Semantic search off — stored vectors were kept';
+
+  @override
+  String searchConsentTitle(String provider) {
+    return 'Send note text to $provider?';
+  }
+
+  @override
+  String searchConsentBody(int chunks, String provider) {
+    return 'About $chunks chunks of note text will be sent to $provider to build the semantic index.';
+  }
+
+  @override
+  String searchConsentBodyWithImages(int chunks, int images, String provider) {
+    return 'About $chunks chunks of note text and $images images will be sent to $provider to build the semantic index.';
+  }
+
+  @override
+  String searchConsentBodyUnknown(String provider) {
+    return 'Your notes will be sent to $provider as they are indexed, to build the semantic index.';
+  }
+
+  @override
+  String searchConsentLargePdfsExcluded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count large PDFs stay excluded and are not sent.',
+      one: '1 large PDF stays excluded and is not sent.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get searchConsentWifiOnly =>
+      'Bulk indexing runs on Wi-Fi only by default; search queries may use any network.';
+
+  @override
+  String searchConsentSwitchDisclosure(String provider) {
+    return 'Until re-indexing completes, searches will continue to use $provider.';
+  }
+
+  @override
+  String searchConsentStopServing(String provider) {
+    return 'Stop using $provider now';
+  }
+
+  @override
+  String searchConsentStoppedServing(String provider) {
+    return '$provider is no longer used — keyword search until re-indexing completes';
+  }
+
+  @override
+  String get searchConsentAccept => 'Send and index';
+
+  @override
+  String searchErrorAuth(String provider) {
+    return '$provider rejected the key — indexing is halted until it is fixed';
+  }
+
+  @override
+  String searchErrorNotInstalled(String provider) {
+    return '$provider is not on this device yet';
+  }
+
+  @override
+  String get searchErrorDimensions =>
+      'The endpoint\'s vector size does not match the configured dimensions';
+
+  @override
+  String get searchErrorHalted => 'Embedding halted';
+
+  @override
+  String searchErrorFailedChunks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count chunks could not be embedded',
+      one: '1 chunk could not be embedded',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get searchErrorFailedChunksHint =>
+      'These are retried by a rebuild — nothing else re-checks them.';
+
+  @override
+  String get searchFixKey => 'Fix key';
+
+  @override
+  String get searchDownloadModel => 'Download model';
+
+  @override
+  String get searchDownloadModelHint =>
+      'Download the model below, then test again.';
+
+  @override
+  String get searchRetryStarted => 'Retrying indexing…';
+
+  @override
+  String get searchWifiOnly => 'Index on Wi-Fi only';
+
+  @override
+  String get searchWifiOnlySubtitle =>
+      'Bulk embedding waits for Wi-Fi. Searching always works.';
+
+  @override
+  String get searchLocalModelSection => 'On-device model';
+
+  @override
+  String get searchLocalModelInstalled => 'Installed on this device';
+
+  @override
+  String get searchLocalModelNotInstalled => 'Not downloaded yet';
+
+  @override
+  String get searchHuggingFaceToken => 'HuggingFace access token';
+
+  @override
+  String get searchHuggingFaceTokenHelp =>
+      'Required — this model\'s repository is gated';
+
+  @override
+  String get searchGetHfToken => 'Get a token';
+
+  @override
+  String get searchInstallModel => 'Download';
+
+  @override
+  String get searchUninstallModel => 'Remove';
+
+  @override
+  String searchInstallProgress(int percent) {
+    return 'Downloading — $percent%';
+  }
+
+  @override
+  String searchInstallAuthFailed(String error) {
+    return 'Download rejected — accept the model licence on HuggingFace and check your token. $error';
+  }
+
+  @override
+  String searchInstallTransientFailed(String error) {
+    return 'Download failed — check the connection and try again. $error';
+  }
+
+  @override
+  String searchInstallFailed(String error) {
+    return 'Download failed: $error';
+  }
+
+  @override
+  String get searchModelInstalled => 'Model downloaded';
+
+  @override
+  String get searchModelRemoved => 'Model removed';
+
+  @override
+  String get searchRebuildIndex => 'Rebuild index';
+
+  @override
+  String get searchRebuildSubtitle => 'Re-check every note and attachment';
+
+  @override
+  String searchRebuildRunning(int percent) {
+    return 'Rebuilding — $percent%';
+  }
+
+  @override
+  String get searchRebuildConfirmTitle => 'Rebuild the search index?';
+
+  @override
+  String searchRebuildConfirmBody(int notes, int chunks) {
+    return '$notes notes and $chunks chunks will be re-checked.';
+  }
+
+  @override
+  String searchRebuildConfirmCost(String provider) {
+    return 'Chunks whose text changed are sent to $provider again; unchanged chunks are not re-embedded.';
+  }
+
+  @override
+  String get searchRebuildStarted => 'Rebuilding the search index…';
+
+  @override
+  String get searchDeleteEmbeddings => 'Delete stored embeddings';
+
+  @override
+  String get searchDeleteEmbeddingsSubtitle =>
+      'Frees storage and erases every vector. Turning a provider off keeps them.';
+
+  @override
+  String get searchDeleteEmbeddingsConfirm =>
+      'Delete every stored embedding? This also turns the embedding provider off, so nothing is re-uploaded behind your back — search falls back to keywords until you pick a provider again.';
+
+  @override
+  String get searchEmbeddingsDeleted =>
+      'Stored embeddings deleted — provider turned off';
+
+  @override
+  String get searchOcrEnabled => 'Recognize text in PDFs and images';
+
+  @override
+  String get searchOcrOnDevice => 'Runs on-device — nothing is uploaded';
+
+  @override
+  String get searchOcrScript => 'Script';
+
+  @override
+  String get searchOcrScriptAuto => 'Automatic (follow device language)';
+
+  @override
+  String get searchOcrScriptLatin => 'Latin';
+
+  @override
+  String get searchOcrScriptChinese => 'Chinese';
+
+  @override
+  String get searchFigureIndexing => 'Index figures and tables';
+
+  @override
+  String get searchFigureIndexingSubtitle =>
+      'Extracts figures from PDFs so they can be found and shown in chat';
+
+  @override
+  String get searchFigureSkillHint =>
+      'Install the Figure Answers skill for better figure replies';
+
+  @override
+  String get searchPdfPageCap => 'Large PDF limit';
+
+  @override
+  String get searchPdfPageCapField => 'Pages';
+
+  @override
+  String searchPdfPageCapSubtitle(int pages) {
+    return 'PDFs longer than $pages pages are skipped unless you opt them in';
+  }
+
+  @override
+  String searchLargePdfsSkipped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count large PDFs not indexed — review',
+      one: '1 large PDF not indexed — review',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String searchLargePdfsMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count more not shown',
+      one: '1 more not shown',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String searchLargePdfPages(String title, int pages) {
+    return '$title · $pages pages';
+  }
+
+  @override
+  String get searchIndexAnyway => 'Index anyway';
+
+  @override
+  String searchLargePdfQueued(String name) {
+    return '$name will be indexed';
+  }
+
+  @override
+  String get searchNoLargePdfs => 'No PDFs are being skipped for size';
+
+  @override
+  String get searchIndexOptions => 'Search indexing';
+
+  @override
+  String get searchIndexOptionsCustom => 'Search indexing: customized';
+
+  @override
+  String searchIndexOptionsSubtitle(String name) {
+    return 'Choose what may be extracted from $name for search.';
+  }
+
+  @override
+  String get searchIndexPurgeWarning =>
+      'Turning an option off deletes what it already produced for this file — its search chunks, any figure crops rendered from it, and the vectors stored for semantic search.';
+
+  @override
+  String get searchIndexEmbedPurgeWarning =>
+      'Turning this off deletes the vectors already stored for this file, so it stops appearing in semantic search results.';
+
+  @override
+  String get searchIndexExtractText => 'Extract the text layer';
+
+  @override
+  String get searchIndexExtractTextSubtitle =>
+      'Index the text already embedded in this PDF.';
+
+  @override
+  String get searchIndexAnywayOverCap => 'Index despite the page limit';
+
+  @override
+  String searchIndexOverCapSubtitle(int pages, int cap) {
+    return '$pages pages — longer than the $cap-page limit, so this PDF is skipped unless you opt it in.';
+  }
+
+  @override
+  String get searchIndexAnywaySubtitle =>
+      'Keep indexing this PDF even when it is longer than the page limit.';
+
+  @override
+  String get searchIndexDeriveOnDevice => 'Extract content on this device';
+
+  @override
+  String get searchIndexDeriveOnDeviceSubtitle =>
+      'Text recognition and figure crops, computed locally. Nothing is uploaded.';
+
+  @override
+  String get searchIndexEmbed => 'Use for semantic search';
+
+  @override
+  String get searchIndexEmbedSubtitle =>
+      'Send this file\'s indexed text to the embedding provider — or, when the provider accepts images, the images themselves: the figure crops rendered from it, or the image file.';
+
+  @override
+  String get searchIndexSvgOnly =>
+      'SVG attachments are indexed by file name and alt text only: there is no text layer to extract, and nothing to recognize or crop on this device. That text is still sent to the embedding provider unless you turn semantic search off below.';
+
+  @override
+  String get searchIndexNotIndexable =>
+      'Note Synapse does not extract content from this file type. It stays findable through the note it is attached to.';
+
+  @override
+  String get searchIndexUpdated => 'Search indexing updated';
+
+  @override
+  String get searchIndexUpdateFailed => 'Could not update search indexing';
+
+  @override
+  String get searchExcludeNote => 'Exclude from search';
+
+  @override
+  String get searchExcludeNoteConfirmTitle => 'Exclude this note from search?';
+
+  @override
+  String get searchExcludeNoteConfirmBody =>
+      'The note and its attachments are removed from the search index, including text extracted from attachments and any figure crops rendered from them. Everything is indexed again if you turn this off.';
+
+  @override
+  String get searchExcludeNoteConfirm => 'Exclude';
+
+  @override
+  String get searchExcludeNoteExcluded => 'Note excluded from search';
+
+  @override
+  String get searchExcludeNoteIncluded =>
+      'Note will be indexed for search again';
+
+  @override
+  String get searchExcludeNoteFailed => 'Could not update the search exclusion';
 }

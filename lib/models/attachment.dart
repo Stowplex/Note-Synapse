@@ -58,6 +58,56 @@ class PdfAiContextConfig {
   bool get hasCustomRange => mode != 'all';
 }
 
+/// Per-attachment search index policy (cost control), stored as JSON under
+/// metadata.searchIndex — same pattern as [PdfAiContextConfig].
+///
+/// Only the lexical chunk stage exists today; the ocr/embed flags are
+/// defined now so all later pipeline stages read policy through this one
+/// accessor. Note-level exclusion (notes.metadata.searchIndex.exclude)
+/// overrides everything here.
+class AttachmentSearchIndexConfig {
+  /// Text extraction: 'auto' (size-gated default), 'on' (explicit opt-in —
+  /// bypasses the PDF page cap, set by the attach-time "Index this PDF?"
+  /// prompt), or 'off'.
+  final String text;
+
+  /// Whether on-device OCR may run over this attachment.
+  final bool ocr;
+
+  /// Whether this attachment's content may be embedded (sent to the active
+  /// embedding provider).
+  final bool embed;
+
+  const AttachmentSearchIndexConfig({
+    this.text = 'auto',
+    this.ocr = true,
+    this.embed = true,
+  });
+
+  factory AttachmentSearchIndexConfig.fromJson(Map<String, dynamic> json) {
+    return AttachmentSearchIndexConfig(
+      text: json['text'] as String? ?? 'auto',
+      ocr: json['ocr'] as bool? ?? true,
+      embed: json['embed'] as bool? ?? true,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'text': text, 'ocr': ocr, 'embed': embed};
+  }
+
+  /// Whether the text-extraction stage may run at all.
+  bool get textEnabled => text != 'off';
+
+  /// Whether the user explicitly opted this attachment into text extraction
+  /// ('on'), which bypasses the size-gated page cap.
+  bool get textExplicitlyOn => text == 'on';
+
+  /// Every indexing stage is off — treat the attachment as fully excluded
+  /// from the search index.
+  bool get isFullyExcluded => !textEnabled && !ocr && !embed;
+}
+
 /// PDF bookmark entry
 class PdfBookmark {
   final String title;
@@ -210,6 +260,15 @@ class Attachment {
   /// Gets the last viewed page number for this PDF
   int? getLastViewedPage() {
     return metadata?['lastViewedPage'] as int?;
+  }
+
+  /// Gets the per-attachment search index policy (defaults when unset)
+  AttachmentSearchIndexConfig getSearchIndexConfig() {
+    final configData = metadata?['searchIndex'];
+    if (configData is Map<String, dynamic>) {
+      return AttachmentSearchIndexConfig.fromJson(configData);
+    }
+    return const AttachmentSearchIndexConfig();
   }
 
   /// Gets the list of PDF bookmarks

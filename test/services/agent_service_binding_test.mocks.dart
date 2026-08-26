@@ -997,6 +997,14 @@ class MockDatabaseService extends _i1.Mock implements _i5.DatabaseService {
   }
 
   @override
+  bool get chunksFtsAvailable =>
+      (super.noSuchMethod(
+            Invocation.getter(#chunksFtsAvailable),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
   _i7.Future<_i4.Database> get database =>
       (super.noSuchMethod(
             Invocation.getter(#database),
@@ -1005,6 +1013,18 @@ class MockDatabaseService extends _i1.Mock implements _i5.DatabaseService {
             ),
           )
           as _i7.Future<_i4.Database>);
+
+  @override
+  set onNoteContentChanged(void Function(String)? value) => super.noSuchMethod(
+    Invocation.setter(#onNoteContentChanged, value),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set onNoteDeleted(void Function(String)? value) => super.noSuchMethod(
+    Invocation.setter(#onNoteDeleted, value),
+    returnValueForMissingStub: null,
+  );
 
   @override
   _i7.Future<void> insertConversationMessageMappingsBatch(
@@ -2390,15 +2410,41 @@ class MockDatabaseService extends _i1.Mock implements _i5.DatabaseService {
           as _i7.Future<Map<String, List<String>>>);
 
   @override
-  _i7.Future<List<_i18.Note>> searchNotesFTS(
-    String? query, {
-    List<String>? tags,
+  _i7.Future<List<_i5.ChunkFtsMatch>> searchChunksLexical(
+    String? ftsQuery, {
+    int? limit = 5000,
+    Set<String>? sourceTypes,
+    String? noteId,
   }) =>
       (super.noSuchMethod(
-            Invocation.method(#searchNotesFTS, [query], {#tags: tags}),
-            returnValue: _i7.Future<List<_i18.Note>>.value(<_i18.Note>[]),
+            Invocation.method(
+              #searchChunksLexical,
+              [ftsQuery],
+              {#limit: limit, #sourceTypes: sourceTypes, #noteId: noteId},
+            ),
+            returnValue: _i7.Future<List<_i5.ChunkFtsMatch>>.value(
+              <_i5.ChunkFtsMatch>[],
+            ),
           )
-          as _i7.Future<List<_i18.Note>>);
+          as _i7.Future<List<_i5.ChunkFtsMatch>>);
+
+  @override
+  _i7.Future<List<_i5.SearchChunkRow>> getSearchChunksByIds(
+    List<int>? chunkIds, {
+    Set<String>? sourceTypes,
+    String? noteId,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #getSearchChunksByIds,
+              [chunkIds],
+              {#sourceTypes: sourceTypes, #noteId: noteId},
+            ),
+            returnValue: _i7.Future<List<_i5.SearchChunkRow>>.value(
+              <_i5.SearchChunkRow>[],
+            ),
+          )
+          as _i7.Future<List<_i5.SearchChunkRow>>);
 
   @override
   _i7.Future<List<Map<String, dynamic>>> runRawQuery(
@@ -2431,14 +2477,6 @@ class MockDatabaseService extends _i1.Mock implements _i5.DatabaseService {
             ),
           )
           as _i7.Future<_i5.RawWriteResult>);
-
-  @override
-  _i7.Future<List<_i18.Note>> searchNotes(String? query) =>
-      (super.noSuchMethod(
-            Invocation.method(#searchNotes, [query]),
-            returnValue: _i7.Future<List<_i18.Note>>.value(<_i18.Note>[]),
-          )
-          as _i7.Future<List<_i18.Note>>);
 
   @override
   _i7.Future<String?> getTagExtractionPrompt(String? tagId) =>

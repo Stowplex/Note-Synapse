@@ -175,6 +175,10 @@ dependencies:
   package_info_plus: ^9.0.0
   mustache_template: ^2.0.0
   opencv_dart: ^2.2.1+4
+  unorm_dart: ^0.3.2
+  google_mlkit_text_recognition: ^0.17.1
+  battery_plus: ^7.1.1
+  connectivity_plus: ^7.3.1
 
 # Compile sqlite3 from the bundled amalgamation with FTS3/FTS4 enabled.
 # Reason: production code uses `CREATE VIRTUAL TABLE notes_fts USING fts4`,
@@ -257,6 +261,7 @@ flutter:
     - assets/scripts/compute-engine/
     - assets/libraries.yaml
     - assets/model_presets/
+    - assets/embedding_presets/
     - assets/starter/
     - assets/starter/apps/
     - assets/starter/skills/

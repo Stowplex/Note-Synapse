@@ -79,6 +79,11 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
           as List<_i6.Note>);
 
   @override
+  bool get hasLoadedOnce =>
+      (super.noSuchMethod(Invocation.getter(#hasLoadedOnce), returnValue: false)
+          as bool);
+
+  @override
   List<_i7.Tag> get tags =>
       (super.noSuchMethod(Invocation.getter(#tags), returnValue: <_i7.Tag>[])
           as List<_i7.Tag>);

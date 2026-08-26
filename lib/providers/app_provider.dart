@@ -19,6 +19,8 @@ import '../services/conversation_service.dart';
 import '../services/logger_service.dart';
 import '../services/service_locator.dart';
 import '../services/model_storage_service.dart';
+import '../services/search/search_text_normalizer.dart';
+import '../utils/note_text_match.dart';
 import '../services/tag_image_service.dart';
 import '../models/generation_context.dart';
 
@@ -68,6 +70,11 @@ class AppProvider extends ChangeNotifier {
   bool get onboardingCompleted => _onboardingCompleted;
 
   List<Note> get notes => _notes;
+
+  /// Whether [loadData] has completed at least once — i.e. [notes] reflects
+  /// the database rather than the initial empty cache. Read by the
+  /// SearchService notesProvider closure in service_locator.dart.
+  bool get hasLoadedOnce => _hasLoadedOnce;
   List<Tag> get tags => _tags;
   List<Filter> get filters => _filters;
   List<UserApp> get userApps => _userApps;
@@ -106,10 +113,7 @@ class AppProvider extends ChangeNotifier {
     _lockTail = release.future;
     return prev.then((_) async {
       try {
-        return await runZoned(
-          action,
-          zoneValues: {_cacheLockZoneKey: true},
-        );
+        return await runZoned(action, zoneValues: {_cacheLockZoneKey: true});
       } finally {
         release.complete();
       }
@@ -255,14 +259,15 @@ class AppProvider extends ChangeNotifier {
       _reloadRequested = true;
       return _loadDataInFlight!;
     }
-    _loadDataInFlight = () async {
-      do {
-        _reloadRequested = false;
-        await _doLoadData();
-      } while (_reloadRequested);
-    }().whenComplete(() {
-      _loadDataInFlight = null;
-    });
+    _loadDataInFlight =
+        () async {
+          do {
+            _reloadRequested = false;
+            await _doLoadData();
+          } while (_reloadRequested);
+        }().whenComplete(() {
+          _loadDataInFlight = null;
+        });
     return _loadDataInFlight!;
   }
 
@@ -314,8 +319,10 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addNote(Note note, {bool fromShare = false}) =>
-      _withCacheLock(() async {
+  Future<void> addNote(
+    Note note, {
+    bool fromShare = false,
+  }) => _withCacheLock(() async {
     try {
       await _databaseService.insertNote(note);
 
@@ -368,54 +375,54 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> updateNoteContent(String noteId, String newContent) =>
       _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      final updatedNote = note.copyWith(
-        content: newContent,
-        updatedAt: DateTime.now(),
-      );
+          final note = _notes[noteIndex];
+          final updatedNote = note.copyWith(
+            content: newContent,
+            updatedAt: DateTime.now(),
+          );
 
-      // Update the note in the database
-      await _databaseService.updateNote(updatedNote);
+          // Update the note in the database
+          await _databaseService.updateNote(updatedNote);
 
-      // Update the local state immediately
-      _notes[noteIndex] = updatedNote;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+          // Update the local state immediately
+          _notes[noteIndex] = updatedNote;
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
+        }
+      });
 
   Future<void> updateTaskStatus(String noteId, TaskStatus status) =>
       _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      if (!note.isTask) return;
+          final note = _notes[noteIndex];
+          if (!note.isTask) return;
 
-      final updatedNote = note.copyWith(
-        status: status,
-        updatedAt: DateTime.now(),
-      );
+          final updatedNote = note.copyWith(
+            status: status,
+            updatedAt: DateTime.now(),
+          );
 
-      // Update the note in the database
-      await _databaseService.updateNote(updatedNote);
+          // Update the note in the database
+          await _databaseService.updateNote(updatedNote);
 
-      // Update the local state immediately
-      _notes[noteIndex] = updatedNote;
-      _dataVersion++;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+          // Update the local state immediately
+          _notes[noteIndex] = updatedNote;
+          _dataVersion++;
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
+        }
+      });
 
   Future<void> toggleNotePin(String noteId) => _withCacheLock(() async {
     try {
@@ -606,28 +613,28 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> addTagToNote(String noteId, String tagName) =>
       _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      if (note.tags.contains(tagName)) return; // Tag already exists
+          final note = _notes[noteIndex];
+          if (note.tags.contains(tagName)) return; // Tag already exists
 
-      final updatedTags = List<String>.from(note.tags)..add(tagName);
-      final updatedNote = note.copyWith(
-        tags: updatedTags,
-        updatedAt: DateTime.now(),
-      );
+          final updatedTags = List<String>.from(note.tags)..add(tagName);
+          final updatedNote = note.copyWith(
+            tags: updatedTags,
+            updatedAt: DateTime.now(),
+          );
 
-      await _databaseService.updateNote(updatedNote);
-      _notes[noteIndex] = updatedNote;
-      _tags = await _databaseService.getAllTags();
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+          await _databaseService.updateNote(updatedNote);
+          _notes[noteIndex] = updatedNote;
+          _tags = await _databaseService.getAllTags();
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
+        }
+      });
 
   List<String> getAllAvailableTags() {
     // Cached because this scans all notes and is called multiple times per
@@ -701,8 +708,10 @@ class AppProvider extends ChangeNotifier {
     }
   });
 
-  Future<void> replaceTag(String oldTagName, String newTagName) =>
-      _withCacheLock(() async {
+  Future<void> replaceTag(
+    String oldTagName,
+    String newTagName,
+  ) => _withCacheLock(() async {
     try {
       // Migrate image from old tag to new tag if new tag has no image
       final tagImageService = getIt<TagImageService>();
@@ -942,130 +951,129 @@ class AppProvider extends ChangeNotifier {
   // SubNote management methods
   Future<void> addSubNoteToNote(String noteId, SubNote subNote) =>
       _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      final updatedSubNotes = List<SubNote>.from(note.subNotes)..add(subNote);
-      final updatedNote = note.copyWith(
-        subNotes: updatedSubNotes,
-        updatedAt: DateTime.now(),
-      );
+          final note = _notes[noteIndex];
+          final updatedSubNotes = List<SubNote>.from(note.subNotes)
+            ..add(subNote);
+          final updatedNote = note.copyWith(
+            subNotes: updatedSubNotes,
+            updatedAt: DateTime.now(),
+          );
 
-      await _databaseService.updateNote(updatedNote);
-      _notes[noteIndex] = updatedNote;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+          await _databaseService.updateNote(updatedNote);
+          _notes[noteIndex] = updatedNote;
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
+        }
+      });
 
-  Future<void> updateSubNoteInNote(
-    String noteId,
-    SubNote updatedSubNote,
-  ) => _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+  Future<void> updateSubNoteInNote(String noteId, SubNote updatedSubNote) =>
+      _withCacheLock(() async {
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      final updatedSubNotes = note.subNotes
-          .map((sn) => sn.id == updatedSubNote.id ? updatedSubNote : sn)
-          .toList();
+          final note = _notes[noteIndex];
+          final updatedSubNotes = note.subNotes
+              .map((sn) => sn.id == updatedSubNote.id ? updatedSubNote : sn)
+              .toList();
 
-      final updatedNote = note.copyWith(
-        subNotes: updatedSubNotes,
-        updatedAt: DateTime.now(),
-      );
+          final updatedNote = note.copyWith(
+            subNotes: updatedSubNotes,
+            updatedAt: DateTime.now(),
+          );
 
-      await _databaseService.updateNote(updatedNote);
-      _notes[noteIndex] = updatedNote;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+          await _databaseService.updateNote(updatedNote);
+          _notes[noteIndex] = updatedNote;
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
+        }
+      });
 
   Future<void> deleteSubNoteFromNote(String noteId, String subNoteId) =>
       _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      final updatedSubNotes = note.subNotes
-          .where((sn) => sn.id != subNoteId)
-          .toList();
+          final note = _notes[noteIndex];
+          final updatedSubNotes = note.subNotes
+              .where((sn) => sn.id != subNoteId)
+              .toList();
 
-      final updatedNote = note.copyWith(
-        subNotes: updatedSubNotes,
-        updatedAt: DateTime.now(),
-      );
+          final updatedNote = note.copyWith(
+            subNotes: updatedSubNotes,
+            updatedAt: DateTime.now(),
+          );
 
-      await _databaseService.updateNote(updatedNote);
-      _notes[noteIndex] = updatedNote;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+          await _databaseService.updateNote(updatedNote);
+          _notes[noteIndex] = updatedNote;
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
+        }
+      });
 
   Future<void> toggleSubNoteCompletion(String noteId, String subNoteId) =>
       _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      final updatedSubNotes = note.subNotes.map((sn) {
-        if (sn.id == subNoteId) {
-          return sn.copyWith(isCompleted: !sn.isCompleted);
+          final note = _notes[noteIndex];
+          final updatedSubNotes = note.subNotes.map((sn) {
+            if (sn.id == subNoteId) {
+              return sn.copyWith(isCompleted: !sn.isCompleted);
+            }
+            return sn;
+          }).toList();
+
+          final updatedNote = note.copyWith(
+            subNotes: updatedSubNotes,
+            updatedAt: DateTime.now(),
+          );
+
+          await _databaseService.updateNote(updatedNote);
+          _notes[noteIndex] = updatedNote;
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
         }
-        return sn;
-      }).toList();
-
-      final updatedNote = note.copyWith(
-        subNotes: updatedSubNotes,
-        updatedAt: DateTime.now(),
-      );
-
-      await _databaseService.updateNote(updatedNote);
-      _notes[noteIndex] = updatedNote;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+      });
 
   Future<void> removeTagFromNote(String noteId, String tagName) =>
       _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      if (!note.tags.contains(tagName)) return; // Tag doesn't exist
+          final note = _notes[noteIndex];
+          if (!note.tags.contains(tagName)) return; // Tag doesn't exist
 
-      final updatedTags = List<String>.from(note.tags)..remove(tagName);
-      final updatedNote = note.copyWith(
-        tags: updatedTags,
-        updatedAt: DateTime.now(),
-      );
+          final updatedTags = List<String>.from(note.tags)..remove(tagName);
+          final updatedNote = note.copyWith(
+            tags: updatedTags,
+            updatedAt: DateTime.now(),
+          );
 
-      await _databaseService.updateNote(updatedNote);
-      _notes[noteIndex] = updatedNote;
-      _tags = await _databaseService.getAllTags();
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+          await _databaseService.updateNote(updatedNote);
+          _notes[noteIndex] = updatedNote;
+          _tags = await _databaseService.getAllTags();
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
+        }
+      });
 
   Future<void> batchUpdateTags(
     List<String> noteIds,
@@ -1122,38 +1130,38 @@ class AppProvider extends ChangeNotifier {
   // Upsert subnote - either add new or update existing
   Future<void> upsertSubNoteInNote(String noteId, SubNote subNote) =>
       _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      final existingSubNoteIndex = note.subNotes.indexWhere(
-        (sn) => sn.id == subNote.id,
-      );
+          final note = _notes[noteIndex];
+          final existingSubNoteIndex = note.subNotes.indexWhere(
+            (sn) => sn.id == subNote.id,
+          );
 
-      List<SubNote> updatedSubNotes;
-      if (existingSubNoteIndex >= 0) {
-        // Update existing subnote
-        updatedSubNotes = List<SubNote>.from(note.subNotes);
-        updatedSubNotes[existingSubNoteIndex] = subNote;
-      } else {
-        // Add new subnote
-        updatedSubNotes = List<SubNote>.from(note.subNotes)..add(subNote);
-      }
+          List<SubNote> updatedSubNotes;
+          if (existingSubNoteIndex >= 0) {
+            // Update existing subnote
+            updatedSubNotes = List<SubNote>.from(note.subNotes);
+            updatedSubNotes[existingSubNoteIndex] = subNote;
+          } else {
+            // Add new subnote
+            updatedSubNotes = List<SubNote>.from(note.subNotes)..add(subNote);
+          }
 
-      final updatedNote = note.copyWith(
-        subNotes: updatedSubNotes,
-        updatedAt: DateTime.now(),
-      );
+          final updatedNote = note.copyWith(
+            subNotes: updatedSubNotes,
+            updatedAt: DateTime.now(),
+          );
 
-      await _databaseService.updateNote(updatedNote);
-      _notes[noteIndex] = updatedNote;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+          await _databaseService.updateNote(updatedNote);
+          _notes[noteIndex] = updatedNote;
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
+        }
+      });
 
   // Reparent subnote from one note to another
   Future<void> reparentSubNote(
@@ -1253,14 +1261,17 @@ class AppProvider extends ChangeNotifier {
       filteredNotes = filteredNotes.where((note) => !note.isArchived).toList();
     }
 
-    // Filter by text content
+    // Filter by text content. Saved filters keep substring semantics (plan
+    // §1.6); the match folds through NFKC, so full-width and compatibility
+    // characters now compare equal (a deliberate widening that matches the
+    // search index's normalization). This runs on the build path
+    // (notes_screen._filterNotes), so fold the query ONCE and let
+    // matchesFoldedQuery reuse each note's memoized folded text.
     if (filter.includeText?.isNotEmpty == true) {
-      final query = filter.includeText!.toLowerCase();
-      filteredNotes = filteredNotes.where((note) {
-        return note.title.toLowerCase().contains(query) ||
-            note.content.toLowerCase().contains(query) ||
-            note.tags.any((tag) => tag.toLowerCase().contains(query));
-      }).toList();
+      final query = foldForMatch(filter.includeText!);
+      filteredNotes = filteredNotes
+          .where((note) => matchesFoldedQuery(note, query))
+          .toList();
     }
 
     // Filter by tags (AND logic - note must have ALL selected tags)

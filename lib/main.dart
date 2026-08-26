@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:provider/provider.dart';
@@ -22,6 +24,7 @@ import 'services/agent_service.dart';
 import 'services/background_agent_service.dart';
 import 'services/service_locator.dart';
 import 'services/plugin_task_service.dart';
+import 'services/search/search_service.dart';
 import 'services/tag_image_service.dart';
 import 'services/wake_lock_service.dart' as wake_lock;
 import 'services/network_provider.dart';
@@ -72,6 +75,11 @@ Future<void> _bootstrap() async {
     // Re-arm any persisted plugin task schedules (e.g. studio polling).
     await getIt<PluginTaskService>().initialize();
 
+    // Kick off the search-index backfill check (fire-and-forget: ensureReady
+    // is idempotent and does all work in the background; search degrades to
+    // the substring fallback until the index is complete).
+    unawaited(getIt<SearchService>().ensureReady());
+
     runApp(const NoteSynapseApp());
   } catch (e, stack) {
     LoggerService.error(
@@ -110,10 +118,7 @@ class _StartupErrorApp extends StatelessWidget {
                   const SizedBox(height: 16),
                   const Text(
                     'Note Synapse failed to start',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 12),

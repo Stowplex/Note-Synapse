@@ -12,9 +12,62 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
+import '../services/search/note_index_service.dart';
+import '../services/service_locator.dart';
 import '../utils/file_utils.dart';
 import '../providers/app_provider.dart';
 import 'raw_data_manager/raw_data_manager_screen.dart';
+
+/// Sub-directory of `attachments/` holding derived figure crops
+/// (`<attachmentId>_p<N>_f<i>.png`), written by the search index's figures
+/// stage. Mirrors `FigureRegionExtractor.defaultDerivedFigureDirectory`.
+const String kDerivedFigureDirName = 'derived';
+
+/// Whether [relativePath] (relative to the attachments directory) is index-
+/// derived data that export/import must NOT carry.
+///
+/// Only `derived/` today: those PNGs are regenerated on demand by
+/// FigureResolver from the figure chunk's stored region, so a restore that
+/// arrives without them is the NORMAL state, not data loss.
+@visibleForTesting
+bool isExcludedAttachmentPath(String relativePath) {
+  final normalized = relativePath.replaceAll('\\', '/');
+  return normalized == kDerivedFigureDirName ||
+      normalized.startsWith('$kDerivedFigureDirName/');
+}
+
+/// Recursive directory copy that skips entries [skip] rejects (matched on the
+/// path RELATIVE to [source], so a nested `derived` folder elsewhere is
+/// unaffected). Top-level so export/import share one implementation and tests
+/// can exercise it without a widget.
+@visibleForTesting
+Future<void> copyDirectoryFiltered(
+  Directory source,
+  Directory destination, {
+  bool Function(String relativePath)? skip,
+  void Function(String message)? onWarning,
+}) async {
+  await destination.create(recursive: true);
+
+  await for (final entity in source.list(recursive: true)) {
+    final relativePath = entity.path.substring(source.path.length + 1);
+    if (skip != null && skip(relativePath)) continue;
+    final destPath = '${destination.path}/$relativePath';
+
+    if (entity is File) {
+      final destFile = File(destPath);
+      await destFile.parent.create(recursive: true);
+      try {
+        await entity.copy(destFile.path);
+      } catch (e) {
+        onWarning?.call('Warning: could not copy ${entity.path}: $e');
+      }
+    } else if (entity is Directory) {
+      final destDir = Directory(destPath);
+      await destDir.create(recursive: true);
+    }
+  }
+}
 
 class RecoveryScreen extends StatefulWidget {
   final String? error;
@@ -37,6 +90,12 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   double _importProgress = 0.0;
   final List<String> _importLogs = [];
   String? _originalDbBackupPath;
+
+  /// The search indexer must not write while the database file is being
+  /// swapped underneath the live connection. Null when the locator has no
+  /// indexer (e.g. isolated tests).
+  NoteIndexService? get _noteIndexService =>
+      getIt.isRegistered<NoteIndexService>() ? getIt<NoteIndexService>() : null;
 
   @override
   void initState() {
@@ -164,7 +223,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       final attachmentsDir = await FileUtils.getPrivateStorageDirectory();
       final destAttachmentsDir = Directory('${exportDir.path}/attachments');
       if (await attachmentsDir.exists()) {
-        await _copyDirectory(attachmentsDir, destAttachmentsDir);
+        await _copyAttachmentsDirectory(attachmentsDir, destAttachmentsDir);
         _addLog(l10n.attachmentsDirectoryCopiedSuccessfully);
       } else {
         _addLog(l10n.noAttachmentsDirectoryFound);
@@ -285,27 +344,27 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     }
   }
 
-  Future<void> _copyDirectory(Directory source, Directory destination) async {
-    await destination.create(recursive: true);
+  Future<void> _copyDirectory(
+    Directory source,
+    Directory destination, {
+    bool Function(String relativePath)? skip,
+  }) => copyDirectoryFiltered(
+    source,
+    destination,
+    skip: skip,
+    onWarning: _addLog,
+  );
 
-    await for (final entity in source.list(recursive: true)) {
-      final relativePath = entity.path.substring(source.path.length + 1);
-      final destPath = '${destination.path}/$relativePath';
-
-      if (entity is File) {
-        final destFile = File(destPath);
-        await destFile.parent.create(recursive: true);
-        try {
-          await entity.copy(destFile.path);
-        } catch (e) {
-          _addLog('Warning: could not copy ${entity.path}: $e');
-        }
-      } else if (entity is Directory) {
-        final destDir = Directory(destPath);
-        await destDir.create(recursive: true);
-      }
-    }
-  }
+  /// Copies the attachments directory for export/import, SKIPPING
+  /// `attachments/derived/` (plan §4.1). Derived figure crops are
+  /// regenerable index artifacts, not user data: FigureResolver re-renders a
+  /// missing crop on demand from the chunk's stored region, which is exactly
+  /// why a restored backup is allowed to arrive without them. Shipping them
+  /// would bloat every archive with data the app rebuilds for free.
+  Future<void> _copyAttachmentsDirectory(
+    Directory source,
+    Directory destination,
+  ) => _copyDirectory(source, destination, skip: isExcludedAttachmentPath);
 
   Future<void> _createZipArchive(Directory sourceDir, File zipFile) async {
     final start = DateTime.now();
@@ -461,6 +520,16 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     });
 
     try {
+      // Pause the indexer for the whole merge + swap; pause() drains any
+      // in-flight index write before the file is touched, and the finally's
+      // resume() re-indexes the swapped-in database. INSIDE the try because
+      // pause() flips the paused flag synchronously and only then awaits the
+      // drain: a throwing drain outside the try would leave the indexer
+      // paused for the rest of the session with no resume, silently dropping
+      // every later note edit. The import still proceeds only on a clean
+      // drain — a throw here lands in the catch below.
+      await _noteIndexService?.pause();
+
       _addImportLog(l10n.checkpointingDatabase);
       _updateImportProgress(0.05);
 
@@ -626,7 +695,10 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       final attachmentsDir = Directory('${extractDir.path}/attachments');
       if (await attachmentsDir.exists()) {
         final appAttachmentsDir = await FileUtils.getPrivateStorageDirectory();
-        await _copyDirectory(attachmentsDir, appAttachmentsDir);
+        // Mirror of the export exclusion: an archive from an older build may
+        // still contain `derived/`, and importing it would resurrect crops
+        // whose figure chunks this install has not re-extracted yet.
+        await _copyAttachmentsDirectory(attachmentsDir, appAttachmentsDir);
       }
 
       // Copy tag images
@@ -697,6 +769,15 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       // Step 17: Merge tag_workflow_bindings (upsert by pattern primary key)
       await _mergeTagWorkflowBindings(stagingDb, migratedBackupDb);
 
+      // search_chunks, chunk_embeddings and search_index_state are
+      // deliberately NOT merged: they hold search index data derived from
+      // notes/attachments, which the indexer rebuilds from source content.
+      // The staging DB starts as a copy of the current DB, so its global
+      // "backfill complete" flag would be stale for merged-in notes that
+      // have no chunks yet — clear it so the indexer re-backfills after the
+      // swap (an empty/missing flag row means "not complete").
+      await _clearGlobalSearchIndexState(stagingDb);
+
       await migratedBackupDb.close();
       await stagingDb.close();
 
@@ -749,6 +830,8 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
           ),
         );
       }
+    } finally {
+      _noteIndexService?.resume();
     }
   }
 
@@ -854,6 +937,21 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     }
+  }
+
+  Future<void> _clearGlobalSearchIndexState(Database stagingDb) async {
+    // search_index_state may not exist yet when recovering from a failed
+    // pre-v47 migration — skip gracefully
+    final tables = await stagingDb.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='search_index_state'",
+    );
+    if (tables.isEmpty) return;
+
+    await stagingDb.delete(
+      'search_index_state',
+      where: 'scopeType = ?',
+      whereArgs: ['global'],
+    );
   }
 
   Future<void> _mergeSubNotes(Database stagingDb, Database backupDb) async {
@@ -1696,6 +1794,12 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     });
 
     try {
+      // Same pause/resume as the import path (and inside the try for the same
+      // reason): the DB file is replaced under the live connection, so drain
+      // in-flight index writes first, and a drain that throws must still
+      // reach the finally's resume() rather than strand the indexer paused.
+      await _noteIndexService?.pause();
+
       _addImportLog('Starting database undo...');
       _updateImportProgress(0.2);
 
@@ -1763,6 +1867,8 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
           ),
         );
       }
+    } finally {
+      _noteIndexService?.resume();
     }
   }
 

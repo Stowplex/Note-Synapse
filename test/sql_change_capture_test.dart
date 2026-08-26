@@ -32,15 +32,15 @@ void main() {
   });
 
   Future<SqlQueryResult> run(String sql) => service.executeQuery(
-        sql,
-        requireApprovalForWrites: false,
-        allowWriteOperations: true,
-      );
+    sql,
+    requireApprovalForWrites: false,
+    allowWriteOperations: true,
+  );
 
   Future<void> insertNoteRow(String id) => run(
-        "INSERT INTO notes (id, title, content, type, createdAt, updatedAt) "
-        "VALUES ('$id', 'title $id', 'content', 'note', 1, 1)",
-      );
+    "INSERT INTO notes (id, title, content, type, createdAt, updatedAt) "
+    "VALUES ('$id', 'title $id', 'content', 'note', 1, 1)",
+  );
 
   DataChangeEvent merged() =>
       events.fold(const DataChangeEvent(), (a, b) => a.merge(b));
@@ -73,19 +73,21 @@ void main() {
   });
 
   group('journal capture', () {
-    test('INSERT / UPDATE / DELETE on notes publish the affected ids',
-        () async {
-      await insertNoteRow('n1');
-      await run("UPDATE notes SET title = 'renamed' WHERE id = 'n1'");
-      await run("DELETE FROM notes WHERE id = 'n1'");
-      await notifier.waitForIdle();
+    test(
+      'INSERT / UPDATE / DELETE on notes publish the affected ids',
+      () async {
+        await insertNoteRow('n1');
+        await run("UPDATE notes SET title = 'renamed' WHERE id = 'n1'");
+        await run("DELETE FROM notes WHERE id = 'n1'");
+        await notifier.waitForIdle();
 
-      expect(events, hasLength(3));
-      for (final event in events) {
-        expect(event.noteIds, {'n1'});
-        expect(event.bulk, isFalse);
-      }
-    });
+        expect(events, hasLength(3));
+        for (final event in events) {
+          expect(event.noteIds, {'n1'});
+          expect(event.bulk, isFalse);
+        }
+      },
+    );
 
     test('UPDATE that rewrites the primary key captures BOTH ids', () async {
       await insertNoteRow('old-id');
@@ -95,56 +97,69 @@ void main() {
       await run("UPDATE notes SET id = 'new-id' WHERE id = 'old-id'");
       await notifier.waitForIdle();
 
-      expect(merged().noteIds, {'old-id', 'new-id'},
-          reason: 'the old cached entry must be removed, not ghosted');
+      expect(
+        merged().noteIds,
+        {'old-id', 'new-id'},
+        reason: 'the old cached entry must be removed, not ghosted',
+      );
     });
 
-    test('ordinary app writes do not grow the journal (trigger gate)',
-        () async {
-      // A captured write installs the triggers...
-      await insertNoteRow('n1');
-      // ...then a plain app-layer write happens outside any capture txn.
-      final rawDb = await db.database;
-      await rawDb.insert('notes', {
-        'id': 'app-write',
-        'title': 't',
-        'content': 'c',
-        'type': 'note',
-        'createdAt': 1,
-        'updatedAt': 1,
-      });
-
-      final journalRows = await rawDb.query('_synapse_change_journal');
-      expect(journalRows, isEmpty,
-          reason: 'gated triggers must journal nothing between captures');
-    });
-
-    test('DML touching more notes than the targeted cap publishes bulk',
-        () async {
-      final n = SqlQueryService.maxTargetedRefreshIds + 20;
-      final rawDb = await db.database;
-      final batch = rawDb.batch();
-      for (var i = 0; i < n; i++) {
-        batch.insert('notes', {
-          'id': 'bulk-$i',
+    test(
+      'ordinary app writes do not grow the journal (trigger gate)',
+      () async {
+        // A captured write installs the triggers...
+        await insertNoteRow('n1');
+        // ...then a plain app-layer write happens outside any capture txn.
+        final rawDb = await db.database;
+        await rawDb.insert('notes', {
+          'id': 'app-write',
           'title': 't',
           'content': 'c',
           'type': 'note',
           'createdAt': 1,
           'updatedAt': 1,
         });
-      }
-      await batch.commit(noResult: true);
-      await notifier.waitForIdle();
-      events.clear();
 
-      await run("UPDATE notes SET title = 'renamed'");
-      await notifier.waitForIdle();
+        final journalRows = await rawDb.query('_synapse_change_journal');
+        expect(
+          journalRows,
+          isEmpty,
+          reason: 'gated triggers must journal nothing between captures',
+        );
+      },
+    );
 
-      expect(merged().bulk, isTrue,
-          reason: 'huge id sets degrade to one debounced reload');
-      expect(merged().noteIds, isEmpty);
-    });
+    test(
+      'DML touching more notes than the targeted cap publishes bulk',
+      () async {
+        final n = SqlQueryService.maxTargetedRefreshIds + 20;
+        final rawDb = await db.database;
+        final batch = rawDb.batch();
+        for (var i = 0; i < n; i++) {
+          batch.insert('notes', {
+            'id': 'bulk-$i',
+            'title': 't',
+            'content': 'c',
+            'type': 'note',
+            'createdAt': 1,
+            'updatedAt': 1,
+          });
+        }
+        await batch.commit(noResult: true);
+        await notifier.waitForIdle();
+        events.clear();
+
+        await run("UPDATE notes SET title = 'renamed'");
+        await notifier.waitForIdle();
+
+        expect(
+          merged().bulk,
+          isTrue,
+          reason: 'huge id sets degrade to one debounced reload',
+        );
+        expect(merged().noteIds, isEmpty);
+      },
+    );
 
     test('REPLACE INTO notes is captured precisely', () async {
       await insertNoteRow('n1');
@@ -174,6 +189,44 @@ void main() {
       );
       await notifier.waitForIdle();
       expect(merged().noteIds, {'n1'});
+    });
+
+    test('note_annotations writes map to the owning note id', () async {
+      await insertNoteRow('n1');
+      final rawDb = await db.database;
+      await rawDb.insert('attachments', {
+        'id': 'att1',
+        'noteId': 'n1',
+        'filePath': 'attachments/f.txt',
+        'fileName': 'f.txt',
+        'fileType': 'txt',
+        'isRelativePath': 1,
+        'createdAt': 1,
+        'includeInAIContext': 1,
+      });
+      // Drain any pending events from setup statements before clearing, so
+      // a late-arriving event cannot leak into the assertion window.
+      await notifier.waitForIdle();
+      events.clear();
+
+      // Note-scoped annotation.
+      await run(
+        "INSERT INTO note_annotations (id, note_id, content, created_at) "
+        "VALUES ('a1', 'n1', 'text', '2026-01-01')",
+      );
+      // Attachment-scoped annotation resolves through attachments.noteId.
+      await run(
+        "INSERT INTO note_annotations (id, attachment_id, content, created_at) "
+        "VALUES ('a2', 'att1', 'text', '2026-01-01')",
+      );
+      await run("DELETE FROM note_annotations WHERE id = 'a2'");
+      await notifier.waitForIdle();
+
+      expect(events, hasLength(3));
+      for (final event in events) {
+        expect(event.noteIds, {'n1'});
+        expect(event.bulk, isFalse);
+      }
     });
 
     test('association UPDATE captures both old and new note ids', () async {
@@ -207,45 +260,49 @@ void main() {
       expect(merged().relationshipNoteIds, {'n1', 'n2'});
     });
 
-    test('tag rename refreshes the tag list AND every note bearing the tag',
-        () async {
-      await insertNoteRow('n1');
-      await run(
-        "INSERT INTO tags (id, name, color, createdAt) "
-        "VALUES ('t1', 'old-name', '#fff', 1)",
-      );
-      await run("INSERT INTO note_tags (noteId, tagId) VALUES ('n1', 't1')");
-      // Drain any pending events from setup statements before clearing, so
-      // a late-arriving event cannot leak into the assertion window.
-      await notifier.waitForIdle();
-      events.clear();
+    test(
+      'tag rename refreshes the tag list AND every note bearing the tag',
+      () async {
+        await insertNoteRow('n1');
+        await run(
+          "INSERT INTO tags (id, name, color, createdAt) "
+          "VALUES ('t1', 'old-name', '#fff', 1)",
+        );
+        await run("INSERT INTO note_tags (noteId, tagId) VALUES ('n1', 't1')");
+        // Drain any pending events from setup statements before clearing, so
+        // a late-arriving event cannot leak into the assertion window.
+        await notifier.waitForIdle();
+        events.clear();
 
-      await run("UPDATE tags SET name = 'new-name' WHERE id = 't1'");
-      await notifier.waitForIdle();
+        await run("UPDATE tags SET name = 'new-name' WHERE id = 't1'");
+        await notifier.waitForIdle();
 
-      expect(merged().tagsChanged, isTrue);
-      expect(merged().noteIds, {'n1'});
-    });
+        expect(merged().tagsChanged, isTrue);
+        expect(merged().noteIds, {'n1'});
+      },
+    );
 
-    test('tag delete captures affected notes before the join rows go away',
-        () async {
-      await insertNoteRow('n1');
-      await run(
-        "INSERT INTO tags (id, name, color, createdAt) "
-        "VALUES ('t1', 'doomed', '#fff', 1)",
-      );
-      await run("INSERT INTO note_tags (noteId, tagId) VALUES ('n1', 't1')");
-      // Drain any pending events from setup statements before clearing, so
-      // a late-arriving event cannot leak into the assertion window.
-      await notifier.waitForIdle();
-      events.clear();
+    test(
+      'tag delete captures affected notes before the join rows go away',
+      () async {
+        await insertNoteRow('n1');
+        await run(
+          "INSERT INTO tags (id, name, color, createdAt) "
+          "VALUES ('t1', 'doomed', '#fff', 1)",
+        );
+        await run("INSERT INTO note_tags (noteId, tagId) VALUES ('n1', 't1')");
+        // Drain any pending events from setup statements before clearing, so
+        // a late-arriving event cannot leak into the assertion window.
+        await notifier.waitForIdle();
+        events.clear();
 
-      await run("DELETE FROM tags WHERE id = 't1'");
-      await notifier.waitForIdle();
+        await run("DELETE FROM tags WHERE id = 't1'");
+        await notifier.waitForIdle();
 
-      expect(merged().tagsChanged, isTrue);
-      expect(merged().noteIds, {'n1'});
-    });
+        expect(merged().tagsChanged, isTrue);
+        expect(merged().noteIds, {'n1'});
+      },
+    );
 
     test('filter writes publish filtersChanged only', () async {
       await run(
@@ -269,30 +326,36 @@ void main() {
 
       await run("INSERT INTO plugin_data VALUES ('k', 'v')");
       await notifier.waitForIdle();
-      expect(events, isEmpty,
-          reason: 'plugin-table DML touches no note domain: no event at all');
-    });
-
-    test('a persistent user trigger cascading into notes is captured',
-        () async {
-      await run('CREATE TABLE plugin_log (id TEXT PRIMARY KEY)');
-      await run(
-        "CREATE TRIGGER plugin_cascade AFTER INSERT ON plugin_log BEGIN "
-        "INSERT INTO notes (id, title, content, type, createdAt, updatedAt) "
-        "VALUES ('via-trigger', 't', 'c', 'note', 1, 1); END",
+      expect(
+        events,
+        isEmpty,
+        reason: 'plugin-table DML touches no note domain: no event at all',
       );
-      // Drain any pending events from setup statements before clearing, so
-      // a late-arriving event cannot leak into the assertion window.
-      await notifier.waitForIdle();
-      events.clear();
-
-      await run("INSERT INTO plugin_log VALUES ('x')");
-      await notifier.waitForIdle();
-
-      expect(merged().noteIds, {'via-trigger'},
-          reason: 'journal observes trigger-cascaded writes');
-      expect(merged().bulk, isFalse);
     });
+
+    test(
+      'a persistent user trigger cascading into notes is captured',
+      () async {
+        await run('CREATE TABLE plugin_log (id TEXT PRIMARY KEY)');
+        await run(
+          "CREATE TRIGGER plugin_cascade AFTER INSERT ON plugin_log BEGIN "
+          "INSERT INTO notes (id, title, content, type, createdAt, updatedAt) "
+          "VALUES ('via-trigger', 't', 'c', 'note', 1, 1); END",
+        );
+        // Drain any pending events from setup statements before clearing, so
+        // a late-arriving event cannot leak into the assertion window.
+        await notifier.waitForIdle();
+        events.clear();
+
+        await run("INSERT INTO plugin_log VALUES ('x')");
+        await notifier.waitForIdle();
+
+        expect(merged().noteIds, {
+          'via-trigger',
+        }, reason: 'journal observes trigger-cascaded writes');
+        expect(merged().bulk, isFalse);
+      },
+    );
   });
 
   group('non-transactional statements', () {
@@ -327,10 +390,16 @@ void main() {
       );
       await notifier.waitForIdle();
 
-      expect(result.success, isTrue,
-          reason: 'degraded capture must not fail the write');
-      expect(merged().bulk, isTrue,
-          reason: 'incomplete trigger set cannot be trusted: bulk fallback');
+      expect(
+        result.success,
+        isTrue,
+        reason: 'degraded capture must not fail the write',
+      );
+      expect(
+        merged().bulk,
+        isTrue,
+        reason: 'incomplete trigger set cannot be trusted: bulk fallback',
+      );
     });
   });
 
@@ -349,8 +418,11 @@ void main() {
       await insertNoteRow('n2');
       await notifier.waitForIdle();
 
-      expect(merged().noteIds, {'n2'},
-          reason: 'TEMP objects must reinstall on the new connection');
+      expect(
+        merged().noteIds,
+        {'n2'},
+        reason: 'TEMP objects must reinstall on the new connection',
+      );
       expect(merged().bulk, isFalse);
     });
   });

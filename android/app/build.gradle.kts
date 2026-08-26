@@ -61,6 +61,15 @@ android {
     }
 }
 
+dependencies {
+    // google_mlkit_text_recognition declares the non-Latin models compileOnly;
+    // the Chinese script recognizer (search OCR, AttachmentOcrExtractor)
+    // needs the app to link the model implementation or the plugin throws
+    // NoClassDefFoundError at runtime. Version must match the plugin's
+    // compileOnly declaration (text-recognition-chinese:16.0.1).
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+}
+
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_11)

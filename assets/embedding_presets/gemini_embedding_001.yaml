@@ -1,0 +1,10 @@
+model_type: gemini
+model_endpoint: https://generativelanguage.googleapis.com/v1beta
+model_name: gemini-embedding-001
+model_display_name: Gemini Embedding
+api_key_url: https://aistudio.google.com/app/apikey
+# Matryoshka truncation from the native 3072 dims; vectors are re-normalized
+# after truncation by the provider.
+dimensions: 768
+supports_images: false
+supports_batch: true

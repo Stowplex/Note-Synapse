@@ -397,6 +397,28 @@
   "filter": "筛选",
   "noNotesFound": "未找到笔记",
   "createFirstNote": "创建您的第一条笔记",
+  "searchInProgress": "搜索中…",
+  "searchTryAdjustingTerms": "尝试调整搜索关键词",
+  "searchTryDifferentTags": "尝试选择其他标签",
+  "createFirstNoteHint": "点击 + 按钮创建您的第一条笔记",
+  "buildingSearchIndex": "正在构建搜索索引… {percent}%",
+  "@buildingSearchIndex": {
+    "placeholders": {
+      "percent": {"type": "int"}
+    }
+  },
+  "searchBadgePdfPage": "PDF · 第 {page} 页",
+  "@searchBadgePdfPage": {
+    "placeholders": {
+      "page": {"type": "int"}
+    }
+  },
+  "searchBadgeAttachment": "附件",
+  "searchBadgeImage": "图片",
+  "searchBadgeSubnote": "子笔记",
+  "searchBadgeTag": "标签",
+  "searchBadgeAnnotation": "批注",
+  "dismiss": "忽略",
   "timeline": "时间线",
   "todo": "待办事项",
   "today": "今天",
@@ -2218,5 +2240,369 @@
       "domain": {"type": "String"}
     }
   },
-  "searchNotes": "搜索笔记"
+  "searchNotes": "搜索笔记",
+  "figureUnavailable": "此图已不可用 — 来源笔记或图片已被删除",
+  "figureSourcePage": "{title} · 第{page}页",
+  "@figureSourcePage": {
+    "placeholders": {
+      "title": {"type": "String"},
+      "page": {"type": "int"}
+    }
+  },
+  "figureOpenSource": "打开来源",
+  "searchSettings": "搜索与索引",
+  "searchSettingsSubtitle": "语义搜索、文字识别与索引维护",
+  "searchSubtitleLexicalOnly": "仅关键词搜索",
+  "searchSubtitleReady": "{provider} · 语义搜索已开启",
+  "@searchSubtitleReady": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchSubtitleIndexing": "{provider} · 正在索引 {percent}%",
+  "@searchSubtitleIndexing": {
+    "placeholders": {
+      "provider": {"type": "String"},
+      "percent": {"type": "int"}
+    }
+  },
+  "searchSubtitleSwitching": "正在切换到 {provider} — 已重建 {percent}%",
+  "@searchSubtitleSwitching": {
+    "placeholders": {
+      "provider": {"type": "String"},
+      "percent": {"type": "int"}
+    }
+  },
+  "searchSubtitleRevoked": "语义搜索已停用 — 重新启用 {provider} 以恢复",
+  "@searchSubtitleRevoked": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchProviderReEnable": "重新启用",
+  "searchSubtitleErrors": "{provider} · {count} 个错误",
+  "@searchSubtitleErrors": {
+    "placeholders": {
+      "provider": {"type": "String"},
+      "count": {"type": "int"}
+    }
+  },
+  "searchIndexStatus": "索引状态",
+  "searchIndexIdle": "已是最新 — 已索引 {chunks} 个片段",
+  "@searchIndexIdle": {
+    "placeholders": {
+      "chunks": {"type": "int"}
+    }
+  },
+  "searchStageChunks": "正在索引笔记 — {done}/{total}",
+  "@searchStageChunks": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "searchStagePdfText": "正在读取 PDF 文字 — {done}/{total} 个附件",
+  "@searchStagePdfText": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "searchStageOcr": "正在识别 PDF 中的文字 — {done}/{total} 页",
+  "@searchStageOcr": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "searchStageEmbed": "正在生成向量 — {done}/{total} 个片段",
+  "@searchStageEmbed": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "searchEmbeddingProvider": "向量模型服务",
+  "searchProviderNone": "不使用（仅关键词）",
+  "searchProviderNoneSubtitle": "仅关键词搜索 — 数据不会离开设备",
+  "searchProviderCustom": "自定义（OpenAI 兼容）",
+  "searchProviderCustomSubtitle": "自建服务或任何 OpenAI 兼容接口",
+  "searchProviderCloud": "云端",
+  "searchProviderOnDevice": "设备本地",
+  "searchProviderDimensions": "{dims} 维",
+  "@searchProviderDimensions": {
+    "placeholders": {
+      "dims": {"type": "int"}
+    }
+  },
+  "searchProviderServedBy": "搜索仍由 {provider} 提供",
+  "@searchProviderServedBy": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchProviderEndpoint": "接口地址",
+  "searchProviderEndpointHelp": "完整的基础 URL，例如 http://localhost:11434/v1",
+  "searchProviderModelName": "模型名称",
+  "searchProviderDimensionsField": "维度",
+  "searchProviderDimensionsHelp": "由连接测试验证",
+  "searchProviderApiKey": "API 密钥",
+  "searchProviderApiKeyHelp": "可选 — 自建的免密钥接口可留空",
+  "searchProviderApiKeyFromChat": "已从你的 {model} 对话模型填入 — 若此接口需要不同密钥请替换。",
+  "@searchProviderApiKeyFromChat": {
+    "placeholders": {
+      "model": {"type": "String"}
+    }
+  },
+  "searchProviderFieldsRequired": "请先填写接口地址和模型名称，然后再测试。",
+  "searchGetApiKey": "获取 API 密钥",
+  "searchTestConnection": "测试连接",
+  "searchTestOk": "连接正常 — 向量为 {dims} 维",
+  "@searchTestOk": {
+    "placeholders": {
+      "dims": {"type": "int"}
+    }
+  },
+  "searchTestDimensionsCorrected": "维度已更正为 {dims}，与接口返回一致",
+  "@searchTestDimensionsCorrected": {
+    "placeholders": {
+      "dims": {"type": "int"}
+    }
+  },
+  "searchTestFailed": "连接失败：{error}",
+  "@searchTestFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "searchTestRequired": "启用之前请先测试连接。",
+  "searchProviderEnable": "启用",
+  "searchProviderEnabled": "已启用 {provider}",
+  "@searchProviderEnabled": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchProviderTurnedOff": "语义搜索已关闭 — 已存储的向量仍保留",
+  "searchConsentTitle": "将笔记文本发送到 {provider}？",
+  "@searchConsentTitle": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchConsentBody": "约 {chunks} 个笔记文本片段将发送到 {provider} 以建立语义索引。",
+  "@searchConsentBody": {
+    "placeholders": {
+      "chunks": {"type": "int"},
+      "provider": {"type": "String"}
+    }
+  },
+  "searchConsentBodyWithImages": "约 {chunks} 个笔记文本片段和 {images} 张图片将发送到 {provider} 以建立语义索引。",
+  "@searchConsentBodyWithImages": {
+    "placeholders": {
+      "chunks": {"type": "int"},
+      "images": {"type": "int"},
+      "provider": {"type": "String"}
+    }
+  },
+  "searchConsentBodyUnknown": "笔记会在建立索引的过程中发送到 {provider}，用于建立语义索引。",
+  "@searchConsentBodyUnknown": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchConsentLargePdfsExcluded": "{count, plural, other{{count} 个大型 PDF 仍被排除，不会发送。}}",
+  "@searchConsentLargePdfsExcluded": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "searchConsentWifiOnly": "批量索引默认仅在 Wi-Fi 下进行；搜索查询可使用任意网络。",
+  "searchConsentSwitchDisclosure": "在重建索引完成之前，搜索将继续使用 {provider}。",
+  "@searchConsentSwitchDisclosure": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchConsentStopServing": "立即停用 {provider}",
+  "@searchConsentStopServing": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchConsentStoppedServing": "已停用 {provider} — 在重建索引完成前仅使用关键词搜索",
+  "@searchConsentStoppedServing": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchConsentAccept": "发送并索引",
+  "searchErrorAuth": "{provider} 拒绝了密钥 — 索引已暂停，请先修正密钥",
+  "@searchErrorAuth": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchErrorNotInstalled": "{provider} 尚未下载到本设备",
+  "@searchErrorNotInstalled": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchErrorDimensions": "接口返回的向量维度与配置的维度不一致",
+  "searchErrorHalted": "向量生成已暂停",
+  "searchErrorFailedChunks": "{count, plural, other{{count} 个片段无法生成向量}}",
+  "@searchErrorFailedChunks": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "searchErrorFailedChunksHint": "这些片段只能通过重建索引重试 — 其他操作不会重新检查它们。",
+  "searchFixKey": "修正密钥",
+  "searchDownloadModel": "下载模型",
+  "searchDownloadModelHint": "请先在下方下载模型，然后重新测试。",
+  "searchRetryStarted": "正在重试索引…",
+  "searchWifiOnly": "仅在 Wi-Fi 下索引",
+  "searchWifiOnlySubtitle": "批量生成向量会等待 Wi-Fi。搜索始终可用。",
+  "searchLocalModelSection": "设备本地模型",
+  "searchLocalModelInstalled": "已下载到本设备",
+  "searchLocalModelNotInstalled": "尚未下载",
+  "searchHuggingFaceToken": "HuggingFace 访问令牌",
+  "searchHuggingFaceTokenHelp": "必填 — 该模型仓库需要授权",
+  "searchGetHfToken": "获取令牌",
+  "searchInstallModel": "下载",
+  "searchUninstallModel": "删除",
+  "searchInstallProgress": "正在下载 — {percent}%",
+  "@searchInstallProgress": {
+    "placeholders": {
+      "percent": {"type": "int"}
+    }
+  },
+  "searchInstallAuthFailed": "下载被拒绝 — 请在 HuggingFace 上接受模型许可并检查令牌。{error}",
+  "@searchInstallAuthFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "searchInstallTransientFailed": "下载失败 — 请检查网络后重试。{error}",
+  "@searchInstallTransientFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "searchInstallFailed": "下载失败：{error}",
+  "@searchInstallFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "searchModelInstalled": "模型已下载",
+  "searchModelRemoved": "模型已删除",
+  "searchRebuildIndex": "重建索引",
+  "searchRebuildSubtitle": "重新检查所有笔记和附件",
+  "searchRebuildRunning": "正在重建 — {percent}%",
+  "@searchRebuildRunning": {
+    "placeholders": {
+      "percent": {"type": "int"}
+    }
+  },
+  "searchRebuildConfirmTitle": "重建搜索索引？",
+  "searchRebuildConfirmBody": "将重新检查 {notes} 篇笔记和 {chunks} 个片段。",
+  "@searchRebuildConfirmBody": {
+    "placeholders": {
+      "notes": {"type": "int"},
+      "chunks": {"type": "int"}
+    }
+  },
+  "searchRebuildConfirmCost": "文本有变化的片段会再次发送到 {provider}；未变化的片段不会重新生成向量。",
+  "@searchRebuildConfirmCost": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchRebuildStarted": "正在重建搜索索引…",
+  "searchDeleteEmbeddings": "删除已存储的向量",
+  "searchDeleteEmbeddingsSubtitle": "释放存储空间并清除全部向量。关闭服务商则会保留它们。",
+  "searchDeleteEmbeddingsConfirm": "删除全部已存储的向量？这同时会关闭向量模型服务，因此不会在你不知情的情况下重新上传 — 在你再次选择服务之前，搜索将回退到关键词。",
+  "searchEmbeddingsDeleted": "已删除存储的向量 — 服务已关闭",
+  "searchOcrEnabled": "识别 PDF 和图片中的文字",
+  "searchOcrOnDevice": "在设备本地运行 — 不会上传任何内容",
+  "searchOcrScript": "文种",
+  "searchOcrScriptAuto": "自动（跟随设备语言）",
+  "searchOcrScriptLatin": "拉丁文",
+  "searchOcrScriptChinese": "中文",
+  "searchFigureIndexing": "索引图表",
+  "searchFigureIndexingSubtitle": "从 PDF 中提取图表，便于搜索并在对话中展示",
+  "searchFigureSkillHint": "安装「Figure Answers」技能以获得更好的图表回复",
+  "searchPdfPageCap": "大型 PDF 上限",
+  "searchPdfPageCapField": "页数",
+  "searchPdfPageCapSubtitle": "超过 {pages} 页的 PDF 不会自动索引，除非你手动开启",
+  "@searchPdfPageCapSubtitle": {
+    "placeholders": {
+      "pages": {"type": "int"}
+    }
+  },
+  "searchLargePdfsSkipped": "{count, plural, other{{count} 个大型 PDF 未被索引 — 请检查}}",
+  "@searchLargePdfsSkipped": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "searchLargePdfsMore": "{count, plural, other{还有 {count} 个未显示}}",
+  "@searchLargePdfsMore": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "searchLargePdfPages": "{title} · {pages} 页",
+  "@searchLargePdfPages": {
+    "placeholders": {
+      "title": {"type": "String"},
+      "pages": {"type": "int"}
+    }
+  },
+  "searchIndexAnyway": "仍然索引",
+  "searchLargePdfQueued": "将开始索引 {name}",
+  "@searchLargePdfQueued": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "searchNoLargePdfs": "没有因体积被跳过的 PDF",
+  "searchIndexOptions": "搜索索引",
+  "searchIndexOptionsCustom": "搜索索引：已自定义",
+  "searchIndexOptionsSubtitle": "选择可以从 {name} 中提取哪些内容用于搜索。",
+  "@searchIndexOptionsSubtitle": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "searchIndexPurgeWarning": "关闭某项后，它已为该文件生成的内容会被删除——包括它的搜索片段、由它渲染出的图表截图，以及为语义搜索存储的向量。",
+  "searchIndexEmbedPurgeWarning": "关闭后，已为该文件存储的向量会被删除，它将不再出现在语义搜索结果中。",
+  "searchIndexExtractText": "提取文本层",
+  "searchIndexExtractTextSubtitle": "索引此 PDF 中已内嵌的文本。",
+  "searchIndexAnywayOverCap": "忽略页数上限并索引",
+  "searchIndexOverCapSubtitle": "共 {pages} 页，超过 {cap} 页的上限，除非手动开启，否则会被跳过。",
+  "@searchIndexOverCapSubtitle": {
+    "placeholders": {
+      "pages": {"type": "int"},
+      "cap": {"type": "int"}
+    }
+  },
+  "searchIndexAnywaySubtitle": "即使此 PDF 超过页数上限也继续索引。",
+  "searchIndexDeriveOnDevice": "在本机提取内容",
+  "searchIndexDeriveOnDeviceSubtitle": "文字识别与图表截图均在本机完成，不会上传。",
+  "searchIndexEmbed": "用于语义搜索",
+  "searchIndexEmbedSubtitle": "将此文件已索引的文本发送给嵌入模型提供方；若提供方支持图像，发送的则是图像本身：由它渲染出的图表截图，或图片文件本身。",
+  "searchIndexSvgOnly": "SVG 附件只按文件名和替代文本索引：没有可提取的文本层，也没有可在本机识别或截取的内容。除非在下方关闭语义搜索，这段文本仍会发送给嵌入模型提供方。",
+  "searchIndexNotIndexable": "Note Synapse 不会从此类文件中提取内容。它仍可通过所属笔记被找到。",
+  "searchIndexUpdated": "已更新搜索索引设置",
+  "searchIndexUpdateFailed": "无法更新搜索索引设置",
+  "searchExcludeNote": "从搜索中排除",
+  "searchExcludeNoteConfirmTitle": "将此笔记从搜索中排除？",
+  "searchExcludeNoteConfirmBody": "该笔记及其附件会从搜索索引中移除，包括从附件提取的文本以及由它们渲染出的图表截图。取消排除后会重新索引。",
+  "searchExcludeNoteConfirm": "排除",
+  "searchExcludeNoteExcluded": "已将笔记从搜索中排除",
+  "searchExcludeNoteIncluded": "笔记将重新被搜索索引",
+  "searchExcludeNoteFailed": "无法更新搜索排除设置"
 }

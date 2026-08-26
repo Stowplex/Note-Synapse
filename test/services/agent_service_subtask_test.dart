@@ -47,11 +47,10 @@ void main() {
     getIt.registerLazySingleton<ModelSelector>(() => mockModelSelector);
     getIt.registerLazySingleton<AIService>(() => mockAIService);
     getIt.registerLazySingleton<DatabaseService>(() => mockDatabaseService);
-    getIt.registerLazySingleton<SkillService>(() => SkillService(mockDatabaseService));
-    when(mockDatabaseService.searchNotesFTS(any, tags: anyNamed('tags')))
-        .thenAnswer((_) async => []);
-    when(mockDatabaseService.getNotesByTag(any))
-        .thenAnswer((_) async => []);
+    getIt.registerLazySingleton<SkillService>(
+      () => SkillService(mockDatabaseService),
+    );
+    when(mockDatabaseService.getNotesByTag(any)).thenAnswer((_) async => []);
     await registerTestPromptTemplateService();
 
     agentService = AgentService(

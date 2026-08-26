@@ -66,6 +66,8 @@ import '../widgets/drawing_editor.dart';
 import 'conversation_tree_screen.dart';
 import 'conversation_chat_screen.dart';
 import '../widgets/pdf_ai_context_dialog.dart';
+import '../widgets/search_index_options_dialog.dart';
+import '../services/search_settings_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'note_selection_dialog.dart';
 import 'note_action_app_selection_screen.dart';
@@ -151,6 +153,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   final Map<String, int> _pdfCurrentPages = {};
   final Map<String, int> _pdfTotalPages = {};
   final Map<String, PdfAiContextConfig> _pdfContextConfigs = {};
+
+  /// `metadata.searchIndex` per attachment path, cached alongside
+  /// [_pdfContextConfigs] so the overflow menu can label its entry from the
+  /// stored policy without an async read while building.
+  final Map<String, AttachmentSearchIndexConfig> _searchIndexConfigs = {};
   final Map<String, PdfViewerController> _pdfViewerControllers = {};
   final Map<String, PdfDocument> _pdfDocuments = {};
   final Map<String, List<PdfOutlineNode>> _pdfOutlines = {};
@@ -973,18 +980,30 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     }
   }
 
+  /// The attachment of the active note at [path].
+  ///
+  /// EXACT matches win — the stored path first, then the resolved absolute
+  /// path (which is what the viewer and the dialogs hold). The basename match
+  /// is only a last resort: it is what makes two attachments of one note that
+  /// share a file name resolve to whichever comes first, and this object is
+  /// read-modify-WRITTEN (bookmarks, search-index policy), so picking the
+  /// wrong row loses data rather than merely showing the wrong thing.
   Future<Attachment?> _resolveAttachment(String path) async {
-    final note = widget.notes[_activeNoteIndex];
-    // This is a simplification; ideally we find the attachment object from the note or DB
+    final notes = widget.notes;
+    if (notes.isEmpty) return null;
+    final note = notes[_activeNoteIndex.clamp(0, notes.length - 1)];
     final attachments = await _databaseService.getAttachmentsForNote(note.id);
-    try {
-      // Try to find by direct path match first (handling relative/absolute)
-      return attachments.firstWhere(
-        (a) => a.filePath == path || a.filePath.endsWith(path.split('/').last),
-      );
-    } catch (_) {
-      return null;
+    for (final attachment in attachments) {
+      if (attachment.filePath == path) return attachment;
     }
+    for (final attachment in attachments) {
+      if (await attachment.getAbsolutePath() == path) return attachment;
+    }
+    final basename = path.split('/').last;
+    for (final attachment in attachments) {
+      if (attachment.filePath.endsWith(basename)) return attachment;
+    }
+    return null;
   }
 
   Future<void> _saveBookmark(
@@ -1251,6 +1270,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                     if (_activeAttachmentPath != null) {
                       await _loadPdfContextConfig(_activeAttachmentPath!);
                     }
+                  } else if (value == 'configure_search_index') {
+                    await _showSearchIndexOptionsDialogForActiveAttachment();
+                    if (_activeAttachmentPath != null) {
+                      await _loadPdfContextConfig(_activeAttachmentPath!);
+                    }
                   } else if (value == 'bookmarks') {
                     _showBookmarksList();
                   } else if (value == 'toggle_bookmark') {
@@ -1329,6 +1353,28 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                             ),
                             const SizedBox(width: 8),
                             Expanded(child: Text(_getPdfAiContextLabel(l10n))),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'configure_search_index',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.manage_search,
+                              color:
+                                  _hasCustomSearchIndex(_activeAttachmentPath!)
+                                  ? Theme.of(context).colorScheme.primary
+                                  : null,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _hasCustomSearchIndex(_activeAttachmentPath!)
+                                    ? l10n.searchIndexOptionsCustom
+                                    : l10n.searchIndexOptions,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -4132,6 +4178,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _activeAttachmentPath = attachment;
         });
         _loadMarkersForAttachment(attachment);
+        // The overflow menu labels its AI-context and search-index entries
+        // from the caches this fills; without it, switching documents shows
+        // the previous attachment's policy (or none at all).
+        _loadPdfContextConfig(attachment);
         Navigator.pop(context);
       },
       onNodeTap: (node) {
@@ -4140,6 +4190,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
           _activeAttachmentPath = attachment;
         });
         _loadMarkersForAttachment(attachment);
+        _loadPdfContextConfig(attachment);
         Navigator.pop(context);
         _navigateToPdfOutlineDestination(attachment, node);
       },
@@ -4190,6 +4241,14 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return config != null && config.hasCustomRange;
   }
 
+  /// Whether the attachment's search index policy differs from the defaults
+  /// in a way its file type can show (see [searchIndexConfigIsCustomized]).
+  bool _hasCustomSearchIndex(String attachmentPath) {
+    final config = _searchIndexConfigs[attachmentPath];
+    return config != null &&
+        searchIndexConfigIsCustomized(attachmentPath, config);
+  }
+
   /// Get the label for the PDF AI context menu item
   String _getPdfAiContextLabel(AppLocalizations l10n) {
     if (_activeAttachmentPath == null) return l10n.configureAiContext;
@@ -4231,7 +4290,13 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     return l10n.aiContext(modeLabel);
   }
 
-  /// Load and cache the PDF AI context configuration
+  /// Loads and caches the AI-context AND search-index policy of the PDF at
+  /// [path] — the two caches the overflow menu labels its entries from.
+  ///
+  /// MUST be called whenever [_activeAttachmentPath] changes (the outline
+  /// taps do), not only at initState: an unlabelled entry under-reports a
+  /// policy the user set, which is exactly the kind of silence a privacy
+  /// control must not have.
   Future<void> _loadPdfContextConfig(String path) async {
     if (!path.toLowerCase().endsWith('.pdf')) return;
 
@@ -4239,6 +4304,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     if (attachment == null) return;
 
     final config = attachment.getAiContextConfig();
+    final searchIndexConfig = attachment.getSearchIndexConfig();
     if (mounted) {
       setState(() {
         if (config != null) {
@@ -4246,6 +4312,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         } else {
           _pdfContextConfigs.remove(path);
         }
+        _searchIndexConfigs[path] = searchIndexConfig;
       });
     }
   }
@@ -4355,6 +4422,85 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
 
     // Dispose loaded document if we created one
     loadedDocument?.dispose();
+  }
+
+  /// Per-attachment search index policy editor for the PDF on screen
+  /// (plan §1.3). Resolves the attachment by ABSOLUTE path, exactly like
+  /// [_showPdfAiContextDialogForActiveAttachment].
+  Future<void> _showSearchIndexOptionsDialogForActiveAttachment() async {
+    final path = _activeAttachmentPath;
+    if (path == null) return;
+
+    final notes = _resolveNotes(context.read<AppProvider>());
+    if (_activeNoteIndex >= notes.length) return;
+
+    final attachments = await _databaseService.getAttachmentsForNote(
+      notes[_activeNoteIndex].id,
+    );
+    Attachment? attachment;
+    for (final att in attachments) {
+      if (await att.getAbsolutePath() == path) {
+        attachment = att;
+        break;
+      }
+    }
+    if (attachment == null) return;
+
+    // The viewer already knows the page count; no second document open.
+    final cachedPages = _pdfTotalPages[path];
+    int? pageCap;
+    try {
+      pageCap = await SearchSettingsService().getPdfPageCap();
+    } catch (e) {
+      LoggerService.warning('Failed to read the PDF page cap: $e');
+    }
+    if (!mounted) return;
+
+    final resolved = attachment;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => SearchIndexOptionsDialog(
+        fileName: resolved.fileName,
+        config: resolved.getSearchIndexConfig(),
+        pageCount: (cachedPages != null && cachedPages > 0)
+            ? cachedPages
+            : null,
+        pageCap: pageCap,
+        onSave: (config) async {
+          try {
+            // Re-read at SAVE time (not from `resolved`, taken before the
+            // dialog opened) so a bookmark written while it was open — or by
+            // any other writer of this row — survives the merge.
+            final metadata = await buildSearchIndexMetadata(
+              attachment: resolved,
+              config: config,
+              reload: _databaseService.getAttachmentById,
+            );
+            await _databaseService.updateAttachmentMetadata(
+              resolved.id,
+              metadata,
+            );
+          } catch (e) {
+            LoggerService.error('Failed to update search index config: $e');
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  AppLocalizations.of(context)!.searchIndexUpdateFailed,
+                ),
+              ),
+            );
+            return;
+          }
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppLocalizations.of(context)!.searchIndexUpdated),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _showOutline(List<Note> notes, AppLocalizations l10n) async {
@@ -4488,6 +4634,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                             _activeAttachmentPath = attachment;
                           });
                           _loadMarkersForAttachment(attachment);
+                          _loadPdfContextConfig(attachment);
                           Navigator.pop(context);
                         },
                       ),

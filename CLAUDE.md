@@ -105,6 +105,7 @@ These columns can be very large and require careful handling:
 - `user_app_revision.code`
 - `user_app_libraries.code`
 - `note.content`
+- `search_chunks.text` (raw chunk text; derived from notes, rebuildable via the search indexer)
 
 ### Database Changes
 When modifying tables, update `recovery_screen.dart` to ensure consistency during recovery.

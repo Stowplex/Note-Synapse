@@ -396,6 +396,28 @@
   "filter": "Filter",
   "noNotesFound": "No notes found",
   "createFirstNote": "Create your first note",
+  "searchInProgress": "Searching…",
+  "searchTryAdjustingTerms": "Try adjusting your search terms",
+  "searchTryDifferentTags": "Try selecting different tags",
+  "createFirstNoteHint": "Tap the + button to create your first note",
+  "buildingSearchIndex": "Building search index… {percent}%",
+  "@buildingSearchIndex": {
+    "placeholders": {
+      "percent": {"type": "int"}
+    }
+  },
+  "searchBadgePdfPage": "PDF · p.{page}",
+  "@searchBadgePdfPage": {
+    "placeholders": {
+      "page": {"type": "int"}
+    }
+  },
+  "searchBadgeAttachment": "Attachment",
+  "searchBadgeImage": "Image",
+  "searchBadgeSubnote": "Sub-note",
+  "searchBadgeTag": "Tag",
+  "searchBadgeAnnotation": "Annotation",
+  "dismiss": "Dismiss",
   "timeline": "Timeline",
   "todo": "Todo",
   "today": "Today",
@@ -2269,5 +2291,401 @@
       "domain": {"type": "String"}
     }
   },
-  "searchNotes": "Search notes"
+  "searchNotes": "Search notes",
+  "figureUnavailable": "Figure no longer available — the source note or figure was removed",
+  "@figureUnavailable": {
+    "description": "Placeholder shown in place of an image when a synapseresource://figure or attachment URI cannot be resolved"
+  },
+  "figureSourcePage": "{title} · p.{page}",
+  "@figureSourcePage": {
+    "description": "Provenance label under a retrieved figure: owning note title and 1-based page",
+    "placeholders": {
+      "title": {"type": "String"},
+      "page": {"type": "int"}
+    }
+  },
+  "figureOpenSource": "Open source",
+  "@figureOpenSource": {
+    "description": "Tooltip/semantics label for the provenance button that opens the figure's source attachment"
+  },
+  "searchSettings": "Search & indexing",
+  "@searchSettings": {
+    "description": "Title of the search/index settings screen and of its Settings entry tile"
+  },
+  "searchSettingsSubtitle": "Semantic search, OCR, and index maintenance",
+  "searchSubtitleLexicalOnly": "Lexical only",
+  "@searchSubtitleLexicalOnly": {
+    "description": "Settings tile subtitle when no embedding provider is configured — keyword search only"
+  },
+  "searchSubtitleReady": "{provider} · semantic search on",
+  "@searchSubtitleReady": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchSubtitleIndexing": "{provider} · indexing {percent}%",
+  "@searchSubtitleIndexing": {
+    "placeholders": {
+      "provider": {"type": "String"},
+      "percent": {"type": "int"}
+    }
+  },
+  "searchSubtitleSwitching": "Switching to {provider} — {percent}% re-indexed",
+  "@searchSubtitleSwitching": {
+    "placeholders": {
+      "provider": {"type": "String"},
+      "percent": {"type": "int"}
+    }
+  },
+  "searchSubtitleRevoked": "Semantic search off — re-enable {provider} to resume",
+  "@searchSubtitleRevoked": {
+    "description": "Subtitle when the configured provider was explicitly stopped (\"Stop using X now\"): it stays unserved across sweeps and restarts until re-enabled, so reporting backfill progress would imply it comes back on its own",
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchProviderReEnable": "Re-enable",
+  "@searchProviderReEnable": {
+    "description": "Action on the revoked-provider row: re-selecting the same provider lifts the revocation"
+  },
+  "searchSubtitleErrors": "{provider} · {count} errors",
+  "@searchSubtitleErrors": {
+    "placeholders": {
+      "provider": {"type": "String"},
+      "count": {"type": "int"}
+    }
+  },
+  "searchIndexStatus": "Index status",
+  "searchIndexIdle": "Up to date — {chunks} indexed chunks",
+  "@searchIndexIdle": {
+    "placeholders": {
+      "chunks": {"type": "int"}
+    }
+  },
+  "searchStageChunks": "Indexing notes — {done}/{total}",
+  "@searchStageChunks": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "searchStagePdfText": "Reading PDF text — {done}/{total} attachments",
+  "@searchStagePdfText": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "searchStageOcr": "Recognizing text in PDFs — {done}/{total} pages",
+  "@searchStageOcr": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "searchStageEmbed": "Creating embeddings — {done}/{total} chunks",
+  "@searchStageEmbed": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "searchEmbeddingProvider": "Embedding provider",
+  "searchProviderNone": "None (lexical only)",
+  "searchProviderNoneSubtitle": "Keyword search only — nothing leaves the device",
+  "searchProviderCustom": "Custom (OpenAI-compatible)",
+  "searchProviderCustomSubtitle": "Self-hosted or any OpenAI-compatible endpoint",
+  "searchProviderCloud": "Cloud",
+  "searchProviderOnDevice": "On-device",
+  "searchProviderDimensions": "{dims} dimensions",
+  "@searchProviderDimensions": {
+    "placeholders": {
+      "dims": {"type": "int"}
+    }
+  },
+  "searchProviderServedBy": "Searches are still served by {provider}",
+  "@searchProviderServedBy": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchProviderEndpoint": "Endpoint URL",
+  "searchProviderEndpointHelp": "Full base URL, e.g. http://localhost:11434/v1",
+  "searchProviderModelName": "Model name",
+  "searchProviderDimensionsField": "Dimensions",
+  "searchProviderDimensionsHelp": "Verified by the connection test",
+  "searchProviderApiKey": "API key",
+  "searchProviderApiKeyHelp": "Optional — leave empty for keyless self-hosted endpoints",
+  "searchProviderApiKeyFromChat": "Prefilled from your {model} chat model — replace it if this endpoint needs a different key.",
+  "@searchProviderApiKeyFromChat": {
+    "description": "Shown when the key field was prefilled from an already-configured chat model that talks to the same provider",
+    "placeholders": {
+      "model": {"type": "String"}
+    }
+  },
+  "searchProviderFieldsRequired": "Enter an endpoint URL and a model name before testing.",
+  "@searchProviderFieldsRequired": {
+    "description": "Validation hint for the custom-provider form: an empty endpoint or model name cannot be probed or stored"
+  },
+  "searchGetApiKey": "Get an API key",
+  "searchTestConnection": "Test connection",
+  "searchTestOk": "Connection OK — {dims}-dimensional vectors",
+  "@searchTestOk": {
+    "placeholders": {
+      "dims": {"type": "int"}
+    }
+  },
+  "searchTestDimensionsCorrected": "Dimensions corrected to {dims} to match the endpoint",
+  "@searchTestDimensionsCorrected": {
+    "placeholders": {
+      "dims": {"type": "int"}
+    }
+  },
+  "searchTestFailed": "Connection failed: {error}",
+  "@searchTestFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "searchTestRequired": "Run the connection test before enabling this provider.",
+  "searchProviderEnable": "Enable",
+  "searchProviderEnabled": "{provider} enabled",
+  "@searchProviderEnabled": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchProviderTurnedOff": "Semantic search off — stored vectors were kept",
+  "searchConsentTitle": "Send note text to {provider}?",
+  "@searchConsentTitle": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchConsentBody": "About {chunks} chunks of note text will be sent to {provider} to build the semantic index.",
+  "@searchConsentBody": {
+    "placeholders": {
+      "chunks": {"type": "int"},
+      "provider": {"type": "String"}
+    }
+  },
+  "searchConsentBodyWithImages": "About {chunks} chunks of note text and {images} images will be sent to {provider} to build the semantic index.",
+  "@searchConsentBodyWithImages": {
+    "placeholders": {
+      "chunks": {"type": "int"},
+      "images": {"type": "int"},
+      "provider": {"type": "String"}
+    }
+  },
+  "searchConsentBodyUnknown": "Your notes will be sent to {provider} as they are indexed, to build the semantic index.",
+  "@searchConsentBodyUnknown": {
+    "description": "Consent body when nothing is chunked yet (fresh install): an estimate of 0 would understate what actually uploads once chunking runs",
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchConsentLargePdfsExcluded": "{count, plural, =1{1 large PDF stays excluded and is not sent.} other{{count} large PDFs stay excluded and are not sent.}}",
+  "@searchConsentLargePdfsExcluded": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "searchConsentWifiOnly": "Bulk indexing runs on Wi-Fi only by default; search queries may use any network.",
+  "searchConsentSwitchDisclosure": "Until re-indexing completes, searches will continue to use {provider}.",
+  "@searchConsentSwitchDisclosure": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchConsentStopServing": "Stop using {provider} now",
+  "@searchConsentStopServing": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchConsentStoppedServing": "{provider} is no longer used — keyword search until re-indexing completes",
+  "@searchConsentStoppedServing": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchConsentAccept": "Send and index",
+  "searchErrorAuth": "{provider} rejected the key — indexing is halted until it is fixed",
+  "@searchErrorAuth": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchErrorNotInstalled": "{provider} is not on this device yet",
+  "@searchErrorNotInstalled": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchErrorDimensions": "The endpoint's vector size does not match the configured dimensions",
+  "searchErrorHalted": "Embedding halted",
+  "searchErrorFailedChunks": "{count, plural, =1{1 chunk could not be embedded} other{{count} chunks could not be embedded}}",
+  "@searchErrorFailedChunks": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "searchErrorFailedChunksHint": "These are retried by a rebuild — nothing else re-checks them.",
+  "@searchErrorFailedChunksHint": {
+    "description": "Explains why the per-chunk failure tile offers Rebuild index rather than a plain Retry: the retry path only clears stage-level halts"
+  },
+  "searchFixKey": "Fix key",
+  "searchDownloadModel": "Download model",
+  "searchDownloadModelHint": "Download the model below, then test again.",
+  "searchRetryStarted": "Retrying indexing…",
+  "searchWifiOnly": "Index on Wi-Fi only",
+  "searchWifiOnlySubtitle": "Bulk embedding waits for Wi-Fi. Searching always works.",
+  "searchLocalModelSection": "On-device model",
+  "searchLocalModelInstalled": "Installed on this device",
+  "searchLocalModelNotInstalled": "Not downloaded yet",
+  "searchHuggingFaceToken": "HuggingFace access token",
+  "searchHuggingFaceTokenHelp": "Required — this model's repository is gated",
+  "searchGetHfToken": "Get a token",
+  "searchInstallModel": "Download",
+  "searchUninstallModel": "Remove",
+  "searchInstallProgress": "Downloading — {percent}%",
+  "@searchInstallProgress": {
+    "placeholders": {
+      "percent": {"type": "int"}
+    }
+  },
+  "searchInstallAuthFailed": "Download rejected — accept the model licence on HuggingFace and check your token. {error}",
+  "@searchInstallAuthFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "searchInstallTransientFailed": "Download failed — check the connection and try again. {error}",
+  "@searchInstallTransientFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "searchInstallFailed": "Download failed: {error}",
+  "@searchInstallFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "searchModelInstalled": "Model downloaded",
+  "searchModelRemoved": "Model removed",
+  "searchRebuildIndex": "Rebuild index",
+  "searchRebuildSubtitle": "Re-check every note and attachment",
+  "searchRebuildRunning": "Rebuilding — {percent}%",
+  "@searchRebuildRunning": {
+    "placeholders": {
+      "percent": {"type": "int"}
+    }
+  },
+  "searchRebuildConfirmTitle": "Rebuild the search index?",
+  "searchRebuildConfirmBody": "{notes} notes and {chunks} chunks will be re-checked.",
+  "@searchRebuildConfirmBody": {
+    "placeholders": {
+      "notes": {"type": "int"},
+      "chunks": {"type": "int"}
+    }
+  },
+  "searchRebuildConfirmCost": "Chunks whose text changed are sent to {provider} again; unchanged chunks are not re-embedded.",
+  "@searchRebuildConfirmCost": {
+    "placeholders": {
+      "provider": {"type": "String"}
+    }
+  },
+  "searchRebuildStarted": "Rebuilding the search index…",
+  "searchDeleteEmbeddings": "Delete stored embeddings",
+  "searchDeleteEmbeddingsSubtitle": "Frees storage and erases every vector. Turning a provider off keeps them.",
+  "searchDeleteEmbeddingsConfirm": "Delete every stored embedding? This also turns the embedding provider off, so nothing is re-uploaded behind your back — search falls back to keywords until you pick a provider again.",
+  "searchEmbeddingsDeleted": "Stored embeddings deleted — provider turned off",
+  "searchOcrEnabled": "Recognize text in PDFs and images",
+  "searchOcrOnDevice": "Runs on-device — nothing is uploaded",
+  "searchOcrScript": "Script",
+  "searchOcrScriptAuto": "Automatic (follow device language)",
+  "searchOcrScriptLatin": "Latin",
+  "searchOcrScriptChinese": "Chinese",
+  "searchFigureIndexing": "Index figures and tables",
+  "searchFigureIndexingSubtitle": "Extracts figures from PDFs so they can be found and shown in chat",
+  "searchFigureSkillHint": "Install the Figure Answers skill for better figure replies",
+  "searchPdfPageCap": "Large PDF limit",
+  "searchPdfPageCapField": "Pages",
+  "searchPdfPageCapSubtitle": "PDFs longer than {pages} pages are skipped unless you opt them in",
+  "@searchPdfPageCapSubtitle": {
+    "placeholders": {
+      "pages": {"type": "int"}
+    }
+  },
+  "searchLargePdfsSkipped": "{count, plural, =1{1 large PDF not indexed — review} other{{count} large PDFs not indexed — review}}",
+  "@searchLargePdfsSkipped": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "searchLargePdfsMore": "{count, plural, =1{1 more not shown} other{{count} more not shown}}",
+  "@searchLargePdfsMore": {
+    "description": "Overflow row when more skipped PDFs exist than the list renders",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "searchLargePdfPages": "{title} · {pages} pages",
+  "@searchLargePdfPages": {
+    "placeholders": {
+      "title": {"type": "String"},
+      "pages": {"type": "int"}
+    }
+  },
+  "searchIndexAnyway": "Index anyway",
+  "searchLargePdfQueued": "{name} will be indexed",
+  "@searchLargePdfQueued": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "searchNoLargePdfs": "No PDFs are being skipped for size",
+  "searchIndexOptions": "Search indexing",
+  "@searchIndexOptions": {
+    "description": "Menu entry and dialog title for the per-attachment search index policy"
+  },
+  "searchIndexOptionsCustom": "Search indexing: customized",
+  "@searchIndexOptionsCustom": {
+    "description": "Menu entry label when the attachment's search index policy differs from the defaults"
+  },
+  "searchIndexOptionsSubtitle": "Choose what may be extracted from {name} for search.",
+  "@searchIndexOptionsSubtitle": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "searchIndexPurgeWarning": "Turning an option off deletes what it already produced for this file — its search chunks, any figure crops rendered from it, and the vectors stored for semantic search.",
+  "searchIndexEmbedPurgeWarning": "Turning this off deletes the vectors already stored for this file, so it stops appearing in semantic search results.",
+  "searchIndexExtractText": "Extract the text layer",
+  "searchIndexExtractTextSubtitle": "Index the text already embedded in this PDF.",
+  "searchIndexAnywayOverCap": "Index despite the page limit",
+  "searchIndexOverCapSubtitle": "{pages} pages — longer than the {cap}-page limit, so this PDF is skipped unless you opt it in.",
+  "@searchIndexOverCapSubtitle": {
+    "placeholders": {
+      "pages": {"type": "int"},
+      "cap": {"type": "int"}
+    }
+  },
+  "searchIndexAnywaySubtitle": "Keep indexing this PDF even when it is longer than the page limit.",
+  "searchIndexDeriveOnDevice": "Extract content on this device",
+  "searchIndexDeriveOnDeviceSubtitle": "Text recognition and figure crops, computed locally. Nothing is uploaded.",
+  "searchIndexEmbed": "Use for semantic search",
+  "searchIndexEmbedSubtitle": "Send this file's indexed text to the embedding provider — or, when the provider accepts images, the images themselves: the figure crops rendered from it, or the image file.",
+  "searchIndexSvgOnly": "SVG attachments are indexed by file name and alt text only: there is no text layer to extract, and nothing to recognize or crop on this device. That text is still sent to the embedding provider unless you turn semantic search off below.",
+  "searchIndexNotIndexable": "Note Synapse does not extract content from this file type. It stays findable through the note it is attached to.",
+  "searchIndexUpdated": "Search indexing updated",
+  "searchIndexUpdateFailed": "Could not update search indexing",
+  "searchExcludeNote": "Exclude from search",
+  "searchExcludeNoteConfirmTitle": "Exclude this note from search?",
+  "searchExcludeNoteConfirmBody": "The note and its attachments are removed from the search index, including text extracted from attachments and any figure crops rendered from them. Everything is indexed again if you turn this off.",
+  "searchExcludeNoteConfirm": "Exclude",
+  "searchExcludeNoteExcluded": "Note excluded from search",
+  "searchExcludeNoteIncluded": "Note will be indexed for search again",
+  "searchExcludeNoteFailed": "Could not update the search exclusion"
 }

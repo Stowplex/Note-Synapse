@@ -155,7 +155,8 @@ void main() {
       expect(result, hasLength(1));
       expect(result.first['id'], 'index-1');
       verify(mockDb.getNotesByTag('wiki-index-ai-research')).called(1);
-      verifyNever(mockDb.searchNotesFTS(any, tags: anyNamed('tags')));
+      // No SearchService is registered in this harness: reaching the layered
+      // search path would throw, so passing proves the tag-only lookup ran.
     });
 
     test('applies AND semantics for tag-only lookup', () async {
@@ -193,7 +194,13 @@ void main() {
       expect(result, hasLength(1));
       expect(result.first['id'], 'note-1');
       verify(mockDb.getNotesByTag('tag-a')).called(1);
-      verifyNever(mockDb.searchNotesFTS(any, tags: anyNamed('tags')));
+    });
+
+    test('returns empty list for empty query without tags', () async {
+      // No SearchService or getNotesByTag interaction: the tool short-circuits.
+      final result = await tool.execute({'query': '   '});
+      expect(result, isEmpty);
+      verifyNever(mockDb.getNotesByTag(any));
     });
   });
 

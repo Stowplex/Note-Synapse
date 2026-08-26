@@ -49,11 +49,7 @@ void main() {
       () => SkillService(mockDatabaseService),
     );
     await registerTestPromptTemplateService();
-    when(
-      mockDatabaseService.searchNotesFTS(any, tags: anyNamed('tags')),
-    ).thenAnswer((_) async => []);
-    when(mockDatabaseService.getNotesByTag(any))
-        .thenAnswer((_) async => []);
+    when(mockDatabaseService.getNotesByTag(any)).thenAnswer((_) async => []);
     when(mockContextManager.rootContext).thenReturn(null);
     when(mockModelSelector.currentModelConfig).thenReturn(null);
 

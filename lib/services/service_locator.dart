@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
+import '../models/note.dart';
 import '../providers/app_provider.dart';
 import 'data_change_notifier.dart';
 import 'database_service.dart';
+import 'logger_service.dart';
 import 'note_modification_service.dart';
 import 'block_note_scope_service.dart';
 import 'content_ingestion_service.dart';
@@ -25,6 +29,11 @@ import 'tag_workflow_service.dart';
 import 'fork_service.dart';
 import 'marker_chat_send_service.dart';
 import 'prompts/prompt_template_service.dart';
+import 'search_settings_service.dart';
+import 'search/embedding/embedding_provider_registry.dart';
+import 'search/note_index_service.dart';
+import 'search/search_service.dart';
+import 'search/vector_search.dart';
 import 'tts_service.dart';
 import 'web_session_service.dart';
 import 'app_domain_grant_service.dart';
@@ -176,6 +185,88 @@ void setupServiceLocator() {
     );
   }
 
+  // Semantic layer (plan §2.3). The registry resolves the configured
+  // embedding provider from persisted settings; initialize() is kicked off
+  // here (fire-and-forget) so the serving/active keys are loaded before the
+  // first search — every consumer also awaits ensureInitialized() itself,
+  // so nothing depends on this completing first.
+  if (!getIt.isRegistered<EmbeddingProviderRegistry>()) {
+    getIt.registerLazySingleton<EmbeddingProviderRegistry>(
+      () => EmbeddingProviderRegistry(),
+    );
+    unawaited(
+      getIt<EmbeddingProviderRegistry>().initialize().catchError((Object e) {
+        LoggerService.error(
+          '[ServiceLocator] Embedding registry init failed: $e',
+          error: e,
+        );
+      }),
+    );
+  }
+
+  if (!getIt.isRegistered<VectorSearch>()) {
+    getIt.registerLazySingleton<VectorSearch>(
+      () => VectorSearch(getIt<DatabaseService>()),
+    );
+  }
+
+  if (!getIt.isRegistered<NoteIndexService>()) {
+    getIt.registerLazySingleton<NoteIndexService>(
+      () => NoteIndexService(
+        getIt<DatabaseService>(),
+        changeNotifier: getIt<DataChangeNotifier>(),
+        embeddingRegistry: getIt<EmbeddingProviderRegistry>(),
+        vectorSearch: getIt<VectorSearch>(),
+        // Wifi-only backfill gate (plan §2.2). The registry lookup MUST stay
+        // inside the closure body: registerLazySingleton evaluates its
+        // factory's arguments once, at first resolution, so a hoisted
+        // getIt<EmbeddingProviderRegistry>().activeConfig would freeze the
+        // provider type as it was at startup (typically null → treated as
+        // cloud) and permanently wifi-gate a provider configured later — a
+        // LOCAL provider uploads nothing and must never be gated. Evaluated
+        // per embed batch here, so it also follows a provider switch.
+        embedNetworkAllowed: () =>
+            SearchSettingsService().embedBackfillNetworkAllowed(
+              isCloudProvider:
+                  getIt<EmbeddingProviderRegistry>().activeConfig?.type !=
+                  'local',
+            ),
+      ),
+    );
+    // Resolve eagerly: constructing the indexer is what registers its
+    // DatabaseService write-path hooks and DataChangeNotifier subscription —
+    // they must be live from startup, not from first UI use.
+    getIt<NoteIndexService>();
+  }
+
+  if (!getIt.isRegistered<SearchService>()) {
+    getIt.registerLazySingleton<SearchService>(
+      () => SearchService(
+        getIt<DatabaseService>(),
+        getIt<NoteIndexService>(),
+        embeddingRegistry: getIt<EmbeddingProviderRegistry>(),
+        vectorSearch: getIt<VectorSearch>(),
+        // Substring-fallback note source (Step 5 inversion): read
+        // AppProvider's in-memory note cache instead of a full-table read
+        // per keystroke. SearchService never imports AppProvider — the
+        // coupling lives only here in the composition root, resolved lazily
+        // at call time via getIt (AppProvider is registered above; main.dart
+        // provides the same instance to the widget tree). This must NEVER
+        // trigger AppProvider.loadData: before the first load completes the
+        // cache is unpopulated, so fall back to a direct database read.
+        notesProvider: () async {
+          final appProvider = getIt<AppProvider>();
+          if (appProvider.hasLoadedOnce) {
+            // Defensive copy: the fallback scan iterates asynchronously and
+            // the cache list mutates on note writes.
+            return List<Note>.of(appProvider.notes);
+          }
+          return getIt<DatabaseService>().getAllNotes();
+        },
+      ),
+    );
+  }
+
   // ============================================================
   // WAVE 4A: Storage services (no database dependency)
   // ============================================================
@@ -272,10 +363,11 @@ void registerWorldClipServices() {
     getIt.registerLazySingleton<VideoSource>(() => GalleryVideoSource());
   }
   if (!getIt.isRegistered<ScreenCaptureService>()) {
-    getIt.registerLazySingleton<ScreenCaptureService>(() =>
-        !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-            ? MethodChannelScreenCaptureService()
-            : UnsupportedScreenCaptureService());
+    getIt.registerLazySingleton<ScreenCaptureService>(
+      () => !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+          ? MethodChannelScreenCaptureService()
+          : UnsupportedScreenCaptureService(),
+    );
   }
 }
 

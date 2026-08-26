@@ -95,6 +95,10 @@ class _BuiltinToolEntry {
 
 const _kBuiltinTools = [
   _BuiltinToolEntry('search_notes', 'Search notes by keyword or tags'),
+  _BuiltinToolEntry(
+    'search_figures',
+    'Find figures, diagrams, tables and images stored in notes',
+  ),
   _BuiltinToolEntry('read_note', 'Read the full content of a note'),
   _BuiltinToolEntry('run_sql', 'Execute a read-only SQL query on the database'),
   _BuiltinToolEntry('ls', 'List available note filters and tags'),

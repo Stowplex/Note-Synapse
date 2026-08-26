@@ -1,0 +1,9 @@
+model_type: openai
+model_endpoint: https://api.openai.com
+model_name: text-embedding-3-small
+model_display_name: OpenAI Text Embedding 3 Small
+api_key_url: https://platform.openai.com/api-keys
+dimensions: 1536
+supports_images: false
+# The official OpenAI API supports the `dimensions` request parameter.
+send_dimensions: true
