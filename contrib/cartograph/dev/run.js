@@ -1,7 +1,7 @@
 // node dev/run.js  - runs the browser-independent assertions
 var fs = require('fs'), path = require('path');
 var base = path.join(__dirname, '..', 'plugins', 'src');
-['md', 'edit', 'sidecar', 'layout', 'view'].forEach(function (f) {
+['md', 'edit', 'sidecar', 'layout', 'view', 'diff', 'ai', 'host'].forEach(function (f) {
   eval(fs.readFileSync(path.join(base, f + '.js'), 'utf8'));
 });
 globalThis.CG_FIXTURES = {};

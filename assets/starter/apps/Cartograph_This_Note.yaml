@@ -1,6 +1,6 @@
-name: "Cartograph"
-uuid: 00713e85-2847-4a4a-9d73-c1685136e0b6
-app_type: normal
+name: "Cartograph: this note"
+uuid: 96d13a4a-3c59-4e2c-9522-0dfee4101da0
+app_type: note_action
 description: "Turns a note into an editable mind map - headings and bullets become branches, and every change on the map is written straight back into the note markdown. Drag to re-nest or pin, flip between map and outline, focus a branch, search and filter, and roll up checkbox progress. Generates a map with AI into a companion note, imports another note as a branch, and reshapes branches with AI behind a preview you approve."
 author: Bruce Li
 license: Apache-2.0

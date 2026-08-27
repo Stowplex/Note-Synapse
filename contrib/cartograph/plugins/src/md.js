@@ -413,5 +413,8 @@
     return problems;
   };
 
+  // Convenience for tests: parse and check in one call.
+  MD.coverageOf = function (src) { return MD.coverage(MD.parse(src)); };
+
   if (typeof module !== 'undefined' && module.exports) module.exports = CG;
 })(typeof window !== 'undefined' ? window : globalThis);

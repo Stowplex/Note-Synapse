@@ -204,6 +204,110 @@
     var eres = layout.compute(evt.root, { sizeOf: sizeOf });
     ok('an empty note does not explode', eres.boxes.size === 1);
 
+    /* ---------------- import: reshaping a foreign outline ---------------- */
+    var HOST_MD = '# Plan\n\n## Design\n- Colors\n';
+    var FOREIGN = '# Research\n\nIntro para.\n\n## Interviews\n- Recruit users\n  - Screener\n- Script\n';
+
+    b = md.parse(HOST_MD);
+    var gr = edit.graft(b, b.nodes.filter(function (n) { return n.text === 'Design'; })[0], FOREIGN);
+    ok('import under a section keeps headings as headings',
+      /### Research/.test(gr.src) && /#### Interviews/.test(gr.src), gr.src);
+    ok('import carries the body text across', gr.src.indexOf('Intro para.') >= 0, gr.src);
+    ok('the grafted note still parses cleanly', md.coverage(md.parse(gr.src)).length === 0);
+
+    b = md.parse(HOST_MD);
+    gr = edit.graft(b, b.nodes.filter(function (n) { return n.text === 'Colors'; })[0], FOREIGN);
+    ok('import under a bullet becomes bullets, never headings',
+      gr.src.indexOf('# Research') < 0 && /  - Research/.test(gr.src) && /    - Interviews/.test(gr.src), gr.src);
+    ok('nesting depth is preserved under a bullet', /        - Screener/.test(gr.src), gr.src);
+
+    b = md.parse('# a\n## b\n### c\n#### d\n##### e\n###### f\n');
+    gr = edit.graft(b, b.nodes.filter(function (n) { return n.text === 'f'; })[0], FOREIGN);
+    ok('an import that would pass ###### turns into bullets, not a flattened row',
+      /- Research/.test(gr.src) && /  - Interviews/.test(gr.src) && !/#######/.test(gr.src),
+      gr.src.split('###### f')[1]);
+
+    b = md.parse('# Host\n');
+    gr = edit.graft(b, b.root, '# Steps\n\n1. First\n2. Second\n\n- [ ] todo\n- [x] done\n');
+    ok('import keeps ordered markers and checkboxes',
+      /1\. First/.test(gr.src) && /- \[ \] todo/.test(gr.src) && /- \[x\] done/.test(gr.src), gr.src);
+
+    b = md.parse(HOST_MD);
+    gr = edit.graft(b, b.root, '');
+    ok('importing an empty note is refused, not silently applied', !!gr.error);
+
+    /* ---------------- diff classification ---------------- */
+    function branchOf(src2, label) {
+      var d2 = md.parse(src2);
+      return { doc: d2, node: d2.nodes.filter(function (n) { return n.text === label; })[0] };
+    }
+    var A = branchOf('# P\n## Build\n- API design\n- API docs\n- Database schema\n- Caching layer\n', 'Build');
+    var B = branchOf('# P\n## Build\n- API design and docs\n- Storage\n  - Database schema\n  - Caching layer\n', 'Build');
+    var cls = CG.diff.classify(A.node, B.node);
+    ok('a merged node is reported as merged, not deleted',
+      Object.keys(cls.byOld).some(function (k) {
+        return cls.byOld[k].from.text === 'API docs' && cls.byOld[k].state === 'merged';
+      }), JSON.stringify(cls.summary));
+    ok('a rename is reported as a rename', cls.summary.renamed === 1, JSON.stringify(cls.summary));
+    ok('re-parented leaves are reported as moved', cls.summary.moved === 2, JSON.stringify(cls.summary));
+    ok('a new grouping node is reported as added', cls.summary.added === 1, JSON.stringify(cls.summary));
+
+    var same = branchOf('# P\n## Build\n- API\n- DB\n', 'Build');
+    var same2 = branchOf('# P\n## Build\n- API\n- DB\n', 'Build');
+    var cls2 = CG.diff.classify(same.node, same2.node);
+    ok('an identical branch reports no change', cls2.summary.touched === 0, JSON.stringify(cls2.summary));
+    ok('describe says so in words', CG.diff.describe(cls2.summary) === 'Nothing would change.');
+
+    var del = branchOf('# P\n## Build\n- API\n', 'Build');
+    var cls3 = CG.diff.classify(same.node, del.node);
+    ok('a real deletion is reported as removed, not merged', cls3.summary.removed === 1 && cls3.summary.merged === 0,
+      JSON.stringify(cls3.summary));
+
+    /* ---------------- what the AI is allowed to hand back ---------------- */
+    var AIM = CG.ai;
+    ok('a fenced answer is unwrapped',
+      AIM.sanitizeOutline('```markdown\n# Plan\n## A\n- one\n```', 'T') === '# Plan\n## A\n- one');
+    ok('chat around the outline is trimmed',
+      AIM.sanitizeOutline('Sure! Here it is:\n\n# Plan\n- one\n\nLet me know!', 'T') === '# Plan\n- one');
+    ok('a missing centre is supplied from the note title',
+      AIM.sanitizeOutline('## A\n- one', 'My note').indexOf('# My note') === 0);
+    ok('several centres are demoted so exactly one remains',
+      (AIM.sanitizeOutline('# A\n- one\n# B\n- two', 'T').match(/^#[ \t]+\S/gm) || []).length === 1,
+      AIM.sanitizeOutline('# A\n- one\n# B\n- two', 'T'));
+    ok('an empty answer yields nothing, not a broken outline', AIM.sanitizeOutline('', 'T') === '');
+    ok('an answer with no structure at all yields nothing',
+      AIM.sanitizeOutline('I could not find any structure here.', 'T') === '');
+    ok('prose between nodes is left alone, being legitimate body',
+      AIM.strip('# A\n\nSome body text.\n\n- one').indexOf('Some body text.') >= 0);
+
+    /* ---------------- chunking a long note ---------------- */
+    var long = '# Big\n\n' + ['Alpha', 'Beta', 'Gamma', 'Delta'].map(function (h) {
+      return '## ' + h + '\n' + new Array(400).join('word ') + '\n';
+    }).join('\n');
+    var secs = AIM.splitSections(long, 1200);
+    ok('a long note is split on its own headings', secs.length > 1, 'sections=' + secs.length);
+    ok('no section is silently dropped',
+      secs.map(function (x) { return x.text; }).join('\n').indexOf('Delta') >= 0);
+    ok('a short note is not split', AIM.splitSections('# A\n- one\n', 1200).length === 1);
+
+    var fenced = '# A\n\n```\n## not a heading\n```\n\n## Real\n- x\n';
+    ok('a heading inside a code fence is not a split point',
+      AIM.splitSections(fenced, 20).every(function (x) { return x.text.indexOf('```') !== 0; }));
+
+    var joined = AIM.joinSections(['## One\n- a', '# Two\n- b'], 'Whole');
+    ok('joined sections sit under a single centre',
+      (joined.match(/^#[ \t]+\S/gm) || []).length === 1 &&
+      /^## One/m.test(joined) && /^## Two/m.test(joined), joined);
+
+    /* ---------------- the companion link ---------------- */
+    var link = CG.host.mapLink('abc-123', 'x');
+    ok('a map link carries the marker that makes it findable', link.indexOf('?via=cartograph') > 0, link);
+    ok('the map id can be read back out of a note', CG.host.mapIdIn('body\n\n' + link) === 'abc-123');
+    ok('an ordinary note link is not mistaken for a map link',
+      CG.host.mapIdIn('[Other](synapseresource://note/zzz)') === null);
+    ok('a map link parses as an ordinary node link too',
+      md.parse('- see ' + link).nodes.filter(function (n) { return n.links.length; }).length === 1);
+
     return results;
   }
 

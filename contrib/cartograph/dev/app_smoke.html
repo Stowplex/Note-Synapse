@@ -71,6 +71,18 @@ f.onload = function () {
 function byText(S, t) {
   return S.doc.nodes.filter(function (n) { return n.text === t; })[0];
 }
+function pick(W, sel, text) {
+  var all = Array.prototype.slice.call(W.document.querySelectorAll(sel));
+  for (var i = 0; i < all.length; i++) {
+    if ((all[i].textContent || '').indexOf(text) >= 0) return all[i];
+  }
+  return null;
+}
+function menuNamed(W, text) { return pick(W, '#sheet .menu-item', text); }
+function btnNamed(W, text) { return pick(W, '#sheet .btn', text); }
+function bbNamed(W, text) { return pick(W, '#bottombar .bb', text); }
+function sheetText(W) { return (W.document.querySelector('#sheet') || {}).textContent || ''; }
+function barText(W) { return (W.document.querySelector('#bottombar') || {}).textContent || ''; }
 function settle() { return new Promise(function (r) { setTimeout(r, 60); }); }
 
 function run(W) {
@@ -255,6 +267,152 @@ function run(W) {
       ok('the keyboard never re-fitted the map', S.k === S.__kBefore,
         'k ' + S.__kBefore + ' -> ' + S.k);
     });
+  }).then(function () {
+    /* =================================================================== */
+    /* v2: import, AI generation, AI refactor with a ghost preview          */
+    /* =================================================================== */
+    // Start from a known document so these do not depend on the edits above.
+    var V2 = ['# Plan', '', '## Build', '- API design', '- API docs',
+              '- Database schema', '- Caching layer', '', '## Ship', '- Beta', ''].join('\n');
+    W.CG.app.apply(V2);
+    return settle();
+  }).then(function () {
+
+    /* ---- import another note at a node ---- */
+    W.__CG_PICK__ = ['mock-note-2'];
+    var build = byText(S, 'Build');
+    W.CG.app._ops.importHere(build);
+    return settle().then(function () {
+      ok('the import sheet offers copy or link',
+        !!menuNamed(W, 'Copy it in') && !!menuNamed(W, 'Link to it instead'),
+        sheetText(W));
+      menuNamed(W, 'Copy it in').click();
+      return settle();
+    }).then(function () {
+      ok('the imported outline is grafted under the chosen node',
+        /## Build[\s\S]*Warm up[\s\S]*## Ship/.test(S.src), S.src);
+      ok('the import lands as a section, not a stray heading level',
+        /### Warm up/.test(S.src), S.src);
+      ok('the note still parses cleanly after an import', W.CG.md.coverageOf(S.src).length === 0);
+      W.CG.app.undo();
+      return settle();
+    });
+
+  }).then(function () {
+    ok('an import is one undo step', S.src.indexOf('Warm up') < 0, S.src);
+
+    /* ---- generate a map with AI ---- */
+    W.__CG_AI__ = ['# Plan\n\n## Build\n- API\n- Storage\n\n## Ship\n- Beta\n'];
+    W.CG.app._ops.generateForCurrentNote();
+    return new Promise(function (r) { setTimeout(r, 300); }).then(function () {
+      ok('the generated map is previewed before anything is written',
+        !!btnNamed(W, 'Save map') && !!btnNamed(W, 'Try again'), sheetText(W));
+      ok('the source note is untouched until you save', S.src.indexOf('via=cartograph') < 0);
+      btnNamed(W, 'Save map').click();
+      return new Promise(function (r2) { setTimeout(r2, 400); });
+    }).then(function () {
+      ok('the map is saved as a companion note',
+        Object.keys(W.__mockNotes()).some(function (k) {
+          return /— map$/.test(W.__mockNotes()[k].title);
+        }), Object.keys(W.__mockNotes()).map(function (k) { return W.__mockNotes()[k].title; }).join(', '));
+      ok('the source note gains exactly one map link',
+        (S.src.match(/via=cartograph/g) || []).length === 1, S.src.slice(-200));
+      ok('the map link is undoable like any other edit', S.undo.length > 0);
+    });
+
+  }).then(function () {
+    /* ---- regenerating replaces, it does not pile up ---- */
+    var before = Object.keys(W.__mockNotes()).length;
+    W.__CG_AI__ = ['# Plan\n\n## Build\n- API only\n'];
+    W.CG.app._ops.generateForCurrentNote();
+    return settle().then(function () {
+      ok('an existing map is noticed rather than duplicated',
+        !!menuNamed(W, 'Regenerate it') && !!menuNamed(W, 'Open the existing map'), sheetText(W));
+      menuNamed(W, 'Regenerate it').click();
+      return new Promise(function (r) { setTimeout(r, 300); });
+    }).then(function () {
+      btnNamed(W, 'Save map').click();
+      return new Promise(function (r) { setTimeout(r, 400); });
+    }).then(function () {
+      ok('regeneration creates no second map note',
+        Object.keys(W.__mockNotes()).length === before,
+        before + ' -> ' + Object.keys(W.__mockNotes()).length);
+      ok('regeneration adds no second link',
+        (S.src.match(/via=cartograph/g) || []).length === 1, S.src.slice(-200));
+      var mapId = W.CG.host.mapIdIn(S.src);
+      ok('the existing map note now holds the new outline',
+        W.__mockNotes()[mapId].content.indexOf('API only') >= 0, W.__mockNotes()[mapId].content);
+    });
+
+  }).then(function () {
+    /* ---- AI refactor: select, merge, preview, apply ---- */
+    var design = byText(S, 'API design'), docs = byText(S, 'API docs');
+    W.CG.app._ops.enterSelect(design.id);
+    S.multi[docs.id] = true;
+    W.CG.app.render();
+    return settle().then(function () {
+      ok('two nodes can be selected at once', Object.keys(S.multi).length === 2);
+      ok('the bar offers the operations that need a selection',
+        !!bbNamed(W, 'Merge') && !!bbNamed(W, 'Group'), barText(W));
+      W.__CG_AI__ = ['- API design and docs\n- Storage\n  - Database schema\n  - Caching layer\n'];
+      W.CG.app._ops.runOp('merge');
+      return new Promise(function (r) { setTimeout(r, 300); });
+    }).then(function () {
+      ok('a proposal is previewed rather than applied', !!S.ghost, 'no ghost was built');
+      ok('the note is not written while the preview is up',
+        S.src.indexOf('API design and docs') < 0, S.src);
+      ok('the preview says a node was merged', /merged/.test(S.ghost.headline), S.ghost.headline);
+      ok('the merged-away node is drawn as a ghost',
+        S.vt.all.some(function (v) { return v.kind === 'ghost' && /API docs/.test(v.text); }),
+        S.vt.all.map(function (v) { return v.kind + ':' + v.text; }).join(' | '));
+      ok('the new grouping node is marked as new',
+        Object.keys(S.ghost.cls.byNew).some(function (k) {
+          return S.ghost.cls.byNew[k].state === 'new' && S.ghost.cls.byNew[k].to.text === 'Storage';
+        }));
+      ok('only the chosen branch is in play',
+        S.ghost.src.indexOf('## Ship') >= 0 && S.ghost.src.indexOf('- Beta') >= 0, S.ghost.src);
+      W.CG.app._ops.applyGhost();
+      return settle();
+    }).then(function () {
+      ok('applying the proposal writes it to the note',
+        /- API design and docs/.test(S.src) && S.src.indexOf('- API docs\n') < 0, S.src);
+      ok('the rest of the note is untouched by the refactor',
+        /## Ship\n- Beta/.test(S.src), S.src);
+      ok('select mode ends once a proposal is applied', S.selectMode === false && !S.ghost);
+      ok('a refactor is one undo step', S.undo.length > 0);
+    });
+
+  }).then(function () {
+    /* ---- discarding a proposal changes nothing ---- */
+    var before = S.src;
+    var build = byText(S, 'Build');
+    W.__CG_AI__ = ['- Everything\n'];
+    W.CG.app._ops.runRefactor('regroup', build, []);
+    return new Promise(function (r) { setTimeout(r, 300); }).then(function () {
+      ok('a destructive proposal still previews first', !!S.ghost);
+      ok('the preview counts what would be lost', /removed|merged/.test(S.ghost.headline), S.ghost.headline);
+      W.CG.app._ops.discardGhost();
+      return settle();
+    }).then(function () {
+      ok('discarding leaves the note exactly as it was', S.src === before);
+    });
+
+  }).then(function () {
+    /* ---- the AI can answer badly, and that must not corrupt anything ---- */
+    var before = S.src;
+    var build = byText(S, 'Build');
+    W.__CG_AI__ = ['I am sorry, I cannot help with that.'];
+    W.CG.app._ops.runRefactor('regroup', build, []);
+    return new Promise(function (r) { setTimeout(r, 300); }).then(function () {
+      ok('an answer with no outline in it is refused', !S.ghost);
+      ok('a refused answer leaves the note untouched', S.src === before);
+      W.__CG_AI__ = [''];
+      W.CG.app._ops.runRefactor('regroup', byText(S, 'Build'), []);
+      return new Promise(function (r) { setTimeout(r, 300); });
+    }).then(function () {
+      ok('an empty answer is refused too', !S.ghost && S.src === before);
+    });
+
   }).then(function () {
     // ---- outline view renders the same tree
     var btn = W.document.querySelector('#viewToggle button[data-mode="outline"]');
