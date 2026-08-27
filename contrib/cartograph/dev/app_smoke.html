@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cartograph app smoke</title>
+<style>
+  body { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0; padding: 16px;
+         background: #0e1013; color: #e8eaf0; }
+  .row { padding: 3px 0; border-bottom: 1px solid #262b36; }
+  .pass::before { content: 'PASS '; color: #34d399; }
+  .fail::before { content: 'FAIL '; color: #f87171; }
+  .fail { color: #f87171; }
+  pre { color: #8b93a5; white-space: pre-wrap; margin: 4px 0 8px 40px; }
+  #sum { padding: 12px 0; font-size: 15px; font-weight: 700; }
+  iframe { position: fixed; right: 8px; bottom: 8px; width: 390px; height: 700px; border: 1px solid #262b36; border-radius: 12px; }
+</style>
+</head>
+<body>
+<div id="sum">running…</div>
+<div id="out"></div>
+<iframe id="f"></iframe>
+<script>
+var results = [];
+function ok(name, cond, detail) { results.push({ name: name, pass: !!cond, detail: cond ? '' : (detail || '') }); }
+
+var FIXTURE = [
+  '# Plan',
+  '',
+  '## Design',
+  '- Colors',
+  '  - Palette',
+  '- [ ] Typography',
+  '',
+  '```js',
+  'const keep = 1;',
+  '```',
+  '',
+  '## Build',
+  '1. API',
+  '2. DB',
+  ''
+].join('\n');
+
+var f = document.getElementById('f');
+f.src = '../plugins/cartograph.html?md=' + encodeURIComponent(FIXTURE);
+
+function waitFor(test, ms) {
+  return new Promise(function (res, rej) {
+    var t0 = Date.now();
+    (function poll() {
+      var v;
+      try { v = test(); } catch (e) { v = null; }
+      if (v) return res(v);
+      if (Date.now() - t0 > (ms || 4000)) return rej(new Error('timeout'));
+      setTimeout(poll, 30);
+    })();
+  });
+}
+
+f.onload = function () {
+  var W = f.contentWindow;
+  waitFor(function () { return W.CG && W.CG.app && W.CG.app.S.booted && W.CG.app.S.doc; })
+    .then(function () { return run(W); })
+    .then(report)
+    .catch(function (e) {
+      ok('harness booted', false, String(e && e.message || e));
+      report();
+    });
+};
+
+function byText(S, t) {
+  return S.doc.nodes.filter(function (n) { return n.text === t; })[0];
+}
+function settle() { return new Promise(function (r) { setTimeout(r, 60); }); }
+
+function run(W) {
+  var app = W.CG.app, S = app.S, ops = app._ops;
+
+  ok('the app booted with the fixture', S.src.indexOf('## Design') >= 0);
+  ok('nodes rendered on the map', Object.keys(S.els).length >= 8, 'els=' + Object.keys(S.els).length);
+  ok('a single H1 became the map centre', S.vt.root.text === 'Plan' && S.vt.root.isRoot === true);
+
+  // ---- add a child, then name it
+  var design = byText(S, 'Design');
+  S.selectedId = design.id;
+  ops.addChild(design);
+  return settle().then(function () {
+    ok('a new empty child was written into the markdown',
+      /- \[ \] Typography\n- \[ \] $/m.test(S.src) || /- \[ \] Typography\n- /.test(S.src), S.src);
+    ok('editing began on the new node', !!S.editingId);
+
+    // type into the live contenteditable, then commit with Enter
+    var field = S.els[S.editingId].querySelector('.label');
+    field.textContent = 'Spacing';
+    field.dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    return settle();
+  }).then(function () {
+    ok('the typed label reached the note', S.src.indexOf('Spacing') >= 0, S.src);
+    ok('a new item in a checklist is itself a task', /- \[ \] Spacing/.test(S.src), S.src);
+    ok('the code fence is untouched', S.src.indexOf('const keep = 1;') >= 0);
+    ok('Enter opened a following sibling', !!S.editingId);
+    // abandon the empty sibling
+    S.els[S.editingId].querySelector('.label').dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    return settle();
+  }).then(function () {
+    ok('abandoning a fresh node leaves no empty bullet', !/^[ \t]*- (\[[ x]\] )?$/m.test(S.src), S.src);
+    // ---- checkbox
+    var typo = byText(S, 'Typography');
+    ops.toggleCheck(typo);
+    return settle();
+  }).then(function () {
+    ok('ticking a task rewrites just that box', S.src.indexOf('- [x] Typography') >= 0, S.src);
+    var design = byText(S, 'Design');
+    var v = S.vt.byId[design.id];
+    ok('the branch rolls the task up', v && v.taskTotal >= 1 && v.taskDone >= 1, v ? v.taskDone + '/' + v.taskTotal : 'none');
+
+    // ---- indent / outdent
+    var spacing = byText(S, 'Spacing');
+    ops.indentNode(spacing);
+    return settle();
+  }).then(function () {
+    ok('indent nests under the bullet above', /- \[x\] Typography\n  - (\[ \] )?Spacing/.test(S.src), S.src);
+    ops.outdentNode(byText(S, 'Spacing'));
+    return settle();
+  }).then(function () {
+    ok('outdent lifts it back', /- \[x\] Typography\n- (\[ \] )?Spacing/.test(S.src), S.src);
+
+    // ---- reorder + ordered-list renumber
+    var db = byText(S, 'DB');
+    ops.nudge(db, -1);
+    return settle();
+  }).then(function () {
+    ok('moving an ordered item renumbers the run', /1\. DB\n2\. API/.test(S.src), S.src);
+
+    // ---- pin, and the sidecar it writes
+    var colors = byText(S, 'Colors');
+    S.pins[colors.id] = { x: 400, y: -150 };
+    W.CG.app.render();
+    return settle();
+  }).then(function () {
+    var box = S.boxes.get(byText(S, 'Colors').id);
+    ok('a pinned node is drawn at its pin', box && Math.round(box.x) === 400, box ? box.x : 'no box');
+    // force the sidecar to be written by making any edit
+    ops.toggleCheck(byText(S, 'Typography'));
+    return settle();
+  }).then(function () {
+    ok('the sidecar block was written into the note', S.src.indexOf('```synapse-cartograph') >= 0, S.src.slice(-260));
+    ok('the sidecar is one line of JSON',
+      /```synapse-cartograph\n\{[^\n]*\}\n```/.test(S.src), S.src.slice(S.src.indexOf('```synapse-cartograph')));
+
+    // ---- focus
+    var build = byText(S, 'Build');
+    ops.setFocus(build.id);
+    return settle();
+  }).then(function () {
+    ok('focus re-roots the map on that branch', S.vt.root.text === 'Build');
+    ok('focus is not written to the note', S.src.indexOf('focus') < 0);
+    ops.setFocus(null);
+    return settle();
+  }).then(function () {
+    // ---- search
+    S.query = 'api';
+    W.CG.app.render();
+    return settle();
+  }).then(function () {
+    var kept = S.vt.all.filter(function (v) { return v.keep; }).map(function (v) { return v.text; });
+    ok('search dims everything off the path', kept.indexOf('API') >= 0 && kept.indexOf('Colors') < 0, kept.join(','));
+    S.query = '';
+    W.CG.app.render();
+    return settle();
+  }).then(function () {
+    // ---- delete + undo
+    var before = S.src;
+    ops.removeNode(byText(S, 'Spacing'));
+    return settle().then(function () {
+      ok('delete removes the node', S.src.indexOf('Spacing') < 0, S.src);
+      W.CG.app.undo();
+      return settle().then(function () {
+        ok('undo restores it exactly', S.src === before, '\n--- before ---\n' + before + '\n--- after undo ---\n' + S.src);
+      });
+    });
+  }).then(function () {
+    // ---- the note was actually written through the bridge (writes are debounced)
+    return new Promise(function (r) { setTimeout(r, 900); }).then(function () {
+    return W.Synapse.runQuery("SELECT content FROM notes WHERE id = 'mock-note-1'").then(function (r) {
+      var stored = r.data[0].content;
+      ok('the host note received the edits', stored.indexOf('Spacing') >= 0 && stored.indexOf('const keep = 1;') >= 0,
+        stored.slice(0, 300));
+    }); });
+  }).then(function () {
+    /*
+     * The on-screen keyboard must never cover the node being edited.
+     *
+     * Shrinking the frame is what Android does to the layout viewport when the
+     * keyboard opens, and it moves visualViewport the same way iOS does.
+     *
+     * Assertions use CG.app.nodeScreenRect(), the app's own geometry, rather
+     * than getBoundingClientRect(): headless Chrome under --virtual-time-budget
+     * never advances CSS transitions, so a painted rect stays frozen at the
+     * start of the transition even though the transform has been set.
+     */
+    var colors = byText(S, 'Colors');
+    S.selectedId = colors.id;
+    W.CG.app.render();
+    return settle().then(function () {
+      // park the node low in the frame, where a keyboard would swallow it
+      var box = S.boxes.get(colors.id);
+      S.ty = (f.clientHeight - 110) - (box.y + box.h / 2) * S.k;
+      W.CG.app.applyTransform();
+      W.CG.app._ops.beginEdit(colors.id);
+      return settle();
+    }).then(function () {
+      ok('editing began on the low node', S.editingId === colors.id, 'editingId=' + S.editingId);
+      var r = W.CG.app.nodeScreenRect(S.editingId);
+      var vis = W.CG.app.visibleRect();
+      ok('the node starts near the bottom of the frame', r.bottom > vis.bottom - 40,
+        'node bottom=' + Math.round(r.bottom) + ' visible bottom=' + Math.round(vis.bottom));
+      S.__tyBefore = S.ty;
+      S.__kBefore = S.k;
+      f.style.height = '360px';           // keyboard opens
+      return new Promise(function (r2) { setTimeout(r2, 1400); });
+    }).then(function () {
+      var vis = W.CG.app.visibleRect();
+      var r = W.CG.app.nodeScreenRect(S.editingId);
+      ok('the map was lifted when the keyboard opened',
+        Math.abs(S.ty - S.__tyBefore) > 40, 'ty ' + Math.round(S.__tyBefore) + ' -> ' + Math.round(S.ty));
+      ok('the edited node ends up above the keyboard',
+        r.bottom <= vis.bottom + 1 && r.top >= vis.top - 1,
+        'node=' + Math.round(r.top) + '..' + Math.round(r.bottom) + '  visible=' + Math.round(vis.top) + '..' + Math.round(vis.bottom));
+      ok('the correction has settled, with nothing left to move',
+        W.CG.app.keepEditingVisible() === false, 'a further correction was still pending');
+      ok('the visible band excludes the action bar',
+        vis.bottom < f.contentWindow.innerHeight - 20,
+        'visBottom=' + Math.round(vis.bottom) + ' innerHeight=' + f.contentWindow.innerHeight);
+
+      // typing more text grows the card; it must stay visible
+      var field = S.els[S.editingId].querySelector('.label');
+      field.textContent = 'Colour palette and the full type scale for every surface we ship';
+      field.dispatchEvent(new W.Event('input', { bubbles: true }));
+      return new Promise(function (r2) { setTimeout(r2, 700); });
+    }).then(function () {
+      var vis = W.CG.app.visibleRect();
+      var r = W.CG.app.nodeScreenRect(S.editingId);
+      ok('a card that grows while typing stays visible',
+        r.bottom <= vis.bottom + 1 && r.top >= vis.top - 1,
+        'node=' + Math.round(r.top) + '..' + Math.round(r.bottom) + '  visible=' + Math.round(vis.top) + '..' + Math.round(vis.bottom));
+      ok('the grown card is taller than one line', r.height > 20, 'h=' + Math.round(r.height));
+      S.els[S.editingId].querySelector('.label')
+        .dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      f.style.height = '700px';           // keyboard closes
+      return new Promise(function (r2) { setTimeout(r2, 300); });
+    }).then(function () {
+      // A keyboard is a height-only resize; re-fitting on one would throw away
+      // the frame the reader was typing into.
+      ok('the keyboard never re-fitted the map', S.k === S.__kBefore,
+        'k ' + S.__kBefore + ' -> ' + S.k);
+    });
+  }).then(function () {
+    // ---- outline view renders the same tree
+    var btn = W.document.querySelector('#viewToggle button[data-mode="outline"]');
+    btn.click();
+    return settle().then(function () {
+      var rows = W.document.querySelectorAll('#ol-list .ol-row');
+      ok('the outline lists every node', rows.length === S.vt.all.length, rows.length + ' vs ' + S.vt.all.length);
+    });
+  });
+}
+
+function report() {
+  var out = document.getElementById('out');
+  var fails = 0;
+  results.forEach(function (r) {
+    if (!r.pass) fails++;
+    var d = document.createElement('div');
+    d.className = 'row ' + (r.pass ? 'pass' : 'fail');
+    d.textContent = r.name;
+    out.appendChild(d);
+    if (!r.pass && r.detail) { var p = document.createElement('pre'); p.textContent = r.detail; out.appendChild(p); }
+  });
+  var sum = (results.length - fails) + '/' + results.length + ' app assertions passed';
+  document.getElementById('sum').textContent = sum;
+  document.title = fails ? 'APP FAIL ' + sum : 'APP OK ' + sum;
+}
+</script>
+</body>
+</html>
