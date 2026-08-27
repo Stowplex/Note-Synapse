@@ -63,12 +63,15 @@ The starter apps are already installed; there is nothing to import for those.
   and annotated screenshots saved back to the note.
 - **yt-fetcher** — adds one AI tool, `fetch_youtube_data`, that pulls a YouTube
   video's transcript (English and Chinese) into a conversation.
-- **cartograph** *(bundled starter app)* — turn the current note into an
-  editable mind map, with no AI involved: headings and bullets become branches,
-  and every change on the map is written straight back into the note's
-  markdown. Drag nodes to re-nest or pin them, flip between map and outline,
-  focus a branch, search and filter, roll up checkbox progress, and attach,
-  create or promote notes from any node.
+- **cartograph** *(two bundled starter apps)* — turn a note into an editable
+  mind map: headings and bullets become branches, and every change on the map is
+  written straight back into the note's markdown. Drag nodes to re-nest or pin
+  them, flip between map and outline, focus a branch, search and filter, roll up
+  checkbox progress, and attach, create, import or promote notes from any node.
+  Optionally generates a map with AI into a companion note, and reshapes
+  branches with AI behind a preview you approve. Ships as **Cartograph**
+  (standalone, with a home screen of your maps) and **Cartograph: this note**
+  (the note action).
 - **table-studio** *(bundled starter app)* — edit the tables in your notes with
   a fluid touch spreadsheet: markdown pipe tables in the note body as well as
   `.csv`/`.tsv`/`.xlsx`/`.ods` attachments, with undo, column alignment,

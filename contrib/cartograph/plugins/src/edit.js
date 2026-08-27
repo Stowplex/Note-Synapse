@@ -248,6 +248,104 @@
     return splices.length ? applySplices(doc.src, splices) : doc.src;
   };
 
+  /* ---------------------------------------------------------------- graft */
+
+  function repeat(ch, n) { return n > 0 ? new Array(n + 1).join(ch) : ''; }
+
+  // Strip a block's own common indent, then re-indent it to `indent`.
+  function reindentBlock(raw, indent) {
+    var lines = raw.replace(/\s+$/, '').split('\n');
+    var min = null;
+    lines.forEach(function (l) {
+      if (!l.trim()) return;
+      var w = MD.indentWidth(/^[ \t]*/.exec(l)[0]);
+      if (min === null || w < min) min = w;
+    });
+    if (min === null) min = 0;
+    return lines.map(function (l) {
+      if (!l.trim()) return '';
+      var ws = /^[ \t]*/.exec(l)[0];
+      return repeat(' ', Math.max(0, MD.indentWidth(ws) - min) + indent) + l.slice(ws.length);
+    }).join('\n');
+  }
+
+  /*
+   * Re-shape a foreign outline so it can live under `target`.
+   *
+   * A heading can only stay a heading while there is heading depth left and the
+   * target itself is a section. Once either runs out - the target is a bullet,
+   * or the level would pass `######` - everything from there down becomes
+   * bullets, nested by indent. Clamping at `######` instead would silently
+   * flatten a deep import into a row of siblings.
+   */
+  ED.reshape = function (fdoc, roots, target) {
+    var startLevel = null, baseIndent = 0;
+    if (target.kind === 'root') startLevel = 1;
+    else if (target.kind === 'heading') startLevel = Math.min(6, target.level + 1);
+    else baseIndent = target.contentIndent;
+    if (target.kind === 'heading' && target.level >= 6) startLevel = null;
+
+    var out = [];
+
+    function emit(n, ctx) {
+      var asHeading = ctx.headingLevel !== null && n.kind === 'heading';
+      var line, childCtx, bodyIndent;
+      if (asHeading) {
+        if (out.length) out.push('');   // a heading wants air above it
+        line = repeat('#', ctx.headingLevel) + ' ' + n.text;
+        bodyIndent = 0;
+        childCtx = {
+          headingLevel: ctx.headingLevel + 1 <= 6 ? ctx.headingLevel + 1 : null,
+          indent: ctx.indent
+        };
+      } else {
+        var box = n.checked === null ? '' : (n.checked ? '[x] ' : '[ ] ');
+        var marker = (n.marker && /\d/.test(n.marker)) ? n.marker : '-';
+        line = repeat(' ', ctx.indent) + marker + ' ' + box + n.text;
+        bodyIndent = ctx.indent + 2;
+        childCtx = { headingLevel: null, indent: ctx.indent + 2 };
+      }
+      out.push(line);
+      for (var b = 0; b < n.body.length; b++) {
+        var raw = fdoc.src.slice(n.body[b].start, n.body[b].end);
+        out.push('');
+        out.push(reindentBlock(raw, bodyIndent));
+      }
+      for (var c = 0; c < n.children.length; c++) emit(n.children[c], childCtx);
+    }
+
+    var ctx0 = { headingLevel: startLevel, indent: baseIndent };
+    for (var i = 0; i < roots.length; i++) emit(roots[i], ctx0);
+    return out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/\s+$/, '');
+  };
+
+  // The part of a foreign note worth importing: its single `#` title branch if
+  // it has one, otherwise everything at the top level.
+  ED.graftRoots = function (fdoc) {
+    var kids = fdoc.root.children;
+    if (kids.length === 1 && kids[0].kind === 'heading') return [kids[0]];
+    return kids;
+  };
+
+  ED.graft = function (doc, target, foreignMarkdown) {
+    var fdoc = MD.parse(String(foreignMarkdown == null ? '' : foreignMarkdown));
+    var roots = ED.graftRoots(fdoc);
+    if (!roots.length) return { src: doc.src, error: 'that note has nothing to import' };
+    var block = ED.reshape(fdoc, roots, target);
+    if (!block.trim()) return { src: doc.src, error: 'that note has nothing to import' };
+    var at = ED.childInsertOffset(doc, target, null);
+    var prefix = '';
+    if (at > 0) {
+      if (doc.src.charAt(at - 1) !== '\n') prefix = '\n';
+      // An imported section reads badly welded to the line above it.
+      if (block.charAt(0) === '#' && doc.src.charAt(at - 2) !== '\n') prefix += '\n';
+    }
+    return {
+      src: applySplices(doc.src, [{ start: at, end: at, text: prefix + block + '\n' }]),
+      error: null
+    };
+  };
+
   /* -------------------------------------------------------------- sidecar */
 
   ED.writeSidecar = function (doc, text) {

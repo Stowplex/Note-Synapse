@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 
 SOURCE="cartograph.html"
 OUTPUT="Cartograph.yaml"
-MODULES=(md edit sidecar layout view host app)
+MODULES=(md edit sidecar layout view diff ai host app)
 TMP_HTML="$(mktemp)"
 trap 'rm -f "$TMP_HTML"' EXIT
 
@@ -32,15 +32,29 @@ done < "$SOURCE" > "$TMP_HTML"
 # GNU base64 wraps by default while macOS base64 does not.
 CODE="$(base64 < "$TMP_HTML" | tr -d '\n')"
 
-{
-  printf '%s\n' \
-    'name: Cartograph' \
-    'uuid: 96d13a4a-3c59-4e2c-9522-0dfee4101da0' \
-    'app_type: note_action' \
-    'description: Turns the current note into an editable mind map, with no AI - headings and bullets become branches, and every change you make on the map is written straight back into the note markdown. Drag to re-nest or pin, flip between map and outline, focus a branch, search and filter, roll up checkbox progress, and attach, create or promote notes from any node.' \
-    'author: Bruce Li' \
-    'license: Apache-2.0'
-  printf 'code: %s\n' "$CODE"
-} > "$OUTPUT"
+DESC='Turns a note into an editable mind map - headings and bullets become branches, and every change on the map is written straight back into the note markdown. Drag to re-nest or pin, flip between map and outline, focus a branch, search and filter, and roll up checkbox progress. Generates a map with AI into a companion note, imports another note as a branch, and reshapes branches with AI behind a preview you approve.'
 
-echo "Wrote $OUTPUT ($(wc -c < "$TMP_HTML" | tr -d ' ') bytes of HTML)"
+# The same HTML ships twice. A `normal` launch arrives with no note and shows
+# the standalone home; a `note_action` launch arrives with one and maps it. The
+# app tells them apart at runtime, so there is no build flag and no code fork.
+# Names and descriptions are emitted as double-quoted YAML scalars. "Cartograph:
+# this note" contains a colon, which is a mapping indicator in a plain scalar
+# and makes the whole file unparseable.
+yq() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+
+emit() {
+  {
+    printf 'name: "%s"\n' "$(yq "$1")"
+    printf 'uuid: %s\n' "$2"
+    printf 'app_type: %s\n' "$3"
+    printf 'description: "%s"\n' "$(yq "$DESC")"
+    printf '%s\n' 'author: Bruce Li' 'license: Apache-2.0'
+    printf 'code: %s\n' "$CODE"
+  } > "$4"
+  echo "Wrote $4"
+}
+
+emit 'Cartograph'            '00713e85-2847-4a4a-9d73-c1685136e0b6' 'normal'      'Cartograph.yaml'
+emit 'Cartograph: this note' '96d13a4a-3c59-4e2c-9522-0dfee4101da0' 'note_action' 'Cartograph_This_Note.yaml'
+
+echo "($(wc -c < "$TMP_HTML" | tr -d ' ') bytes of HTML)"

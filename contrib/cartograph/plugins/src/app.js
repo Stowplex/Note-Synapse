@@ -22,7 +22,8 @@
     undo: [], redo: [], noteCache: {}, embedded: false, isBlockScope: false,
     baseline: '', saveTimer: null, saveState: '', pendingNoteFetch: {},
     tx: 0, ty: 0, k: 1, boxes: null, els: {}, edgeEls: [], fresh: {},
-    editingId: null, booted: false
+    editingId: null, booted: false,
+    selectMode: false, multi: {}, ghost: null, home: null, standalone: false, recents: []
   };
   CG.state = S;
 
@@ -246,6 +247,12 @@
   function nodeClasses(v, depth) {
     var c = ['cg-node', 'k-' + (v.isRoot ? 'root' : v.kind), 'd' + Math.min(depth, 6)];
     if (depth >= 3) c.push('deep');
+    if (S.ghost) {
+      var g = v.kind === 'ghost' ? { state: v.ghostState } : (S.ghost.cls.byNew[v.id] || null);
+      if (g && g.state && g.state !== 'kept') c.push('g-' + g.state);
+      else if (g) c.push('g-kept');
+    }
+    if (S.multi[v.id]) c.push('multi');
     if (v.id === S.selectedId) c.push('sel');
     if (S.vt.filtering && v.matched) c.push('match');
     if (S.vt.filtering && !v.keep) c.push('dim');
@@ -579,6 +586,41 @@
     if (animate) setTimeout(function () { elStage.style.transition = 'none'; }, 320);
   }
 
+  /*
+   * Frame one branch rather than the whole map. After a proposal or an import,
+   * the thing worth looking at is the part that changed - centring the root
+   * instead can leave it off the side of the screen entirely.
+   */
+  function fitBranch(viewId, animate) {
+    if (!S.boxes) return fit(animate);
+    var v = S.vt.byId[viewId];
+    if (!v) return fit(animate);
+    var b = null;
+    (function walk(x) {
+      var bx = S.boxes.get(x.id);
+      if (bx) {
+        if (!b) b = { x0: bx.x, y0: bx.y, x1: bx.x + bx.w, y1: bx.y + bx.h };
+        else {
+          b.x0 = Math.min(b.x0, bx.x); b.y0 = Math.min(b.y0, bx.y);
+          b.x1 = Math.max(b.x1, bx.x + bx.w); b.y1 = Math.max(b.y1, bx.y + bx.h);
+        }
+      }
+      for (var i = 0; i < x.children.length; i++) walk(x.children[i]);
+    })(v);
+    if (!b) return fit(animate);
+
+    var pad = 30;
+    var vis = visibleRect();
+    var w = Math.max(1, b.x1 - b.x0), h = Math.max(1, b.y1 - b.y0);
+    S.k = clamp(Math.min((vis.width - pad * 2) / w, (vis.height - pad * 2) / h, 1.2), 0.15, 3);
+    S.tx = (vis.left + vis.right) / 2 - vis.originLeft - (b.x0 + w / 2) * S.k;
+    S.ty = (vis.top + vis.bottom) / 2 - vis.originTop - (b.y0 + h / 2) * S.k;
+    S.userMoved = true;
+    elStage.style.transition = animate ? 'transform .3s cubic-bezier(.22,.61,.36,1)' : 'none';
+    applyTransform();
+    if (animate) setTimeout(function () { elStage.style.transition = 'none'; }, 320);
+  }
+
   function screenToStage(px, py) {
     var r = elViewport.getBoundingClientRect();
     return { x: (px - r.left - S.tx) / S.k, y: (py - r.top - S.ty) / S.k };
@@ -633,12 +675,24 @@
   /* ===================================================================== */
 
   function render() {
+    var homeEl = $('#home');
+    document.body.classList.toggle('ghosting', !!S.ghost);
+    document.body.classList.toggle('mapping', !S.home);
+    if (S.home) { renderHome(); return; }
+    if (homeEl) homeEl.classList.remove('on');
     // While filtering, collapse is ignored so every path to a match is open.
     var filtering = !!(S.query || '').trim() || !!S.filters.status || !!S.filters.hasNote || !!S.filters.tag;
-    S.vt = view.build(S.doc, {
-      title: S.title, collapsed: filtering ? {} : S.collapsed, focusId: S.focusId,
-      query: S.query, filters: S.filters, noteCache: S.noteCache
+    // A ghost preview draws the PROPOSED tree, never the current one.
+    var doc = S.ghost ? S.ghost.doc : S.doc;
+    S.vt = view.build(doc, {
+      title: S.title,
+      collapsed: S.ghost ? {} : (filtering ? {} : S.collapsed),
+      focusId: S.ghost ? null : S.focusId,
+      query: S.ghost ? '' : S.query,
+      filters: S.ghost ? {} : S.filters,
+      noteCache: S.noteCache
     });
+    if (S.ghost) injectGhostNodes();
     if (S.mode === 'map') renderMap(); else renderOutline();
     renderCrumbs();
     renderBottomBar();
@@ -693,7 +747,15 @@
     down: '<svg viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg>',
     task: '<svg viewBox="0 0 24 24"><path d="M4 7h4v4H4zM4 15h4v4H4z"/><path d="M11 9h9M11 17h9"/></svg>',
     unpin: '<svg viewBox="0 0 24 24"><path d="M9 4h6l-1 6 4 4H6l4-4z"/><path d="M12 14v6"/></svg>',
-    trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>'
+    trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>',
+    select: '<svg viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 011-1h3M20 8V5a1 1 0 00-1-1h-3M4 16v3a1 1 0 001 1h3M20 16v3a1 1 0 01-1 1h-3"/><path d="M9 12l2 2 4-4"/></svg>',
+    ai: '<svg viewBox="0 0 24 24"><path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M18 15l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg>',
+    merge: '<svg viewBox="0 0 24 24"><path d="M7 4v5a4 4 0 004 4h6M17 4v5a4 4 0 01-4 4"/><path d="M14 10l3 3-3 3"/></svg>',
+    group: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><path d="M12 14v3a1 1 0 01-1 1H4M12 14v3a1 1 0 001 1h7"/></svg>',
+    apply: '<svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg>',
+    close: '<svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+    home: '<svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7"/><path d="M6 10v9a1 1 0 001 1h10a1 1 0 001-1v-9"/></svg>',
+    map: '<svg viewBox="0 0 24 24"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg>'
   };
 
   function bb(label, icon, cls, fn) {
@@ -711,8 +773,35 @@
   }
 
   function renderBottomBar() {
-    var v = selectedView();
     elBottom.textContent = '';
+
+    elBottom.classList.toggle('ghost', !!S.ghost);
+    if (S.ghost) {
+      elBottom.classList.add('open');
+      var note = document.createElement('div');
+      note.className = 'bb-note';
+      note.textContent = S.ghost.headline;
+      elBottom.appendChild(note);
+      elBottom.appendChild(bb('Apply', ICONS.apply, 'accent', applyGhost));
+      elBottom.appendChild(bb('Discard', ICONS.close, 'danger', discardGhost));
+      return;
+    }
+
+    if (S.selectMode) {
+      elBottom.classList.add('open');
+      var n = Object.keys(S.multi).length;
+      var count = document.createElement('div');
+      count.className = 'bb-note';
+      count.textContent = n ? n + ' selected' : 'Tap nodes to select';
+      elBottom.appendChild(count);
+      elBottom.appendChild(bb('Merge', ICONS.merge, n >= 2 ? 'accent' : 'off', function () { runOp('merge'); }));
+      elBottom.appendChild(bb('Group', ICONS.group, n >= 2 ? 'accent' : 'off', function () { runOp('group'); }));
+      elBottom.appendChild(bb('Split', ICONS.ai, n >= 1 ? '' : 'off', function () { runOp('split'); }));
+      elBottom.appendChild(bb('Done', ICONS.close, '', exitSelect));
+      return;
+    }
+
+    var v = selectedView();
     if (!v || S.embedded) { elBottom.classList.remove('open'); return; }
     elBottom.classList.add('open');
 
@@ -786,6 +875,7 @@
     var doc = selectedDoc();
     if (!doc) return;
     openSheet('Notes', function (body) {
+      menuItem(body, 'Import a map here', 'Bring another note\u2019s outline in under this node', ICONS.indent, '', function () { importHere(doc); });
       menuItem(body, 'Attach an existing note', 'Pick a note and hang it off this node', ICONS.note, '', function () { attachExisting(doc); });
       menuItem(body, 'Create a note here', 'A new note titled “' + md.plainText(doc.text).slice(0, 28) + '”', ICONS.child, '', function () { createNoteHere(doc); });
       if (doc.children.length) {
@@ -799,6 +889,10 @@
     var doc = v && v.ref;
     if (!doc) return;
     openSheet(md.plainText(doc.text).slice(0, 40) || 'Node', function (body) {
+      menuItem(body, 'Select several nodes', 'Then merge or group them', ICONS.select, '', function () { enterSelect(v.id); });
+      if (doc.children.length) {
+        menuItem(body, 'Reshape this branch with AI', 'Regroup, or tidy the wording', ICONS.ai, '', function () { aiMenu(doc, null); });
+      }
       if (doc.children.length) {
         menuItem(body, v.collapsed ? 'Expand branch' : 'Collapse branch', null, ICONS.more, '', function () {
           if (v.collapsed) delete S.collapsed[doc.id]; else S.collapsed[doc.id] = true;
@@ -1305,7 +1399,8 @@
     if (g.type === 'node') {
       if (Math.hypot(e.clientX - g.x0, e.clientY - g.y0) < 9) return;
       var v = S.vt.byId[g.id];
-      if (!v || v.kind === 'note' || v.isRoot || (v.ref && v.ref.kind === 'root') || S.embedded) { g.moved = true; return; }
+      if (!v || v.kind === 'note' || v.kind === 'ghost' || v.isRoot ||
+          (v.ref && v.ref.kind === 'root') || S.embedded || S.selectMode || S.ghost) { g.moved = true; return; }
       var box = S.boxes.get(g.id);
       g.type = 'drag';
       g.moved = true;
@@ -1375,6 +1470,13 @@
     if (gg.type === 'node') {
       var vv = S.vt.byId[gg.id];
       if (!vv) return;
+      if (S.ghost) return;
+      if (S.selectMode) {
+        if (vv.kind === 'note' || vv.kind === 'ghost' || !vv.ref || vv.ref.kind === 'root') return;
+        if (S.multi[gg.id]) delete S.multi[gg.id]; else S.multi[gg.id] = true;
+        render();
+        return;
+      }
       if (gg.check && vv.ref) { toggleCheck(vv.ref); return; }
       if (S.selectedId === gg.id && !S.embedded) { beginEdit(gg.id); return; }
       S.selectedId = gg.id;
@@ -1400,6 +1502,518 @@
       syncSidecar(); scheduleSave(); render();
       toast('Pinned — drag it onto a node to re-nest, or unpin from More');
     }
+  }
+
+  /* ===================================================================== */
+  /* multi-select                                                           */
+  /* ===================================================================== */
+
+  function enterSelect(seedId) {
+    S.selectMode = true;
+    S.multi = {};
+    if (seedId) S.multi[seedId] = true;
+    S.editingId = null;
+    render();
+    toast('Tap nodes to select. Drag is off while selecting.');
+  }
+
+  function exitSelect() {
+    S.selectMode = false;
+    S.multi = {};
+    render();
+  }
+
+  function multiDocNodes() {
+    var out = [];
+    Object.keys(S.multi).forEach(function (id) {
+      var v = S.vt.byId[id];
+      if (v && v.ref && v.kind !== 'note' && v.kind !== 'ghost') out.push(v.ref);
+    });
+    return out;
+  }
+
+  // Lowest common ancestor - the smallest branch that contains every target,
+  // and therefore the only part of the note an operation may rewrite.
+  function lcaOf(nodes) {
+    if (!nodes.length) return null;
+    var chains = nodes.map(function (n) {
+      var c = [];
+      for (var x = n; x; x = x.parent) c.unshift(x);
+      return c;
+    });
+    var lca = chains[0][0];
+    for (var i = 0; ; i++) {
+      var cand = chains[0][i];
+      if (!cand) break;
+      var all = chains.every(function (c) { return c[i] === cand; });
+      if (!all) break;
+      lca = cand;
+    }
+    // A target cannot also be the scope, or it would be asked to rewrite itself.
+    while (lca && nodes.indexOf(lca) >= 0 && lca.parent) lca = lca.parent;
+    return lca;
+  }
+
+  /* ===================================================================== */
+  /* AI refactor                                                            */
+  /* ===================================================================== */
+
+  function aiMenu(scopeDoc, targets) {
+    openSheet('Reshape with AI', function (body) {
+      menuItem(body, 'Regroup this branch', 'Let related items find each other', ICONS.group, '', function () {
+        runRefactor('regroup', scopeDoc, []);
+      });
+      menuItem(body, 'Tidy the labels', 'Consistent wording, same structure', ICONS.ai, '', function () {
+        runRefactor('tidy', scopeDoc, []);
+      });
+      if (targets && targets.length) {
+        menuItem(body, 'Merge the selected nodes', null, ICONS.merge, '', function () {
+          runRefactor('merge', scopeDoc, targets);
+        });
+      }
+    });
+  }
+
+  function runOp(op) {
+    var targets = multiDocNodes();
+    var need = op === 'split' ? 1 : 2;
+    if (targets.length < need) return toast('Select at least ' + need + ' node' + (need > 1 ? 's' : '') + ' first');
+    var scope = lcaOf(targets);
+    if (!scope) return toast('Those nodes have nothing in common to work within');
+    runRefactor(op, scope, targets);
+  }
+
+  function countBodies(node) {
+    var n = 0;
+    (function walk(x) { n += x.body.length; for (var i = 0; i < x.children.length; i++) walk(x.children[i]); })(node);
+    return n;
+  }
+
+  function runRefactor(op, scope, targets) {
+    if (!scope.children.length) return toast('There is nothing inside this branch to reshape');
+    var branch = S.doc.src.slice(scope.self.end, scope.outer.end);
+    var prompt = CG.ai.refactorPrompt(
+      op,
+      md.plainText(scope.text) || S.title,
+      dedentBranch(branch, scope),
+      (targets || []).map(function (n) { return md.plainText(n.text); })
+    );
+    if (!prompt) return toast('Unknown operation');
+
+    var scopePath = indexPath(scope);
+    busy(CG.ai.OPS[op].label + '…');
+    host.ai(prompt).then(function (text) {
+      var body = CG.ai.strip(text);
+      if (!body) throw new Error('the AI did not return an outline');
+      var fdoc = md.parse(body);
+      if (!fdoc.root.children.length) throw new Error('the AI did not return an outline');
+      var block = edit.reshape(fdoc, fdoc.root.children, scope);
+      if (!block.trim()) throw new Error('the AI returned nothing usable');
+      var proposed = edit.applySplices(S.doc.src, [
+        { start: scope.self.end, end: scope.outer.end, text: block + '\n' }
+      ]);
+      buildGhost(proposed, scopePath, scope, op);
+      busy(null);
+      render();
+      var shown = nodeAtPath(S.ghost.doc, scopePath);
+      requestAnimationFrame(function () { fitBranch(shown ? shown.id : S.vt.root.id, true); });
+    }).catch(function (e) {
+      busy(null);
+      toast(String((e && e.message) || e).slice(0, 140));
+    });
+  }
+
+  function buildGhost(proposedSrc, scopePath, scopeNode, op) {
+    var doc = md.parse(proposedSrc, { title: S.title });
+    var newScope = nodeAtPath(doc, scopePath) || doc.root;
+    var cls = CG.diff.classify(scopeNode, newScope);
+    var lost = countBodies(scopeNode) - countBodies(newScope);
+    var headline = CG.diff.describe(cls.summary);
+    if (lost > 0) headline += ' · ' + lost + ' block' + (lost > 1 ? 's' : '') + ' of text dropped';
+    S.ghost = {
+      doc: doc, src: proposedSrc, cls: cls, op: op,
+      scopePath: scopePath, headline: headline, lost: lost,
+      nothing: cls.summary.touched === 0 && lost === 0
+    };
+  }
+
+  /*
+   * Nodes the proposal drops do not exist in the proposed tree, so they are
+   * grafted onto the VIEW as ghosts - hung off whichever node absorbed them, or
+   * off their old parent's replacement - purely so you can see what would go.
+   */
+  function injectGhostNodes() {
+    var cls = S.ghost.cls;
+    Object.keys(cls.byOld).forEach(function (oldId) {
+      var e = cls.byOld[oldId];
+      if (e.state !== 'removed' && e.state !== 'merged') return;
+      var anchorId = null;
+      if (e.state === 'merged' && e.into) anchorId = e.into.id;
+      if (!anchorId) {
+        var op = e.from.parent;
+        var pe = op && cls.byOld[op.id];
+        if (pe && pe.to) anchorId = pe.to.id;
+      }
+      var anchor = S.vt.byId[anchorId] || S.vt.root;
+      if (!anchor) return;
+      var g = {
+        id: 'ghost:' + oldId, kind: 'ghost', ghostState: e.state, text: e.from.text,
+        ref: null, noteId: null, noteTitle: '', notePreview: '', level: 0, checked: null,
+        children: [], parent: anchor, hasBody: false, bodyTypes: [], taskDone: 0, taskTotal: 0,
+        matched: false, keep: true, tags: [], links: [], collapsed: false, hiddenCount: 0
+      };
+      anchor.children.push(g);
+      S.vt.byId[g.id] = g;
+      S.vt.all.push(g);
+    });
+  }
+
+  function applyGhost() {
+    var g = S.ghost;
+    if (!g) return;
+    S.ghost = null;
+    S.selectMode = false;
+    S.multi = {};
+    S.selectedId = null;
+    apply(g.src);
+    toast(CG.ai.OPS[g.op].label + ' applied — undo in the top bar');
+  }
+
+  function discardGhost() {
+    S.ghost = null;
+    render();
+    requestAnimationFrame(function () { fit(true); });
+  }
+
+  /* ===================================================================== */
+  /* import                                                                 */
+  /* ===================================================================== */
+
+  function importHere(target) {
+    var path = indexPath(target);
+    host.pickNotes({ multiple: false }).then(function (notes) {
+      if (!notes.length) return;
+      var picked = notes[0];
+      return host.readNotes([picked.id]).then(function (rows) {
+        if (!rows.length) return toast('Could not read that note');
+        var source = rows[0];
+        openSheet('Import “' + (source.title || 'note') + '”', function (body) {
+          var p = document.createElement('p');
+          p.textContent = 'Bring its outline in under “' +
+            (md.plainText(target.text).slice(0, 40) || 'this node') + '”.';
+          body.appendChild(p);
+          menuItem(body, 'Copy it in', 'Its headings and bullets become part of this note', ICONS.indent, '', function () {
+            var node = nodeAtPath(S.doc, path) || target;
+            var r = edit.graft(S.doc, node, stripSidecar(source.content));
+            if (r.error) return toast(r.error);
+            var landed = applyAt(r.src, path);
+            if (landed) requestAnimationFrame(function () { fitBranch(landed.id, true); });
+            toast('Imported “' + (source.title || 'note') + '”');
+          });
+          menuItem(body, 'Link to it instead', 'A card that opens the note, kept in sync', ICONS.note, '', function () {
+            var node = nodeAtPath(S.doc, path) || target;
+            applyAt(edit.appendBodyLine(S.doc, node, noteLinkFor(source.id, source.title)), path);
+            toast('Linked “' + (source.title || 'note') + '”');
+          });
+        });
+      });
+    });
+  }
+
+  function stripSidecar(content) {
+    var d = md.parse(String(content == null ? '' : content));
+    return edit.writeSidecar(d, null);
+  }
+
+  /* ===================================================================== */
+  /* AI generation                                                          */
+  /* ===================================================================== */
+
+  function busy(label) {
+    var t = $('#status');
+    if (!t) return;
+    if (label) { t.textContent = label; t.classList.add('busy'); }
+    else { t.classList.remove('busy'); setStatus(S.saveState); }
+  }
+
+  function generateFor(source, onDone) {
+    var content = stripSidecar(source.content || '');
+    if (!content.trim()) { toast('That note is empty'); return; }
+    var sections = CG.ai.splitSections(content);
+    var truncated = sections.some(function (s2) { return s2.truncated; });
+    busy(sections.length > 1 ? 'Mapping 1/' + sections.length + '…' : 'Mapping…');
+
+    var parts = [];
+    var chain = Promise.resolve();
+    sections.forEach(function (sec, i) {
+      chain = chain.then(function () {
+        busy(sections.length > 1 ? 'Mapping ' + (i + 1) + '/' + sections.length + '…' : 'Mapping…');
+        return host.ai(CG.ai.generatePrompt(source.title, sec.text, { section: sections.length > 1 }))
+          .then(function (t) { parts.push(t); });
+      });
+    });
+
+    chain.then(function () {
+      var outline = sections.length > 1
+        ? CG.ai.joinSections(parts, source.title)
+        : CG.ai.sanitizeOutline(parts[0], source.title);
+      busy(null);
+      if (!outline.trim()) throw new Error('the AI did not return an outline');
+      previewGenerated(source, outline, sections.length, truncated, onDone);
+    }).catch(function (e) {
+      busy(null);
+      toast(String((e && e.message) || e).slice(0, 140));
+    });
+  }
+
+  function outlineHtml(markdown) {
+    var d = md.parse(markdown);
+    var out = [];
+    (function walk(n, depth) {
+      for (var i = 0; i < n.children.length; i++) {
+        var c = n.children[i];
+        out.push('<div class="pv-row d' + Math.min(depth, 5) + (c.kind === 'heading' ? ' h' : '') + '">' +
+          inlineMd(c.text) + '</div>');
+        walk(c, depth + 1);
+      }
+    })(d.root, 0);
+    return out.join('') || '<p style="opacity:.6">Nothing came back.</p>';
+  }
+
+  function previewGenerated(source, outline, callCount, truncated, onDone) {
+    openSheet('Map of “' + (source.title || 'note') + '”', function (body) {
+      var meta = document.createElement('p');
+      var count = md.parse(outline).nodes.length - 1;
+      meta.style.color = 'var(--muted)';
+      meta.style.fontSize = '12.5px';
+      meta.textContent = count + ' nodes' +
+        (callCount > 1 ? ' · built from ' + callCount + ' sections' : '') +
+        (truncated ? ' · the note was long and was trimmed' : '');
+      body.appendChild(meta);
+
+      var pv = document.createElement('div');
+      pv.className = 'preview';
+      pv.innerHTML = outlineHtml(outline);
+      body.appendChild(pv);
+
+      var row = document.createElement('div');
+      row.className = 'btn-row';
+      var again = document.createElement('button');
+      again.className = 'btn';
+      again.textContent = 'Try again';
+      again.onclick = function () { closeSheet(); generateFor(source, onDone); };
+      var save = document.createElement('button');
+      save.className = 'btn primary';
+      save.textContent = 'Save map';
+      save.onclick = function () { closeSheet(); saveGenerated(source, outline, onDone); };
+      row.appendChild(again);
+      row.appendChild(save);
+      body.appendChild(row);
+    });
+  }
+
+  function saveGenerated(source, outline, onDone) {
+    var existing = host.mapIdIn(source.content || '');
+    busy('Saving…');
+    var done = function (mapId, replaced) {
+      busy(null);
+      rememberMap(mapId, (source.title || 'Note') + ' — map');
+      toast(replaced ? 'Map updated' : 'Map saved');
+      if (onDone) onDone(mapId);
+    };
+
+    if (existing) {
+      host.writeContent(existing, outline)
+        .then(function () { done(existing, true); })
+        .catch(function (e) { busy(null); toast(String(e.message || e).slice(0, 140)); });
+      return;
+    }
+
+    host.createNote({ title: (source.title || 'Note') + ' — map', content: outline, tags: source.tags || [] })
+      .then(function (created) {
+        S.noteCache[created.id] = { title: created.title, content: outline };
+        var link = host.mapLink(created.id, created.title);
+        // The source note is the one being mapped; when it is also the note on
+        // screen the link goes through the undo stack like any other edit.
+        if (S.doc && source.id === S.noteId) {
+          apply(edit.appendBodyLine(S.doc, S.doc.root, link));
+          done(created.id, false);
+        } else {
+          var next = String(source.content || '').replace(/\s+$/, '');
+          host.writeContent(source.id, next + (next ? '\n\n' : '') + link)
+            .then(function () { done(created.id, false); })
+            .catch(function () { done(created.id, false); });
+        }
+      })
+      .catch(function (e) { busy(null); toast(String((e && e.message) || e).slice(0, 140)); });
+  }
+
+  function generateForCurrentNote() {
+    var existing = host.mapIdIn(S.src);
+    var source = { id: S.noteId, title: S.title, content: S.src, tags: (host.note() || {}).tags || [] };
+    if (!existing) return generateFor(source, offerOpen);
+    openSheet('This note already has a map', function (body) {
+      var p = document.createElement('p');
+      p.textContent = 'Regenerating replaces the contents of the existing map note. No second map is created.';
+      body.appendChild(p);
+      menuItem(body, 'Open the existing map', null, ICONS.map, '', function () { openMap(existing); });
+      menuItem(body, 'Regenerate it', 'Replaces what is in the map note now', ICONS.ai, '', function () {
+        generateFor(source, offerOpen);
+      });
+    });
+  }
+
+  function offerOpen(mapId) {
+    openSheet('Map saved', function (body) {
+      var p = document.createElement('p');
+      p.textContent = 'The map is a note of its own. This note now links to it.';
+      body.appendChild(p);
+      menuItem(body, 'Open the map', null, ICONS.map, '', function () { openMap(mapId); });
+    });
+  }
+
+  function openMap(id) {
+    if (S.standalone) return openMapNote(id);
+    host.openNote(id);
+  }
+
+  /* ===================================================================== */
+  /* standalone home                                                        */
+  /* ===================================================================== */
+
+  function rememberMap(id, title) {
+    if (!S.standalone) return;
+    S.recents = [{ id: id, title: title }].concat(
+      (S.recents || []).filter(function (r) { return r.id !== id; })
+    ).slice(0, 12);
+    host.storeState({ recents: S.recents });
+  }
+
+  function goHome() {
+    S.home = { loading: true, maps: [] };
+    S.ghost = null;
+    S.selectMode = false;
+    S.multi = {};
+    S.editingId = null;
+    render();
+    host.findMaps().then(function (maps) {
+      S.home = { loading: false, maps: maps };
+      render();
+    }).catch(function () {
+      S.home = { loading: false, maps: [] };
+      render();
+    });
+  }
+
+  function loadNote(id) {
+    return host.readNotes([id]).then(function (rows) {
+      if (!rows.length) throw new Error('that note could not be read');
+      var row = rows[0];
+      S.noteId = row.id;
+      S.title = row.title || 'Note';
+      S.isBlockScope = false;
+      S.baseline = row.content || '';
+      S.pins = {};
+      S.collapsed = {};
+      S.selectedId = null;
+      S.focusId = null;
+      S.undo = [];
+      S.redo = [];
+      S.doc = null;
+      reparse(S.baseline);
+      sidecar.apply(S.doc, S);
+      fetchLinkedNotes();
+      return row;
+    });
+  }
+
+  function openMapNote(id) {
+    busy('Opening…');
+    loadNote(id).then(function (row) {
+      busy(null);
+      S.home = null;
+      rememberMap(row.id, row.title);
+      S.userMoved = false;
+      render();
+      requestAnimationFrame(function () { fit(false); setStatus(''); });
+    }).catch(function (e) {
+      busy(null);
+      toast(String((e && e.message) || e).slice(0, 140));
+    });
+  }
+
+  function homeRow(icon, title, sub, onTap) {
+    var b = document.createElement('button');
+    b.className = 'home-row';
+    b.innerHTML = icon + '<span class="hr-text"><span class="hr-title"></span>' +
+      (sub ? '<span class="hr-sub"></span>' : '') + '</span>';
+    b.querySelector('.hr-title').textContent = title;
+    if (sub) b.querySelector('.hr-sub').textContent = sub;
+    b.onclick = onTap;
+    return b;
+  }
+
+  function section(parent, label) {
+    var h = document.createElement('div');
+    h.className = 'home-head';
+    h.textContent = label;
+    parent.appendChild(h);
+  }
+
+  function renderHome() {
+    elBottom.classList.remove('open');
+    elCrumbs.textContent = '';
+    var c = document.createElement('span');
+    c.className = 'crumb last';
+    c.textContent = 'Cartograph';
+    elCrumbs.appendChild(c);
+    $('#btnFocusOut').hidden = true;
+    $('#btnUndo').disabled = true;
+
+    var el = $('#home');
+    el.classList.add('on');
+    el.textContent = '';
+
+    var lead = document.createElement('button');
+    lead.className = 'home-cta';
+    lead.innerHTML = ICONS.ai + '<span>Generate a map from a note…</span>';
+    lead.onclick = function () {
+      host.pickNotes({ multiple: false }).then(function (notes) {
+        if (!notes.length) return;
+        host.readNotes([notes[0].id]).then(function (rows) {
+          if (!rows.length) return toast('Could not read that note');
+          generateFor(rows[0], function (mapId) { openMapNote(mapId); });
+        });
+      });
+    };
+    el.appendChild(lead);
+
+    if (S.recents && S.recents.length) {
+      section(el, 'Recent');
+      S.recents.forEach(function (r) {
+        el.appendChild(homeRow(ICONS.map, r.title || 'Map', null, function () { openMapNote(r.id); }));
+      });
+    }
+
+    section(el, S.home.loading ? 'Maps — looking…' : 'Maps');
+    if (!S.home.loading && !S.home.maps.length) {
+      var empty = document.createElement('div');
+      empty.className = 'home-empty';
+      empty.textContent = 'No maps yet. Generate one above, or open any note as a map.';
+      el.appendChild(empty);
+    }
+    S.home.maps.forEach(function (m) {
+      el.appendChild(homeRow(ICONS.map, m.title || 'Map', 'from ' + (m.sourceTitle || 'a note'), function () {
+        openMapNote(m.id);
+      }));
+    });
+
+    section(el, 'Any note');
+    el.appendChild(homeRow(ICONS.note, 'Open a note as a map…', 'Nothing is written until you change something', function () {
+      host.pickNotes({ multiple: false }).then(function (notes) {
+        if (notes.length) openMapNote(notes[0].id);
+      });
+    }));
   }
 
   /* ===================================================================== */
@@ -1534,6 +2148,15 @@
       toast(S.embedded ? 'Read-only' : 'Editing enabled');
       render();
     };
+    $('#btnHome').onclick = function () {
+      if (S.editingId) commitEdit(false);
+      goHome();
+    };
+    $('#btnAI').onclick = function () {
+      if (S.home) return;
+      if (S.ghost) return toast('Apply or discard the proposal first');
+      generateForCurrentNote();
+    };
     $('#btnSheetClose').onclick = closeSheet;
     elScrim.onclick = closeSheet;
 
@@ -1591,10 +2214,22 @@
     elToast = $('#toast'); elCrumbs = $('#crumbs'); elOutline = $('#outline');
     elOlList = $('#ol-list'); elOlSrc = $('#ol-src'); elTrash = $('#trash'); elEmpty = $('#empty');
 
+    /*
+     * The same HTML ships twice: as a `normal` app and as a `note_action` one.
+     * No build flag is needed to tell them apart - a normal launch simply
+     * arrives with no note, which is the standalone home.
+     */
     var note = host.note();
     if (!note) {
-      elEmpty.classList.add('on');
-      elEmpty.innerHTML = '<div style="font-size:38px">🗺️</div><div><b>No note</b><br>Open Cartograph from a note to map it.</div>';
+      S.standalone = true;
+      document.body.classList.add('standalone');
+      $('#btnHome').hidden = false;
+      wire();
+      S.booted = true;
+      host.loadState().then(function (st) {
+        S.recents = (st && st.recents) || [];
+        goHome();
+      });
       return;
     }
 
@@ -1639,10 +2274,15 @@
 
   CG.app = {
     S: S, apply: apply, reparse: reparse, render: render, fit: fit, undo: undo,
-    screenToStage: screenToStage, boot: boot,
+    screenToStage: screenToStage, boot: boot, fitBranch: fitBranch,
     visibleRect: visibleRect, keepEditingVisible: keepEditingVisible,
     applyTransform: applyTransform, nodeScreenRect: nodeScreenRect,
     _ops: { beginEdit: beginEdit, addChild: addChild, addSibling: addSibling, removeNode: removeNode, doMove: doMove,
+            enterSelect: enterSelect, exitSelect: exitSelect, runOp: runOp, runRefactor: runRefactor,
+            applyGhost: applyGhost, discardGhost: discardGhost, importHere: importHere,
+            generateFor: generateFor, generateForCurrentNote: generateForCurrentNote,
+            saveGenerated: saveGenerated, goHome: goHome, openMapNote: openMapNote, loadNote: loadNote,
+            lcaOf: lcaOf, stripSidecar: stripSidecar,
             indentNode: indentNode, outdentNode: outdentNode, nudge: nudge, toggleCheck: toggleCheck,
             setFocus: setFocus, promoteBranch: promoteBranch, dedentBranch: dedentBranch }
   };

@@ -1,8 +1,12 @@
 # Cartograph
 
-An editable mind map for the note you are reading. **No AI.** The note's
-markdown is parsed directly, and every change you make on the map is written
+An editable mind map for your notes. The note's markdown is parsed directly —
+no AI needed to draw a map — and every change you make on the map is written
 straight back into that markdown.
+
+AI is optional and additive: it can *generate* a map into a companion note, and
+*reshape* a branch behind a preview you approve. It is never in the loop for
+reading, drawing or editing a map.
 
 Headings and bullets become branches. Paragraphs, code fences, tables and
 quotes ride along as the *body* of whichever node they sit under. Nothing in
@@ -29,6 +33,77 @@ source of truth:
 - **Notes on the map.** Attach an existing note, create one in place, or
   promote a whole branch into its own note — all as ordinary markdown links.
 
+## Two apps, one file
+
+Cartograph ships twice, from the same HTML:
+
+| | |
+|---|---|
+| **Cartograph** | A standalone app. Opens on a home screen listing your maps; can be pinned as a home tab. |
+| **Cartograph: this note** | The note action. Maps the note you are reading, or just the block you selected. |
+
+No build flag and no code fork separate them. A `normal` launch simply arrives
+with no note (`Synapse.Notes` is empty), which *is* the home screen; a
+`note_action` launch arrives with one, and maps it.
+
+## Generating a map with AI
+
+The ✦ button offers to build a map of the current note. `Synapse.chatAI` returns
+plain text — there is no JSON or schema mode — so the answer's format is simply
+a markdown outline, which the ordinary parser already consumes. Nothing the
+model can say is unparseable; at worst it becomes a node with a long label.
+
+- The model is told to **restructure, never invent**: group, order and surface
+  what the note already says, preferring the note's own wording so every branch
+  is traceable back to the text.
+- Nothing is written until you have seen the map and pressed **Save**.
+- Long notes are split on their own top-level headings, mapped section by
+  section, and the results concatenated — a join, never a merge.
+- The map is saved as an ordinary **companion note**, and the source note gains
+  one link to it, marked `?via=cartograph`.
+- **Regenerating replaces** that companion's contents. It never creates a second
+  map or a second link.
+
+Answers arrive wrapped in code fences, bookended with chat, missing a title or
+carrying several — all of which are normalised before you see them. An answer
+with no outline in it at all is refused rather than half-applied.
+
+## Reshaping a branch with AI
+
+Select several nodes (**More → Select several nodes**), then **Merge** or
+**Group**; or reshape a whole branch with **Regroup** or **Tidy the labels**.
+
+Only the affected branch is ever sent, and only its replacement is expected
+back, so the rest of the note is not in the request and cannot be rewritten by
+accident.
+
+The proposal is never applied straight away. It is drawn on the map:
+
+| | |
+|---|---|
+| dashed accent | a node the AI would add |
+| amber | a label it would rewrite |
+| green dashed | a node it would move |
+| faded, struck through, **MERGED** / **REMOVED** | a node that would go, hanging off whatever absorbed it |
+
+A summary line states the shape of the change — *"1 merged · 1 added · 1
+renamed · 2 moved"*, plus a count of any body text that would be dropped — with
+**Apply** and **Discard**. Applying is one splice and one undo step.
+
+## Importing another note as a branch
+
+**Note ▾ → Import a map here** brings another note's outline in under the
+selected node — the exact inverse of *promote branch to a note*, reusing the
+same transforms.
+
+Headings stay headings while there is depth left. Once the target is a bullet,
+or the level would pass `######`, everything from there down becomes bullets
+nested by indent — clamping at `######` instead would silently flatten a deep
+import into a row of siblings. Ordered markers and checkboxes survive.
+
+You can **Link** instead of copying, which gives the transclusion card described
+above.
+
 ## How markdown maps to the map
 
 | Markdown | Becomes |
@@ -39,6 +114,7 @@ source of truth:
 | `- [ ]` / `- [x]` | a node with a checkbox |
 | paragraphs, code fences, tables, quotes, images | the **body** of the nearest node, shown behind a `¶` / `⟨⟩` / `▦` chip |
 | `[Title](synapseresource://note/<id>)` | an attached-note card hanging off that node |
+| the same link with `?via=cartograph` | this note's generated map |
 | `[label](#some-heading)` | a dashed cross-link to that node |
 | `#tag` in a label | a filterable tag |
 
@@ -138,9 +214,11 @@ plugins/
   src/sidecar.js    # the sidecar block, and re-finding nodes after outside edits
   src/layout.js     # balanced two-sided tidy tree, pinned-node handling
   src/view.js       # view tree: note cards, focus, rollup, search
+  src/diff.js       # what an AI proposal changed, for the ghost preview
+  src/ai.js         # prompts, answer sanitising, long-note chunking
   src/host.js       # the Synapse bridge (plus an in-memory mock for the browser)
   src/app.js        # state, rendering, gestures, sheets
-  build.sh          # inlines src/*.js into the installable Cartograph.yaml
+  build.sh          # inlines src/*.js into BOTH installable yamls
 dev/
   harness.html      # drive the real app in a desktop browser
   auto_smoke.html   # module assertions in the browser
@@ -152,7 +230,18 @@ dev/
 
 With no Flutter bridge present, `host.js` installs an in-memory mock, so
 `plugins/cartograph.html` opens and works in an ordinary browser.
-`?md=<urlencoded markdown>` seeds it with your own note.
+
+| parameter | effect |
+|---|---|
+| `?md=<urlencoded markdown>` | seed the mock note with your own markdown |
+| `?standalone=1` | drop the note, which is how a `normal` launch arrives |
+| `?mode=embed` | the compact read-mostly embed view |
+| `?view=outline` | open on the outline instead of the map |
+
+The mock's `chatAI` is **scripted, not simulated**: push canned answers onto
+`window.__CG_AI__` and assert on what the app does with them. `window.__CG_PICK__`
+does the same for the note picker. That is how the AI flows are covered end to
+end with no model and no network — including deliberately bad answers.
 
 ```bash
 node dev/run.js          # module assertions, no browser needed

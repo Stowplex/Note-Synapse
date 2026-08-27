@@ -59,7 +59,17 @@
           ].join('\n'),
           tags: ['product']
         },
-        'mock-note-2': { id: 'mock-note-2', title: 'Interview script', content: '## Warm up\n- Tell me about your week.\n', tags: [] }
+        'mock-note-2': { id: 'mock-note-2', title: 'Interview script', content: '## Warm up\n- Tell me about your week.\n', tags: [] },
+        'mock-note-3': {
+          id: 'mock-note-3', title: 'Quarterly review',
+          content: 'Notes from the review.\n\n[\uD83D\uDDFA Mind map](synapseresource://note/mock-note-4?via=cartograph)\n',
+          tags: []
+        },
+        'mock-note-4': {
+          id: 'mock-note-4', title: 'Quarterly review \u2014 map',
+          content: '# Quarterly review\n\n## Wins\n- Shipped sync\n\n## Misses\n- Docs slipped\n',
+          tags: []
+        }
       },
       seq: 2
     };
@@ -69,8 +79,14 @@
         if (k !== 'md') mockParams[k] = v;
       });
     } catch (e) { /* not in a browser */ }
+    // ?standalone=1 drops the note, which is how a `normal` launch arrives.
+    var mockStandalone = false;
+    try {
+      mockStandalone = new URLSearchParams(global.location ? global.location.search : '').has('standalone');
+    } catch (e) { /* not in a browser */ }
+    global.__mockNotes = function () { return mock.notes; };
     global.Synapse = S = {
-      Notes: [mock.notes['mock-note-1']],
+      Notes: mockStandalone ? [] : [mock.notes['mock-note-1']],
       Params: mockParams,
       runQuery: function (sql) {
         var m = /from\s+notes\s+where\s+id\s+in\s*\(([^)]*)\)/i.exec(sql) || /from\s+notes\s+where\s+id\s*=\s*'([^']*)'/i.exec(sql);
@@ -103,12 +119,40 @@
         return Promise.resolve({ success: true, savedCount: list.length });
       },
       pickNotes: function () {
-        var ids = Object.keys(mock.notes);
-        var pick = global.prompt('Mock note picker - id to attach:\n' + ids.map(function (i) { return i + ' = ' + mock.notes[i].title; }).join('\n'), ids[1] || ids[0]);
+        // Scripted first (window.__CG_PICK__), so tests never hit a dialog.
+        var queue = global.__CG_PICK__;
+        var pick = null;
+        if (typeof queue === 'function') pick = queue();
+        else if (Array.isArray(queue) && queue.length) pick = queue.shift();
+        else if (typeof queue === 'string') pick = queue;
+        if (pick === null || pick === undefined) {
+          var ids = Object.keys(mock.notes);
+          pick = global.prompt('Mock note picker - id to attach:\n' +
+            ids.map(function (i) { return i + ' = ' + mock.notes[i].title; }).join('\n'), ids[1] || ids[0]);
+        }
         if (!pick || !mock.notes[pick]) return Promise.resolve({ success: true, cancelled: true, notes: [] });
         return Promise.resolve({ success: true, notes: [{ id: pick, title: mock.notes[pick].title }] });
       },
-      openNote: function (id) { global.console.log('[mock] openNote', id); return Promise.resolve({ success: true }); }
+      openNote: function (id) { global.console.log('[mock] openNote', id); return Promise.resolve({ success: true }); },
+      loadAppState: function () { return Promise.resolve({ success: true, state: mock.state || {} }); },
+      storeAppState: function (st) { mock.state = st; return Promise.resolve({ success: true }); },
+      /*
+       * Scripted, not simulated. Tests push canned answers - including bad ones
+       * (prose, a fenced outline, an empty reply) - onto window.__CG_AI__ and
+       * assert on what the app does with them. No model, no network.
+       */
+      chatAI: function (prompt) {
+        var queue = global.__CG_AI__;
+        var answer;
+        if (typeof queue === 'function') answer = queue(prompt);
+        else if (Array.isArray(queue) && queue.length) answer = queue.shift();
+        (global.__CG_AI_PROMPTS__ = global.__CG_AI_PROMPTS__ || []).push(prompt);
+        if (answer === undefined) {
+          answer = '# Mock map\n\n## First theme\n- point one\n- point two\n\n## Second theme\n- point three\n';
+        }
+        if (answer && answer.__error) return Promise.resolve({ success: false, error: answer.__error });
+        return new Promise(function (r) { setTimeout(function () { r({ success: true, response: answer }); }, 10); });
+      }
     };
   }
 
@@ -185,6 +229,82 @@
       if (!r || r.cancelled || !r.notes) return [];
       return r.notes;
     }).catch(function () { return []; });
+  };
+
+  HOST.ai = function (prompt, options) {
+    if (!S || !S.chatAI) return Promise.reject(new Error('AI is not available here'));
+    var opts = { temperature: 0.2 };
+    if (options) Object.keys(options).forEach(function (k) { opts[k] = options[k]; });
+    return S.chatAI(prompt, opts).then(function (r) {
+      if (!r || r.success === false) throw new Error((r && r.error) || 'the AI did not answer');
+      var text = r.response;
+      if (Array.isArray(text)) {
+        text = text.map(function (p) { return typeof p === 'string' ? p : (p && p.text) || ''; }).join('\n');
+      }
+      if (typeof text !== 'string' || !text.trim()) throw new Error('the AI returned nothing');
+      return text;
+    });
+  };
+
+  HOST.loadState = function () {
+    if (!S || !S.loadAppState) return Promise.resolve({});
+    return S.loadAppState().then(function (r) {
+      if (r && r.success && r.state) return r.state;
+      return (r && typeof r === 'object' && !r.success) ? r : {};
+    }).catch(function () { return {}; });
+  };
+
+  HOST.storeState = function (state) {
+    if (!S || !S.storeAppState) return Promise.resolve();
+    return S.storeAppState(state || {}).catch(function () {});
+  };
+
+  HOST.MAP_MARKER = '?via=cartograph';
+
+  HOST.mapLink = function (id, title) {
+    return '[\uD83D\uDDFA Mind map](synapseresource://note/' + sqlId(id) + HOST.MAP_MARKER + ')';
+  };
+
+  var RE_MAP_LINK = /\[[^\]]*\]\(\s*synapseresource:\/\/note\/([^)?\s]+)\?[^)]*via=cartograph[^)]*\)/i;
+  HOST.RE_MAP_LINK = RE_MAP_LINK;
+
+  HOST.mapIdIn = function (content) {
+    var m = RE_MAP_LINK.exec(String(content == null ? '' : content));
+    return m ? m[1] : null;
+  };
+
+  /*
+   * Maps are found through the notes that link to them: the companion itself is
+   * an ordinary note and carries no backlink, by design. A map nothing links to
+   * is reachable through Recent and Browse instead.
+   */
+  HOST.findMaps = function () {
+    return HOST.query(
+      "SELECT id, title, content FROM notes WHERE content LIKE '%" + HOST.MAP_MARKER + "%'"
+    ).then(function (rows) {
+      var pairs = [], want = {};
+      rows.forEach(function (r) {
+        var id = HOST.mapIdIn(r.content);
+        if (!id) return;
+        pairs.push({ mapId: id, sourceId: r.id, sourceTitle: r.title });
+        want[id] = true;
+      });
+      var ids = Object.keys(want);
+      if (!ids.length) return [];
+      return HOST.readNotes(ids).then(function (maps) {
+        var byId = {};
+        maps.forEach(function (m) { byId[m.id] = m; });
+        return pairs.filter(function (p) { return byId[p.mapId]; }).map(function (p) {
+          return {
+            id: p.mapId,
+            title: byId[p.mapId].title,
+            content: byId[p.mapId].content,
+            sourceId: p.sourceId,
+            sourceTitle: p.sourceTitle
+          };
+        });
+      });
+    });
   };
 
   HOST.openNote = function (id) {
