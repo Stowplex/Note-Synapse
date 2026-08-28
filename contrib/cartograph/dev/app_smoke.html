@@ -414,6 +414,100 @@ function run(W) {
     });
 
   }).then(function () {
+    /* =================================================================== */
+    /* move to a different parent                                           */
+    /* =================================================================== */
+    var V3 = ['# Plan', '', '## Design', '- Colors', '  - Palette', '- Type',
+              '', '## Build', '- API', '- DB', ''].join('\n');
+    W.CG.app.apply(V3);
+    return settle();
+  }).then(function () {
+    var colors = byText(S, 'Colors');
+    var targets = W.CG.app._ops.moveTargets([colors]);
+    var names = targets.map(function (t) { return t.top ? 'Top level' : t.node.text; });
+    ok('the picker offers the top level and other branches',
+      names.indexOf('Top level') >= 0 && names.indexOf('Build') >= 0, names.join(','));
+    ok('the picker does not offer the node itself', names.indexOf('Colors') < 0, names.join(','));
+    ok('the picker does not offer anything inside it', names.indexOf('Palette') < 0, names.join(','));
+    ok('the picker does not offer the parent it already has',
+      names.indexOf('Design') < 0, names.join(','));
+
+    W.CG.app._ops.movePicker([colors]);
+    return settle();
+  }).then(function () {
+    var rows = W.document.querySelectorAll('#sheet .move-row');
+    ok('the picker renders a row per destination', rows.length >= 3, 'rows=' + rows.length);
+    var q = W.document.getElementById('moveq');
+    q.value = 'build';
+    q.dispatchEvent(new W.Event('input', { bubbles: true }));
+    return settle();
+  }).then(function () {
+    var rows = W.document.querySelectorAll('#sheet .move-row');
+    ok('searching narrows the destinations', rows.length === 1 && /Build/.test(rows[0].textContent),
+      Array.prototype.map.call(rows, function (r) { return r.textContent; }).join(','));
+    var before = S.undo.length;
+    rows[0].click();
+    return settle().then(function () {
+      ok('the node lands under the chosen parent',
+        /## Build\n- API\n- DB\n- Colors\n  - Palette/.test(S.src), S.src);
+      ok('it is gone from where it was', !/## Design\n- Colors/.test(S.src), S.src);
+      ok('a move is a single undo step', S.undo.length === before + 1,
+        before + ' -> ' + S.undo.length);
+      ok('the moved node is selected so you can see where it went',
+        S.selectedId && S.vt.byId[S.selectedId] && S.vt.byId[S.selectedId].text === 'Colors',
+        S.selectedId ? (S.vt.byId[S.selectedId] || {}).text : 'nothing selected');
+      W.CG.app.undo();
+      return settle();
+    }).then(function () {
+      ok('undo puts it back exactly', /## Design\n- Colors\n  - Palette\n- Type/.test(S.src), S.src);
+    });
+
+  }).then(function () {
+    /* ---- a section moved under a bullet converts, and says so first ---- */
+    var build = byText(S, 'Build');
+    var targets = W.CG.app._ops.moveTargets([build]);
+    ok('moving a section under a bullet is offered, not hidden',
+      targets.some(function (t) { return !t.top && t.node.text === 'Colors'; }),
+      targets.map(function (t) { return t.top ? 'Top' : t.node.text; }).join(','));
+    W.CG.app._ops.movePicker([build]);
+    return settle().then(function () {
+      var row = pick(W, '#sheet .move-row', 'Colors');
+      ok('the row warns that the section will become a bullet',
+        !!row && /becomes a bullet/.test(row.textContent), row ? row.textContent : 'no row');
+      row.click();
+      return settle();
+    }).then(function () {
+      ok('the section arrives as bullets, correctly nested',
+        /- Colors\n  - Palette\n  - Build\n    - API\n    - DB/.test(S.src), S.src);
+      ok('no stray heading is left behind', !/#+ Build/.test(S.src), S.src);
+      ok('the note still parses cleanly', W.CG.md.coverageOf(S.src).length === 0);
+      W.CG.app.undo();
+      return settle();
+    });
+
+  }).then(function () {
+    /* ---- moving a multi-selection ---- */
+    var api = byText(S, 'API'), db = byText(S, 'DB');
+    W.CG.app._ops.enterSelect(api.id);
+    S.multi[db.id] = true;
+    W.CG.app.render();
+    return settle().then(function () {
+      ok('select mode offers Move', !!bbNamed(W, 'Move'), barText(W));
+      W.CG.app._ops.movePicker(W.CG.app._ops ? [api, db] : []);
+      return settle();
+    }).then(function () {
+      var row = pick(W, '#sheet .move-row', 'Type');
+      ok('a destination inside another branch is offered for a multi-selection', !!row, sheetText(W));
+      row.click();
+      return settle();
+    }).then(function () {
+      ok('both nodes move together, in document order',
+        /- Type\n  - API\n  - DB/.test(S.src), S.src);
+      ok('they are gone from the branch they left', /## Build\s*$/.test(S.src.replace(/\n+$/, '')), S.src);
+      ok('select mode ends after a move', S.selectMode === false);
+    });
+
+  }).then(function () {
     // ---- outline view renders the same tree
     var btn = W.document.querySelector('#viewToggle button[data-mode="outline"]');
     btn.click();

@@ -95,12 +95,80 @@
     b = md.parse(FIXTURES['plan.md']);
     var disc = b.nodes.filter(function (n) { return n.text === 'Discovery'; })[0];
     var ci = b.nodes.filter(function (n) { return n.text === 'Customer interviews'; })[0];
-    ok('a section may not nest inside a bullet', edit.canMove(disc, ci) !== null);
+    // Deliberately a bullet in a DIFFERENT branch. The v1 test used one nested
+    // inside `disc`, so it was really testing the own-branch rule.
+    var farBullet = b.nodes.filter(function (n) { return n.text === 'Wireframes'; })[0];
+    ok('a section moving under a bullet elsewhere is allowed, and converts',
+      edit.canMove(disc, farBullet) === null && edit.willChangeKind(disc, farBullet) === true,
+      JSON.stringify(edit.canMove(disc, farBullet)));
+    ok('a bullet inside the branch being moved is still refused', edit.canMove(disc, ci) !== null);
     ok('a node may not move into its own branch', edit.canMove(disc, b.nodes.filter(function (n) { return n.text === 'Recruit 8 users'; })[0]) !== null);
 
     var build = b.nodes.filter(function (n) { return n.text === 'Build'; })[0];
     mv = edit.move(b, build, disc, null);
     ok('heading demotion rewrites its own level', !mv.error && /### Build/.test(mv.src), mv.error || mv.src);
+
+    /* ---------------- move to a different parent ---------------- */
+    var MV = '# Plan\n\n## Design\n- Colors\n  - Palette\n- Type\n\n## Build\n- API\n- DB\n';
+    function mvDoc() {
+      var d3 = md.parse(MV);
+      return { doc: d3, n: function (t) { return d3.nodes.filter(function (x) { return x.text === t; })[0]; } };
+    }
+
+    var m = mvDoc();
+    var mr = edit.move(m.doc, m.n('Build'), m.n('Colors'), null);
+    ok('a section moved under a bullet becomes bullets, nested correctly',
+      !mr.error && /- Colors\n  - Palette\n  - Build\n    - API\n    - DB/.test(mr.src),
+      mr.error || mr.src);
+    ok('no heading survives that conversion', !/#+ Build/.test(mr.src), mr.src);
+    ok('the converted note still parses cleanly', md.coverage(md.parse(mr.src)).length === 0);
+
+    m = mvDoc();
+    mr = edit.move(m.doc, m.n('API'), m.n('Design'), null);
+    ok('a bullet moved under a section lands at the top level of it',
+      !mr.error && /## Design[\s\S]*\n- API\n/.test(mr.src), mr.error || mr.src);
+
+    m = mvDoc();
+    mr = edit.move(m.doc, m.n('Type'), m.n('Colors'), null);
+    ok('a same-kind move still takes the fast path and only shifts indent',
+      !mr.error && /  - Palette\n  - Type/.test(mr.src), mr.error || mr.src);
+
+    m = mvDoc();
+    mr = edit.moveMany(m.doc, [m.n('API'), m.n('DB')], m.n('Design'));
+    ok('several nodes move together, keeping document order',
+      !mr.error && /- Type\n- API\n- DB/.test(mr.src), mr.error || mr.src);
+    ok('a multi-move empties the branch they left', /## Build\s*$/.test(mr.src), JSON.stringify(mr.src.slice(-40)));
+
+    m = mvDoc();
+    mr = edit.moveMany(m.doc, [m.n('Colors'), m.n('Palette')], m.n('Build'));
+    ok('a node selected inside another selected node is not moved twice',
+      !mr.error && (mr.src.match(/Palette/g) || []).length === 1, mr.error || mr.src);
+    ok('and it still arrives nested under its own parent',
+      /- Colors\n  - Palette/.test(mr.src), mr.src);
+
+    m = mvDoc();
+    ok('a node cannot be moved inside its own branch',
+      edit.moveMany(m.doc, [m.n('Colors')], m.n('Palette')).error !== null);
+    m = mvDoc();
+    ok('moving a node where it already lives is refused, not applied as a no-op',
+      edit.moveMany(m.doc, [m.n('API')], m.n('Build')).error !== null);
+
+    m = mvDoc();
+    mr = edit.moveMany(m.doc, [m.n('DB')], m.n('Design'));
+    ok('moving a branch\'s last child does not corrupt the insertion point',
+      !mr.error && /- Type\n- DB/.test(mr.src) && /## Build\n- API/.test(mr.src), mr.error || mr.src);
+
+    m = mvDoc();
+    mr = edit.moveMany(m.doc, [m.n('Type')], m.n('Build'));
+    ok('everything not involved in a move is left exactly as it was',
+      mr.src.indexOf('- Colors\n  - Palette') >= 0 && mr.src.indexOf('- API\n- DB\n- Type') >= 0,
+      mr.src);
+    ok('a move leaves the document parseable', md.coverage(md.parse(mr.src)).length === 0);
+
+    m = mvDoc();
+    mr = edit.moveMany(m.doc, [m.n('Colors')], m.doc.root);
+    ok('a node can be moved out to the top level',
+      !mr.error && /\n- Colors\n  - Palette/.test(mr.src), mr.error || mr.src);
 
     /* ---------------- checkboxes ---------------- */
     b = md.parse(FIXTURES['plan.md']);
