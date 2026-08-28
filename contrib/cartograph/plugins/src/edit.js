@@ -141,8 +141,14 @@
     if (!node || !newParent) return 'nothing to move';
     if (node === newParent) return 'a node cannot hold itself';
     if (isDescendant(newParent, node)) return 'a node cannot move inside its own branch';
-    if (node.kind === 'heading' && newParent.kind === 'item') return 'a section cannot nest inside a bullet';
     return null;
+  };
+
+  // True when the move would turn a section into bullets. Worth saying out loud
+  // before it happens, since it rewrites how the note reads.
+  ED.willChangeKind = function (node, newParent) {
+    return !!(node && newParent && node.kind === 'heading' &&
+      (newParent.kind === 'item' || newParent.level >= 6));
   };
 
   function shiftIndent(block, delta) {
@@ -187,13 +193,26 @@
     var block = original;
     if (block.charAt(block.length - 1) !== '\n') block += '\n';
 
-    if (node.kind === 'item') {
+    /*
+     * Same-kind moves are a pure shift - indent for bullets, heading level for
+     * sections - which preserves markers and spacing exactly. That is the path
+     * drag, indent and outdent take.
+     *
+     * When the kinds differ (a section moving under a bullet, or past ######)
+     * the shift has no meaning, so the block is re-shaped instead, using the
+     * same transform that import uses.
+     */
+    if (ED.willChangeKind(node, newParent)) {
+      block = ED.reshape.apply(null, reshapeArgs(doc, node, newParent));
+      if (block) block += '\n';
+    } else if (node.kind === 'item') {
       var newIndent = (newParent.kind === 'item') ? newParent.contentIndent : 0;
       block = shiftIndent(block, newIndent - node.indent);
     } else {
       var newLevel = newParent.kind === 'root' ? 1 : Math.min(6, newParent.level + 1);
       block = shiftHeadings(block, newLevel - node.level);
     }
+    if (!block.trim()) return { src: doc.src, error: 'there is nothing to move' };
 
     var at;
     if (anchor && anchor.before) at = anchor.before.outer.start;
@@ -216,6 +235,81 @@
     var out = applySplices(doc.src, splices);
     var seam = at < node.outer.start ? node.outer.start + (prefix + block).length : node.outer.start;
     return { src: tidySeam(out, seam), error: null };
+  };
+
+  /*
+   * A node's own subtree, lifted to the top level: an item dedented to column
+   * zero, a section renumbered to start at `#`. This is the form `reshape`
+   * expects, and it is how a move is expressed as an import of itself.
+   */
+  ED.subtreeMarkdown = function (doc, node) {
+    var raw = doc.src.slice(node.outer.start, node.outer.end);
+    if (node.kind === 'item') return shiftIndent(raw, -node.indent).replace(/\s+$/, '');
+    return shiftHeadings(raw, 1 - node.level).replace(/\s+$/, '');
+  };
+
+  function reshapeArgs(doc, node, target) {
+    var fdoc = MD.parse(ED.subtreeMarkdown(doc, node));
+    return [fdoc, fdoc.root.children, target];
+  }
+
+  // Where a new last child of `target` goes, ignoring any child that is itself
+  // on its way out - the only way an insertion could land inside a removal.
+  function insertOffsetSkipping(doc, target, moving) {
+    var end = target.kind === 'root'
+      ? (doc.sidecar ? doc.sidecar.span.start : doc.src.length)
+      : target.self.end;
+    for (var i = 0; i < target.body.length; i++) end = Math.max(end, target.body[i].end);
+    for (var c = 0; c < target.children.length; c++) {
+      if (moving.indexOf(target.children[c]) >= 0) continue;
+      end = Math.max(end, target.children[c].outer.end);
+    }
+    return end;
+  }
+
+  /*
+   * Move several nodes under one destination as a SINGLE splice set.
+   *
+   * Every removal and the one insertion are computed against the original
+   * document and applied together, so no offset is ever re-resolved against a
+   * document that has already shifted underneath it. One undo step, too.
+   */
+  ED.moveMany = function (doc, nodes, target) {
+    var list = (nodes || []).filter(Boolean);
+    if (!list.length) return { src: doc.src, error: 'nothing to move' };
+
+    // A node travelling inside its own selected ancestor must not also move on
+    // its own account, or it would arrive twice.
+    list = list.filter(function (n) {
+      return !list.some(function (other) { return other !== n && isDescendant(n, other); });
+    });
+
+    for (var i = 0; i < list.length; i++) {
+      var why = ED.canMove(list[i], target);
+      if (why) return { src: doc.src, error: why };
+    }
+
+    list.sort(function (a, b) { return a.outer.start - b.outer.start; });
+    if (list.every(function (n) { return n.parent === target; })) {
+      return { src: doc.src, error: 'they are already there' };
+    }
+
+    var joined = list.map(function (n) { return ED.subtreeMarkdown(doc, n); }).join('\n');
+    var fdoc = MD.parse(joined);
+    var block = ED.reshape(fdoc, fdoc.root.children, target);
+    if (!block.trim()) return { src: doc.src, error: 'there is nothing to move' };
+
+    var at = insertOffsetSkipping(doc, target, list);
+    var prefix = (at > 0 && doc.src.charAt(at - 1) !== '\n') ? '\n' : '';
+    if (at > 0 && block.charAt(0) === '#' && doc.src.charAt(at - 2) !== '\n') prefix += '\n';
+
+    var splices = list.map(function (n) {
+      return { start: n.outer.start, end: n.outer.end, text: '' };
+    });
+    splices.push({ start: at, end: at, text: prefix + block + '\n' });
+
+    var out = applySplices(doc.src, splices);
+    return { src: out.replace(/\n{3,}/g, '\n\n'), error: null, moved: list.length };
   };
 
   /* ------------------------------------------------------------- renumber */

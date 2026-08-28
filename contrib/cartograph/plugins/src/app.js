@@ -755,7 +755,8 @@
     apply: '<svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg>',
     close: '<svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>',
     home: '<svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7"/><path d="M6 10v9a1 1 0 001 1h10a1 1 0 001-1v-9"/></svg>',
-    map: '<svg viewBox="0 0 24 24"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg>'
+    map: '<svg viewBox="0 0 24 24"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg>',
+    move: '<svg viewBox="0 0 24 24"><path d="M5 4h5M5 4v5"/><path d="M5 4l7 7"/><path d="M14 20h5v-5"/><path d="M19 20l-7-7"/></svg>'
   };
 
   function bb(label, icon, cls, fn) {
@@ -796,6 +797,10 @@
       elBottom.appendChild(count);
       elBottom.appendChild(bb('Merge', ICONS.merge, n >= 2 ? 'accent' : 'off', function () { runOp('merge'); }));
       elBottom.appendChild(bb('Group', ICONS.group, n >= 2 ? 'accent' : 'off', function () { runOp('group'); }));
+      elBottom.appendChild(bb('Move', ICONS.move, n >= 1 ? '' : 'off', function () {
+        if (!n) return toast('Select at least one node first');
+        movePicker(multiDocNodes());
+      }));
       elBottom.appendChild(bb('Split', ICONS.ai, n >= 1 ? '' : 'off', function () { runOp('split'); }));
       elBottom.appendChild(bb('Done', ICONS.close, '', exitSelect));
       return;
@@ -889,6 +894,11 @@
     var doc = v && v.ref;
     if (!doc) return;
     openSheet(md.plainText(doc.text).slice(0, 40) || 'Node', function (body) {
+      if (doc.kind !== 'root') {
+        menuItem(body, 'Move to…', 'Put this branch under a different parent', ICONS.move, '', function () {
+          movePicker([doc]);
+        });
+      }
       menuItem(body, 'Select several nodes', 'Then merge or group them', ICONS.select, '', function () { enterSelect(v.id); });
       if (doc.children.length) {
         menuItem(body, 'Reshape this branch with AI', 'Regroup, or tidy the wording', ICONS.ai, '', function () { aiMenu(doc, null); });
@@ -1552,6 +1562,135 @@
     // A target cannot also be the scope, or it would be asked to rewrite itself.
     while (lca && nodes.indexOf(lca) >= 0 && lca.parent) lca = lca.parent;
     return lca;
+  }
+
+  /* ===================================================================== */
+  /* move to a different parent                                             */
+  /* ===================================================================== */
+
+  /*
+   * Destinations that cannot work are not listed at all, rather than offered
+   * and then refused: the node itself, anything inside it, and the parent it is
+   * already under. Reordering within a parent is what the up/down buttons are
+   * for, so the picker does not try to be that as well.
+   */
+  function moveTargets(list) {
+    var out = [];
+    var sharedParent = list.every(function (n) { return n.parent === list[0].parent; })
+      ? list[0].parent : null;
+
+    if (sharedParent !== S.doc.root) out.push({ node: S.doc.root, depth: 0, top: true });
+
+    (function walk(n, depth) {
+      for (var i = 0; i < n.children.length; i++) {
+        var c = n.children[i];
+        // Inside something that is moving? Then so is everything below it.
+        if (list.some(function (m) { return m === c || edit.isDescendant(c, m); })) continue;
+        if (c !== sharedParent) out.push({ node: c, depth: depth });
+        walk(c, depth + 1);
+      }
+    })(S.doc.root, 0);
+
+    return out;
+  }
+
+  function movePicker(nodes) {
+    var list = (nodes || []).filter(Boolean);
+    list = list.filter(function (n) {
+      return !list.some(function (o) { return o !== n && edit.isDescendant(n, o); });
+    });
+    if (!list.length) return toast('Nothing to move');
+
+    var paths = list.map(indexPath);
+    var targets = moveTargets(list);
+    if (!targets.length) return toast('There is nowhere else for it to go');
+
+    var what = list.length === 1
+      ? '“' + (md.plainText(list[0].text).slice(0, 32) || 'this node') + '”'
+      : list.length + ' nodes';
+
+    openSheet('Move ' + what + ' to…', function (body) {
+      var q = document.createElement('input');
+      q.type = 'search';
+      q.id = 'moveq';
+      q.placeholder = 'Find a destination';
+      q.autocomplete = 'off';
+      q.spellcheck = false;
+      body.appendChild(q);
+
+      var listEl = document.createElement('div');
+      listEl.className = 'move-list';
+      body.appendChild(listEl);
+
+      function draw() {
+        var needle = q.value.trim().toLowerCase();
+        listEl.textContent = '';
+        var shown = 0;
+        /*
+         * When a lone `#` heading is hoisted to be the map's centre, "Top
+         * level" means OUTSIDE it - a second centre, which changes the shape of
+         * the whole map. Say so, rather than letting it look like the obvious
+         * choice sitting above the real one.
+         */
+        var hoisted = layout.displayRoot(S.doc.root);
+        var topLabel = hoisted === S.doc.root
+          ? 'Top level'
+          : 'Top level — outside “' + (md.plainText(hoisted.text).slice(0, 24) || 'the centre') + '”';
+
+        targets.forEach(function (t) {
+          var label = t.top ? topLabel : (md.plainText(t.node.text) || 'Untitled');
+          if (needle && label.toLowerCase().indexOf(needle) < 0) return;
+          shown++;
+          var row = document.createElement('button');
+          row.className = 'move-row' + (t.top ? ' top' : '');
+          row.style.paddingLeft = (12 + Math.min(t.depth, 6) * 13) + 'px';
+          var changes = list.some(function (m) { return edit.willChangeKind(m, t.node); });
+          row.innerHTML = '<span class="mv-label"></span>' +
+            (changes ? '<span class="mv-hint">becomes a bullet</span>' : '');
+          row.querySelector('.mv-label').textContent = label;
+          row.onclick = function () { closeSheet(); performMove(paths, t.top ? null : indexPath(t.node), label); };
+          listEl.appendChild(row);
+        });
+        if (!shown) {
+          var none = document.createElement('div');
+          none.className = 'home-empty';
+          none.textContent = 'No destination matches that.';
+          listEl.appendChild(none);
+        }
+      }
+      q.addEventListener('input', draw);
+      draw();
+    });
+  }
+
+  function performMove(paths, targetPath, label) {
+    var nodes = paths.map(function (p) { return nodeAtPath(S.doc, p); }).filter(Boolean);
+    var target = targetPath ? nodeAtPath(S.doc, targetPath) : S.doc.root;
+    if (!nodes.length || !target) return toast('That node moved on before this could run');
+
+    var r = edit.moveMany(S.doc, nodes, target);
+    if (r.error) return toast(r.error);
+
+    // Carry the destination across the re-parse, so the moved nodes can be
+    // found again as its last children.
+    S.selectedId = target.kind === 'root' ? null : target.id;
+    S.selectMode = false;
+    S.multi = {};
+    apply(r.src);
+
+    var landed = target.kind === 'root'
+      ? S.doc.root
+      : (S.selectedId ? S.doc.byId[S.selectedId] : null);
+    var first = landed && landed.children.length
+      ? landed.children[landed.children.length - r.moved]
+      : null;
+    if (first) {
+      S.selectedId = first.id;
+      if (S.collapsed[first.id]) delete S.collapsed[first.id];
+      render();
+      requestAnimationFrame(function () { fitBranch(first.id, true); });
+    }
+    toast('Moved to “' + label + '” — undo in the top bar');
   }
 
   /* ===================================================================== */
@@ -2283,6 +2422,7 @@
             generateFor: generateFor, generateForCurrentNote: generateForCurrentNote,
             saveGenerated: saveGenerated, goHome: goHome, openMapNote: openMapNote, loadNote: loadNote,
             lcaOf: lcaOf, stripSidecar: stripSidecar,
+            movePicker: movePicker, performMove: performMove, moveTargets: moveTargets,
             indentNode: indentNode, outdentNode: outdentNode, nudge: nudge, toggleCheck: toggleCheck,
             setFocus: setFocus, promoteBranch: promoteBranch, dedentBranch: dedentBranch }
   };

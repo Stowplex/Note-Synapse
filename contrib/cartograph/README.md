@@ -104,6 +104,10 @@ import into a row of siblings. Ordered markers and checkboxes survive.
 You can **Link** instead of copying, which gives the transclusion card described
 above.
 
+The same reshaping is what lets a **section move under a bullet**: it becomes
+bullets, nested as it was. A destination that would do this says *"becomes a
+bullet"* on its row, since it changes how the note reads.
+
 ## How markdown maps to the map
 
 | Markdown | Becomes |
@@ -166,6 +170,11 @@ outline instead of the map.
   than left behind as an empty bullet.
 - **Drag** a node onto another to re-nest that whole branch, onto empty space
   to pin it, or onto the bin to delete it.
+- **More ▸ Move to…** reparents without dragging — needed whenever the
+  destination is off screen, and the only way to reparent in the outline. Pick a
+  destination from the note's outline; invalid ones (the node itself, anything
+  inside it, the parent it already has) are not listed. In select mode, **Move**
+  does the same for everything selected, in one step.
 - **Drag the background** to pan, **pinch** to zoom, **double-tap** to fit.
   The Fit button toggles between the whole map and a readable zoom.
 - Every write is undoable from the top bar, 50 steps deep.

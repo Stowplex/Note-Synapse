@@ -346,6 +346,22 @@
   .pv-row.d1::before, .pv-row.d2::before, .pv-row.d3::before,
   .pv-row.d4::before, .pv-row.d5::before { content: '· '; color: var(--faint); }
 
+  /* ------------------------------------------------------------ move list */
+  #moveq {
+    width: 100%; padding: 10px 12px; border-radius: 11px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text); font-size: 15px; outline: none; margin: 4px 0 10px;
+  }
+  #moveq:focus { border-color: var(--accent); background: var(--surface); }
+  .move-list { max-height: 52vh; overflow-y: auto; margin: 0 -4px; }
+  .move-row {
+    width: 100%; display: flex; align-items: baseline; gap: 8px; padding: 11px 12px;
+    border-bottom: 1px solid var(--border); text-align: left; font-size: 14.5px;
+  }
+  .move-row:active { background: var(--surface-2); }
+  .move-row.top { font-weight: 680; }
+  .mv-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mv-hint { margin-left: auto; flex: none; font-size: 11px; font-weight: 650; color: var(--warn); }
+
   /* ----------------------------------------------------------------- home */
   #home { position: absolute; inset: 0; overflow-y: auto; display: none;
           padding: 12px 12px calc(24px + env(safe-area-inset-bottom)); background: var(--bg); }
