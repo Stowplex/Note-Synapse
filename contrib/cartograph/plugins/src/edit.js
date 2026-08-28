@@ -122,11 +122,21 @@
     return applySplices(doc.src, [insertLineAt(doc.src, node.outer.end, lineText(s))]);
   };
 
+  /*
+   * Add a line of body text under a node.
+   *
+   * A line placed directly beneath a bullet, with no blank line between, is a
+   * paragraph continuation of that bullet - it folds into the LABEL rather than
+   * becoming body. So an item with no body yet gets a blank line first,
+   * otherwise every "attach" would quietly lengthen the node's own label.
+   * Headings need no such care: a line after a heading is already body.
+   */
   ED.appendBodyLine = function (doc, node, text) {
     var at = node.self.end;
     for (var i = 0; i < node.body.length; i++) at = Math.max(at, node.body[i].end);
     var pad = node.kind === 'item' ? new Array(node.contentIndent + 1).join(' ') : '';
-    return applySplices(doc.src, [insertLineAt(doc.src, at, pad + text)]);
+    var needsGap = node.kind === 'item' && !node.body.length;
+    return applySplices(doc.src, [insertLineAt(doc.src, at, (needsGap ? '\n' : '') + pad + text)]);
   };
 
   /* ------------------------------------------------------------------ move */
@@ -340,6 +350,129 @@
     }
     visit(doc.root);
     return splices.length ? applySplices(doc.src, splices) : doc.src;
+  };
+
+  /* ---------------------------------------------------------------- links */
+
+  function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  function lineBoundsAt(src, pos) {
+    var start = src.lastIndexOf('\n', pos - 1) + 1;
+    var nl = src.indexOf('\n', pos);
+    return { start: start, end: nl === -1 ? src.length : nl + 1 };
+  }
+
+  /*
+   * Remove every link in `node` matching `re`, and take the whole line with it
+   * when nothing but whitespace would be left behind.
+   *
+   * Deliberately line-precise rather than a document-wide tidy of blank lines:
+   * a whitespace-only line inside a fenced code block is content, and a global
+   * sweep would eat it.
+   */
+  ED.stripLinks = function (doc, node, re) {
+    var src = doc.src;
+    var hits = [];
+    function scan(start, end) {
+      var text = src.slice(start, end);
+      var m;
+      re.lastIndex = 0;
+      while ((m = re.exec(text)) !== null) {
+        hits.push({ start: start + m.index, end: start + m.index + m[0].length });
+      }
+    }
+    scan(node.textStart, node.textEnd);
+    for (var i = 0; i < node.body.length; i++) scan(node.body[i].start, node.body[i].end);
+    if (!hits.length) return { src: src, count: 0 };
+
+    var splices = hits.map(function (h) {
+      var line = lineBoundsAt(src, h.start);
+      var rest = src.slice(line.start, h.start) + src.slice(h.end, line.end);
+      if (rest.trim()) return { start: h.start, end: h.end, text: '' };
+      // The whole line goes. If it was separated from the node above only by
+      // the blank line that made it body in the first place, that goes too -
+      // but not when the next line is blank as well, where the gap is the
+      // reader's paragraph break, not ours.
+      var start = line.start;
+      if (start > 0) {
+        var prev = lineBoundsAt(src, start - 1);
+        var next = src.slice(line.end, (src.indexOf('\n', line.end) + 1) || src.length);
+        if (!src.slice(prev.start, prev.end).trim() && next.trim()) start = prev.start;
+      }
+      return { start: start, end: line.end, text: '' };
+    });
+    return { src: applySplices(src, splices), count: hits.length };
+  };
+
+  ED.linkLabel = function (target) {
+    return '\u2192 ' + MD.plainText(target.text).replace(/[\[\]]/g, '').slice(0, 60);
+  };
+
+  ED.linkLine = function (target) {
+    return '[' + ED.linkLabel(target) + '](#' + MD.slug(target.text) + ')';
+  };
+
+  ED.linksFrom = function (node) {
+    return (node.links || []).filter(function (l) { return l.type === 'anchor'; });
+  };
+
+  ED.hasLinkTo = function (node, slug) {
+    return ED.linksFrom(node).some(function (l) {
+      return l.target.replace(/^#/, '').toLowerCase() === slug;
+    });
+  };
+
+  ED.addLink = function (doc, source, target) {
+    if (!source || !target) return { src: doc.src, error: 'nothing to link' };
+    if (source === target) return { src: doc.src, error: 'a node cannot link to itself' };
+    var slug = MD.slug(target.text);
+    if (!slug) return { src: doc.src, error: 'that node has no label to link to' };
+    if (ED.hasLinkTo(source, slug)) return { src: doc.src, error: 'those two are already linked' };
+    return { src: ED.appendBodyLine(doc, source, ED.linkLine(target)), error: null, slug: slug };
+  };
+
+  ED.removeLink = function (doc, source, slug) {
+    var re = new RegExp('[ \\t]*\\[[^\\]]*\\]\\([ \\t]*#' + escapeRe(slug) + '[ \\t]*\\)', 'gi');
+    var r = ED.stripLinks(doc, source, re);
+    if (!r.count) return { src: doc.src, error: 'that link is not on this node' };
+    return { src: r.src, error: null };
+  };
+
+  /*
+   * Rename a node and carry any links that pointed at it.
+   *
+   * Anchors address a node by its text, so renaming would otherwise strand
+   * every link to it. Both edits go in one splice set, hence one undo step.
+   *
+   * Only done when the old slug named exactly one node: if two nodes shared it,
+   * the remaining twin still answers to it and rewriting would steal its links.
+   */
+  ED.renameCarryingLinks = function (doc, node, text, anchorIndex) {
+    var clean = String(text == null ? '' : text).replace(/[\r\n]+/g, ' ');
+    var splices = [{ start: node.textStart, end: node.textEnd, text: clean }];
+
+    var oldSlug = MD.slug(node.text);
+    var newSlug = MD.slug(clean);
+    var unique = !anchorIndex || !oldSlug || (anchorIndex[oldSlug] || []).length === 1;
+
+    if (oldSlug && newSlug && oldSlug !== newSlug && unique) {
+      var oldLabel = ED.linkLabel(node);
+      var newLabel = '\u2192 ' + MD.plainText(clean).replace(/[\[\]]/g, '').slice(0, 60);
+      var re = new RegExp('\\[([^\\]]*)\\]\\([ \\t]*#' + escapeRe(oldSlug) + '[ \\t]*\\)', 'gi');
+      var m;
+      re.lastIndex = 0;
+      while ((m = re.exec(doc.src)) !== null) {
+        // Never touch a link inside the label being replaced.
+        if (m.index >= node.textStart && m.index < node.textEnd) continue;
+        // Keep a hand-written label; only refresh the one this app generates.
+        var label = m[1] === oldLabel ? newLabel : m[1];
+        splices.push({
+          start: m.index, end: m.index + m[0].length,
+          text: '[' + label + '](#' + newSlug + ')'
+        });
+      }
+    }
+    return applySplices(doc.src, splices);
   };
 
   /* ---------------------------------------------------------------- graft */

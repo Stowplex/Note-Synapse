@@ -23,7 +23,8 @@
     baseline: '', saveTimer: null, saveState: '', pendingNoteFetch: {},
     tx: 0, ty: 0, k: 1, boxes: null, els: {}, edgeEls: [], fresh: {},
     editingId: null, booted: false,
-    selectMode: false, multi: {}, ghost: null, home: null, standalone: false, recents: []
+    selectMode: false, multi: {}, ghost: null, home: null, standalone: false, recents: [],
+    linkEls: []
   };
   CG.state = S;
 
@@ -369,17 +370,24 @@
 
     drawEdges(res, vt);
     drawToggles(res, vt);
+    drawLinkHandles(res, vt);
     S.lastResult = res;
   }
 
-  function edgePath(from, to) {
+  function edgeEnds(from, to) {
     var rightward = (to.x + to.w / 2) >= (from.x + from.w / 2);
-    var x1 = rightward ? from.x + from.w : from.x;
-    var y1 = from.y + from.h / 2;
-    var x2 = rightward ? to.x : to.x + to.w;
-    var y2 = to.y + to.h / 2;
-    var mx = x1 + (x2 - x1) * 0.5;
-    return 'M' + x1 + ',' + y1 + 'C' + mx + ',' + y1 + ' ' + mx + ',' + y2 + ' ' + x2 + ',' + y2;
+    return {
+      x1: rightward ? from.x + from.w : from.x,
+      y1: from.y + from.h / 2,
+      x2: rightward ? to.x : to.x + to.w,
+      y2: to.y + to.h / 2
+    };
+  }
+
+  function edgePath(from, to) {
+    var e = edgeEnds(from, to);
+    var mx = e.x1 + (e.x2 - e.x1) * 0.5;
+    return 'M' + e.x1 + ',' + e.y1 + 'C' + mx + ',' + e.y1 + ' ' + mx + ',' + e.y2 + ' ' + e.x2 + ',' + e.y2;
   }
 
   function drawEdges(res, vt) {
@@ -402,7 +410,9 @@
       p.setAttribute('stroke', 'currentColor');
       p.setAttribute('stroke-width', '1.5');
       p.setAttribute('stroke-dasharray', '5 5');
-      p.setAttribute('opacity', '0.35');
+      var lit = !vt.filtering ||
+        ((vt.byId[cl.from] && vt.byId[cl.from].keep) || (vt.byId[cl.to] && vt.byId[cl.to].keep));
+      p.setAttribute('opacity', lit ? '0.4' : '0.08');
       frag.appendChild(p);
     });
     elEdges.textContent = '';
@@ -424,10 +434,44 @@
       t.textContent = v.collapsed ? String(v.hiddenCount) : '−';
       var rightward = b.dir >= 0;
       var x = rightward ? b.x + b.w - 4 : b.x - 16;
-      t.style.transform = 'translate(' + x + 'px,' + (b.y + b.h / 2 - 10) + 'px)';
+      t.style.transform = 'translate(' + x + 'px,' + (b.y + b.h / 2 - 10) + 'px) scale(var(--inv, 1))';
       if (vt.filtering && !v.keep) t.style.opacity = '0.15';
       elStage.appendChild(t);
       S.edgeEls.push(t);
+    });
+  }
+
+  /*
+   * A dashed 1.5px curve is not a touch target, so every link gets a handle at
+   * its midpoint. For the cubic used here the curve's midpoint is exactly the
+   * average of its endpoints, which makes this cheap and exact.
+   *
+   * The handle is an ordinary element in the stage rather than something inside
+   * the SVG: #edges is a 1x1 box relying on overflow, and hit-testing content
+   * outside an SVG viewport is not dependable across engines.
+   */
+  function drawLinkHandles(res, vt) {
+    S.linkEls.forEach(function (h) { if (h.parentNode) h.parentNode.removeChild(h); });
+    S.linkEls = [];
+    if (S.ghost) return;
+    vt.crossLinks.forEach(function (cl) {
+      var a = res.boxes.get(cl.from), b = res.boxes.get(cl.to);
+      if (!a || !b) return;
+      var e = edgeEnds(a, b);
+      var h = document.createElement('button');
+      var lit = !vt.filtering ||
+        ((vt.byId[cl.from] && vt.byId[cl.from].keep) || (vt.byId[cl.to] && vt.byId[cl.to].keep));
+      h.className = 'cg-link' + (lit ? '' : ' dim') +
+        (S.multi[cl.from] && S.multi[cl.to] ? ' on' : '');
+      h.dataset.linkFrom = cl.from;
+      h.dataset.linkTo = cl.to;
+      h.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9.5 14.5l5-5"/>' +
+        '<path d="M12.5 7.5l1.8-1.8a3.5 3.5 0 014.9 4.9L17.4 12.4"/>' +
+        '<path d="M11.5 16.5l-1.8 1.8a3.5 3.5 0 01-4.9-4.9L6.6 11.6"/></svg>';
+      h.style.transform = 'translate(' + ((e.x1 + e.x2) / 2 - 13) + 'px,' +
+        ((e.y1 + e.y2) / 2 - 13) + 'px) scale(var(--inv, 1))';
+      elStage.appendChild(h);
+      S.linkEls.push(h);
     });
   }
 
@@ -437,6 +481,13 @@
 
   function applyTransform() {
     elStage.style.transform = 'translate(' + S.tx + 'px,' + S.ty + 'px) scale(' + S.k + ')';
+    /*
+     * Handles and collapse chips are affordances, not diagram content, so they
+     * counter-scale to hold a constant size on screen. At a readable zoom of
+     * 0.62 a 26px handle would otherwise render 16px, which is not a touch
+     * target. Clamped so they do not balloon when zoomed far out.
+     */
+    elStage.style.setProperty('--inv', String(Math.min(2.2, 1 / S.k)));
   }
 
   /*
@@ -756,7 +807,9 @@
     close: '<svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>',
     home: '<svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7"/><path d="M6 10v9a1 1 0 001 1h10a1 1 0 001-1v-9"/></svg>',
     map: '<svg viewBox="0 0 24 24"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg>',
-    move: '<svg viewBox="0 0 24 24"><path d="M5 4h5M5 4v5"/><path d="M5 4l7 7"/><path d="M14 20h5v-5"/><path d="M19 20l-7-7"/></svg>'
+    move: '<svg viewBox="0 0 24 24"><path d="M5 4h5M5 4v5"/><path d="M5 4l7 7"/><path d="M14 20h5v-5"/><path d="M19 20l-7-7"/></svg>',
+    link: '<svg viewBox="0 0 24 24"><path d="M9.5 14.5l5-5"/><path d="M12.5 7.5l1.8-1.8a3.5 3.5 0 014.9 4.9L17.4 12.4"/><path d="M11.5 16.5l-1.8 1.8a3.5 3.5 0 01-4.9-4.9L6.6 11.6"/></svg>',
+    unlink: '<svg viewBox="0 0 24 24"><path d="M12.5 7.5l1.8-1.8a3.5 3.5 0 014.9 4.9L17.4 12.4"/><path d="M11.5 16.5l-1.8 1.8a3.5 3.5 0 01-4.9-4.9L6.6 11.6"/><path d="M4 4l16 16"/></svg>'
   };
 
   function bb(label, icon, cls, fn) {
@@ -801,6 +854,16 @@
         if (!n) return toast('Select at least one node first');
         movePicker(multiDocNodes());
       }));
+      var ids = Object.keys(S.multi);
+      var pair = ids.length === 2 ? linkedPair(ids[0], ids[1]) : null;
+      if (pair) {
+        elBottom.appendChild(bb('Unlink', ICONS.unlink, 'danger', unlinkSelected));
+      } else {
+        elBottom.appendChild(bb('Link', ICONS.link, n === 2 ? '' : 'off', function () {
+          if (n !== 2) return toast('Select exactly two nodes to link them');
+          linkSelected();
+        }));
+      }
       elBottom.appendChild(bb('Split', ICONS.ai, n >= 1 ? '' : 'off', function () { runOp('split'); }));
       elBottom.appendChild(bb('Done', ICONS.close, '', exitSelect));
       return;
@@ -897,6 +960,9 @@
       if (doc.kind !== 'root') {
         menuItem(body, 'Move to…', 'Put this branch under a different parent', ICONS.move, '', function () {
           movePicker([doc]);
+        });
+        menuItem(body, 'Link to…', 'A dashed line to any other node', ICONS.link, '', function () {
+          linkPicker(doc);
         });
       }
       menuItem(body, 'Select several nodes', 'Then merge or group them', ICONS.select, '', function () { enterSelect(v.id); });
@@ -1183,22 +1249,12 @@
 
   function detachNote(v) {
     var docNode = v.ref;
-    var re = new RegExp('[ \\t]*\\[[^\\]]*\\]\\(\\s*synapseresource://note/' + host.sqlId(v.noteId) + '[^)]*\\)', 'gi');
-    var splices = [];
-    var scan = function (start, end) {
-      var text = S.doc.src.slice(start, end);
-      var m;
-      re.lastIndex = 0;
-      while ((m = re.exec(text)) !== null) splices.push({ start: start + m.index, end: start + m.index + m[0].length, text: '' });
-    };
-    scan(docNode.textStart, docNode.textEnd);
-    docNode.body.forEach(function (b) { scan(b.start, b.end); });
-    if (!splices.length) return toast('Could not find that link');
+    var re = new RegExp('[ \\t]*\\[[^\\]]*\\]\\(\\s*synapseresource://note/' +
+      host.sqlId(v.noteId) + '[^)]*\\)', 'gi');
+    var r = edit.stripLinks(S.doc, docNode, re);
+    if (!r.count) return toast('Could not find that link');
     S.selectedId = docNode.id;
-    var out = edit.applySplices(S.doc.src, splices);
-    // A body line that held only the link is now blank; drop it.
-    out = out.replace(/\n[ \t]+(?=\n)/g, '\n').replace(/\n{3,}/g, '\n\n');
-    apply(out);
+    apply(r.src);
     toast('Detached');
   }
 
@@ -1323,7 +1379,7 @@
     var path = indexPath(d);
     if (!text && dropIfEmpty(d)) return;
     if (text !== d.text) {
-      var n = applyAt(edit.setText(S.doc, d, text), path);
+      var n = applyAt(edit.renameCarryingLinks(S.doc, d, text, CG.view.anchorIndex(S.doc)), path);
       if (thenSibling && n) addSibling(n);
       return;
     }
@@ -1348,6 +1404,12 @@
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (ptrs.size === 2) { startPinch(); return; }
     if (ptrs.size > 2) return;
+
+    var linkEl = e.target.closest && e.target.closest('.cg-link');
+    if (linkEl) {
+      g = { type: 'link', from: linkEl.dataset.linkFrom, to: linkEl.dataset.linkTo };
+      return;
+    }
 
     var toggle = e.target.closest && e.target.closest('.cg-toggle');
     if (toggle) { g = { type: 'toggle', id: toggle.dataset.toggle }; return; }
@@ -1463,6 +1525,10 @@
         if (S.collapsed[v.ref.id]) delete S.collapsed[v.ref.id]; else S.collapsed[v.ref.id] = true;
         syncSidecar(); scheduleSave(); render();
       }
+      return;
+    }
+    if (gg.type === 'link') {
+      if (!S.ghost) selectLinkEnds(gg.from, gg.to);
       return;
     }
     if (gg.type === 'anchor') {
@@ -1609,11 +1675,37 @@
       ? '“' + (md.plainText(list[0].text).slice(0, 32) || 'this node') + '”'
       : list.length + ' nodes';
 
-    openSheet('Move ' + what + ' to…', function (body) {
+    /*
+     * When a lone `#` heading is hoisted to be the map's centre, "Top level"
+     * means OUTSIDE it - a second centre, which changes the shape of the whole
+     * map. Say so, rather than letting it look like the obvious choice sitting
+     * above the real one.
+     */
+    var hoisted = layout.displayRoot(S.doc.root);
+    var topLabel = hoisted === S.doc.root
+      ? 'Top level'
+      : 'Top level — outside “' + (md.plainText(hoisted.text).slice(0, 24) || 'the centre') + '”';
+
+    var rows = targets.map(function (t) {
+      return {
+        label: t.top ? topLabel : (md.plainText(t.node.text) || 'Untitled'),
+        depth: t.depth,
+        top: !!t.top,
+        hint: list.some(function (m) { return edit.willChangeKind(m, t.node); }) ? 'becomes a bullet' : null,
+        pick: function (label) { performMove(paths, t.top ? null : indexPath(t.node), label); }
+      };
+    });
+
+    nodePickerSheet('Move ' + what + ' to…', 'Find a destination', rows, 'No destination matches that.');
+  }
+
+  // Shared by Move to… and Link to…: a searchable, indented list of nodes.
+  function nodePickerSheet(title, placeholder, rows, emptyText) {
+    openSheet(title, function (body) {
       var q = document.createElement('input');
       q.type = 'search';
       q.id = 'moveq';
-      q.placeholder = 'Find a destination';
+      q.placeholder = placeholder;
       q.autocomplete = 'off';
       q.spellcheck = false;
       body.appendChild(q);
@@ -1626,41 +1718,156 @@
         var needle = q.value.trim().toLowerCase();
         listEl.textContent = '';
         var shown = 0;
-        /*
-         * When a lone `#` heading is hoisted to be the map's centre, "Top
-         * level" means OUTSIDE it - a second centre, which changes the shape of
-         * the whole map. Say so, rather than letting it look like the obvious
-         * choice sitting above the real one.
-         */
-        var hoisted = layout.displayRoot(S.doc.root);
-        var topLabel = hoisted === S.doc.root
-          ? 'Top level'
-          : 'Top level — outside “' + (md.plainText(hoisted.text).slice(0, 24) || 'the centre') + '”';
-
-        targets.forEach(function (t) {
-          var label = t.top ? topLabel : (md.plainText(t.node.text) || 'Untitled');
-          if (needle && label.toLowerCase().indexOf(needle) < 0) return;
+        rows.forEach(function (r) {
+          if (needle && r.label.toLowerCase().indexOf(needle) < 0) return;
           shown++;
           var row = document.createElement('button');
-          row.className = 'move-row' + (t.top ? ' top' : '');
-          row.style.paddingLeft = (12 + Math.min(t.depth, 6) * 13) + 'px';
-          var changes = list.some(function (m) { return edit.willChangeKind(m, t.node); });
+          row.className = 'move-row' + (r.top ? ' top' : '');
+          row.style.paddingLeft = (12 + Math.min(r.depth, 6) * 13) + 'px';
           row.innerHTML = '<span class="mv-label"></span>' +
-            (changes ? '<span class="mv-hint">becomes a bullet</span>' : '');
-          row.querySelector('.mv-label').textContent = label;
-          row.onclick = function () { closeSheet(); performMove(paths, t.top ? null : indexPath(t.node), label); };
+            (r.hint ? '<span class="mv-hint"></span>' : '');
+          row.querySelector('.mv-label').textContent = r.label;
+          if (r.hint) row.querySelector('.mv-hint').textContent = r.hint;
+          row.onclick = function () { closeSheet(); r.pick(r.label); };
           listEl.appendChild(row);
         });
         if (!shown) {
           var none = document.createElement('div');
           none.className = 'home-empty';
-          none.textContent = 'No destination matches that.';
+          none.textContent = emptyText;
           listEl.appendChild(none);
         }
       }
       q.addEventListener('input', draw);
       draw();
     });
+  }
+
+  /* ===================================================================== */
+  /* links between unrelated nodes                                          */
+  /* ===================================================================== */
+
+  function linkedPair(idA, idB) {
+    var links = (S.vt && S.vt.crossLinks) || [];
+    for (var i = 0; i < links.length; i++) {
+      var l = links[i];
+      if ((l.from === idA && l.to === idB) || (l.from === idB && l.to === idA)) return l;
+    }
+    return null;
+  }
+
+  /*
+   * Unlike Move to…, a node's own children and its parent ARE offered: linking
+   * to your own child says something, even though moving there cannot.
+   */
+  function linkPicker(source) {
+    var rows = [];
+    (function walk(n, depth) {
+      for (var i = 0; i < n.children.length; i++) {
+        var c = n.children[i];
+        var slug = md.slug(c.text);
+        if (c !== source && slug && !edit.hasLinkTo(source, slug)) {
+          rows.push({
+            label: md.plainText(c.text) || 'Untitled',
+            depth: depth,
+            hint: (CG.view.anchorIndex(S.doc)[slug] || []).length > 1 ? 'name repeats' : null,
+            node: c
+          });
+        }
+        walk(c, depth + 1);
+      }
+    })(S.doc.root, 0);
+
+    if (!rows.length) return toast('There is nothing left to link to');
+
+    var sourcePath = indexPath(source);
+    rows.forEach(function (r) {
+      var targetPath = indexPath(r.node);
+      r.pick = function () { performLink(sourcePath, targetPath); };
+    });
+
+    nodePickerSheet('Link “' + (md.plainText(source.text).slice(0, 30) || 'this node') + '” to…',
+      'Find a node', rows, 'No node matches that.');
+  }
+
+  function performLink(sourcePath, targetPath) {
+    var source = nodeAtPath(S.doc, sourcePath);
+    var target = nodeAtPath(S.doc, targetPath);
+    if (!source || !target) return toast('One of those nodes moved on before this could run');
+
+    var r = edit.addLink(S.doc, source, target);
+    if (r.error) return toast(r.error);
+
+    S.selectedId = source.id;
+    S.selectMode = false;
+    S.multi = {};
+    apply(r.src);
+
+    var twins = (CG.view.anchorIndex(S.doc)[r.slug] || []).length;
+    toast(twins > 1
+      ? 'Linked — but “' + md.plainText(target.text).slice(0, 24) + '” is not a unique name, so the line points at the nearest one'
+      : 'Linked to “' + md.plainText(target.text).slice(0, 24) + '”');
+  }
+
+  function linkSelected() {
+    var nodes = multiDocNodes();
+    if (nodes.length !== 2) return toast('Select exactly two nodes to link them');
+    nodes.sort(function (a, b) { return a.outer.start - b.outer.start; });
+    performLink(indexPath(nodes[0]), indexPath(nodes[1]));
+  }
+
+  function unlinkSelected() {
+    var ids = Object.keys(S.multi);
+    var pair = ids.length === 2 && linkedPair(ids[0], ids[1]);
+    if (!pair) return toast('Those two are not linked');
+    var source = S.doc.byId[pair.from];
+    if (!source) return toast('That link has gone');
+    var r = edit.removeLink(S.doc, source, pair.slug);
+    if (r.error) return toast(r.error);
+    S.selectMode = false;
+    S.multi = {};
+    S.selectedId = null;
+    apply(r.src);
+    toast('Unlinked — undo in the top bar');
+  }
+
+  // Tapping a link is how you act on it: both ends selected means merge, group
+  // and move are immediately available.
+  function selectLinkEnds(fromId, toId) {
+    if (!S.vt.byId[fromId] || !S.vt.byId[toId]) return;
+    S.selectMode = true;
+    S.multi = {};
+    S.multi[fromId] = true;
+    S.multi[toId] = true;
+    S.selectedId = null;
+    render();
+    requestAnimationFrame(function () { frameIds([fromId, toId], true); });
+    toast('Both ends selected');
+  }
+
+  function frameIds(ids, animate) {
+    if (!S.boxes) return;
+    var b = null;
+    ids.forEach(function (id) {
+      var bx = S.boxes.get(id);
+      if (!bx) return;
+      if (!b) b = { x0: bx.x, y0: bx.y, x1: bx.x + bx.w, y1: bx.y + bx.h };
+      else {
+        b.x0 = Math.min(b.x0, bx.x); b.y0 = Math.min(b.y0, bx.y);
+        b.x1 = Math.max(b.x1, bx.x + bx.w); b.y1 = Math.max(b.y1, bx.y + bx.h);
+      }
+    });
+    if (!b) return;
+    var pad = 40;
+    var vis = visibleRect();
+    var w = Math.max(1, b.x1 - b.x0), h = Math.max(1, b.y1 - b.y0);
+    S.k = clamp(Math.min((vis.width - pad * 2) / w, (vis.height - pad * 2) / h, 1.2), 0.15, 3);
+    S.tx = (vis.left + vis.right) / 2 - vis.originLeft - (b.x0 + w / 2) * S.k;
+    S.ty = (vis.top + vis.bottom) / 2 - vis.originTop - (b.y0 + h / 2) * S.k;
+    S.userMoved = true;
+    elStage.style.transition = animate ? 'transform .3s cubic-bezier(.22,.61,.36,1)' : 'none';
+    applyTransform();
+    if (animate) setTimeout(function () { elStage.style.transition = 'none'; }, 320);
   }
 
   function performMove(paths, targetPath, label) {
@@ -2423,6 +2630,8 @@
             saveGenerated: saveGenerated, goHome: goHome, openMapNote: openMapNote, loadNote: loadNote,
             lcaOf: lcaOf, stripSidecar: stripSidecar,
             movePicker: movePicker, performMove: performMove, moveTargets: moveTargets,
+            linkPicker: linkPicker, performLink: performLink, linkSelected: linkSelected,
+            unlinkSelected: unlinkSelected, selectLinkEnds: selectLinkEnds, linkedPair: linkedPair,
             indentNode: indentNode, outdentNode: outdentNode, nudge: nudge, toggleCheck: toggleCheck,
             setFocus: setFocus, promoteBranch: promoteBranch, dedentBranch: dedentBranch }
   };

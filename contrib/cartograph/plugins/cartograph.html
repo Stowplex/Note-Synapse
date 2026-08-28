@@ -192,7 +192,7 @@
     position: absolute; width: 20px; height: 20px; border-radius: 999px;
     background: var(--surface); border: 1.5px solid var(--border); color: var(--muted);
     display: grid; place-items: center; font-size: 10px; font-weight: 800; line-height: 1;
-    box-shadow: var(--shadow-1); z-index: 5;
+    box-shadow: var(--shadow-1); z-index: 5; transform-origin: 10px 10px;
     transition: transform .22s cubic-bezier(.22,.61,.36,1);
   }
 
@@ -293,6 +293,24 @@
   #empty { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center;
     justify-content: center; gap: 14px; padding: 32px; text-align: center; color: var(--muted); }
   #empty.on { display: flex; }
+
+  /* ----------------------------------------------------------- link edges */
+  /* Links cross the hierarchy, so they are deliberately neutral rather than
+     branch-tinted: they read as something laid over the structure. */
+  .cg-link {
+    position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 999px;
+    background: var(--surface); border: 1.5px dashed var(--faint); color: var(--muted);
+    display: grid; place-items: center; box-shadow: var(--shadow-1); z-index: 6;
+    transform-origin: 13px 13px;
+    transition: transform .22s cubic-bezier(.22,.61,.36,1), opacity .18s, border-color .15s;
+  }
+  .cg-link svg { width: 14px; height: 14px; fill: none; stroke: currentColor;
+    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .cg-link:active { background: var(--surface-2); }
+  .cg-link.on { border-style: solid; border-color: var(--accent); color: var(--accent);
+    background: var(--accent-soft); }
+  .cg-link.dim { opacity: .12; }
+  body.ghosting .cg-link { display: none; }
 
   /* ------------------------------------------------------- select + ghost */
   .cg-node.multi { border-color: var(--accent); background: var(--accent-soft); }

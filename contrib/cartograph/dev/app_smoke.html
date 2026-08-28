@@ -508,6 +508,126 @@ function run(W) {
     });
 
   }).then(function () {
+    /* =================================================================== */
+    /* links between unrelated nodes                                        */
+    /* =================================================================== */
+    var V4 = ['# Plan', '', '## Design', '- Colors', '  - Palette', '- Type',
+              '', '## Build', '- API', '- DB', ''].join('\n');
+    W.CG.app.apply(V4);
+    return settle();
+  }).then(function () {
+    var colors = byText(S, 'Colors');
+    W.CG.app._ops.linkPicker(colors);
+    return settle().then(function () {
+      var labels = Array.prototype.map.call(
+        W.document.querySelectorAll('#sheet .move-row'), function (r) { return r.textContent; });
+      ok('the link picker does not offer the node itself',
+        !labels.some(function (l) { return l.trim() === 'Colors'; }), labels.join(','));
+      ok('unlike Move to…, it DOES offer the node\u2019s own child',
+        labels.some(function (l) { return /Palette/.test(l); }), labels.join(','));
+      ok('and its parent, which Move to… hides',
+        labels.some(function (l) { return /Design/.test(l); }), labels.join(','));
+      ok('there is no Top level row: you cannot link to the root',
+        !labels.some(function (l) { return /Top level/.test(l); }), labels.join(','));
+
+      var before = S.undo.length;
+      pick(W, '#sheet .move-row', 'API').click();
+      return settle().then(function () {
+        ok('the link is written as a markdown anchor in the body',
+          /- Colors\n\n  \[\u2192 API\]\(#api\)/.test(S.src), S.src);
+        ok('the node\u2019s label is untouched', !!byText(S, 'Colors'), 'label changed');
+        ok('linking is one undo step', S.undo.length === before + 1);
+        ok('an edge now joins them', S.vt.crossLinks.length === 1,
+          JSON.stringify(S.vt.crossLinks));
+      });
+    });
+
+  }).then(function () {
+    /* ---- the edge has a handle you can actually hit ---- */
+    var handles = W.document.querySelectorAll('#stage .cg-link');
+    ok('the link is drawn with a handle', handles.length === 1, 'handles=' + handles.length);
+    var h = handles[0];
+    var r = h.getBoundingClientRect();
+    // Counter-scaled, so it holds its size on screen however far the map is
+    // zoomed out - the whole point of putting it outside the diagram content.
+    ok('the handle holds a real touch size whatever the zoom', r.width >= 24 && r.height >= 24,
+      Math.round(r.width) + 'x' + Math.round(r.height) + ' at k=' + S.k.toFixed(2));
+
+    // tap it, through the real gesture path
+    ['pointerdown', 'pointerup'].forEach(function (type) {
+      h.dispatchEvent(new W.PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: 7,
+        clientX: r.left + r.width / 2, clientY: r.top + r.height / 2
+      }));
+    });
+    return settle().then(function () {
+      ok('tapping the link selects both of its ends', S.selectMode === true &&
+        Object.keys(S.multi).length === 2, 'selectMode=' + S.selectMode +
+        ' selected=' + Object.keys(S.multi).length);
+      var texts = Object.keys(S.multi).map(function (id) { return S.vt.byId[id].text; }).sort();
+      ok('and they are the right two nodes', texts.join(',') === 'API,Colors', texts.join(','));
+      ok('so the AI operations become available', !!bbNamed(W, 'Merge') && !!bbNamed(W, 'Group'),
+        barText(W));
+      ok('the bar offers Unlink for a pair that is already linked', !!bbNamed(W, 'Unlink'), barText(W));
+    });
+
+  }).then(function () {
+    /* ---- unlink from the bar ---- */
+    var before = S.src;
+    bbNamed(W, 'Unlink').click();
+    return settle().then(function () {
+      ok('unlinking removes the link line', S.src.indexOf('#api)') < 0, S.src);
+      ok('and leaves the rest of the note exactly as it was',
+        S.src === before.replace(/\n\n  \[\u2192 API\]\(#api\)/, ''),
+        JSON.stringify(S.src));
+      ok('the edge is gone', S.vt.crossLinks.length === 0);
+      ok('select mode ends after unlinking', S.selectMode === false);
+    });
+
+  }).then(function () {
+    /* ---- linking from a two-node selection ---- */
+    var type = byText(S, 'Type'), db = byText(S, 'DB');
+    W.CG.app._ops.enterSelect(type.id);
+    S.multi[db.id] = true;
+    W.CG.app.render();
+    return settle().then(function () {
+      ok('two selected but unlinked nodes are offered Link', !!bbNamed(W, 'Link'), barText(W));
+      bbNamed(W, 'Link').click();
+      return settle();
+    }).then(function () {
+      ok('the pair is linked from the earlier node', /- Type\n\n  \[\u2192 DB\]\(#db\)/.test(S.src), S.src);
+      ok('and an edge appears', S.vt.crossLinks.length === 1);
+    });
+
+  }).then(function () {
+    /* ---- a rename on the map carries its links ---- */
+    var db = byText(S, 'DB');
+    S.selectedId = db.id;
+    W.CG.app.render();
+    return settle().then(function () {
+      W.CG.app._ops.beginEdit(db.id);
+      return settle();
+    }).then(function () {
+      var field = S.els[S.editingId].querySelector('.label');
+      field.textContent = 'Database';
+      field.dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      // Escape discards; commit properly instead
+      W.CG.app._ops.beginEdit(byText(S, 'DB').id);
+      return settle();
+    }).then(function () {
+      var field = S.els[S.editingId].querySelector('.label');
+      field.textContent = 'Database';
+      field.dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      return settle();
+    }).then(function () {
+      ok('renaming the target repoints the anchor', /\(#database\)/.test(S.src), S.src);
+      ok('and refreshes the generated label', /\[\u2192 Database\]/.test(S.src), S.src);
+      ok('so the link survives the rename', S.vt.crossLinks.length === 1,
+        JSON.stringify(S.vt.crossLinks));
+      ok('the note still parses cleanly', W.CG.md.coverageOf(S.src).length === 0);
+    });
+
+  }).then(function () {
     // ---- outline view renders the same tree
     var btn = W.document.querySelector('#viewToggle button[data-mode="outline"]');
     btn.click();
