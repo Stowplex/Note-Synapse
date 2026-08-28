@@ -85,7 +85,12 @@
       if (v.collapsed) v.hiddenCount = countDescendants(docNode);
       byId[v.id] = v;
       all.push(v);
-      if (docNode.kind !== 'root') anchors[MD.slug(docNode.text)] = v.id;
+      if (docNode.kind !== 'root') {
+        // A slug can name several nodes, so this is a list. Which one a link
+        // means is decided per source, by distance - see below.
+        var sl = MD.slug(docNode.text);
+        if (sl) (anchors[sl] = anchors[sl] || []).push(v.id);
+      }
 
       // Attached notes become cards hanging off the node.
       var seen = {};
@@ -119,13 +124,34 @@
     // though the document tree knows it as an ordinary heading.
     rootView.isRoot = true;
 
-    // Anchor links become dashed edges once every node id is known.
+    /*
+     * Anchor links become dashed edges once every node id is known.
+     *
+     * `#colors` cannot tell two nodes called "Colors" apart, so the nearest one
+     * to the link's source wins - counted in edges through their lowest common
+     * ancestor. Document order breaks a tie. The link is still reported as
+     * ambiguous so the app can say so.
+     */
     all.forEach(function (v) {
       if (!v.ref || v.kind === 'note') return;
       v.links.forEach(function (link) {
         if (link.type !== 'anchor') return;
-        var target = anchors[link.target.replace(/^#/, '').toLowerCase()];
-        if (target && target !== v.id) crossLinks.push({ from: v.id, to: target, label: link.label });
+        var slug = link.target.replace(/^#/, '').toLowerCase();
+        var ids = anchors[slug];
+        if (!ids || !ids.length) return;
+        var best = null, bestDist = Infinity;
+        for (var i = 0; i < ids.length; i++) {
+          var cand = byId[ids[i]];
+          if (!cand || cand.id === v.id || !cand.ref) continue;
+          var d = VIEW.distance(v.ref, cand.ref);
+          if (d < bestDist) { bestDist = d; best = cand; }
+        }
+        if (best) {
+          crossLinks.push({
+            from: v.id, to: best.id, label: link.label,
+            slug: slug, ambiguous: ids.length > 1
+          });
+        }
       });
     });
 
@@ -154,6 +180,33 @@
     }
 
     return { root: rootView, byId: byId, all: all, anchors: anchors, crossLinks: crossLinks, filtering: filtering };
+  };
+
+  // Edges between two nodes, through their lowest common ancestor.
+  VIEW.distance = function (a, b) {
+    if (a === b) return 0;
+    var up = new Map(), d = 0;
+    for (var x = a; x; x = x.parent, d++) up.set(x, d);
+    var e = 0;
+    for (var y = b; y; y = y.parent, e++) {
+      if (up.has(y)) return up.get(y) + e;
+    }
+    return Infinity;
+  };
+
+  /*
+   * Every slug in the document and the nodes that answer to it. Used when
+   * creating a link, to warn that a label is not unique.
+   */
+  VIEW.anchorIndex = function (doc) {
+    var map = {};
+    doc.nodes.forEach(function (n) {
+      if (n.kind === 'root') return;
+      var s = MD.slug(n.text);
+      if (!s) return;
+      (map[s] = map[s] || []).push(n);
+    });
+    return map;
   };
 
   VIEW.preview = function (content) {

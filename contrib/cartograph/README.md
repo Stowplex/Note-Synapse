@@ -90,6 +90,49 @@ A summary line states the shape of the change — *"1 merged · 1 added · 1
 renamed · 2 moved"*, plus a count of any body text that would be dropped — with
 **Apply** and **Discard**. Applying is one splice and one undo step.
 
+## Linking two unrelated nodes
+
+Two nodes anywhere in the map can be joined by a **dashed line**, independent of
+the hierarchy. Create one from **More ▸ Link to…**, or by selecting exactly two
+nodes and tapping **Link**.
+
+It is written as an ordinary markdown anchor, on its own line under the source
+node, so the node's label stays clean:
+
+```markdown
+- Colors
+
+  [→ Type](#type)
+- Type
+```
+
+**Tapping the link's handle selects both of its ends** — which is the point of
+it: with two nodes selected, Merge, Group and Move are already there, and
+**Unlink** appears in their place.
+
+The handle exists because a 1.5px dashed curve is not a touch target. It sits at
+the curve's midpoint and *counter-scales*, holding its size on screen however
+far the map is zoomed out — as do the collapse chips. They are affordances, not
+diagram content.
+
+### Which node a link means
+
+`#colors` cannot tell two nodes called "Colors" apart. The **nearest** one to
+the link's source wins, counted in edges through their lowest common ancestor,
+so a link written in one branch resolves within that branch. Creating a link to
+a name that is not unique says so, rather than quietly guessing.
+
+Renaming a node **inside Cartograph carries its links**: anchors that pointed at
+it are repointed, and the generated `[→ Name]` label refreshed, in the same undo
+step. A hand-written label is left alone — only its target is updated. If two
+nodes shared the old name, nothing is rewritten, since the remaining twin still
+answers to it.
+
+Renames made in another editor still break the link; that is inherent to
+text-addressed anchors, and the alternative (invisible ids in your markdown) was
+rejected in v1. A link whose target has gone simply draws no edge and stays in
+the note as an ordinary markdown link.
+
 ## Importing another note as a branch
 
 **Note ▾ → Import a map here** brings another note's outline in under the
@@ -119,7 +162,7 @@ bullet"* on its row, since it changes how the note reads.
 | paragraphs, code fences, tables, quotes, images | the **body** of the nearest node, shown behind a `¶` / `⟨⟩` / `▦` chip |
 | `[Title](synapseresource://note/<id>)` | an attached-note card hanging off that node |
 | the same link with `?via=cartograph` | this note's generated map |
-| `[label](#some-heading)` | a dashed cross-link to that node |
+| `[label](#some-heading)` | a dashed link to that node, with a handle you can tap |
 | `#tag` in a label | a filterable tag |
 
 Every node remembers the exact byte range it came from. An edit is a splice

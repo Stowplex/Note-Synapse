@@ -170,6 +170,113 @@
     ok('a node can be moved out to the top level',
       !mr.error && /\n- Colors\n  - Palette/.test(mr.src), mr.error || mr.src);
 
+    /* ---------------- links between unrelated nodes ---------------- */
+    var LK = '# P\n\n## Design\n- Colors\n- Type\n\n## Build\n- API\n\n```js\n   \n```\n';
+    function lk() {
+      var d4 = md.parse(LK, { title: 'P' });
+      return { doc: d4, n: function (t) { return d4.nodes.filter(function (x) { return x.text === t; })[0]; } };
+    }
+
+    var L = lk();
+    var lr = edit.addLink(L.doc, L.n('Colors'), L.n('Type'));
+    ok('a link is written as an ordinary markdown anchor',
+      !lr.error && /\[\u2192 Type\]\(#type\)/.test(lr.src), lr.error || lr.src);
+
+    var LD = md.parse(lr.src, { title: 'P' });
+    var colours = LD.nodes.filter(function (n) { return n.text === 'Colors'; })[0];
+    ok('the link goes in the body, leaving the label alone',
+      !!colours && colours.text === 'Colors' && colours.body.length === 1,
+      colours ? JSON.stringify(colours.text) + ' body=' + colours.body.length : 'node lost');
+    ok('a linked note still parses cleanly', md.coverage(LD).length === 0);
+
+    var LV = CG.view.build(LD, { title: 'P', noteCache: {} });
+    ok('the link becomes exactly one dashed edge', LV.crossLinks.length === 1);
+    ok('and it joins the two nodes it names',
+      LV.byId[LV.crossLinks[0].from].text === 'Colors' && LV.byId[LV.crossLinks[0].to].text === 'Type');
+
+    ok('linking the same pair twice is refused',
+      edit.addLink(LD, colours, LD.nodes.filter(function (n) { return n.text === 'Type'; })[0]).error !== null);
+    ok('a node cannot link to itself', edit.addLink(LD, colours, colours).error !== null);
+
+    /* link and unlink must be byte-exact inverses, in every shape */
+    [['- Colors', '# P\n\n## Design\n- Colors\n- Type\n'],
+     ['with existing body', '# P\n\n## Design\n- Colors\n\n  A note about colour.\n- Type\n'],
+     ['heading source', '# P\n\n## Design\n- x\n\n## Type\n- y\n']].forEach(function (pair) {
+      var src2 = pair[1];
+      var d5 = md.parse(src2);
+      var a = d5.nodes.filter(function (n) { return n.text === 'Colors' || n.text === 'Design'; })[0];
+      var bnode = d5.nodes.filter(function (n) { return n.text === 'Type'; })[0];
+      var added = edit.addLink(d5, a, bnode);
+      var d6 = md.parse(added.src);
+      var a2 = d6.nodes.filter(function (n) { return n.text === a.text; })[0];
+      var removed = edit.removeLink(d6, a2, md.slug('Type'));
+      ok('link then unlink restores the note exactly (' + pair[0] + ')',
+        removed.src === src2, JSON.stringify(removed.src) + ' vs ' + JSON.stringify(src2));
+    });
+
+    ok('unlinking a link that is not there is refused',
+      edit.removeLink(md.parse(LK), md.parse(LK).nodes[1], 'nope').error !== null);
+
+    /* a whitespace-only line inside a fence is content, not slack to be tidied */
+    var FENCE = md.parse(lr.src);
+    var fcol = FENCE.nodes.filter(function (n) { return n.text === 'Colors'; })[0];
+    var stripped = edit.removeLink(FENCE, fcol, 'type');
+    ok('unlinking leaves a code fence untouched',
+      stripped.src.indexOf('```js\n   \n```') >= 0, stripped.src);
+
+    /* ---------------- ambiguous targets ---------------- */
+    var TWIN = '# P\n\n## Design\n- Colors\n- Type\n\n  [\u2192 Colors](#colors)\n\n## Brand\n- Colors\n- Logo\n\n  [\u2192 Colors](#colors)\n';
+    var TD = md.parse(TWIN, { title: 'P' });
+    var TV = CG.view.build(TD, { title: 'P', noteCache: {} });
+    ok('two links to the same name produce two edges', TV.crossLinks.length === 2);
+    var resolved = TV.crossLinks.map(function (l) {
+      var t = TV.byId[l.to];
+      return TV.byId[l.from].text + '>' + (t.parent ? t.parent.text : '?');
+    }).sort().join(' ');
+    ok('each link resolves to the nearer of the two same-named nodes',
+      resolved === 'Logo>Brand Type>Design', resolved);
+    ok('an ambiguous target is reported as such',
+      TV.crossLinks.every(function (l) { return l.ambiguous === true; }));
+
+    ok('distance counts edges through the common ancestor',
+      CG.view.distance(TD.nodes.filter(function (n) { return n.text === 'Design'; })[0],
+                       TD.nodes.filter(function (n) { return n.text === 'Brand'; })[0]) === 2);
+    ok('distance is symmetric',
+      CG.view.distance(TD.nodes[2], TD.nodes[5]) === CG.view.distance(TD.nodes[5], TD.nodes[2]));
+
+    ok('anchorIndex reports how many nodes answer to a name',
+      (CG.view.anchorIndex(TD)['colors'] || []).length === 2 &&
+      (CG.view.anchorIndex(TD)['logo'] || []).length === 1);
+
+    /* ---------------- renaming carries links ---------------- */
+    var RN = md.parse(lr.src, { title: 'P' });
+    var target = RN.nodes.filter(function (n) { return n.text === 'Type'; })[0];
+    var renamed = edit.renameCarryingLinks(RN, target, 'Typography', CG.view.anchorIndex(RN));
+    ok('renaming a linked node rewrites the anchor that pointed at it',
+      /\[\u2192 Typography\]\(#typography\)/.test(renamed) && renamed.indexOf('#type)') < 0, renamed);
+    var RV = CG.view.build(md.parse(renamed, { title: 'P' }), { title: 'P', noteCache: {} });
+    ok('so the edge survives the rename', RV.crossLinks.length === 1);
+
+    var HAND = md.parse('# P\n\n## Design\n- Colors\n\n  [see also](#type)\n- Type\n');
+    var handRenamed = edit.renameCarryingLinks(
+      HAND, HAND.nodes.filter(function (n) { return n.text === 'Type'; })[0], 'Typography',
+      CG.view.anchorIndex(HAND));
+    ok('a hand-written label is left alone, only its target is repointed',
+      /\[see also\]\(#typography\)/.test(handRenamed), handRenamed);
+
+    var TWIN2 = md.parse(TWIN, { title: 'P' });
+    var oneTwin = TWIN2.nodes.filter(function (n) { return n.text === 'Colors'; })[0];
+    var twinRenamed = edit.renameCarryingLinks(TWIN2, oneTwin, 'Palette', CG.view.anchorIndex(TWIN2));
+    ok('renaming one of two same-named nodes does not steal the other\'s links',
+      (twinRenamed.match(/\(#colors\)/g) || []).length === 2, twinRenamed);
+
+    /* ---------------- a link whose target is gone ---------------- */
+    var DEAD = md.parse('# P\n\n## Design\n- Colors\n\n  [\u2192 Type](#type)\n');
+    var DV = CG.view.build(DEAD, { title: 'P', noteCache: {} });
+    ok('a link to a node that no longer exists draws no edge and does not throw',
+      DV.crossLinks.length === 0);
+    ok('and the note is still perfectly parseable', md.coverage(DEAD).length === 0);
+
     /* ---------------- checkboxes ---------------- */
     b = md.parse(FIXTURES['plan.md']);
     var vis = b.nodes.filter(function (n) { return n.text === 'Visual language'; })[0];
