@@ -131,13 +131,141 @@
    * otherwise every "attach" would quietly lengthen the node's own label.
    * Headings need no such care: a line after a heading is already body.
    */
-  ED.appendBodyLine = function (doc, node, text) {
+  ED.appendBodyLines = function (doc, node, lines) {
+    var list = (lines || []).filter(function (l) { return String(l).trim(); });
+    if (!list.length) return doc.src;
     var at = node.self.end;
     for (var i = 0; i < node.body.length; i++) at = Math.max(at, node.body[i].end);
     var pad = node.kind === 'item' ? new Array(node.contentIndent + 1).join(' ') : '';
     var needsGap = node.kind === 'item' && !node.body.length;
-    return applySplices(doc.src, [insertLineAt(doc.src, at, (needsGap ? '\n' : '') + pad + text)]);
+    var block = list.map(function (l) { return pad + l; }).join('\n');
+    return applySplices(doc.src, [insertLineAt(doc.src, at, (needsGap ? '\n' : '') + block)]);
   };
+
+  ED.appendBodyLine = function (doc, node, text) {
+    return ED.appendBodyLines(doc, node, [text]);
+  };
+
+  /* --------------------------------------------------------- note cards */
+
+  ED.noteLink = function (id, title) {
+    return '[' + String(title || 'Note').replace(/[\[\]]/g, '') +
+      '](synapseresource://note/' + String(id).replace(/[^A-Za-z0-9_\-]/g, '') + ')';
+  };
+
+  /*
+   * The body line an attached note lives on, if it has one of its own. A note
+   * link sitting inside a node's LABEL has no line to move or hang links from.
+   */
+  ED.attachmentLine = function (doc, node, noteId) {
+    var split = MD.splitLinks(node);
+    for (var i = 0; i < split.cards.length; i++) {
+      var c = split.cards[i];
+      if (c.noteId !== noteId) continue;
+      if (!c.link.inBody) return null;
+      var nl = doc.src.indexOf('\n', c.lineStart);
+      return { start: c.lineStart, end: nl === -1 ? doc.src.length : nl + 1, card: c };
+    }
+    return null;
+  };
+
+  ED.attachNotes = function (doc, node, notes) {
+    var lines = (notes || []).map(function (n) { return ED.noteLink(n.id, n.title); });
+    if (!lines.length) return { src: doc.src, error: 'nothing to attach' };
+    return { src: ED.appendBodyLines(doc, node, lines), error: null, count: lines.length };
+  };
+
+  /*
+   * Moving a card is moving one line, so removal and insertion go in a single
+   * splice set against the original document - the whole line travels, which is
+   * how the card keeps its own links.
+   */
+  /*
+   * Move attached notes onto another node. Every removal and the one insertion
+   * go in a single splice set against the original document, so N cards move as
+   * one undo step and no offset is re-resolved against a shifted document.
+   *
+   * A card already on the target is skipped rather than refused, which also
+   * keeps the insertion point clear of anything being removed.
+   */
+  ED.moveAttachments = function (doc, items, target) {
+    if (!target) return { src: doc.src, error: 'nothing to move' };
+    var lines = [], removals = [];
+    for (var i = 0; i < (items || []).length; i++) {
+      var it = items[i];
+      if (!it || !it.node) continue;
+      if (it.node === target) continue;
+      var line = ED.attachmentLine(doc, it.node, it.noteId);
+      if (!line) return { src: doc.src, error: 'that note is part of the label, so it has no line to move' };
+      lines.push(doc.src.slice(line.start, line.end).replace(/\n$/, '').replace(/^[ \t]+/, ''));
+      removals.push(ED.lineRemoval(doc.src, line.start, line.end));
+    }
+    if (!lines.length) return { src: doc.src, error: 'they are already there' };
+
+    var at = target.self.end;
+    for (var b = 0; b < target.body.length; b++) at = Math.max(at, target.body[b].end);
+    var pad = target.kind === 'item' ? new Array(target.contentIndent + 1).join(' ') : '';
+    var needsGap = target.kind === 'item' && !target.body.length;
+    var prefix = (at > 0 && doc.src.charAt(at - 1) !== '\n') ? '\n' : '';
+    var block = lines.map(function (l) { return pad + l; }).join('\n');
+
+    return {
+      src: applySplices(doc.src, removals.concat([
+        { start: at, end: at, text: prefix + (needsGap ? '\n' : '') + block + '\n' }
+      ])),
+      error: null,
+      moved: lines.length
+    };
+  };
+
+  ED.moveAttachment = function (doc, source, noteId, target) {
+    return ED.moveAttachments(doc, [{ node: source, noteId: noteId }], target);
+  };
+
+  ED.addCardLink = function (doc, source, noteId, linkMarkdown) {
+    var line = ED.attachmentLine(doc, source, noteId);
+    if (!line) return { src: doc.src, error: 'that note is part of the label, so it cannot carry links' };
+    var end = line.end;
+    if (doc.src.charAt(end - 1) === '\n') end--;
+    while (end > line.start && /[ \t]/.test(doc.src.charAt(end - 1))) end--;
+    return {
+      src: applySplices(doc.src, [{ start: end, end: end, text: ' \u2192 ' + linkMarkdown }]),
+      error: null
+    };
+  };
+
+  ED.removeCardLink = function (doc, source, noteId, targetPattern) {
+    var line = ED.attachmentLine(doc, source, noteId);
+    if (!line) return { src: doc.src, error: 'no such attachment' };
+    var text = doc.src.slice(line.start, line.end);
+    var re = new RegExp('[ \\t]*(\\u2192[ \\t]*)?\\[[^\\]]*\\]\\([ \\t]*' + targetPattern + '[ \\t]*\\)', 'g');
+    var splices = [], m;
+    while ((m = re.exec(text)) !== null) {
+      splices.push({ start: line.start + m.index, end: line.start + m.index + m[0].length, text: '' });
+    }
+    if (!splices.length) return { src: doc.src, error: 'that link is not on this note' };
+    return { src: applySplices(doc.src, splices), error: null };
+  };
+
+  /*
+   * Detaching takes the card's whole line, so any links the card carried go
+   * with it. Stripping just the note link would strand them, and the line's
+   * first link would then be an anchor - quietly turning the card's links into
+   * the node's.
+   */
+  ED.detachNote = function (doc, node, noteId) {
+    var line = ED.attachmentLine(doc, node, noteId);
+    if (line) {
+      return { src: applySplices(doc.src, [ED.lineRemoval(doc.src, line.start, line.end)]), error: null };
+    }
+    var re = new RegExp('[ \\t]*\\[[^\\]]*\\]\\([ \\t]*synapseresource://note/' +
+      escapeRe(noteId) + '[^)]*\\)', 'gi');
+    var r = ED.stripLinks(doc, node, re);
+    if (!r.count) return { src: doc.src, error: 'could not find that link' };
+    return { src: r.src, error: null };
+  };
+
+  ED.escapeRe = escapeRe;
 
   /* ------------------------------------------------------------------ move */
 
@@ -389,19 +517,42 @@
       var line = lineBoundsAt(src, h.start);
       var rest = src.slice(line.start, h.start) + src.slice(h.end, line.end);
       if (rest.trim()) return { start: h.start, end: h.end, text: '' };
-      // The whole line goes. If it was separated from the node above only by
-      // the blank line that made it body in the first place, that goes too -
-      // but not when the next line is blank as well, where the gap is the
-      // reader's paragraph break, not ours.
-      var start = line.start;
-      if (start > 0) {
-        var prev = lineBoundsAt(src, start - 1);
-        var next = src.slice(line.end, (src.indexOf('\n', line.end) + 1) || src.length);
-        if (!src.slice(prev.start, prev.end).trim() && next.trim()) start = prev.start;
-      }
-      return { start: start, end: line.end, text: '' };
+      return ED.lineRemoval(src, line.start, line.end);
     });
     return { src: applySplices(src, splices), count: hits.length };
+  };
+
+  /*
+   * Remove a whole line. If it was separated from the node above only by the
+   * blank line that made it body in the first place, that goes too - but not
+   * when the next line is blank as well, where the gap is the reader's
+   * paragraph break rather than ours.
+   */
+  ED.lineRemoval = function (src, start, end) {
+    var from = start;
+    if (from > 0) {
+      var prev = lineBoundsAt(src, from - 1);
+      if (!src.slice(prev.start, prev.end).trim()) {
+        var nl = src.indexOf('\n', end);
+        var nextLine = end >= src.length ? '' : src.slice(end, nl === -1 ? src.length : nl);
+        var removedIndent = MD.indentWidth(src.slice(start, end));
+        /*
+         * That blank line is what makes everything under it BODY rather than a
+         * continuation of the label. It may only go when nothing indented is
+         * left below - otherwise the next line folds back into the label, which
+         * is the same trap appendBodyLine has to avoid from the other side.
+         */
+        // A nested bullet or heading below is a CHILD, not body, so it never
+        // needed that blank line. Only unstructured indented text does.
+        var nextIsStructural = /^[ \t]*([-*+]|\d{1,9}[.)])[ \t]+/.test(nextLine) ||
+          /^[ \t]{0,3}#{1,6}[ \t]+/.test(nextLine);
+        if (end >= src.length || !nextLine.trim() ||
+            MD.indentWidth(nextLine) < removedIndent || nextIsStructural) {
+          from = prev.start;
+        }
+      }
+    }
+    return { start: from, end: end, text: '' };
   };
 
   ED.linkLabel = function (target) {

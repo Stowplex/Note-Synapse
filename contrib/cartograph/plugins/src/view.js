@@ -28,7 +28,8 @@
       id: id, kind: kind, text: '', ref: null, noteId: null, noteTitle: '', notePreview: '',
       level: 0, checked: null, children: [], parent: null,
       hasBody: false, bodyTypes: [], taskDone: 0, taskTotal: 0,
-      matched: false, keep: true, tags: [], links: [], collapsed: false, hiddenCount: 0
+      matched: false, keep: true, tags: [], links: [], outLinks: [], lineStart: -1,
+      collapsed: false, hiddenCount: 0
     };
   }
 
@@ -65,6 +66,7 @@
 
     var byId = {};
     var anchors = {};
+    var cardsByNote = {};
     var crossLinks = [];
     var all = [];
 
@@ -78,7 +80,9 @@
       v.hasBody = docNode.body.length > 0;
       v.bodyTypes = docNode.body.map(function (b) { return b.type; });
       v.tags = tagsIn(v.text);
-      v.links = docNode.links;
+      var split = MD.splitLinks(docNode);
+      // Only the links this node actually owns; the rest belong to its cards.
+      v.links = split.own;
       var r = rollup(docNode);
       v.taskDone = r.done; v.taskTotal = r.total;
       v.collapsed = !!collapsed[docNode.id];
@@ -94,20 +98,23 @@
 
       // Attached notes become cards hanging off the node.
       var seen = {};
-      for (var L = 0; L < docNode.links.length; L++) {
-        var link = docNode.links[L];
-        if (link.type !== 'note' || !link.noteId || seen[link.noteId]) continue;
-        seen[link.noteId] = true;
-        var nv = mkView('note', 'note:' + docNode.id + ':' + link.noteId);
-        nv.noteId = link.noteId;
+      for (var L = 0; L < split.cards.length; L++) {
+        var card = split.cards[L];
+        if (seen[card.noteId]) continue;
+        seen[card.noteId] = true;
+        var nv = mkView('note', 'note:' + docNode.id + ':' + card.noteId);
+        nv.noteId = card.noteId;
         nv.ref = docNode;
-        var cached = noteCache[link.noteId];
-        nv.noteTitle = (cached && cached.title) || link.label || 'Note';
+        nv.outLinks = card.out;
+        nv.lineStart = card.lineStart;
+        var cached = noteCache[card.noteId];
+        nv.noteTitle = (cached && cached.title) || card.link.label || 'Note';
         nv.notePreview = cached ? VIEW.preview(cached.content) : '';
         nv.text = nv.noteTitle;
         nv.parent = v;
         byId[nv.id] = nv;
         all.push(nv);
+        (cardsByNote[card.noteId] = cardsByNote[card.noteId] || []).push(nv);
         v.children.push(nv);
       }
 
@@ -132,26 +139,44 @@
      * ancestor. Document order breaks a tie. The link is still reported as
      * ambiguous so the app can say so.
      */
+    // Nearest of the candidates, measured from the source's own node. A card
+    // measures from the node it hangs off, which is where it lives.
+    function nearest(fromView, candidates) {
+      var best = null, bestDist = Infinity;
+      for (var i = 0; i < candidates.length; i++) {
+        var cand = candidates[i];
+        if (!cand || cand.id === fromView.id || !cand.ref || !fromView.ref) continue;
+        var d = VIEW.distance(fromView.ref, cand.ref);
+        if (d < bestDist) { bestDist = d; best = cand; }
+      }
+      return best;
+    }
+
+    // Both nodes and cards can be the source of a link; a card's live on the
+    // body line it shares with its attachment.
     all.forEach(function (v) {
-      if (!v.ref || v.kind === 'note') return;
-      v.links.forEach(function (link) {
-        if (link.type !== 'anchor') return;
-        var slug = link.target.replace(/^#/, '').toLowerCase();
-        var ids = anchors[slug];
-        if (!ids || !ids.length) return;
-        var best = null, bestDist = Infinity;
-        for (var i = 0; i < ids.length; i++) {
-          var cand = byId[ids[i]];
-          if (!cand || cand.id === v.id || !cand.ref) continue;
-          var d = VIEW.distance(v.ref, cand.ref);
-          if (d < bestDist) { bestDist = d; best = cand; }
+      if (!v.ref) return;
+      var outgoing = v.kind === 'note' ? v.outLinks : v.links;
+      (outgoing || []).forEach(function (link) {
+        var candidates = null, slug = null, ambiguous = false;
+        if (link.type === 'anchor') {
+          slug = link.target.replace(/^#/, '').toLowerCase();
+          var ids = anchors[slug] || [];
+          candidates = ids.map(function (id) { return byId[id]; });
+          ambiguous = ids.length > 1;
+        } else if (link.type === 'note' && link.noteId) {
+          candidates = cardsByNote[link.noteId] || [];
+          ambiguous = candidates.length > 1;
+        } else {
+          return;
         }
-        if (best) {
-          crossLinks.push({
-            from: v.id, to: best.id, label: link.label,
-            slug: slug, ambiguous: ids.length > 1
-          });
-        }
+        var best = nearest(v, candidates);
+        if (!best) return;
+        crossLinks.push({
+          from: v.id, to: best.id, label: link.label,
+          slug: slug, noteId: link.noteId || null,
+          ambiguous: ambiguous, fromCard: v.kind === 'note'
+        });
       });
     });
 

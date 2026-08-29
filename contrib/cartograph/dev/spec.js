@@ -277,6 +277,96 @@
       DV.crossLinks.length === 0);
     ok('and the note is still perfectly parseable', md.coverage(DEAD).length === 0);
 
+    /* ---------------- attached notes as first-class cards ---------------- */
+    var NC = ['# P', '', '## Design', '- Colors', '', '## Build', '- x', ''].join('\n');
+    var CACHE = { a: { title: 'One', content: 'x' }, bb: { title: 'Two', content: 'y' } };
+
+    var nd = md.parse(NC);
+    var att = edit.attachNotes(nd, nd.nodes.filter(function (n) { return n.text === 'Colors'; })[0],
+      [{ id: 'a', title: 'One' }, { id: 'bb', title: 'Two' }]);
+    ok('several notes attach in one edit',
+      !att.error && /\[One\]\(synapseresource:\/\/note\/a\)\n  \[Two\]\(synapseresource:\/\/note\/bb\)/.test(att.src),
+      att.error || att.src);
+    ok('an attachment block still parses cleanly', md.coverage(md.parse(att.src)).length === 0);
+    var attV = CG.view.build(md.parse(att.src, { title: 'P' }), { title: 'P', noteCache: CACHE });
+    ok('each attached note gets its own card',
+      attV.all.filter(function (v) { return v.kind === 'note'; }).length === 2);
+
+    /* links on an attachment line belong to the CARD, not the node */
+    var CL = ['# P', '', '## Design', '- Colors', '',
+      '  [One](synapseresource://note/a) → [Type](#type)',
+      '  [Plain](#build)', '- Type', '', '## Build', '- x', ''].join('\n');
+    var cd = md.parse(CL, { title: 'P' });
+    var cSplit = md.splitLinks(cd.nodes.filter(function (n) { return n.text === 'Colors'; })[0]);
+    ok('a link after an attachment belongs to the card',
+      cSplit.cards.length === 1 && cSplit.cards[0].out.length === 1 &&
+      cSplit.cards[0].out[0].target === '#type', JSON.stringify(cSplit.cards.map(function (c) { return c.out.length; })));
+    ok('a link on its own body line still belongs to the node',
+      cSplit.own.length === 1 && cSplit.own[0].target === '#build',
+      JSON.stringify(cSplit.own.map(function (l) { return l.target; })));
+
+    var cv = CG.view.build(cd, { title: 'P', noteCache: CACHE });
+    var cardEdge = cv.crossLinks.filter(function (l) { return l.fromCard; })[0];
+    ok('the card\'s link is drawn from the card', !!cardEdge &&
+      cv.byId[cardEdge.to].text === 'Type', JSON.stringify(cv.crossLinks.length));
+    ok('and the node keeps only its own', cv.crossLinks.filter(function (l) { return !l.fromCard; }).length === 1);
+
+    /* a note link inside a LABEL must still make a card - v1 behaviour */
+    var LBL = md.parse('# P\n\n## Design\n- See [One](synapseresource://note/a)\n', { title: 'P' });
+    var lblV = CG.view.build(LBL, { title: 'P', noteCache: CACHE });
+    ok('a note link in a label still becomes a card',
+      lblV.all.filter(function (v) { return v.kind === 'note'; }).length === 1);
+
+    /* card to card, resolved to the nearest copy */
+    var CC = ['# P', '', '## Design', '- Colors', '', '  [One](synapseresource://note/a)',
+      '- Type', '', '  [Two](synapseresource://note/bb) → [One](synapseresource://note/a)',
+      '', '## Build', '- x', '', '  [One](synapseresource://note/a)', ''].join('\n');
+    var ccd = md.parse(CC, { title: 'P' });
+    var ccv = CG.view.build(ccd, { title: 'P', noteCache: CACHE });
+    var c2c = ccv.crossLinks.filter(function (l) { return l.fromCard && l.noteId === 'a'; })[0];
+    ok('a card-to-card link resolves to the nearest copy of that note',
+      !!c2c && ccv.byId[c2c.to].ref.text === 'Colors',
+      c2c ? ccv.byId[c2c.to].ref.text : 'no edge');
+    ok('and reports that the target was ambiguous', !!c2c && c2c.ambiguous === true);
+
+    var DEADC = md.parse('# P\n\n## Design\n- Colors\n\n  [One](synapseresource://note/a) → [Two](synapseresource://note/zz)\n',
+      { title: 'P' });
+    var deadV = CG.view.build(DEADC, { title: 'P', noteCache: CACHE });
+    ok('a card link to a note attached nowhere draws no edge', deadV.crossLinks.length === 0);
+
+    /* moving a card takes its links with it */
+    var mvd = md.parse(CL, { title: 'P' });
+    var mvr = edit.moveAttachment(mvd, mvd.nodes.filter(function (n) { return n.text === 'Colors'; })[0],
+      'a', mvd.nodes.filter(function (n) { return n.text === 'x'; })[0]);
+    ok('a moved card keeps its own links',
+      !mvr.error && /- x\n\n  \[One\]\(synapseresource:\/\/note\/a\) → \[Type\]\(#type\)/.test(mvr.src),
+      mvr.error || mvr.src);
+    ok('and the node it left keeps its own link',
+      /- Colors\n\n  \[Plain\]\(#build\)/.test(mvr.src), mvr.src);
+    ok('a moved card leaves a parseable note', md.coverage(md.parse(mvr.src)).length === 0);
+    ok('moving a card onto the node it is already on is refused',
+      edit.moveAttachment(mvd, mvd.nodes.filter(function (n) { return n.text === 'Colors'; })[0], 'a',
+        mvd.nodes.filter(function (n) { return n.text === 'Colors'; })[0]).error !== null);
+
+    /* attach -> link -> unlink -> detach must return the note exactly */
+    var base = '# P\n\n## Design\n- Colors\n- Type\n';
+    var s1 = edit.attachNotes(md.parse(base), md.parse(base).nodes.filter(function (n) { return n.text === 'Colors'; })[0],
+      [{ id: 'a', title: 'One' }]).src;
+    var d1 = md.parse(s1);
+    var s2 = edit.addCardLink(d1, d1.nodes.filter(function (n) { return n.text === 'Colors'; })[0], 'a', '[Type](#type)').src;
+    var d2 = md.parse(s2);
+    var s3 = edit.removeCardLink(d2, d2.nodes.filter(function (n) { return n.text === 'Colors'; })[0], 'a', '#type').src;
+    ok('unlinking a card link restores the attachment exactly', s3 === s1, JSON.stringify(s3));
+    var d3b = md.parse(s3);
+    var s4 = edit.detachNote(d3b, d3b.nodes.filter(function (n) { return n.text === 'Colors'; })[0], 'a').src;
+    ok('detaching then restores the note exactly', s4 === base, JSON.stringify(s4));
+
+    /* detaching must take the card's links with it, not strand them */
+    var STR = md.parse(s2);
+    var stripped = edit.detachNote(STR, STR.nodes.filter(function (n) { return n.text === 'Colors'; })[0], 'a');
+    ok('detaching a card removes its links too, leaving none behind for the node',
+      stripped.src.indexOf('#type') < 0 && stripped.src === base, JSON.stringify(stripped.src));
+
     /* ---------------- checkboxes ---------------- */
     b = md.parse(FIXTURES['plan.md']);
     var vis = b.nodes.filter(function (n) { return n.text === 'Visual language'; })[0];

@@ -844,15 +844,34 @@
     if (S.selectMode) {
       elBottom.classList.add('open');
       var n = Object.keys(S.multi).length;
+      var nodes = multiDocNodes();
+      var cards = multiCardViews();
+      var mixed = nodes.length > 0 && cards.length > 0;
+
       var count = document.createElement('div');
       count.className = 'bb-note';
-      count.textContent = n ? n + ' selected' : 'Tap nodes to select';
+      count.textContent = n
+        ? n + ' selected' + (cards.length ? ' · ' + cards.length + ' attached' : '')
+        : 'Tap nodes to select';
       elBottom.appendChild(count);
-      elBottom.appendChild(bb('Merge', ICONS.merge, n >= 2 ? 'accent' : 'off', function () { runOp('merge'); }));
-      elBottom.appendChild(bb('Group', ICONS.group, n >= 2 ? 'accent' : 'off', function () { runOp('group'); }));
-      elBottom.appendChild(bb('Move', ICONS.move, n >= 1 ? '' : 'off', function () {
-        if (!n) return toast('Select at least one node first');
-        movePicker(multiDocNodes());
+
+      /*
+       * Merge, Group and Split rewrite markdown labels. A card is a reference to
+       * another note, not text this note owns, so they are withheld whenever one
+       * is in the selection rather than offered and then failing.
+       */
+      if (!cards.length) {
+        elBottom.appendChild(bb('Merge', ICONS.merge, n >= 2 ? 'accent' : 'off', function () { runOp('merge'); }));
+        elBottom.appendChild(bb('Group', ICONS.group, n >= 2 ? 'accent' : 'off', function () { runOp('group'); }));
+      }
+
+      elBottom.appendChild(bb('Move', ICONS.move, n >= 1 && !mixed ? '' : 'off', function () {
+        if (!n) return toast('Select something first');
+        // Nodes move as subtrees among children; cards move as lines into a
+        // body. Doing both at once is possible but would fail silently.
+        if (mixed) return toast('Move nodes and attached notes separately');
+        if (cards.length) return moveCardsPicker(cards);
+        movePicker(nodes);
       }));
       var ids = Object.keys(S.multi);
       var pair = ids.length === 2 ? linkedPair(ids[0], ids[1]) : null;
@@ -864,7 +883,9 @@
           linkSelected();
         }));
       }
-      elBottom.appendChild(bb('Split', ICONS.ai, n >= 1 ? '' : 'off', function () { runOp('split'); }));
+      if (!cards.length) {
+        elBottom.appendChild(bb('Split', ICONS.ai, n >= 1 ? '' : 'off', function () { runOp('split'); }));
+      }
       elBottom.appendChild(bb('Done', ICONS.close, '', exitSelect));
       return;
     }
@@ -876,6 +897,9 @@
     if (v.kind === 'note') {
       elBottom.appendChild(bb('Open', ICONS.open, 'accent', function () { host.openNote(v.noteId); }));
       elBottom.appendChild(bb('Edit', ICONS.edit, '', function () { editNoteSheet(v.noteId); }));
+      elBottom.appendChild(bb('Move', ICONS.move, '', function () { moveCardsPicker([v]); }));
+      elBottom.appendChild(bb('Link', ICONS.link, '', function () { cardLinkPicker(v); }));
+      elBottom.appendChild(bb('Select', ICONS.select, '', function () { enterSelect(v.id); }));
       elBottom.appendChild(bb('Detach', ICONS.trash, 'danger', function () { detachNote(v); }));
       return;
     }
@@ -1172,14 +1196,23 @@
     return '[' + String(title || 'Note').replace(/[\[\]]/g, '') + '](synapseresource://note/' + id + ')';
   }
 
+  /*
+   * The host picker's option is `multiSelect`, not `multiple` - passing the
+   * wrong name meant it always opened multi-select and the extra choices were
+   * silently dropped. Attaching now takes everything that comes back, in one
+   * splice, so N notes are one undo step.
+   */
   function attachExisting(docNode) {
     var path = indexPath(docNode);
-    host.pickNotes({ multiple: false }).then(function (notes) {
+    host.pickNotes({ title: 'Attach notes' }).then(function (notes) {
       if (!notes.length) return;
       var n = nodeAtPath(S.doc, path) || docNode;
-      var link = noteLinkFor(notes[0].id, notes[0].title);
-      applyAt(edit.appendBodyLine(S.doc, n, link), path);
-      toast('Attached “' + (notes[0].title || 'note') + '”');
+      var r = edit.attachNotes(S.doc, n, notes);
+      if (r.error) return toast(r.error);
+      applyAt(r.src, path);
+      toast(notes.length === 1
+        ? 'Attached “' + (notes[0].title || 'note') + '”'
+        : 'Attached ' + notes.length + ' notes');
     });
   }
 
@@ -1249,10 +1282,8 @@
 
   function detachNote(v) {
     var docNode = v.ref;
-    var re = new RegExp('[ \\t]*\\[[^\\]]*\\]\\(\\s*synapseresource://note/' +
-      host.sqlId(v.noteId) + '[^)]*\\)', 'gi');
-    var r = edit.stripLinks(S.doc, docNode, re);
-    if (!r.count) return toast('Could not find that link');
+    var r = edit.detachNote(S.doc, docNode, host.sqlId(v.noteId));
+    if (r.error) return toast(r.error);
     S.selectedId = docNode.id;
     apply(r.src);
     toast('Detached');
@@ -1548,7 +1579,7 @@
       if (!vv) return;
       if (S.ghost) return;
       if (S.selectMode) {
-        if (vv.kind === 'note' || vv.kind === 'ghost' || !vv.ref || vv.ref.kind === 'root') return;
+        if (vv.kind === 'ghost' || !vv.ref || (vv.kind !== 'note' && vv.ref.kind === 'root')) return;
         if (S.multi[gg.id]) delete S.multi[gg.id]; else S.multi[gg.id] = true;
         render();
         return;
@@ -1606,6 +1637,19 @@
       if (v && v.ref && v.kind !== 'note' && v.kind !== 'ghost') out.push(v.ref);
     });
     return out;
+  }
+
+  function multiCardViews() {
+    var out = [];
+    Object.keys(S.multi).forEach(function (id) {
+      var v = S.vt.byId[id];
+      if (v && v.kind === 'note' && v.ref) out.push(v);
+    });
+    return out;
+  }
+
+  function cardItems(views) {
+    return views.map(function (v) { return { node: v.ref, noteId: v.noteId }; });
   }
 
   // Lowest common ancestor - the smallest branch that contains every target,
@@ -1809,20 +1853,47 @@
       : 'Linked to “' + md.plainText(target.text).slice(0, 24) + '”');
   }
 
+  /*
+   * When a card is in the pair it is the source, because a card's links live on
+   * its own line. Two cards use the earlier one; two nodes take the node path.
+   */
   function linkSelected() {
-    var nodes = multiDocNodes();
-    if (nodes.length !== 2) return toast('Select exactly two nodes to link them');
-    nodes.sort(function (a, b) { return a.outer.start - b.outer.start; });
-    performLink(indexPath(nodes[0]), indexPath(nodes[1]));
+    var views = Object.keys(S.multi).map(function (id) { return S.vt.byId[id]; }).filter(Boolean);
+    if (views.length !== 2) return toast('Select exactly two things to link them');
+    views.sort(function (a, b) { return docPos(a) - docPos(b); });
+
+    var cards = views.filter(function (v) { return v.kind === 'note'; });
+    if (!cards.length) {
+      performLink(indexPath(views[0].ref), indexPath(views[1].ref));
+      return;
+    }
+    var source = cards[0];
+    var other = views[0] === source ? views[1] : views[0];
+    if (other.kind === 'note') {
+      performCardLink(source, { kind: 'card', noteId: other.noteId, title: other.noteTitle });
+    } else {
+      performCardLink(source, { kind: 'node', path: indexPath(other.ref) });
+    }
   }
 
   function unlinkSelected() {
     var ids = Object.keys(S.multi);
     var pair = ids.length === 2 && linkedPair(ids[0], ids[1]);
     if (!pair) return toast('Those two are not linked');
-    var source = S.doc.byId[pair.from];
-    if (!source) return toast('That link has gone');
-    var r = edit.removeLink(S.doc, source, pair.slug);
+
+    var r;
+    if (pair.fromCard) {
+      var fv = S.vt.byId[pair.from];
+      if (!fv || !fv.ref) return toast('That link has gone');
+      var pattern = pair.noteId
+        ? 'synapseresource://note/' + edit.escapeRe(pair.noteId) + '[^)]*'
+        : '#' + edit.escapeRe(pair.slug);
+      r = edit.removeCardLink(S.doc, fv.ref, fv.noteId, pattern);
+    } else {
+      var source = S.doc.byId[pair.from];
+      if (!source) return toast('That link has gone');
+      r = edit.removeLink(S.doc, source, pair.slug);
+    }
     if (r.error) return toast(r.error);
     S.selectMode = false;
     S.multi = {};
@@ -1898,6 +1969,138 @@
       requestAnimationFrame(function () { fitBranch(first.id, true); });
     }
     toast('Moved to “' + label + '” — undo in the top bar');
+  }
+
+  /* ===================================================================== */
+  /* attached notes: moving and linking                                     */
+  /* ===================================================================== */
+
+  function cardLabel(views) {
+    return views.length === 1
+      ? '“' + (views[0].noteTitle || 'note').slice(0, 28) + '”'
+      : views.length + ' notes';
+  }
+
+  // Where a view sits in the document, for putting a pair in order.
+  function docPos(v) {
+    if (!v) return 0;
+    if (v.kind === 'note') return v.lineStart >= 0 ? v.lineStart : (v.ref ? v.ref.outer.start : 0);
+    return v.ref ? v.ref.outer.start : 0;
+  }
+
+  function nodeRows(skip) {
+    var rows = [];
+    (function walk(n, depth) {
+      for (var i = 0; i < n.children.length; i++) {
+        var c = n.children[i];
+        if (!skip || !skip(c)) {
+          rows.push({ label: md.plainText(c.text) || 'Untitled', depth: depth, node: c });
+        }
+        walk(c, depth + 1);
+      }
+    })(S.doc.root, 0);
+    return rows;
+  }
+
+  /*
+   * A card attaches to a node, so the root is not offered: a link line at the
+   * very end of the note belongs to nothing.
+   */
+  function moveCardsPicker(cards) {
+    var owners = cards.map(function (v) { return v.ref; });
+    var shared = owners.every(function (o) { return o === owners[0]; }) ? owners[0] : null;
+    var items = cards.map(function (v) { return { path: indexPath(v.ref), noteId: v.noteId }; });
+
+    var rows = nodeRows(function (c) { return c === shared; });
+    if (!rows.length) return toast('There is nowhere else to put it');
+    rows.forEach(function (r) {
+      var targetPath = indexPath(r.node);
+      r.pick = function (label) { performCardMove(items, targetPath, label); };
+    });
+    nodePickerSheet('Move ' + cardLabel(cards) + ' to…', 'Find a node', rows,
+      'No node matches that.');
+  }
+
+  function performCardMove(items, targetPath, label) {
+    var target = nodeAtPath(S.doc, targetPath);
+    var resolved = items.map(function (it) {
+      return { node: nodeAtPath(S.doc, it.path), noteId: it.noteId };
+    }).filter(function (x) { return x.node; });
+    if (!target || !resolved.length) return toast('That note moved on before this could run');
+
+    var r = edit.moveAttachments(S.doc, resolved, target);
+    if (r.error) return toast(r.error);
+
+    S.selectedId = target.id;
+    S.selectMode = false;
+    S.multi = {};
+    apply(r.src);
+
+    var landed = S.selectedId ? S.doc.byId[S.selectedId] : null;
+    if (landed) {
+      var cardId = 'note:' + landed.id + ':' + resolved[0].noteId;
+      if (S.vt.byId[cardId]) {
+        S.selectedId = cardId;
+        render();
+        requestAnimationFrame(function () { fitBranch(cardId, true); });
+      }
+    }
+    toast('Moved to “' + label + '”');
+  }
+
+  function cardLinkPicker(card) {
+    var already = {};
+    (card.outLinks || []).forEach(function (l) {
+      already[l.type === 'note' ? 'note:' + l.noteId : 'slug:' + l.target.replace(/^#/, '').toLowerCase()] = true;
+    });
+
+    var rows = nodeRows(function (c) {
+      var slug = md.slug(c.text);
+      return !slug || already['slug:' + slug];
+    });
+    rows.forEach(function (r) {
+      var targetPath = indexPath(r.node);
+      r.pick = function () { performCardLink(card, { kind: 'node', path: targetPath }); };
+    });
+
+    // Other attached notes are targets too - that is a card-to-card link.
+    S.vt.all.forEach(function (v) {
+      if (v.kind !== 'note' || v.noteId === card.noteId || already['note:' + v.noteId]) return;
+      rows.push({
+        label: v.noteTitle || 'Note', depth: 0, hint: 'attached note',
+        pick: function () {
+          performCardLink(card, { kind: 'card', noteId: v.noteId, title: v.noteTitle });
+        }
+      });
+    });
+
+    if (!rows.length) return toast('There is nothing left to link to');
+    nodePickerSheet('Link “' + (card.noteTitle || 'note').slice(0, 26) + '” to…',
+      'Find a node or note', rows, 'Nothing matches that.');
+  }
+
+  function performCardLink(card, target) {
+    var sourcePath = indexPath(card.ref);
+    var noteId = card.noteId;
+    var linkMd;
+    if (target.kind === 'node') {
+      var t = nodeAtPath(S.doc, target.path);
+      if (!t) return toast('That node moved on before this could run');
+      linkMd = '[' + edit.linkLabel(t) + '](#' + md.slug(t.text) + ')';
+    } else {
+      linkMd = '[\u2192 ' + String(target.title || 'Note').replace(/[\[\]]/g, '') +
+        '](synapseresource://note/' + host.sqlId(target.noteId) + ')';
+    }
+    var source = nodeAtPath(S.doc, sourcePath);
+    if (!source) return toast('That note moved on before this could run');
+
+    var r = edit.addCardLink(S.doc, source, noteId, linkMd);
+    if (r.error) return toast(r.error);
+    S.selectedId = source.id;
+    S.selectMode = false;
+    S.multi = {};
+    apply(r.src);
+    toast('Linked');
   }
 
   /* ===================================================================== */
@@ -2037,7 +2240,7 @@
 
   function importHere(target) {
     var path = indexPath(target);
-    host.pickNotes({ multiple: false }).then(function (notes) {
+    host.pickNotes({ multiSelect: false }).then(function (notes) {
       if (!notes.length) return;
       var picked = notes[0];
       return host.readNotes([picked.id]).then(function (rows) {
@@ -2324,7 +2527,7 @@
     lead.className = 'home-cta';
     lead.innerHTML = ICONS.ai + '<span>Generate a map from a note…</span>';
     lead.onclick = function () {
-      host.pickNotes({ multiple: false }).then(function (notes) {
+      host.pickNotes({ multiSelect: false }).then(function (notes) {
         if (!notes.length) return;
         host.readNotes([notes[0].id]).then(function (rows) {
           if (!rows.length) return toast('Could not read that note');
@@ -2356,7 +2559,7 @@
 
     section(el, 'Any note');
     el.appendChild(homeRow(ICONS.note, 'Open a note as a map…', 'Nothing is written until you change something', function () {
-      host.pickNotes({ multiple: false }).then(function (notes) {
+      host.pickNotes({ multiSelect: false }).then(function (notes) {
         if (notes.length) openMapNote(notes[0].id);
       });
     }));
@@ -2632,6 +2835,9 @@
             movePicker: movePicker, performMove: performMove, moveTargets: moveTargets,
             linkPicker: linkPicker, performLink: performLink, linkSelected: linkSelected,
             unlinkSelected: unlinkSelected, selectLinkEnds: selectLinkEnds, linkedPair: linkedPair,
+            attachExisting: attachExisting, moveCardsPicker: moveCardsPicker, performCardMove: performCardMove,
+            cardLinkPicker: cardLinkPicker, performCardLink: performCardLink,
+            multiCardViews: multiCardViews, detachNote: detachNote,
             indentNode: indentNode, outdentNode: outdentNode, nudge: nudge, toggleCheck: toggleCheck,
             setFocus: setFocus, promoteBranch: promoteBranch, dedentBranch: dedentBranch }
   };

@@ -628,6 +628,139 @@ function run(W) {
     });
 
   }).then(function () {
+    /* =================================================================== */
+    /* attached notes as first-class cards                                  */
+    /* =================================================================== */
+    var V5 = ['# Plan', '', '## Design', '- Colors', '- Type', '', '## Build', '- API', ''].join('\n');
+    W.CG.app.apply(V5);
+    return settle();
+  }).then(function () {
+    /* ---- several notes attach at once ---- */
+    W.__CG_PICK__ = [['mock-note-2', 'mock-note-3']];
+    var before = S.undo.length;
+    W.CG.app._ops.attachExisting(byText(S, 'Colors'));
+    return settle().then(function () {
+      ok('every note the picker returned is attached, not just the first',
+        (S.src.match(/synapseresource:\/\/note\//g) || []).length === 2, S.src);
+      ok('attaching several notes is one undo step', S.undo.length === before + 1,
+        before + ' -> ' + S.undo.length);
+      ok('both become cards on the map',
+        S.vt.all.filter(function (v) { return v.kind === 'note'; }).length === 2);
+      ok('the node\u2019s own label is untouched', !!byText(S, 'Colors'));
+    });
+
+  }).then(function () {
+    /* ---- a card can be selected, but not merged ---- */
+    var card = S.vt.all.filter(function (v) { return v.kind === 'note'; })[0];
+    W.CG.app._ops.enterSelect(card.id);
+    return settle().then(function () {
+      ok('a card can be selected', !!S.multi[card.id]);
+      ok('Merge is withheld when a card is selected', !bbNamed(W, 'Merge'), barText(W));
+      ok('Group is withheld too', !bbNamed(W, 'Group'), barText(W));
+      ok('but Move and Link are offered', !!bbNamed(W, 'Move') && !!bbNamed(W, 'Link'), barText(W));
+
+      // add a node to the selection: now it is mixed
+      S.multi[byText(S, 'API').id] = true;
+      W.CG.app.render();
+      return settle();
+    }).then(function () {
+      ok('a mixed selection still offers Link', !!bbNamed(W, 'Link'), barText(W));
+      bbNamed(W, 'Move').click();
+      return settle();
+    }).then(function () {
+      // closeSheet only hides the sheet, so its previous contents linger in the
+      // DOM: assert it never OPENED rather than that it holds no rows.
+      ok('but Move on a mixed selection is refused rather than attempted',
+        !W.document.getElementById('sheet').classList.contains('open'),
+        'a picker opened: ' + sheetText(W).slice(0, 80));
+      W.CG.app._ops.exitSelect();
+      return settle();
+    });
+
+  }).then(function () {
+    /* ---- move a card to another node ---- */
+    var card = S.vt.all.filter(function (v) { return v.kind === 'note'; })[0];
+    var noteId = card.noteId;
+    W.CG.app._ops.moveCardsPicker([card]);
+    return settle().then(function () {
+      var labels = Array.prototype.map.call(
+        W.document.querySelectorAll('#sheet .move-row'), function (r) { return r.textContent; });
+      ok('the card move picker offers other nodes',
+        labels.some(function (l) { return /API/.test(l); }), labels.join(','));
+      ok('but not the node it is already on',
+        !labels.some(function (l) { return l.trim() === 'Colors'; }), labels.join(','));
+      pick(W, '#sheet .move-row', 'API').click();
+      return settle();
+    }).then(function () {
+      ok('the card moves to the chosen node',
+        new RegExp('- API\\n\\n  \\[[^\\]]*\\]\\(synapseresource://note/' + noteId).test(S.src), S.src);
+      ok('and leaves the other attachment where it was',
+        (S.src.match(/synapseresource:\/\/note\//g) || []).length === 2, S.src);
+      ok('the note still parses cleanly', W.CG.md.coverageOf(S.src).length === 0);
+    });
+
+  }).then(function () {
+    /* ---- a card can link to a node, and the link is the card's own ---- */
+    var card = S.vt.all.filter(function (v) { return v.kind === 'note'; })[0];
+    W.CG.app._ops.cardLinkPicker(card);
+    return settle().then(function () {
+      ok('the card link picker offers nodes',
+        !!pick(W, '#sheet .move-row', 'Type'), sheetText(W));
+      ok('and other attached notes as card-to-card targets',
+        !!pick(W, '#sheet .move-row', 'attached note'), sheetText(W));
+      pick(W, '#sheet .move-row', 'Type').click();
+      return settle();
+    }).then(function () {
+      ok('the link is written on the card\u2019s own line',
+        /synapseresource:\/\/note\/[^)]*\) \u2192 \[\u2192 Type\]\(#type\)/.test(S.src), S.src);
+      var fromCard = S.vt.crossLinks.filter(function (l) { return l.fromCard; });
+      ok('the edge starts at the card, not at the node holding it',
+        fromCard.length === 1 && S.vt.byId[fromCard[0].to].text === 'Type',
+        JSON.stringify(S.vt.crossLinks));
+      var owner = S.vt.byId[fromCard[0].from].ref;
+      ok('and the node owning the card claims none of it',
+        (W.CG.md.splitLinks(owner).own || []).length === 0);
+    });
+
+  }).then(function () {
+    /* ---- tapping a card link selects the card and its target ---- */
+    var h = W.document.querySelector('#stage .cg-link');
+    ok('a card link gets a handle like any other', !!h);
+    var r = h.getBoundingClientRect();
+    ['pointerdown', 'pointerup'].forEach(function (t) {
+      h.dispatchEvent(new W.PointerEvent(t, {
+        bubbles: true, cancelable: true, pointerId: 9,
+        clientX: r.left + r.width / 2, clientY: r.top + r.height / 2
+      }));
+    });
+    return settle().then(function () {
+      var kinds = Object.keys(S.multi).map(function (id) { return S.vt.byId[id].kind; }).sort();
+      ok('tapping it selects the card and the node it points at',
+        Object.keys(S.multi).length === 2 && kinds.join(',') === 'item,note', kinds.join(','));
+      ok('Unlink is offered for the pair', !!bbNamed(W, 'Unlink'), barText(W));
+      bbNamed(W, 'Unlink').click();
+      return settle();
+    }).then(function () {
+      ok('unlinking removes the card\u2019s link but keeps the attachment',
+        S.src.indexOf('#type)') < 0 &&
+        (S.src.match(/synapseresource:\/\/note\//g) || []).length === 2, S.src);
+    });
+
+  }).then(function () {
+    /* ---- detaching takes the card's own links with it ---- */
+    var card = S.vt.all.filter(function (v) { return v.kind === 'note'; })[0];
+    W.CG.app._ops.performCardLink(card, { kind: 'node', path: [0, 0, 1] });
+    return settle().then(function () {
+      var again = S.vt.all.filter(function (v) { return v.kind === 'note'; })[0];
+      W.CG.app._ops.detachNote(again);
+      return settle();
+    }).then(function () {
+      ok('detaching leaves no orphaned link behind',
+        (S.src.match(/synapseresource:\/\/note\//g) || []).length === 1, S.src);
+      ok('and the note still parses cleanly', W.CG.md.coverageOf(S.src).length === 0);
+    });
+
+  }).then(function () {
     // ---- outline view renders the same tree
     var btn = W.document.querySelector('#viewToggle button[data-mode="outline"]');
     btn.click();

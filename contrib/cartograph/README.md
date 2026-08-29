@@ -90,6 +90,42 @@ A summary line states the shape of the change — *"1 merged · 1 added · 1
 renamed · 2 moved"*, plus a count of any body text that would be dropped — with
 **Apply** and **Discard**. Applying is one splice and one undo step.
 
+## Attached notes
+
+**Note ▸ Attach an existing note** takes **as many notes as you pick** — each
+becomes its own card hanging off the node, in one undo step.
+
+A card is not a dead end. From its action bar you can **Open** or **Edit** the
+note, **Move** the card to a different node, **Link** it to something, or
+**Detach** it. Cards can also be selected alongside nodes.
+
+Each card is one line in the note's body, and its own links ride on that line:
+
+```markdown
+- Colors
+
+  [Interview script](synapseresource://note/abc) → [Design](#design)
+  [Recruiting plan](synapseresource://note/def) → [Interview script](synapseresource://note/abc)
+```
+
+The rule is positional: **a body line whose first link is a note link belongs to
+that card, and so does everything else on it.** The `→` is decoration. Because
+the whole line travels together, moving a card carries its links, and detaching
+one takes them with it rather than stranding them on the node.
+
+A card may link to a node or to another card. When a card is one of a linked
+pair it is always the source, since that is where its links can live. A
+card-to-card link resolves to the **nearest** copy of that note, the same
+distance rule used for repeated names.
+
+### What cards cannot do
+
+Merge, Group and Split are withheld whenever a card is selected: they rewrite
+markdown labels, and a card is a reference to another note, not text this note
+owns. Move is withheld for a selection mixing nodes and cards — nodes move as
+subtrees among a node's children, cards move as lines into a body, and doing
+both at once would fail silently. You get a plain refusal instead.
+
 ## Linking two unrelated nodes
 
 Two nodes anywhere in the map can be joined by a **dashed line**, independent of

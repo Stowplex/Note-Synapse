@@ -109,6 +109,43 @@
   }
   MD.extractLinks = extractLinks;
 
+  /*
+   * Split a node's links into the ones the NODE owns and the ones belonging to
+   * attached-note cards hanging off it.
+   *
+   * A body line whose first link is a note link is that card's line: the note
+   * link makes the card, and every other link on the line is the card's own.
+   * Any other line's links are the node's, as they always were.
+   */
+  MD.splitLinks = function (node) {
+    var byLine = {};
+    var order = [];
+    (node.links || []).forEach(function (l) {
+      var key = String(l.lineStart);
+      if (!byLine[key]) { byLine[key] = []; order.push(key); }
+      byLine[key].push(l);
+    });
+    var own = [], cards = [];
+    order.forEach(function (key) {
+      var line = byLine[key].slice().sort(function (a, b) { return a.index - b.index; });
+      var first = line[0];
+      if (first.inBody && first.type === 'note' && first.noteId) {
+        cards.push({ link: first, noteId: first.noteId, lineStart: first.lineStart, out: line.slice(1) });
+        return;
+      }
+      // A note link anywhere else - in the label, or after other text - still
+      // makes a card, it just has no links of its own to carry.
+      line.forEach(function (l) {
+        if (l.type === 'note' && l.noteId) {
+          cards.push({ link: l, noteId: l.noteId, lineStart: l.lineStart, out: [] });
+        } else {
+          own.push(l);
+        }
+      });
+    });
+    return { own: own, cards: cards };
+  };
+
   /* ---------------------------------------------------------------- nodes */
 
   function makeNode(kind) {
@@ -353,13 +390,27 @@
         end = Math.max(end, node.children[j].outer.end);
       }
       node.outer = { start: node.self.start, end: end };
+      /*
+       * Links carry absolute offsets and the start of the line they sit on.
+       * The line matters: a body line whose first link is a note link belongs
+       * to that attached-note card, and so does everything else on it - which
+       * is how a card gets links of its own without becoming a node.
+       */
+      function lineStartAt(pos) { return src.lastIndexOf('\n', pos - 1) + 1; }
+
       node.links = extractLinks(node.text);
+      for (var t = 0; t < node.links.length; t++) {
+        node.links[t].index += node.textStart;
+        node.links[t].inBody = false;
+        node.links[t].lineStart = lineStartAt(node.links[t].index);
+      }
       for (var k = 0; k < node.body.length; k++) {
         var blockText = src.slice(node.body[k].start, node.body[k].end);
         var found = extractLinks(blockText);
         for (var f = 0; f < found.length; f++) {
           found[f].index += node.body[k].start;
           found[f].inBody = true;
+          found[f].lineStart = lineStartAt(found[f].index);
           node.links.push(found[f]);
         }
       }
