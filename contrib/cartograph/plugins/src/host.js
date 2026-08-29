@@ -130,8 +130,13 @@
           pick = global.prompt('Mock note picker - id to attach:\n' +
             ids.map(function (i) { return i + ' = ' + mock.notes[i].title; }).join('\n'), ids[1] || ids[0]);
         }
-        if (!pick || !mock.notes[pick]) return Promise.resolve({ success: true, cancelled: true, notes: [] });
-        return Promise.resolve({ success: true, notes: [{ id: pick, title: mock.notes[pick].title }] });
+        var ids = Array.isArray(pick) ? pick : [pick];
+        ids = ids.filter(function (i) { return i && mock.notes[i]; });
+        if (!ids.length) return Promise.resolve({ success: true, cancelled: true, notes: [] });
+        return Promise.resolve({
+          success: true,
+          notes: ids.map(function (i) { return { id: i, title: mock.notes[i].title }; })
+        });
       },
       openNote: function (id) { global.console.log('[mock] openNote', id); return Promise.resolve({ success: true }); },
       loadAppState: function () { return Promise.resolve({ success: true, state: mock.state || {} }); },

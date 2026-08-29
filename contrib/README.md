@@ -67,8 +67,8 @@ The starter apps are already installed; there is nothing to import for those.
   mind map: headings and bullets become branches, and every change on the map is
   written straight back into the note's markdown. Drag nodes to re-nest or pin
   them, flip between map and outline, focus a branch, search and filter, roll up
-  checkbox progress, link any two nodes with a dashed line, and attach, create,
-  import or promote notes from any node.
+  checkbox progress, link any two nodes with a dashed line, and attach several
+  notes at once as cards you can move, link and select like anything else.
   Optionally generates a map with AI into a companion note, and reshapes
   branches with AI behind a preview you approve. Ships as **Cartograph**
   (standalone, with a home screen of your maps) and **Cartograph: this note**
