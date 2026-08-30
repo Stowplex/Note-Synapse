@@ -19,6 +19,7 @@ import '../services/service_locator.dart';
 import '../services/logger_service.dart';
 import '../services/web_content_extraction_service.dart';
 import '../services/web_session_service.dart';
+import '../services/user_app_session_service.dart';
 import '../services/media_attachment_service.dart';
 import '../services/network_provider.dart';
 import '../utils/file_utils.dart';
@@ -41,6 +42,31 @@ class ShareScreen extends StatefulWidget {
 }
 
 class _ShareScreenState extends State<ShareScreen> {
+  /// Leaves the share flow once the user is done (saved, appended, cancelled).
+  ///
+  /// Normally this resets the stack to `/main`: a share intent can arrive over
+  /// any app state, so landing on a clean Home is the predictable result.
+  ///
+  /// A backgrounded User App is the exception. It *lives* in that stack, so
+  /// `removeUntil((route) => false)` would destroy the very app the user shared
+  /// into Note Synapse to get back to — clip a page, return to the mind map.
+  /// While one is alive, unwind only the routes the share flow itself pushed and
+  /// leave the user where they were, pill intact.
+  void _leaveShareFlow(
+    NavigatorState navigator,
+    ModalRoute<dynamic>? shareRoute,
+  ) {
+    final handled =
+        getIt.isRegistered<UserAppSessionService>() &&
+        getIt<UserAppSessionService>().unwindPreservingApp(
+          navigator,
+          shareRoute,
+        );
+    if (!handled) {
+      navigator.pushNamedAndRemoveUntil('/main', (route) => false);
+    }
+  }
+
   Note? _preparedNote;
   String? _error;
   bool _isLoading = true;
@@ -529,9 +555,11 @@ class _ShareScreenState extends State<ShareScreen> {
                   onPressed: () async {
                     // Clean up downloaded file on cancel
                     await _cleanupDownloadedFile();
-                    Navigator.of(
-                      context,
-                    ).pushNamedAndRemoveUntil('/main', (route) => false);
+                    if (!mounted) return;
+                    _leaveShareFlow(
+                      Navigator.of(context),
+                      ModalRoute.of(context),
+                    );
                   },
                   child: Text(l10n.cancel),
                 ),
@@ -613,10 +641,9 @@ class _ShareScreenState extends State<ShareScreen> {
                         children: _selectedTags.map((tag) {
                           return Chip(
                             label: Text(tag),
-                            backgroundColor:
-                                _filterDerivedTags.contains(tag)
-                                    ? Colors.purple.withOpacity(0.1)
-                                    : null,
+                            backgroundColor: _filterDerivedTags.contains(tag)
+                                ? Colors.purple.withOpacity(0.1)
+                                : null,
                             deleteIcon: const Icon(Icons.close, size: 18),
                             onDeleted: () {
                               setState(() {
@@ -744,7 +771,9 @@ class _ShareScreenState extends State<ShareScreen> {
   }
 
   void _openFilterSelectionForTags(
-      BuildContext context, AppProvider appProvider) {
+    BuildContext context,
+    AppProvider appProvider,
+  ) {
     showDialog(
       context: context,
       builder: (context) => HierarchyDialog(
@@ -754,8 +783,9 @@ class _ShareScreenState extends State<ShareScreen> {
           setState(() {
             for (final filterId in selectedIds) {
               try {
-                final filter =
-                    appProvider.filters.firstWhere((f) => f.id == filterId);
+                final filter = appProvider.filters.firstWhere(
+                  (f) => f.id == filterId,
+                );
                 for (final tag in filter.includeTags) {
                   if (!_selectedTags.contains(tag)) {
                     _selectedTags.add(tag);
@@ -1648,9 +1678,11 @@ class _ShareScreenState extends State<ShareScreen> {
     // to avoid using deactivated context
     ScaffoldMessengerState? scaffoldMessenger;
     NavigatorState? navigator;
+    ModalRoute<dynamic>? shareRoute;
     if (mounted) {
       scaffoldMessenger = ScaffoldMessenger.of(context);
       navigator = Navigator.of(context);
+      shareRoute = ModalRoute.of(context);
     }
 
     try {
@@ -1705,8 +1737,7 @@ class _ShareScreenState extends State<ShareScreen> {
               backgroundColor: Colors.green,
             ),
           );
-          // Navigate to main screen instead of just popping
-          navigator.pushNamedAndRemoveUntil('/main', (route) => false);
+          _leaveShareFlow(navigator, shareRoute);
         }
       } else {
         RemoteImageDownloadReport? downloadReport;
@@ -1758,8 +1789,7 @@ class _ShareScreenState extends State<ShareScreen> {
               backgroundColor: Colors.green,
             ),
           );
-          // Navigate to main screen instead of just popping
-          navigator.pushNamedAndRemoveUntil('/main', (route) => false);
+          _leaveShareFlow(navigator, shareRoute);
         }
       }
     } catch (e) {
@@ -2200,9 +2230,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         await service.syncFromLiveJar(loadedUrl ?? widget.url);
       }
     } catch (e) {
-      LoggerService.warning(
-        '[ShareScreen] Failed to sync session cookies: $e',
-      );
+      LoggerService.warning('[ShareScreen] Failed to sync session cookies: $e');
     }
   }
 

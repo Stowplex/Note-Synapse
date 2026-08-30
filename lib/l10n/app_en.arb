@@ -2307,5 +2307,25 @@
       "domain": {"type": "String"}
     }
   },
-  "searchNotes": "Search notes"
+  "searchNotes": "Search notes",
+  "runInBackground": "Keep running in background",
+  "appRunningInBackground": "{appName} is running",
+  "@appRunningInBackground": {
+    "placeholders": {
+      "appName": {"type": "String"}
+    }
+  },
+  "closeBackgroundApp": "Close app",
+  "closeBackgroundAppConfirm": "Close \"{appName}\"? Anything unsaved in the app will be lost.",
+  "@closeBackgroundAppConfirm": {
+    "placeholders": {
+      "appName": {"type": "String"}
+    }
+  },
+  "backgroundAppClosed": "Closed \"{appName}\" — only one app can run in the background.",
+  "@backgroundAppClosed": {
+    "placeholders": {
+      "appName": {"type": "String"}
+    }
+  }
 }

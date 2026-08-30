@@ -26,6 +26,7 @@ import 'services/tag_image_service.dart';
 import 'services/wake_lock_service.dart' as wake_lock;
 import 'services/network_provider.dart';
 import 'utils/global_keys.dart';
+import 'widgets/user_app_background_shell.dart';
 import 'widgets/workflow_shell.dart';
 
 void main() async {
@@ -154,6 +155,13 @@ class _StartupErrorApp extends StatelessWidget {
   }
 }
 
+/// Hoisted out of `build`: `MaterialApp` sits under a `Consumer<AppProvider>`,
+/// so a fresh list literal here would make `NavigatorState.didUpdateWidget`
+/// detach and re-attach the observer on every provider notification.
+final List<NavigatorObserver> _navigatorObservers = <NavigatorObserver>[
+  appRouteObserver,
+];
+
 class NoteSynapseApp extends StatelessWidget {
   const NoteSynapseApp({super.key});
 
@@ -180,6 +188,7 @@ class NoteSynapseApp extends StatelessWidget {
             ],
             locale: appProvider.locale,
             navigatorKey: navigatorKey,
+            navigatorObservers: _navigatorObservers,
             theme: ThemeData(
               colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
               useMaterial3: true,
@@ -209,7 +218,11 @@ class NoteSynapseApp extends StatelessWidget {
               },
             },
             builder: (context, child) {
-              return WorkflowShell(child: child ?? const SizedBox.shrink());
+              return WorkflowShell(
+                child: UserAppBackgroundShell(
+                  child: child ?? const SizedBox.shrink(),
+                ),
+              );
             },
           );
         },

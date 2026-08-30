@@ -2256,5 +2256,25 @@
       "domain": {"type": "String"}
     }
   },
-  "searchNotes": "搜索笔记"
+  "searchNotes": "搜索笔记",
+  "runInBackground": "后台保持运行",
+  "appRunningInBackground": "{appName} 正在运行",
+  "@appRunningInBackground": {
+    "placeholders": {
+      "appName": {"type": "String"}
+    }
+  },
+  "closeBackgroundApp": "关闭应用",
+  "closeBackgroundAppConfirm": "确定关闭“{appName}”吗？应用中未保存的内容将会丢失。",
+  "@closeBackgroundAppConfirm": {
+    "placeholders": {
+      "appName": {"type": "String"}
+    }
+  },
+  "backgroundAppClosed": "已关闭“{appName}”——同一时间只能有一个应用在后台运行。",
+  "@backgroundAppClosed": {
+    "placeholders": {
+      "appName": {"type": "String"}
+    }
+  }
 }

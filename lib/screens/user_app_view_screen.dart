@@ -9,8 +9,11 @@ import '../models/user_app.dart';
 import '../models/app_revision.dart';
 import '../models/note.dart';
 import '../services/user_app_service.dart';
+import '../services/user_app_session_service.dart';
+import '../services/service_locator.dart';
 import '../services/logger_service.dart';
 import '../utils/file_utils.dart';
+import '../utils/global_keys.dart';
 import '../widgets/user_app_web_view.dart';
 import 'user_app_edit_screen.dart';
 import 'note_detail_screen.dart';
@@ -28,6 +31,14 @@ class UserAppViewScreen extends StatefulWidget {
   final bool showRevisionHistory;
   final List<Widget>? extraActions;
 
+  /// Whether this instance may be backgrounded — kept alive under a freshly
+  /// pushed Home screen and returned to via the floating pill.
+  ///
+  /// False where the screen is a *tab body* rather than a pushed route
+  /// (`MultiFunctionScreen`): there is no route of our own to keep alive, and
+  /// the app is already permanently reachable through its tab.
+  final bool canRunInBackground;
+
   const UserAppViewScreen({
     super.key,
     required this.app,
@@ -37,17 +48,31 @@ class UserAppViewScreen extends StatefulWidget {
     this.showEditAction = true,
     this.showRevisionHistory = true,
     this.extraActions,
+    this.canRunInBackground = true,
   });
 
   @override
   State<UserAppViewScreen> createState() => UserAppViewScreenState();
 }
 
-class UserAppViewScreenState extends State<UserAppViewScreen> {
+class UserAppViewScreenState extends State<UserAppViewScreen> with RouteAware {
   final List<String> _consoleOutput = [];
   bool _isLoading = true;
   AppRevision? _selectedRevision;
   bool _showRevisionDetails = false;
+
+  /// The route this screen owns, once registered as a backgroundable session.
+  /// Null when the screen is embedded, opted out, or not hosted by a route.
+  ModalRoute<void>? _sessionRoute;
+
+  /// Set once the app has been seen in [AppProvider]; guards the
+  /// "deleted while backgrounded" check against a not-yet-loaded provider.
+  bool _appSeenInProvider = false;
+
+  UserAppSessionService? get _sessionService =>
+      getIt.isRegistered<UserAppSessionService>()
+      ? getIt<UserAppSessionService>()
+      : null;
 
   @override
   void initState() {
@@ -77,8 +102,10 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _maybeRegisterSession();
     // Update selected revision when provider data changes
     final appProvider = context.watch<AppProvider>();
+    _checkAppStillExists(appProvider);
     final currentApp = appProvider.userApps.firstWhere(
       (app) => app.id == widget.app.id,
       orElse: () => widget.app,
@@ -104,6 +131,99 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
         );
       }
     }
+  }
+
+  /// Records this screen's route with [UserAppSessionService] so it can be kept
+  /// alive under a pushed Home screen, and subscribes to [appRouteObserver] to
+  /// track whether it is the visible route.
+  ///
+  /// Only pushed [PageRoute]s qualify: an embedded/tab-body instance would pick
+  /// up whatever route happens to host it, which is not ours to background.
+  void _maybeRegisterSession() {
+    if (_sessionRoute != null) return;
+    if (!widget.canRunInBackground || widget.isEmbedded) return;
+    if (!UserAppService.isWebViewSupported()) return;
+
+    final route = ModalRoute.of(context);
+    if (route is! PageRoute<void>) return;
+
+    final service = _sessionService;
+    if (service == null) return;
+
+    _sessionRoute = route;
+    appRouteObserver.subscribe(this, route);
+    service.register(widget.app, route);
+  }
+
+  /// Closes the session if the app was deleted while it was backgrounded, so
+  /// the pill never points at an app that no longer exists.
+  void _checkAppStillExists(AppProvider appProvider) {
+    if (_sessionRoute == null) return;
+    final exists = appProvider.userApps.any((a) => a.id == widget.app.id);
+    if (exists) {
+      _appSeenInProvider = true;
+      return;
+    }
+    if (!_appSeenInProvider) return;
+    _appSeenInProvider = false;
+    final service = _sessionService;
+    if (service == null) return;
+    final route = _sessionRoute;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // By the time the frame ends the tracked session may be someone else's
+      // (a second app launched in between); never tear down a stranger.
+      if (!identical(service.session?.route, route)) return;
+      // `discard`, not `close`: the user is looking at whichever screen they
+      // deleted the app from, so walking them back to the app route just to
+      // pop it again would be two page transitions they did not ask for.
+      service.discard();
+    });
+  }
+
+  /// Covered by another route — the app is no longer in the foreground.
+  ///
+  /// Passes our own route: a second app screen may be alive further up the
+  /// stack (app A → in-app note link → app B), and only the screen that owns
+  /// the session is allowed to move it.
+  @override
+  void didPushNext() {
+    final route = _sessionRoute;
+    if (route != null) _sessionService?.setForeground(route, false);
+  }
+
+  /// Uncovered again. Fires whether the user came back via the pill or the
+  /// system back gesture, so the pill hides either way.
+  ///
+  /// Re-registers rather than just flipping the flag: if another app screen was
+  /// opened above this one it took the session, so becoming visible again means
+  /// taking it back — otherwise this screen's "run in background" button would
+  /// be a silent no-op, or worse, act on a stranger's route.
+  @override
+  void didPopNext() {
+    final route = _sessionRoute;
+    if (route != null) _sessionService?.register(widget.app, route);
+  }
+
+  Future<void> _moveToBackground() async {
+    final route = _sessionRoute;
+    final service = _sessionService;
+    if (route == null || service == null) return;
+    // This screen is the visible one, so it should already own the session;
+    // claim it first regardless so the button can never be a no-op because the
+    // session drifted to another app screen.
+    service.register(widget.app, route);
+    await service.moveToBackground();
+  }
+
+  @override
+  void dispose() {
+    final route = _sessionRoute;
+    if (route != null) {
+      appRouteObserver.unsubscribe(this);
+      _sessionService?.unregister(route);
+      _sessionRoute = null;
+    }
+    super.dispose();
   }
 
   Future<void> _loadRevisions() async {
@@ -319,6 +439,12 @@ class UserAppViewScreenState extends State<UserAppViewScreen> {
                 ],
               ),
               actions: [
+                if (_sessionRoute != null)
+                  IconButton(
+                    icon: const Icon(Icons.picture_in_picture_alt_outlined),
+                    onPressed: _moveToBackground,
+                    tooltip: l10n.runInBackground,
+                  ),
                 if (widget.extraActions != null) ...widget.extraActions!,
                 IconButton(
                   icon: const Icon(Icons.code),
