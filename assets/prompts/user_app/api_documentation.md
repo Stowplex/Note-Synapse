@@ -110,6 +110,7 @@
        * This function fetches the webpage, and converts it to markdown.
        * The markdown field contains the cleaned, readable content in markdown format, which is ideal for further processing or display.
        * The function may throw an error if the URL is invalid, the page cannot be loaded, or WebView is not supported on the platform.
+       * Image and link URLs in `markdown` are already absolute - relative references in the page are resolved against its base URL before conversion, so there is no need to re-resolve them. In-page anchors (`#section`) are the one exception and are left as-is.
    - Synapse.originFetch(url: string, options?: object) - Perform an HTTP request from INSIDE a real browser (WebView) context loaded at the target's origin, so the browser's cookie jar, session, and Sec-Fetch semantics apply. Use this (instead of proxyFetch) for resources that require a real browser context - e.g. endpoints protected by a login session the user established via an in-app browser login, or hosts that reject plain HTTP clients.
      Param format:
        url: string                    // HTTP(S) URL to request

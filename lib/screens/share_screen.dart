@@ -2412,7 +2412,17 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     return false;
   }
 
-  Future<String> _getCurrentPageBodyHtml() async {
+  /// Captures the current page as HTML plus the base URL that its relative
+  /// references resolve against.
+  ///
+  /// The base URL has to come from `document.baseURI` rather than
+  /// [_WebExtractionDialog.url]: it accounts for a `<base href>` element and
+  /// for any redirect the page went through, `body.innerHTML` never carries
+  /// the `<base>` tag itself (it lives in `<head>`), and the user may have
+  /// navigated away from the URL this dialog was opened with. When the page
+  /// reports no base URI there is no trustworthy substitute, so the pass is
+  /// skipped rather than fed a stale URL.
+  Future<WebContentJob> _getCurrentPageBodyHtml() async {
     if (_controller == null) {
       throw Exception('WebView controller not ready');
     }
@@ -2422,9 +2432,17 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     final result = await _controller!.evaluateJavascript(
       source: '''
         (function() {
+          var baseUri = '';
+          try {
+            baseUri = document.baseURI || window.location.href || '';
+          } catch (e) {
+            baseUri = '';
+          }
+
           var debug = {
             contentType: document.contentType,
             url: window.location.href,
+            baseUri: baseUri,
             hasBody: !!document.body,
             hasDocEl: !!document.documentElement,
             bodyTextLength: document.body ? document.body.innerText.length : -1,
@@ -2457,6 +2475,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 return JSON.stringify({
                   status: 'success',
                   content: '<pre>' + escapeHtml(content) + '</pre>',
+                  baseUri: baseUri,
                   debug: debug
                 });
               } else {
@@ -2468,6 +2487,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               return JSON.stringify({
                   status: 'success',
                   content: document.body.innerHTML,
+                  baseUri: baseUri,
                   debug: debug
               });
             }
@@ -2477,6 +2497,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                return JSON.stringify({
                   status: 'success',
                   content: docContent,
+                  baseUri: baseUri,
                   debug: debug
                });
             }
@@ -2511,7 +2532,13 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
             "Extracted content is empty. Debug: ${jsonEncode(response['debug'])}",
           );
         }
-        return content;
+        final baseUri = response['baseUri'] as String?;
+        return (
+          html: content,
+          baseUrl: (baseUri == null || baseUri.trim().isEmpty)
+              ? null
+              : baseUri,
+        );
       } else {
         final message = response['message'] ?? 'Unknown error';
         final debug = response['debug'];
@@ -2551,12 +2578,12 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     });
 
     try {
-      final htmlContent = await _getCurrentPageBodyHtml();
+      final page = await _getCurrentPageBodyHtml();
 
       // Run heavy parsing in background isolate
       String finalContent = await compute(
         WebContentProcessor.processHtml,
-        htmlContent,
+        page,
       );
 
       var title = await _getCurrentPageTitle();

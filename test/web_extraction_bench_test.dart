@@ -16,9 +16,15 @@ void main() {
       htmlBuffer.write(
         '<pre class="language-dart">void main() { print("hello world $i"); }</pre>',
       );
-      htmlBuffer.write(
-        '<img src="https://example.com/image$i.jpg" alt="Image $i" />',
-      );
+      // Half absolute, half relative: exercises both the pass-through and the
+      // rewrite path of the URL absolutizer.
+      if (i.isEven) {
+        htmlBuffer.write(
+          '<img src="https://example.com/image$i.jpg" alt="Image $i" />',
+        );
+      } else {
+        htmlBuffer.write('<img src="/image$i.jpg" alt="Image $i" />');
+      }
     }
     htmlBuffer.write('</body></html>');
 
@@ -30,7 +36,10 @@ void main() {
     // 1. Process HTML
     // Note: in a unit test environment, compute might run synchronously or need setup.
     // We test the method directly first to ensure logic correctness and measure time.
-    final finalContent = WebContentProcessor.processHtml(htmlContent);
+    final finalContent = WebContentProcessor.processHtml((
+      html: htmlContent,
+      baseUrl: 'https://example.com/articles/huge',
+    ));
 
     final processTime = stopwatch.elapsedMilliseconds;
     print('Process time: ${processTime}ms');
