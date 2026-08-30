@@ -5550,4 +5550,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String revokeAppAccessConfirm(String appName, String domain) {
     return 'Remove \"$appName\" access to your $domain login?';
   }
+
+  @override
+  String get runInBackground => 'Keep running in background';
+
+  @override
+  String appRunningInBackground(String appName) {
+    return '$appName is running';
+  }
+
+  @override
+  String get closeBackgroundApp => 'Close app';
+
+  @override
+  String closeBackgroundAppConfirm(String appName) {
+    return 'Close \"$appName\"? Anything unsaved in the app will be lost.';
+  }
+
+  @override
+  String backgroundAppClosed(String appName) {
+    return 'Closed \"$appName\" — only one app can run in the background.';
+  }
 }

@@ -8,6 +8,7 @@ import 'block_note_scope_service.dart';
 import 'content_ingestion_service.dart';
 import 'conversation_service.dart';
 import 'user_app_service.dart';
+import 'user_app_session_service.dart';
 import 'model_storage_service.dart';
 import 'model_preference_service.dart';
 import 'model_selector.dart';
@@ -111,6 +112,14 @@ void setupServiceLocator() {
 
   if (!getIt.isRegistered<TtsService>()) {
     getIt.registerLazySingleton<TtsService>(() => TtsService());
+  }
+
+  // Tracks the single User App allowed to keep running in the background.
+  // Pure in-memory navigator bookkeeping, so it has no dependencies.
+  if (!getIt.isRegistered<UserAppSessionService>()) {
+    getIt.registerLazySingleton<UserAppSessionService>(
+      () => UserAppSessionService(),
+    );
   }
 
   // ============================================================

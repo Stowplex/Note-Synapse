@@ -9607,6 +9607,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Remove \"{appName}\" access to your {domain} login?'**
   String revokeAppAccessConfirm(String appName, String domain);
+
+  /// No description provided for @runInBackground.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep running in background'**
+  String get runInBackground;
+
+  /// No description provided for @appRunningInBackground.
+  ///
+  /// In en, this message translates to:
+  /// **'{appName} is running'**
+  String appRunningInBackground(String appName);
+
+  /// No description provided for @closeBackgroundApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Close app'**
+  String get closeBackgroundApp;
+
+  /// No description provided for @closeBackgroundAppConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Close \"{appName}\"? Anything unsaved in the app will be lost.'**
+  String closeBackgroundAppConfirm(String appName);
+
+  /// No description provided for @backgroundAppClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed \"{appName}\" — only one app can run in the background.'**
+  String backgroundAppClosed(String appName);
 }
 
 class _AppLocalizationsDelegate

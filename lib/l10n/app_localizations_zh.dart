@@ -5275,4 +5275,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String revokeAppAccessConfirm(String appName, String domain) {
     return '移除“$appName”对你 $domain 登录的访问权限？';
   }
+
+  @override
+  String get runInBackground => '后台保持运行';
+
+  @override
+  String appRunningInBackground(String appName) {
+    return '$appName 正在运行';
+  }
+
+  @override
+  String get closeBackgroundApp => '关闭应用';
+
+  @override
+  String closeBackgroundAppConfirm(String appName) {
+    return '确定关闭“$appName”吗？应用中未保存的内容将会丢失。';
+  }
+
+  @override
+  String backgroundAppClosed(String appName) {
+    return '已关闭“$appName”——同一时间只能有一个应用在后台运行。';
+  }
 }
