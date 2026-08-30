@@ -22,6 +22,7 @@ import 'prompts/registrations/app_prompt_configuration.dart';
 import 'user_app_library_service.dart';
 import 'global_library_service.dart';
 import '../models/generation_context.dart';
+import '../utils/html_url_absolutizer.dart';
 import '../utils/synapse_temp_utils.dart';
 import 'service_locator.dart';
 
@@ -889,27 +890,67 @@ IMPORTANT:
         }
 
         try {
-          // Get the body HTML (similar to share_screen.dart when Readability is off)
+          // Get the body HTML plus the page's base URI (similar to
+          // share_screen.dart when Readability is off). The base URI has to
+          // come from the page rather than from `url`, because it accounts for
+          // a `<base href>` element that innerHTML never carries.
           final htmlResult = await controller.evaluateJavascript(
             source: '''
               (function() {
+                var baseUri = '';
                 try {
+                  baseUri = document.baseURI || window.location.href || '';
+                } catch (e) {
+                  baseUri = '';
+                }
+                try {
+                  var html = '';
                   if (document.body) {
-                    return document.body.innerHTML;
+                    html = document.body.innerHTML;
+                  } else if (document.documentElement) {
+                    html = document.documentElement.innerHTML;
                   }
-                  return document.documentElement ? document.documentElement.innerHTML : '';
+                  return JSON.stringify({ html: html, baseUri: baseUri });
                 } catch (e) {
                   console.log(e, e.stack);
-                  return '';
+                  return JSON.stringify({ html: '', baseUri: baseUri });
                 }
               })();
             ''',
           );
-          final htmlContent = htmlResult?.toString() ?? '';
+
+          var htmlContent = '';
+          String? baseUri;
+          final rawResult = htmlResult?.toString() ?? '';
+          if (rawResult.isNotEmpty) {
+            try {
+              final decoded = jsonDecode(rawResult);
+              if (decoded is Map) {
+                htmlContent = decoded['html'] as String? ?? '';
+                final rawBase = decoded['baseUri'] as String?;
+                if (rawBase != null && rawBase.trim().isNotEmpty) {
+                  baseUri = rawBase;
+                }
+              }
+            } catch (e) {
+              LoggerService.warning(
+                '[Synapse.fetchWebPage] Could not parse extraction payload: $e',
+              );
+            }
+          }
 
           if (htmlContent.isEmpty) {
             throw Exception('Failed to extract HTML content from webpage');
           }
+
+          // Resolve relative src/href values so images and links stay usable.
+          //
+          // Unlike the share screen, falling back to `url` here is safe: this
+          // is the `onLoadStop` URL, i.e. the page actually loaded after any
+          // redirect, not the caller's requested URL. It only misses a
+          // `<base href>` override, which is exactly what `baseUri` covers
+          // when the page reports one.
+          htmlContent = absolutizeUrls(htmlContent, baseUri ?? url?.toString());
 
           // Get the title
           final titleResult = await controller.evaluateJavascript(
