@@ -417,6 +417,83 @@
     sidecar.apply(noSidecar, s4);
     ok('a missing sidecar is fine', Object.keys(s4.pins).length === 0);
 
+    /* ---------------- comments in the sidecar ---------------- */
+    var cdoc = md.parse(FIXTURES['plan.md']);
+    var cColour = cdoc.nodes.filter(function (n) { return n.text === 'Colour and type'; })[0];
+    var cLaunch = cdoc.nodes.filter(function (n) { return n.text === 'Launch'; })[0];
+    var cDesign = cdoc.nodes.filter(function (n) { return /^Design/.test(n.text); })[0];
+    var cst = { pins: {}, collapsed: {}, comments: {} };
+    cst.comments.c1 = { id: 'c1', text: 'Check with the brand team', anchors: [{ kind: 'node', n: cColour.id }],
+      pos: { x: 90, y: -70 }, abs: { x: 500, y: 40 } };
+    cst.comments.c2 = { id: 'c2', text: 'Ship together', anchors: [{ kind: 'link', a: { n: cDesign.id }, b: { n: cLaunch.id } }],
+      pos: { x: 0, y: -50 }, abs: { x: 200, y: 200 } };
+    cst.comments.c3 = { id: 'c3', text: 'Free-floating\ntwo lines', anchors: [], pos: { x: -300, y: 120 } };
+    cst.comments.c4 = { id: 'c4', text: '   ', anchors: [], pos: { x: 0, y: 0 } };
+    var cblock = sidecar.build(cdoc, cst);
+    ok('comments are written into the sidecar', /"c":\[/.test(cblock), cblock);
+    ok('an empty comment is not written', cblock.indexOf('"c4"') < 0, cblock);
+    ok('a comment writes no markdown of its own',
+      edit.writeSidecar(cdoc, cblock).split('```synapse-cartograph')[0].indexOf('brand team') < 0);
+    ok('the nodes a comment points at get fingerprint entries even without a pin',
+      new RegExp('"' + cColour.id + '":\\{"k":').test(cblock) && new RegExp('"' + cLaunch.id + '":\\{"k":').test(cblock), cblock);
+
+    var cseeded = edit.writeSidecar(cdoc, cblock);
+    var cre = md.parse(cseeded);
+    ok('a note with comments still parses cleanly', md.coverage(cre).length === 0);
+    var cs2 = { pins: {}, collapsed: {}, comments: {} };
+    sidecar.apply(cre, cs2);
+    var reColour = cre.nodes.filter(function (n) { return n.text === 'Colour and type'; })[0];
+    var reLaunch = cre.nodes.filter(function (n) { return n.text === 'Launch'; })[0];
+    ok('three comments survive the round trip', Object.keys(cs2.comments).length === 3, JSON.stringify(Object.keys(cs2.comments)));
+    ok('a node anchor is re-resolved to the node',
+      cs2.comments.c1 && cs2.comments.c1.anchors[0].kind === 'node' && cs2.comments.c1.anchors[0].n === reColour.id);
+    ok('its offset is kept, since the anchor is still there',
+      cs2.comments.c1 && cs2.comments.c1.pos.x === 90 && cs2.comments.c1.pos.y === -70 && !cs2.comments.c1.reanchor);
+    ok('a link anchor comes back with both ends',
+      cs2.comments.c2 && cs2.comments.c2.anchors[0].kind === 'link' && cs2.comments.c2.anchors[0].b.n === reLaunch.id);
+    ok('a floating comment keeps its absolute spot and its line break',
+      cs2.comments.c3 && cs2.comments.c3.pos.x === -300 && cs2.comments.c3.text === 'Free-floating\ntwo lines');
+
+    // The node the comment hung off is deleted elsewhere.
+    var lost = md.parse(cseeded.replace('  - Colour and type\n', ''));
+    var cs3 = { pins: {}, collapsed: {}, comments: {} };
+    sidecar.apply(lost, cs3);
+    ok('a comment whose anchor is gone survives, unanchored', cs3.comments.c1 && cs3.comments.c1.anchors.length === 0);
+    ok('and stays where it was last drawn rather than at a meaningless offset',
+      cs3.comments.c1 && cs3.comments.c1.pos.x === 500 && cs3.comments.c1.pos.y === 40, JSON.stringify(cs3.comments.c1));
+
+    // Renamed elsewhere: the same fuzzy matching pins rely on.
+    var renamed = md.parse(cseeded.replace('  - Colour and type', '  - Colour & type'));
+    var cs4 = { pins: {}, collapsed: {}, comments: {} };
+    sidecar.apply(renamed, cs4);
+    var rn = renamed.nodes.filter(function (n) { return n.text === 'Colour & type'; })[0];
+    ok('a comment follows its node through a rename', cs4.comments.c1 && cs4.comments.c1.anchors[0].n === rn.id);
+
+    // Two anchors, first one lost: keep the second, re-measure later.
+    var cst5 = { pins: {}, collapsed: {}, comments: {} };
+    cst5.comments.c5 = { id: 'c5', text: 'Both', anchors: [{ kind: 'node', n: cColour.id }, { kind: 'node', n: cLaunch.id }],
+      pos: { x: 10, y: 10 }, abs: { x: 700, y: 700 } };
+    var lost2 = md.parse(edit.writeSidecar(cdoc, sidecar.build(cdoc, cst5)).replace('  - Colour and type\n', ''));
+    var cs5 = { pins: {}, collapsed: {}, comments: {} };
+    sidecar.apply(lost2, cs5);
+    ok('losing the first anchor keeps the others', cs5.comments.c5 && cs5.comments.c5.anchors.length === 1);
+    ok('and marks the position for re-measuring against the next one',
+      cs5.comments.c5 && cs5.comments.c5.reanchor === true && cs5.comments.c5.pos.x === 700);
+
+    var garbage = md.parse(cseeded.replace(/"c":\[.*\]\}/, '"c":[{"i":5},{"i":"x","t":"no position"},{"i":"y","t":"ok","p":[1,2],"a":[{"bogus":1}]}]}'));
+    var cs6 = { pins: {}, collapsed: {}, comments: {} };
+    sidecar.apply(garbage, cs6);
+    ok('malformed comment entries are skipped, valid ones kept',
+      Object.keys(cs6.comments).length === 1 && cs6.comments.y && cs6.comments.y.anchors.length === 0, JSON.stringify(cs6.comments));
+    ok('a state without a comments map is left alone', (function () {
+      var s = { pins: {}, collapsed: {} }; sidecar.apply(cre, s); return !s.comments;
+    })());
+
+    ok('anchor equality ignores link direction', sidecar.sameAnchor(
+      { kind: 'link', a: { n: 'a' }, b: { n: 'b' } }, { kind: 'link', a: { n: 'b' }, b: { n: 'a' } }));
+    ok('a card and a node on the same line are different anchors',
+      !sidecar.sameAnchor({ kind: 'card', n: 'a', c: 'x' }, { kind: 'node', n: 'a' }));
+
     b = md.parse(seeded);
     var cleared = edit.writeSidecar(b, sidecar.build(b, { pins: {}, collapsed: {} }));
     ok('no pins means no block at all', cleared.indexOf('synapse-cartograph') < 0 && !/\n{3,}$/.test(cleared));

@@ -32,6 +32,9 @@ source of truth:
   them shows its progress. Ticking one rewrites that one line of markdown.
 - **Notes on the map.** Attach an existing note, create one in place, or
   promote a whole branch into its own note — all as ordinary markdown links.
+- **Comments.** Light text boxes floating over the map, pointing at nodes,
+  cards or links with a dotted line — annotations that are not nodes, create
+  no notes, and leave the outline untouched.
 
 ## Two apps, one file
 
@@ -184,6 +187,44 @@ text-addressed anchors, and the alternative (invisible ids in your markdown) was
 rejected in v1. A link whose target has gone simply draws no edge and stays in
 the note as an ordinary markdown link.
 
+## Comments
+
+A comment is a light text box floating over the map — an annotation, not a
+node. It writes no line into the outline and creates no note. It can point at
+a node, an attached-note card, a dashed link between nodes, or several of
+those at once, each joined to it by a **thin dotted straight line**: dotted and
+straight so it cannot be mistaken for the dashed curve of a node link or the
+solid curve of the hierarchy. Left unattached, it simply floats where you put
+it.
+
+- **Comment** on a node's or card's action bar makes one pointing at it. In
+  select mode, **Comment** makes one pointing at everything selected; when the
+  selection is a linked pair (which is what tapping a link's handle selects),
+  it points at the link itself.
+- **More ▸ Add a floating comment** makes one attached to nothing.
+- Tap a comment to select it; tap again to edit it in place. Enter commits,
+  Shift+Enter breaks a line. Its bar offers **Edit**, **Attach to…** (any node,
+  card or link), **Detach** (one target, or all of them) and **Delete**.
+- Drag it anywhere. Drop it on a node to attach it to that node; drop it on
+  the bin to delete it.
+- A comment **rides along with the first thing it points at**: its position is
+  stored as an offset from that node, so it follows when the node is dragged,
+  pinned or re-laid-out. Detaching or re-attaching never moves it on screen —
+  the offset is simply re-measured.
+- Search reaches comment text; the outline lists comments after the tree, each
+  with what it points at.
+
+Comments live in the sidecar block, not in the markdown body, so the note
+reads exactly as before. They name their targets through the same
+fingerprinted entries pins use, and survive outside edits by the same rules: a
+renamed node keeps its comments; a deleted one loses them, and a comment whose
+only target is gone stays where it was last seen, floating. An empty comment is
+never written — abandoning a fresh one leaves no trace in the note or the undo
+stack.
+
+Comments stay out of multi-select, AI operations and ghost previews. None of
+those know what to do with text the note does not own.
+
 ## Importing another note as a branch
 
 **Note ▾ → Import a map here** brings another note's outline in under the
@@ -222,19 +263,30 @@ one bullet cannot reformat a code fence three sections away.
 
 ## The sidecar block
 
-Positions and collapse state are the only things markdown cannot express. When
-you pin or collapse something, Cartograph appends one compact block:
+Positions, collapse state and comments are the only things markdown cannot
+express. When you pin or collapse something, or write a comment, Cartograph
+appends one compact block:
 
 ````markdown
 ```synapse-cartograph
-{"v":1,"n":{"n7":{"k":"i0:plan/design/colors","t":"colors","d":3,"p":[400,-150]}}}
+{"v":1,"n":{"n7":{"k":"i0:plan/design/colors","t":"colors","d":3,"p":[400,-150]}},
+ "c":[{"i":"c8k2p1","t":"Check with brand","p":[94,-60],"a":[{"n":"n7"}],"q":[521,-105]}]}
 ```
 ````
 
+(Shown wrapped; it is written on one line.) Under `n`, each node a pin,
+collapse or comment refers to gets a fingerprint entry — its outline path `k`,
+label `t`, depth `d` and parent `pk` — plus `p` for a pin and `c` for collapse.
+Under `c`, each comment has its text `t`, its position `p` (an offset from its
+first anchor while it has one, an absolute spot when it floats), its anchors
+`a` (a node `{n}`, a card `{n,c}` or a link `{l:[end,end]}`), and `q`, where
+it was last drawn, so it can hold its place if that first anchor disappears.
+
 It is written only when there is something to say, and removed again when there
-is not — a map with no pins leaves the note completely clean. **The map lays
-out correctly without it.** If the block is missing, stale or hand-mangled,
-every node simply falls back to automatic layout; nothing breaks.
+is not — a map with no pins and no comments leaves the note completely clean.
+**The map lays out correctly without it.** If the block is missing, stale or
+hand-mangled, every node simply falls back to automatic layout and the map has
+no comments; nothing breaks.
 
 When the note is edited elsewhere, stored positions are re-attached by trying,
 in descending order of confidence: the exact outline path, then exact label text

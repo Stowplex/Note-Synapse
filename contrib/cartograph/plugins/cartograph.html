@@ -22,6 +22,10 @@
     --good: #059669;
     --good-soft: rgba(5, 150, 105, 0.12);
     --warn: #b45309;
+    --comment: #fff6d5;
+    --comment-border: #e8cf86;
+    --comment-ink: #4a3a10;
+    --comment-line: #c9a227;
     --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06), 0 2px 8px rgba(16, 24, 40, 0.05);
     --shadow-2: 0 6px 24px rgba(16, 24, 40, 0.14);
     --radius: 14px;
@@ -48,6 +52,10 @@
       --good: #34d399;
       --good-soft: rgba(52, 211, 153, 0.18);
       --warn: #fbbf24;
+      --comment: #2e2916;
+      --comment-border: #5c4d1e;
+      --comment-ink: #f3e6bd;
+      --comment-line: #d4a72c;
       --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.35);
       --shadow-2: 0 6px 28px rgba(0, 0, 0, 0.6);
       --b0: #7d90ff; --b1: #f472b6; --b2: #2dd4bf; --b3: #fbbf24;
@@ -207,6 +215,13 @@
   .ol-row.h .ol-txt { font-weight: 660; }
   .ol-row.done .ol-txt { color: var(--muted); text-decoration: line-through; }
   .ol-note { font-size: 12px; color: var(--accent); font-weight: 600; }
+  .ol-head { padding: 18px 12px 6px; font-size: 11.5px; font-weight: 750; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted); }
+  .ol-row.comment { background: var(--comment); color: var(--comment-ink); border-bottom-color: var(--comment-border); }
+  .ol-row.comment.sel { box-shadow: inset 3px 0 0 var(--comment-line); }
+  .ol-cmark { flex: none; font-size: 13px; line-height: 1.35; }
+  .ol-ctext { display: block; white-space: pre-wrap; }
+  .ol-csub { display: block; font-size: 11.5px; opacity: .65; margin-top: 2px; }
   #ol-src { margin: 10px 12px; padding: 12px; border-radius: var(--radius); background: var(--surface);
     border: 1px solid var(--border); white-space: pre-wrap; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
     color: var(--muted); display: none; overflow-x: auto; }
@@ -311,6 +326,34 @@
     background: var(--accent-soft); }
   .cg-link.dim { opacity: .12; }
   body.ghosting .cg-link { display: none; }
+
+  /* -------------------------------------------------------------- comments */
+  /* A comment is an annotation laid over the map, not part of it: a paper
+     note, tinted and squarer than a node, joined to what it annotates by a
+     thin dotted straight line rather than a curve. */
+  .cg-comment {
+    position: absolute; left: 0; top: 0; z-index: 4;
+    width: max-content; max-width: 200px; min-width: 44px;
+    padding: 7px 10px; border-radius: 7px;
+    background: var(--comment); color: var(--comment-ink);
+    border: 1px solid var(--comment-border);
+    box-shadow: var(--shadow-1);
+    font-size: 12.5px; line-height: 1.35;
+    transition: transform .22s cubic-bezier(.22,.61,.36,1), opacity .18s, box-shadow .15s, border-color .15s;
+    will-change: transform; cursor: pointer; user-select: none;
+  }
+  .cg-comment .label { display: block; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .cg-comment .label:empty::before { content: 'Comment…'; opacity: .5; }
+  .cg-comment.sel { border-color: var(--comment-line); box-shadow: 0 0 0 3px rgba(201, 162, 39, .22), var(--shadow-2); }
+  .cg-comment.match { border-color: var(--warn); box-shadow: 0 0 0 3px rgba(180,131,9,.2); }
+  .cg-comment.dim { opacity: .16; }
+  .cg-comment.dragging { opacity: .9; box-shadow: var(--shadow-2); transition: none; z-index: 20; }
+  .cg-comment.editing { border-color: var(--comment-line); box-shadow: 0 0 0 3px rgba(201, 162, 39, .22); cursor: text; }
+  .cg-comment .label[contenteditable="true"] { outline: none; min-width: 40px; cursor: text; user-select: text; }
+  #edges path.cg-cline { stroke: var(--comment-line); stroke-width: 1.3; stroke-dasharray: 0.1 4.2; opacity: .6; }
+  #edges path.cg-cline.on { stroke-width: 1.8; opacity: .9; }
+  #edges path.cg-cline.dim { opacity: .08; }
+  body.ghosting .cg-comment { display: none; }
 
   /* ------------------------------------------------------- select + ghost */
   .cg-node.multi { border-color: var(--accent); background: var(--accent-soft); }

@@ -24,7 +24,9 @@
     tx: 0, ty: 0, k: 1, boxes: null, els: {}, edgeEls: [], fresh: {},
     editingId: null, booted: false,
     selectMode: false, multi: {}, ghost: null, home: null, standalone: false, recents: [],
-    linkEls: []
+    linkEls: [],
+    // Comments: free text boxes over the map. Not nodes - see sidecar.js.
+    comments: {}, selCid: null, cEls: {}, cpos: {}, cLines: {}
   };
   CG.state = S;
 
@@ -52,6 +54,9 @@
       var ids = Object.keys(S.pins).concat(Object.keys(S.collapsed));
       if (S.selectedId) ids.push(S.selectedId);
       if (S.focusId) ids.push(S.focusId);
+      Object.keys(S.comments).forEach(function (cid) {
+        S.comments[cid].anchors.forEach(function (a) { ids = ids.concat(sidecar.anchorNodeIds(a)); });
+      });
       carried = fingerprintsFor(ids);
     }
     var doc = md.parse(newSrc, { title: S.title });
@@ -64,20 +69,52 @@
       S.collapsed = collapsed;
       S.selectedId = S.selectedId && m[S.selectedId] ? m[S.selectedId].id : null;
       S.focusId = S.focusId && m[S.focusId] ? m[S.focusId].id : null;
+      var lookup = function (id) { return m[id] ? m[id].id : null; };
+      Object.keys(S.comments).forEach(function (cid) {
+        var c = S.comments[cid];
+        if (!c.anchors.length) return;
+        var next = sidecar.remapAnchors(c.anchors, lookup);
+        var first = sidecar.remapAnchors([c.anchors[0]], lookup);
+        if (!first.length) {
+          // The anchor its offset was measured from is gone: hold the spot it
+          // was last drawn at, and re-measure against the next anchor if any.
+          var abs = S.cpos[cid] || c.abs || c.pos;
+          c.pos = { x: abs.x, y: abs.y };
+          if (next.length) c.reanchor = true;
+        }
+        c.anchors = next;
+      });
     }
     S.doc = doc;
     S.src = newSrc;
   }
 
+  /*
+   * Node ids are minted afresh by every parse, so nothing keyed by id can be
+   * copied back verbatim on undo. The text is enough: the sidecar inside it is
+   * kept in step with the state by syncSidecar, so pins, collapse and comments
+   * are all recovered from it by fingerprint. Selection and focus are carried
+   * the same way pins are across a reparse.
+   */
   function snapshot() {
-    return { src: S.src, pins: JSON.parse(JSON.stringify(S.pins)), collapsed: JSON.parse(JSON.stringify(S.collapsed)), selectedId: S.selectedId, focusId: S.focusId };
+    return {
+      src: S.src,
+      sel: S.selectedId ? fingerprintsFor([S.selectedId])[0] || null : null,
+      focus: S.focusId ? fingerprintsFor([S.focusId])[0] || null : null,
+      selCid: S.selCid
+    };
   }
 
   function restore(snap) {
-    S.pins = snap.pins; S.collapsed = snap.collapsed;
-    S.selectedId = snap.selectedId; S.focusId = snap.focusId;
     S.doc = md.parse(snap.src, { title: S.title });
     S.src = snap.src;
+    S.pins = {}; S.collapsed = {}; S.comments = {};
+    sidecar.apply(S.doc, S);
+    var carried = [snap.sel, snap.focus].filter(Boolean);
+    var m = carried.length ? sidecar.match(carried, S.doc.nodes) : {};
+    S.selectedId = snap.sel && m[snap.sel.id] ? m[snap.sel.id].id : null;
+    S.focusId = snap.focus && m[snap.focus.id] ? m[snap.focus.id].id : null;
+    S.selCid = snap.selCid && S.comments[snap.selCid] ? snap.selCid : null;
   }
 
   // The single entry point for anything that changes the note.
@@ -371,6 +408,7 @@
     drawEdges(res, vt);
     drawToggles(res, vt);
     drawLinkHandles(res, vt);
+    drawComments(res, vt);
     S.lastResult = res;
   }
 
@@ -537,8 +575,14 @@
    * the element, because the card grows as the text wraps.
    */
   function nodeScreenRect(viewId) {
-    var el = S.els[viewId];
-    var box = S.boxes && S.boxes.get(viewId);
+    var el, box;
+    if (isCommentId(viewId)) {
+      el = S.cEls[cidOf(viewId)];
+      box = S.cpos[cidOf(viewId)];
+    } else {
+      el = S.els[viewId];
+      box = S.boxes && S.boxes.get(viewId);
+    }
     if (!el || !box) return null;
     var r = elViewport.getBoundingClientRect();
     var top = r.top + S.ty + box.y * S.k;
@@ -627,7 +671,7 @@
   }
 
   function centerOn(viewId, animate) {
-    var b = S.boxes && S.boxes.get(viewId);
+    var b = isCommentId(viewId) ? commentBox(cidOf(viewId)) : (S.boxes && S.boxes.get(viewId));
     if (!b) return;
     var vis = visibleRect();
     S.tx = (vis.left + vis.right) / 2 - vis.originLeft - (b.x + b.w / 2) * S.k;
@@ -716,6 +760,30 @@
       }
       for (var i = 0; i < v.children.length; i++) walk(v.children[i], depth + 1);
     })(S.vt.root, 0);
+
+    // Comments are not in the tree, so they are listed after it, each with
+    // what it points at. Tapping one selects it, as on the map.
+    var cids = Object.keys(S.comments).filter(function (cid) { return !S.comments[cid].fresh; });
+    if (cids.length && !S.ghost) {
+      var head = document.createElement('div');
+      head.className = 'ol-head';
+      head.textContent = 'Comments';
+      frag.appendChild(head);
+      cids.forEach(function (cid) {
+        var c = S.comments[cid];
+        var row = document.createElement('div');
+        row.className = 'ol-row comment' + (S.selCid === cid ? ' sel' : '') +
+          (S.vt.filtering && !c.keep ? ' dim' : '');
+        row.dataset.cid = cid;
+        var where = c.anchors.map(anchorLabel).filter(Boolean);
+        row.innerHTML = '<span class="ol-cmark">💬</span><span class="ol-txt"><span class="ol-ctext"></span>' +
+          '<span class="ol-csub"></span></span>';
+        row.querySelector('.ol-ctext').textContent = c.text;
+        row.querySelector('.ol-csub').textContent = where.length ? '→ ' + where.join(', ') : 'floating';
+        frag.appendChild(row);
+      });
+    }
+
     elOlList.textContent = '';
     elOlList.appendChild(frag);
     if (elOlSrc.classList.contains('on')) elOlSrc.textContent = S.src;
@@ -744,6 +812,11 @@
       noteCache: S.noteCache
     });
     if (S.ghost) injectGhostNodes();
+    // A node and a comment are never selected at once; the node wins, since
+    // every node-selecting path sets selectedId without knowing about comments.
+    if (S.selectedId) S.selCid = null;
+    if (S.selCid && !S.comments[S.selCid]) S.selCid = null;
+    markComments();
     if (S.mode === 'map') renderMap(); else renderOutline();
     renderCrumbs();
     renderBottomBar();
@@ -819,6 +892,7 @@
     map: '<svg viewBox="0 0 24 24"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg>',
     move: '<svg viewBox="0 0 24 24"><path d="M5 4h5M5 4v5"/><path d="M5 4l7 7"/><path d="M14 20h5v-5"/><path d="M19 20l-7-7"/></svg>',
     link: '<svg viewBox="0 0 24 24"><path d="M9.5 14.5l5-5"/><path d="M12.5 7.5l1.8-1.8a3.5 3.5 0 014.9 4.9L17.4 12.4"/><path d="M11.5 16.5l-1.8 1.8a3.5 3.5 0 01-4.9-4.9L6.6 11.6"/></svg>',
+    comment: '<svg viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 015.5 4h13A1.5 1.5 0 0120 5.5v9a1.5 1.5 0 01-1.5 1.5H10l-4.5 4v-4H5.5A1.5 1.5 0 014 14.5z"/><path d="M8 9h8M8 12.5h5"/></svg>',
     unlink: '<svg viewBox="0 0 24 24"><path d="M12.5 7.5l1.8-1.8a3.5 3.5 0 014.9 4.9L17.4 12.4"/><path d="M11.5 16.5l-1.8 1.8a3.5 3.5 0 01-4.9-4.9L6.6 11.6"/><path d="M4 4l16 16"/></svg>'
   };
 
@@ -896,7 +970,28 @@
       if (!cards.length) {
         elBottom.appendChild(bb('Split', ICONS.ai, n >= 1 ? '' : 'off', function () { runOp('split'); }));
       }
+      // One comment pointing at everything selected; at the link itself when
+      // the selection is a linked pair (which is how tapping a link selects).
+      elBottom.appendChild(bb('Comment', ICONS.comment, n >= 1 ? '' : 'off', function () {
+        if (!n) return toast('Select something first');
+        var anchors = pair ? [linkAnchor(pair.from, pair.to)] : ids.map(anchorFromView);
+        anchors = anchors.filter(Boolean);
+        if (!anchors.length) return toast('Nothing selected can carry a comment');
+        createComment(anchors, ids[0]);
+      }));
       elBottom.appendChild(bb('Done', ICONS.close, '', exitSelect));
+      return;
+    }
+
+    if (S.selCid && S.comments[S.selCid] && !S.embedded) {
+      var c = S.comments[S.selCid];
+      elBottom.classList.add('open');
+      elBottom.appendChild(bb('Edit', ICONS.edit, 'accent', function () { beginCommentEdit(c.id); }));
+      elBottom.appendChild(bb('Attach', ICONS.link, '', function () { attachCommentPicker(c); }));
+      if (c.anchors.length) {
+        elBottom.appendChild(bb('Detach', ICONS.unlink, '', function () { detachCommentSheet(c); }));
+      }
+      elBottom.appendChild(bb('Delete', ICONS.trash, 'danger', function () { deleteComment(c.id); }));
       return;
     }
 
@@ -909,6 +1004,7 @@
       elBottom.appendChild(bb('Edit', ICONS.edit, '', function () { editNoteSheet(v.noteId); }));
       elBottom.appendChild(bb('Move', ICONS.move, '', function () { moveCardsPicker([v]); }));
       elBottom.appendChild(bb('Link', ICONS.link, '', function () { cardLinkPicker(v); }));
+      elBottom.appendChild(bb('Comment', ICONS.comment, '', function () { createComment([anchorFromView(v.id)], v.id); }));
       elBottom.appendChild(bb('Select', ICONS.select, '', function () { enterSelect(v.id); }));
       elBottom.appendChild(bb('Detach', ICONS.trash, 'danger', function () { detachNote(v); }));
       return;
@@ -929,6 +1025,12 @@
     if (v.ref.kind !== 'root') elBottom.appendChild(bb('Sibling', ICONS.sibling, '', function () { addSibling(v.ref); }));
     elBottom.appendChild(bb('Edit', ICONS.edit, '', function () { beginEdit(v.id); }));
     elBottom.appendChild(bb('Note', ICONS.note, '', noteMenu));
+    elBottom.appendChild(bb('Comment', ICONS.comment, '', function () {
+      // The synthetic root is the note title, which has no line to anchor to,
+      // so a comment on it simply floats beside it.
+      var a = anchorFromView(v.id);
+      createComment(a ? [a] : [], v.id);
+    }));
     elBottom.appendChild(bb('Focus', ICONS.focus, '', function () { setFocus(v.ref.id); }));
     elBottom.appendChild(bb('More', ICONS.more, '', moreMenu));
   }
@@ -936,7 +1038,9 @@
   function renderMatches() {
     var hits = $('#hits');
     if (!S.vt.filtering) { S.matches = []; hits.textContent = ''; return; }
-    S.matches = S.vt.all.filter(function (v) { return v.matched; }).map(function (v) { return v.id; });
+    S.matches = S.vt.all.filter(function (v) { return v.matched; }).map(function (v) { return v.id; })
+      .concat(Object.keys(S.comments).filter(function (cid) { return S.comments[cid].matched; })
+        .map(function (cid) { return 'comment:' + cid; }));
     hits.textContent = S.matches.length ? (Math.max(0, S.matchIx) + 1) + '/' + S.matches.length : '0';
   }
 
@@ -1000,6 +1104,9 @@
         });
       }
       menuItem(body, 'Select several nodes', 'Then merge or group them', ICONS.select, '', function () { enterSelect(v.id); });
+      menuItem(body, 'Add a floating comment', 'A free text box on the canvas, attached to nothing', ICONS.comment, '', function () {
+        createComment([], v.id);
+      });
       if (doc.children.length) {
         menuItem(body, 'Reshape this branch with AI', 'Regroup, or tidy the wording', ICONS.ai, '', function () { aiMenu(doc, null); });
       }
@@ -1395,6 +1502,7 @@
 
   function cancelEdit() {
     var id = S.editingId;
+    if (isCommentId(id)) return cancelCommentEdit(cidOf(id));
     S.editingId = null;
     stopKeyboardFollow();
     var v = id && S.vt.byId[id];
@@ -1405,6 +1513,7 @@
   function commitEdit(thenSibling) {
     var id = S.editingId;
     if (!id) return;
+    if (isCommentId(id)) return commitCommentEdit(cidOf(id));
     S.editingId = null;
     stopKeyboardFollow();
     var host_ = S.mode === 'map' ? S.els[id] : elOlList.querySelector('[data-id="' + id + '"]');
@@ -1457,6 +1566,14 @@
 
     var link = e.target.closest && e.target.closest('a.anchorref');
     if (link) { g = { type: 'anchor', href: link.dataset.href }; return; }
+
+    var cEl = e.target.closest && e.target.closest('.cg-comment');
+    if (cEl) {
+      if (S.editingId === 'comment:' + cEl.dataset.cid) { g = null; return; }
+      g = { type: 'comment', cid: cEl.dataset.cid, el: cEl, x0: e.clientX, y0: e.clientY, moved: false };
+      try { elViewport.setPointerCapture(e.pointerId); } catch (err) {}
+      return;
+    }
 
     var nodeEl = e.target.closest && e.target.closest('.cg-node');
     if (nodeEl && S.editingId === nodeEl.dataset.id) { g = null; return; }
@@ -1534,7 +1651,49 @@
       if (g.target && g.target !== target) g.target.classList.remove('droptarget');
       if (target) target.classList.add('droptarget');
       g.target = target;
+      return;
     }
+
+    if (g.type === 'comment') {
+      if (Math.hypot(e.clientX - g.x0, e.clientY - g.y0) < 9) return;
+      var o = S.cpos[g.cid];
+      if (!o || S.embedded || S.selectMode || S.ghost) { g.moved = true; return; }
+      g.type = 'cdrag';
+      g.moved = true;
+      g.o = { x: o.x, y: o.y };
+      g.el.classList.add('dragging');
+      elTrash.classList.add('open');
+      return;
+    }
+
+    if (g.type === 'cdrag') {
+      var cdx = (e.clientX - g.x0) / S.k, cdy = (e.clientY - g.y0) / S.k;
+      g.nx = g.o.x + cdx; g.ny = g.o.y + cdy;
+      moveCommentEl(g.cid, g.nx, g.ny);
+      var tr2 = elTrash.getBoundingClientRect();
+      var hot = e.clientX > tr2.left && e.clientX < tr2.right && e.clientY > tr2.top && e.clientY < tr2.bottom;
+      elTrash.classList.toggle('hot', hot);
+      // Dropping a comment on a node attaches it, the way dropping a node
+      // re-nests it.
+      var ctarget = hot ? null : commentHitTest(e.clientX, e.clientY, g.cid);
+      if (g.target && g.target !== ctarget) g.target.classList.remove('droptarget');
+      if (ctarget) ctarget.classList.add('droptarget');
+      g.target = ctarget;
+    }
+  }
+
+  function commentHitTest(x, y, cid) {
+    var prev = g.el.style.pointerEvents;
+    g.el.style.pointerEvents = 'none';
+    var hit = document.elementFromPoint(x, y);
+    g.el.style.pointerEvents = prev;
+    var nodeEl = hit && hit.closest && hit.closest('.cg-node');
+    if (!nodeEl) return null;
+    var a = anchorFromView(nodeEl.dataset.id);
+    var c = S.comments[cid];
+    if (!a || !c) return null;
+    if (c.anchors.some(function (x2) { return sidecar.sameAnchor(x2, a); })) return null;
+    return nodeEl;
   }
 
   function hitTest(x, y, selfId) {
@@ -1580,8 +1739,39 @@
     if (gg.type === 'pan') {
       if (!gg.moved && Date.now() - gg.t < 250 && Math.hypot(e.clientX - gg.x0, e.clientY - gg.y0) < 6) {
         if (S.lastTap && Date.now() - S.lastTap < 320) { fit(true); S.lastTap = 0; }
-        else { S.lastTap = Date.now(); S.selectedId = null; render(); }
+        else { S.lastTap = Date.now(); S.selectedId = null; S.selCid = null; render(); }
       }
+      return;
+    }
+    if (gg.type === 'comment') {
+      if (S.ghost || S.selectMode) return;
+      if (S.selCid === gg.cid && !S.embedded) { beginCommentEdit(gg.cid); return; }
+      S.selectedId = null;
+      S.selCid = gg.cid;
+      render();
+      return;
+    }
+    if (gg.type === 'cdrag') {
+      gg.el.classList.remove('dragging');
+      elTrash.classList.remove('open', 'hot');
+      if (gg.target) gg.target.classList.remove('droptarget');
+      var cm = S.comments[gg.cid];
+      if (!cm) { render(); return; }
+      var tr3 = elTrash.getBoundingClientRect();
+      if (e.clientX > tr3.left && e.clientX < tr3.right && e.clientY > tr3.top && e.clientY < tr3.bottom) {
+        deleteComment(cm.id); return;
+      }
+      var abs = { x: gg.nx, y: gg.ny };
+      S.cpos[gg.cid] = abs;
+      if (gg.target) {
+        var added = anchorFromView(gg.target.dataset.id);
+        if (added) {
+          commitComments(function () { setCommentAnchors(cm, cm.anchors.concat([added])); });
+          toast('Attached to “' + anchorLabel(added).slice(0, 24) + '”');
+          return;
+        }
+      }
+      commitComments(function () { placeComment(cm, abs); });
       return;
     }
     if (gg.type === 'node') {
@@ -1629,6 +1819,7 @@
     S.selectMode = true;
     S.multi = {};
     if (seedId) S.multi[seedId] = true;
+    S.selCid = null;
     S.editingId = null;
     render();
     toast('Tap nodes to select. Drag is off while selecting.');
@@ -2534,6 +2725,8 @@
       S.baseline = row.content || '';
       S.pins = {};
       S.collapsed = {};
+      S.comments = {};
+      S.selCid = null;
       S.selectedId = null;
       S.focusId = null;
       S.undo = [];
@@ -2636,6 +2829,458 @@
   }
 
   /* ===================================================================== */
+  /* comments                                                               */
+  /* ===================================================================== */
+
+  /*
+   * A comment is a light text box floating over the map: an annotation, not a
+   * node. It writes no markdown line and creates no note; it lives in the
+   * sidecar (see sidecar.js for the shape). It may point at any number of
+   * nodes, cards and links with a thin dotted straight line - deliberately
+   * unlike the dashed curve of a node link - and rides along with the first
+   * thing it points at. Unanchored, it floats where it was put.
+   *
+   * Comments never take part in multi-select, ghost previews or AI operations:
+   * none of those know what to do with text the note does not own.
+   */
+  function isCommentId(id) { return typeof id === 'string' && id.indexOf('comment:') === 0; }
+  function cidOf(id) { return String(id).slice(8); }
+  function newCid() {
+    var id;
+    do { id = 'c' + Math.random().toString(36).slice(2, 8); } while (S.comments[id]);
+    return id;
+  }
+
+  // view id -> anchor, or null for things a comment cannot point at.
+  function anchorFromView(viewId) {
+    var v = S.vt && S.vt.byId[viewId];
+    if (!v || !v.ref || v.kind === 'ghost') return null;
+    if (v.kind === 'note') return { kind: 'card', n: v.ref.id, c: v.noteId };
+    if (v.ref.kind === 'root') return null;
+    return { kind: 'node', n: v.ref.id };
+  }
+  function endOfView(viewId) {
+    var a = anchorFromView(viewId);
+    if (!a) return null;
+    return a.kind === 'card' ? { n: a.n, c: a.c } : { n: a.n };
+  }
+  function viewIdOfEnd(end) { return end.c ? 'note:' + end.n + ':' + end.c : end.n; }
+  function linkAnchor(fromViewId, toViewId) {
+    var a = endOfView(fromViewId), b = endOfView(toViewId);
+    return a && b ? { kind: 'link', a: a, b: b } : null;
+  }
+
+  function anchorLabel(a) {
+    var name = function (end) {
+      var d = S.doc.byId[end.n];
+      if (!d) return null;
+      if (end.c) { var cached = S.noteCache[end.c]; return (cached && cached.title) || 'attached note'; }
+      return md.plainText(d.text).slice(0, 28) || 'Untitled';
+    };
+    if (!a) return null;
+    if (a.kind === 'link') {
+      var x = name(a.a), y = name(a.b);
+      return x && y ? x + ' → ' + y : null;
+    }
+    return name(a);
+  }
+
+  // Where an anchor is on the current layout, or null while it is hidden
+  // (collapsed away, or outside the focused branch).
+  function anchorPoint(a, boxes) {
+    if (!a || !boxes) return null;
+    if (a.kind === 'link') {
+      var l = linkedPair(viewIdOfEnd(a.a), viewIdOfEnd(a.b));
+      if (!l) return null;
+      var ba = boxes.get(l.from), bb2 = boxes.get(l.to);
+      if (!ba || !bb2) return null;
+      var e = edgeEnds(ba, bb2);
+      return { x: (e.x1 + e.x2) / 2, y: (e.y1 + e.y2) / 2 };
+    }
+    var b = boxes.get(a.kind === 'card' ? viewIdOfEnd({ n: a.n, c: a.c }) : a.n);
+    return b ? { x: b.x + b.w / 2, y: b.y + b.h / 2, box: b } : null;
+  }
+
+  // Top-left of a comment on the current layout; null when its first anchor
+  // is hidden, in which case the comment is not drawn either.
+  function commentOrigin(c, boxes) {
+    if (!c.anchors.length) return { x: c.pos.x, y: c.pos.y };
+    var p = anchorPoint(c.anchors[0], boxes);
+    if (!p) return null;
+    if (c.reanchor) {
+      // pos was left absolute by a lost anchor; measure it against this one now.
+      c.pos = { x: c.pos.x - p.x, y: c.pos.y - p.y };
+      delete c.reanchor;
+    }
+    return { x: p.x + c.pos.x, y: p.y + c.pos.y };
+  }
+
+  function commentBox(cid) {
+    var el = S.cEls[cid], o = S.cpos[cid];
+    if (!el || !o) return null;
+    return { x: o.x, y: o.y, w: el.offsetWidth, h: el.offsetHeight };
+  }
+
+  // Put a comment at an absolute spot, keeping it anchored: pos is re-measured
+  // from its first anchor when it has one.
+  function placeComment(c, abs) {
+    var p = c.anchors.length ? anchorPoint(c.anchors[0], S.boxes) : null;
+    if (p) c.pos = { x: abs.x - p.x, y: abs.y - p.y };
+    else { c.pos = { x: abs.x, y: abs.y }; if (c.anchors.length) c.reanchor = true; }
+    c.abs = { x: abs.x, y: abs.y };
+  }
+
+  // Change what a comment points at without moving it on screen.
+  function setCommentAnchors(c, anchors) {
+    var abs = S.cpos[c.id] || c.abs || (c.anchors.length ? null : c.pos);
+    c.anchors = anchors;
+    if (abs) placeComment(c, abs);
+  }
+
+  /*
+   * Every change to comments goes through here, so each is one undo step and
+   * the sidecar in S.src never lags the state - the same contract apply() gives
+   * markdown edits.
+   */
+  function commitComments(mutate) {
+    S.undo.push(snapshot());
+    if (S.undo.length > 50) S.undo.shift();
+    S.redo.length = 0;
+    mutate();
+    syncSidecar();
+    scheduleSave();
+    render();
+  }
+
+  function createComment(anchors, nearViewId) {
+    if (S.embedded) return null;
+    if (S.editingId) commitEdit(false);
+    anchors = (anchors || []).filter(Boolean);
+    var boxes = S.boxes;
+    var c = { id: newCid(), text: '', anchors: anchors, pos: { x: 0, y: 0 }, fresh: true };
+    var p = anchors.length ? anchorPoint(anchors[0], boxes) : null;
+    if (p) {
+      // Up and to the right of what it annotates, clear of the node itself.
+      var w = p.box ? p.box.w : 120, h = p.box ? p.box.h : 32;
+      c.pos = { x: w / 2 + 26, y: -(h / 2) - 60 };
+    } else {
+      var near = nearViewId && boxes && boxes.get(nearViewId);
+      if (near) c.pos = { x: near.x + near.w + 44, y: near.y - 52 };
+      else {
+        var vis = visibleRect();
+        var mid = screenToStage((vis.left + vis.right) / 2, (vis.top + vis.bottom) / 2);
+        c.pos = { x: mid.x - 60, y: mid.y - 20 };
+      }
+      if (anchors.length) c.reanchor = true;
+    }
+    S.comments[c.id] = c;
+    S.selectMode = false;
+    S.multi = {};
+    S.selectedId = null;
+    S.selCid = c.id;
+    render();
+    if (S.mode === 'map') beginCommentEdit(c.id); else commentEditSheet(c.id);
+    return c;
+  }
+
+  function deleteComment(cid) {
+    var c = S.comments[cid];
+    if (!c) return;
+    if (S.editingId === 'comment:' + cid) { S.editingId = null; stopKeyboardFollow(); }
+    if (c.fresh) { delete S.comments[cid]; if (S.selCid === cid) S.selCid = null; render(); return; }
+    commitComments(function () { delete S.comments[cid]; if (S.selCid === cid) S.selCid = null; });
+    toast('Comment deleted — undo in the top bar');
+  }
+
+  function attachComment(cid, anchor) {
+    var c = S.comments[cid];
+    if (!c || !anchor) return;
+    if (c.anchors.some(function (a) { return sidecar.sameAnchor(a, anchor); })) return toast('Already attached to that');
+    commitComments(function () { setCommentAnchors(c, c.anchors.concat([anchor])); });
+  }
+
+  function detachComment(cid, anchor) {
+    var c = S.comments[cid];
+    if (!c) return;
+    commitComments(function () {
+      setCommentAnchors(c, anchor ? c.anchors.filter(function (a) { return !sidecar.sameAnchor(a, anchor); }) : []);
+    });
+  }
+
+  function attachCommentPicker(c) {
+    var rows = [];
+    var has = function (a) { return c.anchors.some(function (x) { return sidecar.sameAnchor(x, a); }); };
+    (function walk(n, depth) {
+      for (var i = 0; i < n.children.length; i++) {
+        var d = n.children[i];
+        var a = { kind: 'node', n: d.id };
+        if (!has(a)) rows.push({ label: md.plainText(d.text) || 'Untitled', depth: depth, anchor: a });
+        walk(d, depth + 1);
+      }
+    })(S.doc.root, 0);
+    S.vt.all.forEach(function (v) {
+      if (v.kind !== 'note') return;
+      var a = anchorFromView(v.id);
+      if (a && !has(a)) rows.push({ label: v.noteTitle || 'Note', depth: 1, hint: 'attached note', anchor: a });
+    });
+    S.vt.crossLinks.forEach(function (l) {
+      var a = linkAnchor(l.from, l.to);
+      if (a && !has(a)) rows.push({ label: anchorLabel(a) || 'link', depth: 0, hint: 'link', anchor: a });
+    });
+    if (!rows.length) return toast('There is nothing left to attach to');
+    rows.forEach(function (r) { r.pick = function () { attachComment(c.id, r.anchor); }; });
+    nodePickerSheet('Attach this comment to…', 'Find a node or link', rows, 'Nothing matches that.');
+  }
+
+  function detachCommentSheet(c) {
+    if (c.anchors.length === 1) return detachComment(c.id, null);
+    openSheet('Detach from…', function (body) {
+      c.anchors.forEach(function (a) {
+        menuItem(body, anchorLabel(a) || 'a missing node', a.kind === 'link' ? 'a link' : null, ICONS.unlink, '', function () {
+          detachComment(c.id, a);
+        });
+      });
+      menuItem(body, 'Detach from everything', 'The comment stays where it is, floating free', ICONS.unlink, 'danger', function () {
+        detachComment(c.id, null);
+      });
+    });
+  }
+
+  /* ---- drawing ---- */
+
+  function commentClasses(c) {
+    var cls = ['cg-comment'];
+    if (S.selCid === c.id) cls.push('sel');
+    if (S.editingId === 'comment:' + c.id) cls.push('editing');
+    if (S.vt.filtering) { if (c.matched) cls.push('match'); else if (!c.keep) cls.push('dim'); }
+    return cls.join(' ');
+  }
+
+  // Search reaches comments too. With only chip filters on (no text), a
+  // comment stays lit when anything it points at does.
+  function markComments() {
+    var q = (S.query || '').trim().toLowerCase();
+    Object.keys(S.comments).forEach(function (cid) {
+      var c = S.comments[cid];
+      if (!S.vt.filtering) { c.matched = false; c.keep = true; return; }
+      c.matched = !!q && c.text.toLowerCase().indexOf(q) >= 0;
+      c.keep = c.matched || (!q && c.anchors.some(function (a) {
+        return sidecar.anchorNodeIds(a).some(function (nid) { var v = S.vt.byId[nid]; return v && v.keep; });
+      }));
+    });
+  }
+
+  function commentTransform(o) { return 'translate(' + o.x + 'px,' + o.y + 'px)'; }
+
+  function drawComments(res, vt) {
+    Object.keys(S.cLines).forEach(function (cid) {
+      S.cLines[cid].forEach(function (p) { if (p.parentNode) p.parentNode.removeChild(p); });
+    });
+    S.cLines = {};
+    var live = {};
+    if (!S.ghost) {
+      Object.keys(S.comments).forEach(function (cid) {
+        var c = S.comments[cid];
+        var origin = commentOrigin(c, res.boxes);
+        if (!origin) return;
+        live[cid] = true;
+        var d = S.cEls[cid];
+        var fresh = false;
+        if (!d) {
+          d = document.createElement('div');
+          d.dataset.cid = cid;
+          d.innerHTML = '<span class="label"></span>';
+          d.style.opacity = '0';
+          elStage.appendChild(d);
+          S.cEls[cid] = d;
+          fresh = true;
+        }
+        d.className = commentClasses(c);
+        if (S.editingId !== 'comment:' + cid) d.querySelector('.label').textContent = c.text;
+        if (fresh) {
+          d.style.transition = 'none';
+          d.style.transform = commentTransform(origin);
+          d.offsetHeight;
+          d.style.transition = '';
+        }
+        d.style.transform = commentTransform(origin);
+        d.style.opacity = '1';
+        S.cpos[cid] = origin;
+        c.abs = { x: origin.x, y: origin.y };
+        // Comments count towards "fit": a note in the margin should be seen.
+        var w = d.offsetWidth, h = d.offsetHeight;
+        res.bbox.x0 = Math.min(res.bbox.x0, origin.x); res.bbox.y0 = Math.min(res.bbox.y0, origin.y);
+        res.bbox.x1 = Math.max(res.bbox.x1, origin.x + w); res.bbox.y1 = Math.max(res.bbox.y1, origin.y + h);
+        drawCommentLines(c, d, origin, res.boxes);
+      });
+    }
+    Object.keys(S.cEls).forEach(function (cid) {
+      if (live[cid]) return;
+      var d = S.cEls[cid];
+      if (d.parentNode) d.parentNode.removeChild(d);
+      delete S.cEls[cid];
+      delete S.cpos[cid];
+    });
+  }
+
+  // A straight dotted line from the box's edge to each thing it points at.
+  // Straight and dotted, so it cannot be mistaken for the dashed curve of a
+  // node link or the solid curve of the hierarchy.
+  function commentLinePath(o, w, h, p) {
+    var cx = o.x + w / 2, cy = o.y + h / 2;
+    var dx = p.x - cx, dy = p.y - cy;
+    var sx = cx, sy = cy;
+    if (dx || dy) {
+      var t = Math.min(Math.abs((w / 2) / (dx || 1e-9)), Math.abs((h / 2) / (dy || 1e-9)));
+      sx = cx + dx * t; sy = cy + dy * t;
+    }
+    return 'M' + sx + ',' + sy + 'L' + p.x + ',' + p.y;
+  }
+
+  function drawCommentLines(c, d, origin, boxes) {
+    var w = d.offsetWidth, h = d.offsetHeight;
+    var dim = S.vt.filtering && !c.keep;
+    var paths = [];
+    c.anchors.forEach(function (a) {
+      var p = anchorPoint(a, boxes);
+      if (!p) return;
+      var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('class', 'cg-cline' + (dim ? ' dim' : '') + (S.selCid === c.id ? ' on' : ''));
+      path.setAttribute('d', commentLinePath(origin, w, h, p));
+      elEdges.appendChild(path);
+      paths.push(path);
+    });
+    S.cLines[c.id] = paths;
+  }
+
+  // Mid-drag: move the box and its lines without a full render.
+  function moveCommentEl(cid, x, y) {
+    var c = S.comments[cid], d = S.cEls[cid];
+    if (!c || !d) return;
+    d.style.transform = commentTransform({ x: x, y: y });
+    (S.cLines[cid] || []).forEach(function (p) { if (p.parentNode) p.parentNode.removeChild(p); });
+    drawCommentLines(c, d, { x: x, y: y }, S.boxes);
+  }
+
+  /* ---- editing ---- */
+
+  function beginCommentEdit(cid) {
+    if (S.embedded) return;
+    var c = S.comments[cid];
+    if (!c) return;
+    if (S.mode === 'outline') return commentEditSheet(cid);
+    var d = S.cEls[cid];
+    if (!d) return;
+    if (S.editingId && S.editingId !== 'comment:' + cid) commitEdit(false);
+    S.editingId = 'comment:' + cid;
+    S.selectedId = null;
+    S.selCid = cid;
+    d.className = commentClasses(c);
+    var label = d.querySelector('.label');
+    label.textContent = c.text;
+    label.contentEditable = 'true';
+    label.spellcheck = false;
+    label.onkeydown = function (e) {
+      // Enter commits, as on a node; Shift+Enter breaks a line, since a
+      // comment may run to a few lines.
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(false); }
+      else if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+    };
+    label.oninput = function () { keepEditingVisible(); };
+    label.onblur = function () { if (S.editingId === 'comment:' + cid) commitEdit(false); };
+    focusAll(label);
+    armKeyboardFollow();
+  }
+
+  function releaseCommentField(cid) {
+    var d = S.cEls[cid];
+    var field = d && d.querySelector('.label');
+    if (!field) return null;
+    var text = (field.innerText || '').replace(/\r\n?/g, '\n').replace(/ /g, ' ')
+      .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    field.contentEditable = 'false';
+    field.onkeydown = null;
+    field.oninput = null;
+    field.onblur = null;
+    return text;
+  }
+
+  function commitCommentEdit(cid) {
+    S.editingId = null;
+    stopKeyboardFollow();
+    var c = S.comments[cid];
+    var text = releaseCommentField(cid);
+    if (!c) { render(); return; }
+    if (text === null) text = c.text;
+    if (!text) {
+      // An empty comment is not a comment. Abandoning a fresh one leaves no
+      // trace and no undo step; emptying an old one deletes it, undoably.
+      if (c.fresh) { delete S.comments[cid]; if (S.selCid === cid) S.selCid = null; render(); return; }
+      commitComments(function () { delete S.comments[cid]; if (S.selCid === cid) S.selCid = null; });
+      toast('Comment removed — undo in the top bar');
+      return;
+    }
+    if (text === c.text && !c.fresh) { render(); return; }
+    commitComments(function () { c.text = text; delete c.fresh; });
+  }
+
+  function cancelCommentEdit(cid) {
+    S.editingId = null;
+    stopKeyboardFollow();
+    var c = S.comments[cid];
+    releaseCommentField(cid);
+    if (c && c.fresh) { delete S.comments[cid]; if (S.selCid === cid) S.selCid = null; }
+    render();
+  }
+
+  // The outline has no box to type into, so it edits through a sheet.
+  function commentEditSheet(cid) {
+    var c = S.comments[cid];
+    if (!c || S.embedded) return;
+    openSheet(c.fresh ? 'New comment' : 'Comment', function (body) {
+      var ta = document.createElement('textarea');
+      ta.id = 'editor';
+      ta.value = c.text;
+      ta.placeholder = 'Write a comment…';
+      body.appendChild(ta);
+      var where = c.anchors.map(anchorLabel).filter(Boolean);
+      if (where.length) {
+        var p = document.createElement('p');
+        p.style.color = 'var(--muted)';
+        p.style.fontSize = '12.5px';
+        p.textContent = '→ ' + where.join(', ');
+        body.appendChild(p);
+      }
+      var row = document.createElement('div');
+      row.className = 'btn-row';
+      var cancel = document.createElement('button');
+      cancel.className = 'btn';
+      cancel.textContent = 'Cancel';
+      cancel.onclick = function () {
+        closeSheet();
+        if (c.fresh) { delete S.comments[cid]; if (S.selCid === cid) S.selCid = null; render(); }
+      };
+      var save = document.createElement('button');
+      save.className = 'btn primary';
+      save.textContent = 'Save';
+      save.onclick = function () {
+        var text = ta.value.replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+        closeSheet();
+        if (!text) {
+          if (c.fresh) { delete S.comments[cid]; if (S.selCid === cid) S.selCid = null; render(); return; }
+          commitComments(function () { delete S.comments[cid]; if (S.selCid === cid) S.selCid = null; });
+          return;
+        }
+        if (text === c.text && !c.fresh) return;
+        commitComments(function () { c.text = text; delete c.fresh; });
+      };
+      row.appendChild(cancel); row.appendChild(save);
+      body.appendChild(row);
+      setTimeout(function () { ta.focus(); }, 50);
+    });
+  }
+
+  /* ===================================================================== */
   /* search                                                                 */
   /* ===================================================================== */
 
@@ -2672,11 +3317,12 @@
     if (!S.matches.length) return;
     S.matchIx = (S.matchIx + dir + S.matches.length) % S.matches.length;
     var id = S.matches[S.matchIx];
-    S.selectedId = id;
+    if (isCommentId(id)) { S.selectedId = null; S.selCid = cidOf(id); }
+    else S.selectedId = id;
     render();
     if (S.mode === 'map') centerOn(id, true);
     else {
-      var row = elOlList.querySelector('[data-id="' + id + '"]');
+      var row = elOlList.querySelector(isCommentId(id) ? '[data-cid="' + cidOf(id) + '"]' : '[data-id="' + id + '"]');
       if (row) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
   }
@@ -2712,6 +3358,14 @@
       }
       var row = e.target.closest('.ol-row');
       if (!row) return;
+      if (row.dataset.cid) {
+        if (S.editingId) commitEdit(false);
+        if (S.selCid === row.dataset.cid && !S.embedded) { commentEditSheet(row.dataset.cid); return; }
+        S.selectedId = null;
+        S.selCid = row.dataset.cid;
+        render();
+        return;
+      }
       var id = row.dataset.id;
       var v = S.vt.byId[id];
       if (v && v.kind === 'note') { host.openNote(v.noteId); return; }
@@ -2912,7 +3566,11 @@
             cardLinkPicker: cardLinkPicker, performCardLink: performCardLink,
             multiCardViews: multiCardViews, detachNote: detachNote,
             indentNode: indentNode, outdentNode: outdentNode, nudge: nudge, toggleCheck: toggleCheck,
-            setFocus: setFocus, promoteBranch: promoteBranch, dedentBranch: dedentBranch }
+            setFocus: setFocus, promoteBranch: promoteBranch, dedentBranch: dedentBranch,
+            createComment: createComment, beginCommentEdit: beginCommentEdit, deleteComment: deleteComment,
+            attachComment: attachComment, detachComment: detachComment, placeComment: placeComment,
+            anchorFromView: anchorFromView, linkAnchor: linkAnchor, anchorLabel: anchorLabel,
+            commitComments: commitComments }
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

@@ -202,6 +202,7 @@ function run(W) {
       W.CG.app.undo();
       return settle().then(function () {
         ok('undo restores it exactly', S.src === before, '\n--- before ---\n' + before + '\n--- after undo ---\n' + S.src);
+        ok('undo keeps the pin that was set before the edit', !!S.pins[byText(S, 'Colors').id], JSON.stringify(S.pins));
       });
     });
   }).then(function () {
@@ -808,12 +809,185 @@ function run(W) {
     });
 
   }).then(function () {
-    // ---- outline view renders the same tree
+    /* =================================================================== */
+    /* comments                                                             */
+    /* =================================================================== */
+    var V4 = ['# Plan', '', '## Design', '- Colors', '- Type', '', '  [→ Colors](#colors)', '', '## Build', '- API', ''].join('\n');
+    W.CG.app.apply(V4);
+    return settle();
+  }).then(function () {
+    var colors = byText(S, 'Colors');
+    var before = S.undo.length;
+    var c = ops.createComment([ops.anchorFromView(colors.id)], colors.id);
+    S.__cid = c && c.id;
+    ok('a comment can be created on a node', !!c && !!S.comments[c.id] && S.comments[c.id].anchors[0].n === colors.id);
+    ok('it is drawn on the map', !!W.document.querySelector('.cg-comment[data-cid="' + c.id + '"]'));
+    ok('a dotted line joins it to the node', W.document.querySelectorAll('#edges path.cg-cline').length === 1);
+    ok('it is not a node', S.vt.all.length === 6 && !S.vt.byId[c.id], 'views=' + S.vt.all.length);
+    ok('creating opens it for typing', S.editingId === 'comment:' + c.id);
+    ok('an unwritten comment reaches neither the note nor the undo stack', S.src.indexOf('"c":') < 0 && S.undo.length === before);
+    var field = W.document.querySelector('.cg-comment[data-cid="' + c.id + '"] .label');
+    field.textContent = 'Check with brand';
+    field.dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    return settle().then(function () {
+      ok('committing writes the comment into the sidecar',
+        /"c":\[\{"i":"c[a-z0-9]+","t":"Check with brand"/.test(S.src), S.src.slice(-300));
+      ok('and nowhere else in the note', S.src.split('```synapse-cartograph')[0].indexOf('Check with brand') < 0);
+      ok('a comment is one undo step', S.undo.length === before + 1);
+      ok('no node was added for it', S.doc.nodes.length === 7, 'nodes=' + S.doc.nodes.length);
+      ok('the note still parses cleanly', W.CG.md.coverageOf(S.src).length === 0);
+      ok('the comment gets its own action bar',
+        !!bbNamed(W, 'Attach') && !!bbNamed(W, 'Detach') && !!bbNamed(W, 'Delete') && !bbNamed(W, 'Child'), barText(W));
+    });
+
+  }).then(function () {
+    /* ---- it rides along with the node it points at ---- */
+    var cid = S.__cid, colors = byText(S, 'Colors');
+    var o1 = S.cpos[cid], b0 = S.boxes.get(colors.id);
+    S.pins[colors.id] = { x: 700, y: 300 };
+    W.CG.app.render();
+    return settle().then(function () {
+      var o2 = S.cpos[cid], b1 = S.boxes.get(colors.id);
+      ok('the node actually moved', Math.abs(b1.x - b0.x) > 50, b0.x + ' -> ' + b1.x);
+      // Measured from the node's centre: a pinned node grows a pin pill, so
+      // its top-left is not a stable reference.
+      ok('moving the node carries the comment along',
+        Math.abs((o2.x - (b1.x + b1.w / 2)) - (o1.x - (b0.x + b0.w / 2))) < 1 &&
+        Math.abs((o2.y - (b1.y + b1.h / 2)) - (o1.y - (b0.y + b0.h / 2))) < 1,
+        [o1.x, o1.y, b0.x, b0.y, o2.x, o2.y, b1.x, b1.y].map(Math.round).join(','));
+      delete S.pins[colors.id];
+      W.CG.app.render();
+      return settle();
+    });
+
+  }).then(function () {
+    /* ---- one comment, several targets, including a link ---- */
+    var cid = S.__cid;
+    var abs = { x: S.cpos[cid].x, y: S.cpos[cid].y };
+    // Every edit re-parses and renumbers node ids, so nodes are looked up afresh each step.
+    ops.attachComment(cid, ops.anchorFromView(byText(S, 'Type').id));
+    return settle().then(function () {
+      ok('a comment can point at a second node', S.comments[cid].anchors.length === 2);
+      ok('attaching does not move it', Math.abs(S.cpos[cid].x - abs.x) < 1 && Math.abs(S.cpos[cid].y - abs.y) < 1,
+        JSON.stringify([abs, S.cpos[cid]]));
+      ok('two dotted lines now', W.document.querySelectorAll('#edges path.cg-cline').length === 2);
+      var l = S.vt.crossLinks[0];
+      ok('the fixture has a node link to point at', !!l);
+      ops.attachComment(cid, ops.linkAnchor(l.from, l.to));
+      return settle();
+    }).then(function () {
+      var a = S.comments[cid].anchors[2];
+      ok('a comment can point at a link', a && a.kind === 'link', JSON.stringify(S.comments[cid].anchors));
+      ok('the link anchor is named by both ends', ops.anchorLabel(a) === 'Type → Colors', ops.anchorLabel(a));
+      ok('three lines, one per target', W.document.querySelectorAll('#edges path.cg-cline').length === 3);
+      ok('the sidecar records the link as a pair', /"l":\[\{"n":"n[a-z0-9]+"\},\{"n":"n[a-z0-9]+"\}\]/.test(S.src), S.src.slice(-320));
+      var again = ops.anchorFromView(byText(S, 'Type').id);
+      ok('the anchor to refuse is a real one', !!again);
+      ops.attachComment(cid, again);
+      ok('attaching twice to the same thing is refused', S.comments[cid].anchors.length === 3);
+      ops.detachComment(cid, ops.anchorFromView(byText(S, 'Type').id));
+      return settle();
+    }).then(function () {
+      ok('one target can be detached on its own', S.comments[cid].anchors.length === 2 &&
+        !S.comments[cid].anchors.some(function (a) { return a.kind === 'node' && a.n === byText(S, 'Type').id; }));
+    });
+
+  }).then(function () {
+    /* ---- dragging it somewhere keeps it anchored ---- */
+    var cid = S.__cid, c = S.comments[cid];
+    ops.commitComments(function () { ops.placeComment(c, { x: 900, y: 900 }); });
+    return settle().then(function () {
+      var b = S.boxes.get(byText(S, 'Colors').id);
+      ok('the comment is drawn where it was put', Math.abs(S.cpos[cid].x - 900) < 1 && Math.abs(S.cpos[cid].y - 900) < 1, JSON.stringify(S.cpos[cid]));
+      ok('but is stored as an offset from its node, not an absolute spot',
+        Math.abs(c.pos.x - (900 - (b.x + b.w / 2))) < 1, JSON.stringify(c.pos));
+      ok('the map fits around it too', S.lastResult.bbox.x1 >= 900);
+    });
+
+  }).then(function () {
+    /* ---- search reaches comments ---- */
+    var cid = S.__cid;
+    S.query = 'brand';
+    W.CG.app.render();
+    return settle().then(function () {
+      ok('a comment matching the search is lit',
+        W.document.querySelector('.cg-comment[data-cid="' + cid + '"]').classList.contains('match'));
+      ok('and counted among the hits', S.matches.indexOf('comment:' + cid) >= 0, JSON.stringify(S.matches));
+      S.query = 'API';
+      W.CG.app.render();
+      return settle();
+    }).then(function () {
+      ok('a comment that does not match is dimmed with the rest',
+        W.document.querySelector('.cg-comment[data-cid="' + cid + '"]').classList.contains('dim'));
+      S.query = '';
+      W.CG.app.render();
+      return settle();
+    });
+
+  }).then(function () {
+    /* ---- losing the node it hung off ---- */
+    var cid = S.__cid, colors = byText(S, 'Colors');
+    var abs = { x: S.cpos[cid].x, y: S.cpos[cid].y };
+    ops.removeNode(colors);
+    return settle().then(function () {
+      var c = S.comments[cid];
+      ok('the comment outlives the node it pointed at', !!c);
+      ok('its anchors on that node (and the link into it) are gone', c.anchors.length === 0, JSON.stringify(c.anchors));
+      ok('and it stays where it was last seen', Math.abs(c.pos.x - abs.x) < 1 && Math.abs(c.pos.y - abs.y) < 1,
+        JSON.stringify([abs, c.pos]));
+      W.CG.app.undo();
+      return settle();
+    }).then(function () {
+      var c = S.comments[cid];
+      ok('undoing the deletion brings the anchors back', c && c.anchors.length === 2 && !!byText(S, 'Colors'), JSON.stringify(c && c.anchors));
+    });
+
+  }).then(function () {
+    /* ---- a fresh comment abandoned with Escape leaves nothing ---- */
+    var n0 = Object.keys(S.comments).length, u0 = S.undo.length, src0 = S.src;
+    var c = ops.createComment([], byText(S, 'API').id);
+    ok('a floating comment needs no anchor', !!c && c.anchors.length === 0);
+    var field = W.document.querySelector('.cg-comment[data-cid="' + c.id + '"] .label');
+    field.dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    return settle().then(function () {
+      ok('abandoning it removes it', Object.keys(S.comments).length === n0 && !W.document.querySelector('.cg-comment[data-cid="' + c.id + '"]'));
+      ok('with no trace in the note or the undo stack', S.src === src0 && S.undo.length === u0);
+    });
+
+  }).then(function () {
+    /* ---- delete and undo ---- */
+    var cid = S.__cid;
+    ops.deleteComment(cid);
+    return settle().then(function () {
+      ok('deleting removes the comment', !S.comments[cid] && S.src.indexOf('Check with brand') < 0);
+      W.CG.app.undo();
+      return settle();
+    }).then(function () {
+      ok('undo brings it back, anchors and all', !!S.comments[cid] && S.comments[cid].anchors.length === 2 &&
+        !!W.document.querySelector('.cg-comment[data-cid="' + cid + '"]'));
+    });
+
+  }).then(function () {
+    /* ---- a reopened note finds its comments again ---- */
+    var st = { pins: {}, collapsed: {}, comments: {} };
+    var doc2 = W.CG.md.parse(S.src);
+    W.CG.sidecar.apply(doc2, st);
+    var c = st.comments[S.__cid];
+    ok('the comment is read back from the note', !!c && c.text === 'Check with brand');
+    ok('pointing at the right node in the fresh parse',
+      c && doc2.byId[c.anchors[0].n] && doc2.byId[c.anchors[0].n].text === 'Colors', JSON.stringify(c && c.anchors));
+
+  }).then(function () {
+    // ---- outline view renders the same tree, and lists comments after it
     var btn = W.document.querySelector('#viewToggle button[data-mode="outline"]');
     btn.click();
     return settle().then(function () {
-      var rows = W.document.querySelectorAll('#ol-list .ol-row');
+      var rows = W.document.querySelectorAll('#ol-list .ol-row:not(.comment)');
       ok('the outline lists every node', rows.length === S.vt.all.length, rows.length + ' vs ' + S.vt.all.length);
+      var crow = W.document.querySelector('#ol-list .ol-row.comment');
+      ok('the outline lists the comment after the tree', !!crow && /Check with brand/.test(crow.textContent), crow && crow.textContent);
+      ok('with what it points at', !!crow && /→ Colors, Type → Colors/.test(crow.textContent), crow && crow.textContent);
+      ok('but no comment sneaks into the tree itself', rows.length === S.doc.nodes.length - 1, rows.length + ' vs ' + (S.doc.nodes.length - 1));
     });
   });
 }
