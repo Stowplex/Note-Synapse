@@ -27,16 +27,62 @@
     '- Keep labels short. A label is a phrase, not a sentence.'
   ].join('\n');
 
+  /*
+   * A note is more than its markdown: a PDF, an image or a document attached
+   * to it is as much "the note" as the text is. Attached files travel with the
+   * request itself (Synapse.chatAI's `attachments`); the prompt only has to
+   * name them and say that they count. `opts.attachments` is that list of
+   * names. The text may legitimately be empty when the note is attachments
+   * only, and the prompt says so rather than sending a bare, puzzling block.
+   */
   AI.generatePrompt = function (title, text, opts) {
     opts = opts || {};
+    var atts = (opts.attachments || []).map(function (a) {
+      return String(a == null ? '' : (a.fileName || a.name || a)).replace(/[\r\n]+/g, ' ').trim();
+    }).filter(Boolean);
+    var body = String(text == null ? '' : text);
+    var hasText = !!body.trim();
     var head = opts.section
       ? 'Turn this section of a note into one branch of a mind map.\n\n' +
         'Return a single "##" heading for the section, with nested bullets beneath it.'
       : 'Turn this note into a mind map outline.\n\n' +
         'Return one "#" heading - the centre of the map, naming the whole note - ' +
         'then "##" headings for its main themes, with nested bullets beneath them.';
-    return head + '\n\n' + RULES + '\n\nNote title: ' + (title || 'Untitled') +
-      '\n\n--- BEGIN TEXT ---\n' + text + '\n--- END TEXT ---';
+    if (atts.length && opts.section && !hasText) {
+      head = 'Turn the files attached to a note into branches of a mind map.\n\n' +
+        'Return one "##" heading per main theme found in the files, with nested bullets beneath it.';
+    }
+    var files = '';
+    if (atts.length) {
+      files = '\n\nAttached files (' + atts.length + ', included with this message): ' + atts.join(', ') + '.\n' +
+        'Their contents are part of the note. Read them and map what they say' +
+        (hasText ? ' alongside the text below.' : '.');
+      if (!hasText) files += '\nThe note has no text of its own; the attached files are the whole note.';
+    }
+    return head + '\n\n' + RULES + '\n\nNote title: ' + (title || 'Untitled') + files +
+      '\n\n--- BEGIN TEXT ---\n' + (hasText ? body : '(no text)') + '\n--- END TEXT ---';
+  };
+
+  /*
+   * Which model calls a generation takes. Text is split on its own headings as
+   * before; attachments ride on the single call when there is one, and get a
+   * call of their own when the text was long enough to split, so a section
+   * prompt is never asked to fold a PDF into one heading of the text.
+   */
+  AI.planCalls = function (content, attachments, maxChars) {
+    var text = String(content == null ? '' : content);
+    var atts = attachments || [];
+    var calls = text.trim()
+      ? AI.splitSections(text, maxChars).map(function (s) { return { text: s.text, truncated: s.truncated, attachments: [] }; })
+      : [];
+    if (!atts.length) return calls;
+    if (calls.length <= 1) {
+      if (!calls.length) calls.push({ text: '', truncated: false, attachments: [] });
+      calls[0].attachments = atts;
+    } else {
+      calls.push({ text: '', truncated: false, attachments: atts });
+    }
+    return calls;
   };
 
   var OPS = {

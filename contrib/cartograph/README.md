@@ -40,11 +40,19 @@ Cartograph ships twice, from the same HTML:
 | | |
 |---|---|
 | **Cartograph** | A standalone app. Opens on a home screen listing your maps; can be pinned as a home tab. |
-| **Cartograph: this note** | The note action. Maps the note you are reading, or just the block you selected. |
+| **Cartograph: this note** | The note action. Asks whether to map the note (or selected block) as written, open the map it already has, or generate one with AI. |
 
 No build flag and no code fork separate them. A `normal` launch simply arrives
 with no note (`Synapse.Notes` is empty), which *is* the home screen; a
-`note_action` launch arrives with one, and maps it.
+`note_action` launch arrives with one.
+
+The note action does not assume what you came for. The note is drawn as a map
+behind a small chooser: **Map this note as written** (dismissing the sheet does
+the same), **Open the existing map** when the note already links to one, and
+**Generate a map with AI**. Reading the note as written is only useful when it
+has headings or bullets; a note that is a PDF and a line of text wants the
+third option, which is why it is offered up front. An inline embed skips the
+question, as does `?launch=map`.
 
 ## Generating a map with AI
 
@@ -53,12 +61,19 @@ plain text — there is no JSON or schema mode — so the answer's format is sim
 a markdown outline, which the ordinary parser already consumes. Nothing the
 model can say is unparseable; at worst it becomes a node with a long label.
 
+- The **whole note** is mapped, not just its markdown. Every file attached to
+  the note travels with the request (`Synapse.chatAI`'s `attachments`, listed
+  through `Synapse.exportNotes`), and the prompt names them and says they count.
+  A note with no text and one PDF is a perfectly good source; only a note with
+  neither text nor attachments is refused.
 - The model is told to **restructure, never invent**: group, order and surface
   what the note already says, preferring the note's own wording so every branch
   is traceable back to the text.
 - Nothing is written until you have seen the map and pressed **Save**.
 - Long notes are split on their own top-level headings, mapped section by
-  section, and the results concatenated — a join, never a merge.
+  section, and the results concatenated — a join, never a merge. When the text
+  was long enough to split, the attachments get a call of their own rather
+  than being folded into one section's heading.
 - The map is saved as an ordinary **companion note**, and the source note gains
   one link to it, marked `?via=cartograph`.
 - **Regenerating replaces** that companion's contents. It never creates a second

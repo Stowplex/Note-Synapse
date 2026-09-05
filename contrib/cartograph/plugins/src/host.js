@@ -21,9 +21,14 @@
   var mock = null;
   if (HOST.isMock) {
     var fixture = '';
+    // ?att=slides.pdf,photo.png hangs attachments off the mock note, the way a
+    // note_action launch advertises them through Synapse.Notes[0].attachmentPaths.
+    var fixtureAtts = [];
     try {
       var qp = new URLSearchParams(global.location ? global.location.search : '');
       fixture = qp.get('md') || '';
+      fixtureAtts = (qp.get('att') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean)
+        .map(function (name) { return { path: '/mock/attachments/' + name, fileName: name, mimeType: '' }; });
     } catch (e) { /* not in a browser */ }
     mock = {
       notes: {
@@ -57,9 +62,15 @@
             '- Public GA',
             ''
           ].join('\n'),
-          tags: ['product']
+          tags: ['product'],
+          attachments: fixtureAtts
         },
         'mock-note-2': { id: 'mock-note-2', title: 'Interview script', content: '## Warm up\n- Tell me about your week.\n', tags: [] },
+        // A note that is nothing but a file: no markdown at all, one PDF.
+        'mock-note-5': {
+          id: 'mock-note-5', title: 'Lecture slides', content: '', tags: [],
+          attachments: [{ path: '/mock/attachments/slides.pdf', fileName: 'slides.pdf', mimeType: 'application/pdf' }]
+        },
         'mock-note-3': {
           id: 'mock-note-3', title: 'Quarterly review',
           content: 'Notes from the review.\n\n[\uD83D\uDDFA Mind map](synapseresource://note/mock-note-4?via=cartograph)\n',
@@ -71,7 +82,13 @@
           tags: []
         }
       },
-      seq: 2
+      seq: 5
+    };
+    var mockNoteView = function (n) {
+      return {
+        id: n.id, title: n.title, content: n.content, tags: n.tags,
+        attachmentPaths: (n.attachments || []).map(function (a) { return a.path; })
+      };
     };
     var mockParams = {};
     try {
@@ -86,8 +103,22 @@
     } catch (e) { /* not in a browser */ }
     global.__mockNotes = function () { return mock.notes; };
     global.Synapse = S = {
-      Notes: mockStandalone ? [] : [mock.notes['mock-note-1']],
+      Notes: mockStandalone ? [] : [mockNoteView(mock.notes['mock-note-1'])],
       Params: mockParams,
+      exportNotes: function (ids) {
+        var out = [];
+        (ids || []).forEach(function (id) {
+          var n = mock.notes[id];
+          if (!n) return;
+          out.push({
+            id: n.id, title: n.title, markdown: '# ' + n.title + '\n\n' + n.content,
+            attachments: (n.attachments || []).map(function (a, i) {
+              return { id: 'att-' + i, path: a.path, fileName: a.fileName, mimeType: a.mimeType || '' };
+            })
+          });
+        });
+        return Promise.resolve({ success: true, notes: out });
+      },
       runQuery: function (sql) {
         var m = /from\s+notes\s+where\s+id\s+in\s*\(([^)]*)\)/i.exec(sql) || /from\s+notes\s+where\s+id\s*=\s*'([^']*)'/i.exec(sql);
         var ids = m ? m[1].split(',').map(function (x) { return x.trim().replace(/^'|'$/g, ''); }) : [];
@@ -146,12 +177,13 @@
        * (prose, a fenced outline, an empty reply) - onto window.__CG_AI__ and
        * assert on what the app does with them. No model, no network.
        */
-      chatAI: function (prompt) {
+      chatAI: function (prompt, opts) {
         var queue = global.__CG_AI__;
         var answer;
-        if (typeof queue === 'function') answer = queue(prompt);
+        if (typeof queue === 'function') answer = queue(prompt, opts);
         else if (Array.isArray(queue) && queue.length) answer = queue.shift();
         (global.__CG_AI_PROMPTS__ = global.__CG_AI_PROMPTS__ || []).push(prompt);
+        (global.__CG_AI_OPTS__ = global.__CG_AI_OPTS__ || []).push(opts || {});
         if (answer === undefined) {
           answer = '# Mock map\n\n## First theme\n- point one\n- point two\n\n## Second theme\n- point three\n';
         }
@@ -170,8 +202,40 @@
       title: n.title || '',
       content: n.content || '',
       tags: n.tags || [],
+      attachmentPaths: Array.isArray(n.attachmentPaths) ? n.attachmentPaths.slice() : [],
       isBlockScope: n.isBlockScope === true
     } : null;
+  };
+
+  /*
+   * The files attached to a note, as [{ path, fileName }]. `path` is absolute
+   * and is what Synapse.chatAI's `attachments` option takes; `fileName` is the
+   * human name, for the prompt and the preview. exportNotes is the one API that
+   * lists attachments for an arbitrary note (a block-scoped id resolves to its
+   * parent's files there). If it is unavailable, the current note's own
+   * attachmentPaths still serve - the host's basenames carry a uuid suffix, so
+   * the name is tidied for display.
+   */
+  HOST.attachmentsOf = function (id) {
+    var fromCurrent = function () {
+      var n = HOST.note();
+      if (!n || n.id !== id) return [];
+      return (n.attachmentPaths || []).map(function (p) {
+        var base = String(p).split('/').pop();
+        var m = /^(.*)_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\.[^.]+)?$/i.exec(base);
+        return { path: p, fileName: m ? m[1] + (m[2] || '') : base };
+      });
+    };
+    if (!S || !S.exportNotes || !id) return Promise.resolve(fromCurrent());
+    return S.exportNotes([id], { includeSubNotesAndLinkedNotes: false, includeAttachmentList: true })
+      .then(function (r) {
+        var note = r && r.success && Array.isArray(r.notes) ? r.notes[0] : null;
+        if (!note || !Array.isArray(note.attachments)) return fromCurrent();
+        return note.attachments.filter(function (a) { return a && a.path; }).map(function (a) {
+          return { path: a.path, fileName: a.fileName || String(a.path).split('/').pop(), mimeType: a.mimeType || '' };
+        });
+      })
+      .catch(fromCurrent);
   };
 
   HOST.params = function () { return (S && S.Params) || {}; };

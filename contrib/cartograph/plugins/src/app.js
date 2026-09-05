@@ -752,12 +752,22 @@
     elEmpty.classList.toggle('on', S.doc.nodes.length <= 1);
     if (S.doc.nodes.length <= 1) {
       elEmpty.innerHTML = '<div style="font-size:38px">🗺️</div><div><b>Nothing to map yet</b><br>' +
-        'This note has no headings or bullets. Add one to start the map.</div>';
+        'This note has no headings or bullets. Add one to start the map, or let AI build one from the whole note.</div>';
+      var row = document.createElement('div');
+      row.className = 'btn-row';
       var add = document.createElement('button');
       add.className = 'btn primary';
       add.textContent = 'Add the first node';
       add.onclick = function () { addChild(S.doc.root); };
-      elEmpty.appendChild(add);
+      row.appendChild(add);
+      if (!S.embedded) {
+        var gen = document.createElement('button');
+        gen.className = 'btn';
+        gen.textContent = 'Generate with AI';
+        gen.onclick = function () { generateForCurrentNote(); };
+        row.appendChild(gen);
+      }
+      elEmpty.appendChild(row);
     }
   }
 
@@ -2285,30 +2295,56 @@
     else { t.classList.remove('busy'); setStatus(S.saveState); }
   }
 
+  /*
+   * Map the WHOLE note: its markdown and every file attached to it. A note that
+   * is only a PDF has nothing in `content`, and is still very much a note. The
+   * attachments are looked up here (the caller may pre-supply them) so every
+   * entry point - the ✦ button, the launch chooser, the standalone home - gets
+   * the same treatment.
+   */
   function generateFor(source, onDone) {
     var content = stripSidecar(source.content || '');
-    if (!content.trim()) { toast('That note is empty'); return; }
-    var sections = CG.ai.splitSections(content);
-    var truncated = sections.some(function (s2) { return s2.truncated; });
-    busy(sections.length > 1 ? 'Mapping 1/' + sections.length + '…' : 'Mapping…');
+    busy('Reading the note…');
+    var lookup = Array.isArray(source.attachments)
+      ? Promise.resolve(source.attachments)
+      : host.attachmentsOf(source.id).catch(function () { return []; });
 
-    var parts = [];
-    var chain = Promise.resolve();
-    sections.forEach(function (sec, i) {
-      chain = chain.then(function () {
-        busy(sections.length > 1 ? 'Mapping ' + (i + 1) + '/' + sections.length + '…' : 'Mapping…');
-        return host.ai(CG.ai.generatePrompt(source.title, sec.text, { section: sections.length > 1 }))
-          .then(function (t) { parts.push(t); });
+    lookup.then(function (atts) {
+      atts = atts || [];
+      if (!content.trim() && !atts.length) {
+        busy(null);
+        toast('That note is empty: no text and no attachments');
+        return;
+      }
+      var calls = CG.ai.planCalls(content, atts);
+      var truncated = calls.some(function (c) { return c.truncated; });
+      var label = function (i) { return calls.length > 1 ? 'Mapping ' + (i + 1) + '/' + calls.length + '…' : 'Mapping…'; };
+      busy(label(0));
+
+      var parts = [];
+      var chain = Promise.resolve();
+      calls.forEach(function (call, i) {
+        chain = chain.then(function () {
+          busy(label(i));
+          var prompt = CG.ai.generatePrompt(source.title, call.text, {
+            section: calls.length > 1,
+            attachments: call.attachments.map(function (a) { return a.fileName; })
+          });
+          var opts = call.attachments.length
+            ? { attachments: call.attachments.map(function (a) { return a.path; }) }
+            : undefined;
+          return host.ai(prompt, opts).then(function (t) { parts.push(t); });
+        });
       });
-    });
 
-    chain.then(function () {
-      var outline = sections.length > 1
-        ? CG.ai.joinSections(parts, source.title)
-        : CG.ai.sanitizeOutline(parts[0], source.title);
-      busy(null);
-      if (!outline.trim()) throw new Error('the AI did not return an outline');
-      previewGenerated(source, outline, sections.length, truncated, onDone);
+      return chain.then(function () {
+        var outline = calls.length > 1
+          ? CG.ai.joinSections(parts, source.title)
+          : CG.ai.sanitizeOutline(parts[0], source.title);
+        busy(null);
+        if (!outline.trim()) throw new Error('the AI did not return an outline');
+        previewGenerated(source, outline, { calls: calls.length, truncated: truncated, attachments: atts.length }, onDone);
+      });
     }).catch(function (e) {
       busy(null);
       toast(String((e && e.message) || e).slice(0, 140));
@@ -2329,15 +2365,17 @@
     return out.join('') || '<p style="opacity:.6">Nothing came back.</p>';
   }
 
-  function previewGenerated(source, outline, callCount, truncated, onDone) {
+  function previewGenerated(source, outline, info, onDone) {
+    info = info || {};
     openSheet('Map of “' + (source.title || 'note') + '”', function (body) {
       var meta = document.createElement('p');
       var count = md.parse(outline).nodes.length - 1;
       meta.style.color = 'var(--muted)';
       meta.style.fontSize = '12.5px';
       meta.textContent = count + ' nodes' +
-        (callCount > 1 ? ' · built from ' + callCount + ' sections' : '') +
-        (truncated ? ' · the note was long and was trimmed' : '');
+        (info.calls > 1 ? ' · built from ' + info.calls + ' parts' : '') +
+        (info.attachments ? ' · read ' + info.attachments + ' attached file' + (info.attachments === 1 ? '' : 's') : '') +
+        (info.truncated ? ' · the note was long and was trimmed' : '');
       body.appendChild(meta);
 
       var pv = document.createElement('div');
@@ -2397,9 +2435,41 @@
       .catch(function (e) { busy(null); toast(String((e && e.message) || e).slice(0, 140)); });
   }
 
+  function currentSource() {
+    return { id: S.noteId, title: S.title, content: S.src, tags: (host.note() || {}).tags || [] };
+  }
+
+  /*
+   * A note_action launch used to open the note as a map without asking, which
+   * is only ever useful for a note with headings or bullets in it. Now the
+   * reader is asked what they came for: read the note as it is written, open
+   * the map it already has, or have AI build one from the whole note -
+   * attachments included, so a note that is nothing but a PDF still works.
+   * Dismissing the sheet is the same as choosing the first option: the map
+   * behind it is already drawn, and nothing has been written.
+   */
+  function launchChooser() {
+    var existing = host.mapIdIn(S.src);
+    var what = S.isBlockScope ? 'block' : 'note';
+    openSheet(S.title || 'Cartograph', function (body) {
+      menuItem(body, 'Map this ' + what + ' as written',
+        'Headings and bullets become branches. Nothing is written until you change something.',
+        ICONS.map, '', function () {});
+      if (existing) {
+        menuItem(body, 'Open the existing map', 'This ' + what + ' already links to a map note',
+          ICONS.open, '', function () { openMap(existing); });
+      }
+      menuItem(body, existing ? 'Regenerate the map with AI' : 'Generate a map with AI',
+        existing
+          ? 'Reads the whole ' + what + ', attachments included, and replaces the existing map note'
+          : 'Reads the whole ' + what + ', attachments included, into a new companion note',
+        ICONS.ai, '', function () { generateFor(currentSource(), offerOpen); });
+    });
+  }
+
   function generateForCurrentNote() {
     var existing = host.mapIdIn(S.src);
-    var source = { id: S.noteId, title: S.title, content: S.src, tags: (host.note() || {}).tags || [] };
+    var source = currentSource();
     if (!existing) return generateFor(source, offerOpen);
     openSheet('This note already has a map', function (body) {
       var p = document.createElement('p');
@@ -2818,6 +2888,9 @@
     // An inline embed is a preview: show the whole map rather than a readable
     // slice of it, since the reader is not there to explore.
     requestAnimationFrame(function () { fit(false, { all: S.embedded }); setStatus(''); });
+    // A full-screen note_action launch asks what the reader wants first. An
+    // embed is a preview with nobody to ask, and ?launch=map skips the question.
+    if (!S.embedded && String(params.launch || '') !== 'map') launchChooser();
     S.booted = true;
   }
 

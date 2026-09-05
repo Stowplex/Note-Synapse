@@ -42,7 +42,8 @@ var FIXTURE = [
 ].join('\n');
 
 var f = document.getElementById('f');
-f.src = '../plugins/cartograph.html?md=' + encodeURIComponent(FIXTURE);
+// The mock note carries one attachment, as a note with a PDF would.
+f.src = '../plugins/cartograph.html?md=' + encodeURIComponent(FIXTURE) + '&att=slides.pdf';
 
 function waitFor(test, ms) {
   return new Promise(function (res, rej) {
@@ -91,6 +92,18 @@ function run(W) {
   ok('the app booted with the fixture', S.src.indexOf('## Design') >= 0);
   ok('nodes rendered on the map', Object.keys(S.els).length >= 8, 'els=' + Object.keys(S.els).length);
   ok('a single H1 became the map centre', S.vt.root.text === 'Plan' && S.vt.root.isRoot === true);
+
+  /* ---- a note_action launch asks first ---- */
+  ok('a note_action launch opens on a choice, not straight into the map',
+    W.document.getElementById('sheet').classList.contains('open'), 'sheet not open');
+  ok('the choice offers the note as written and an AI-generated map',
+    !!menuNamed(W, 'Map this note as written') && !!menuNamed(W, 'Generate a map with AI'), sheetText(W));
+  ok('with no map yet, none is offered to open', !menuNamed(W, 'Open the existing map'), sheetText(W));
+  ok('the map is already drawn behind the choice', Object.keys(S.els).length >= 8);
+  ok('asking wrote nothing', S.src === FIXTURE && S.undo.length === 0);
+  menuNamed(W, 'Map this note as written').click();
+  ok('choosing the note as written simply dismisses the sheet',
+    !W.document.getElementById('sheet').classList.contains('open') && S.src === FIXTURE);
 
   // ---- add a child, then name it
   var design = byText(S, 'Design');
@@ -301,13 +314,19 @@ function run(W) {
   }).then(function () {
     ok('an import is one undo step', S.src.indexOf('Warm up') < 0, S.src);
 
-    /* ---- generate a map with AI ---- */
+    /* ---- generate a map with AI, from the whole note ---- */
     W.__CG_AI__ = ['# Plan\n\n## Build\n- API\n- Storage\n\n## Ship\n- Beta\n'];
+    W.__CG_AI_PROMPTS__ = []; W.__CG_AI_OPTS__ = [];
     W.CG.app._ops.generateForCurrentNote();
     return new Promise(function (r) { setTimeout(r, 300); }).then(function () {
       ok('the generated map is previewed before anything is written',
         !!btnNamed(W, 'Save map') && !!btnNamed(W, 'Try again'), sheetText(W));
       ok('the source note is untouched until you save', S.src.indexOf('via=cartograph') < 0);
+      var opts = W.__CG_AI_OPTS__[0] || {};
+      ok('the note’s attachment is sent to the model with the text',
+        Array.isArray(opts.attachments) && opts.attachments[0] === '/mock/attachments/slides.pdf', JSON.stringify(opts));
+      ok('and the prompt names it', /slides\.pdf/.test(W.__CG_AI_PROMPTS__[0] || ''), W.__CG_AI_PROMPTS__[0]);
+      ok('the preview says the file was read', /read 1 attached file/.test(sheetText(W)), sheetText(W));
       btnNamed(W, 'Save map').click();
       return new Promise(function (r2) { setTimeout(r2, 400); });
     }).then(function () {
@@ -342,6 +361,34 @@ function run(W) {
       var mapId = W.CG.host.mapIdIn(S.src);
       ok('the existing map note now holds the new outline',
         W.__mockNotes()[mapId].content.indexOf('API only') >= 0, W.__mockNotes()[mapId].content);
+    });
+
+  }).then(function () {
+    /* ---- a note that is only a PDF is still a note ---- */
+    W.__CG_AI__ = ['# Lecture slides\n\n## Week 1\n- Intro\n'];
+    W.__CG_AI_PROMPTS__ = []; W.__CG_AI_OPTS__ = [];
+    var before = Object.keys(W.__mockNotes()).length;
+    W.CG.app._ops.generateFor({ id: 'mock-note-5', title: 'Lecture slides', content: '', tags: [] }, function () {});
+    return new Promise(function (r) { setTimeout(r, 300); }).then(function () {
+      ok('an attachments-only note is not refused as empty', W.__CG_AI_PROMPTS__.length === 1, 'prompts=' + W.__CG_AI_PROMPTS__.length);
+      ok('its attachments are looked up and sent',
+        ((W.__CG_AI_OPTS__[0] || {}).attachments || [])[0] === '/mock/attachments/slides.pdf', JSON.stringify(W.__CG_AI_OPTS__[0]));
+      ok('the prompt says the files are the whole note', /no text of its own/.test(W.__CG_AI_PROMPTS__[0] || ''));
+      ok('the result is previewed like any other', !!btnNamed(W, 'Save map'), sheetText(W));
+      btnNamed(W, 'Save map').click();
+      return new Promise(function (r2) { setTimeout(r2, 400); });
+    }).then(function () {
+      ok('saving creates the companion and links it from the PDF note',
+        Object.keys(W.__mockNotes()).length === before + 1 &&
+        /via=cartograph/.test(W.__mockNotes()['mock-note-5'].content), W.__mockNotes()['mock-note-5'].content);
+
+      /* ---- and a note with neither text nor files is still refused ---- */
+      W.__CG_AI_PROMPTS__ = [];
+      W.CG.app._ops.generateFor({ id: 'mock-note-2', title: 'Blank', content: '   \n', tags: [], attachments: [] }, function () {});
+      return settle();
+    }).then(function () {
+      ok('a truly empty note makes no AI call', W.__CG_AI_PROMPTS__.length === 0);
+      ok('and says why', /no text and no attachments/.test((W.document.getElementById('toast') || {}).textContent || ''));
     });
 
   }).then(function () {

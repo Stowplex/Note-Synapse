@@ -545,6 +545,39 @@
     ok('prose between nodes is left alone, being legitimate body',
       AIM.strip('# A\n\nSome body text.\n\n- one').indexOf('Some body text.') >= 0);
 
+    /* ---------------- the whole note, attachments included ---------------- */
+    var pPlain = AIM.generatePrompt('T', '# A\n- one');
+    ok('a note without attachments gets the plain prompt', pPlain.indexOf('Attached files') < 0 && pPlain.indexOf('- one') >= 0);
+    var pBoth = AIM.generatePrompt('T', '# A\n- one', { attachments: ['slides.pdf', 'photo.png'] });
+    ok('attached files are named in the prompt', /Attached files \(2[^)]*\): slides\.pdf, photo\.png/.test(pBoth), pBoth);
+    ok('the model is told the files count as the note', /part of the note/.test(pBoth));
+    ok('the text still travels alongside the files', pBoth.indexOf('- one') >= 0);
+    var pOnly = AIM.generatePrompt('T', '', { attachments: [{ fileName: 'slides.pdf', path: '/x/slides.pdf' }] });
+    ok('an attachments-only note is described as such, not sent as a blank block',
+      /no text of its own/.test(pOnly) && /\(no text\)/.test(pOnly) && /slides\.pdf/.test(pOnly), pOnly);
+    ok('attachment names may arrive as objects or strings', /slides\.pdf/.test(pOnly));
+
+    var one = [{ path: '/a/slides.pdf', fileName: 'slides.pdf' }];
+    ok('no text and no files means no calls at all', AIM.planCalls('', []).length === 0);
+    var c1 = AIM.planCalls('', one);
+    ok('an attachments-only note is one call carrying the files',
+      c1.length === 1 && c1[0].text === '' && c1[0].attachments.length === 1, JSON.stringify(c1));
+    var c2 = AIM.planCalls('# A\n- one', one);
+    ok('short text and files share one call', c2.length === 1 && c2[0].attachments.length === 1 && /- one/.test(c2[0].text));
+    var longNote = '# Big\n\n' + ['Alpha', 'Beta', 'Gamma'].map(function (h) {
+      return '## ' + h + '\n' + new Array(400).join('word ') + '\n';
+    }).join('\n');
+    var c3 = AIM.planCalls(longNote, one, 1200);
+    ok('files get a call of their own when the text had to be split',
+      c3.length === AIM.splitSections(longNote, 1200).length + 1 &&
+      c3.slice(0, -1).every(function (c) { return !c.attachments.length; }) &&
+      c3[c3.length - 1].attachments.length === 1 && c3[c3.length - 1].text === '',
+      'calls=' + c3.length);
+    ok('the files-only section prompt asks for branches, not one heading of the text',
+      /files attached to a note/.test(AIM.generatePrompt('T', '', { section: true, attachments: ['a.pdf'] })));
+
+    ok('the current note advertises its attachment paths', Array.isArray(CG.host.note().attachmentPaths));
+
     /* ---------------- chunking a long note ---------------- */
     var long = '# Big\n\n' + ['Alpha', 'Beta', 'Gamma', 'Delta'].map(function (h) {
       return '## ' + h + '\n' + new Array(400).join('word ') + '\n';
