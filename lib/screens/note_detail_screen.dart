@@ -58,6 +58,7 @@ import 'package:pdfrx/pdfrx.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'conversation_tree_screen.dart';
+import 'note_merge_screen.dart';
 import 'immersive_note_screen.dart';
 import 'conversation_chat_screen.dart';
 import 'user_app_view_screen.dart';
@@ -907,6 +908,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                         ),
                       ),
                       PopupMenuItem(
+                        value: 'merge',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.call_merge),
+                            const SizedBox(width: 8),
+                            Text(l10n.mergeWith),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
                         value: 'fetch_images',
                         child: Row(
                           children: [
@@ -991,6 +1002,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     onSelected: (value) {
                       if (value == 'share') {
                         _shareNote();
+                      } else if (value == 'merge') {
+                        _mergeWith();
                       } else if (value == 'fetch_images') {
                         _fetchRemoteImages();
                       } else if (value == 'force_fetch_images') {
@@ -2977,6 +2990,32 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         builder: (context) =>
             NoteActionAppSelectionScreen(selectedNotes: [currentNote]),
       ),
+    );
+  }
+
+  Future<void> _mergeWith() async {
+    final l10n = AppLocalizations.of(context)!;
+    final currentNote = context.read<AppProvider>().notes.firstWhere(
+      (note) => note.id == widget.note.id,
+      orElse: () => widget.note,
+    );
+
+    final merged = await Navigator.of(context).push<Note>(
+      MaterialPageRoute(
+        builder: (context) => NoteMergeScreen(notes: [currentNote]),
+      ),
+    );
+    if (merged == null || !mounted) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.mergedInto(merged.title))));
+    if (merged.id == currentNote.id) {
+      // Replaced in place: this screen already tracks the note by id.
+      return;
+    }
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (context) => NoteDetailScreen(note: merged)),
     );
   }
 

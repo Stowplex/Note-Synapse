@@ -20,6 +20,7 @@ import 'package:file_picker/file_picker.dart';
 import '../services/import_service.dart';
 import '../services/logger_service.dart';
 import 'immersive_note_screen.dart';
+import 'note_merge_screen.dart';
 
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
@@ -135,6 +136,11 @@ class _NotesScreenState extends State<NotesScreen> {
               icon: const Icon(Icons.link),
               onPressed: _selectedNotes.length >= 2 ? _linkSelectedNotes : null,
               tooltip: l10n.linkSelectedNotes,
+            ),
+            IconButton(
+              icon: const Icon(Icons.call_merge),
+              onPressed: _selectedNotes.isNotEmpty ? _openMergeEditor : null,
+              tooltip: l10n.mergeNotes,
             ),
             IconButton(
               icon: const Icon(Icons.chrome_reader_mode),
@@ -681,6 +687,27 @@ class _NotesScreenState extends State<NotesScreen> {
         builder: (context) =>
             ImmersiveNoteScreen(notes: List<Note>.from(_selectedNotes)),
       ),
+    );
+  }
+
+  Future<void> _openMergeEditor() async {
+    if (_selectedNotes.isEmpty) return;
+    final l10n = AppLocalizations.of(context)!;
+
+    final merged = await Navigator.of(context).push<Note>(
+      MaterialPageRoute(
+        builder: (context) =>
+            NoteMergeScreen(notes: List<Note>.from(_selectedNotes)),
+      ),
+    );
+    if (merged == null || !mounted) return;
+
+    _exitMultiSelectMode();
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.mergedInto(merged.title))));
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => NoteDetailScreen(note: merged)),
     );
   }
 

@@ -5571,4 +5571,164 @@ class AppLocalizationsEn extends AppLocalizations {
   String backgroundAppClosed(String appName) {
     return 'Closed \"$appName\" — only one app can run in the background.';
   }
+
+  @override
+  String get mergeNotes => 'Merge notes';
+
+  @override
+  String get mergeWith => 'Merge with…';
+
+  @override
+  String mergeTabMerged(int count) {
+    return 'Merged ($count)';
+  }
+
+  @override
+  String get mergeAddNotes => 'Add notes';
+
+  @override
+  String get mergeSelectNotesTitle => 'Select notes to merge';
+
+  @override
+  String get mergeNeedsSecondNote =>
+      'Pick at least one more note to merge with.';
+
+  @override
+  String get mergeRemoveSource => 'Remove from merge';
+
+  @override
+  String mergeRemoveSourceBody(String title) {
+    return 'Blocks already taken from \"$title\" stay in the merged note. The note itself is not changed.';
+  }
+
+  @override
+  String get mergeAddAll => 'Add all';
+
+  @override
+  String get mergeRemoveAll => 'Remove all';
+
+  @override
+  String mergeBlocksAdded(int added, int total) {
+    return '$added of $total blocks added';
+  }
+
+  @override
+  String get mergeAddToMerged => 'Add to merged';
+
+  @override
+  String get mergeRemoveFromMerged => 'Remove from merged';
+
+  @override
+  String mergeAddSection(int count) {
+    return 'Add this section ($count blocks)';
+  }
+
+  @override
+  String get mergeCopyText => 'Copy text';
+
+  @override
+  String get mergeSelectText => 'Select text…';
+
+  @override
+  String get mergeCopied => 'Copied';
+
+  @override
+  String get mergeEditedTitle => 'Changed in the merged note';
+
+  @override
+  String get mergeEditedBody =>
+      'This block was changed or removed in the merged note. Edit it there, or add another copy.';
+
+  @override
+  String get mergeAddAnotherCopy => 'Add another copy';
+
+  @override
+  String get mergeForget => 'Forget';
+
+  @override
+  String get mergeArrange => 'Arrange';
+
+  @override
+  String get mergeEdit => 'Edit';
+
+  @override
+  String get mergeInsertHere => 'Next block goes here';
+
+  @override
+  String mergeInsertingAt(int position) {
+    return 'Inserting at position $position';
+  }
+
+  @override
+  String get mergeEmptyHint =>
+      'Tap blocks in a note tab to add them here, or switch to Edit and paste.';
+
+  @override
+  String mergeUseCombinedTitle(String title) {
+    return 'Use \"$title\"';
+  }
+
+  @override
+  String get mergeSaveAsNew => 'Save as new note';
+
+  @override
+  String mergeReplaceNote(String title) {
+    return 'Replace \"$title\"';
+  }
+
+  @override
+  String mergeReplaceWarning(String title, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '\"$title\" gets this content and title. The other $count notes are not changed.',
+      one:
+          '\"$title\" gets this content and title. The other note is not changed.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get mergeLinkBack => 'Link back to source notes';
+
+  @override
+  String get mergeArchiveOthers => 'Archive the other source notes';
+
+  @override
+  String get mergeDiscardTitle => 'Discard merged note?';
+
+  @override
+  String get mergeDiscardBody =>
+      'Blocks you added and text you typed will be lost.';
+
+  @override
+  String get mergeDiscard => 'Discard';
+
+  @override
+  String mergedInto(String title) {
+    return 'Merged into \"$title\"';
+  }
+
+  @override
+  String get mergeNothingToSave => 'Add at least one block or some text first.';
+
+  @override
+  String mergeSaveFailed(String error) {
+    return 'Could not save the merged note: $error';
+  }
+
+  @override
+  String mergeBlockFromNote(String title) {
+    return 'From \"$title\"';
+  }
+
+  @override
+  String get mergeRemoveBlock => 'Remove';
+
+  @override
+  String get mergeOtherAttachments => 'Other attachments to keep';
+
+  @override
+  String get mergeArchiveOthersPinned => 'Pinned notes are left as they are.';
 }

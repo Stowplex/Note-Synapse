@@ -2412,5 +2412,104 @@
     "placeholders": {
       "appName": {"type": "String"}
     }
-  }
+  },
+  "mergeNotes": "Merge notes",
+  "mergeWith": "Merge with…",
+  "mergeTabMerged": "Merged ({count})",
+  "@mergeTabMerged": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "mergeAddNotes": "Add notes",
+  "mergeSelectNotesTitle": "Select notes to merge",
+  "mergeNeedsSecondNote": "Pick at least one more note to merge with.",
+  "mergeRemoveSource": "Remove from merge",
+  "mergeRemoveSourceBody": "Blocks already taken from \"{title}\" stay in the merged note. The note itself is not changed.",
+  "@mergeRemoveSourceBody": {
+    "placeholders": {
+      "title": {"type": "String"}
+    }
+  },
+  "mergeAddAll": "Add all",
+  "mergeRemoveAll": "Remove all",
+  "mergeBlocksAdded": "{added} of {total} blocks added",
+  "@mergeBlocksAdded": {
+    "placeholders": {
+      "added": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "mergeAddToMerged": "Add to merged",
+  "mergeRemoveFromMerged": "Remove from merged",
+  "mergeAddSection": "Add this section ({count} blocks)",
+  "@mergeAddSection": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "mergeCopyText": "Copy text",
+  "mergeSelectText": "Select text…",
+  "mergeCopied": "Copied",
+  "mergeEditedTitle": "Changed in the merged note",
+  "mergeEditedBody": "This block was changed or removed in the merged note. Edit it there, or add another copy.",
+  "mergeAddAnotherCopy": "Add another copy",
+  "mergeForget": "Forget",
+  "mergeArrange": "Arrange",
+  "mergeEdit": "Edit",
+  "mergeInsertHere": "Next block goes here",
+  "mergeInsertingAt": "Inserting at position {position}",
+  "@mergeInsertingAt": {
+    "placeholders": {
+      "position": {"type": "int"}
+    }
+  },
+  "mergeEmptyHint": "Tap blocks in a note tab to add them here, or switch to Edit and paste.",
+  "mergeUseCombinedTitle": "Use \"{title}\"",
+  "@mergeUseCombinedTitle": {
+    "placeholders": {
+      "title": {"type": "String"}
+    }
+  },
+  "mergeSaveAsNew": "Save as new note",
+  "mergeReplaceNote": "Replace \"{title}\"",
+  "@mergeReplaceNote": {
+    "placeholders": {
+      "title": {"type": "String"}
+    }
+  },
+  "mergeReplaceWarning": "{count, plural, =1{\"{title}\" gets this content and title. The other note is not changed.} other{\"{title}\" gets this content and title. The other {count} notes are not changed.}}",
+  "@mergeReplaceWarning": {
+    "placeholders": {
+      "title": {"type": "String"},
+      "count": {"type": "int"}
+    }
+  },
+  "mergeLinkBack": "Link back to source notes",
+  "mergeArchiveOthers": "Archive the other source notes",
+  "mergeDiscardTitle": "Discard merged note?",
+  "mergeDiscardBody": "Blocks you added and text you typed will be lost.",
+  "mergeDiscard": "Discard",
+  "mergedInto": "Merged into \"{title}\"",
+  "@mergedInto": {
+    "placeholders": {
+      "title": {"type": "String"}
+    }
+  },
+  "mergeNothingToSave": "Add at least one block or some text first.",
+  "mergeSaveFailed": "Could not save the merged note: {error}",
+  "@mergeSaveFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "mergeBlockFromNote": "From \"{title}\"",
+  "@mergeBlockFromNote": {
+    "placeholders": {
+      "title": {"type": "String"}
+    }
+  },
+  "mergeRemoveBlock": "Remove",
+  "mergeOtherAttachments": "Other attachments to keep",
+  "mergeArchiveOthersPinned": "Pinned notes are left as they are."
 }
