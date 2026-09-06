@@ -674,6 +674,87 @@
       (joined.match(/^#[ \t]+\S/gm) || []).length === 1 &&
       /^## One/m.test(joined) && /^## Two/m.test(joined), joined);
 
+    /* ---------------- exporting the map ---------------- */
+    var EXP = CG.export;
+    var xdoc = md.parse(FIXTURES['plan.md']);
+    var xColour = xdoc.nodes.filter(function (n) { return n.text === 'Colour and type'; })[0];
+    var xLaunch = xdoc.nodes.filter(function (n) { return n.text === 'Launch'; })[0];
+    var xDesign = xdoc.nodes.filter(function (n) { return /^Design/.test(n.text); })[0];
+    var xstate = { title: 'Product plan', pins: {}, collapsed: {}, comments: {}, focusId: xDesign.id };
+    xstate.collapsed[xDesign.id] = true;
+    xstate.pins[xLaunch.id] = { x: 900, y: 400 };
+    xstate.comments.k1 = { id: 'k1', text: 'Check with the brand team', anchors: [{ kind: 'node', n: xColour.id }], pos: { x: 90, y: -70 } };
+    xstate.comments.k2 = { id: 'k2', text: 'floating', anchors: [], pos: { x: -400, y: 300 } };
+    var scene = EXP.scene(xdoc, xstate, EXP.estimateMeasure);
+    // plan.md opens with a lone H1, which is hoisted to the centre; the
+    // synthetic root is then not drawn, exactly as on screen.
+    var expected = xdoc.nodes.length - 1;
+    ok('the scene has every node, collapse and focus notwithstanding',
+      scene.nodes.length === expected, scene.nodes.length + ' vs ' + expected);
+    ok('every box has a positive size', scene.nodes.every(function (n) { return n.w > 0 && n.h > 0; }));
+    ok('the scene is shifted to a top-left origin with padding',
+      scene.nodes.concat(scene.comments).every(function (n) { return n.x >= EXP.PAD - 0.5 && n.y >= EXP.PAD - 0.5; }));
+    ok('the scene is as big as its contents',
+      scene.nodes.concat(scene.comments).every(function (n) { return n.x + n.w <= scene.w && n.y + n.h <= scene.h; }));
+    var sLaunch = scene.nodes.filter(function (n) { return n.text === 'Launch'; })[0];
+    var sRoot = scene.nodes.filter(function (n) { return n.isRoot; })[0];
+    // A pin's x is the box's left edge, its y the box's centre, both relative
+    // to the root's centre - the same convention the drag handler writes.
+    ok('a pin is honoured', !!sLaunch && !!sRoot &&
+      Math.round(sLaunch.x - (sRoot.x + sRoot.w / 2)) === 900 &&
+      Math.round((sLaunch.y + sLaunch.h / 2) - (sRoot.y + sRoot.h / 2)) === 400,
+      sLaunch && sRoot ? String([sLaunch.x - (sRoot.x + sRoot.w / 2), (sLaunch.y + sLaunch.h / 2) - (sRoot.y + sRoot.h / 2)]) : 'missing');
+    ok('a pinned edge is drawn dashed', scene.edges.some(function (e) { return e.pinned; }));
+    ok('comments are in the scene with a line to their anchor',
+      scene.comments.length === 2 && scene.comments.filter(function (c) { return c.id === 'k1'; })[0].anchors.length === 1);
+    var sColour = scene.nodes.filter(function (n) { return n.text === 'Colour and type'; })[0];
+    var k1 = scene.comments.filter(function (c) { return c.id === 'k1'; })[0];
+    ok('an anchored comment sits at its offset from the node centre',
+      Math.abs((k1.x - (sColour.x + sColour.w / 2)) - 90) < 0.6 && Math.abs((k1.y - (sColour.y + sColour.h / 2)) + 70) < 0.6,
+      JSON.stringify([k1.x, k1.y, sColour.x, sColour.w]));
+    ok('a ticked task is drawn ticked', scene.nodes.some(function (n) { return n.check && n.checked === true; }));
+
+    var longDoc = md.parse('# T\n- ' + new Array(12).join('considerably ') + 'long\n- 这是一个没有空格但是非常非常非常非常非常非常长的标签\n');
+    var longScene = EXP.scene(longDoc, { title: 'T' }, EXP.estimateMeasure);
+    ok('a long label wraps into several lines', longScene.nodes.some(function (n) { return n.lines.length > 1; }));
+    ok('and never wider than its column', longScene.nodes.every(function (n) { return n.w <= n.st.maxW + 1 || n.pills.length; }),
+      JSON.stringify(longScene.nodes.map(function (n) { return [n.w, n.st.maxW]; })));
+    ok('unspaced CJK is broken by character rather than overflowing',
+      longScene.nodes.some(function (n) { return /标签/.test(n.text) && n.lines.length > 1; }));
+
+    var svg = EXP.svg(scene);
+    ok('the SVG declares its size', /^<svg [^>]*width="\d+" height="\d+" viewBox="0 0 \d+ \d+"/.test(svg));
+    ok('the SVG starts with an opaque backdrop', /<rect x="0" y="0" width="\d+" height="\d+" fill="#ffffff"\/>/.test(svg));
+    ok('the SVG uses nothing an <img> cannot render', svg.indexOf('foreignObject') < 0 && svg.indexOf('class=') < 0 && svg.indexOf('url(') < 0);
+    ok('every label is in the picture', xdoc.nodes.every(function (n) {
+      return n.kind === 'root' || svg.indexOf(md.plainText(n.text).split(' ')[0]) >= 0;
+    }));
+    ok('comment text is in the picture', svg.indexOf('brand team') >= 0);
+    ok('a dotted comment line is drawn', /stroke-dasharray="0.1 4.2"/.test(svg));
+    ok('characters that would break XML are escaped',
+      EXP.svg(EXP.scene(md.parse('# A & B\n- a < b\n'), { title: 'x' }, EXP.estimateMeasure)).indexOf('&amp; B') > 0 &&
+      EXP.svg(EXP.scene(md.parse('# A & B\n- a < b\n'), { title: 'x' }, EXP.estimateMeasure)).indexOf('a &lt; b') > 0);
+
+    ok('png is a registered format', !!EXP.format('png') && EXP.format('png').ext === '.png' && EXP.format('png').mime === 'image/png');
+    var before = EXP.formats.length;
+    EXP.register({ id: 'zz-test', label: 'Test', ext: '.zz', mime: 'x/y', write: function () { return { text: 'hi' }; } });
+    EXP.register({ id: 'zz-test', label: 'Test 2', ext: '.zz', mime: 'x/y', write: function () { return { text: 'hi' }; } });
+    ok('registering a format lists it once, replacing by id',
+      EXP.formats.length === before + 1 && EXP.format('zz-test').label === 'Test 2');
+    EXP.formats = EXP.formats.filter(function (f) { return f.id !== 'zz-test'; });
+
+    ok('a 2x export of a normal map is not scaled down', EXP.pngScale(1600, 900) === 2);
+    ok('a huge map is scaled to fit the canvas ceiling', EXP.pngScale(8000, 6000) < 1 && EXP.pngScale(8000, 6000) >= 0.25);
+    ok('the file is named after the note', EXP.fileName('Product plan', '.png') === 'Product plan — map.png');
+    ok('unsafe characters are kept out of the name', EXP.fileName('a/b:c?', '.png').indexOf('/') < 0 && EXP.fileName('a/b:c?', '.png').indexOf(':') < 0);
+    var stem = EXP.fileStem('Product plan');
+    ok('a previous export is recognised by its human name', EXP.isPreviousExport({ fileName: stem + '.png', path: '/x/y.png' }, stem, '.png'));
+    ok('or by the host-renamed stored name',
+      EXP.isPreviousExport({ fileName: 'other', path: '/att/' + stem + '_123e4567-e89b-12d3-a456-426614174000.png' }, stem, '.png'));
+    ok('but a different file with a similar stem is left alone',
+      !EXP.isPreviousExport({ fileName: stem + ' 2.png', path: '/att/' + stem + ' 2_123e4567-e89b-12d3-a456-426614174000.png' }, stem, '.png') &&
+      !EXP.isPreviousExport({ fileName: stem + '.svg', path: '/att/' + stem + '_123e4567-e89b-12d3-a456-426614174000.svg' }, stem, '.png'));
+
     /* ---------------- the companion link ---------------- */
     var link = CG.host.mapLink('abc-123', 'x');
     ok('a map link carries the marker that makes it findable', link.indexOf('?via=cartograph') > 0, link);

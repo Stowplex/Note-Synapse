@@ -978,6 +978,74 @@ function run(W) {
       c && doc2.byId[c.anchors[0].n] && doc2.byId[c.anchors[0].n].text === 'Colors', JSON.stringify(c && c.anchors));
 
   }).then(function () {
+    /* =================================================================== */
+    /* export                                                               */
+    /* =================================================================== */
+    W.__mockUpdates = [];
+    return ops.exportMap('png').then(function (okd) {
+      ok('exporting resolves', okd === true);
+      var upd = (W.__mockUpdates[W.__mockUpdates.length - 1] || [])[0];
+      var added = upd && upd.modification && upd.modification.attachments && upd.modification.attachments.added;
+      ok('the export is attached to the note being mapped', !!upd && upd.id === S.noteId, JSON.stringify(upd && upd.id));
+      ok('as one base64 PNG named after the note',
+        !!added && added.length === 1 && added[0].type === 'base64' && added[0].mimeType === 'image/png' &&
+        /— map\.png$/.test(added[0].fileName), JSON.stringify(added && added[0] && [added[0].type, added[0].mimeType, added[0].fileName]));
+      ok('the bytes are a PNG', !!added && /^iVBORw0KGgo/.test(added[0].data || ''), (added && added[0].data || '').slice(0, 20));
+      ok('nothing earlier was removed on a first export', !upd.modification.attachments.removed);
+      S.__png = added && added[0].data;
+      // Draw it back and make sure it is not a blank sheet.
+      return new Promise(function (resolve) {
+        var img = new W.Image();
+        img.onload = function () {
+          var cv = W.document.createElement('canvas');
+          cv.width = img.width; cv.height = img.height;
+          var ctx = cv.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          var px = ctx.getImageData(0, 0, cv.width, cv.height).data;
+          var dark = 0;
+          for (var i = 0; i < px.length; i += 4 * 37) if (px[i] < 200 || px[i + 1] < 200 || px[i + 2] < 200) dark++;
+          resolve({ w: img.width, h: img.height, dark: dark });
+        };
+        img.onerror = function () { resolve(null); };
+        img.src = 'data:image/png;base64,' + S.__png;
+      });
+    }).then(function (r) {
+      ok('the PNG decodes', !!r, 'image did not load');
+      ok('and is drawn at 2x', !!r && r.w > 400 && r.h > 200, r && (r.w + 'x' + r.h));
+      ok('and is not blank', !!r && r.dark > 20, r && ('dark samples=' + r.dark));
+    });
+
+  }).then(function () {
+    /* ---- exporting again replaces, it does not pile up ---- */
+    var note = W.__mockNotes()[S.noteId];
+    var firstPath = note.attachments.filter(function (a) { return /— map\.png$/.test(a.fileName); })[0].path;
+    return ops.exportMap('png').then(function () {
+      var upd = (W.__mockUpdates[W.__mockUpdates.length - 1] || [])[0];
+      var removed = upd.modification.attachments.removed || [];
+      ok('a second export removes the first file in the same write', removed.length === 1 && removed[0] === firstPath, JSON.stringify(removed));
+      ok('the human name is sent again, not the stored one', upd.modification.attachments.added[0].fileName === firstPath.split('/').pop().replace(/_[0-9a-f-]{36}\.png$/, '.png'));
+      var maps = note.attachments.filter(function (a) { return /— map\.png$/.test(a.fileName); });
+      ok('the note ends up with exactly one map image', maps.length === 1, 'maps=' + maps.length);
+      ok('the user’s own attachment is untouched', note.attachments.some(function (a) { return a.fileName === 'slides.pdf'; }));
+    });
+
+  }).then(function () {
+    /* ---- a block-scoped launch attaches to the parent note ---- */
+    var n0 = W.Synapse.Notes[0];
+    n0.isBlockScope = true; n0.parentNoteId = 'mock-note-2';
+    ok('a block launch targets its parent note', ops.exportTargetNoteId() === 'mock-note-2', ops.exportTargetNoteId());
+    delete n0.isBlockScope; delete n0.parentNoteId;
+    ok('a whole-note launch targets itself', ops.exportTargetNoteId() === S.noteId);
+
+    /* ---- refused while a proposal is pending ---- */
+    S.ghost = { headline: 'stub' };
+    var n = W.__mockUpdates.length;
+    return ops.exportMap('png').then(function (okd) {
+      S.ghost = null;
+      ok('export is refused while a proposal is pending', okd === false && W.__mockUpdates.length === n);
+    });
+
+  }).then(function () {
     // ---- outline view renders the same tree, and lists comments after it
     var btn = W.document.querySelector('#viewToggle button[data-mode="outline"]');
     btn.click();

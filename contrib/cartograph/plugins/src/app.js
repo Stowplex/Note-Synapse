@@ -892,6 +892,7 @@
     map: '<svg viewBox="0 0 24 24"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg>',
     move: '<svg viewBox="0 0 24 24"><path d="M5 4h5M5 4v5"/><path d="M5 4l7 7"/><path d="M14 20h5v-5"/><path d="M19 20l-7-7"/></svg>',
     link: '<svg viewBox="0 0 24 24"><path d="M9.5 14.5l5-5"/><path d="M12.5 7.5l1.8-1.8a3.5 3.5 0 014.9 4.9L17.4 12.4"/><path d="M11.5 16.5l-1.8 1.8a3.5 3.5 0 01-4.9-4.9L6.6 11.6"/></svg>',
+    export: '<svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>',
     comment: '<svg viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 015.5 4h13A1.5 1.5 0 0120 5.5v9a1.5 1.5 0 01-1.5 1.5H10l-4.5 4v-4H5.5A1.5 1.5 0 014 14.5z"/><path d="M8 9h8M8 12.5h5"/></svg>',
     unlink: '<svg viewBox="0 0 24 24"><path d="M12.5 7.5l1.8-1.8a3.5 3.5 0 014.9 4.9L17.4 12.4"/><path d="M11.5 16.5l-1.8 1.8a3.5 3.5 0 01-4.9-4.9L6.6 11.6"/><path d="M4 4l16 16"/></svg>'
   };
@@ -1107,6 +1108,7 @@
       menuItem(body, 'Add a floating comment', 'A free text box on the canvas, attached to nothing', ICONS.comment, '', function () {
         createComment([], v.id);
       });
+      menuItem(body, 'Export map…', 'The whole map as a file attached to this note', ICONS.export, '', exportSheet);
       if (doc.children.length) {
         menuItem(body, 'Reshape this branch with AI', 'Regroup, or tidy the wording', ICONS.ai, '', function () { aiMenu(doc, null); });
       }
@@ -2655,6 +2657,8 @@
           ? 'Reads the whole ' + what + ', attachments included, and replaces the existing map note'
           : 'Reads the whole ' + what + ', attachments included, into a new companion note',
         ICONS.ai, '', function () { generateFor(currentSource(), offerOpen); });
+      menuItem(body, 'Export as an image', 'A picture of the whole map, attached to this ' + what,
+        ICONS.export, '', exportSheet);
     });
   }
 
@@ -3281,6 +3285,76 @@
   }
 
   /* ===================================================================== */
+  /* export                                                                 */
+  /* ===================================================================== */
+
+  /*
+   * The picture is of the WHOLE map, never of the screen: CG.export builds its
+   * own fully expanded layout. The file is attached to the note being mapped,
+   * and exporting again replaces the earlier file rather than piling up.
+   */
+  function exportTargetNoteId() {
+    // A block-scoped launch has no attachment rows of its own; its files
+    // belong to the parent note, which is where the host keeps them.
+    var n = host.note();
+    if (n && n.id === S.noteId && n.isBlockScope && n.parentNoteId) return n.parentNoteId;
+    return S.noteId;
+  }
+
+  function exportMap(formatId) {
+    if (S.embedded) return Promise.resolve(false);
+    if (S.ghost) { toast('Apply or discard the proposal first'); return Promise.resolve(false); }
+    var f = CG.export.format(formatId || 'png');
+    if (!f) { toast('Unknown export format'); return Promise.resolve(false); }
+    if (S.editingId) commitEdit(false);
+    var noteId = exportTargetNoteId();
+    busy('Rendering…');
+    var scene;
+    try {
+      scene = CG.export.scene(S.doc, { title: S.title, pins: S.pins, comments: S.comments, noteCache: S.noteCache }, CG.export.canvasMeasure());
+    } catch (e) {
+      busy(null);
+      toast(String((e && e.message) || e).slice(0, 140));
+      return Promise.resolve(false);
+    }
+    return Promise.resolve(f.write(scene, S.doc, {})).then(function (out) {
+      busy('Attaching…');
+      var stem = CG.export.fileStem(S.title), name = stem + f.ext;
+      var data = out.base64 || CG.export.toBase64(out.text || '');
+      if (!data) throw new Error('nothing was rendered');
+      return host.attachmentsOf(noteId).catch(function () { return []; }).then(function (atts) {
+        var old = atts.filter(function (a) { return CG.export.isPreviousExport(a, stem, f.ext); })
+          .map(function (a) { return a.path; });
+        return host.attachFile(noteId, { data: data, fileName: name, mimeType: f.mime }, old).then(function () {
+          busy(null);
+          toast((old.length ? 'Replaced ' : 'Attached ') + name +
+            (out.width ? ' (' + out.width + '×' + out.height + ')' : '') +
+            (out.scaled ? ' · scaled to fit' : ''));
+          return true;
+        });
+      });
+    }).catch(function (e) {
+      busy(null);
+      toast(String((e && e.message) || e).slice(0, 140));
+      return false;
+    });
+  }
+
+  function exportSheet() {
+    if (S.ghost) return toast('Apply or discard the proposal first');
+    openSheet('Export the map', function (body) {
+      CG.export.formats.forEach(function (f) {
+        menuItem(body, f.label, f.sub, ICONS.export, '', function () { exportMap(f.id); });
+      });
+      var p = document.createElement('p');
+      p.style.color = 'var(--muted)';
+      p.style.fontSize = '12.5px';
+      p.textContent = 'The whole map, expanded. Saved as an attachment on this note; exporting again replaces it.';
+      body.appendChild(p);
+    });
+  }
+
+  /* ===================================================================== */
   /* search                                                                 */
   /* ===================================================================== */
 
@@ -3570,7 +3644,8 @@
             createComment: createComment, beginCommentEdit: beginCommentEdit, deleteComment: deleteComment,
             attachComment: attachComment, detachComment: detachComment, placeComment: placeComment,
             anchorFromView: anchorFromView, linkAnchor: linkAnchor, anchorLabel: anchorLabel,
-            commitComments: commitComments }
+            commitComments: commitComments,
+            exportMap: exportMap, exportSheet: exportSheet, exportTargetNoteId: exportTargetNoteId }
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

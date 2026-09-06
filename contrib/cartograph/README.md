@@ -225,6 +225,35 @@ stack.
 Comments stay out of multi-select, AI operations and ghost previews. None of
 those know what to do with text the note does not own.
 
+## Exporting the map
+
+**More ▸ Export map…** (or **Export as an image** on the launch chooser) saves
+a picture of the map as an attachment on the note being mapped. Today the one
+format is **PNG**; the sheet lists whatever formats are registered, so others
+slot in without touching what is around them.
+
+- **The whole map, always.** Every branch expanded, focus lifted, filters
+  ignored — comments, cards and dashed links included. Pins are honoured, since
+  they are your layout choices. Exporting a filtered or focused map still
+  exports all of it.
+- **Always light and opaque**, whatever the phone's theme, so the picture
+  reads in a chat, a document or on paper.
+- **Attached, not inserted.** The file lands on the note (or, from a block
+  launch, on the note the block belongs to) as `<Title> — map.png`, through
+  the same approval as any other write. **Exporting again replaces** the
+  previous file in the same write; it never piles up.
+- **Rendered on the phone.** The map is laid out afresh with the same layout
+  engine the screen uses, drawn as SVG made of nothing an `<img>` cannot render
+  (rects, paths and wrapped text; no `foreignObject`, no CSS, no fonts to load),
+  and rasterised on a canvas at 2× — capped so a very large map is scaled to fit
+  the WebView's canvas ceiling rather than coming out blank, and the toast says
+  so.
+
+The pipeline is three layers — a pure **scene** (`CG.export.scene`), a
+**writer** per format (`CG.export.register({ id, label, ext, mime, write })`),
+and one **sink** that attaches — so FreeMind, OPML or SVG are each one new
+writer walking the scene or the document tree.
+
 ## Importing another note as a branch
 
 **Note ▾ → Import a map here** brings another note's outline in under the

@@ -132,12 +132,31 @@
         return Promise.resolve({ success: true, data: rows });
       },
       updateNotes: function (list) {
+        (global.__mockUpdates = global.__mockUpdates || []).push(list);
         list.forEach(function (u) {
           var n = mock.notes[u.id];
           if (!n) return;
           if (u.modification && u.modification.content) n.content = u.modification.content.text;
           else if (typeof u.content === 'string') n.content = u.content;
           if (u.title) n.title = u.title;
+          // Attachments, the way the host does it: every saved file is renamed
+          // to <stem>_<uuid><ext>, and `removed` names stored paths.
+          var am = u.modification && u.modification.attachments;
+          if (am) {
+            n.attachments = n.attachments || [];
+            (am.removed || []).forEach(function (p) {
+              n.attachments = n.attachments.filter(function (a) { return a.path !== p; });
+            });
+            (am.added || []).forEach(function (a) {
+              if (!a || a.type !== 'base64' || !a.fileName) return;
+              var dot = a.fileName.lastIndexOf('.');
+              var stem = dot > 0 ? a.fileName.slice(0, dot) : a.fileName, ext = dot > 0 ? a.fileName.slice(dot) : '';
+              var uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (ch) {
+                var r = Math.random() * 16 | 0; return (ch === 'x' ? r : (r & 3 | 8)).toString(16);
+              });
+              n.attachments.push({ path: '/mock/attachments/' + stem + '_' + uuid + ext, fileName: a.fileName, mimeType: a.mimeType || '', data: a.data });
+            });
+          }
         });
         return Promise.resolve({ success: true, updatedCount: list.length });
       },
@@ -203,8 +222,27 @@
       content: n.content || '',
       tags: n.tags || [],
       attachmentPaths: Array.isArray(n.attachmentPaths) ? n.attachmentPaths.slice() : [],
-      isBlockScope: n.isBlockScope === true
+      isBlockScope: n.isBlockScope === true,
+      parentNoteId: n.parentNoteId || null
     } : null;
+  };
+
+  /*
+   * Attach one file to a note, optionally removing earlier ones in the same
+   * write, so a replacement is one approval and never leaves two copies. The
+   * host renames the saved file to <stem>_<uuid><ext>; always send the
+   * human name, never a stored one, or a uuid is appended on every save.
+   */
+  HOST.attachFile = function (noteId, file, removePaths) {
+    if (!S || !S.updateNotes) return Promise.reject(new Error('no host'));
+    var attachments = { added: [{ type: 'base64', data: file.data, fileName: file.fileName, mimeType: file.mimeType || '' }] };
+    if (removePaths && removePaths.length) attachments.removed = removePaths.slice();
+    return S.updateNotes([{ id: noteId, modification: { attachments: attachments } }]).then(function (r) {
+      if (!r || r.success === false) throw new Error((r && r.error) || 'the attachment was declined');
+      if (r.errors && r.errors.length) throw new Error(r.errors[0]);
+      if (r.updatedCount === 0) throw new Error('the attachment was declined');
+      return true;
+    });
   };
 
   /*

@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 
 SOURCE="cartograph.html"
 OUTPUT="Cartograph.yaml"
-MODULES=(md edit sidecar layout view diff ai host app)
+MODULES=(md edit sidecar layout view diff ai host export app)
 TMP_HTML="$(mktemp)"
 trap 'rm -f "$TMP_HTML"' EXIT
 
