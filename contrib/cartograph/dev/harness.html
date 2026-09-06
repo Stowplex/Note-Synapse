@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cartograph harness</title>
+<style>
+  body { margin: 0; font: 13px -apple-system, system-ui, sans-serif; background: #0e1013; color: #e8eaf0;
+         display: flex; flex-direction: column; height: 100vh; }
+  header { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid #262b36; }
+  select, button { font: inherit; background: #1f232c; color: #e8eaf0; border: 1px solid #262b36;
+                   border-radius: 8px; padding: 5px 9px; }
+  #wrap { flex: 1; display: grid; place-items: center; background: #16181d; }
+  iframe { width: 390px; height: 780px; border: 1px solid #262b36; border-radius: 22px; background: #fff; }
+  label { color: #8b93a5; }
+</style>
+</head>
+<body>
+<header>
+  <label>fixture</label>
+  <select id="pick">
+    <option value="plan.md">plan.md</option>
+    <option value="mixed.md">mixed.md</option>
+    <option value="bullets.md">bullets.md</option>
+    <option value="empty.md">empty.md</option>
+    <option value="">(built-in mock note)</option>
+  </select>
+  <label>size</label>
+  <select id="size">
+    <option value="390x780">phone 390×780</option>
+    <option value="360x640">small 360×640</option>
+    <option value="768x900">tablet 768×900</option>
+    <option value="390x420">embed 390×420</option>
+  </select>
+  <button id="reload">reload</button>
+  <a href="auto_smoke.html" style="color:#7d90ff;margin-left:auto">run smoke tests →</a>
+</header>
+<div id="wrap"><iframe id="f"></iframe></div>
+<script>
+var f = document.getElementById('f');
+// ?fixture=&size= let a screenshot run pick a state without clicking.
+(function () {
+  var q = new URLSearchParams(location.search);
+  if (q.get('fixture') !== null) document.getElementById('pick').value = q.get('fixture');
+  if (q.get('size')) document.getElementById('size').value = q.get('size');
+})();
+function load() {
+  var name = document.getElementById('pick').value;
+  var dims = document.getElementById('size').value.split('x');
+  f.style.width = dims[0] + 'px';
+  f.style.height = dims[1] + 'px';
+  var embed = document.getElementById('size').value === '390x420';
+  if (!name) { f.src = '../plugins/cartograph.html' + (embed ? '?mode=embed' : ''); return; }
+  fetch('fixtures/' + name).then(function (r) { return r.text(); }).then(function (t) {
+    f.src = '../plugins/cartograph.html?md=' + encodeURIComponent(t) + (embed ? '&mode=embed' : '');
+  });
+}
+document.getElementById('pick').onchange = load;
+document.getElementById('size').onchange = load;
+document.getElementById('reload').onclick = load;
+load();
+</script>
+</body>
+</html>

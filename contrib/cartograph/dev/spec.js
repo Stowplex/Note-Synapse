@@ -1,0 +1,772 @@
+/*
+ * Cartograph assertions. Runs in node (`node dev/spec.js`) and in the browser
+ * (dev/auto_smoke.html). Pure modules only - no DOM.
+ */
+(function (global) {
+  'use strict';
+  var CG = global.CG;
+  var md = CG.md, edit = CG.edit, sidecar = CG.sidecar, layout = CG.layout, view = CG.view;
+
+  var results = [];
+  function ok(name, cond, detail) { results.push({ name: name, pass: !!cond, detail: cond ? '' : (detail || '') }); }
+  function eq(name, actual, expected) {
+    var pass = actual === expected;
+    ok(name, pass, pass ? '' : '\n--- expected ---\n' + expected + '\n--- actual ---\n' + actual + '\n---');
+  }
+
+  var FIXTURES = global.CG_FIXTURES || {};
+
+  function run() {
+    results = [];
+
+    /* ---------------- parse fidelity ---------------- */
+    Object.keys(FIXTURES).forEach(function (name) {
+      var doc = md.parse(FIXTURES[name], { title: name });
+      var problems = md.coverage(doc);
+      ok('coverage: ' + name, problems.length === 0, problems.join('; '));
+    });
+
+    var mixed = FIXTURES['mixed.md'] || '';
+    var doc = md.parse(mixed, { title: 'Release notes' });
+
+    ok('lazy continuation folds into the bullet',
+      !!doc.nodes.filter(function (n) { return n.text === 'A bullet that wraps onto a lazy second line'; }).length,
+      doc.nodes.map(function (n) { return n.text; }).join(' | '));
+
+    var engine = doc.nodes.filter(function (n) { return n.text === 'Engine'; })[0];
+    ok('prose, code, table and quote attach as body', engine && engine.body.length >= 4,
+      engine ? 'body=' + engine.body.length : 'no Engine node');
+
+    var linkNode = doc.nodes.filter(function (n) { return /the script/.test(n.text); })[0];
+    ok('note link is recognised', linkNode && linkNode.links.some(function (l) { return l.type === 'note' && l.noteId === 'mock-note-2'; }));
+
+    var anchorNode = doc.nodes.filter(function (n) { return /Compare with/.test(n.text); })[0];
+    ok('anchor link is recognised', anchorNode && anchorNode.links.some(function (l) { return l.type === 'anchor'; }));
+
+    /* ---------------- edits are surgical ---------------- */
+    var d = md.parse(mixed);
+    var faster = d.nodes.filter(function (n) { return n.text === 'Faster parse'; })[0];
+    var after = edit.setText(d, faster, 'Much faster parse');
+    eq('rename touches only that label', after, mixed.replace('- Faster parse', '- Much faster parse'));
+    ok('code fence survives a rename', after.indexOf('// this fence must survive every edit') >= 0);
+
+    d = md.parse(after);
+    var lower = d.nodes.filter(function (n) { return n.text === 'Lower memory'; })[0];
+    var removed = edit.remove(d, lower);
+    ok('delete removes exactly one bullet', removed.indexOf('- Lower memory') < 0 && removed.indexOf('- Much faster parse') >= 0);
+    ok('delete keeps the fence', removed.indexOf('const x = 1;') >= 0);
+    ok('delete leaves no triple blank line', !/\n{3,}/.test(removed), JSON.stringify(removed.slice(0, 400)));
+
+    /* ---------------- ordered list renumbering ---------------- */
+    var b = md.parse(FIXTURES['plan.md']);
+    var sync = b.nodes.filter(function (n) { return n.text === 'Sync engine'; })[0];
+    var out = edit.remove(b, sync);
+    out = edit.renumber(md.parse(out));
+    ok('ordered list renumbers after a delete',
+      /1\. API surface\n2\. Offline cache/.test(out), out.slice(out.indexOf('## Build'), out.indexOf('## Launch')));
+
+    /* ---------------- insertion ---------------- */
+    b = md.parse(FIXTURES['plan.md']);
+    var design = b.nodes.filter(function (n) { return n.text === 'Design'; })[0];
+    out = edit.insertChild(b, design, { text: 'Spacing scale' });
+    ok('new child adopts the sibling marker and lands last in the branch',
+      /- \[ \] Motion study\n- \[ \] Spacing scale/.test(out) || /- \[ \] Motion study\n- Spacing scale/.test(out),
+      out.slice(out.indexOf('## Design'), out.indexOf('## Build')));
+
+    b = md.parse(FIXTURES['bullets.md']);
+    var alphaOne = b.nodes.filter(function (n) { return n.text === 'Alpha one'; })[0];
+    out = edit.insertSibling(b, alphaOne, { text: 'Alpha one and a half' });
+    ok('new sibling keeps the nesting indent',
+      /  - Alpha one\n  - Alpha one and a half\n  - Alpha two/.test(out), out);
+
+    /* ---------------- move / indent / outdent ---------------- */
+    b = md.parse(FIXTURES['bullets.md']);
+    var beta = b.nodes.filter(function (n) { return n.text === 'Beta'; })[0];
+    var alpha = b.nodes.filter(function (n) { return n.text === 'Alpha'; })[0];
+    var mv = edit.move(b, beta, alpha, null);
+    ok('move re-indents the whole subtree', !mv.error && /  - Beta\n    1\. Beta one\n    2\. Beta two/.test(mv.src), mv.error || mv.src);
+
+    b = md.parse(FIXTURES['bullets.md']);
+    var g = b.nodes.filter(function (n) { return n.text === 'Gamma'; })[0];
+    var a2 = b.nodes.filter(function (n) { return n.text === 'Alpha'; })[0];
+    mv = edit.move(b, g, b.root, { before: a2 });
+    ok('move-before puts it first', !mv.error && /^- Gamma\n- Alpha/.test(mv.src), mv.error || mv.src);
+
+    b = md.parse(FIXTURES['plan.md']);
+    var disc = b.nodes.filter(function (n) { return n.text === 'Discovery'; })[0];
+    var ci = b.nodes.filter(function (n) { return n.text === 'Customer interviews'; })[0];
+    // Deliberately a bullet in a DIFFERENT branch. The v1 test used one nested
+    // inside `disc`, so it was really testing the own-branch rule.
+    var farBullet = b.nodes.filter(function (n) { return n.text === 'Wireframes'; })[0];
+    ok('a section moving under a bullet elsewhere is allowed, and converts',
+      edit.canMove(disc, farBullet) === null && edit.willChangeKind(disc, farBullet) === true,
+      JSON.stringify(edit.canMove(disc, farBullet)));
+    ok('a bullet inside the branch being moved is still refused', edit.canMove(disc, ci) !== null);
+    ok('a node may not move into its own branch', edit.canMove(disc, b.nodes.filter(function (n) { return n.text === 'Recruit 8 users'; })[0]) !== null);
+
+    var build = b.nodes.filter(function (n) { return n.text === 'Build'; })[0];
+    mv = edit.move(b, build, disc, null);
+    ok('heading demotion rewrites its own level', !mv.error && /### Build/.test(mv.src), mv.error || mv.src);
+
+    /* ---------------- move to a different parent ---------------- */
+    var MV = '# Plan\n\n## Design\n- Colors\n  - Palette\n- Type\n\n## Build\n- API\n- DB\n';
+    function mvDoc() {
+      var d3 = md.parse(MV);
+      return { doc: d3, n: function (t) { return d3.nodes.filter(function (x) { return x.text === t; })[0]; } };
+    }
+
+    var m = mvDoc();
+    var mr = edit.move(m.doc, m.n('Build'), m.n('Colors'), null);
+    ok('a section moved under a bullet becomes bullets, nested correctly',
+      !mr.error && /- Colors\n  - Palette\n  - Build\n    - API\n    - DB/.test(mr.src),
+      mr.error || mr.src);
+    ok('no heading survives that conversion', !/#+ Build/.test(mr.src), mr.src);
+    ok('the converted note still parses cleanly', md.coverage(md.parse(mr.src)).length === 0);
+
+    m = mvDoc();
+    mr = edit.move(m.doc, m.n('API'), m.n('Design'), null);
+    ok('a bullet moved under a section lands at the top level of it',
+      !mr.error && /## Design[\s\S]*\n- API\n/.test(mr.src), mr.error || mr.src);
+
+    m = mvDoc();
+    mr = edit.move(m.doc, m.n('Type'), m.n('Colors'), null);
+    ok('a same-kind move still takes the fast path and only shifts indent',
+      !mr.error && /  - Palette\n  - Type/.test(mr.src), mr.error || mr.src);
+
+    m = mvDoc();
+    mr = edit.moveMany(m.doc, [m.n('API'), m.n('DB')], m.n('Design'));
+    ok('several nodes move together, keeping document order',
+      !mr.error && /- Type\n- API\n- DB/.test(mr.src), mr.error || mr.src);
+    ok('a multi-move empties the branch they left', /## Build\s*$/.test(mr.src), JSON.stringify(mr.src.slice(-40)));
+
+    m = mvDoc();
+    mr = edit.moveMany(m.doc, [m.n('Colors'), m.n('Palette')], m.n('Build'));
+    ok('a node selected inside another selected node is not moved twice',
+      !mr.error && (mr.src.match(/Palette/g) || []).length === 1, mr.error || mr.src);
+    ok('and it still arrives nested under its own parent',
+      /- Colors\n  - Palette/.test(mr.src), mr.src);
+
+    m = mvDoc();
+    ok('a node cannot be moved inside its own branch',
+      edit.moveMany(m.doc, [m.n('Colors')], m.n('Palette')).error !== null);
+    m = mvDoc();
+    ok('moving a node where it already lives is refused, not applied as a no-op',
+      edit.moveMany(m.doc, [m.n('API')], m.n('Build')).error !== null);
+
+    m = mvDoc();
+    mr = edit.moveMany(m.doc, [m.n('DB')], m.n('Design'));
+    ok('moving a branch\'s last child does not corrupt the insertion point',
+      !mr.error && /- Type\n- DB/.test(mr.src) && /## Build\n- API/.test(mr.src), mr.error || mr.src);
+
+    m = mvDoc();
+    mr = edit.moveMany(m.doc, [m.n('Type')], m.n('Build'));
+    ok('everything not involved in a move is left exactly as it was',
+      mr.src.indexOf('- Colors\n  - Palette') >= 0 && mr.src.indexOf('- API\n- DB\n- Type') >= 0,
+      mr.src);
+    ok('a move leaves the document parseable', md.coverage(md.parse(mr.src)).length === 0);
+
+    m = mvDoc();
+    mr = edit.moveMany(m.doc, [m.n('Colors')], m.doc.root);
+    ok('a node can be moved out to the top level',
+      !mr.error && /\n- Colors\n  - Palette/.test(mr.src), mr.error || mr.src);
+
+    /* ---------------- links between unrelated nodes ---------------- */
+    var LK = '# P\n\n## Design\n- Colors\n- Type\n\n## Build\n- API\n\n```js\n   \n```\n';
+    function lk() {
+      var d4 = md.parse(LK, { title: 'P' });
+      return { doc: d4, n: function (t) { return d4.nodes.filter(function (x) { return x.text === t; })[0]; } };
+    }
+
+    var L = lk();
+    var lr = edit.addLink(L.doc, L.n('Colors'), L.n('Type'));
+    ok('a link is written as an ordinary markdown anchor',
+      !lr.error && /\[\u2192 Type\]\(#type\)/.test(lr.src), lr.error || lr.src);
+
+    var LD = md.parse(lr.src, { title: 'P' });
+    var colours = LD.nodes.filter(function (n) { return n.text === 'Colors'; })[0];
+    ok('the link goes in the body, leaving the label alone',
+      !!colours && colours.text === 'Colors' && colours.body.length === 1,
+      colours ? JSON.stringify(colours.text) + ' body=' + colours.body.length : 'node lost');
+    ok('a linked note still parses cleanly', md.coverage(LD).length === 0);
+
+    var LV = CG.view.build(LD, { title: 'P', noteCache: {} });
+    ok('the link becomes exactly one dashed edge', LV.crossLinks.length === 1);
+    ok('and it joins the two nodes it names',
+      LV.byId[LV.crossLinks[0].from].text === 'Colors' && LV.byId[LV.crossLinks[0].to].text === 'Type');
+
+    ok('linking the same pair twice is refused',
+      edit.addLink(LD, colours, LD.nodes.filter(function (n) { return n.text === 'Type'; })[0]).error !== null);
+    ok('a node cannot link to itself', edit.addLink(LD, colours, colours).error !== null);
+
+    /* link and unlink must be byte-exact inverses, in every shape */
+    [['- Colors', '# P\n\n## Design\n- Colors\n- Type\n'],
+     ['with existing body', '# P\n\n## Design\n- Colors\n\n  A note about colour.\n- Type\n'],
+     ['heading source', '# P\n\n## Design\n- x\n\n## Type\n- y\n']].forEach(function (pair) {
+      var src2 = pair[1];
+      var d5 = md.parse(src2);
+      var a = d5.nodes.filter(function (n) { return n.text === 'Colors' || n.text === 'Design'; })[0];
+      var bnode = d5.nodes.filter(function (n) { return n.text === 'Type'; })[0];
+      var added = edit.addLink(d5, a, bnode);
+      var d6 = md.parse(added.src);
+      var a2 = d6.nodes.filter(function (n) { return n.text === a.text; })[0];
+      var removed = edit.removeLink(d6, a2, md.slug('Type'));
+      ok('link then unlink restores the note exactly (' + pair[0] + ')',
+        removed.src === src2, JSON.stringify(removed.src) + ' vs ' + JSON.stringify(src2));
+    });
+
+    ok('unlinking a link that is not there is refused',
+      edit.removeLink(md.parse(LK), md.parse(LK).nodes[1], 'nope').error !== null);
+
+    /* a whitespace-only line inside a fence is content, not slack to be tidied */
+    var FENCE = md.parse(lr.src);
+    var fcol = FENCE.nodes.filter(function (n) { return n.text === 'Colors'; })[0];
+    var stripped = edit.removeLink(FENCE, fcol, 'type');
+    ok('unlinking leaves a code fence untouched',
+      stripped.src.indexOf('```js\n   \n```') >= 0, stripped.src);
+
+    /* ---------------- ambiguous targets ---------------- */
+    var TWIN = '# P\n\n## Design\n- Colors\n- Type\n\n  [\u2192 Colors](#colors)\n\n## Brand\n- Colors\n- Logo\n\n  [\u2192 Colors](#colors)\n';
+    var TD = md.parse(TWIN, { title: 'P' });
+    var TV = CG.view.build(TD, { title: 'P', noteCache: {} });
+    ok('two links to the same name produce two edges', TV.crossLinks.length === 2);
+    var resolved = TV.crossLinks.map(function (l) {
+      var t = TV.byId[l.to];
+      return TV.byId[l.from].text + '>' + (t.parent ? t.parent.text : '?');
+    }).sort().join(' ');
+    ok('each link resolves to the nearer of the two same-named nodes',
+      resolved === 'Logo>Brand Type>Design', resolved);
+    ok('an ambiguous target is reported as such',
+      TV.crossLinks.every(function (l) { return l.ambiguous === true; }));
+
+    ok('distance counts edges through the common ancestor',
+      CG.view.distance(TD.nodes.filter(function (n) { return n.text === 'Design'; })[0],
+                       TD.nodes.filter(function (n) { return n.text === 'Brand'; })[0]) === 2);
+    ok('distance is symmetric',
+      CG.view.distance(TD.nodes[2], TD.nodes[5]) === CG.view.distance(TD.nodes[5], TD.nodes[2]));
+
+    ok('anchorIndex reports how many nodes answer to a name',
+      (CG.view.anchorIndex(TD)['colors'] || []).length === 2 &&
+      (CG.view.anchorIndex(TD)['logo'] || []).length === 1);
+
+    /* ---------------- renaming carries links ---------------- */
+    var RN = md.parse(lr.src, { title: 'P' });
+    var target = RN.nodes.filter(function (n) { return n.text === 'Type'; })[0];
+    var renamed = edit.renameCarryingLinks(RN, target, 'Typography', CG.view.anchorIndex(RN));
+    ok('renaming a linked node rewrites the anchor that pointed at it',
+      /\[\u2192 Typography\]\(#typography\)/.test(renamed) && renamed.indexOf('#type)') < 0, renamed);
+    var RV = CG.view.build(md.parse(renamed, { title: 'P' }), { title: 'P', noteCache: {} });
+    ok('so the edge survives the rename', RV.crossLinks.length === 1);
+
+    var HAND = md.parse('# P\n\n## Design\n- Colors\n\n  [see also](#type)\n- Type\n');
+    var handRenamed = edit.renameCarryingLinks(
+      HAND, HAND.nodes.filter(function (n) { return n.text === 'Type'; })[0], 'Typography',
+      CG.view.anchorIndex(HAND));
+    ok('a hand-written label is left alone, only its target is repointed',
+      /\[see also\]\(#typography\)/.test(handRenamed), handRenamed);
+
+    var TWIN2 = md.parse(TWIN, { title: 'P' });
+    var oneTwin = TWIN2.nodes.filter(function (n) { return n.text === 'Colors'; })[0];
+    var twinRenamed = edit.renameCarryingLinks(TWIN2, oneTwin, 'Palette', CG.view.anchorIndex(TWIN2));
+    ok('renaming one of two same-named nodes does not steal the other\'s links',
+      (twinRenamed.match(/\(#colors\)/g) || []).length === 2, twinRenamed);
+
+    /* ---------------- a link whose target is gone ---------------- */
+    var DEAD = md.parse('# P\n\n## Design\n- Colors\n\n  [\u2192 Type](#type)\n');
+    var DV = CG.view.build(DEAD, { title: 'P', noteCache: {} });
+    ok('a link to a node that no longer exists draws no edge and does not throw',
+      DV.crossLinks.length === 0);
+    ok('and the note is still perfectly parseable', md.coverage(DEAD).length === 0);
+
+    /* ---------------- attached notes as first-class cards ---------------- */
+    var NC = ['# P', '', '## Design', '- Colors', '', '## Build', '- x', ''].join('\n');
+    var CACHE = { a: { title: 'One', content: 'x' }, bb: { title: 'Two', content: 'y' } };
+
+    var nd = md.parse(NC);
+    var att = edit.attachNotes(nd, nd.nodes.filter(function (n) { return n.text === 'Colors'; })[0],
+      [{ id: 'a', title: 'One' }, { id: 'bb', title: 'Two' }]);
+    ok('several notes attach in one edit',
+      !att.error && /\[One\]\(synapseresource:\/\/note\/a\)\n  \[Two\]\(synapseresource:\/\/note\/bb\)/.test(att.src),
+      att.error || att.src);
+    ok('an attachment block still parses cleanly', md.coverage(md.parse(att.src)).length === 0);
+    var attV = CG.view.build(md.parse(att.src, { title: 'P' }), { title: 'P', noteCache: CACHE });
+    ok('each attached note gets its own card',
+      attV.all.filter(function (v) { return v.kind === 'note'; }).length === 2);
+
+    /* links on an attachment line belong to the CARD, not the node */
+    var CL = ['# P', '', '## Design', '- Colors', '',
+      '  [One](synapseresource://note/a) → [Type](#type)',
+      '  [Plain](#build)', '- Type', '', '## Build', '- x', ''].join('\n');
+    var cd = md.parse(CL, { title: 'P' });
+    var cSplit = md.splitLinks(cd.nodes.filter(function (n) { return n.text === 'Colors'; })[0]);
+    ok('a link after an attachment belongs to the card',
+      cSplit.cards.length === 1 && cSplit.cards[0].out.length === 1 &&
+      cSplit.cards[0].out[0].target === '#type', JSON.stringify(cSplit.cards.map(function (c) { return c.out.length; })));
+    ok('a link on its own body line still belongs to the node',
+      cSplit.own.length === 1 && cSplit.own[0].target === '#build',
+      JSON.stringify(cSplit.own.map(function (l) { return l.target; })));
+
+    var cv = CG.view.build(cd, { title: 'P', noteCache: CACHE });
+    var cardEdge = cv.crossLinks.filter(function (l) { return l.fromCard; })[0];
+    ok('the card\'s link is drawn from the card', !!cardEdge &&
+      cv.byId[cardEdge.to].text === 'Type', JSON.stringify(cv.crossLinks.length));
+    ok('and the node keeps only its own', cv.crossLinks.filter(function (l) { return !l.fromCard; }).length === 1);
+
+    /* a note link inside a LABEL must still make a card - v1 behaviour */
+    var LBL = md.parse('# P\n\n## Design\n- See [One](synapseresource://note/a)\n', { title: 'P' });
+    var lblV = CG.view.build(LBL, { title: 'P', noteCache: CACHE });
+    ok('a note link in a label still becomes a card',
+      lblV.all.filter(function (v) { return v.kind === 'note'; }).length === 1);
+
+    /* card to card, resolved to the nearest copy */
+    var CC = ['# P', '', '## Design', '- Colors', '', '  [One](synapseresource://note/a)',
+      '- Type', '', '  [Two](synapseresource://note/bb) → [One](synapseresource://note/a)',
+      '', '## Build', '- x', '', '  [One](synapseresource://note/a)', ''].join('\n');
+    var ccd = md.parse(CC, { title: 'P' });
+    var ccv = CG.view.build(ccd, { title: 'P', noteCache: CACHE });
+    var c2c = ccv.crossLinks.filter(function (l) { return l.fromCard && l.noteId === 'a'; })[0];
+    ok('a card-to-card link resolves to the nearest copy of that note',
+      !!c2c && ccv.byId[c2c.to].ref.text === 'Colors',
+      c2c ? ccv.byId[c2c.to].ref.text : 'no edge');
+    ok('and reports that the target was ambiguous', !!c2c && c2c.ambiguous === true);
+
+    var DEADC = md.parse('# P\n\n## Design\n- Colors\n\n  [One](synapseresource://note/a) → [Two](synapseresource://note/zz)\n',
+      { title: 'P' });
+    var deadV = CG.view.build(DEADC, { title: 'P', noteCache: CACHE });
+    ok('a card link to a note attached nowhere draws no edge', deadV.crossLinks.length === 0);
+
+    /* moving a card takes its links with it */
+    var mvd = md.parse(CL, { title: 'P' });
+    var mvr = edit.moveAttachment(mvd, mvd.nodes.filter(function (n) { return n.text === 'Colors'; })[0],
+      'a', mvd.nodes.filter(function (n) { return n.text === 'x'; })[0]);
+    ok('a moved card keeps its own links',
+      !mvr.error && /- x\n\n  \[One\]\(synapseresource:\/\/note\/a\) → \[Type\]\(#type\)/.test(mvr.src),
+      mvr.error || mvr.src);
+    ok('and the node it left keeps its own link',
+      /- Colors\n\n  \[Plain\]\(#build\)/.test(mvr.src), mvr.src);
+    ok('a moved card leaves a parseable note', md.coverage(md.parse(mvr.src)).length === 0);
+    ok('moving a card onto the node it is already on is refused',
+      edit.moveAttachment(mvd, mvd.nodes.filter(function (n) { return n.text === 'Colors'; })[0], 'a',
+        mvd.nodes.filter(function (n) { return n.text === 'Colors'; })[0]).error !== null);
+
+    /* attach -> link -> unlink -> detach must return the note exactly */
+    var base = '# P\n\n## Design\n- Colors\n- Type\n';
+    var s1 = edit.attachNotes(md.parse(base), md.parse(base).nodes.filter(function (n) { return n.text === 'Colors'; })[0],
+      [{ id: 'a', title: 'One' }]).src;
+    var d1 = md.parse(s1);
+    var s2 = edit.addCardLink(d1, d1.nodes.filter(function (n) { return n.text === 'Colors'; })[0], 'a', '[Type](#type)').src;
+    var d2 = md.parse(s2);
+    var s3 = edit.removeCardLink(d2, d2.nodes.filter(function (n) { return n.text === 'Colors'; })[0], 'a', '#type').src;
+    ok('unlinking a card link restores the attachment exactly', s3 === s1, JSON.stringify(s3));
+    var d3b = md.parse(s3);
+    var s4 = edit.detachNote(d3b, d3b.nodes.filter(function (n) { return n.text === 'Colors'; })[0], 'a').src;
+    ok('detaching then restores the note exactly', s4 === base, JSON.stringify(s4));
+
+    /* detaching must take the card's links with it, not strand them */
+    var STR = md.parse(s2);
+    var stripped = edit.detachNote(STR, STR.nodes.filter(function (n) { return n.text === 'Colors'; })[0], 'a');
+    ok('detaching a card removes its links too, leaving none behind for the node',
+      stripped.src.indexOf('#type') < 0 && stripped.src === base, JSON.stringify(stripped.src));
+
+    /* ---------------- checkboxes ---------------- */
+    b = md.parse(FIXTURES['plan.md']);
+    var vis = b.nodes.filter(function (n) { return n.text === 'Visual language'; })[0];
+    out = edit.setChecked(b, vis, true);
+    ok('checkbox toggles in place', out.indexOf('- [x] Visual language') >= 0);
+    b = md.parse(out);
+    vis = b.nodes.filter(function (n) { return n.text === 'Visual language'; })[0];
+    out = edit.clearChecked(b, vis);
+    ok('checkbox can be removed', out.indexOf('- Visual language') >= 0 && out.indexOf('- [x] Visual language') < 0);
+
+    /* ---------------- sidecar ---------------- */
+    b = md.parse(FIXTURES['plan.md']);
+    var st = { pins: {}, collapsed: {} };
+    var colour = b.nodes.filter(function (n) { return n.text === 'Colour and type'; })[0];
+    var launch = b.nodes.filter(function (n) { return n.text === 'Launch'; })[0];
+    st.pins[colour.id] = { x: 380, y: -120 };
+    st.collapsed[launch.id] = true;
+    var seeded = edit.writeSidecar(b, sidecar.build(b, st));
+    ok('sidecar is a single fenced block', (seeded.match(/```synapse-cartograph/g) || []).length === 1);
+    ok('sidecar block is compact', seeded.split('```synapse-cartograph')[1].split('```')[0].trim().split('\n').length === 1);
+
+    var reparsed = md.parse(seeded);
+    ok('sidecar coverage stays clean', md.coverage(reparsed).length === 0);
+    var st2 = { pins: {}, collapsed: {} };
+    sidecar.apply(reparsed, st2);
+    var c2 = reparsed.nodes.filter(function (n) { return n.text === 'Colour and type'; })[0];
+    ok('pin survives a round trip', !!st2.pins[c2.id]);
+
+    function afterOutsideEdit(mutate) {
+      var doc2 = md.parse(mutate(seeded));
+      var s3 = { pins: {}, collapsed: {} };
+      sidecar.apply(doc2, s3);
+      return { doc: doc2, state: s3 };
+    }
+    var r1 = afterOutsideEdit(function (s) { return s.replace('  - Colour and type', '  - Colour & type'); });
+    var t1 = r1.doc.nodes.filter(function (n) { return n.text === 'Colour & type'; })[0];
+    ok('pin survives a rename', !!r1.state.pins[t1.id]);
+
+    var r2 = afterOutsideEdit(function (s) { return s.replace('## Discovery', '## Research\n- New first item\n\n## Discovery'); });
+    var t2 = r2.doc.nodes.filter(function (n) { return n.text === 'Colour and type'; })[0];
+    ok('pin survives an inserted section', !!r2.state.pins[t2.id]);
+
+    var r3 = afterOutsideEdit(function (s) { return s.replace(/\{"v":1.*\}/, '{ this is not json'); });
+    ok('a mangled sidecar is ignored, not fatal', Object.keys(r3.state.pins).length === 0 && r3.doc.nodes.length > 5);
+
+    var noSidecar = md.parse(FIXTURES['plan.md']);
+    var s4 = { pins: {}, collapsed: {} };
+    sidecar.apply(noSidecar, s4);
+    ok('a missing sidecar is fine', Object.keys(s4.pins).length === 0);
+
+    /* ---------------- comments in the sidecar ---------------- */
+    var cdoc = md.parse(FIXTURES['plan.md']);
+    var cColour = cdoc.nodes.filter(function (n) { return n.text === 'Colour and type'; })[0];
+    var cLaunch = cdoc.nodes.filter(function (n) { return n.text === 'Launch'; })[0];
+    var cDesign = cdoc.nodes.filter(function (n) { return /^Design/.test(n.text); })[0];
+    var cst = { pins: {}, collapsed: {}, comments: {} };
+    cst.comments.c1 = { id: 'c1', text: 'Check with the brand team', anchors: [{ kind: 'node', n: cColour.id }],
+      pos: { x: 90, y: -70 }, abs: { x: 500, y: 40 } };
+    cst.comments.c2 = { id: 'c2', text: 'Ship together', anchors: [{ kind: 'link', a: { n: cDesign.id }, b: { n: cLaunch.id } }],
+      pos: { x: 0, y: -50 }, abs: { x: 200, y: 200 } };
+    cst.comments.c3 = { id: 'c3', text: 'Free-floating\ntwo lines', anchors: [], pos: { x: -300, y: 120 } };
+    cst.comments.c4 = { id: 'c4', text: '   ', anchors: [], pos: { x: 0, y: 0 } };
+    var cblock = sidecar.build(cdoc, cst);
+    ok('comments are written into the sidecar', /"c":\[/.test(cblock), cblock);
+    ok('an empty comment is not written', cblock.indexOf('"c4"') < 0, cblock);
+    ok('a comment writes no markdown of its own',
+      edit.writeSidecar(cdoc, cblock).split('```synapse-cartograph')[0].indexOf('brand team') < 0);
+    ok('the nodes a comment points at get fingerprint entries even without a pin',
+      new RegExp('"' + cColour.id + '":\\{"k":').test(cblock) && new RegExp('"' + cLaunch.id + '":\\{"k":').test(cblock), cblock);
+
+    var cseeded = edit.writeSidecar(cdoc, cblock);
+    var cre = md.parse(cseeded);
+    ok('a note with comments still parses cleanly', md.coverage(cre).length === 0);
+    var cs2 = { pins: {}, collapsed: {}, comments: {} };
+    sidecar.apply(cre, cs2);
+    var reColour = cre.nodes.filter(function (n) { return n.text === 'Colour and type'; })[0];
+    var reLaunch = cre.nodes.filter(function (n) { return n.text === 'Launch'; })[0];
+    ok('three comments survive the round trip', Object.keys(cs2.comments).length === 3, JSON.stringify(Object.keys(cs2.comments)));
+    ok('a node anchor is re-resolved to the node',
+      cs2.comments.c1 && cs2.comments.c1.anchors[0].kind === 'node' && cs2.comments.c1.anchors[0].n === reColour.id);
+    ok('its offset is kept, since the anchor is still there',
+      cs2.comments.c1 && cs2.comments.c1.pos.x === 90 && cs2.comments.c1.pos.y === -70 && !cs2.comments.c1.reanchor);
+    ok('a link anchor comes back with both ends',
+      cs2.comments.c2 && cs2.comments.c2.anchors[0].kind === 'link' && cs2.comments.c2.anchors[0].b.n === reLaunch.id);
+    ok('a floating comment keeps its absolute spot and its line break',
+      cs2.comments.c3 && cs2.comments.c3.pos.x === -300 && cs2.comments.c3.text === 'Free-floating\ntwo lines');
+
+    // The node the comment hung off is deleted elsewhere.
+    var lost = md.parse(cseeded.replace('  - Colour and type\n', ''));
+    var cs3 = { pins: {}, collapsed: {}, comments: {} };
+    sidecar.apply(lost, cs3);
+    ok('a comment whose anchor is gone survives, unanchored', cs3.comments.c1 && cs3.comments.c1.anchors.length === 0);
+    ok('and stays where it was last drawn rather than at a meaningless offset',
+      cs3.comments.c1 && cs3.comments.c1.pos.x === 500 && cs3.comments.c1.pos.y === 40, JSON.stringify(cs3.comments.c1));
+
+    // Renamed elsewhere: the same fuzzy matching pins rely on.
+    var renamed = md.parse(cseeded.replace('  - Colour and type', '  - Colour & type'));
+    var cs4 = { pins: {}, collapsed: {}, comments: {} };
+    sidecar.apply(renamed, cs4);
+    var rn = renamed.nodes.filter(function (n) { return n.text === 'Colour & type'; })[0];
+    ok('a comment follows its node through a rename', cs4.comments.c1 && cs4.comments.c1.anchors[0].n === rn.id);
+
+    // Two anchors, first one lost: keep the second, re-measure later.
+    var cst5 = { pins: {}, collapsed: {}, comments: {} };
+    cst5.comments.c5 = { id: 'c5', text: 'Both', anchors: [{ kind: 'node', n: cColour.id }, { kind: 'node', n: cLaunch.id }],
+      pos: { x: 10, y: 10 }, abs: { x: 700, y: 700 } };
+    var lost2 = md.parse(edit.writeSidecar(cdoc, sidecar.build(cdoc, cst5)).replace('  - Colour and type\n', ''));
+    var cs5 = { pins: {}, collapsed: {}, comments: {} };
+    sidecar.apply(lost2, cs5);
+    ok('losing the first anchor keeps the others', cs5.comments.c5 && cs5.comments.c5.anchors.length === 1);
+    ok('and marks the position for re-measuring against the next one',
+      cs5.comments.c5 && cs5.comments.c5.reanchor === true && cs5.comments.c5.pos.x === 700);
+
+    var garbage = md.parse(cseeded.replace(/"c":\[.*\]\}/, '"c":[{"i":5},{"i":"x","t":"no position"},{"i":"y","t":"ok","p":[1,2],"a":[{"bogus":1}]}]}'));
+    var cs6 = { pins: {}, collapsed: {}, comments: {} };
+    sidecar.apply(garbage, cs6);
+    ok('malformed comment entries are skipped, valid ones kept',
+      Object.keys(cs6.comments).length === 1 && cs6.comments.y && cs6.comments.y.anchors.length === 0, JSON.stringify(cs6.comments));
+    ok('a state without a comments map is left alone', (function () {
+      var s = { pins: {}, collapsed: {} }; sidecar.apply(cre, s); return !s.comments;
+    })());
+
+    ok('anchor equality ignores link direction', sidecar.sameAnchor(
+      { kind: 'link', a: { n: 'a' }, b: { n: 'b' } }, { kind: 'link', a: { n: 'b' }, b: { n: 'a' } }));
+    ok('a card and a node on the same line are different anchors',
+      !sidecar.sameAnchor({ kind: 'card', n: 'a', c: 'x' }, { kind: 'node', n: 'a' }));
+
+    b = md.parse(seeded);
+    var cleared = edit.writeSidecar(b, sidecar.build(b, { pins: {}, collapsed: {} }));
+    ok('no pins means no block at all', cleared.indexOf('synapse-cartograph') < 0 && !/\n{3,}$/.test(cleared));
+
+    /* ---------------- view tree ---------------- */
+    var vdoc = md.parse(FIXTURES['plan.md'], { title: 'Product plan' });
+    var vt = view.build(vdoc, { title: 'Product plan', noteCache: {}, collapsed: {} });
+    var vDesign = vt.all.filter(function (v) { return v.text === 'Design'; })[0];
+    ok('task rollup counts the branch', vDesign && vDesign.taskDone === 1 && vDesign.taskTotal === 3,
+      vDesign ? vDesign.taskDone + '/' + vDesign.taskTotal : 'no Design');
+
+    var mdoc = md.parse(mixed, { title: 'Release notes' });
+    var mvt = view.build(mdoc, { title: 'Release notes', noteCache: { 'mock-note-2': { title: 'Interview script', content: '## Warm up\n- Tell me about your week.' } } });
+    ok('an attached note becomes a card', mvt.all.some(function (v) { return v.kind === 'note' && v.noteTitle === 'Interview script'; }));
+    ok('the card carries a preview', mvt.all.some(function (v) { return v.kind === 'note' && v.notePreview.indexOf('Warm up') >= 0; }));
+    ok('preview drops list markers', !mvt.all.some(function (v) { return /^- /.test(v.notePreview); }));
+    ok('an anchor link becomes a cross link', mvt.crossLinks.length === 1, JSON.stringify(mvt.crossLinks));
+
+    var svt = view.build(vdoc, { title: 'Product plan', query: 'sync', noteCache: {} });
+    var kept = svt.all.filter(function (v) { return v.keep; }).map(function (v) { return v.text; });
+    ok('search keeps only the path to a match', kept.indexOf('Sync engine') >= 0 && kept.indexOf('Beta cohort') < 0, kept.join(','));
+
+    var fvt = view.build(vdoc, { title: 'Product plan', filters: { status: 'todo' }, noteCache: {} });
+    var fkept = fvt.all.filter(function (v) { return v.matched; }).map(function (v) { return v.text; });
+    ok('the to-do filter selects unchecked tasks only',
+      fkept.length === 2 && fkept.indexOf('Wireframes') < 0, fkept.join(','));
+
+    /* ---------------- layout ---------------- */
+    var sizeOf = function (v) { return { w: Math.min(210, 44 + (v.text || 'root').length * 7), h: 34 }; };
+    var lvt = view.build(vdoc, { title: 'Product plan', noteCache: {} });
+    var res = layout.compute(lvt.root, { sizeOf: sizeOf });
+    ok('no two boxes overlap', layout.overlaps(res).length === 0, JSON.stringify(layout.overlaps(res).slice(0, 3)));
+    ok('branches are split across both sides', res.sides.left.length > 0 && res.sides.right.length > 0,
+      'L=' + res.sides.left.length + ' R=' + res.sides.right.length);
+    ok('a single H1 becomes the visual centre', layout.displayRoot(vdoc.root).text === 'Product plan');
+
+    var pinTarget = lvt.all.filter(function (v) { return v.text === 'Colour and type'; })[0];
+    var pres = layout.compute(lvt.root, { sizeOf: sizeOf, pinOf: function (v) { return v.id === pinTarget.id ? { x: 640, y: -260 } : null; } });
+    var pbox = pres.boxes.get(pinTarget.id);
+    ok('a pinned node sits exactly at its pin', Math.round(pbox.x) === 640 && Math.round(pbox.y + pbox.h / 2) === -260,
+      pbox ? pbox.x + ',' + (pbox.y + pbox.h / 2) : 'missing');
+    ok('flowed branches are pushed clear of a pin', layout.overlaps(pres).length === 0,
+      JSON.stringify(layout.overlaps(pres).slice(0, 3)));
+
+    var bvt = view.build(md.parse(FIXTURES['bullets.md'], { title: 'Bullets' }), { title: 'Bullets', noteCache: {} });
+    var bres = layout.compute(bvt.root, { sizeOf: sizeOf });
+    ok('a note with no headings still lays out', bres.boxes.size > 5 && layout.overlaps(bres).length === 0);
+
+    var evt = view.build(md.parse(FIXTURES['empty.md'], { title: 'Empty' }), { title: 'Empty', noteCache: {} });
+    var eres = layout.compute(evt.root, { sizeOf: sizeOf });
+    ok('an empty note does not explode', eres.boxes.size === 1);
+
+    /* ---------------- import: reshaping a foreign outline ---------------- */
+    var HOST_MD = '# Plan\n\n## Design\n- Colors\n';
+    var FOREIGN = '# Research\n\nIntro para.\n\n## Interviews\n- Recruit users\n  - Screener\n- Script\n';
+
+    b = md.parse(HOST_MD);
+    var gr = edit.graft(b, b.nodes.filter(function (n) { return n.text === 'Design'; })[0], FOREIGN);
+    ok('import under a section keeps headings as headings',
+      /### Research/.test(gr.src) && /#### Interviews/.test(gr.src), gr.src);
+    ok('import carries the body text across', gr.src.indexOf('Intro para.') >= 0, gr.src);
+    ok('the grafted note still parses cleanly', md.coverage(md.parse(gr.src)).length === 0);
+
+    b = md.parse(HOST_MD);
+    gr = edit.graft(b, b.nodes.filter(function (n) { return n.text === 'Colors'; })[0], FOREIGN);
+    ok('import under a bullet becomes bullets, never headings',
+      gr.src.indexOf('# Research') < 0 && /  - Research/.test(gr.src) && /    - Interviews/.test(gr.src), gr.src);
+    ok('nesting depth is preserved under a bullet', /        - Screener/.test(gr.src), gr.src);
+
+    b = md.parse('# a\n## b\n### c\n#### d\n##### e\n###### f\n');
+    gr = edit.graft(b, b.nodes.filter(function (n) { return n.text === 'f'; })[0], FOREIGN);
+    ok('an import that would pass ###### turns into bullets, not a flattened row',
+      /- Research/.test(gr.src) && /  - Interviews/.test(gr.src) && !/#######/.test(gr.src),
+      gr.src.split('###### f')[1]);
+
+    b = md.parse('# Host\n');
+    gr = edit.graft(b, b.root, '# Steps\n\n1. First\n2. Second\n\n- [ ] todo\n- [x] done\n');
+    ok('import keeps ordered markers and checkboxes',
+      /1\. First/.test(gr.src) && /- \[ \] todo/.test(gr.src) && /- \[x\] done/.test(gr.src), gr.src);
+
+    b = md.parse(HOST_MD);
+    gr = edit.graft(b, b.root, '');
+    ok('importing an empty note is refused, not silently applied', !!gr.error);
+
+    /* ---------------- diff classification ---------------- */
+    function branchOf(src2, label) {
+      var d2 = md.parse(src2);
+      return { doc: d2, node: d2.nodes.filter(function (n) { return n.text === label; })[0] };
+    }
+    var A = branchOf('# P\n## Build\n- API design\n- API docs\n- Database schema\n- Caching layer\n', 'Build');
+    var B = branchOf('# P\n## Build\n- API design and docs\n- Storage\n  - Database schema\n  - Caching layer\n', 'Build');
+    var cls = CG.diff.classify(A.node, B.node);
+    ok('a merged node is reported as merged, not deleted',
+      Object.keys(cls.byOld).some(function (k) {
+        return cls.byOld[k].from.text === 'API docs' && cls.byOld[k].state === 'merged';
+      }), JSON.stringify(cls.summary));
+    ok('a rename is reported as a rename', cls.summary.renamed === 1, JSON.stringify(cls.summary));
+    ok('re-parented leaves are reported as moved', cls.summary.moved === 2, JSON.stringify(cls.summary));
+    ok('a new grouping node is reported as added', cls.summary.added === 1, JSON.stringify(cls.summary));
+
+    var same = branchOf('# P\n## Build\n- API\n- DB\n', 'Build');
+    var same2 = branchOf('# P\n## Build\n- API\n- DB\n', 'Build');
+    var cls2 = CG.diff.classify(same.node, same2.node);
+    ok('an identical branch reports no change', cls2.summary.touched === 0, JSON.stringify(cls2.summary));
+    ok('describe says so in words', CG.diff.describe(cls2.summary) === 'Nothing would change.');
+
+    var del = branchOf('# P\n## Build\n- API\n', 'Build');
+    var cls3 = CG.diff.classify(same.node, del.node);
+    ok('a real deletion is reported as removed, not merged', cls3.summary.removed === 1 && cls3.summary.merged === 0,
+      JSON.stringify(cls3.summary));
+
+    /* ---------------- what the AI is allowed to hand back ---------------- */
+    var AIM = CG.ai;
+    ok('a fenced answer is unwrapped',
+      AIM.sanitizeOutline('```markdown\n# Plan\n## A\n- one\n```', 'T') === '# Plan\n## A\n- one');
+    ok('chat around the outline is trimmed',
+      AIM.sanitizeOutline('Sure! Here it is:\n\n# Plan\n- one\n\nLet me know!', 'T') === '# Plan\n- one');
+    ok('a missing centre is supplied from the note title',
+      AIM.sanitizeOutline('## A\n- one', 'My note').indexOf('# My note') === 0);
+    ok('several centres are demoted so exactly one remains',
+      (AIM.sanitizeOutline('# A\n- one\n# B\n- two', 'T').match(/^#[ \t]+\S/gm) || []).length === 1,
+      AIM.sanitizeOutline('# A\n- one\n# B\n- two', 'T'));
+    ok('an empty answer yields nothing, not a broken outline', AIM.sanitizeOutline('', 'T') === '');
+    ok('an answer with no structure at all yields nothing',
+      AIM.sanitizeOutline('I could not find any structure here.', 'T') === '');
+    ok('prose between nodes is left alone, being legitimate body',
+      AIM.strip('# A\n\nSome body text.\n\n- one').indexOf('Some body text.') >= 0);
+
+    /* ---------------- the whole note, attachments included ---------------- */
+    var pPlain = AIM.generatePrompt('T', '# A\n- one');
+    ok('a note without attachments gets the plain prompt', pPlain.indexOf('Attached files') < 0 && pPlain.indexOf('- one') >= 0);
+    var pBoth = AIM.generatePrompt('T', '# A\n- one', { attachments: ['slides.pdf', 'photo.png'] });
+    ok('attached files are named in the prompt', /Attached files \(2[^)]*\): slides\.pdf, photo\.png/.test(pBoth), pBoth);
+    ok('the model is told the files count as the note', /part of the note/.test(pBoth));
+    ok('the text still travels alongside the files', pBoth.indexOf('- one') >= 0);
+    var pOnly = AIM.generatePrompt('T', '', { attachments: [{ fileName: 'slides.pdf', path: '/x/slides.pdf' }] });
+    ok('an attachments-only note is described as such, not sent as a blank block',
+      /no text of its own/.test(pOnly) && /\(no text\)/.test(pOnly) && /slides\.pdf/.test(pOnly), pOnly);
+    ok('attachment names may arrive as objects or strings', /slides\.pdf/.test(pOnly));
+
+    var one = [{ path: '/a/slides.pdf', fileName: 'slides.pdf' }];
+    ok('no text and no files means no calls at all', AIM.planCalls('', []).length === 0);
+    var c1 = AIM.planCalls('', one);
+    ok('an attachments-only note is one call carrying the files',
+      c1.length === 1 && c1[0].text === '' && c1[0].attachments.length === 1, JSON.stringify(c1));
+    var c2 = AIM.planCalls('# A\n- one', one);
+    ok('short text and files share one call', c2.length === 1 && c2[0].attachments.length === 1 && /- one/.test(c2[0].text));
+    var longNote = '# Big\n\n' + ['Alpha', 'Beta', 'Gamma'].map(function (h) {
+      return '## ' + h + '\n' + new Array(400).join('word ') + '\n';
+    }).join('\n');
+    var c3 = AIM.planCalls(longNote, one, 1200);
+    ok('files get a call of their own when the text had to be split',
+      c3.length === AIM.splitSections(longNote, 1200).length + 1 &&
+      c3.slice(0, -1).every(function (c) { return !c.attachments.length; }) &&
+      c3[c3.length - 1].attachments.length === 1 && c3[c3.length - 1].text === '',
+      'calls=' + c3.length);
+    ok('the files-only section prompt asks for branches, not one heading of the text',
+      /files attached to a note/.test(AIM.generatePrompt('T', '', { section: true, attachments: ['a.pdf'] })));
+
+    ok('the current note advertises its attachment paths', Array.isArray(CG.host.note().attachmentPaths));
+
+    /* ---------------- chunking a long note ---------------- */
+    var long = '# Big\n\n' + ['Alpha', 'Beta', 'Gamma', 'Delta'].map(function (h) {
+      return '## ' + h + '\n' + new Array(400).join('word ') + '\n';
+    }).join('\n');
+    var secs = AIM.splitSections(long, 1200);
+    ok('a long note is split on its own headings', secs.length > 1, 'sections=' + secs.length);
+    ok('no section is silently dropped',
+      secs.map(function (x) { return x.text; }).join('\n').indexOf('Delta') >= 0);
+    ok('a short note is not split', AIM.splitSections('# A\n- one\n', 1200).length === 1);
+
+    var fenced = '# A\n\n```\n## not a heading\n```\n\n## Real\n- x\n';
+    ok('a heading inside a code fence is not a split point',
+      AIM.splitSections(fenced, 20).every(function (x) { return x.text.indexOf('```') !== 0; }));
+
+    var joined = AIM.joinSections(['## One\n- a', '# Two\n- b'], 'Whole');
+    ok('joined sections sit under a single centre',
+      (joined.match(/^#[ \t]+\S/gm) || []).length === 1 &&
+      /^## One/m.test(joined) && /^## Two/m.test(joined), joined);
+
+    /* ---------------- exporting the map ---------------- */
+    var EXP = CG.export;
+    var xdoc = md.parse(FIXTURES['plan.md']);
+    var xColour = xdoc.nodes.filter(function (n) { return n.text === 'Colour and type'; })[0];
+    var xLaunch = xdoc.nodes.filter(function (n) { return n.text === 'Launch'; })[0];
+    var xDesign = xdoc.nodes.filter(function (n) { return /^Design/.test(n.text); })[0];
+    var xstate = { title: 'Product plan', pins: {}, collapsed: {}, comments: {}, focusId: xDesign.id };
+    xstate.collapsed[xDesign.id] = true;
+    xstate.pins[xLaunch.id] = { x: 900, y: 400 };
+    xstate.comments.k1 = { id: 'k1', text: 'Check with the brand team', anchors: [{ kind: 'node', n: xColour.id }], pos: { x: 90, y: -70 } };
+    xstate.comments.k2 = { id: 'k2', text: 'floating', anchors: [], pos: { x: -400, y: 300 } };
+    var scene = EXP.scene(xdoc, xstate, EXP.estimateMeasure);
+    // plan.md opens with a lone H1, which is hoisted to the centre; the
+    // synthetic root is then not drawn, exactly as on screen.
+    var expected = xdoc.nodes.length - 1;
+    ok('the scene has every node, collapse and focus notwithstanding',
+      scene.nodes.length === expected, scene.nodes.length + ' vs ' + expected);
+    ok('every box has a positive size', scene.nodes.every(function (n) { return n.w > 0 && n.h > 0; }));
+    ok('the scene is shifted to a top-left origin with padding',
+      scene.nodes.concat(scene.comments).every(function (n) { return n.x >= EXP.PAD - 0.5 && n.y >= EXP.PAD - 0.5; }));
+    ok('the scene is as big as its contents',
+      scene.nodes.concat(scene.comments).every(function (n) { return n.x + n.w <= scene.w && n.y + n.h <= scene.h; }));
+    var sLaunch = scene.nodes.filter(function (n) { return n.text === 'Launch'; })[0];
+    var sRoot = scene.nodes.filter(function (n) { return n.isRoot; })[0];
+    // A pin's x is the box's left edge, its y the box's centre, both relative
+    // to the root's centre - the same convention the drag handler writes.
+    ok('a pin is honoured', !!sLaunch && !!sRoot &&
+      Math.round(sLaunch.x - (sRoot.x + sRoot.w / 2)) === 900 &&
+      Math.round((sLaunch.y + sLaunch.h / 2) - (sRoot.y + sRoot.h / 2)) === 400,
+      sLaunch && sRoot ? String([sLaunch.x - (sRoot.x + sRoot.w / 2), (sLaunch.y + sLaunch.h / 2) - (sRoot.y + sRoot.h / 2)]) : 'missing');
+    ok('a pinned edge is drawn dashed', scene.edges.some(function (e) { return e.pinned; }));
+    ok('comments are in the scene with a line to their anchor',
+      scene.comments.length === 2 && scene.comments.filter(function (c) { return c.id === 'k1'; })[0].anchors.length === 1);
+    var sColour = scene.nodes.filter(function (n) { return n.text === 'Colour and type'; })[0];
+    var k1 = scene.comments.filter(function (c) { return c.id === 'k1'; })[0];
+    ok('an anchored comment sits at its offset from the node centre',
+      Math.abs((k1.x - (sColour.x + sColour.w / 2)) - 90) < 0.6 && Math.abs((k1.y - (sColour.y + sColour.h / 2)) + 70) < 0.6,
+      JSON.stringify([k1.x, k1.y, sColour.x, sColour.w]));
+    ok('a ticked task is drawn ticked', scene.nodes.some(function (n) { return n.check && n.checked === true; }));
+
+    var longDoc = md.parse('# T\n- ' + new Array(12).join('considerably ') + 'long\n- 这是一个没有空格但是非常非常非常非常非常非常长的标签\n');
+    var longScene = EXP.scene(longDoc, { title: 'T' }, EXP.estimateMeasure);
+    ok('a long label wraps into several lines', longScene.nodes.some(function (n) { return n.lines.length > 1; }));
+    ok('and never wider than its column', longScene.nodes.every(function (n) { return n.w <= n.st.maxW + 1 || n.pills.length; }),
+      JSON.stringify(longScene.nodes.map(function (n) { return [n.w, n.st.maxW]; })));
+    ok('unspaced CJK is broken by character rather than overflowing',
+      longScene.nodes.some(function (n) { return /标签/.test(n.text) && n.lines.length > 1; }));
+
+    var svg = EXP.svg(scene);
+    ok('the SVG declares its size', /^<svg [^>]*width="\d+" height="\d+" viewBox="0 0 \d+ \d+"/.test(svg));
+    ok('the SVG starts with an opaque backdrop', /<rect x="0" y="0" width="\d+" height="\d+" fill="#ffffff"\/>/.test(svg));
+    ok('the SVG uses nothing an <img> cannot render', svg.indexOf('foreignObject') < 0 && svg.indexOf('class=') < 0 && svg.indexOf('url(') < 0);
+    ok('every label is in the picture', xdoc.nodes.every(function (n) {
+      return n.kind === 'root' || svg.indexOf(md.plainText(n.text).split(' ')[0]) >= 0;
+    }));
+    ok('comment text is in the picture', svg.indexOf('brand team') >= 0);
+    ok('a dotted comment line is drawn', /stroke-dasharray="0.1 4.2"/.test(svg));
+    ok('characters that would break XML are escaped',
+      EXP.svg(EXP.scene(md.parse('# A & B\n- a < b\n'), { title: 'x' }, EXP.estimateMeasure)).indexOf('&amp; B') > 0 &&
+      EXP.svg(EXP.scene(md.parse('# A & B\n- a < b\n'), { title: 'x' }, EXP.estimateMeasure)).indexOf('a &lt; b') > 0);
+
+    ok('png is a registered format', !!EXP.format('png') && EXP.format('png').ext === '.png' && EXP.format('png').mime === 'image/png');
+    var before = EXP.formats.length;
+    EXP.register({ id: 'zz-test', label: 'Test', ext: '.zz', mime: 'x/y', write: function () { return { text: 'hi' }; } });
+    EXP.register({ id: 'zz-test', label: 'Test 2', ext: '.zz', mime: 'x/y', write: function () { return { text: 'hi' }; } });
+    ok('registering a format lists it once, replacing by id',
+      EXP.formats.length === before + 1 && EXP.format('zz-test').label === 'Test 2');
+    EXP.formats = EXP.formats.filter(function (f) { return f.id !== 'zz-test'; });
+
+    ok('a 2x export of a normal map is not scaled down', EXP.pngScale(1600, 900) === 2);
+    ok('a huge map is scaled to fit the canvas ceiling', EXP.pngScale(8000, 6000) < 1 && EXP.pngScale(8000, 6000) >= 0.25);
+    ok('the file is named after the note', EXP.fileName('Product plan', '.png') === 'Product plan — map.png');
+    ok('unsafe characters are kept out of the name', EXP.fileName('a/b:c?', '.png').indexOf('/') < 0 && EXP.fileName('a/b:c?', '.png').indexOf(':') < 0);
+    var stem = EXP.fileStem('Product plan');
+    ok('a previous export is recognised by its human name', EXP.isPreviousExport({ fileName: stem + '.png', path: '/x/y.png' }, stem, '.png'));
+    ok('or by the host-renamed stored name',
+      EXP.isPreviousExport({ fileName: 'other', path: '/att/' + stem + '_123e4567-e89b-12d3-a456-426614174000.png' }, stem, '.png'));
+    ok('but a different file with a similar stem is left alone',
+      !EXP.isPreviousExport({ fileName: stem + ' 2.png', path: '/att/' + stem + ' 2_123e4567-e89b-12d3-a456-426614174000.png' }, stem, '.png') &&
+      !EXP.isPreviousExport({ fileName: stem + '.svg', path: '/att/' + stem + '_123e4567-e89b-12d3-a456-426614174000.svg' }, stem, '.png'));
+
+    /* ---------------- the companion link ---------------- */
+    var link = CG.host.mapLink('abc-123', 'x');
+    ok('a map link carries the marker that makes it findable', link.indexOf('?via=cartograph') > 0, link);
+    ok('the map id can be read back out of a note', CG.host.mapIdIn('body\n\n' + link) === 'abc-123');
+    ok('an ordinary note link is not mistaken for a map link',
+      CG.host.mapIdIn('[Other](synapseresource://note/zzz)') === null);
+    ok('a map link parses as an ordinary node link too',
+      md.parse('- see ' + link).nodes.filter(function (n) { return n.links.length; }).length === 1);
+
+    return results;
+  }
+
+  CG.spec = { run: run };
+  if (typeof module !== 'undefined' && module.exports) module.exports = CG.spec;
+})(typeof window !== 'undefined' ? window : globalThis);

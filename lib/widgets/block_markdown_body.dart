@@ -12,6 +12,14 @@ import '../services/chips_block_parser.dart';
 /// Callback for when a block edit is requested
 typedef BlockEditCallback = void Function(MarkdownBlock block);
 
+/// Callback carrying a block and its index in the parsed list.
+typedef BlockIndexCallback = void Function(int index, MarkdownBlock block);
+
+/// Lets a parent decorate each rendered block (badges, colour bars) without
+/// re-implementing the block list.
+typedef BlockWrapperBuilder =
+    Widget Function(int index, MarkdownBlock block, Widget child);
+
 /// A widget that renders markdown content as a list of interactive blocks.
 ///
 /// Each block is wrapped in a defined DragTarget, allowing "drag-to-edit" interactions.
@@ -44,6 +52,16 @@ class BlockMarkdownBody extends StatefulWidget {
   /// off-screen heading blocks before retrying ensureVisible.
   final ScrollController? scrollController;
 
+  /// Tap / long-press on a block as a whole. Link taps and checkbox toggles
+  /// inside the block still win the gesture arena, so these only fire on
+  /// otherwise-inert areas of the block.
+  final BlockIndexCallback? onBlockTap;
+  final BlockIndexCallback? onBlockLongPress;
+
+  /// Wraps each block's rendered widget. Applied inside the drag target and
+  /// selection border, so the wrapper decorates the block content itself.
+  final BlockWrapperBuilder? blockWrapper;
+
   const BlockMarkdownBody({
     super.key,
     required this.content,
@@ -58,6 +76,9 @@ class BlockMarkdownBody extends StatefulWidget {
     this.onFetchImage,
     this.onChipsExtracted,
     this.scrollController,
+    this.onBlockTap,
+    this.onBlockLongPress,
+    this.blockWrapper,
   });
 
   final Function(String)? onFetchImage;
@@ -260,7 +281,26 @@ class BlockMarkdownBodyState extends State<BlockMarkdownBody> {
 
         final showHighlight = isHovered || isSelected;
 
-        return Container(
+        Widget content = InteractiveCheckboxMarkdown(
+          key: ValueKey(
+            '${widget.noteId}_${block.startOffset}_${block.endOffset}',
+          ),
+          noteId: widget.noteId,
+          originalContent: block.content,
+          onContentChanged: (newBlockContent) {
+            _handleBlockContentChanged(block, newBlockContent);
+          },
+          onLinkTap: widget.onLinkTap,
+          style: widget.style,
+          maxLines: null,
+          overflow: null,
+          onFetchImage: widget.onFetchImage,
+        );
+        if (widget.blockWrapper != null) {
+          content = widget.blockWrapper!(index, block, content);
+        }
+
+        Widget item = Container(
           key: anchorKey,
           decoration: BoxDecoration(
             border: Border.all(
@@ -271,22 +311,21 @@ class BlockMarkdownBodyState extends State<BlockMarkdownBody> {
             // Only add background color for selection/hover feedback
             color: showHighlight ? backgroundColor : Colors.transparent,
           ),
-          child: InteractiveCheckboxMarkdown(
-            key: ValueKey(
-              '${widget.noteId}_${block.startOffset}_${block.endOffset}',
-            ),
-            noteId: widget.noteId,
-            originalContent: block.content,
-            onContentChanged: (newBlockContent) {
-              _handleBlockContentChanged(block, newBlockContent);
-            },
-            onLinkTap: widget.onLinkTap,
-            style: widget.style,
-            maxLines: null,
-            overflow: null,
-            onFetchImage: widget.onFetchImage,
-          ),
+          child: content,
         );
+        if (widget.onBlockTap != null || widget.onBlockLongPress != null) {
+          item = GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: widget.onBlockTap == null
+                ? null
+                : () => widget.onBlockTap!(index, block),
+            onLongPress: widget.onBlockLongPress == null
+                ? null
+                : () => widget.onBlockLongPress!(index, block),
+            child: item,
+          );
+        }
+        return item;
       },
     );
   }

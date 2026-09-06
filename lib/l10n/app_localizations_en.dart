@@ -5479,6 +5479,65 @@ class AppLocalizationsEn extends AppLocalizations {
   String get requestMobileSite => 'Request mobile site';
 
   @override
+  String get done => 'Done';
+
+  @override
+  String get refreshLogin => 'Refresh login';
+
+  @override
+  String get webLoginRefreshHint =>
+      'Sign in again to refresh this login. Your saved app permissions are kept.';
+
+  @override
+  String webLoginRefreshed(String domain) {
+    return 'Login refreshed for $domain';
+  }
+
+  @override
+  String get webLoginRefreshDiscarded =>
+      'Refresh cancelled — your previous login was restored.';
+
+  @override
+  String get clearSiteCookies => 'Clear cookies for this site';
+
+  @override
+  String get webLoginCookiesCleared =>
+      'Cookies cleared. Sign in again, then tap Save login.';
+
+  @override
+  String get webLoginExpired => 'Expired — refresh to sign in again';
+
+  @override
+  String webLoginExpiresInDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Expires in $days days — refresh soon',
+      one: 'Expires tomorrow — refresh soon',
+      zero: 'Expires today — refresh soon',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String webLoginValidUntil(String date) {
+    return 'Valid until $date';
+  }
+
+  @override
+  String get webLoginNoExpiry => 'No expiry set by the site';
+
+  @override
+  String webLoginSavedAgo(String time) {
+    return 'Saved $time';
+  }
+
+  @override
+  String webLoginRefreshedAgo(String time) {
+    return 'Refreshed $time';
+  }
+
+  @override
   String get webLoginAppsWithAccess => 'Apps with access';
 
   @override
@@ -5491,4 +5550,185 @@ class AppLocalizationsEn extends AppLocalizations {
   String revokeAppAccessConfirm(String appName, String domain) {
     return 'Remove \"$appName\" access to your $domain login?';
   }
+
+  @override
+  String get runInBackground => 'Keep running in background';
+
+  @override
+  String appRunningInBackground(String appName) {
+    return '$appName is running';
+  }
+
+  @override
+  String get closeBackgroundApp => 'Close app';
+
+  @override
+  String closeBackgroundAppConfirm(String appName) {
+    return 'Close \"$appName\"? Anything unsaved in the app will be lost.';
+  }
+
+  @override
+  String backgroundAppClosed(String appName) {
+    return 'Closed \"$appName\" — only one app can run in the background.';
+  }
+
+  @override
+  String get mergeNotes => 'Merge notes';
+
+  @override
+  String get mergeWith => 'Merge with…';
+
+  @override
+  String mergeTabMerged(int count) {
+    return 'Merged ($count)';
+  }
+
+  @override
+  String get mergeAddNotes => 'Add notes';
+
+  @override
+  String get mergeSelectNotesTitle => 'Select notes to merge';
+
+  @override
+  String get mergeNeedsSecondNote =>
+      'Pick at least one more note to merge with.';
+
+  @override
+  String get mergeRemoveSource => 'Remove from merge';
+
+  @override
+  String mergeRemoveSourceBody(String title) {
+    return 'Blocks already taken from \"$title\" stay in the merged note. The note itself is not changed.';
+  }
+
+  @override
+  String get mergeAddAll => 'Add all';
+
+  @override
+  String get mergeRemoveAll => 'Remove all';
+
+  @override
+  String mergeBlocksAdded(int added, int total) {
+    return '$added of $total blocks added';
+  }
+
+  @override
+  String get mergeAddToMerged => 'Add to merged';
+
+  @override
+  String get mergeRemoveFromMerged => 'Remove from merged';
+
+  @override
+  String mergeAddSection(int count) {
+    return 'Add this section ($count blocks)';
+  }
+
+  @override
+  String get mergeCopyText => 'Copy text';
+
+  @override
+  String get mergeSelectText => 'Select text…';
+
+  @override
+  String get mergeCopied => 'Copied';
+
+  @override
+  String get mergeEditedTitle => 'Changed in the merged note';
+
+  @override
+  String get mergeEditedBody =>
+      'This block was changed or removed in the merged note. Edit it there, or add another copy.';
+
+  @override
+  String get mergeAddAnotherCopy => 'Add another copy';
+
+  @override
+  String get mergeForget => 'Forget';
+
+  @override
+  String get mergeArrange => 'Arrange';
+
+  @override
+  String get mergeEdit => 'Edit';
+
+  @override
+  String get mergeInsertHere => 'Next block goes here';
+
+  @override
+  String mergeInsertingAt(int position) {
+    return 'Inserting at position $position';
+  }
+
+  @override
+  String get mergeEmptyHint =>
+      'Tap blocks in a note tab to add them here, or switch to Edit and paste.';
+
+  @override
+  String mergeUseCombinedTitle(String title) {
+    return 'Use \"$title\"';
+  }
+
+  @override
+  String get mergeSaveAsNew => 'Save as new note';
+
+  @override
+  String mergeReplaceNote(String title) {
+    return 'Replace \"$title\"';
+  }
+
+  @override
+  String mergeReplaceWarning(String title, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '\"$title\" gets this content and title. The other $count notes are not changed.',
+      one:
+          '\"$title\" gets this content and title. The other note is not changed.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get mergeLinkBack => 'Link back to source notes';
+
+  @override
+  String get mergeArchiveOthers => 'Archive the other source notes';
+
+  @override
+  String get mergeDiscardTitle => 'Discard merged note?';
+
+  @override
+  String get mergeDiscardBody =>
+      'Blocks you added and text you typed will be lost.';
+
+  @override
+  String get mergeDiscard => 'Discard';
+
+  @override
+  String mergedInto(String title) {
+    return 'Merged into \"$title\"';
+  }
+
+  @override
+  String get mergeNothingToSave => 'Add at least one block or some text first.';
+
+  @override
+  String mergeSaveFailed(String error) {
+    return 'Could not save the merged note: $error';
+  }
+
+  @override
+  String mergeBlockFromNote(String title) {
+    return 'From \"$title\"';
+  }
+
+  @override
+  String get mergeRemoveBlock => 'Remove';
+
+  @override
+  String get mergeOtherAttachments => 'Other attachments to keep';
+
+  @override
+  String get mergeArchiveOthersPinned => 'Pinned notes are left as they are.';
 }

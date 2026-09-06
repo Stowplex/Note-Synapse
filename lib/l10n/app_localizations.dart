@@ -9506,6 +9506,84 @@ abstract class AppLocalizations {
   /// **'Request mobile site'**
   String get requestMobileSite;
 
+  /// No description provided for @done.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get done;
+
+  /// No description provided for @refreshLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh login'**
+  String get refreshLogin;
+
+  /// No description provided for @webLoginRefreshHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in again to refresh this login. Your saved app permissions are kept.'**
+  String get webLoginRefreshHint;
+
+  /// No description provided for @webLoginRefreshed.
+  ///
+  /// In en, this message translates to:
+  /// **'Login refreshed for {domain}'**
+  String webLoginRefreshed(String domain);
+
+  /// No description provided for @webLoginRefreshDiscarded.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh cancelled — your previous login was restored.'**
+  String get webLoginRefreshDiscarded;
+
+  /// No description provided for @clearSiteCookies.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear cookies for this site'**
+  String get clearSiteCookies;
+
+  /// No description provided for @webLoginCookiesCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Cookies cleared. Sign in again, then tap Save login.'**
+  String get webLoginCookiesCleared;
+
+  /// No description provided for @webLoginExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired — refresh to sign in again'**
+  String get webLoginExpired;
+
+  /// No description provided for @webLoginExpiresInDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =0{Expires today — refresh soon} =1{Expires tomorrow — refresh soon} other{Expires in {days} days — refresh soon}}'**
+  String webLoginExpiresInDays(int days);
+
+  /// No description provided for @webLoginValidUntil.
+  ///
+  /// In en, this message translates to:
+  /// **'Valid until {date}'**
+  String webLoginValidUntil(String date);
+
+  /// No description provided for @webLoginNoExpiry.
+  ///
+  /// In en, this message translates to:
+  /// **'No expiry set by the site'**
+  String get webLoginNoExpiry;
+
+  /// No description provided for @webLoginSavedAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved {time}'**
+  String webLoginSavedAgo(String time);
+
+  /// No description provided for @webLoginRefreshedAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Refreshed {time}'**
+  String webLoginRefreshedAgo(String time);
+
   /// No description provided for @webLoginAppsWithAccess.
   ///
   /// In en, this message translates to:
@@ -9529,6 +9607,288 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Remove \"{appName}\" access to your {domain} login?'**
   String revokeAppAccessConfirm(String appName, String domain);
+
+  /// No description provided for @runInBackground.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep running in background'**
+  String get runInBackground;
+
+  /// No description provided for @appRunningInBackground.
+  ///
+  /// In en, this message translates to:
+  /// **'{appName} is running'**
+  String appRunningInBackground(String appName);
+
+  /// No description provided for @closeBackgroundApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Close app'**
+  String get closeBackgroundApp;
+
+  /// No description provided for @closeBackgroundAppConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Close \"{appName}\"? Anything unsaved in the app will be lost.'**
+  String closeBackgroundAppConfirm(String appName);
+
+  /// No description provided for @backgroundAppClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed \"{appName}\" — only one app can run in the background.'**
+  String backgroundAppClosed(String appName);
+
+  /// No description provided for @mergeNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge notes'**
+  String get mergeNotes;
+
+  /// No description provided for @mergeWith.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge with…'**
+  String get mergeWith;
+
+  /// No description provided for @mergeTabMerged.
+  ///
+  /// In en, this message translates to:
+  /// **'Merged ({count})'**
+  String mergeTabMerged(int count);
+
+  /// No description provided for @mergeAddNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Add notes'**
+  String get mergeAddNotes;
+
+  /// No description provided for @mergeSelectNotesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select notes to merge'**
+  String get mergeSelectNotesTitle;
+
+  /// No description provided for @mergeNeedsSecondNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick at least one more note to merge with.'**
+  String get mergeNeedsSecondNote;
+
+  /// No description provided for @mergeRemoveSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from merge'**
+  String get mergeRemoveSource;
+
+  /// No description provided for @mergeRemoveSourceBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocks already taken from \"{title}\" stay in the merged note. The note itself is not changed.'**
+  String mergeRemoveSourceBody(String title);
+
+  /// No description provided for @mergeAddAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Add all'**
+  String get mergeAddAll;
+
+  /// No description provided for @mergeRemoveAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove all'**
+  String get mergeRemoveAll;
+
+  /// No description provided for @mergeBlocksAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'{added} of {total} blocks added'**
+  String mergeBlocksAdded(int added, int total);
+
+  /// No description provided for @mergeAddToMerged.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to merged'**
+  String get mergeAddToMerged;
+
+  /// No description provided for @mergeRemoveFromMerged.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from merged'**
+  String get mergeRemoveFromMerged;
+
+  /// No description provided for @mergeAddSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Add this section ({count} blocks)'**
+  String mergeAddSection(int count);
+
+  /// No description provided for @mergeCopyText.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy text'**
+  String get mergeCopyText;
+
+  /// No description provided for @mergeSelectText.
+  ///
+  /// In en, this message translates to:
+  /// **'Select text…'**
+  String get mergeSelectText;
+
+  /// No description provided for @mergeCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get mergeCopied;
+
+  /// No description provided for @mergeEditedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Changed in the merged note'**
+  String get mergeEditedTitle;
+
+  /// No description provided for @mergeEditedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This block was changed or removed in the merged note. Edit it there, or add another copy.'**
+  String get mergeEditedBody;
+
+  /// No description provided for @mergeAddAnotherCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Add another copy'**
+  String get mergeAddAnotherCopy;
+
+  /// No description provided for @mergeForget.
+  ///
+  /// In en, this message translates to:
+  /// **'Forget'**
+  String get mergeForget;
+
+  /// No description provided for @mergeArrange.
+  ///
+  /// In en, this message translates to:
+  /// **'Arrange'**
+  String get mergeArrange;
+
+  /// No description provided for @mergeEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get mergeEdit;
+
+  /// No description provided for @mergeInsertHere.
+  ///
+  /// In en, this message translates to:
+  /// **'Next block goes here'**
+  String get mergeInsertHere;
+
+  /// No description provided for @mergeInsertingAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Inserting at position {position}'**
+  String mergeInsertingAt(int position);
+
+  /// No description provided for @mergeEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap blocks in a note tab to add them here, or switch to Edit and paste.'**
+  String get mergeEmptyHint;
+
+  /// No description provided for @mergeUseCombinedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Use \"{title}\"'**
+  String mergeUseCombinedTitle(String title);
+
+  /// No description provided for @mergeSaveAsNew.
+  ///
+  /// In en, this message translates to:
+  /// **'Save as new note'**
+  String get mergeSaveAsNew;
+
+  /// No description provided for @mergeReplaceNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace \"{title}\"'**
+  String mergeReplaceNote(String title);
+
+  /// No description provided for @mergeReplaceWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{\"{title}\" gets this content and title. The other note is not changed.} other{\"{title}\" gets this content and title. The other {count} notes are not changed.}}'**
+  String mergeReplaceWarning(String title, int count);
+
+  /// No description provided for @mergeLinkBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Link back to source notes'**
+  String get mergeLinkBack;
+
+  /// No description provided for @mergeArchiveOthers.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive the other source notes'**
+  String get mergeArchiveOthers;
+
+  /// No description provided for @mergeDiscardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard merged note?'**
+  String get mergeDiscardTitle;
+
+  /// No description provided for @mergeDiscardBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocks you added and text you typed will be lost.'**
+  String get mergeDiscardBody;
+
+  /// No description provided for @mergeDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get mergeDiscard;
+
+  /// No description provided for @mergedInto.
+  ///
+  /// In en, this message translates to:
+  /// **'Merged into \"{title}\"'**
+  String mergedInto(String title);
+
+  /// No description provided for @mergeNothingToSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Add at least one block or some text first.'**
+  String get mergeNothingToSave;
+
+  /// No description provided for @mergeSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the merged note: {error}'**
+  String mergeSaveFailed(String error);
+
+  /// No description provided for @mergeBlockFromNote.
+  ///
+  /// In en, this message translates to:
+  /// **'From \"{title}\"'**
+  String mergeBlockFromNote(String title);
+
+  /// No description provided for @mergeRemoveBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get mergeRemoveBlock;
+
+  /// No description provided for @mergeOtherAttachments.
+  ///
+  /// In en, this message translates to:
+  /// **'Other attachments to keep'**
+  String get mergeOtherAttachments;
+
+  /// No description provided for @mergeArchiveOthersPinned.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned notes are left as they are.'**
+  String get mergeArchiveOthersPinned;
 }
 
 class _AppLocalizationsDelegate

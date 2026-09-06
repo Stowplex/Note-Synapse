@@ -5207,6 +5207,62 @@ class AppLocalizationsZh extends AppLocalizations {
   String get requestMobileSite => '请求移动版网站';
 
   @override
+  String get done => '完成';
+
+  @override
+  String get refreshLogin => '刷新登录';
+
+  @override
+  String get webLoginRefreshHint => '重新登录以刷新此登录信息，已授权应用的权限会保留。';
+
+  @override
+  String webLoginRefreshed(String domain) {
+    return '已刷新 $domain 的登录';
+  }
+
+  @override
+  String get webLoginRefreshDiscarded => '已取消刷新，原有登录已恢复。';
+
+  @override
+  String get clearSiteCookies => '清除此站点的 Cookie';
+
+  @override
+  String get webLoginCookiesCleared => 'Cookie 已清除。请重新登录，然后点按“保存登录”。';
+
+  @override
+  String get webLoginExpired => '已过期 — 刷新以重新登录';
+
+  @override
+  String webLoginExpiresInDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days 天后过期 — 请尽快刷新',
+      one: '明天过期 — 请尽快刷新',
+      zero: '今天过期 — 请尽快刷新',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String webLoginValidUntil(String date) {
+    return '有效期至 $date';
+  }
+
+  @override
+  String get webLoginNoExpiry => '站点未设置过期时间';
+
+  @override
+  String webLoginSavedAgo(String time) {
+    return '保存于 $time';
+  }
+
+  @override
+  String webLoginRefreshedAgo(String time) {
+    return '刷新于 $time';
+  }
+
+  @override
   String get webLoginAppsWithAccess => '有访问权限的应用';
 
   @override
@@ -5219,4 +5275,178 @@ class AppLocalizationsZh extends AppLocalizations {
   String revokeAppAccessConfirm(String appName, String domain) {
     return '移除“$appName”对你 $domain 登录的访问权限？';
   }
+
+  @override
+  String get runInBackground => '后台保持运行';
+
+  @override
+  String appRunningInBackground(String appName) {
+    return '$appName 正在运行';
+  }
+
+  @override
+  String get closeBackgroundApp => '关闭应用';
+
+  @override
+  String closeBackgroundAppConfirm(String appName) {
+    return '确定关闭“$appName”吗？应用中未保存的内容将会丢失。';
+  }
+
+  @override
+  String backgroundAppClosed(String appName) {
+    return '已关闭“$appName”——同一时间只能有一个应用在后台运行。';
+  }
+
+  @override
+  String get mergeNotes => '合并笔记';
+
+  @override
+  String get mergeWith => '与其他笔记合并…';
+
+  @override
+  String mergeTabMerged(int count) {
+    return '合并结果 ($count)';
+  }
+
+  @override
+  String get mergeAddNotes => '添加笔记';
+
+  @override
+  String get mergeSelectNotesTitle => '选择要合并的笔记';
+
+  @override
+  String get mergeNeedsSecondNote => '请至少再选择一篇笔记进行合并。';
+
+  @override
+  String get mergeRemoveSource => '从合并中移除';
+
+  @override
+  String mergeRemoveSourceBody(String title) {
+    return '已从“$title”中选取的区块会保留在合并结果中。笔记本身不会被修改。';
+  }
+
+  @override
+  String get mergeAddAll => '全部添加';
+
+  @override
+  String get mergeRemoveAll => '全部移除';
+
+  @override
+  String mergeBlocksAdded(int added, int total) {
+    return '已添加 $added / $total 个区块';
+  }
+
+  @override
+  String get mergeAddToMerged => '添加到合并结果';
+
+  @override
+  String get mergeRemoveFromMerged => '从合并结果中移除';
+
+  @override
+  String mergeAddSection(int count) {
+    return '添加此章节（$count 个区块）';
+  }
+
+  @override
+  String get mergeCopyText => '复制文本';
+
+  @override
+  String get mergeSelectText => '选择文本…';
+
+  @override
+  String get mergeCopied => '已复制';
+
+  @override
+  String get mergeEditedTitle => '已在合并结果中修改';
+
+  @override
+  String get mergeEditedBody => '此区块已在合并结果中被修改或删除。请在那里编辑，或再添加一份副本。';
+
+  @override
+  String get mergeAddAnotherCopy => '再添加一份';
+
+  @override
+  String get mergeForget => '忽略';
+
+  @override
+  String get mergeArrange => '排列';
+
+  @override
+  String get mergeEdit => '编辑';
+
+  @override
+  String get mergeInsertHere => '下一个区块插入此处';
+
+  @override
+  String mergeInsertingAt(int position) {
+    return '插入到位置 $position';
+  }
+
+  @override
+  String get mergeEmptyHint => '在笔记标签页中点按区块即可添加到这里，或切换到“编辑”后粘贴。';
+
+  @override
+  String mergeUseCombinedTitle(String title) {
+    return '使用“$title”';
+  }
+
+  @override
+  String get mergeSaveAsNew => '另存为新笔记';
+
+  @override
+  String mergeReplaceNote(String title) {
+    return '替换“$title”';
+  }
+
+  @override
+  String mergeReplaceWarning(String title, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '“$title”将使用此内容和标题。其余 $count 篇笔记不会改变。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get mergeLinkBack => '链接回来源笔记';
+
+  @override
+  String get mergeArchiveOthers => '归档其他来源笔记';
+
+  @override
+  String get mergeDiscardTitle => '放弃合并结果？';
+
+  @override
+  String get mergeDiscardBody => '已添加的区块和已输入的文本将会丢失。';
+
+  @override
+  String get mergeDiscard => '放弃';
+
+  @override
+  String mergedInto(String title) {
+    return '已合并到“$title”';
+  }
+
+  @override
+  String get mergeNothingToSave => '请先添加至少一个区块或输入一些文本。';
+
+  @override
+  String mergeSaveFailed(String error) {
+    return '无法保存合并结果：$error';
+  }
+
+  @override
+  String mergeBlockFromNote(String title) {
+    return '来自“$title”';
+  }
+
+  @override
+  String get mergeRemoveBlock => '移除';
+
+  @override
+  String get mergeOtherAttachments => '其他要保留的附件';
+
+  @override
+  String get mergeArchiveOthersPinned => '已置顶的笔记会保持不变。';
 }

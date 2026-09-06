@@ -2293,6 +2293,44 @@
   "showDetails": "显示详情",
   "forceRefetchImages": "强制重新获取图片",
   "fetchingImage": "正在获取图片...",
+  "done": "完成",
+  "refreshLogin": "刷新登录",
+  "webLoginRefreshHint": "重新登录以刷新此登录信息，已授权应用的权限会保留。",
+  "webLoginRefreshed": "已刷新 {domain} 的登录",
+  "@webLoginRefreshed": {
+    "placeholders": {
+      "domain": {"type": "String"}
+    }
+  },
+  "webLoginRefreshDiscarded": "已取消刷新，原有登录已恢复。",
+  "clearSiteCookies": "清除此站点的 Cookie",
+  "webLoginCookiesCleared": "Cookie 已清除。请重新登录，然后点按“保存登录”。",
+  "webLoginExpired": "已过期 — 刷新以重新登录",
+  "webLoginExpiresInDays": "{days, plural, =0{今天过期 — 请尽快刷新} =1{明天过期 — 请尽快刷新} other{{days} 天后过期 — 请尽快刷新}}",
+  "@webLoginExpiresInDays": {
+    "placeholders": {
+      "days": {"type": "int"}
+    }
+  },
+  "webLoginValidUntil": "有效期至 {date}",
+  "@webLoginValidUntil": {
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  "webLoginNoExpiry": "站点未设置过期时间",
+  "webLoginSavedAgo": "保存于 {time}",
+  "@webLoginSavedAgo": {
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+  "webLoginRefreshedAgo": "刷新于 {time}",
+  "@webLoginRefreshedAgo": {
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
   "webLoginAppsWithAccess": "有访问权限的应用",
   "revoke": "撤销",
   "revokeAppAccessTitle": "撤销访问权限",
@@ -2303,5 +2341,124 @@
       "domain": {"type": "String"}
     }
   },
-  "searchNotes": "搜索笔记"
+  "searchNotes": "搜索笔记",
+  "runInBackground": "后台保持运行",
+  "appRunningInBackground": "{appName} 正在运行",
+  "@appRunningInBackground": {
+    "placeholders": {
+      "appName": {"type": "String"}
+    }
+  },
+  "closeBackgroundApp": "关闭应用",
+  "closeBackgroundAppConfirm": "确定关闭“{appName}”吗？应用中未保存的内容将会丢失。",
+  "@closeBackgroundAppConfirm": {
+    "placeholders": {
+      "appName": {"type": "String"}
+    }
+  },
+  "backgroundAppClosed": "已关闭“{appName}”——同一时间只能有一个应用在后台运行。",
+  "@backgroundAppClosed": {
+    "placeholders": {
+      "appName": {"type": "String"}
+    }
+  },
+  "mergeNotes": "合并笔记",
+  "mergeWith": "与其他笔记合并…",
+  "mergeTabMerged": "合并结果 ({count})",
+  "@mergeTabMerged": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "mergeAddNotes": "添加笔记",
+  "mergeSelectNotesTitle": "选择要合并的笔记",
+  "mergeNeedsSecondNote": "请至少再选择一篇笔记进行合并。",
+  "mergeRemoveSource": "从合并中移除",
+  "mergeRemoveSourceBody": "已从“{title}”中选取的区块会保留在合并结果中。笔记本身不会被修改。",
+  "@mergeRemoveSourceBody": {
+    "placeholders": {
+      "title": {"type": "String"}
+    }
+  },
+  "mergeAddAll": "全部添加",
+  "mergeRemoveAll": "全部移除",
+  "mergeBlocksAdded": "已添加 {added} / {total} 个区块",
+  "@mergeBlocksAdded": {
+    "placeholders": {
+      "added": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "mergeAddToMerged": "添加到合并结果",
+  "mergeRemoveFromMerged": "从合并结果中移除",
+  "mergeAddSection": "添加此章节（{count} 个区块）",
+  "@mergeAddSection": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "mergeCopyText": "复制文本",
+  "mergeSelectText": "选择文本…",
+  "mergeCopied": "已复制",
+  "mergeEditedTitle": "已在合并结果中修改",
+  "mergeEditedBody": "此区块已在合并结果中被修改或删除。请在那里编辑，或再添加一份副本。",
+  "mergeAddAnotherCopy": "再添加一份",
+  "mergeForget": "忽略",
+  "mergeArrange": "排列",
+  "mergeEdit": "编辑",
+  "mergeInsertHere": "下一个区块插入此处",
+  "mergeInsertingAt": "插入到位置 {position}",
+  "@mergeInsertingAt": {
+    "placeholders": {
+      "position": {"type": "int"}
+    }
+  },
+  "mergeEmptyHint": "在笔记标签页中点按区块即可添加到这里，或切换到“编辑”后粘贴。",
+  "mergeUseCombinedTitle": "使用“{title}”",
+  "@mergeUseCombinedTitle": {
+    "placeholders": {
+      "title": {"type": "String"}
+    }
+  },
+  "mergeSaveAsNew": "另存为新笔记",
+  "mergeReplaceNote": "替换“{title}”",
+  "@mergeReplaceNote": {
+    "placeholders": {
+      "title": {"type": "String"}
+    }
+  },
+  "mergeReplaceWarning": "{count, plural, other{“{title}”将使用此内容和标题。其余 {count} 篇笔记不会改变。}}",
+  "@mergeReplaceWarning": {
+    "placeholders": {
+      "title": {"type": "String"},
+      "count": {"type": "int"}
+    }
+  },
+  "mergeLinkBack": "链接回来源笔记",
+  "mergeArchiveOthers": "归档其他来源笔记",
+  "mergeDiscardTitle": "放弃合并结果？",
+  "mergeDiscardBody": "已添加的区块和已输入的文本将会丢失。",
+  "mergeDiscard": "放弃",
+  "mergedInto": "已合并到“{title}”",
+  "@mergedInto": {
+    "placeholders": {
+      "title": {"type": "String"}
+    }
+  },
+  "mergeNothingToSave": "请先添加至少一个区块或输入一些文本。",
+  "mergeSaveFailed": "无法保存合并结果：{error}",
+  "@mergeSaveFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "mergeBlockFromNote": "来自“{title}”",
+  "@mergeBlockFromNote": {
+    "placeholders": {
+      "title": {"type": "String"}
+    }
+  },
+  "mergeRemoveBlock": "移除",
+  "mergeOtherAttachments": "其他要保留的附件",
+  "mergeArchiveOthersPinned": "已置顶的笔记会保持不变。"
 }

@@ -19,6 +19,7 @@ import '../services/service_locator.dart';
 import '../services/logger_service.dart';
 import '../services/web_content_extraction_service.dart';
 import '../services/web_session_service.dart';
+import '../services/user_app_session_service.dart';
 import '../services/media_attachment_service.dart';
 import '../services/network_provider.dart';
 import '../utils/file_utils.dart';
@@ -41,6 +42,31 @@ class ShareScreen extends StatefulWidget {
 }
 
 class _ShareScreenState extends State<ShareScreen> {
+  /// Leaves the share flow once the user is done (saved, appended, cancelled).
+  ///
+  /// Normally this resets the stack to `/main`: a share intent can arrive over
+  /// any app state, so landing on a clean Home is the predictable result.
+  ///
+  /// A backgrounded User App is the exception. It *lives* in that stack, so
+  /// `removeUntil((route) => false)` would destroy the very app the user shared
+  /// into Note Synapse to get back to — clip a page, return to the mind map.
+  /// While one is alive, unwind only the routes the share flow itself pushed and
+  /// leave the user where they were, pill intact.
+  void _leaveShareFlow(
+    NavigatorState navigator,
+    ModalRoute<dynamic>? shareRoute,
+  ) {
+    final handled =
+        getIt.isRegistered<UserAppSessionService>() &&
+        getIt<UserAppSessionService>().unwindPreservingApp(
+          navigator,
+          shareRoute,
+        );
+    if (!handled) {
+      navigator.pushNamedAndRemoveUntil('/main', (route) => false);
+    }
+  }
+
   Note? _preparedNote;
   String? _error;
   bool _isLoading = true;
@@ -529,9 +555,11 @@ class _ShareScreenState extends State<ShareScreen> {
                   onPressed: () async {
                     // Clean up downloaded file on cancel
                     await _cleanupDownloadedFile();
-                    Navigator.of(
-                      context,
-                    ).pushNamedAndRemoveUntil('/main', (route) => false);
+                    if (!mounted) return;
+                    _leaveShareFlow(
+                      Navigator.of(context),
+                      ModalRoute.of(context),
+                    );
                   },
                   child: Text(l10n.cancel),
                 ),
@@ -613,10 +641,9 @@ class _ShareScreenState extends State<ShareScreen> {
                         children: _selectedTags.map((tag) {
                           return Chip(
                             label: Text(tag),
-                            backgroundColor:
-                                _filterDerivedTags.contains(tag)
-                                    ? Colors.purple.withOpacity(0.1)
-                                    : null,
+                            backgroundColor: _filterDerivedTags.contains(tag)
+                                ? Colors.purple.withOpacity(0.1)
+                                : null,
                             deleteIcon: const Icon(Icons.close, size: 18),
                             onDeleted: () {
                               setState(() {
@@ -744,7 +771,9 @@ class _ShareScreenState extends State<ShareScreen> {
   }
 
   void _openFilterSelectionForTags(
-      BuildContext context, AppProvider appProvider) {
+    BuildContext context,
+    AppProvider appProvider,
+  ) {
     showDialog(
       context: context,
       builder: (context) => HierarchyDialog(
@@ -754,8 +783,9 @@ class _ShareScreenState extends State<ShareScreen> {
           setState(() {
             for (final filterId in selectedIds) {
               try {
-                final filter =
-                    appProvider.filters.firstWhere((f) => f.id == filterId);
+                final filter = appProvider.filters.firstWhere(
+                  (f) => f.id == filterId,
+                );
                 for (final tag in filter.includeTags) {
                   if (!_selectedTags.contains(tag)) {
                     _selectedTags.add(tag);
@@ -1648,9 +1678,11 @@ class _ShareScreenState extends State<ShareScreen> {
     // to avoid using deactivated context
     ScaffoldMessengerState? scaffoldMessenger;
     NavigatorState? navigator;
+    ModalRoute<dynamic>? shareRoute;
     if (mounted) {
       scaffoldMessenger = ScaffoldMessenger.of(context);
       navigator = Navigator.of(context);
+      shareRoute = ModalRoute.of(context);
     }
 
     try {
@@ -1705,8 +1737,7 @@ class _ShareScreenState extends State<ShareScreen> {
               backgroundColor: Colors.green,
             ),
           );
-          // Navigate to main screen instead of just popping
-          navigator.pushNamedAndRemoveUntil('/main', (route) => false);
+          _leaveShareFlow(navigator, shareRoute);
         }
       } else {
         RemoteImageDownloadReport? downloadReport;
@@ -1758,8 +1789,7 @@ class _ShareScreenState extends State<ShareScreen> {
               backgroundColor: Colors.green,
             ),
           );
-          // Navigate to main screen instead of just popping
-          navigator.pushNamedAndRemoveUntil('/main', (route) => false);
+          _leaveShareFlow(navigator, shareRoute);
         }
       }
     } catch (e) {
@@ -2193,6 +2223,17 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     });
   }
 
+  Future<void> _syncSessionCookies(String? loadedUrl) async {
+    try {
+      final service = getIt<WebSessionService>();
+      if (service.isSupported) {
+        await service.syncFromLiveJar(loadedUrl ?? widget.url);
+      }
+    } catch (e) {
+      LoggerService.warning('[ShareScreen] Failed to sync session cookies: $e');
+    }
+  }
+
   Future<void> _restoreSessionCookies() async {
     try {
       final service = getIt<WebSessionService>();
@@ -2371,7 +2412,17 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     return false;
   }
 
-  Future<String> _getCurrentPageBodyHtml() async {
+  /// Captures the current page as HTML plus the base URL that its relative
+  /// references resolve against.
+  ///
+  /// The base URL has to come from `document.baseURI` rather than
+  /// [_WebExtractionDialog.url]: it accounts for a `<base href>` element and
+  /// for any redirect the page went through, `body.innerHTML` never carries
+  /// the `<base>` tag itself (it lives in `<head>`), and the user may have
+  /// navigated away from the URL this dialog was opened with. When the page
+  /// reports no base URI there is no trustworthy substitute, so the pass is
+  /// skipped rather than fed a stale URL.
+  Future<WebContentJob> _getCurrentPageBodyHtml() async {
     if (_controller == null) {
       throw Exception('WebView controller not ready');
     }
@@ -2381,9 +2432,17 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     final result = await _controller!.evaluateJavascript(
       source: '''
         (function() {
+          var baseUri = '';
+          try {
+            baseUri = document.baseURI || window.location.href || '';
+          } catch (e) {
+            baseUri = '';
+          }
+
           var debug = {
             contentType: document.contentType,
             url: window.location.href,
+            baseUri: baseUri,
             hasBody: !!document.body,
             hasDocEl: !!document.documentElement,
             bodyTextLength: document.body ? document.body.innerText.length : -1,
@@ -2416,6 +2475,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 return JSON.stringify({
                   status: 'success',
                   content: '<pre>' + escapeHtml(content) + '</pre>',
+                  baseUri: baseUri,
                   debug: debug
                 });
               } else {
@@ -2427,6 +2487,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               return JSON.stringify({
                   status: 'success',
                   content: document.body.innerHTML,
+                  baseUri: baseUri,
                   debug: debug
               });
             }
@@ -2436,6 +2497,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                return JSON.stringify({
                   status: 'success',
                   content: docContent,
+                  baseUri: baseUri,
                   debug: debug
                });
             }
@@ -2470,7 +2532,13 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
             "Extracted content is empty. Debug: ${jsonEncode(response['debug'])}",
           );
         }
-        return content;
+        final baseUri = response['baseUri'] as String?;
+        return (
+          html: content,
+          baseUrl: (baseUri == null || baseUri.trim().isEmpty)
+              ? null
+              : baseUri,
+        );
       } else {
         final message = response['message'] ?? 'Unknown error';
         final debug = response['debug'];
@@ -2510,12 +2578,12 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     });
 
     try {
-      final htmlContent = await _getCurrentPageBodyHtml();
+      final page = await _getCurrentPageBodyHtml();
 
       // Run heavy parsing in background isolate
       String finalContent = await compute(
         WebContentProcessor.processHtml,
-        htmlContent,
+        page,
       );
 
       var title = await _getCurrentPageTitle();
@@ -2901,6 +2969,11 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           _status = l10n.webExtractionStatusReady;
           _errorMessage = null;
         });
+
+        // The site almost certainly rotated its session cookie while serving
+        // this page. Fold that back into the saved login so it rolls forward
+        // instead of decaying into an expired snapshot.
+        await _syncSessionCookies(url?.toString());
 
         if (_readabilityEnabled) {
           await _applyReadabilityMode();

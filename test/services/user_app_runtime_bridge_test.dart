@@ -530,6 +530,47 @@ void main() {
         },
       );
 
+      test(
+        'session:true rolls the saved login forward from Set-Cookie',
+        () async {
+          _seedSession(sessionStorage, 'example.com');
+          await grantService.grant('test-uuid', 'example.com');
+
+          final result = await jsHandlers['proxyFetch']!([
+            {'url': 'https://example.com/api', 'session': true},
+          ]);
+
+          expect(result['status'], isNot('error'));
+          // The mock response sets `sid=secret`; the stored session was on
+          // `sid=xyz` and must now hold the rotated value instead of decaying.
+          final stored =
+              jsonDecode(sessionStorage.data['web_session_example.com']!)
+                  as Map<String, dynamic>;
+          final cookies = stored['cookies'] as List;
+          expect(cookies.single['name'], 'sid');
+          expect(cookies.single['value'], 'secret');
+          expect(stored['refreshedAt'], isNotNull);
+          // Set-Cookie still never reaches JS.
+          expect(
+            (result['headers'] as Map).keys.map((k) => k.toString().toLowerCase()),
+            isNot(contains('set-cookie')),
+          );
+        },
+      );
+
+      test(
+        'a response for a domain with no saved login creates nothing',
+        () async {
+          final result = await jsHandlers['proxyFetch']!([
+            {'url': 'https://example.com/api', 'session': true},
+          ]);
+
+          expect(result['status'], isNot('error'));
+          expect(sessionStorage.data.containsKey('web_session_example.com'),
+              isFalse);
+        },
+      );
+
       test('multipart with a non-ASCII filename does not crash', () async {
         final result = await jsHandlers['proxyFetch']!([
           {
@@ -2027,6 +2068,9 @@ class MockResponseHeaders extends Fake implements HttpHeaders {
 
   @override
   String? value(String name) => _values[name.toLowerCase()]?.join(', ');
+
+  @override
+  List<String>? operator [](String name) => _values[name.toLowerCase()];
 
   @override
   void forEach(void Function(String name, List<String> values) action) {
