@@ -35,6 +35,13 @@ typedef OpenNoteCallback = Future<void> Function(Note note, bool replaceWindow);
 typedef OpenConversationsCallback =
     Future<void> Function(List<Note> notes, bool immersiveMode);
 typedef OpenAIActionsCallback = Future<void> Function(List<Note> notes);
+
+/// Asks the host to open the note merge screen on [notes]; resolves to the
+/// merged note, or `null` if the user backed out without merging.
+///
+/// A host that cannot open the screen at all must throw rather than return
+/// `null`, which the bridge would report to the plugin as a cancellation.
+typedef OpenMergeCallback = Future<Note?> Function(List<Note> notes);
 typedef ModificationRequestCallback =
     Future<bool> Function(
       UserAppRuntimeBridge source,
@@ -105,6 +112,7 @@ class UserAppRuntimeBridge {
     this.onOpenNote,
     this.onOpenConversations,
     this.onOpenAIActions,
+    this.onOpenMerge,
     this.onModificationRequest,
     this.onSqlWriteApprovalRequest,
     this.onDeletionApprovalRequest,
@@ -124,6 +132,7 @@ class UserAppRuntimeBridge {
   final OpenNoteCallback? onOpenNote;
   final OpenConversationsCallback? onOpenConversations;
   final OpenAIActionsCallback? onOpenAIActions;
+  final OpenMergeCallback? onOpenMerge;
   final ModificationRequestCallback? onModificationRequest;
   final SqlWriteApprovalCallback? onSqlWriteApprovalRequest;
   final DeletionApprovalCallback? onDeletionApprovalRequest;
@@ -341,6 +350,10 @@ class UserAppRuntimeBridge {
           },
           openAIActions: async (notes = []) => {
             const result = await window.flutter_inappwebview.callHandler('openAIActions', notes ?? []);
+            return result;
+          },
+          openMerge: async (notes = []) => {
+            const result = await window.flutter_inappwebview.callHandler('openMerge', notes ?? []);
             return result;
           },
           tts: {
@@ -1670,12 +1683,16 @@ class UserAppRuntimeBridge {
           LoggerService.debug(
             '[Synapse.saveNotes] Called with ${notesData.length} notes',
           );
-          final savedCount = await _saveNotesFromJavaScript(notesData);
+          final savedNoteIds = await _saveNotesFromJavaScript(notesData);
           final duration = DateTime.now().difference(startTime);
           LoggerService.debug(
-            '[Synapse.saveNotes] Success - Saved $savedCount notes in ${duration.inMilliseconds}ms',
+            '[Synapse.saveNotes] Success - Saved ${savedNoteIds.length} notes in ${duration.inMilliseconds}ms',
           );
-          return {'success': true, 'savedCount': savedCount};
+          return {
+            'success': true,
+            'savedCount': savedNoteIds.length,
+            'savedNoteIds': savedNoteIds,
+          };
         } catch (e) {
           final duration = DateTime.now().difference(startTime);
           LoggerService.error(
@@ -1932,29 +1949,10 @@ class UserAppRuntimeBridge {
             };
           }
 
-          final notes = <Note>[];
-          for (final noteData in notesData) {
-            if (noteData is Map<String, dynamic> && noteData['id'] != null) {
-              final noteId = noteData['id'] as String;
-              final note = await _resolveNoteForNavigation(noteId);
-              if (note != null) {
-                notes.add(note);
-              } else {
-                LoggerService.warning(
-                  '[Synapse.openConversations] Note not found: $noteId',
-                );
-              }
-            } else if (noteData is String) {
-              final note = await _resolveNoteForNavigation(noteData);
-              if (note != null) {
-                notes.add(note);
-              } else {
-                LoggerService.warning(
-                  '[Synapse.openConversations] Note not found: $noteData',
-                );
-              }
-            }
-          }
+          final notes = await _resolveNotesArg(
+            notesData,
+            'Synapse.openConversations',
+          );
 
           await onOpenConversations!(notes, immersiveMode);
           final duration = DateTime.now().difference(startTime);
@@ -1991,29 +1989,10 @@ class UserAppRuntimeBridge {
             '[Synapse.openAIActions] Called with ${notesData.length} notes',
           );
 
-          final notes = <Note>[];
-          for (final noteData in notesData) {
-            if (noteData is Map<String, dynamic> && noteData['id'] != null) {
-              final noteId = noteData['id'] as String;
-              final note = await _resolveNoteForNavigation(noteId);
-              if (note != null) {
-                notes.add(note);
-              } else {
-                LoggerService.warning(
-                  '[Synapse.openAIActions] Note not found: $noteId',
-                );
-              }
-            } else if (noteData is String) {
-              final note = await _resolveNoteForNavigation(noteData);
-              if (note != null) {
-                notes.add(note);
-              } else {
-                LoggerService.warning(
-                  '[Synapse.openAIActions] Note not found: $noteData',
-                );
-              }
-            }
-          }
+          final notes = await _resolveNotesArg(
+            notesData,
+            'Synapse.openAIActions',
+          );
 
           await onOpenAIActions!(notes);
           final duration = DateTime.now().difference(startTime);
@@ -2025,6 +2004,77 @@ class UserAppRuntimeBridge {
           final duration = DateTime.now().difference(startTime);
           LoggerService.error(
             '[Synapse.openAIActions] Error after ${duration.inMilliseconds}ms: $e',
+            error: e,
+          );
+          return {'success': false, 'error': e.toString()};
+        }
+      },
+    );
+
+    controller.addJavaScriptHandler(
+      handlerName: 'openMerge',
+      callback: (args) async {
+        final startTime = DateTime.now();
+        try {
+          if (onOpenMerge == null) {
+            return {
+              'success': false,
+              'error': 'openMerge not supported in this context',
+            };
+          }
+
+          final rawArg = args.isNotEmpty ? args.first : const <dynamic>[];
+          if (rawArg is! List) {
+            LoggerService.warning(
+              '[Synapse.openMerge] Expected an array of notes, got '
+              '${rawArg.runtimeType}',
+            );
+            return {
+              'success': false,
+              'error': 'openMerge expects an array of notes or note IDs',
+            };
+          }
+          final notesData = rawArg;
+          LoggerService.debug(
+            '[Synapse.openMerge] Called with ${notesData.length} notes',
+          );
+
+          // Count distinct notes, not resolved entries: a repeated id, and any
+          // set of block-scope ids from one note, all resolve to the same note.
+          // MergeDocument.addSource drops the repeats, so the merge screen
+          // would open on one source and pop a picker the app never asked for.
+          final notes = _distinctById(
+            await _resolveNotesArg(notesData, 'Synapse.openMerge'),
+          );
+
+          if (notes.length < 2) {
+            LoggerService.warning(
+              '[Synapse.openMerge] Only ${notes.length} distinct note(s) from '
+              '${notesData.length} entries',
+            );
+            return {
+              'success': false,
+              'error':
+                  'openMerge needs at least two notes; '
+                  '${notesData.length} entries resolved to '
+                  '${notes.length} distinct note(s)',
+            };
+          }
+
+          final merged = await onOpenMerge!(notes);
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.debug(
+            '[Synapse.openMerge] Success - Merged ${notes.length} notes into '
+            '${merged?.id ?? 'nothing (cancelled)'} in ${duration.inMilliseconds}ms',
+          );
+          if (merged == null) {
+            return {'success': true, 'cancelled': true};
+          }
+          return {'success': true, 'mergedNoteId': merged.id};
+        } catch (e) {
+          final duration = DateTime.now().difference(startTime);
+          LoggerService.error(
+            '[Synapse.openMerge] Error after ${duration.inMilliseconds}ms: $e',
             error: e,
           );
           return {'success': false, 'error': e.toString()};
@@ -2175,6 +2225,53 @@ class UserAppRuntimeBridge {
     final scope = _blockScopeFor(noteId);
     if (scope != null) return _databaseService.getNote(scope.parentNoteId);
     return _databaseService.getNote(noteId);
+  }
+
+  /// Resolves a `notes` argument - entries are either note id strings or
+  /// objects carrying an `id` - into the notes they name, in argument order.
+  ///
+  /// An entry that is malformed (not a string, or an object whose `id` is not a
+  /// string) is skipped with a warning, exactly like one naming a note that no
+  /// longer exists: a single bad entry must not abort the whole call with a raw
+  /// Dart cast message. [tag] names the calling handler in those warnings.
+  ///
+  /// Block-scope ids resolve to their parent note, so the result can contain
+  /// the same note more than once; callers that care must de-duplicate.
+  Future<List<Note>> _resolveNotesArg(
+    List<dynamic> notesData,
+    String tag,
+  ) async {
+    final notes = <Note>[];
+    for (final noteData in notesData) {
+      String? noteId;
+      if (noteData is String) {
+        noteId = noteData;
+      } else if (noteData is Map<String, dynamic> && noteData['id'] is String) {
+        noteId = noteData['id'] as String;
+      }
+      if (noteId == null) {
+        LoggerService.warning(
+          '[$tag] Skipping malformed note entry: $noteData',
+        );
+        continue;
+      }
+      final note = await _resolveNoteForNavigation(noteId);
+      if (note != null) {
+        notes.add(note);
+      } else {
+        LoggerService.warning('[$tag] Note not found: $noteId');
+      }
+    }
+    return notes;
+  }
+
+  /// Drops repeats of the same note, keeping the first occurrence of each id.
+  List<Note> _distinctById(List<Note> notes) {
+    final seen = <String>{};
+    return [
+      for (final note in notes)
+        if (seen.add(note.id)) note,
+    ];
   }
 
   /// Open block-scope ids that appear literally in [sql].
@@ -2651,15 +2748,17 @@ class UserAppRuntimeBridge {
     return {'data': base64Data, 'mimeType': mimeType};
   }
 
-  Future<int> _saveNotesFromJavaScript(List<dynamic> notesData) async {
+  /// Creates a note per entry in [notesData], returning the ids of the notes
+  /// that were created, in the order of the inputs that succeeded.
+  Future<List<String>> _saveNotesFromJavaScript(List<dynamic> notesData) async {
     final modificationService = getIt<NoteModificationService>();
-    var savedCount = 0;
+    final savedNoteIds = <String>[];
     for (final noteData in notesData) {
       if (noteData is! Map<String, dynamic>) continue;
       try {
         final note = await modificationService.buildNote(noteData);
         await appProvider.addNote(note);
-        savedCount++;
+        savedNoteIds.add(note.id);
         LoggerService.debug(
           '[Synapse.saveNotes] Saved note: ${note.id} - ${note.title}',
         );
@@ -2670,7 +2769,7 @@ class UserAppRuntimeBridge {
         );
       }
     }
-    return savedCount;
+    return savedNoteIds;
   }
 
   Future<int> _deleteNotesFromJavaScript(List<dynamic> noteIdsData) async {

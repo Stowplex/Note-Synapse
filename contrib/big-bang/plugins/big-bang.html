@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Big Bang</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #eef0f4;
+    --surface-3: #e4e7ee;
+    --text: #191c22;
+    --muted: #6b7280;
+    --faint: #9aa1ae;
+    --border: #e2e5ea;
+    --accent: #4f6ef7;
+    --accent-soft: rgba(79, 110, 247, 0.12);
+    --accent-ink: #ffffff;
+    --danger: #dc2626;
+    --danger-soft: rgba(220, 38, 38, 0.1);
+    --good: #059669;
+    --good-soft: rgba(5, 150, 105, 0.12);
+    --warn: #b45309;
+    --warn-soft: rgba(180, 83, 9, 0.12);
+    --sticky: #fff6d5;
+    --sticky-border: #e8cf86;
+    --sticky-ink: #4a3a10;
+    --annot-line: #c9a227;
+    --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06), 0 2px 8px rgba(16, 24, 40, 0.05);
+    --shadow-2: 0 6px 24px rgba(16, 24, 40, 0.14);
+    --radius: 14px;
+    --radius-sm: 10px;
+    --bar-h: 52px;
+    /* Card and link colours, named by the `c` field in the block. */
+    --c-blue: #4f6ef7; --c-pink: #e0559a; --c-teal: #0d9488; --c-amber: #d97706;
+    --c-violet: #7c3aed; --c-sky: #2563eb; --c-green: #059669; --c-rose: #db2777;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1013;
+      --surface: #171a20;
+      --surface-2: #1f232c;
+      --surface-3: #2a2f3a;
+      --text: #e8eaf0;
+      --muted: #8b93a5;
+      --faint: #6b7280;
+      --border: #262b36;
+      --accent: #7d90ff;
+      --accent-soft: rgba(125, 144, 255, 0.22);
+      --accent-ink: #0e1013;
+      --danger: #f87171;
+      --danger-soft: rgba(248, 113, 113, 0.16);
+      --good: #34d399;
+      --good-soft: rgba(52, 211, 153, 0.18);
+      --warn: #fbbf24;
+      --warn-soft: rgba(251, 191, 36, 0.16);
+      --sticky: #2e2916;
+      --sticky-border: #5c4d1e;
+      --sticky-ink: #f3e6bd;
+      --annot-line: #d4a72c;
+      --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.35);
+      --shadow-2: 0 6px 28px rgba(0, 0, 0, 0.6);
+      --c-blue: #7d90ff; --c-pink: #f472b6; --c-teal: #2dd4bf; --c-amber: #fbbf24;
+      --c-violet: #a78bfa; --c-sky: #60a5fa; --c-green: #34d399; --c-rose: #f9a8d4;
+    }
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif;
+  }
+
+  #app { display: flex; flex-direction: column; height: 100%; }
+
+  /* The top bar floats above the safe-area inset, as every bar does. */
+  #topbar {
+    display: flex; align-items: center; gap: 6px;
+    padding: calc(env(safe-area-inset-top, 0px) + 8px) 10px 8px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow-1); z-index: 3;
+  }
+  #title { font-weight: 650; font-size: 16px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #badge {
+    font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 999px;
+    background: var(--surface-2); color: var(--muted); white-space: nowrap;
+  }
+  #badge.ok { background: var(--good-soft); color: var(--good); }
+  #badge.warn { background: var(--warn-soft); color: var(--warn); }
+  #badge.bad { background: var(--danger-soft); color: var(--danger); }
+
+  /* Every tappable thing is at least 44px, on every bar. */
+  .icon-btn {
+    width: 44px; height: 44px; flex: none; display: grid; place-items: center;
+    background: none; border: 0; border-radius: 12px; color: var(--text); padding: 0;
+  }
+  .icon-btn:disabled { color: var(--faint); }
+  .icon-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  #banner {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 9px 12px; font-size: 13px; z-index: 3;
+    background: var(--warn-soft); color: var(--warn); border-bottom: 1px solid var(--border);
+  }
+  #banner.bad { background: var(--danger-soft); color: var(--danger); }
+  #banner .btext { flex: 1; min-width: 180px; }
+
+  /*
+   * The stage is the camera's window; the scene is what the camera looks at.
+   * touch-action:none so no gesture ever reaches the browser's own pan/zoom.
+   */
+  #stage { position: relative; flex: 1; overflow: hidden; touch-action: none; contain: layout paint; }
+  #scene {
+    position: absolute; left: 0; top: 0; width: 0; height: 0;
+    transform-origin: 0 0; will-change: transform;
+  }
+  /*
+   * Four layers, bottom to top: group frames, lines, cards, affordances.
+   *
+   * #edges is a 1x1 box relying on overflow, so a line can run anywhere on the
+   * plane without the SVG needing a viewport. It takes no pointer events of its
+   * own; only the invisible fat strokes inside it do.
+   */
+  #groups, #cards, #handles { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+  #edges { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+  #groups { pointer-events: none; }
+  #handles { pointer-events: none; }
+  #handles > * { pointer-events: auto; }
+
+  .bb-card {
+    position: absolute; left: 0; top: 0; width: 220px; min-height: 44px;
+    padding: 10px 12px; border-radius: var(--radius);
+    background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-1);
+    will-change: transform; contain: layout style; user-select: none; cursor: pointer;
+  }
+  .bb-card .ct {
+    font-weight: 640; font-size: 14px; line-height: 1.3; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  }
+  .bb-card .cx {
+    margin-top: 5px; font-size: 12px; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+  }
+  .bb-card .cc {
+    margin-top: 7px; display: flex; flex-wrap: wrap; gap: 4px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em;
+    color: var(--faint);
+  }
+  .bb-card .cc .chip {
+    max-width: 100%; padding: 1px 6px; border-radius: 999px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* What KIND of card this is - said once, in the row's own voice. */
+  .bb-card .cc .chip.state { text-transform: uppercase; }
+  /* A tag chip wears its tag's colour when the tag has a usable one, and the
+     border rather than the fill, so the name stays legible in both themes. */
+  .bb-card .cc .chip.tag {
+    text-transform: none; letter-spacing: 0.01em; font-weight: 600; font-size: 11px;
+    color: var(--muted); background: var(--surface-2);
+    border: 1px solid var(--chip, var(--border));
+  }
+  .bb-card .cc.bad { color: var(--danger); }
+
+  /*
+   * A task's checkbox - a marker AND a control, since ticking it writes the
+   * note behind the card.
+   *
+   * Which makes it an affordance, so it is 44px and counter-scales like every
+   * other one: the box the user SEES is 17px, drawn by ::before inside a
+   * target a thumb can hit at any zoom. It is anchored to the card's top-right
+   * corner, where it can overlap the width grip on a short card; the gesture
+   * layer looks for the grip first, because the grip has to be draggable and
+   * the tick has the rest of the card to itself.
+   */
+  /*
+   * The counter-scale is CAPPED here, and only here.
+   *
+   * --inv reaches 6.67 at the zoom a finger can reach, and 44px multiplied by
+   * that is 293 board units - wider than any card. The grip and the port live
+   * with that because they appear only on a card the user has already selected
+   * and aimed at; this box is on every task card all the time, so a target
+   * that grew to cover the card would turn any tap on a zoomed-out task into a
+   * question about the note behind it. Capped, it holds 44px on screen down to
+   * a zoom of 0.55 and shrinks with the card after that, which is the right
+   * way round: a card too small to read is a card too small to tick.
+   */
+  .bb-card .tk {
+    position: absolute; right: 0; top: 0; width: 44px; height: 44px;
+    transform: scale(min(var(--inv, 1), 1.8)); transform-origin: 100% 0;
+    touch-action: none;
+  }
+  .bb-card .tk::before {
+    content: ''; position: absolute; right: 10px; top: 10px; width: 17px; height: 17px;
+    border: 1.5px solid var(--faint); border-radius: 4px; background: var(--surface);
+  }
+  .bb-card.task .ct { padding-right: 26px; }
+  .bb-card.done .tk::before { background: var(--good); border-color: var(--good); }
+  .bb-card.done .tk::after {
+    content: '✓'; position: absolute; right: 10px; top: 8px; width: 17px;
+    text-align: center; font-size: 13px; font-weight: 800; color: var(--accent-ink);
+  }
+  .bb-card.done .ct { color: var(--muted); }
+  /* A board nobody may write to draws the marker and takes no taps for it. */
+  body.ro .bb-card .tk { pointer-events: none; }
+
+  /*
+   * The one place a board's colour NAME becomes a colour.
+   *
+   * render.js gives a coloured object two classes: `col`, meaning it wears one,
+   * and `c-<name>`, saying which. The name sets --c here and nothing else, and
+   * every rule that wears a colour - a card's stripe, a line's stroke, a
+   * handle's ring, a frame's border, a tab - reads --c. It used to be this
+   * eight-way block written out five times; a ninth colour is now one line.
+   */
+  .c-blue { --c: var(--c-blue); }
+  .c-pink { --c: var(--c-pink); }
+  .c-teal { --c: var(--c-teal); }
+  .c-amber { --c: var(--c-amber); }
+  .c-violet { --c: var(--c-violet); }
+  .c-sky { --c: var(--c-sky); }
+  .c-green { --c: var(--c-green); }
+  .c-rose { --c: var(--c-rose); }
+
+  /* A card's `c` colour is a stripe, not a fill: the excerpt has to stay
+     readable in both themes, and a tinted card body cannot promise that. */
+  .bb-card.col { border-left: 3px solid var(--c); }
+
+  .bb-card.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-2); }
+
+  /*
+   * Dimmed: on the board, and not part of what is being looked for.
+   *
+   * Opacity alone, on every kind of object, so that nothing moves, nothing
+   * reflows and nothing becomes untappable - a search is a way of LOOKING at a
+   * board, not a filter that removes half of it. A dimmed card is still there,
+   * still draggable and still openable; it is simply not the answer.
+   */
+  .bb-card.dim { opacity: 0.22; }
+  .bb-card.dim.sel { opacity: 0.5; }
+  .bb-edge.dim, .bb-lead.dim { opacity: 0.18; }
+  .bb-link.dim, .bb-label.dim, .bb-gtab.dim { opacity: 0.25; }
+  .bb-group.dim { opacity: 0.3; }
+  /*
+   * An annotation is ABOVE what it is about. Cards have no z-index of their
+   * own, so without this they stack in the order their elements were created -
+   * which means a card added after an annotation covers it, and render.js's
+   * hitItem, which answers "annotation" for a point inside both, disagrees with
+   * what the user can see.
+   */
+  .bb-card.k-annot { z-index: 2; }
+  /* Last, so that whatever is under the finger comes over the top of both. */
+  .bb-card.dragging { box-shadow: var(--shadow-2); opacity: 0.95; z-index: 5; }
+
+  /* A tombstone: the note is gone, the card is not. */
+  .bb-card.tomb { border-style: dashed; border-color: var(--faint); background: var(--surface-2); }
+  .bb-card.tomb .ct { text-decoration: line-through; color: var(--muted); }
+
+  /*
+   * A sticky: a text box that lives only in the board. It looks like paper
+   * rather than like a card, because it is not a reference to anything - what
+   * you see is the whole of it.
+   */
+  .bb-card.k-sticky {
+    background: var(--sticky); border-color: var(--sticky-border); color: var(--sticky-ink);
+  }
+  .bb-card.k-sticky .ct {
+    font-weight: 500; font-size: 14px; -webkit-line-clamp: 8; white-space: pre-wrap;
+  }
+
+  /*
+   * An annotation: lighter than a card and joined to what it points at by a
+   * thin dotted straight line, deliberately unlike a link's bowed curve.
+   */
+  .bb-card.k-annot {
+    background: var(--surface-2); border-color: var(--border); border-style: dashed;
+    padding: 8px 10px; min-height: 36px;
+  }
+  .bb-card.k-annot .ct {
+    font-weight: 500; font-size: 13px; font-style: italic; color: var(--muted);
+    -webkit-line-clamp: 6; white-space: pre-wrap;
+  }
+
+  /* A sticky or an annotation nobody has typed into yet shows what it is
+     waiting for, in the same greyed voice a placeholder always uses. */
+  .bb-card.blank .ct { color: var(--faint); font-style: italic; }
+
+  /* Being typed into: the box grows to fit and stops clamping its own text. */
+  .bb-card.editing { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-2); }
+  .bb-card.editing .ct {
+    -webkit-line-clamp: unset; display: block; overflow: visible;
+    outline: none; min-height: 18px; cursor: text; user-select: text; -webkit-user-select: text;
+  }
+
+  /* The card a link is being drawn from, and the one under the finger. */
+  .bb-card.linking { box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-2); }
+  .bb-card.target { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow-2); }
+
+  /*
+   * Lines.
+   *
+   * Stroke widths, dashes and arrowheads are all set in JS, in board units
+   * multiplied by 1/zoom: vector-effect:non-scaling-stroke compensates only for
+   * transforms inside an SVG, and this one is scaled by a CSS transform on an
+   * HTML ancestor that it cannot see. Only the COLOURS live here.
+   */
+  .bb-edge { stroke: var(--faint); stroke-linecap: round; }
+  .bb-edge.on { stroke: var(--accent); }
+  .bb-lead { stroke: var(--annot-line); stroke-linecap: round; opacity: 0.85; }
+  .bb-lead.on { stroke: var(--accent); opacity: 1; }
+  .bb-rubber { stroke: var(--accent); stroke-linecap: round; opacity: 0.9; }
+  /* The stroke the finger actually hits. Transparent, far fatter than the line
+     it shadows, and the only thing in #edges that takes a pointer at all. */
+  .bb-hit { stroke: transparent; fill: none; pointer-events: stroke; }
+
+  /* After .on, deliberately: a colour the user chose outranks the selection
+     highlight, exactly as it did when this was eight rules. */
+  .bb-edge.col, .bb-lead.col { stroke: var(--c); }
+
+  /*
+   * A link's handle. The curve is 1.7px on screen and no thumb can find it, so
+   * the handle is the link as far as the finger is concerned - 44px, counter-
+   * scaled, sitting on the point the curve really passes through.
+   */
+  .bb-link {
+    position: absolute; left: 0; top: 0; width: 44px; height: 44px; display: grid; place-items: center;
+    transform-origin: 0 0; border: 0; padding: 0; background: none;
+  }
+  .bb-link::before {
+    content: ''; position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px;
+    border-radius: 999px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-1);
+  }
+  .bb-link svg {
+    position: relative; width: 15px; height: 15px; fill: none; stroke: var(--muted);
+    stroke-width: 2; stroke-linecap: round;
+  }
+  .bb-link.on::before { background: var(--accent); border-color: var(--accent); }
+  .bb-link.on svg { stroke: var(--accent-ink); }
+  /* A link a real note relationship stands behind wears a solid dot. */
+  .bb-link.real::after {
+    content: ''; position: absolute; right: 6px; top: 6px; width: 8px; height: 8px;
+    border-radius: 999px; background: var(--good); box-shadow: 0 0 0 2px var(--surface);
+  }
+  .bb-link.col::before { border-color: var(--c); }
+
+  /* A link's label, sitting just above its handle and counter-scaled with it:
+     it is a legend on an affordance, not diagram content, and a label that
+     shrank out of legibility would be worse than no label. */
+  /*
+   * A link's label.
+   *
+   * `width: max-content` is load-bearing, not tidying. #handles is a 1x1 box
+   * with no width of its own, so an absolutely positioned child's available
+   * width is ZERO and its used width falls back to shrink-to-fit - which is
+   * min-content, and `overflow-wrap: anywhere` makes min-content ONE
+   * CHARACTER. Without this every label on every board drew as a vertical
+   * column of letters. max-content asks for the unbroken width instead, and
+   * max-width brings it back to a phone-sized line.
+   */
+  .bb-label {
+    position: absolute; left: 0; top: 0; transform-origin: 0 0;
+    width: max-content; max-width: 190px;
+    padding: 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    background: var(--surface); color: var(--muted); border: 1px solid var(--border);
+    box-shadow: var(--shadow-1); white-space: pre-wrap; overflow-wrap: anywhere; text-align: center;
+  }
+  .bb-label.on { color: var(--accent); border-color: var(--accent); }
+  .bb-label.editing {
+    outline: none; color: var(--text); border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft); min-width: 40px;
+    cursor: text; user-select: text; -webkit-user-select: text;
+  }
+
+  /*
+   * A link the AI has only SUGGESTED.
+   *
+   * Dashed and accented, whatever a real link's own style axes happen to be
+   * set to: the single thing this line has to say is that it is not there yet,
+   * and it has to say it against a board that may already be full of dashed,
+   * coloured, labelled lines the user drew. So it wears the accent - the one
+   * colour a board object cannot be given - and its handle is an ✕ rather than
+   * the link glyph, because the one thing to do with a proposal you do not
+   * want is drop it.
+   */
+  .bb-edge.prop { stroke: var(--accent); }
+  .bb-link.prop::before { background: var(--accent-soft); border-color: var(--accent); border-style: dashed; }
+  .bb-link.prop svg { stroke: var(--accent); }
+  .bb-label.prop { color: var(--accent); border-color: var(--accent); border-style: dashed; }
+
+  /*
+   * A group frame. It takes no pointer events at all: a frame is mostly empty
+   * canvas, and one that swallowed taps would make the space inside it the one
+   * place a new sticky could not be long-pressed into being. Its TAB is the
+   * handle - a real 44px target that drags the group and opens its bar.
+   */
+  /*
+   * The frame's border counter-scales like everything else that is an
+   * affordance rather than diagram content. A frame is drawn INSIDE the scaled
+   * scene, so a flat 1.5px became 0.22 device pixels at the zoom floor and the
+   * group all but vanished at exactly the zoom where a frame is the only thing
+   * telling you which cards belong together. The dash pattern of a CSS border
+   * is derived from its width, so it scales with it and needs no rule of its
+   * own.
+   */
+  .bb-group {
+    position: absolute; left: 0; top: 0; border-radius: 20px;
+    border: calc(1.5px * var(--inv, 1)) dashed var(--faint);
+    background: rgba(127, 137, 155, 0.06);
+  }
+  .bb-group.sel { border-color: var(--accent); border-style: solid; background: var(--accent-soft); }
+  .bb-group.col { border-color: var(--c); }
+
+  /*
+   * 44px, like every other affordance, and for a harder reason than most: the
+   * frame itself takes no pointer events, so the tab is a group's ONLY target.
+   * At 30px it was the one thing on the board a thumb could miss.
+   */
+  .bb-gtab {
+    position: absolute; left: 0; top: 0; transform-origin: 0 0;
+    min-height: 44px; min-width: 44px; max-width: 240px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 14px; border-radius: 999px; font-size: 12.5px; font-weight: 650;
+    background: var(--surface); color: var(--muted);
+    border: 1px solid var(--border); box-shadow: var(--shadow-1);
+  }
+  .bb-gtab .gt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bb-gtab.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .bb-gtab.col { border-color: var(--c); color: var(--c); }
+
+  /*
+   * Affordances counter-scale: --inv is 1/zoom, so a grip is the same size on
+   * screen however far the board is zoomed out. They are affordances, not
+   * diagram content.
+   */
+  .grip {
+    position: absolute; right: -4px; top: 50%; width: 44px; height: 44px; display: none;
+    transform: translateY(-50%) scale(var(--inv, 1)); transform-origin: 100% 50%;
+    touch-action: none;
+  }
+  .grip::after {
+    content: ''; position: absolute; right: 8px; top: 50%; width: 5px; height: 26px;
+    margin-top: -13px; border-radius: 3px; background: var(--accent); box-shadow: var(--shadow-1);
+  }
+  .bb-card.sel:not(.multi) .grip { display: block; }
+  body.ro .grip { display: none !important; }
+
+  /*
+   * The link port: where a link is dragged from. Bottom-centre, so it never
+   * shares a pixel with the right-edge width grip - two 44px targets that
+   * overlap are one target that does the wrong thing half the time.
+   */
+  .port {
+    position: absolute; left: 50%; bottom: -22px; width: 44px; height: 44px; display: none;
+    transform: translateX(-50%) scale(var(--inv, 1)); transform-origin: 50% 0;
+    touch-action: none;
+  }
+  .port::after {
+    content: ''; position: absolute; left: 50%; top: 8px; width: 20px; height: 20px; margin-left: -10px;
+    border-radius: 999px; background: var(--surface); border: 2px solid var(--accent);
+    box-shadow: var(--shadow-1);
+  }
+  .bb-card.sel:not(.multi) .port { display: block; }
+  body.ro .port { display: none !important; }
+
+  /*
+   * The group drop handle. A card dragged by its body onto another note is a
+   * merge; the same drop made from this top-centre handle creates a visual
+   * group instead. It is a separate 44px touch target, not a keyboard
+   * modifier a phone cannot provide, and sits opposite the link port so the
+   * two gestures never share a pixel.
+   */
+  .group-port {
+    position: absolute; left: 50%; top: -22px; width: 44px; height: 44px; display: none;
+    transform: translateX(-50%) scale(var(--inv, 1)); transform-origin: 50% 100%;
+    touch-action: none;
+  }
+  .group-port::before, .group-port::after {
+    content: ''; position: absolute; top: 12px; width: 16px; height: 16px;
+    border-radius: 5px; background: var(--surface); border: 2px solid var(--accent);
+    box-shadow: var(--shadow-1);
+  }
+  .group-port::before { left: 8px; }
+  .group-port::after { left: 20px; }
+  .bb-card.sel:not(.multi) .group-port { display: block; }
+  body.ro .group-port { display: none !important; }
+  .bb-card.editing .grip, .bb-card.editing .port, .bb-card.editing .group-port { display: none !important; }
+
+  .bb-card.multi.sel::before {
+    content: '✓'; position: absolute; left: -8px; top: -8px; width: 24px; height: 24px;
+    border-radius: 999px; background: var(--accent); color: var(--accent-ink);
+    font-size: 14px; line-height: 24px; text-align: center; font-weight: 700;
+    transform: scale(var(--inv, 1)); transform-origin: 0 0;
+  }
+
+  #hint {
+    position: absolute; left: 0; right: 0; top: 40%; text-align: center; padding: 0 32px;
+    color: var(--faint); font-size: 14px; pointer-events: none;
+  }
+
+  /*
+   * The bin. It fades rather than sliding: a drop target that is mid-animation
+   * is a drop target that misses, and its rectangle has to be reliable the
+   * instant a drag begins.
+   */
+  #bin {
+    position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+    width: 56px; height: 56px; border-radius: 999px; display: grid; place-items: center;
+    background: var(--surface); color: var(--muted);
+    border: 2px dashed var(--border); box-shadow: var(--shadow-2); z-index: 6;
+  }
+  #bin.hot { background: var(--danger); border-style: solid; border-color: var(--danger); color: #fff; }
+  #bin svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
+
+  #bottombar {
+    display: flex; align-items: center; gap: 8px; min-height: var(--bar-h);
+    padding: 8px 12px calc(env(safe-area-inset-bottom, 0px) + 8px);
+    background: var(--surface); border-top: 1px solid var(--border);
+    font-size: 13px; color: var(--muted); overflow-x: auto; z-index: 2;
+  }
+  #bottombar.sel, #bottombar.one { color: var(--text); }
+  /*
+   * `flex: none`, so it cannot be squeezed to nothing.
+   *
+   * Everything else on the bar refuses to shrink, so all of a crowded bar's
+   * shrinking landed here - and with overflow:hidden and no minimum, the label
+   * shrank to zero width. On the suggestion bar that meant the COUNT, which is
+   * the whole of what the bar is telling you, silently vanished. It still caps
+   * itself at 45% and still ellipsises; it simply is not the bar's shock
+   * absorber any more.
+   */
+  #bottombar .blabel {
+    flex: none; font-weight: 640; font-size: 14px; color: var(--text);
+    max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #bottombar .blabel.tomb { text-decoration: line-through; color: var(--muted); }
+  /*
+   * The bar's own sentence - what the board holds, what the list is doing -
+   * scrolls with the rest of the bar rather than wrapping inside it.
+   *
+   * It used to wrap, and the bar grew a line for every wrap. That was survivable
+   * while the board bar held one button; with three on it the summary was down
+   * to sixty pixels of width, wrapped to eight lines, and the bar took a
+   * quarter of the screen away from the board - which is not a smaller bar
+   * with more in it, it is a canvas with less canvas. The bar already scrolls
+   * sideways (overflow-x on the row above), which is where a sentence too long
+   * for a phone belongs.
+   */
+  #bottombar .bnote { flex: 1 0 auto; white-space: nowrap; }
+  .bb {
+    flex: none; min-height: 44px; padding: 10px 14px; border-radius: var(--radius-sm);
+    background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+    font: inherit; font-weight: 600; font-size: 13.5px;
+  }
+  .bb.danger { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
+  .bb.small { padding: 8px 12px; }
+  .bb.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  /* An action that cannot be taken right now is still SHOWN, so the bar does
+     not change shape under the thumb; pressing it says why. */
+  .bb.off { opacity: 0.55; }
+
+  /* ------------------------------------------------------------ searching */
+
+  /*
+   * A row of its own, under the top bar, rather than a field inside it: the
+   * top bar already carries four 44px targets and a badge, and a phone-width
+   * field wedged between them would be four characters wide.
+   */
+  #searchbar {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    background: var(--surface); border-bottom: 1px solid var(--border); z-index: 3;
+  }
+  #q {
+    flex: 1; min-width: 0; min-height: 44px; padding: 8px 12px;
+    font: inherit; font-size: 15px; color: var(--text);
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  }
+  #q::placeholder { color: var(--faint); }
+  #qcount { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+
+  /* ------------------------------------------------------------- the home */
+
+  /*
+   * The board home. It replaces the canvas rather than floating over it: a
+   * list and a board are two different things to be doing, and a list drawn on
+   * top of a board that is still taking gestures underneath is how a tap ends
+   * up somewhere nobody meant.
+   */
+  body.home #stage, body.home #bin { display: none !important; }
+  #home { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 12px 24px; }
+  .home-head {
+    padding: 16px 4px 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--faint);
+  }
+  .home-row {
+    display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px;
+    padding: 10px 14px; margin-bottom: 8px; text-align: left;
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-1);
+    font: inherit;
+  }
+  .home-row .hr-text { flex: 1; min-width: 0; }
+  .home-row .hr-title {
+    display: block; font-weight: 640; font-size: 15px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .home-row .hr-sub { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .home-row svg { width: 22px; height: 22px; flex: none; fill: none; stroke: var(--muted); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .home-row.cta { background: var(--accent-soft); border-color: var(--accent); }
+  .home-row.cta .hr-title { color: var(--accent); }
+  .home-row.cta svg { stroke: var(--accent); }
+  .home-empty { padding: 10px 4px 4px; color: var(--muted); font-size: 13.5px; }
+  .home-empty.bad { color: var(--danger); }
+
+  /* --------------------------------------------------------- embed mode */
+
+  /*
+   * Read-mostly, and compact. The bars are GONE rather than emptied, because
+   * an embed is a picture of a board inside its own note: pan it, zoom it, tap
+   * a card to go to that note. Everything that could write is refused in the
+   * app itself - hiding a button is not a refusal - and this only takes the
+   * chrome away.
+   */
+  body.embed #topbar, body.embed #bottombar, body.embed #banner,
+  body.embed #searchbar, body.embed #bin, body.embed #home { display: none !important; }
+  body.embed #hint { top: 44%; font-size: 13px; }
+
+  /* A colour swatch, in the second-level bar the Colour button opens. */
+  .bb.sw { width: 44px; min-width: 44px; padding: 0; position: relative; }
+  .bb.sw::after {
+    content: ''; position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px;
+    border-radius: 999px; background: var(--sw, var(--surface-3)); border: 1px solid var(--border);
+  }
+  .bb.sw.on::after { box-shadow: 0 0 0 3px var(--accent-soft); border-color: var(--accent); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <button class="icon-btn" id="btnHome" title="Boards" hidden>
+      <svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7"/><path d="M6 10v9a1 1 0 001 1h10a1 1 0 001-1v-9"/></svg>
+    </button>
+    <div id="title">Big Bang</div>
+    <button class="icon-btn" id="btnSearch" title="Search this board">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.4-4.4"/></svg>
+    </button>
+    <button class="icon-btn" id="btnUndo" title="Undo" disabled>
+      <svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></svg>
+    </button>
+    <button class="icon-btn" id="btnRedo" title="Redo" disabled>
+      <svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 000 10h3"/></svg>
+    </button>
+    <button class="icon-btn" id="btnFit" title="Fit the board">
+      <svg viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4"/></svg>
+    </button>
+    <div id="badge">…</div>
+  </header>
+
+  <div id="searchbar" hidden>
+    <input id="q" type="search" autocomplete="off" autocorrect="off" spellcheck="false"
+           enterkeyhint="search" placeholder="Search this board">
+    <span id="qcount"></span>
+    <button class="bb small" id="qdone">Done</button>
+  </div>
+
+  <div id="banner" hidden></div>
+
+  <section id="home" hidden></section>
+
+  <main id="stage">
+    <div id="scene">
+      <div id="groups"></div>
+      <svg id="edges"></svg>
+      <div id="cards"></div>
+      <div id="handles"></div>
+    </div>
+    <div id="hint" hidden>This board is empty.</div>
+    <div id="bin" hidden>
+      <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>
+    </div>
+  </main>
+
+  <footer id="bottombar"></footer>
+</div>
+
+<script src="src/board.js"></script>
+<script src="src/model.js"></script>
+<script src="src/host.js"></script>
+<script src="src/notes.js"></script>
+<script src="src/render.js"></script>
+<script src="src/gestures.js"></script>
+<script src="src/ai.js"></script>
+<script src="src/export.js"></script>
+<script src="src/app.js"></script>
+<script>BB.app.boot();</script>
+</body>
+</html>
