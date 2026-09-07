@@ -99,23 +99,55 @@ class UserAppWebView extends StatefulWidget {
 class _UserAppWebViewState extends State<UserAppWebView> {
   late UserAppRuntimeBridge _bridge;
 
+  /// False until the bridge behind the WebView about to be created has loaded
+  /// the selected notes' sources, so its bootstrap script can carry them (see
+  /// [UserAppRuntimeBridge.loadSelectedNoteSources]); reset when a new app or
+  /// revision replaces the WebView.
+  bool _bridgeReady = false;
+
   @override
   void initState() {
     super.initState();
-    _bridge = _buildBridge();
-    widget.onBridgeReady?.call(_bridge);
+    _initBridge();
   }
 
   @override
   void didUpdateWidget(covariant UserAppWebView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.app.id != widget.app.id ||
-        oldWidget.revision.revisionNumber != widget.revision.revisionNumber ||
+    final webViewReplaced =
+        oldWidget.app.id != widget.app.id ||
+        oldWidget.revision.revisionNumber != widget.revision.revisionNumber;
+    if (webViewReplaced ||
         !identical(oldWidget.selectedNotes, widget.selectedNotes) ||
         !identical(oldWidget.params, widget.params)) {
-      _bridge = _buildBridge();
-      widget.onBridgeReady?.call(_bridge);
+      // A new app or revision gets a new WebView (its key changes), whose
+      // bootstrap must wait for the new bridge's sources like the first did.
+      if (webViewReplaced && widget.selectedNotes.isNotEmpty) {
+        _bridgeReady = false;
+      }
+      _initBridge();
     }
+  }
+
+  /// Builds the bridge, hands it to [UserAppWebView.onBridgeReady] right away
+  /// and marks it ready once the selected notes' sources are loaded — at once
+  /// when there are no notes, so the common case costs no extra frame. Once
+  /// ready, a later bridge for the same WebView never hides it again; only
+  /// [didUpdateWidget] resets the flag, when the WebView is replaced anyway.
+  /// The load never throws, but `whenComplete` makes sure a failure could not
+  /// leave the plugin blank either.
+  void _initBridge() {
+    final bridge = _buildBridge();
+    _bridge = bridge;
+    widget.onBridgeReady?.call(bridge);
+    if (widget.selectedNotes.isEmpty) {
+      _bridgeReady = true;
+      return;
+    }
+    bridge.loadSelectedNoteSources().whenComplete(() {
+      if (!mounted || !identical(_bridge, bridge)) return;
+      if (!_bridgeReady) setState(() => _bridgeReady = true);
+    });
   }
 
   UserAppRuntimeBridge _buildBridge() {
@@ -321,6 +353,7 @@ class _UserAppWebViewState extends State<UserAppWebView> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_bridgeReady) return const SizedBox.shrink();
     final bridge = _bridge;
     final htmlData = widget.revision.appCode;
 

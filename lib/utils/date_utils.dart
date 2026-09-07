@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../l10n/app_localizations.dart';
 
 class AppDateUtils {
   /// Formats a date string (YYYY-MM-DD or ISO string) to display format
@@ -82,5 +83,22 @@ class AppDateUtils {
     } else {
       return DateFormat('MM/dd/yyyy HH:mm').format(date);
     }
+  }
+
+  /// Short relative time for timestamps: `Just now`, `5m ago`, `3h ago`,
+  /// `14d ago` (localized). Anything under a minute, including a [time] in
+  /// the future, is "just now". [now] is injectable for tests.
+  static String formatRelative(
+    DateTime time,
+    AppLocalizations l10n, {
+    DateTime? now,
+  }) {
+    final difference = (now ?? DateTime.now()).difference(time);
+    if (difference.inDays >= 1) return l10n.daysAgoShort(difference.inDays);
+    if (difference.inHours >= 1) return l10n.hoursAgoShort(difference.inHours);
+    if (difference.inMinutes >= 1) {
+      return l10n.minutesAgoShort(difference.inMinutes);
+    }
+    return l10n.justNow;
   }
 }

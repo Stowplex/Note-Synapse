@@ -7106,6 +7106,24 @@ abstract class AppLocalizations {
   /// **'Just now'**
   String get justNow;
 
+  /// No description provided for @minutesAgoShort.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}m ago'**
+  String minutesAgoShort(int count);
+
+  /// No description provided for @hoursAgoShort.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}h ago'**
+  String hoursAgoShort(int count);
+
+  /// No description provided for @daysAgoShort.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}d ago'**
+  String daysAgoShort(int count);
+
   /// No description provided for @addNoteDialogTitle.
   ///
   /// In en, this message translates to:
@@ -9889,6 +9907,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pinned notes are left as they are.'**
   String get mergeArchiveOthersPinned;
+
+  /// No description provided for @source.
+  ///
+  /// In en, this message translates to:
+  /// **'Source'**
+  String get source;
+
+  /// No description provided for @clippedFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'Clipped from'**
+  String get clippedFrom;
+
+  /// No description provided for @clippedRelative.
+  ///
+  /// In en, this message translates to:
+  /// **'clipped {when}'**
+  String clippedRelative(String when);
+
+  /// No description provided for @openOriginal.
+  ///
+  /// In en, this message translates to:
+  /// **'Open original'**
+  String get openOriginal;
+
+  /// No description provided for @copyLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy link'**
+  String get copyLink;
+
+  /// No description provided for @linkCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Link copied'**
+  String get linkCopied;
+
+  /// No description provided for @editSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit source'**
+  String get editSource;
+
+  /// No description provided for @removeSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove source'**
+  String get removeSource;
+
+  /// No description provided for @removeSourceConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove this source from the note? The note\'s content stays as it is.'**
+  String get removeSourceConfirm;
+
+  /// No description provided for @addSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Add source'**
+  String get addSource;
+
+  /// No description provided for @addSourceMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Add source…'**
+  String get addSourceMenu;
+
+  /// No description provided for @sourceSiteName.
+  ///
+  /// In en, this message translates to:
+  /// **'Site name'**
+  String get sourceSiteName;
+
+  /// No description provided for @invalidUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid http(s) link'**
+  String get invalidUrl;
+
+  /// No description provided for @duplicateSourceUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'This link is already a source of this note'**
+  String get duplicateSourceUrl;
+
+  /// No description provided for @moreSources.
+  ///
+  /// In en, this message translates to:
+  /// **'+{count} more'**
+  String moreSources(int count);
+
+  /// No description provided for @showLess.
+  ///
+  /// In en, this message translates to:
+  /// **'Show less'**
+  String get showLess;
 }
 
 class _AppLocalizationsDelegate

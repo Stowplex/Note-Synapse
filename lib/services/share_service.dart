@@ -22,6 +22,7 @@ import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
 import 'package:intl/intl.dart';
 import '../models/note.dart';
+import '../models/note_source.dart';
 import '../providers/app_provider.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/file_utils.dart';
@@ -135,11 +136,16 @@ class ShareService {
   }
 
   /// Generates markdown text from a list of notes with optional sub-notes and linked notes
+  ///
+  /// [sourceNoteIdFor] maps a note id to the id whose sources are written on
+  /// its `**Source:**` lines; identity by default. The plugin bridge passes a
+  /// resolver so a transient block note reports its parent's sources.
   static Future<String> generateMarkdownText({
     required List<Note> notes,
     required bool includeSubNotesAndLinkedNotes,
     required AppProvider appProvider,
     required AppLocalizations l10n,
+    String Function(String noteId)? sourceNoteIdFor,
   }) async {
     final buffer = StringBuffer();
     final Set<String> visitedNoteIds = <String>{};
@@ -171,6 +177,7 @@ class ShareService {
         appProvider: appProvider,
         l10n: l10n,
         level: 0,
+        sourceNoteIdFor: sourceNoteIdFor,
       );
 
       // If including linked notes, add them to the queue for processing
@@ -506,9 +513,15 @@ class ShareService {
         return null;
       }
 
+      final sourcesByNoteId = await _loadNoteSources(
+        notesToExport,
+        appProvider,
+      );
+
       final pdfBytes = await _buildPdfBytes(
         notes: notesToExport,
         includeSubNotes: includeSubNotesAndLinkedNotes,
+        sourcesByNoteId: sourcesByNoteId,
         l10n: l10n,
         pageSize: pageSize,
         context: context,
@@ -644,9 +657,21 @@ class ShareService {
     return ordered;
   }
 
+  /// The sources of each of [notes], keyed by note id, for a renderer that
+  /// cannot await per note (the PDF builder). Cached [Note] objects never
+  /// carry metadata, so this lookup is the only way to get them.
+  static Future<Map<String, List<NoteSource>>> _loadNoteSources(
+    List<Note> notes,
+    AppProvider appProvider,
+  ) async => {
+    for (final note in notes)
+      note.id: await appProvider.getNoteSources(note.id),
+  };
+
   static Future<List<int>> _buildPdfBytes({
     required List<Note> notes,
     required bool includeSubNotes,
+    required Map<String, List<NoteSource>> sourcesByNoteId,
     required AppLocalizations l10n,
     required Size pageSize,
     required BuildContext context,
@@ -668,6 +693,7 @@ class ShareService {
     final exporter = _PdfNoteRenderer(
       notes: notes,
       includeSubNotes: includeSubNotes,
+      sourcesByNoteId: sourcesByNoteId,
       l10n: l10n,
       pageFormat: pageFormat,
       fonts: fonts,
@@ -1122,6 +1148,7 @@ class ShareService {
     required AppLocalizations l10n,
     required int level,
     bool forExport = false,
+    String Function(String noteId)? sourceNoteIdFor,
   }) async {
     // Note: We don't need to check for duplicates here since the main BFS loop
     // already handles the visited check before calling this method
@@ -1130,6 +1157,14 @@ class ShareService {
     final headerPrefix = '#${'#' * level}';
     buffer.writeln('$headerPrefix ${note.title}');
     buffer.writeln();
+
+    // Where the note was clipped from. Cached Note objects never carry
+    // metadata, so this lookup is the only way to get it. A transient
+    // block-scoped note has no row of its own; a caller that knows its parent
+    // (the plugin bridge) resolves the id through sourceNoteIdFor.
+    final sources = await appProvider.getNoteSources(
+      sourceNoteIdFor?.call(note.id) ?? note.id,
+    );
 
     // Add note metadata
     if (forExport) {
@@ -1175,6 +1210,9 @@ class ShareService {
       if (note.tags.isNotEmpty) {
         buffer.writeln('**Tags:** ${note.tags.join(', ')}');
       }
+      for (final source in sources) {
+        buffer.writeln('**Source:** ${_sourceMarkdownLink(source)}');
+      }
       buffer.writeln('**Created:** ${note.createdAt.toIso8601String()}');
       if (note.updatedAt != note.createdAt) {
         buffer.writeln('**Updated:** ${note.updatedAt.toIso8601String()}');
@@ -1191,6 +1229,9 @@ class ShareService {
       }
       if (note.tags.isNotEmpty) {
         buffer.writeln('**${l10n.tags}:** ${note.tags.join(', ')}');
+      }
+      for (final source in sources) {
+        buffer.writeln('**${l10n.source}:** ${_sourceMarkdownLink(source)}');
       }
       buffer.writeln('**${l10n.created}:** ${_formatDateTime(note.createdAt)}');
       if (note.updatedAt != note.createdAt) {
@@ -1366,6 +1407,27 @@ class ShareService {
   static String _formatDateTime(DateTime dateTime) {
     return DateFormat('MM/dd/yyyy').format(dateTime);
   }
+
+  static final RegExp _whitespaceRun = RegExp(r'\s+');
+
+  /// `[title](url)` for a `**Source:**` line. The link text is
+  /// [NoteSource.displayTitle] on one line with `\`, `]` and `)` escaped, so
+  /// `ImportService` can tell where the text ends; the url is written as is
+  /// (the importer takes everything up to the closing parenthesis).
+  static String _sourceMarkdownLink(NoteSource source) {
+    final text = source.displayTitle
+        .replaceAll(_whitespaceRun, ' ')
+        .replaceAll('\\', r'\\')
+        .replaceAll(']', r'\]')
+        .replaceAll(')', r'\)');
+    return '[$text](${source.url})';
+  }
+
+  /// `title — url` for a PDF metadata row; just the url when the source has
+  /// no title (the host [NoteSource.displayTitle] falls back to would only
+  /// repeat the url). Used by the PDF renderer and the projection tests.
+  static String sourceLabel(NoteSource source) =>
+      source.title == null ? source.url : '${source.title} — ${source.url}';
 
   /// Process shared content from platform channels
   static Future<Map<String, dynamic>> processSharedContent(
@@ -1803,6 +1865,7 @@ class _PdfNoteRenderer {
   _PdfNoteRenderer({
     required this.notes,
     required this.includeSubNotes,
+    required this.sourcesByNoteId,
     required this.l10n,
     required this.pageFormat,
     required this.fonts,
@@ -1817,6 +1880,10 @@ class _PdfNoteRenderer {
 
   final List<Note> notes;
   final bool includeSubNotes;
+
+  /// Where each note was clipped from, keyed by note id; a note without an
+  /// entry has no sources.
+  final Map<String, List<NoteSource>> sourcesByNoteId;
   final AppLocalizations l10n;
   final PdfPageFormat pageFormat;
   final _PdfFonts fonts;
@@ -1908,6 +1975,12 @@ class _PdfNoteRenderer {
 
     if (note.tags.isNotEmpty) {
       metadata.add(_metadataLine(l10n.tags, note.tags.join(', ')));
+    }
+
+    for (final source in sourcesByNoteId[note.id] ?? const <NoteSource>[]) {
+      metadata.add(
+        _metadataLine(l10n.source, ShareService.sourceLabel(source)),
+      );
     }
 
     metadata

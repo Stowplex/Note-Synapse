@@ -41,6 +41,7 @@ import '../services/conversation_prompt_builder.dart';
 import '../widgets/chip_aware_ai_message_content.dart';
 import '../utils/file_utils.dart';
 import '../utils/conversation_title_directive.dart';
+import '../utils/date_utils.dart';
 import '../l10n/app_localizations.dart';
 import '../services/conversation_ai_engine.dart';
 import 'note_selection_dialog.dart';
@@ -3916,21 +3917,8 @@ $historyBuffer
     );
   }
 
-  String _formatTimestamp(DateTime timestamp) {
-    final l10n = AppLocalizations.of(context)!;
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return l10n.justNow;
-    }
-  }
+  String _formatTimestamp(DateTime timestamp) =>
+      AppDateUtils.formatRelative(timestamp, AppLocalizations.of(context)!);
 
   void _showMissingNotesAlert(List<String> missingNoteIds) {
     showDialog(

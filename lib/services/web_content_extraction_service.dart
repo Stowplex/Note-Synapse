@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -51,6 +52,106 @@ class WebContentExtractionService {
   /// flows) can inject it into a WebView without triggering a full extraction.
   static Future<String> getReadabilityScript() async {
     return _loadReadabilityScript();
+  }
+
+  // ── Page source info ────────────────────────────────────────────────────
+
+  /// Reads where the loaded page says it lives, for the `sources` entry a
+  /// clip records (`NoteSource.fromPageInfo` consumes the result). Returns
+  /// JSON text of `{href, canonical, ogUrl, siteName, title, byline,
+  /// published}` with `''` for anything the page does not declare, and
+  /// never throws: every read is guarded, so a hostile or half-loaded page
+  /// degrades to empty fields instead of failing the extraction. `title`,
+  /// `siteName` and `byline` are capped at 1000 characters (they are
+  /// display strings that end up in `notes.metadata`); the URLs and the
+  /// date are returned whole. The `<head>` survives [applyReadabilityView]
+  /// (only `body.innerHTML` is replaced), so this works after the
+  /// Readability toggle too.
+  ///
+  /// Decode the `evaluateJavascript` result with [parsePageSourceInfo].
+  static const String pageSourceInfoScript = r'''
+    (function() {
+      function attr(selector, name) {
+        try {
+          var el = document.querySelector(selector);
+          var value = el ? el.getAttribute(name) : null;
+          return typeof value === 'string' ? value : '';
+        } catch (e) {
+          return '';
+        }
+      }
+      var info = {
+        href: '',
+        canonical: '',
+        ogUrl: '',
+        siteName: '',
+        title: '',
+        byline: '',
+        published: ''
+      };
+      try {
+        info.href = String(window.location.href || '');
+      } catch (e) {}
+      try {
+        info.title = String(document.title || '');
+      } catch (e) {}
+      // Token match, so rel="canonical alternate" is found as well.
+      info.canonical = attr('link[rel~="canonical"]', 'href');
+      info.ogUrl = attr(
+        'meta[property="og:url"], meta[name="og:url"]', 'content');
+      info.siteName = attr(
+        'meta[property="og:site_name"], meta[name="og:site_name"]', 'content');
+      // Open Graph's article:author is a profile URL; it only stands in for
+      // a missing author name when it is not one.
+      var articleAuthor = attr('meta[property="article:author"]', 'content');
+      if (/^https?:/i.test(articleAuthor)) {
+        articleAuthor = '';
+      }
+      info.byline = attr('meta[name="author"]', 'content') || articleAuthor;
+      info.published =
+        attr('meta[property="article:published_time"]', 'content') ||
+        attr('meta[name="date"]', 'content');
+      // Display strings only: a runaway <title> must not land whole in
+      // notes.metadata. The URLs and the date are returned untouched.
+      try {
+        info.title = info.title.slice(0, 1000);
+        info.siteName = info.siteName.slice(0, 1000);
+        info.byline = info.byline.slice(0, 1000);
+      } catch (e) {}
+      try {
+        return JSON.stringify(info);
+      } catch (e) {
+        return '';
+      }
+    })();
+  ''';
+
+  /// Decodes an `evaluateJavascript` result of [pageSourceInfoScript] into
+  /// the `{href, canonical, ogUrl, siteName, title, byline, published}` map
+  /// `NoteSource.fromPageInfo` reads.
+  ///
+  /// The script returns JSON text: Android's controller hands it back as a
+  /// [String] (it JSON-decodes the native result once, which unwraps the
+  /// string literal) and iOS returns it as is. A [Map] is accepted too, for
+  /// an implementation that decodes JS objects itself, and a payload wrapped
+  /// in a second JSON string layer is unwrapped. Anything else — `null`, a
+  /// number, a list, unparseable text — yields an empty map. Never throws.
+  /// Keys are stringified; values pass through untouched (the consumer
+  /// ignores non-string ones). The result is a fresh, mutable map.
+  static Map<String, dynamic> parsePageSourceInfo(dynamic result) {
+    Object? value = result;
+    // JSON text, possibly wrapped in one more JSON string layer.
+    for (var i = 0; i < 2; i++) {
+      final text = value;
+      if (text is! String) break;
+      try {
+        value = jsonDecode(text);
+      } catch (_) {
+        return {};
+      }
+    }
+    if (value is! Map) return {};
+    return value.map((key, v) => MapEntry(key.toString(), v));
   }
 
   static Future<WebContentExtractionResult> extractFromController(

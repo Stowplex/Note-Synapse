@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
@@ -17,6 +18,7 @@ import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/attachment.dart';
 import '../models/relationship.dart';
+import '../models/note_source.dart';
 import '../services/approval_service.dart';
 import '../services/audio_recording_service.dart';
 import '../services/ai_service.dart';
@@ -26,6 +28,8 @@ import '../widgets/share_dialog.dart';
 import '../widgets/tag_selection_dialog.dart';
 import '../widgets/synapse_note_editor.dart';
 import '../widgets/app_embed_picker_sheet.dart';
+import '../widgets/note_source_card.dart';
+import '../widgets/note_source_editor_sheet.dart';
 import '../widgets/block_editor_dialog.dart';
 import '../widgets/block_ai_edit_dialog.dart';
 import '../widgets/block_diff_preview_dialog.dart';
@@ -35,6 +39,7 @@ import '../widgets/block_selection_menu.dart';
 import '../widgets/block_selection_count_popup.dart';
 
 import '../utils/date_utils.dart';
+import '../utils/note_metadata.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
 import 'ai_action_screen.dart';
@@ -51,6 +56,7 @@ import '../services/content_ingestion_service.dart';
 import '../services/block_note_scope_service.dart';
 import '../services/service_locator.dart';
 import '../services/skill_service.dart';
+import '../services/note_source_service.dart';
 import '../models/conversation.dart';
 import '../widgets/approval_dialog.dart';
 import '../widgets/pdf_ai_context_dialog.dart';
@@ -118,6 +124,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   // Attachment metadata state
   Map<String, Attachment> _attachmentsMap = {};
+
+  // Where the note was clipped from (notes.metadata sources), shown by
+  // NoteSourceCard. _sourcesVersion is the (id, updatedAt) the list was
+  // loaded for; see _syncSources.
+  List<NoteSource> _sources = [];
+  (String, DateTime)? _sourcesVersion;
   Future<ApprovalResult> Function(ApprovalRequest)? _approvalCallback;
 
   // Multi-block selection state
@@ -157,6 +169,123 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         _attachmentsMap = tempMap;
       });
     }
+  }
+
+  // ── Sources ("clipped from" card) ─────────────────────────────────────────
+
+  /// Reloads the note's sources for [NoteSourceCard]. Nothing to load until
+  /// the note exists in the database. A result for a version that
+  /// [_syncSources] has since moved past is dropped: that version's own load
+  /// is the current one.
+  Future<void> _loadSources() async {
+    if (widget.isNewNote && !_hasBeenSaved) return;
+    final version = _sourcesVersion;
+    final sources = await context.read<AppProvider>().getNoteSources(
+      widget.note.id,
+    );
+    if (!mounted || _sourcesVersion != version) return;
+    setState(() => _sources = sources);
+  }
+
+  /// [_loadSources] once per (id, updatedAt) of the displayed note, from
+  /// build with the provider's copy: the first build loads, and an append
+  /// from the share flow bumps updatedAt there without a new widget, so the
+  /// card shows the new source without reopening the note.
+  void _syncSources(Note note) {
+    final version = (note.id, note.updatedAt);
+    if (_sourcesVersion == version) return;
+    _sourcesVersion = version;
+    _loadSources();
+  }
+
+  Widget _buildSourceCard({bool compact = false}) {
+    return NoteSourceCard(
+      sources: _sources,
+      compact: compact,
+      onOpen: (source) => _launchUrl(source.url),
+      onCopy: _copySourceLink,
+      onEdit: compact ? null : _editSource,
+      onRemove: compact ? null : _removeSource,
+    );
+  }
+
+  Future<void> _copySourceLink(NoteSource source) async {
+    await Clipboard.setData(ClipboardData(text: source.url));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppLocalizations.of(context)!.linkCopied)),
+    );
+  }
+
+  /// Whether another source of this note already records [candidate]'s url
+  /// ([NoteMetadata.sourceKey]). The service would keep the existing entry
+  /// and drop the new one silently, so the editor sheet asks first.
+  Future<bool> _isDuplicateSource(NoteSource candidate) async {
+    final key = NoteMetadata.sourceKey(candidate);
+    final sources = await context.read<AppProvider>().getNoteSources(
+      widget.note.id,
+    );
+    return sources.any(
+      (s) => s.id != candidate.id && NoteMetadata.sourceKey(s) == key,
+    );
+  }
+
+  /// "Add source…" in the app bar's overflow menu, so a hand-written note can
+  /// gain a `manual` source. Not before the note's row exists: addSources
+  /// would update nothing and the input would be lost (the menu item is
+  /// hidden then too).
+  Future<void> _addSource() async {
+    if (widget.isNewNote && !_hasBeenSaved) return;
+    final result = await NoteSourceEditorSheet.show(
+      context,
+      isDuplicate: _isDuplicateSource,
+    );
+    final source = result?.source;
+    if (source == null || !mounted) return;
+    await getIt<NoteSourceService>().addSources(widget.note.id, [source]);
+    await _loadSources();
+  }
+
+  Future<void> _editSource(NoteSource source) async {
+    final result = await NoteSourceEditorSheet.show(
+      context,
+      existing: source,
+      isDuplicate: _isDuplicateSource,
+    );
+    if (result == null || !mounted) return;
+    if (result.removed) {
+      await _removeSource(source);
+      return;
+    }
+    await getIt<NoteSourceService>().updateSource(
+      widget.note.id,
+      result.source!,
+    );
+    await _loadSources();
+  }
+
+  Future<void> _removeSource(NoteSource source) async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.removeSource),
+        content: Text(l10n.removeSourceConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l10n.remove),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    await getIt<NoteSourceService>().removeSource(widget.note.id, source.id);
+    await _loadSources();
   }
 
   @override
@@ -810,6 +939,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           (note) => note.id == widget.note.id,
           orElse: () => widget.note,
         );
+        _syncSources(currentNote);
 
         return PopScope(
           canPop: !_isEditing, // Don't allow popping when editing
@@ -917,6 +1047,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                           ],
                         ),
                       ),
+                      // Sources live on the note's row, so a new note gains
+                      // one only once it has been saved.
+                      if (!widget.isNewNote || _hasBeenSaved)
+                        PopupMenuItem(
+                          value: 'add_source',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.add_link),
+                              const SizedBox(width: 8),
+                              Text(l10n.addSourceMenu),
+                            ],
+                          ),
+                        ),
                       PopupMenuItem(
                         value: 'fetch_images',
                         child: Row(
@@ -1004,6 +1147,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                         _shareNote();
                       } else if (value == 'merge') {
                         _mergeWith();
+                      } else if (value == 'add_source') {
+                        _addSource();
                       } else if (value == 'fetch_images') {
                         _fetchRemoteImages();
                       } else if (value == 'force_fetch_images') {
@@ -1272,6 +1417,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                           style: Theme.of(context).textTheme.headlineSmall
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
+                        if (_sources.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          _buildSourceCard(),
+                        ],
                         const SizedBox(height: 16),
                       ],
                     ),
@@ -1758,6 +1907,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 16),
+          if (_sources.isNotEmpty) ...[
+            _buildSourceCard(compact: true),
+            const SizedBox(height: 16),
+          ],
           if (widget.note.isTask) ...[
             _buildDateSelectionFields(),
             const SizedBox(height: 16),

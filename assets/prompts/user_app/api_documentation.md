@@ -618,7 +618,14 @@
 
    - Synapse.Notes (array, read-only) - The notes the app was launched with.
      Each entry is an object with id, title, content, tags, createdAt, updatedAt,
-     isTask, status, pinned, isArchived, and attachmentPaths.
+     isTask, status, pinned, isArchived, attachmentPaths, and sources.
+     `sources` (array) is where the note's content was clipped from: each entry
+     is { id, url, title?, siteName?, clippedAt?, kind, method } - `url` is the
+     page or file the content came from, `clippedAt` an ISO-8601 UTC timestamp,
+     `kind` 'web' | 'file', `method` 'extract' | 'ai' | 'download' | 'manual' |
+     'import'; optional fields are absent when unknown. It is empty unless the
+     note was clipped from the web or given a source by hand, so never rely on
+     it being non-empty; when it is, cite `url` when attributing the content.
 
      BLOCK SCOPE: when the user launched the app on a selected block of a note
      rather than on whole notes, the entry additionally has:
@@ -628,8 +635,8 @@
      transient id that exists just for this app session. Treat the entry as an
      ordinary note: reading `content` and calling Synapse.updateNotes with that
      `id` both work, and every write is applied back over that block's range in
-     the parent note. `title`, `tags` and `attachmentPaths` are inherited from
-     the parent note, so Synapse.readAttachment works unchanged.
+     the parent note. `title`, `tags`, `attachmentPaths` and `sources` are
+     inherited from the parent note, so Synapse.readAttachment works unchanged.
      Notes:
        * A block-scoped write is CONTENT-ONLY: title, tags, attachments, link,
          subnote and task fields are ignored with a warning. Target parentNoteId

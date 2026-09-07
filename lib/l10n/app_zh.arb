@@ -1414,6 +1414,24 @@
   "user": "用户",
   "ai": "AI",
   "justNow": "刚刚",
+  "minutesAgoShort": "{count}分钟前",
+  "@minutesAgoShort": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "hoursAgoShort": "{count}小时前",
+  "@hoursAgoShort": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "daysAgoShort": "{count}天前",
+  "@daysAgoShort": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
   "addNoteDialogTitle": "添加到笔记",
   "addNoteDialogMessage": "您想如何将此内容添加到笔记？",
   "addAsIs": "原样添加",
@@ -2460,5 +2478,31 @@
   },
   "mergeRemoveBlock": "移除",
   "mergeOtherAttachments": "其他要保留的附件",
-  "mergeArchiveOthersPinned": "已置顶的笔记会保持不变。"
+  "mergeArchiveOthersPinned": "已置顶的笔记会保持不变。",
+  "source": "来源",
+  "clippedFrom": "剪藏自",
+  "clippedRelative": "{when}剪藏",
+  "@clippedRelative": {
+    "placeholders": {
+      "when": {"type": "String"}
+    }
+  },
+  "openOriginal": "打开原文",
+  "copyLink": "复制链接",
+  "linkCopied": "链接已复制",
+  "editSource": "编辑来源",
+  "removeSource": "移除来源",
+  "removeSourceConfirm": "要从笔记中移除此来源吗？笔记内容不会改变。",
+  "addSource": "添加来源",
+  "addSourceMenu": "添加来源…",
+  "sourceSiteName": "网站名称",
+  "invalidUrl": "请输入有效的 http(s) 链接",
+  "duplicateSourceUrl": "此链接已是该笔记的来源",
+  "moreSources": "还有 {count} 个",
+  "@moreSources": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "showLess": "收起"
 }

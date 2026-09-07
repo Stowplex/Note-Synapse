@@ -67,6 +67,7 @@ void main() {
     // Stub these for ShareService to work
     when(mockAppProvider.getNoteRelationships(any)).thenAnswer((_) async => []);
     when(mockAppProvider.getLinkedNotes(any)).thenAnswer((_) async => []);
+    when(mockAppProvider.getNoteSources(any)).thenAnswer((_) async => []);
     when(mockAppProvider.notes).thenReturn([]);
 
     // Mock FilePicker channel
