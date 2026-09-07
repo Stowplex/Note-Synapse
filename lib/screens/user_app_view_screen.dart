@@ -20,6 +20,7 @@ import 'note_detail_screen.dart';
 import 'conversation_chat_screen.dart';
 import 'immersive_note_screen.dart';
 import 'ai_action_screen.dart';
+import 'note_merge_screen.dart';
 
 class UserAppViewScreen extends StatefulWidget {
   final UserApp app;
@@ -692,6 +693,18 @@ class UserAppViewScreenState extends State<UserAppViewScreen> with RouteAware {
             Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (context) => AIActionScreen(selectedNotes: notes),
+              ),
+            );
+          },
+          onOpenMerge: (notes) async {
+            // Throw rather than return null: null is how the bridge reports the
+            // user cancelling the merge, and being unmounted is not that.
+            if (!mounted) {
+              throw StateError('user app screen is no longer mounted');
+            }
+            return Navigator.of(context).push<Note>(
+              MaterialPageRoute(
+                builder: (context) => NoteMergeScreen(notes: notes),
               ),
             );
           },
