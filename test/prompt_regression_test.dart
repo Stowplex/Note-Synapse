@@ -782,6 +782,7 @@ void main() {
       expect(result, contains('Synapse.openNote'));
       expect(result, contains('Synapse.openConversations'));
       expect(result, contains('Synapse.openAIActions'));
+      expect(result, contains('Synapse.openMerge'));
       expect(result, contains(r'${result1.updatedCount}'));
     });
 

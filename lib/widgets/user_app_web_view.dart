@@ -30,6 +30,13 @@ typedef UserAppOpenConversations =
     Future<void> Function(List<Note> notes, bool immersiveMode);
 typedef UserAppOpenAIActions = Future<void> Function(List<Note> notes);
 
+/// Opens the note merge screen on [notes] and resolves to the merged note, or
+/// `null` if the user backed out without merging.
+///
+/// `null` means precisely that - a host that cannot open the screen must throw
+/// instead, so the plugin is not told the user declined.
+typedef UserAppOpenMerge = Future<Note?> Function(List<Note> notes);
+
 /// Shared WebView that hosts a User App.
 ///
 /// Encapsulates the [UserAppRuntimeBridge] construction, [InAppWebView]
@@ -51,6 +58,7 @@ class UserAppWebView extends StatefulWidget {
     this.onOpenNote,
     this.onOpenConversations,
     this.onOpenAIActions,
+    this.onOpenMerge,
     this.onConsoleMessage,
     this.onLoadStart,
     this.onLoadStop,
@@ -78,6 +86,7 @@ class UserAppWebView extends StatefulWidget {
   final UserAppOpenNote? onOpenNote;
   final UserAppOpenConversations? onOpenConversations;
   final UserAppOpenAIActions? onOpenAIActions;
+  final UserAppOpenMerge? onOpenMerge;
   final void Function(InAppWebViewController, ConsoleMessage)? onConsoleMessage;
   final void Function(InAppWebViewController, WebUri?)? onLoadStart;
   final void Function(InAppWebViewController, WebUri?)? onLoadStop;
@@ -138,6 +147,20 @@ class _UserAppWebViewState extends State<UserAppWebView> {
         if (!mounted) return;
         await widget.onOpenAIActions?.call(notes);
       },
+      // Left null when the host gave us no handler, so the bridge reports
+      // 'not supported in this context' rather than a null that a plugin would
+      // read as the user cancelling the merge. For the same reason an unmounted
+      // view throws instead of returning null: the bridge turns that into a
+      // success:false error, so a plugin can tell 'the host could not open the
+      // screen' from 'the user backed out'.
+      onOpenMerge: widget.onOpenMerge == null
+          ? null
+          : (notes) async {
+              if (!mounted) {
+                throw StateError('user app view is no longer mounted');
+              }
+              return widget.onOpenMerge!(notes);
+            },
       onModificationRequest: (source, noteId, modification) async {
         if (!mounted) return false;
 
