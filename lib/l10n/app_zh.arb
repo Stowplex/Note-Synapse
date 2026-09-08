@@ -2460,5 +2460,31 @@
   },
   "mergeRemoveBlock": "移除",
   "mergeOtherAttachments": "其他要保留的附件",
-  "mergeArchiveOthersPinned": "已置顶的笔记会保持不变。"
+  "mergeArchiveOthersPinned": "已置顶的笔记会保持不变。",
+  "navPadUnitChar": "字符",
+  "navPadUnitToken": "词",
+  "navPadUnitLine": "行",
+  "navPadUnitBlock": "块",
+  "navPadModeMove": "移动",
+  "navPadModeSelect": "选择",
+  "navPadUnitTooltip": "按{unit}移动",
+  "@navPadUnitTooltip": {
+    "placeholders": {"unit": {"type": "String"}}
+  },
+  "navPadModeTooltip": "点按切换移动/选择 · 长按扩展选区 · 下滑收缩",
+  "navPadMoveUp": "向上",
+  "navPadMoveDown": "向下",
+  "navPadMoveBackward": "向前",
+  "navPadMoveForward": "向后",
+  "navPadSwitchSide": "把导航键移到另一侧",
+  "navPadHide": "隐藏导航键",
+  "navPadShow": "显示导航键",
+  "navPadLabelLineStart": "行首",
+  "navPadLabelLineEnd": "行尾",
+  "navPadLabelBlockStart": "块首",
+  "navPadLabelBlockEnd": "块尾",
+  "navPadLabelPrevBlock": "上一块",
+  "navPadLabelNextBlock": "下一块",
+  "navPadLabelExpand": "已扩展",
+  "navPadLabelShrink": "已收缩"
 }

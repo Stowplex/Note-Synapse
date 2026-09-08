@@ -5731,4 +5731,76 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mergeArchiveOthersPinned => 'Pinned notes are left as they are.';
+
+  @override
+  String get navPadUnitChar => 'Char';
+
+  @override
+  String get navPadUnitToken => 'Token';
+
+  @override
+  String get navPadUnitLine => 'Line';
+
+  @override
+  String get navPadUnitBlock => 'Block';
+
+  @override
+  String get navPadModeMove => 'Move';
+
+  @override
+  String get navPadModeSelect => 'Select';
+
+  @override
+  String navPadUnitTooltip(String unit) {
+    return 'Move by $unit';
+  }
+
+  @override
+  String get navPadModeTooltip =>
+      'Tap to switch move/select · hold to expand selection · swipe down to shrink';
+
+  @override
+  String get navPadMoveUp => 'Up';
+
+  @override
+  String get navPadMoveDown => 'Down';
+
+  @override
+  String get navPadMoveBackward => 'Backward';
+
+  @override
+  String get navPadMoveForward => 'Forward';
+
+  @override
+  String get navPadSwitchSide => 'Move pad to the other side';
+
+  @override
+  String get navPadHide => 'Hide navigation pad';
+
+  @override
+  String get navPadShow => 'Show navigation pad';
+
+  @override
+  String get navPadLabelLineStart => 'Line start';
+
+  @override
+  String get navPadLabelLineEnd => 'Line end';
+
+  @override
+  String get navPadLabelBlockStart => 'Block start';
+
+  @override
+  String get navPadLabelBlockEnd => 'Block end';
+
+  @override
+  String get navPadLabelPrevBlock => 'Previous block';
+
+  @override
+  String get navPadLabelNextBlock => 'Next block';
+
+  @override
+  String get navPadLabelExpand => 'Expanded';
+
+  @override
+  String get navPadLabelShrink => 'Shrunk';
 }

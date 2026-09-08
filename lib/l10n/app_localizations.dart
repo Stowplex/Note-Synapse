@@ -9889,6 +9889,144 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pinned notes are left as they are.'**
   String get mergeArchiveOthersPinned;
+
+  /// No description provided for @navPadUnitChar.
+  ///
+  /// In en, this message translates to:
+  /// **'Char'**
+  String get navPadUnitChar;
+
+  /// No description provided for @navPadUnitToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Token'**
+  String get navPadUnitToken;
+
+  /// No description provided for @navPadUnitLine.
+  ///
+  /// In en, this message translates to:
+  /// **'Line'**
+  String get navPadUnitLine;
+
+  /// No description provided for @navPadUnitBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Block'**
+  String get navPadUnitBlock;
+
+  /// No description provided for @navPadModeMove.
+  ///
+  /// In en, this message translates to:
+  /// **'Move'**
+  String get navPadModeMove;
+
+  /// No description provided for @navPadModeSelect.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get navPadModeSelect;
+
+  /// No description provided for @navPadUnitTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Move by {unit}'**
+  String navPadUnitTooltip(String unit);
+
+  /// No description provided for @navPadModeTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to switch move/select · hold to expand selection · swipe down to shrink'**
+  String get navPadModeTooltip;
+
+  /// No description provided for @navPadMoveUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Up'**
+  String get navPadMoveUp;
+
+  /// No description provided for @navPadMoveDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Down'**
+  String get navPadMoveDown;
+
+  /// No description provided for @navPadMoveBackward.
+  ///
+  /// In en, this message translates to:
+  /// **'Backward'**
+  String get navPadMoveBackward;
+
+  /// No description provided for @navPadMoveForward.
+  ///
+  /// In en, this message translates to:
+  /// **'Forward'**
+  String get navPadMoveForward;
+
+  /// No description provided for @navPadSwitchSide.
+  ///
+  /// In en, this message translates to:
+  /// **'Move pad to the other side'**
+  String get navPadSwitchSide;
+
+  /// No description provided for @navPadHide.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide navigation pad'**
+  String get navPadHide;
+
+  /// No description provided for @navPadShow.
+  ///
+  /// In en, this message translates to:
+  /// **'Show navigation pad'**
+  String get navPadShow;
+
+  /// No description provided for @navPadLabelLineStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Line start'**
+  String get navPadLabelLineStart;
+
+  /// No description provided for @navPadLabelLineEnd.
+  ///
+  /// In en, this message translates to:
+  /// **'Line end'**
+  String get navPadLabelLineEnd;
+
+  /// No description provided for @navPadLabelBlockStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Block start'**
+  String get navPadLabelBlockStart;
+
+  /// No description provided for @navPadLabelBlockEnd.
+  ///
+  /// In en, this message translates to:
+  /// **'Block end'**
+  String get navPadLabelBlockEnd;
+
+  /// No description provided for @navPadLabelPrevBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous block'**
+  String get navPadLabelPrevBlock;
+
+  /// No description provided for @navPadLabelNextBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Next block'**
+  String get navPadLabelNextBlock;
+
+  /// No description provided for @navPadLabelExpand.
+  ///
+  /// In en, this message translates to:
+  /// **'Expanded'**
+  String get navPadLabelExpand;
+
+  /// No description provided for @navPadLabelShrink.
+  ///
+  /// In en, this message translates to:
+  /// **'Shrunk'**
+  String get navPadLabelShrink;
 }
 
 class _AppLocalizationsDelegate

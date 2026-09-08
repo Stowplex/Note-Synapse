@@ -5449,4 +5449,75 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mergeArchiveOthersPinned => '已置顶的笔记会保持不变。';
+
+  @override
+  String get navPadUnitChar => '字符';
+
+  @override
+  String get navPadUnitToken => '词';
+
+  @override
+  String get navPadUnitLine => '行';
+
+  @override
+  String get navPadUnitBlock => '块';
+
+  @override
+  String get navPadModeMove => '移动';
+
+  @override
+  String get navPadModeSelect => '选择';
+
+  @override
+  String navPadUnitTooltip(String unit) {
+    return '按$unit移动';
+  }
+
+  @override
+  String get navPadModeTooltip => '点按切换移动/选择 · 长按扩展选区 · 下滑收缩';
+
+  @override
+  String get navPadMoveUp => '向上';
+
+  @override
+  String get navPadMoveDown => '向下';
+
+  @override
+  String get navPadMoveBackward => '向前';
+
+  @override
+  String get navPadMoveForward => '向后';
+
+  @override
+  String get navPadSwitchSide => '把导航键移到另一侧';
+
+  @override
+  String get navPadHide => '隐藏导航键';
+
+  @override
+  String get navPadShow => '显示导航键';
+
+  @override
+  String get navPadLabelLineStart => '行首';
+
+  @override
+  String get navPadLabelLineEnd => '行尾';
+
+  @override
+  String get navPadLabelBlockStart => '块首';
+
+  @override
+  String get navPadLabelBlockEnd => '块尾';
+
+  @override
+  String get navPadLabelPrevBlock => '上一块';
+
+  @override
+  String get navPadLabelNextBlock => '下一块';
+
+  @override
+  String get navPadLabelExpand => '已扩展';
+
+  @override
+  String get navPadLabelShrink => '已收缩';
 }

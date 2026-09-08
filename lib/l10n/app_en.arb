@@ -2511,5 +2511,31 @@
   },
   "mergeRemoveBlock": "Remove",
   "mergeOtherAttachments": "Other attachments to keep",
-  "mergeArchiveOthersPinned": "Pinned notes are left as they are."
+  "mergeArchiveOthersPinned": "Pinned notes are left as they are.",
+  "navPadUnitChar": "Char",
+  "navPadUnitToken": "Token",
+  "navPadUnitLine": "Line",
+  "navPadUnitBlock": "Block",
+  "navPadModeMove": "Move",
+  "navPadModeSelect": "Select",
+  "navPadUnitTooltip": "Move by {unit}",
+  "@navPadUnitTooltip": {
+    "placeholders": {"unit": {"type": "String"}}
+  },
+  "navPadModeTooltip": "Tap to switch move/select · hold to expand selection · swipe down to shrink",
+  "navPadMoveUp": "Up",
+  "navPadMoveDown": "Down",
+  "navPadMoveBackward": "Backward",
+  "navPadMoveForward": "Forward",
+  "navPadSwitchSide": "Move pad to the other side",
+  "navPadHide": "Hide navigation pad",
+  "navPadShow": "Show navigation pad",
+  "navPadLabelLineStart": "Line start",
+  "navPadLabelLineEnd": "Line end",
+  "navPadLabelBlockStart": "Block start",
+  "navPadLabelBlockEnd": "Block end",
+  "navPadLabelPrevBlock": "Previous block",
+  "navPadLabelNextBlock": "Next block",
+  "navPadLabelExpand": "Expanded",
+  "navPadLabelShrink": "Shrunk"
 }
