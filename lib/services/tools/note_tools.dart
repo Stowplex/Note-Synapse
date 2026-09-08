@@ -8,6 +8,7 @@ import '../approval_service.dart';
 import '../data_change_notifier.dart';
 import '../database_service.dart';
 import '../note_modification_service.dart';
+import '../note_source_service.dart';
 import '../logger_service.dart';
 import '../sql_query_service.dart';
 import '../service_locator.dart';
@@ -100,6 +101,7 @@ Priority order for exploring user's notes:
 
 class NoteReadTool implements NativeTool {
   DatabaseService get _db => getIt<DatabaseService>();
+  NoteSourceService get _sourceService => getIt<NoteSourceService>();
 
   @override
   String get name => 'read_note';
@@ -116,6 +118,8 @@ Read a note with progressive discovery modes:
 - 'summary': Returns summary block or first 500 chars.
 - 'toc': Returns table of contents (headers from markdown).
 - 'full': Returns full text content. If extraction_guide is provided, uses AI to extract info from content and specified attachments.
+
+'stat' and 'full' also return `sources` (under `metadata` in 'full'): where a clipped note came from, as {url, title, siteName, clippedAt}. It is empty for notes written by hand; when it is not, cite the source url when quoting or attributing the note's content.
 
 Progressive discovery workflow:
 1. Call with mode='stat' to see note structure and attachment sizes
@@ -242,6 +246,7 @@ Progressive discovery workflow:
       'title': note.title,
       'line_count': lineCount,
       'tags': note.tags,
+      'sources': await _sourcesJson(note.id),
       'attachments': attachmentInfos,
       'linked_notes': linkedNotes,
       'subnotes': note.subNotes.map((s) => s.name).toList(),
@@ -250,6 +255,19 @@ Progressive discovery workflow:
           'Use mode="lines" to read specific line ranges, mode="pdf_pages" to read PDF pages, or mode="toc" for headers.',
     };
   }
+
+  /// Where [noteId] was clipped from, in the shape the description promises:
+  /// `{url, title, siteName, clippedAt}` per source, null fields omitted.
+  Future<List<Map<String, dynamic>>> _sourcesJson(String noteId) async => [
+    for (final s in await _sourceService.getSources(noteId))
+      {
+        'url': s.url,
+        if (s.title != null) 'title': s.title,
+        if (s.siteName != null) 'siteName': s.siteName,
+        if (s.clippedAt != null)
+          'clippedAt': s.clippedAt!.toUtc().toIso8601String(),
+      },
+  ];
 
   /// Get attachment info including PDF ToC with real page numbers
   Future<Map<String, dynamic>?> _getAttachmentInfo(String path) async {
@@ -586,6 +604,7 @@ $extractionGuide
         'metadata': {
           'tags': note.tags,
           'updatedAt': note.updatedAt.toIso8601String(),
+          'sources': await _sourcesJson(note.id),
         },
       };
     }

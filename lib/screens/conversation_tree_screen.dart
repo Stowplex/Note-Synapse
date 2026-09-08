@@ -8,6 +8,7 @@ import '../services/fork_service.dart';
 import '../services/logger_service.dart';
 import '../services/service_locator.dart';
 import '../l10n/app_localizations.dart';
+import '../utils/date_utils.dart';
 import 'conversation_chat_screen.dart';
 import '../widgets/add_note_dialog.dart';
 import '../widgets/add_conversation_dialog.dart';
@@ -1597,19 +1598,6 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     return [aiMessage];
   }
 
-  String _formatTimestamp(DateTime timestamp) {
-    final l10n = AppLocalizations.of(context)!;
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return l10n.justNow;
-    }
-  }
+  String _formatTimestamp(DateTime timestamp) =>
+      AppDateUtils.formatRelative(timestamp, AppLocalizations.of(context)!);
 }

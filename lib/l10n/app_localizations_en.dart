@@ -4011,6 +4011,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get justNow => 'Just now';
 
   @override
+  String minutesAgoShort(int count) {
+    return '${count}m ago';
+  }
+
+  @override
+  String hoursAgoShort(int count) {
+    return '${count}h ago';
+  }
+
+  @override
+  String daysAgoShort(int count) {
+    return '${count}d ago';
+  }
+
+  @override
   String get addNoteDialogTitle => 'Add to Note';
 
   @override
@@ -5731,4 +5746,57 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mergeArchiveOthersPinned => 'Pinned notes are left as they are.';
+
+  @override
+  String get source => 'Source';
+
+  @override
+  String get clippedFrom => 'Clipped from';
+
+  @override
+  String clippedRelative(String when) {
+    return 'clipped $when';
+  }
+
+  @override
+  String get openOriginal => 'Open original';
+
+  @override
+  String get copyLink => 'Copy link';
+
+  @override
+  String get linkCopied => 'Link copied';
+
+  @override
+  String get editSource => 'Edit source';
+
+  @override
+  String get removeSource => 'Remove source';
+
+  @override
+  String get removeSourceConfirm =>
+      'Remove this source from the note? The note\'s content stays as it is.';
+
+  @override
+  String get addSource => 'Add source';
+
+  @override
+  String get addSourceMenu => 'Add source…';
+
+  @override
+  String get sourceSiteName => 'Site name';
+
+  @override
+  String get invalidUrl => 'Enter a valid http(s) link';
+
+  @override
+  String get duplicateSourceUrl => 'This link is already a source of this note';
+
+  @override
+  String moreSources(int count) {
+    return '+$count more';
+  }
+
+  @override
+  String get showLess => 'Show less';
 }

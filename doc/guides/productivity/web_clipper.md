@@ -32,6 +32,22 @@ If Note Synapse detects that the URL points to a blob file, it will download it 
 
 ![](../../media/image_1771223381613_8706a110-96c3-41fb-9a0a-a70d512eea08.png)
 
+## Where a Clip Came From
+
+A clipped note remembers the page it came from, in a small card under the title in both the reading and the editing view.
+
+![](../../media/web_clipping/source_card.png)
+
+It is not part of the note text, so editing, block operations and AI edits never touch it. Collapsed, it takes two lines: the page title, then the site and how long ago you clipped it, such as `Example · clipped 3d ago`. Several sources add a third line such as **+2 more**.
+
+Tap the title to open the page. Long-press it for **Copy link**, **Edit source** and **Remove source**; removing asks first and leaves the content alone. With more than one source, the chevron or **+2 more** expands the card to list every source with a shortened address. The `⋯` on each row opens the same menu, and **Show less** folds the card again. While editing you can open or copy a source but not change it.
+
+**Extract**, **AI-Extract**, downloaded files and appended clips all record a source, and an appended clip joins the note's existing list. **As-Is** records none, since that note is the URL itself.
+
+Any saved note can be given a source by hand. Open the menu at the top of the note, choose **Add source…** and fill in the **URL**; a **Title** and **Site name** are optional. Only http and https links are accepted; `https://` is added when left out. A link the note already has is refused with `This link is already a source of this note`, a malformed one with `Enter a valid http(s) link`.
+
+The source follows the note out of the app. Share a note from its menu: **Share as Zip**, **Share as Text** and **Copy to clipboard** add a `**Source:** [title](url)` line per source, and **Import Markdown Zip** brings them back from that zip. **Share as PDF** adds a **Source** row per source. Plugins find the sources in each `Synapse.Notes` entry, and the AI sees them when it reads a note, so it can cite the page it quotes.
+
 ## Signing In to Sites
 
 Some pages show nothing useful until you are signed in, and the clipper's webview starts out signed out. Save a login once and clipping that site works from then on.

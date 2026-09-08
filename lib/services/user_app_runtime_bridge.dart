@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/note.dart';
+import '../models/note_source.dart';
 import '../models/user_app.dart';
 import '../providers/app_provider.dart';
 import '../services/ai_service.dart';
@@ -108,6 +109,7 @@ class UserAppRuntimeBridge {
     required this.revisionNumber,
     required this.isInteractive,
     List<Note>? selectedNotes,
+    Map<String, List<NoteSource>>? selectedNoteSources,
     Map<String, dynamic>? params,
     this.onOpenNote,
     this.onOpenConversations,
@@ -121,6 +123,7 @@ class UserAppRuntimeBridge {
     this.onPickNotes,
     this.onPickTags,
   }) : _selectedNotes = selectedNotes ?? const [],
+       _selectedNoteSources = {...?selectedNoteSources},
        _params = params ?? const {};
 
   final UserApp app;
@@ -128,6 +131,12 @@ class UserAppRuntimeBridge {
   final int revisionNumber;
   final bool isInteractive;
   final List<Note> _selectedNotes;
+
+  /// Where each selected note was clipped from, keyed by note id (the
+  /// transient id for a block note), for the `sources` field of
+  /// `Synapse.Notes`. Filled by [loadSelectedNoteSources] (or handed in by a
+  /// caller that already has the lists); a note without an entry gets `[]`.
+  final Map<String, List<NoteSource>> _selectedNoteSources;
   final Map<String, dynamic> _params;
   final OpenNoteCallback? onOpenNote;
   final OpenConversationsCallback? onOpenConversations;
@@ -181,6 +190,25 @@ class UserAppRuntimeBridge {
       getIt<AppDomainGrantService>();
   static final HttpClient _proxyHttpClient = HttpClient()
     ..autoUncompress = true;
+
+  /// Loads the sources of every selected note into the map
+  /// [buildBootstrapScript] reads, so `Synapse.Notes[i].sources` is populated.
+  /// Await it before the bootstrap script is built. A transient block note has
+  /// no row of its own and inherits its parent's sources, as it does title,
+  /// tags and attachments; the entry is keyed by the transient id its
+  /// `Synapse.Notes` entry uses. Never throws (see
+  /// [AppProvider.getNoteSources]).
+  Future<void> loadSelectedNoteSources() async {
+    // One round trip for the whole selection: the plugin view waits on this.
+    final loaded = await Future.wait(
+      _selectedNotes.map(
+        (note) => appProvider.getNoteSources(_realNoteId(note.id)),
+      ),
+    );
+    for (var i = 0; i < _selectedNotes.length; i++) {
+      _selectedNoteSources[_selectedNotes[i].id] = loaded[i];
+    }
+  }
 
   /// Creates the bootstrap user script that initialises the Synapse namespace.
   UserScript buildBootstrapScript() {
@@ -1474,11 +1502,14 @@ class UserAppRuntimeBridge {
             if (note == null) {
               continue;
             }
+            // A transient block note has no sources row of its own; its
+            // **Source:** lines are the parent's, like its attachments below.
             final markdown = await ShareService.generateMarkdownText(
               notes: [note],
               includeSubNotesAndLinkedNotes: includeLinked,
               appProvider: appProvider,
               l10n: l10n,
+              sourceNoteIdFor: _realNoteId,
             );
             final entry = <String, dynamic>{
               'id': note.id,
@@ -2192,6 +2223,9 @@ class UserAppRuntimeBridge {
         'pinned': note.pinned,
         'isArchived': note.isArchived,
         'attachmentPaths': note.attachmentPaths,
+        'sources': sourcesToPluginJson(
+          _selectedNoteSources[note.id] ?? const [],
+        ),
       };
 
       // Additive only: a transient block note also advertises the note it was
@@ -2206,6 +2240,26 @@ class UserAppRuntimeBridge {
     }).toList();
     return jsonEncode(notesData);
   }
+
+  /// The `sources` array of a `Synapse.Notes` entry: one
+  /// `{id, url, title?, siteName?, clippedAt?, kind, method}` object per
+  /// source, null fields omitted and `clippedAt` as a UTC ISO-8601 string —
+  /// the shape `api_documentation.md` promises plugins.
+  static List<Map<String, dynamic>> sourcesToPluginJson(
+    List<NoteSource> sources,
+  ) => [
+    for (final s in sources)
+      {
+        'id': s.id,
+        'url': s.url,
+        if (s.title != null) 'title': s.title,
+        if (s.siteName != null) 'siteName': s.siteName,
+        if (s.clippedAt != null)
+          'clippedAt': s.clippedAt!.toUtc().toIso8601String(),
+        'kind': s.kind,
+        'method': s.method,
+      },
+  ];
 
   /// Resolves a note id for reading/exporting.
   ///

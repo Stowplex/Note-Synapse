@@ -21,6 +21,7 @@ import 'agent_service.dart';
 import 'mcp_service.dart';
 import 'tag_image_service.dart';
 import 'note_marker_service.dart';
+import 'note_source_service.dart';
 import 'note_annotation_service.dart';
 import 'skill_service.dart';
 import 'tag_workflow_service.dart';
@@ -171,6 +172,12 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<NoteMarkerService>()) {
     getIt.registerLazySingleton<NoteMarkerService>(
       () => NoteMarkerService(getIt<DatabaseService>()),
+    );
+  }
+
+  if (!getIt.isRegistered<NoteSourceService>()) {
+    getIt.registerLazySingleton<NoteSourceService>(
+      () => NoteSourceService(getIt<DatabaseService>()),
     );
   }
 
