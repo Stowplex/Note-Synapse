@@ -11,6 +11,7 @@ import 'package:html2md/html2md.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
+import '../models/note_source.dart';
 import '../services/approval_service.dart';
 import '../services/share_service.dart';
 import '../services/ai_service.dart';
@@ -22,11 +23,13 @@ import '../services/web_session_service.dart';
 import '../services/user_app_session_service.dart';
 import '../services/media_attachment_service.dart';
 import '../services/network_provider.dart';
+import '../services/note_source_service.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/remote_image_utils.dart';
 import '../utils/html_rules.dart';
 import '../utils/markdown_cleaner.dart';
+import '../utils/note_metadata.dart';
 import '../utils/web_content_processor.dart';
 import '../widgets/approval_dialog.dart';
 import 'note_selection_dialog.dart';
@@ -1689,7 +1692,12 @@ class _ShareScreenState extends State<ShareScreen> {
       final appProvider = context.read<AppProvider>();
 
       if (_action == 'create') {
-        // Create note with edited title and tags
+        // Create note with edited title and tags. copyWith keeps `metadata`
+        // (the clip's `sources`, set by the extraction dialog) and addNote →
+        // insertNote persists it. The ingestion below only reaches the row
+        // through updateNote / NoteModificationService, which strip metadata
+        // instead of overwriting it, so nothing downstream clobbers the
+        // sources. Keep it that way.
         var finalNote = _preparedNote!.copyWith(
           title: _titleController.text.isNotEmpty
               ? _titleController.text
@@ -1765,6 +1773,27 @@ class _ShareScreenState extends State<ShareScreen> {
           ],
         );
 
+        // The clip's own source is merged in before the content update:
+        // updateNote notifies listeners synchronously, and an open detail
+        // screen reloads its sources on that notification, so the source
+        // must be stored by then. The order is safe because updateNote
+        // strips `metadata`, so the note's existing markers and sources —
+        // this one included — survive the content update. The service skips
+        // an empty list and never throws, and the lookup is guarded too:
+        // failing to record the source must not fail the append.
+        try {
+          await getIt<NoteSourceService>().addSources(
+            _selectedNote!.id,
+            NoteMetadata.readSources(
+              NoteMetadata.decode(_preparedNote!.metadata),
+            ),
+          );
+        } catch (e) {
+          LoggerService.warning(
+            '[ShareScreen] Failed to record source on append: $e',
+          );
+        }
+
         await appProvider.updateNote(updatedNote);
 
         // Trigger AI content ingestion if needed (fire and forget)
@@ -1793,6 +1822,11 @@ class _ShareScreenState extends State<ShareScreen> {
         }
       }
     } catch (e) {
+      // In append mode the source has already been merged into the target
+      // note's metadata by this point (addSources runs before updateNote), so
+      // a failure here leaves a recorded source on a note whose append did
+      // not land. Harmless — a retry de-duplicates on url — but worth a log.
+      LoggerService.error('[ShareScreen] Saving shared content failed: $e');
       setState(() {
         _isCreating = false;
       });
@@ -1832,6 +1866,11 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
   String? _downloadedFilePath;
   String? _activeAction;
   InAppWebViewController? _controller;
+
+  /// The URL the page ended on (after redirects), recorded in onLoadStop.
+  /// The clip's source falls back to it when the page cannot report its own
+  /// location.
+  String? _loadedUrl;
 
   @override
   void didChangeDependencies() {
@@ -1995,14 +2034,16 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
             else if (path.endsWith('.css'))
               language = 'css';
 
+            final fileName = path.split('/').last;
             final note = Note(
               id: const Uuid().v4(),
-              title: path.split('/').last,
+              title: fileName,
               content: '```$language\n$content\n```',
               type: NoteType.note,
               createdAt: DateTime.now(),
               updatedAt: DateTime.now(),
               tags: ['shared', 'code', 'web-clip'],
+              metadata: _downloadSourceMetadata(fileName),
             );
 
             if (!mounted) return;
@@ -2140,6 +2181,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 updatedAt: DateTime.now(),
                 attachmentPaths: [relativePath],
                 tags: ['shared', 'download', 'file'],
+                metadata: _downloadSourceMetadata(fileName),
               );
 
               if (!mounted) {
@@ -2221,6 +2263,22 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       _isLoading = true;
       _status = AppLocalizations.of(context)!.loadingWebPage;
     });
+  }
+
+  /// `Note.metadata` for a note created from a downloaded file (raw code
+  /// file or blob attachment): a single file-kind source pointing at the
+  /// shared URL. Not built by `fromPageInfo`, so the clip time is passed
+  /// explicitly.
+  String _downloadSourceMetadata(String fileName) {
+    return NoteMetadata.encodeSources([
+      NoteSource(
+        kind: NoteSourceKind.file,
+        url: widget.url,
+        title: fileName,
+        method: NoteSourceMethod.download,
+        clippedAt: DateTime.now(),
+      ),
+    ]);
   }
 
   Future<void> _syncSessionCookies(String? loadedUrl) async {
@@ -2564,6 +2622,28 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     return result?.toString().trim() ?? '';
   }
 
+  /// What the loaded page says about where it lives — the
+  /// `{href, canonical, ogUrl, siteName, title, byline, published}` map
+  /// [NoteSource.fromPageInfo] reads — with `href` falling back to
+  /// [_loadedUrl] when the page could not report one. Never throws: a
+  /// script failure yields a map holding at most that fallback.
+  Future<Map<String, dynamic>> _getPageSourceInfo() async {
+    var info = <String, dynamic>{};
+    try {
+      final result = await _controller?.evaluateJavascript(
+        source: WebContentExtractionService.pageSourceInfoScript,
+      );
+      info = WebContentExtractionService.parsePageSourceInfo(result);
+    } catch (e) {
+      LoggerService.warning('[ShareScreen] Failed to read page source: $e');
+    }
+    final href = info['href'];
+    if ((href is! String || href.trim().isEmpty) && _loadedUrl != null) {
+      info['href'] = _loadedUrl;
+    }
+    return info;
+  }
+
   Future<void> _performExtraction({required bool useAI}) async {
     if (_controller == null) {
       return;
@@ -2591,6 +2671,11 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         title = 'Web Content - ${DateTime.now().toString().substring(0, 16)}';
       }
 
+      // Where the clip came from, read now so it describes the page that
+      // was just captured (the AI step below can take a while). Never
+      // throws; the source itself is built after that step.
+      final pageInfo = await _getPageSourceInfo();
+
       final tags = <String>{'shared', 'web', 'extracted'};
       if (_readabilityEnabled) {
         tags.add('readability');
@@ -2611,6 +2696,25 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         tags.add('markdown');
       }
 
+      // The clip's source, kept in the note's `sources` metadata. Built
+      // after the AI step so the method records what actually happened: a
+      // failed AI pass falls back to plain extraction (no `ai_processed`
+      // tag) and must not claim `ai`. Best effort: if anything here fails
+      // the note is still created, just without a source.
+      String? metadata;
+      try {
+        final source = NoteSource.fromPageInfo(
+          pageInfo,
+          sharedUrl: widget.url,
+          method: tags.contains('ai_processed')
+              ? NoteSourceMethod.ai
+              : NoteSourceMethod.extract,
+        );
+        metadata = NoteMetadata.encodeSources([source]);
+      } catch (e) {
+        LoggerService.warning('[ShareScreen] Failed to record source: $e');
+      }
+
       // Process data URLs in the content
       final dataUrlResult = await _processDataUrls(finalContent);
       finalContent = dataUrlResult['content'] as String;
@@ -2625,6 +2729,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         updatedAt: DateTime.now(),
         tags: tags.toList(),
         attachmentPaths: newAttachments,
+        metadata: metadata,
       );
 
       final preview = title.isNotEmpty
@@ -2960,6 +3065,9 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         if (!mounted) {
           return;
         }
+        // Even a stopped load ends somewhere; the clip's source falls back
+        // to this when the page cannot report its own location.
+        _loadedUrl = url?.toString();
         if (_stopRequested) {
           // Stop was already handled by the user pressing the stop button.
           return;

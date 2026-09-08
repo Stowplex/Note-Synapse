@@ -40,6 +40,8 @@ void main() {
 
   setUp(() async {
     mockAppProvider = MockAppProvider();
+    // Export reads each note's sources; these notes have none.
+    when(mockAppProvider.getNoteSources(any)).thenAnswer((_) async => []);
     l10n = AppLocalizationsEn();
     tempDir = await Directory.systemTemp.createTemp();
     PathProviderPlatform.instance = MockPathProviderPlatform(tempDir.path);

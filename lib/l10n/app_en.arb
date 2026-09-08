@@ -1522,6 +1522,24 @@
   "user": "User",
   "ai": "AI",
   "justNow": "Just now",
+  "minutesAgoShort": "{count}m ago",
+  "@minutesAgoShort": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "hoursAgoShort": "{count}h ago",
+  "@hoursAgoShort": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "daysAgoShort": "{count}d ago",
+  "@daysAgoShort": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
   "addNoteDialogTitle": "Add to Note",
   "addNoteDialogMessage": "How would you like to add this content to your notes?",
   "addAsIs": "Add as-is",
@@ -2537,5 +2555,31 @@
   "navPadLabelPrevBlock": "Previous block",
   "navPadLabelNextBlock": "Next block",
   "navPadLabelExpand": "Expanded",
-  "navPadLabelShrink": "Shrunk"
+  "navPadLabelShrink": "Shrunk",
+  "source": "Source",
+  "clippedFrom": "Clipped from",
+  "clippedRelative": "clipped {when}",
+  "@clippedRelative": {
+    "placeholders": {
+      "when": {"type": "String"}
+    }
+  },
+  "openOriginal": "Open original",
+  "copyLink": "Copy link",
+  "linkCopied": "Link copied",
+  "editSource": "Edit source",
+  "removeSource": "Remove source",
+  "removeSourceConfirm": "Remove this source from the note? The note's content stays as it is.",
+  "addSource": "Add source",
+  "addSourceMenu": "Add source…",
+  "sourceSiteName": "Site name",
+  "invalidUrl": "Enter a valid http(s) link",
+  "duplicateSourceUrl": "This link is already a source of this note",
+  "moreSources": "+{count} more",
+  "@moreSources": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "showLess": "Show less"
 }

@@ -30,6 +30,13 @@ typedef UserAppOpenConversations =
     Future<void> Function(List<Note> notes, bool immersiveMode);
 typedef UserAppOpenAIActions = Future<void> Function(List<Note> notes);
 
+/// Opens the note merge screen on [notes] and resolves to the merged note, or
+/// `null` if the user backed out without merging.
+///
+/// `null` means precisely that - a host that cannot open the screen must throw
+/// instead, so the plugin is not told the user declined.
+typedef UserAppOpenMerge = Future<Note?> Function(List<Note> notes);
+
 /// Shared WebView that hosts a User App.
 ///
 /// Encapsulates the [UserAppRuntimeBridge] construction, [InAppWebView]
@@ -51,6 +58,7 @@ class UserAppWebView extends StatefulWidget {
     this.onOpenNote,
     this.onOpenConversations,
     this.onOpenAIActions,
+    this.onOpenMerge,
     this.onConsoleMessage,
     this.onLoadStart,
     this.onLoadStop,
@@ -78,6 +86,7 @@ class UserAppWebView extends StatefulWidget {
   final UserAppOpenNote? onOpenNote;
   final UserAppOpenConversations? onOpenConversations;
   final UserAppOpenAIActions? onOpenAIActions;
+  final UserAppOpenMerge? onOpenMerge;
   final void Function(InAppWebViewController, ConsoleMessage)? onConsoleMessage;
   final void Function(InAppWebViewController, WebUri?)? onLoadStart;
   final void Function(InAppWebViewController, WebUri?)? onLoadStop;
@@ -99,23 +108,55 @@ class UserAppWebView extends StatefulWidget {
 class _UserAppWebViewState extends State<UserAppWebView> {
   late UserAppRuntimeBridge _bridge;
 
+  /// False until the bridge behind the WebView about to be created has loaded
+  /// the selected notes' sources, so its bootstrap script can carry them (see
+  /// [UserAppRuntimeBridge.loadSelectedNoteSources]); reset when a new app or
+  /// revision replaces the WebView.
+  bool _bridgeReady = false;
+
   @override
   void initState() {
     super.initState();
-    _bridge = _buildBridge();
-    widget.onBridgeReady?.call(_bridge);
+    _initBridge();
   }
 
   @override
   void didUpdateWidget(covariant UserAppWebView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.app.id != widget.app.id ||
-        oldWidget.revision.revisionNumber != widget.revision.revisionNumber ||
+    final webViewReplaced =
+        oldWidget.app.id != widget.app.id ||
+        oldWidget.revision.revisionNumber != widget.revision.revisionNumber;
+    if (webViewReplaced ||
         !identical(oldWidget.selectedNotes, widget.selectedNotes) ||
         !identical(oldWidget.params, widget.params)) {
-      _bridge = _buildBridge();
-      widget.onBridgeReady?.call(_bridge);
+      // A new app or revision gets a new WebView (its key changes), whose
+      // bootstrap must wait for the new bridge's sources like the first did.
+      if (webViewReplaced && widget.selectedNotes.isNotEmpty) {
+        _bridgeReady = false;
+      }
+      _initBridge();
     }
+  }
+
+  /// Builds the bridge, hands it to [UserAppWebView.onBridgeReady] right away
+  /// and marks it ready once the selected notes' sources are loaded — at once
+  /// when there are no notes, so the common case costs no extra frame. Once
+  /// ready, a later bridge for the same WebView never hides it again; only
+  /// [didUpdateWidget] resets the flag, when the WebView is replaced anyway.
+  /// The load never throws, but `whenComplete` makes sure a failure could not
+  /// leave the plugin blank either.
+  void _initBridge() {
+    final bridge = _buildBridge();
+    _bridge = bridge;
+    widget.onBridgeReady?.call(bridge);
+    if (widget.selectedNotes.isEmpty) {
+      _bridgeReady = true;
+      return;
+    }
+    bridge.loadSelectedNoteSources().whenComplete(() {
+      if (!mounted || !identical(_bridge, bridge)) return;
+      if (!_bridgeReady) setState(() => _bridgeReady = true);
+    });
   }
 
   UserAppRuntimeBridge _buildBridge() {
@@ -138,6 +179,20 @@ class _UserAppWebViewState extends State<UserAppWebView> {
         if (!mounted) return;
         await widget.onOpenAIActions?.call(notes);
       },
+      // Left null when the host gave us no handler, so the bridge reports
+      // 'not supported in this context' rather than a null that a plugin would
+      // read as the user cancelling the merge. For the same reason an unmounted
+      // view throws instead of returning null: the bridge turns that into a
+      // success:false error, so a plugin can tell 'the host could not open the
+      // screen' from 'the user backed out'.
+      onOpenMerge: widget.onOpenMerge == null
+          ? null
+          : (notes) async {
+              if (!mounted) {
+                throw StateError('user app view is no longer mounted');
+              }
+              return widget.onOpenMerge!(notes);
+            },
       onModificationRequest: (source, noteId, modification) async {
         if (!mounted) return false;
 
@@ -321,6 +376,7 @@ class _UserAppWebViewState extends State<UserAppWebView> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_bridgeReady) return const SizedBox.shrink();
     final bridge = _bridge;
     final htmlData = widget.revision.appCode;
 

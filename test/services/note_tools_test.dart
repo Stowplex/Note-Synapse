@@ -5,6 +5,7 @@ import 'package:note_synapse/services/approval_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/note_modification_service.dart';
+import 'package:note_synapse/services/note_source_service.dart';
 import 'package:note_synapse/services/tools/note_tools.dart';
 import 'package:note_synapse/models/note.dart';
 
@@ -27,6 +28,7 @@ void main() {
     getIt.registerSingleton<NoteModificationService>(
       mockNoteModificationService,
     );
+    getIt.registerSingleton<NoteSourceService>(NoteSourceService(mockDb));
     ApprovalService.resetSession();
     ApprovalService.onApprovalRequest = null;
   });
@@ -76,6 +78,80 @@ void main() {
       // This test would need a real note in the database
       // For now, we just verify the tool structure
       expect(tool.inputSchema['properties']['mode']['enum'], isNotEmpty);
+    });
+
+    group('sources', () {
+      final note = Note(
+        id: 'n1',
+        title: 'Clipped',
+        content: 'Body',
+        type: NoteType.note,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 2),
+        tags: const ['a'],
+      );
+
+      setUp(() {
+        when(mockDb.getNoteById('n1')).thenAnswer((_) async => note);
+        when(mockDb.getRelationships('n1')).thenAnswer((_) async => []);
+      });
+
+      test('description tells the model about sources', () {
+        expect(tool.description, contains('sources'));
+        expect(tool.description, contains('clippedAt'));
+      });
+
+      test(
+        'stat and full expose the clip origin, null fields omitted',
+        () async {
+          when(mockDb.getNoteMetadata('n1')).thenAnswer(
+            (_) async => {
+              'sources': [
+                {
+                  'id': 's1',
+                  'url': 'https://example.com/post/123',
+                  'title': 'Post title',
+                  'siteName': 'Example',
+                  'clippedAt': '2026-09-06T17:04:11.000Z',
+                  'kind': 'web',
+                  'method': 'extract',
+                },
+                {
+                  'id': 's2',
+                  'url': 'https://example.com/x',
+                  'method': 'manual',
+                },
+              ],
+            },
+          );
+          final expected = [
+            {
+              'url': 'https://example.com/post/123',
+              'title': 'Post title',
+              'siteName': 'Example',
+              'clippedAt': '2026-09-06T17:04:11.000Z',
+            },
+            {'url': 'https://example.com/x'},
+          ];
+
+          final stat = await tool.execute({'note_id': 'n1'});
+          final full = await tool.execute({'note_id': 'n1', 'mode': 'full'});
+
+          expect(stat['sources'], expected);
+          expect(full['metadata']['sources'], expected);
+          expect(full['metadata']['tags'], ['a']);
+        },
+      );
+
+      test('a hand-written note has an empty list', () async {
+        when(mockDb.getNoteMetadata('n1')).thenAnswer((_) async => null);
+
+        final stat = await tool.execute({'note_id': 'n1'});
+        final full = await tool.execute({'note_id': 'n1', 'mode': 'full'});
+
+        expect(stat['sources'], isEmpty);
+        expect(full['metadata']['sources'], isEmpty);
+      });
     });
   });
 
@@ -314,28 +390,30 @@ void main() {
       expect(fakeService.batchCalls, isEmpty);
     });
 
-    test('malformed batch items are reported by index, not silently dropped',
-        () async {
-      ApprovalService.onApprovalRequest = (_) async =>
-          ApprovalResult(approved: true);
+    test(
+      'malformed batch items are reported by index, not silently dropped',
+      () async {
+        ApprovalService.onApprovalRequest = (_) async =>
+            ApprovalResult(approved: true);
 
-      final result = await tool.execute({
-        'modifications': [
-          {
-            'note_id': 'n1',
-            'modification': {
-              'content': {'action': 'append', 'text': 'x'},
+        final result = await tool.execute({
+          'modifications': [
+            {
+              'note_id': 'n1',
+              'modification': {
+                'content': {'action': 'append', 'text': 'x'},
+              },
             },
-          },
-          'Infinity',
-        ],
-      });
+            'Infinity',
+          ],
+        });
 
-      expect(result['code'], 'invalid_argument');
-      expect(result['error'], contains('modifications[1]'));
-      expect(result['error'], contains('Infinity'));
-      expect(fakeService.batchCalls, isEmpty);
-    });
+        expect(result['code'], 'invalid_argument');
+        expect(result['error'], contains('modifications[1]'));
+        expect(result['error'], contains('Infinity'));
+        expect(fakeService.batchCalls, isEmpty);
+      },
+    );
 
     test('empty modifications array is rejected', () async {
       final result = await tool.execute({'modifications': []});

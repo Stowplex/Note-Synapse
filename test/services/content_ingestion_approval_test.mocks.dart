@@ -15,11 +15,12 @@ import 'package:note_synapse/models/attachment.dart' as _i12;
 import 'package:note_synapse/models/conversation.dart' as _i16;
 import 'package:note_synapse/models/conversation_attachment.dart' as _i17;
 import 'package:note_synapse/models/filter.dart' as _i15;
-import 'package:note_synapse/models/generation_context.dart' as _i27;
+import 'package:note_synapse/models/generation_context.dart' as _i28;
 import 'package:note_synapse/models/mcp_endpoint.dart' as _i21;
 import 'package:note_synapse/models/model_config.dart' as _i23;
 import 'package:note_synapse/models/note.dart' as _i9;
 import 'package:note_synapse/models/note_annotation.dart' as _i11;
+import 'package:note_synapse/models/note_source.dart' as _i27;
 import 'package:note_synapse/models/relationship.dart' as _i14;
 import 'package:note_synapse/models/tag.dart' as _i13;
 import 'package:note_synapse/models/user_app.dart' as _i7;
@@ -2315,11 +2316,21 @@ class MockAppProvider extends _i1.Mock implements _i26.AppProvider {
           as _i8.Future<List<_i9.Note>>);
 
   @override
+  _i8.Future<List<_i27.NoteSource>> getNoteSources(String? noteId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getNoteSources, [noteId]),
+            returnValue: _i8.Future<List<_i27.NoteSource>>.value(
+              <_i27.NoteSource>[],
+            ),
+          )
+          as _i8.Future<List<_i27.NoteSource>>);
+
+  @override
   _i8.Future<String> transformNote(
     _i9.Note? note,
     String? transformationPrompt, {
     List<_i24.PlatformFile>? attachedFiles,
-    _i27.GenerationContext? generationContext,
+    _i28.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -2352,7 +2363,7 @@ class MockAppProvider extends _i1.Mock implements _i26.AppProvider {
     List<_i9.Note>? contextNotes, {
     List<_i24.PlatformFile>? attachedFiles,
     bool? persist = true,
-    _i27.GenerationContext? generationContext,
+    _i28.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -2723,7 +2734,7 @@ class MockAppProvider extends _i1.Mock implements _i26.AppProvider {
     List<String>? attachmentPaths,
     List<_i9.Note>? contextNotes,
     List<_i7.UserAppLibraryInfo>? libraries,
-    _i27.GenerationContext? generationContext,
+    _i28.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#createUserApp, [], {
@@ -2761,7 +2772,7 @@ class MockAppProvider extends _i1.Mock implements _i26.AppProvider {
     List<String>? attachmentPaths,
     List<_i9.Note>? contextNotes,
     List<_i7.UserAppLibraryInfo>? libraries,
-    _i27.GenerationContext? generationContext,
+    _i28.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#editUserApp, [], {

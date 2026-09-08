@@ -56,6 +56,7 @@ import '../utils/file_utils.dart';
 import '../utils/conversation_title_directive.dart';
 import '../utils/native_capture_utils.dart';
 import '../utils/synapse_temp_utils.dart';
+import '../utils/date_utils.dart';
 import '../widgets/approval_dialog.dart';
 import '../widgets/heading_anchor_registry.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
@@ -6876,10 +6877,6 @@ class _RecallAnnotationsDialogState extends State<_RecallAnnotationsDialog> {
     );
   }
 
-  String _formatDate(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inDays > 0) return '${diff.inDays}d ago';
-    if (diff.inHours > 0) return '${diff.inHours}h ago';
-    return '${diff.inMinutes}m ago';
-  }
+  String _formatDate(DateTime dt) =>
+      AppDateUtils.formatRelative(dt, AppLocalizations.of(context)!);
 }

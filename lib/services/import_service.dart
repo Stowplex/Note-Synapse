@@ -4,9 +4,13 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../models/note.dart';
+import '../models/note_source.dart';
 import '../providers/app_provider.dart';
 import '../services/logger_service.dart';
+import '../services/note_source_service.dart';
+import '../services/service_locator.dart';
 import '../utils/file_utils.dart';
+import '../utils/note_metadata.dart';
 
 class ImportStats {
   int processed = 0;
@@ -189,6 +193,10 @@ class ImportService {
           )
           .toList(),
       attachmentPaths: attachmentPaths,
+      // Where the content was clipped from; insertNote persists the column.
+      metadata: data.sources.isEmpty
+          ? null
+          : NoteMetadata.encodeSources(data.sources),
       // recurrenceRule? pinned? isArchived? not in parsing logic yet but good to defaults.
     );
 
@@ -228,6 +236,18 @@ class ImportService {
       attachmentPaths: currentPaths,
     );
 
+    // The imported sources are merged into the stored list first, so the
+    // detail screen, which re-reads them when updateNote's notification
+    // changes the note's updatedAt, never caches the pre-merge list. Safe
+    // because updateNote leaves the metadata column alone (a Note never
+    // carries it). A url that is already recorded keeps its existing entry.
+    if (data.sources.isNotEmpty) {
+      await getIt<NoteSourceService>().addSources(
+        existingNote.id,
+        data.sources,
+      );
+    }
+
     await appProvider.updateNote(updatedNote);
   }
 
@@ -260,6 +280,7 @@ class ImportService {
     List<String> tags = [];
     List<SubNote> subNotes = [];
     List<_ParsedAttachment> attachments = [];
+    List<NoteSource> sources = [];
 
     final lines = content.split('\n');
     int i = 0;
@@ -304,6 +325,12 @@ class ImportService {
             .map((e) => e.trim())
             .where((e) => e.isNotEmpty)
             .toList();
+      } else if (line.startsWith(_sourceLabel)) {
+        // Repeatable: one line per source.
+        final source = _parseSourceValue(
+          line.substring(_sourceLabel.length).trim(),
+        );
+        if (source != null) sources.add(source);
       } else if (line.startsWith('**Created:**')) {
         final val = line.split(':**').last.trim();
         createdAt = DateTime.tryParse(val);
@@ -494,7 +521,54 @@ class ImportService {
       completeBy: completeBy,
       subNotes: subNotes,
       attachments: attachments,
+      sources: sources,
     );
+  }
+
+  static const String _sourceLabel = '**Source:**';
+
+  /// `[title](url)`: the title is a run of escaped characters or anything
+  /// but `]`, so the first unescaped `](` ends it; the url runs to the
+  /// closing parenthesis at the end of the line.
+  static final RegExp _sourceLink = RegExp(r'^\[((?:\\.|[^\\\]])*)\]\((.+)\)$');
+  static final RegExp _escapedChar = RegExp(r'\\(.)');
+  static final RegExp _whitespace = RegExp(r'\s');
+
+  /// The value of a `**Source:**` line as a [NoteSource], or null when it
+  /// holds no usable url. Accepts `[title](url)` as `ShareService` exports it
+  /// (with `\`, `]` and `)` escaped in the title), `<url>` and a bare url.
+  /// Only an absolute http(s) url is accepted — the manual editor's rule — so
+  /// a stray line cannot smuggle in a `javascript:` link. `clippedAt` is left
+  /// null on purpose: the clip time is unknown, and the card then omits it.
+  /// The export writes [NoteSource.displayTitle], which is the host when a
+  /// source has no title; that text is not read back as a title, so a
+  /// round-trip reproduces the source exactly.
+  static NoteSource? _parseSourceValue(String value) {
+    var url = value;
+    String? title;
+    final link = _sourceLink.firstMatch(value);
+    if (link != null) {
+      title = link
+          .group(1)!
+          .replaceAllMapped(_escapedChar, (m) => m.group(1)!)
+          .trim();
+      url = link.group(2)!.trim();
+    }
+    if (url.startsWith('<') && url.endsWith('>')) {
+      url = url.substring(1, url.length - 1).trim();
+    }
+    if (url.isEmpty || _whitespace.hasMatch(url)) return null;
+    final uri = Uri.tryParse(url);
+    if (uri == null ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty) {
+      return null;
+    }
+    final untitled = NoteSource(url: url, method: NoteSourceMethod.import);
+    if (title == null || title.isEmpty || title == untitled.displayTitle) {
+      return untitled;
+    }
+    return untitled.copyWith(title: title);
   }
 }
 
@@ -512,6 +586,9 @@ class _ParsedNoteData {
   final List<SubNote> subNotes;
   final List<_ParsedAttachment> attachments;
 
+  /// Where the content was clipped from, one entry per `**Source:**` line.
+  final List<NoteSource> sources;
+
   _ParsedNoteData({
     this.id,
     required this.title,
@@ -525,6 +602,7 @@ class _ParsedNoteData {
     this.tags = const [],
     this.subNotes = const [],
     this.attachments = const [],
+    this.sources = const [],
   });
 }
 

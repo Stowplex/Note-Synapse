@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../models/note.dart';
+import '../models/note_source.dart';
 import '../models/relationship.dart';
 import '../models/tag.dart';
 import '../models/filter.dart';
@@ -17,6 +18,7 @@ import '../services/ai_service.dart';
 import '../services/user_app_service.dart';
 import '../services/conversation_service.dart';
 import '../services/logger_service.dart';
+import '../services/note_source_service.dart';
 import '../services/service_locator.dart';
 import '../services/model_storage_service.dart';
 import '../services/tag_image_service.dart';
@@ -42,6 +44,12 @@ class AppProvider extends ChangeNotifier {
 
   ConversationService get _conversationService => getIt<ConversationService>();
   UserAppService get _userAppService => getIt<UserAppService>();
+
+  /// Stateless and bound to this provider's own database, so screens and
+  /// services can read a note's sources without reaching for getIt.
+  late final NoteSourceService _noteSourceService = NoteSourceService(
+    _databaseService,
+  );
 
   List<Note> _notes = [];
   List<Tag> _tags = [];
@@ -531,6 +539,11 @@ class AppProvider extends ChangeNotifier {
       return [];
     }
   }
+
+  /// Where [noteId]'s content was clipped from, in stored order; empty when
+  /// it has none. Never throws (see [NoteSourceService.getSources]).
+  Future<List<NoteSource>> getNoteSources(String noteId) =>
+      _noteSourceService.getSources(noteId);
 
   Future<String> transformNote(
     Note note,

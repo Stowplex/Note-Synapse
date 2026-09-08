@@ -3848,6 +3848,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get justNow => '刚刚';
 
   @override
+  String minutesAgoShort(int count) {
+    return '$count分钟前';
+  }
+
+  @override
+  String hoursAgoShort(int count) {
+    return '$count小时前';
+  }
+
+  @override
+  String daysAgoShort(int count) {
+    return '$count天前';
+  }
+
+  @override
   String get addNoteDialogTitle => '添加到笔记';
 
   @override
@@ -5520,4 +5535,56 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get navPadLabelShrink => '已收缩';
+
+  @override
+  String get source => '来源';
+
+  @override
+  String get clippedFrom => '剪藏自';
+
+  @override
+  String clippedRelative(String when) {
+    return '$when剪藏';
+  }
+
+  @override
+  String get openOriginal => '打开原文';
+
+  @override
+  String get copyLink => '复制链接';
+
+  @override
+  String get linkCopied => '链接已复制';
+
+  @override
+  String get editSource => '编辑来源';
+
+  @override
+  String get removeSource => '移除来源';
+
+  @override
+  String get removeSourceConfirm => '要从笔记中移除此来源吗？笔记内容不会改变。';
+
+  @override
+  String get addSource => '添加来源';
+
+  @override
+  String get addSourceMenu => '添加来源…';
+
+  @override
+  String get sourceSiteName => '网站名称';
+
+  @override
+  String get invalidUrl => '请输入有效的 http(s) 链接';
+
+  @override
+  String get duplicateSourceUrl => '此链接已是该笔记的来源';
+
+  @override
+  String moreSources(int count) {
+    return '还有 $count 个';
+  }
+
+  @override
+  String get showLess => '收起';
 }

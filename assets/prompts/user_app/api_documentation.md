@@ -181,7 +181,16 @@
          * completionPercentage: number (optional, 0.0-1.0)
          * pinned: boolean (optional, default: false) - Whether note is pinned
          * isArchived: boolean (optional, default: false) - Whether note is archived
-      Response format: {success: boolean, savedCount?: number, error?: string}
+      Response format: {success: boolean, savedCount?: number, savedNoteIds?: array of strings, error?: string}
+      Usage notes:
+        * savedNoteIds holds the IDs of the notes that were created, in the same
+          order as the notes that saved successfully. Use it when the app needs to
+          refer to a note it just created (e.g. to link to it or open it) - there
+          is no need to search for the note afterwards.
+        * An entry that is not an object, and one that failed to save, are both
+          skipped, so savedNoteIds can be shorter than the array you passed in
+          and the positions do not line up with it. savedCount is always
+          savedNoteIds.length.
     - Synapse.updateNotes(notes: array) - Update existing notes in the database (REQUIRES USER APPROVAL)
       Param format: array of objects. Each object MUST contain an 'id' field.
       Response format: {success, updatedCount, errors?}
@@ -283,6 +292,32 @@
      Usage notes:
        * If notes is empty, opens the default AI actions screen (similar to tapping the AI action button on main_screen without selecting any notes)
        * If notes is not empty, opens the AI actions screen with the list of notes (similar to AI action button on main_screen with notes selected)
+       * Notes can be provided as an array of note IDs (strings) or note objects with an 'id' field
+   - Synapse.openMerge(notes: array) - Open the note merge screen on a list of notes and wait for the result
+     Param format:
+       - notes: array of note objects or note IDs (strings). MUST resolve to at least two DISTINCT notes.
+     Response format: {success: boolean, mergedNoteId?: string, cancelled?: boolean, error?: string}
+     Usage notes:
+       * The user drives the merge screen; the call resolves only once they leave it
+       * On a completed merge, success is true and mergedNoteId is the ID of the merged note.
+         The merge screen can either create a new note OR rewrite the FIRST source note in
+         place, so mergedNoteId MAY be one of the IDs you passed in. Treat the result as an
+         upsert: if you already track that ID, refresh it instead of adding a second entry
+       * The merge screen owns what happens to the source notes, and it is more than
+         archiving: rewriting the first source replaces its title, content, tags and
+         attachments, linking back to the sources is ON by default (it writes note
+         relationships), and attachment ownership moves off the sources. Do NOT assume the
+         sources came through untouched - re-read any source note you still display
+       * success:true with cancelled:true means no note came back. Usually the user backed
+         out, but it also covers rarer cases where a merge did save and the result was not
+         returned. Do NOT automatically retry the merge on cancelled - a retry can create a
+         second merged note. Ask the user, or re-read the notes first
+       * Fewer than two DISTINCT notes resolving (empty array, one note, the same ID twice,
+         or IDs that no longer exist) returns success:false with an error; check the count
+         before calling
+       * A block-scope entry resolves to its PARENT note (see Synapse.Notes), so openMerge
+         always merges whole notes, never blocks. An app launched on several blocks of one
+         note resolves them all to that one note and the call is refused
        * Notes can be provided as an array of note IDs (strings) or note objects with an 'id' field
    - Synapse.tts.speak(text: string, options?: object) - Read text aloud with the device text-to-speech engine
      Param format:
@@ -616,9 +651,45 @@
    await Synapse.openAIActions(noteIds);
    ```
 
+   CORRECT openMerge Usage Examples:
+   ```javascript
+   // Merge two notes and use the note that came back
+   const sources = ['note-id-1', 'note-id-2'];
+   const result1 = await Synapse.openMerge(sources);
+   if (result1.success && result1.mergedNoteId) {
+     // The merged ID may be one of the sources, so remove the OTHER sources only
+     const gone = sources.filter(id => id !== result1.mergedNoteId);
+     console.log('Merged into', result1.mergedNoteId, '- dropped', gone);
+   } else if (result1.cancelled) {
+     // No note came back. Do not call openMerge again on its own.
+     console.log('Nothing merged');
+   } else {
+     console.error('Error:', result1.error);
+   }
+   
+   // Merging the notes the app was launched with (needs at least two DISTINCT
+   // notes; block-scope entries resolve to their parent note)
+   const noteIds = [...new Set(
+     Synapse.Notes.map(note => note.parentNoteId || note.id)
+   )];
+   if (noteIds.length >= 2) {
+     const result2 = await Synapse.openMerge(noteIds);
+     if (result2.mergedNoteId) {
+       await Synapse.openNote(result2.mergedNoteId);
+     }
+   }
+   ```
+
    - Synapse.Notes (array, read-only) - The notes the app was launched with.
      Each entry is an object with id, title, content, tags, createdAt, updatedAt,
-     isTask, status, pinned, isArchived, and attachmentPaths.
+     isTask, status, pinned, isArchived, attachmentPaths, and sources.
+     `sources` (array) is where the note's content was clipped from: each entry
+     is { id, url, title?, siteName?, clippedAt?, kind, method } - `url` is the
+     page or file the content came from, `clippedAt` an ISO-8601 UTC timestamp,
+     `kind` 'web' | 'file', `method` 'extract' | 'ai' | 'download' | 'manual' |
+     'import'; optional fields are absent when unknown. It is empty unless the
+     note was clipped from the web or given a source by hand, so never rely on
+     it being non-empty; when it is, cite `url` when attributing the content.
 
      BLOCK SCOPE: when the user launched the app on a selected block of a note
      rather than on whole notes, the entry additionally has:
@@ -628,8 +699,8 @@
      transient id that exists just for this app session. Treat the entry as an
      ordinary note: reading `content` and calling Synapse.updateNotes with that
      `id` both work, and every write is applied back over that block's range in
-     the parent note. `title`, `tags` and `attachmentPaths` are inherited from
-     the parent note, so Synapse.readAttachment works unchanged.
+     the parent note. `title`, `tags`, `attachmentPaths` and `sources` are
+     inherited from the parent note, so Synapse.readAttachment works unchanged.
      Notes:
        * A block-scoped write is CONTENT-ONLY: title, tags, attachments, link,
          subnote and task fields are ignored with a warning. Target parentNoteId
