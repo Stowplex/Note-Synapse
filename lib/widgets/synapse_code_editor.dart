@@ -12,6 +12,10 @@ import 'package:re_highlight/languages/yaml.dart';
 import 'package:re_highlight/languages/javascript.dart';
 import 'package:re_highlight/languages/css.dart';
 
+import '../l10n/app_localizations.dart';
+import '../services/editor_navigation_settings_service.dart';
+import 'editor_navigation_pad.dart';
+
 class SynapseCodeEditor extends StatefulWidget {
   final CodeLineEditingController controller;
   final FocusNode? focusNode;
@@ -42,8 +46,24 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
   late final CodeFindController _findController;
   late final MobileSelectionToolbarController _mobileToolbarController;
   bool _isSearchVisible = false;
-  bool _isArrowsVisible = false;
-  bool _isSelectionMode = false;
+  /// Whether the pad is switched on at all. Persisted, so dismissing it from
+  /// the toolbar or its own close button turns it off for good rather than for
+  /// one session. Starts false and is only trusted once the stored value has
+  /// loaded, so a pad the user turned off cannot flash up in the meantime.
+  bool _padEnabled = false;
+  bool _keyboardOpen = false;
+
+  /// Supplied by the caller when there is one, ours otherwise. The pad needs a
+  /// focus node to know when to reset its granularity dial, and
+  /// `user_app_edit_screen` does not pass one.
+  late FocusNode _focusNode;
+  bool _ownsFocusNode = false;
+
+  /// The pad is for editing, so it appears when this editor is being edited —
+  /// which on a phone means the soft keyboard is up, and elsewhere means the
+  /// editor holds focus.
+  bool get _isPadVisible =>
+      _padEnabled && !widget.readOnly && (_keyboardOpen || _focusNode.hasFocus);
 
   late final ValueNotifier<bool> _hasSelectionNotifier;
 
@@ -55,6 +75,10 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
       builder: _buildMobileToolbar,
     );
     _isSearchVisible = false;
+    _focusNode = widget.focusNode ?? FocusNode();
+    _ownsFocusNode = widget.focusNode == null;
+    _focusNode.addListener(_onFocusChanged);
+    _loadPadPreference();
     _hasSelectionNotifier = ValueNotifier(
       !widget.controller.selection.isCollapsed,
     );
@@ -69,14 +93,48 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
       widget.controller.addListener(_onCodeControllerChanged);
       _onCodeControllerChanged();
     }
+    if (widget.focusNode != oldWidget.focusNode) {
+      _focusNode.removeListener(_onFocusChanged);
+      if (_ownsFocusNode) _focusNode.dispose();
+      _focusNode = widget.focusNode ?? FocusNode();
+      _ownsFocusNode = widget.focusNode == null;
+      _focusNode.addListener(_onFocusChanged);
+    }
   }
 
   @override
   void dispose() {
     _findController.dispose();
+    _focusNode.removeListener(_onFocusChanged);
+    if (_ownsFocusNode) _focusNode.dispose();
     widget.controller.removeListener(_onCodeControllerChanged);
     _hasSelectionNotifier.dispose();
     super.dispose();
+  }
+
+  void _onFocusChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadPadPreference() async {
+    final enabled = await EditorNavigationSettingsService.isPadVisible();
+    if (mounted && enabled != _padEnabled) {
+      setState(() => _padEnabled = enabled);
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    if (keyboardOpen != _keyboardOpen) {
+      setState(() => _keyboardOpen = keyboardOpen);
+    }
+  }
+
+  Future<void> _setPadVisible(bool visible) async {
+    setState(() => _padEnabled = visible);
+    await EditorNavigationSettingsService.setPadVisible(visible);
   }
 
   void _onCodeControllerChanged() {
@@ -110,64 +168,6 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
 
   void _redo() {
     widget.controller.redo();
-  }
-
-  void _moveCursor(int dIndex, int dOffset) {
-    final selection = widget.controller.selection;
-    final codeLines = widget.controller.value.codeLines;
-
-    int newIndex = selection.extentIndex + dIndex;
-    int newOffset = selection.extentOffset + dOffset;
-
-    // Bounds check for index
-    if (newIndex < 0) {
-      newIndex = 0;
-      newOffset = 0;
-    } else if (newIndex >= codeLines.length) {
-      newIndex = codeLines.length - 1;
-      newOffset = codeLines.last.length;
-    }
-
-    // Bounds check for offset on current line
-    if (dIndex != 0) {
-      // Moving up/down: cap offset to line length
-      if (newOffset > codeLines[newIndex].length) {
-        newOffset = codeLines[newIndex].length;
-      }
-    } else {
-      // Moving left/right: handle line wrapping
-      if (newOffset < 0) {
-        if (newIndex > 0) {
-          newIndex--;
-          newOffset = codeLines[newIndex].length;
-        } else {
-          newOffset = 0;
-        }
-      } else if (newOffset > codeLines[newIndex].length) {
-        if (newIndex < codeLines.length - 1) {
-          newIndex++;
-          newOffset = 0;
-        } else {
-          newOffset = codeLines[newIndex].length;
-        }
-      }
-    }
-
-    final newPos = CodeLinePosition(index: newIndex, offset: newOffset);
-
-    if (_isSelectionMode) {
-      widget.controller.selection = CodeLineSelection(
-        baseIndex: selection.baseIndex,
-        baseOffset: selection.baseOffset,
-        extentIndex: newPos.index,
-        extentOffset: newPos.offset,
-      );
-    } else {
-      widget.controller.selection = CodeLineSelection.collapsed(
-        index: newPos.index,
-        offset: newPos.offset,
-      );
-    }
   }
 
   Future<void> _paste() async {
@@ -324,18 +324,14 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
                     ),
                     IconButton(
                       icon: Icon(
-                        _isArrowsVisible ? Icons.unfold_less : Icons.open_with,
+                        _padEnabled ? Icons.unfold_less : Icons.open_with,
                         size: 20,
-                        color: _isArrowsVisible
-                            ? theme.colorScheme.primary
-                            : null,
+                        color: _padEnabled ? theme.colorScheme.primary : null,
                       ),
-                      onPressed: () {
-                        setState(() {
-                          _isArrowsVisible = !_isArrowsVisible;
-                        });
-                      },
-                      tooltip: _isArrowsVisible ? 'Hide Arrows' : 'Show Arrows',
+                      onPressed: () => _setPadVisible(!_padEnabled),
+                      tooltip: _padEnabled
+                          ? AppLocalizations.of(context)!.navPadHide
+                          : AppLocalizations.of(context)!.navPadShow,
                     ),
                     if (widget.actions != null &&
                         widget.actions!.isNotEmpty) ...[
@@ -391,7 +387,7 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
 
                   return CodeEditor(
                     controller: widget.controller,
-                    focusNode: widget.focusNode,
+                    focusNode: _focusNode,
                     toolbarController: _mobileToolbarController,
                     style: CodeEditorStyle(
                       fontSize: widget.fontSize,
@@ -404,7 +400,12 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
                   );
                 },
               ),
-              if (_isArrowsVisible) _buildArrowsOverlay(context),
+              if (_isPadVisible)
+                EditorNavigationPad(
+                  controller: widget.controller,
+                  focusNode: _focusNode,
+                  onDismiss: () => _setPadVisible(false),
+                ),
             ],
           ),
         ),
@@ -665,92 +666,4 @@ class _SynapseCodeEditorState extends State<SynapseCodeEditor> {
     );
   }
 
-  Widget _buildArrowsOverlay(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Positioned(
-      bottom: 16,
-      right: 16,
-      child: CodeEditorTapRegion(
-        child: Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: colorScheme.surface.withOpacity(0.9),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: colorScheme.outlineVariant),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.keyboard_arrow_up),
-                onPressed: () => _moveCursor(-1, 0),
-                visualDensity: VisualDensity.compact,
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.keyboard_arrow_left),
-                    onPressed: () => _moveCursor(0, -1),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  _buildSelectionToggle(context),
-                  IconButton(
-                    icon: const Icon(Icons.keyboard_arrow_right),
-                    onPressed: () => _moveCursor(0, 1),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ],
-              ),
-              IconButton(
-                icon: const Icon(Icons.keyboard_arrow_down),
-                onPressed: () => _moveCursor(1, 0),
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSelectionToggle(BuildContext context) {
-    final theme = Theme.of(context);
-    return Tooltip(
-      message: _isSelectionMode ? 'Selection Mode: ON' : 'Selection Mode: OFF',
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            _isSelectionMode = !_isSelectionMode;
-          });
-        },
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: _isSelectionMode
-                ? theme.colorScheme.primaryContainer
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            _isSelectionMode ? Icons.select_all : Icons.touch_app,
-            size: 20,
-            color: _isSelectionMode
-                ? theme.colorScheme.onPrimaryContainer
-                : theme.colorScheme.onSurface,
-          ),
-        ),
-      ),
-    );
-  }
 }
