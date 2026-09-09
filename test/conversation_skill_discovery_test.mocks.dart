@@ -952,14 +952,18 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
+    List<String>? scopeTags,
     bool? includeEmpty = true,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#getAllConversations, [], {
               #maxAge: maxAge,
               #conversationIds: conversationIds,
               #tagNames: tagNames,
+              #scopeTags: scopeTags,
               #includeEmpty: includeEmpty,
+              #includeAllSpacesTag: includeAllSpacesTag,
             }),
             returnValue: _i6.Future<List<_i16.Conversation>>.value(
               <_i16.Conversation>[],
@@ -1479,9 +1483,19 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
   _i6.Future<List<_i7.Note>> searchNotesFTS(
     String? query, {
     List<String>? tags,
+    List<String>? scopeTags,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
-            Invocation.method(#searchNotesFTS, [query], {#tags: tags}),
+            Invocation.method(
+              #searchNotesFTS,
+              [query],
+              {
+                #tags: tags,
+                #scopeTags: scopeTags,
+                #includeAllSpacesTag: includeAllSpacesTag,
+              },
+            ),
             returnValue: _i6.Future<List<_i7.Note>>.value(<_i7.Note>[]),
           )
           as _i6.Future<List<_i7.Note>>);
@@ -1912,6 +1926,15 @@ class MockAgentService extends _i1.Mock implements _i19.AgentService {
   );
 
   @override
+  _i6.Future<void> refreshSkillIndexIfScopeChanged() =>
+      (super.noSuchMethod(
+            Invocation.method(#refreshSkillIndexIfScopeChanged, []),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
   _i6.Future<void> runWorkflowTask({
     required _i24.ResolvedBinding? binding,
     required _i7.Note? note,
@@ -2017,9 +2040,11 @@ class MockSkillService extends _i1.Mock implements _i26.SkillService {
           as String);
 
   @override
-  _i6.Future<Map<String, _i26.SkillMetadata>> buildSkillIndex() =>
+  _i6.Future<Map<String, _i26.SkillMetadata>> buildSkillIndex({
+    bool? allSpaces = false,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#buildSkillIndex, []),
+            Invocation.method(#buildSkillIndex, [], {#allSpaces: allSpaces}),
             returnValue: _i6.Future<Map<String, _i26.SkillMetadata>>.value(
               <String, _i26.SkillMetadata>{},
             ),

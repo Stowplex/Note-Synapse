@@ -95,15 +95,40 @@ class _ShareScreenState extends State<ShareScreen> {
   /// Check if running on Linux (non-web)
   bool get _isLinux => !kIsWeb && Platform.isLinux;
 
+  /// Whether the active Space's tags have been offered on [_selectedTags].
+  /// Applied exactly once, so a top-up after the load cannot re-add a tag the
+  /// user has already taken off.
+  bool _spacePrefilled = false;
+
   @override
   void initState() {
     super.initState();
     _setupApprovalCallback();
+    _applySpacePrefill();
     _processSharedData();
-    // Load notes when the screen initializes
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AppProvider>().loadData();
+    // Load notes when the screen initializes.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final appProvider = context.read<AppProvider>();
+      await appProvider.loadData();
+      // A share intent can cold-start the app straight onto this route, so
+      // `initState` may run before the filters — and therefore the active
+      // Space — are known. Top up once here, when they are.
+      if (mounted && !_spacePrefilled) setState(_applySpacePrefill);
     });
+  }
+
+  /// Prefills the tag selection with the active Space's tags, so shared
+  /// content lands in the Space the user is working in.
+  ///
+  /// They render as removable chips below, which is what keeps the stamp a
+  /// default rather than a lock — and is why the save passes
+  /// `applySpaceTags: false`: re-stamping would put back exactly the tag the
+  /// user just took off. Never `all-spaces` (A2).
+  void _applySpacePrefill() {
+    final spaceTags = context.read<AppProvider>().spaceTags;
+    if (spaceTags.isEmpty) return;
+    _selectedTags.addAll(spaceTags);
+    _spacePrefilled = true;
   }
 
   @override
@@ -1721,7 +1746,10 @@ class _ShareScreenState extends State<ShareScreen> {
           );
         }
 
-        await appProvider.addNote(finalNote);
+        // No stamp: `initState` already prefilled `_selectedTags` with the
+        // Space's tags and the user can remove them, so stamping here would
+        // silently undo the opt-out (invariant 5).
+        await appProvider.addNote(finalNote, applySpaceTags: false);
 
         // Trigger AI content ingestion if needed (fire and forget)
         if (!finalNote.content.contains('> [!SUMMARY]')) {

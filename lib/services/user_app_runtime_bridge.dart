@@ -28,6 +28,7 @@ import '../utils/synapse_temp_utils.dart';
 import 'approval_service.dart';
 import 'block_note_scope_service.dart';
 import 'note_modification_service.dart';
+import 'space_scope_service.dart';
 import 'sql_query_service.dart';
 import 'service_locator.dart';
 import 'tts_service.dart';
@@ -154,6 +155,12 @@ class UserAppRuntimeBridge {
   bool _sessionApprovedSqlWrites = false;
   bool _sessionApprovedDeletions = false;
 
+  /// The controller of the WebView this bridge is attached to, captured in
+  /// [registerJavaScriptHandlers]. Null for a bridge that was built but never
+  /// attached (a bootstrap-script-only unit test), which is why
+  /// [notifySpaceChanged] is a no-op rather than an error in that state.
+  InAppWebViewController? _controller;
+
   void approveSession() {
     _sessionApprovedModifications = true;
   }
@@ -214,6 +221,7 @@ class UserAppRuntimeBridge {
   UserScript buildBootstrapScript() {
     final notesJson = _buildSelectedNotesJson();
     final paramsJson = _buildParamsJson();
+    final spaceJson = buildSpaceJson();
     final toolEnvFlag = isInteractive ? 'true' : 'false';
 
     final script =
@@ -438,6 +446,7 @@ class UserAppRuntimeBridge {
           },
           Notes: $notesJson,
           Params: $paramsJson,
+          space: $spaceJson,
         };
 
         if (!window.Synapse.tool) {
@@ -465,8 +474,78 @@ class UserAppRuntimeBridge {
     );
   }
 
+  /// Name of the DOM event fired at `window` when the active Space changes.
+  static const String spaceChangedEvent = 'synapse:spacechanged';
+
+  /// `window.Synapse.space` as a JavaScript literal: `{id, name, tags}` for the
+  /// active Space, or `null` when none is active.
+  ///
+  /// Read from [SpaceScopeService], not from `appProvider`: the headless AI
+  /// tool runtime builds a bridge with no widget tree behind it, and M5 put
+  /// `activeSpaceName` on the service beside `activeSpaceId` and `stampTags`
+  /// exactly so a `BuildContext`-free caller can name the Space.
+  ///
+  /// **Always [jsonEncode]d, never interpolated field by field.** A Space name
+  /// is arbitrary user text: a name containing `"`, `\` or a newline pasted
+  /// straight into the bootstrap source would end the JavaScript string early
+  /// and take the *whole* `window.Synapse` object down with it — every API, not
+  /// just this one. Encoding is the only thing standing between a Space called
+  /// `He said "no"` and a dead plugin runtime.
+  String buildSpaceJson() {
+    final scope = SpaceScopeService.shared();
+    // `isActive` also rejects an id resolved from prefs whose tags have not
+    // been pushed in yet, which would otherwise publish a Space with an empty
+    // `tags` array that a plugin would read as "scoped to nothing".
+    if (!scope.isActive) return 'null';
+    return jsonEncode({
+      'id': scope.activeSpaceId,
+      'name': scope.activeSpaceName,
+      'tags': scope.stampTags,
+    });
+  }
+
+  /// The script that republishes the Space onto an already-loaded page.
+  ///
+  /// Both halves matter: `window.Synapse.space` is updated so an app reading it
+  /// later sees the new value, *and* [spaceChangedEvent] fires so an app that
+  /// is already running can react. The detail is the same object, `null` on
+  /// leave.
+  String buildSpaceChangedScript() {
+    final spaceJson = buildSpaceJson();
+    return '''
+      (function () {
+        var space = $spaceJson;
+        if (window.Synapse) { window.Synapse.space = space; }
+        window.dispatchEvent(
+          new CustomEvent('$spaceChangedEvent', { detail: space })
+        );
+      })();
+    ''';
+  }
+
+  /// Tells the live page that the active Space changed.
+  ///
+  /// The boot-time value in [buildBootstrapScript] is not enough on its own:
+  /// a background user app keeps a **live WebView** (its route is covered, not
+  /// popped), so an app running while the user switches Spaces would otherwise
+  /// go on scoping its queries to a Space the user has left.
+  Future<void> notifySpaceChanged() async {
+    final controller = _controller;
+    if (controller == null) return;
+    try {
+      await controller.evaluateJavascript(source: buildSpaceChangedScript());
+    } catch (e) {
+      // A WebView disposed between the space change and this call throws; the
+      // page is gone, so there is nothing to tell and nothing to recover.
+      LoggerService.warning(
+        '[UserAppRuntimeBridge] Could not dispatch $spaceChangedEvent: $e',
+      );
+    }
+  }
+
   /// Registers all JavaScript handlers required by the Synapse runtime.
   void registerJavaScriptHandlers(InAppWebViewController controller) {
+    _controller = controller;
     controller.addJavaScriptHandler(
       handlerName: 'runQuery',
       callback: (args) async {

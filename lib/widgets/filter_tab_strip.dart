@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/filter.dart';
 import '../providers/app_provider.dart';
+import '../services/space_scope_service.dart';
 import '../l10n/app_localizations.dart';
 import 'custom_filter_dialog.dart';
 import 'hierarchy_dialog.dart';
@@ -37,6 +38,9 @@ class FilterTabStrip extends StatefulWidget {
 
 class _FilterTabStripState extends State<FilterTabStrip> {
   final ScrollController _scrollController = ScrollController();
+
+  /// A selection reset is already queued for after this frame.
+  bool _prunePending = false;
 
   @override
   void dispose() {
@@ -160,7 +164,101 @@ class _FilterTabStripState extends State<FilterTabStrip> {
     );
   }
 
+  /// Long-press on a filter tab: the Space actions.
+  ///
+  /// There is no per-tab popup menu to extend — the tab is a bare
+  /// [GestureDetector] — so this sheet is the *Activate as space* affordance.
+  ///
+  /// It offers activation only. The active Space has no tab in the strip (its
+  /// criteria already apply to every list), so *Leave* lives in the switcher
+  /// and in the active-filters dialog instead.
+  void _showTabActions(Filter filter) {
+    final l10n = AppLocalizations.of(context)!;
+    // A Space with no include tags would scope nothing and stamp nothing (A8).
+    // A reserved include-tag disqualifies it just as firmly
+    // (`AppProvider._isUsableSpace`): `all-spaces` would stamp the cross-Space
+    // escape onto every note created inside (A2). Refused here rather than at
+    // activation, because `_activateAsSpace` writes `isSpace: true` *before*
+    // activating — a filter that can never be a Space must not be flagged as
+    // one on the way to being rejected.
+    final hasReservedTag = filter.includeTags.any(
+      SpaceScopeService.isReservedTag,
+    );
+    final canBeSpace = filter.includeTags.isNotEmpty && !hasReservedTag;
+
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text(
+                filter.name,
+                style: Theme.of(sheetContext).textTheme.titleMedium,
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.workspaces_outlined),
+              title: Text(l10n.activateAsSpace),
+              subtitle: canBeSpace
+                  ? null
+                  : Text(
+                      hasReservedTag
+                          ? l10n.focusOnTagReserved
+                          : l10n.useAsSpaceNeedsIncludeTags,
+                    ),
+              enabled: canBeSpace,
+              onTap: canBeSpace
+                  ? () {
+                      Navigator.of(sheetContext).pop();
+                      _activateAsSpace(filter);
+                    }
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Turns [filter] into a Space if it is not one already, then activates it.
+  ///
+  /// Activation drops the filter's own tab from the strip, so a selection
+  /// still pointing at it is reset here — see [_pruneStaleSelection] for what
+  /// leaving it in place costs.
+  Future<void> _activateAsSpace(Filter filter) async {
+    final l10n = AppLocalizations.of(context)!;
+    final appProvider = context.read<AppProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+
+    if (!filter.isSpace) {
+      await appProvider.updateFilter(
+        filter.copyWith(isSpace: true, updatedAt: DateTime.now()),
+      );
+    }
+    // Reports failure rather than throwing — see AppProvider.setActiveSpace.
+    if (!await appProvider.setActiveSpace(filter.id)) {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.spaceUnavailable)));
+      return;
+    }
+    // Reset up front rather than leaving it to the next build's prune: that
+    // one runs after the frame, so the list would flash the wrong contents.
+    if (!mounted) return;
+    if (widget.selectedFilterIds.contains(filter.id)) {
+      widget.onFilterSelected({'default'});
+    }
+  }
+
+  Future<void> _leaveSpace() =>
+      context.read<AppProvider>().setActiveSpace(null);
+
   void _showActiveFiltersDialog() {
+    final appProvider = context.read<AppProvider>();
+    final activeSpace = appProvider.activeSpace;
     showDialog(
       context: context,
       builder: (context) {
@@ -258,6 +356,13 @@ class _FilterTabStripState extends State<FilterTabStrip> {
             return ActiveFiltersDialog(
               selectedFilters: getActiveFilters(),
               additionalTags: currentTags,
+              spaceName: activeSpace?.name,
+              onLeaveSpace: activeSpace == null
+                  ? null
+                  : () {
+                      Navigator.of(context).pop();
+                      _leaveSpace();
+                    },
               onRemoveFilter: (filter) {
                 setState(() {
                   currentFilterIds.remove(filter.id);
@@ -293,9 +398,22 @@ class _FilterTabStripState extends State<FilterTabStrip> {
     final l10n = AppLocalizations.of(context)!;
     final appProvider = context.watch<AppProvider>();
     final isHierarchyEnabled = appProvider.isHierarchyEnabled;
+    final activeSpace = appProvider.activeSpace;
+
+    // Candidates for the strip. The active Space's own tab is dropped: its
+    // criteria are already applied to every list, so the tab would be a no-op.
+    // In hierarchy mode a Space also roots the tree — only its own
+    // sub-filters (strict narrowings of it) are offered.
+    List<Filter> candidates = widget.customFilters
+        .where((f) => f.id != activeSpace?.id)
+        .toList();
+    if (isHierarchyEnabled && activeSpace != null) {
+      candidates = candidates.where((f) => f.isChildOf(activeSpace)).toList();
+    }
+    _pruneStaleSelection(candidates);
 
     // Sort filters: Pinned first, then by hierarchy/creation
-    List<Filter> visibleFilters = List.from(widget.customFilters);
+    List<Filter> visibleFilters = List.from(candidates);
 
     // Separate pinned and unpinned
     final pinnedFilters = visibleFilters.where((f) => f.isPinned).toList();
@@ -304,8 +422,11 @@ class _FilterTabStripState extends State<FilterTabStrip> {
     List<Filter> hierarchyFilteredUnpinned = unpinnedFilters;
     if (isHierarchyEnabled) {
       hierarchyFilteredUnpinned = unpinnedFilters.where((f) {
-        // Show if it is NOT a child of any other filter (pinned or unpinned)
-        return !widget.customFilters.any((other) {
+        // Show if it is NOT a child of any other candidate (pinned or not).
+        // The parent set has to be the candidates, not every filter: inside a
+        // Space every candidate is a child of the Space, so measuring against
+        // the full list would hide all of them.
+        return !candidates.any((other) {
           if (f == other) return false;
           if (!f.isChildOf(other)) return false;
           if (other.isChildOf(f)) {
@@ -321,9 +442,12 @@ class _FilterTabStripState extends State<FilterTabStrip> {
     // Combine: Pinned first, then hierarchy-filtered unpinned
     visibleFilters = [...pinnedFilters, ...hierarchyFilteredUnpinned];
 
+    // An active Space counts: the filters dialog is where the user goes to ask
+    // "why am I not seeing everything", and it is the only route to *Leave*.
     final hasActiveFilters =
         widget.selectedFilterIds.any((id) => id != 'default') ||
-        widget.additionalSelectedTags.isNotEmpty;
+        widget.additionalSelectedTags.isNotEmpty ||
+        activeSpace != null;
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -365,7 +489,12 @@ class _FilterTabStripState extends State<FilterTabStrip> {
 
           for (final filter in visibleFilters) ...[
             const SizedBox(width: 2),
-            _buildCustomFilterTab(filter, isHierarchyEnabled, appProvider),
+            _buildCustomFilterTab(
+              filter,
+              isHierarchyEnabled,
+              appProvider,
+              candidates,
+            ),
           ],
           const SizedBox(width: 16), // Extra space at the end
         ],
@@ -373,18 +502,59 @@ class _FilterTabStripState extends State<FilterTabStrip> {
     );
   }
 
+  /// Drops selected filter tabs that the current scope no longer offers,
+  /// falling back to the default tab once nothing is left selected.
+  ///
+  /// Activating a Space removes its own tab from [candidates], and in
+  /// hierarchy mode narrows them to the Space's children. A selection left
+  /// pointing at a dropped tab is invisible — no tab renders as selected — and
+  /// is *not* inert: `NotesScreen._filterNotes` goes on re-applying that
+  /// filter's criteria over the already-scoped list. For the Space's own
+  /// filter that silently rejects every note in scope only via `all-spaces`
+  /// (A1) and every archived member (A5), so the user activates a Space and
+  /// loses notes that belong in it.
+  ///
+  /// Only ids that still name a known filter are pruned: an id absent from
+  /// `customFilters` altogether is a deleted filter, which the notes screen
+  /// clears itself, and treating a momentarily empty list as "out of scope"
+  /// would wipe the user's selection during a reload.
+  ///
+  /// Called from `build`, so the reset is deferred to after the frame — it
+  /// runs the parent's `setState`.
+  void _pruneStaleSelection(List<Filter> candidates) {
+    if (_prunePending) return;
+    final stale = widget.selectedFilterIds
+        .where(
+          (id) =>
+              widget.customFilters.any((f) => f.id == id) &&
+              !candidates.any((f) => f.id == id),
+        )
+        .toSet();
+    if (stale.isEmpty) return;
+
+    _prunePending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _prunePending = false;
+      if (!mounted) return;
+      final kept = widget.selectedFilterIds.difference(stale);
+      widget.onFilterSelected(kept.isEmpty ? {'default'} : kept);
+    });
+  }
+
   Widget _buildCustomFilterTab(
     Filter filter,
     bool isHierarchyEnabled,
     AppProvider appProvider,
+    List<Filter> candidates,
   ) {
     final isSelected = widget.selectedFilterIds.contains(filter.id);
-    final hasChildren = widget.customFilters.any(
+    final hasChildren = candidates.any(
       (other) => other != filter && other.isChildOf(filter),
     );
 
     return GestureDetector(
       onTap: () => widget.onFilterSelected({filter.id}),
+      onLongPress: () => _showTabActions(filter),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
@@ -523,7 +693,8 @@ class _FilterTabStripState extends State<FilterTabStrip> {
         appProvider.toggleHierarchy();
       },
       onLongPress: () {
-        _showHierarchyDialog(null); // Show all hierarchy
+        // Inside a Space the tree is rooted there; otherwise the whole tree.
+        _showHierarchyDialog(appProvider.activeSpace);
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

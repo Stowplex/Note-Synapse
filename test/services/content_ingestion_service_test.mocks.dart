@@ -946,14 +946,18 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
+    List<String>? scopeTags,
     bool? includeEmpty = true,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#getAllConversations, [], {
               #maxAge: maxAge,
               #conversationIds: conversationIds,
               #tagNames: tagNames,
+              #scopeTags: scopeTags,
               #includeEmpty: includeEmpty,
+              #includeAllSpacesTag: includeAllSpacesTag,
             }),
             returnValue: _i7.Future<List<_i15.Conversation>>.value(
               <_i15.Conversation>[],
@@ -1473,9 +1477,19 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
   _i7.Future<List<_i8.Note>> searchNotesFTS(
     String? query, {
     List<String>? tags,
+    List<String>? scopeTags,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
-            Invocation.method(#searchNotesFTS, [query], {#tags: tags}),
+            Invocation.method(
+              #searchNotesFTS,
+              [query],
+              {
+                #tags: tags,
+                #scopeTags: scopeTags,
+                #includeAllSpacesTag: includeAllSpacesTag,
+              },
+            ),
             returnValue: _i7.Future<List<_i8.Note>>.value(<_i8.Note>[]),
           )
           as _i7.Future<List<_i8.Note>>);
@@ -1702,6 +1716,38 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as bool);
 
   @override
+  List<_i14.Filter> get spaces =>
+      (super.noSuchMethod(
+            Invocation.getter(#spaces),
+            returnValue: <_i14.Filter>[],
+          )
+          as List<_i14.Filter>);
+
+  @override
+  List<String> get spaceTags =>
+      (super.noSuchMethod(
+            Invocation.getter(#spaceTags),
+            returnValue: <String>[],
+          )
+          as List<String>);
+
+  @override
+  List<_i8.Note> get scopedNotes =>
+      (super.noSuchMethod(
+            Invocation.getter(#scopedNotes),
+            returnValue: <_i8.Note>[],
+          )
+          as List<_i8.Note>);
+
+  @override
+  List<String> get spacesInvalidatedByLastTagChange =>
+      (super.noSuchMethod(
+            Invocation.getter(#spacesInvalidatedByLastTagChange),
+            returnValue: <String>[],
+          )
+          as List<String>);
+
+  @override
   set newNoteFromShare(bool? value) => super.noSuchMethod(
     Invocation.setter(#newNoteFromShare, value),
     returnValueForMissingStub: null,
@@ -1749,9 +1795,17 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
   );
 
   @override
-  _i7.Future<void> addNote(_i8.Note? note, {bool? fromShare = false}) =>
+  _i7.Future<void> addNote(
+    _i8.Note? note, {
+    bool? fromShare = false,
+    bool? applySpaceTags = true,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#addNote, [note], {#fromShare: fromShare}),
+            Invocation.method(
+              #addNote,
+              [note],
+              {#fromShare: fromShare, #applySpaceTags: applySpaceTags},
+            ),
             returnValue: _i7.Future<void>.value(),
             returnValueForMissingStub: _i7.Future<void>.value(),
           )
@@ -1937,9 +1991,9 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as _i7.Future<void>);
 
   @override
-  List<String> getAllAvailableTags() =>
+  List<String> getAllAvailableTags({bool? scoped = true}) =>
       (super.noSuchMethod(
-            Invocation.method(#getAllAvailableTags, []),
+            Invocation.method(#getAllAvailableTags, [], {#scoped: scoped}),
             returnValue: <String>[],
           )
           as List<String>);
@@ -1958,6 +2012,38 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
             returnValueForMissingStub: _i7.Future<void>.value(),
           )
           as _i7.Future<void>);
+
+  @override
+  _i7.Future<bool> setActiveSpace(String? id) =>
+      (super.noSuchMethod(
+            Invocation.method(#setActiveSpace, [id]),
+            returnValue: _i7.Future<bool>.value(false),
+          )
+          as _i7.Future<bool>);
+
+  @override
+  _i7.Future<bool> joinSpace(List<String>? noteIds, String? spaceId) =>
+      (super.noSuchMethod(
+            Invocation.method(#joinSpace, [noteIds, spaceId]),
+            returnValue: _i7.Future<bool>.value(false),
+          )
+          as _i7.Future<bool>);
+
+  @override
+  _i7.Future<bool> leaveSpace(List<String>? noteIds, String? spaceId) =>
+      (super.noSuchMethod(
+            Invocation.method(#leaveSpace, [noteIds, spaceId]),
+            returnValue: _i7.Future<bool>.value(false),
+          )
+          as _i7.Future<bool>);
+
+  @override
+  int notesHiddenBySpace(List<String>? noteIds, String? spaceId) =>
+      (super.noSuchMethod(
+            Invocation.method(#notesHiddenBySpace, [noteIds, spaceId]),
+            returnValue: 0,
+          )
+          as int);
 
   @override
   _i7.Future<String?> getTagExtractionPrompt(String? tagId) =>
@@ -2127,7 +2213,7 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as _i7.Future<void>);
 
   @override
-  _i7.Future<void> batchUpdateTags(
+  _i7.Future<bool> batchUpdateTags(
     List<String>? noteIds,
     List<String>? tagsToAdd,
     List<String>? tagsToRemove,
@@ -2138,10 +2224,9 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
               tagsToAdd,
               tagsToRemove,
             ]),
-            returnValue: _i7.Future<void>.value(),
-            returnValueForMissingStub: _i7.Future<void>.value(),
+            returnValue: _i7.Future<bool>.value(false),
           )
-          as _i7.Future<void>);
+          as _i7.Future<bool>);
 
   @override
   _i7.Future<void> upsertSubNoteInNote(String? noteId, _i8.SubNote? subNote) =>
@@ -2197,9 +2282,12 @@ class MockAppProvider extends _i1.Mock implements _i18.AppProvider {
           as _i7.Future<void>);
 
   @override
-  List<_i8.Note> getFilteredNotes(_i14.Filter? filter) =>
+  List<_i8.Note> getFilteredNotes(
+    _i14.Filter? filter, {
+    List<_i8.Note>? base,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#getFilteredNotes, [filter]),
+            Invocation.method(#getFilteredNotes, [filter], {#base: base}),
             returnValue: <_i8.Note>[],
           )
           as List<_i8.Note>);

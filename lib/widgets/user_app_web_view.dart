@@ -114,10 +114,40 @@ class _UserAppWebViewState extends State<UserAppWebView> {
   /// revision replaces the WebView.
   bool _bridgeReady = false;
 
+  /// The provider this view is subscribed to for Space changes, kept so the
+  /// listener can be removed in [dispose] without a `BuildContext`.
+  AppProvider? _spaceSource;
+
+  /// The last payload published to the page, so an unrelated
+  /// `notifyListeners()` (the provider fires on every data change) does not
+  /// re-dispatch an event whose detail is identical.
+  String? _lastSpaceJson;
+
   @override
   void initState() {
     super.initState();
     _initBridge();
+    // Activation lives in AppProvider, which notifies on every change; the
+    // page only hears about it if something bridges the two. A background user
+    // app keeps a live WebView, so the boot-time value alone would go stale.
+    final provider = context.read<AppProvider>();
+    _spaceSource = provider..addListener(_publishSpaceIfChanged);
+    _lastSpaceJson = _bridge.buildSpaceJson();
+  }
+
+  @override
+  void dispose() {
+    _spaceSource?.removeListener(_publishSpaceIfChanged);
+    super.dispose();
+  }
+
+  /// Dispatches `synapse:spacechanged` when — and only when — the payload the
+  /// page would see actually changed.
+  void _publishSpaceIfChanged() {
+    final spaceJson = _bridge.buildSpaceJson();
+    if (spaceJson == _lastSpaceJson) return;
+    _lastSpaceJson = spaceJson;
+    _bridge.notifySpaceChanged();
   }
 
   @override

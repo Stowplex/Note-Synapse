@@ -26,6 +26,8 @@ import '../widgets/interactive_checkbox_markdown.dart';
 import '../widgets/interactive_checkbox_component.dart';
 import '../widgets/share_dialog.dart';
 import '../widgets/tag_selection_dialog.dart';
+import '../widgets/space_picker_dialog.dart';
+import '../services/space_scope_service.dart';
 import '../widgets/synapse_note_editor.dart';
 import '../widgets/app_embed_picker_sheet.dart';
 import '../widgets/note_source_card.dart';
@@ -94,6 +96,21 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   bool _hasChanges = false;
   bool _hasBeenSaved = false; // Track if note has been saved to database
   Timer? _autoSaveTimer;
+
+  /// Tags of a note that is not in the database yet, or null once it is.
+  ///
+  /// A new note only exists after the 2 s auto-save fires, and until then every
+  /// tag edit routed through `AppProvider` by note id finds nothing and
+  /// silently no-ops — which is exactly the window in which the Space prefill
+  /// asks the user to decide. So while this is non-null it is the authority:
+  /// the chips render from it, [_removeTag] and [_showAddTagDialog] edit it,
+  /// and the first save writes it verbatim with `applySpaceTags: false` so the
+  /// stamp cannot put back a tag the user just took off (invariant 5 / R5).
+  ///
+  /// The contract that follows for creators: a `isNewNote: true` caller that
+  /// wants the Space's tags must **prefill** them on the note it passes in.
+  /// They are shown, they are removable, and they are saved as they stand.
+  List<String>? _pendingTags;
 
   /// Transient block-note scope handed to a Note Action App, if one is open.
   /// Owned by this screen: see [_handleNoteActionAppSelection].
@@ -321,6 +338,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     if (widget.isNewNote) {
       _isEditing = true;
       _hasBeenSaved = false; // New notes haven't been saved yet
+      _pendingTags = List<String>.of(widget.note.tags);
     } else {
       _hasBeenSaved = true; // Existing notes are already in the database
     }
@@ -905,10 +923,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   /// Freshest copy of this note from the provider.
-  Note get _currentNote => Provider.of<AppProvider>(
-    context,
-    listen: false,
-  ).notes.firstWhere((n) => n.id == widget.note.id, orElse: () => widget.note);
+  Note get _currentNote => _withPendingTags(
+    Provider.of<AppProvider>(context, listen: false).notes.firstWhere(
+      (n) => n.id == widget.note.id,
+      orElse: () => widget.note,
+    ),
+  );
+
+  /// Overlays [_pendingTags] while the note has no row to read them from.
+  ///
+  /// A no-op once the first save has cleared the pending list, so every later
+  /// read is the provider's own truth.
+  Note _withPendingTags(Note note) {
+    final pending = _pendingTags;
+    if (pending == null) return note;
+    return note.copyWith(tags: List<String>.of(pending));
+  }
 
   /// Releases the transient block scope, if any. Safe to call repeatedly.
   void _releaseBlockScope() {
@@ -934,10 +964,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
     return Consumer<AppProvider>(
       builder: (context, appProvider, child) {
-        // Get the latest version of the note from the provider
-        final currentNote = appProvider.notes.firstWhere(
-          (note) => note.id == widget.note.id,
-          orElse: () => widget.note,
+        // Get the latest version of the note from the provider, with the
+        // pending tags of an as-yet-unsaved note overlaid on top.
+        final currentNote = _withPendingTags(
+          appProvider.notes.firstWhere(
+            (note) => note.id == widget.note.id,
+            orElse: () => widget.note,
+          ),
         );
         _syncSources(currentNote);
 
@@ -1047,6 +1080,28 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                           ],
                         ),
                       ),
+                      // Space membership is written by tagging the note's row,
+                      // so it needs a row: an unsaved note has nothing to join.
+                      if (!widget.isNewNote || _hasBeenSaved)
+                        PopupMenuItem(
+                          value: 'add_to_space',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.workspaces_outlined),
+                              const SizedBox(width: 8),
+                              Text(l10n.addToSpaceMenu),
+                            ],
+                          ),
+                        ),
+                      // The globe tag, on the other hand, is just a tag, so it
+                      // works on the pending list of an unsaved note too.
+                      CheckedPopupMenuItem(
+                        value: 'show_everywhere',
+                        checked: currentNote.tags.contains(
+                          SpaceScopeService.allSpacesTag,
+                        ),
+                        child: Text(l10n.showInEverySpace),
+                      ),
                       // Sources live on the note's row, so a new note gains
                       // one only once it has been saved.
                       if (!widget.isNewNote || _hasBeenSaved)
@@ -1060,13 +1115,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                             ],
                           ),
                         ),
+                      // These two labels are longer than the popup menu's
+                      // fixed maximum width, so they overflow their Row
+                      // unless the text is allowed to wrap.
                       PopupMenuItem(
                         value: 'fetch_images',
                         child: Row(
                           children: [
                             const Icon(Icons.download),
                             const SizedBox(width: 8),
-                            Text(l10n.fetchRemoteImages),
+                            Expanded(child: Text(l10n.fetchRemoteImages)),
                           ],
                         ),
                       ),
@@ -1076,7 +1134,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                           children: [
                             const Icon(Icons.cloud_sync),
                             const SizedBox(width: 8),
-                            Text(l10n.forceRefetchImages),
+                            Expanded(child: Text(l10n.forceRefetchImages)),
                           ],
                         ),
                       ),
@@ -1145,6 +1203,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     onSelected: (value) {
                       if (value == 'share') {
                         _shareNote();
+                      } else if (value == 'add_to_space') {
+                        SpacePickerDialog.show(context, [currentNote.id]);
+                      } else if (value == 'show_everywhere') {
+                        _toggleShowInEverySpace(currentNote);
                       } else if (value == 'merge') {
                         _mergeWith();
                       } else if (value == 'add_source') {
@@ -1907,6 +1969,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 16),
+          // A new note opens straight into this view and stays here until the
+          // first auto-save, so this is the only place the Space prefill can be
+          // shown and declined. Without it the stamp would be a lock, not a
+          // default (invariant 5).
+          if (_pendingTags != null) ...[
+            _buildPendingTagsRow(l10n),
+            const SizedBox(height: 16),
+          ],
           if (_sources.isNotEmpty) ...[
             _buildSourceCard(compact: true),
             const SizedBox(height: 16),
@@ -1928,6 +1998,45 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               onPickUserApp: () => _showUserAppPicker(context),
               language: 'markdown',
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The tags a not-yet-saved note will be created with.
+  ///
+  /// Removal and addition go through the same [_removeTag] / [_showAddTagDialog]
+  /// the saved note uses — they branch onto the pending list themselves — so
+  /// there is one tag-editing path, not a second one that could drift.
+  Widget _buildPendingTagsRow(AppLocalizations l10n) {
+    final note = _currentNote;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final tag in note.tags)
+            Chip(
+              label: Text(tag),
+              avatar: tag == SpaceScopeService.allSpacesTag
+                  ? const Icon(Icons.public, size: 14)
+                  : null,
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.1),
+              labelStyle: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              deleteIcon: const Icon(Icons.close, size: 16),
+              onDeleted: () => _removeTag(note, tag),
+            ),
+          TextButton.icon(
+            onPressed: () => _showAddTagDialog(note),
+            icon: const Icon(Icons.add, size: 16),
+            label: Text(l10n.addTag),
           ),
         ],
       ),
@@ -2597,11 +2706,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       return;
     }
 
-    // Get the current note from the provider to preserve any tags that were added
+    // Get the current note from the provider to preserve any tags that were
+    // added. Before the first save there is no row, so the pending tag list is
+    // what the user actually sees and what must be written.
     final appProvider = context.read<AppProvider>();
-    final currentNote = appProvider.notes.firstWhere(
-      (note) => note.id == widget.note.id,
-      orElse: () => widget.note,
+    final currentNote = _withPendingTags(
+      appProvider.notes.firstWhere(
+        (note) => note.id == widget.note.id,
+        orElse: () => widget.note,
+      ),
     );
 
     // We no longer automatically download images here to prevent unwanted data usage.
@@ -2651,10 +2764,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
     try {
       if (!_hasBeenSaved) {
-        await appProvider.addNote(updatedNote);
+        // `applySpaceTags: false` because this screen already showed the
+        // Space's tags as removable chips: stamping now would re-add whatever
+        // the user took off and turn the default into a lock (invariant 5).
+        // A creator that wants the tags prefills them; they are in
+        // `updatedNote.tags` already.
+        await appProvider.addNote(updatedNote, applySpaceTags: false);
         setState(() {
           _hasBeenSaved = true; // Mark as saved after first insert
+          _pendingTags = null; // The row is now the authority.
         });
+        if (mounted) {
+          reportSavedOutsideSpace(context, appProvider, updatedNote.tags);
+        }
       } else {
         await appProvider.updateNote(updatedNote);
       }
@@ -4033,6 +4155,49 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     );
   }
 
+  /// Adds or removes `all-spaces`, the tag that makes a note show up inside
+  /// every Space regardless of its own tags.
+  ///
+  /// On an unsaved note it edits the pending list like any other tag, so the
+  /// choice survives the first save instead of being lost with it.
+  Future<void> _toggleShowInEverySpace(Note currentNote) async {
+    const tag = SpaceScopeService.allSpacesTag;
+    final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    final appProvider = context.read<AppProvider>();
+    final wanted = !currentNote.tags.contains(tag);
+
+    final pending = _pendingTags;
+    if (pending != null) {
+      setState(() {
+        if (wanted) {
+          if (!pending.contains(tag)) pending.add(tag);
+        } else {
+          pending.remove(tag);
+        }
+      });
+    } else {
+      final ok = await setShowInEverySpace(
+        appProvider,
+        [currentNote.id],
+        wanted,
+      );
+      if (!ok) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.spaceMembershipFailed)),
+        );
+        return;
+      }
+    }
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          wanted ? l10n.showInEverySpaceOn : l10n.showInEverySpaceOff,
+        ),
+      ),
+    );
+  }
+
   void _removeTag(Note currentNote, String tagName) {
     showDialog(
       context: context,
@@ -4049,6 +4214,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
+              // Before the first save there is no row to edit: the provider
+              // would look the note up by id, find nothing and return without
+              // a word, leaving the chip on screen and the tag on the note.
+              // Removing a prefilled Space tag is exactly that case.
+              final pending = _pendingTags;
+              if (pending != null) {
+                setState(() => pending.remove(tagName));
+                return;
+              }
               await context.read<AppProvider>().removeTagFromNote(
                 currentNote.id,
                 tagName,
@@ -4077,6 +4251,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       ),
     ).then((tagNames) async {
       if (tagNames == null || tagNames.isEmpty) return;
+      // Same unsaved-note window as _removeTag: hold the additions locally so
+      // the first save carries them instead of dropping them on the floor.
+      final pending = _pendingTags;
+      if (pending != null) {
+        setState(() {
+          for (final tagName in tagNames) {
+            if (!pending.contains(tagName)) pending.add(tagName);
+          }
+        });
+        return;
+      }
       for (final tagName in tagNames) {
         await appProvider.addTagToNote(currentNote.id, tagName);
       }

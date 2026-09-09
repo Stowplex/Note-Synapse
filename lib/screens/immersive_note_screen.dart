@@ -5630,6 +5630,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         ..writeln()
         ..writeln(mcpToolsPrompt.trim());
     }
+    // Rebuild the session's index if the Space moved since skills were enabled.
+    await _conversationService.ensureSkillIndex();
     if (_conversationService.skillsEnabled &&
         _conversationService.skillIndex.isNotEmpty) {
       final isLocalModel =

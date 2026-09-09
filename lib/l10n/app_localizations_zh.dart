@@ -5587,4 +5587,166 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get showLess => '收起';
+
+  @override
+  String get switchSpace => '切换空间';
+
+  @override
+  String get manageSpaces => '管理空间…';
+
+  @override
+  String get manageSpacesTitle => '管理空间';
+
+  @override
+  String get noSpacesYet => '还没有空间';
+
+  @override
+  String get noSpacesYetHint => '在筛选器编辑器中打开“用作空间”，即可把筛选器变成空间。';
+
+  @override
+  String get spaceUnavailable => '该空间已不可用';
+
+  @override
+  String get leaveSpace => '退出空间';
+
+  @override
+  String get activateAsSpace => '设为当前空间';
+
+  @override
+  String get stopUsingAsSpace => '取消用作空间';
+
+  @override
+  String spaceRowLabel(String name) {
+    return '空间：$name';
+  }
+
+  @override
+  String get useAsSpace => '用作空间';
+
+  @override
+  String get useAsSpaceDescription => '启用空间后，所有列表只显示该空间的笔记，新建笔记会自动带上它的包含标签。';
+
+  @override
+  String get useAsSpaceNeedsIncludeTags =>
+      '请至少添加一个包含标签：没有包含标签的空间既限定不了范围，也标记不了笔记。';
+
+  @override
+  String spaceStampPreview(String tags) {
+    return '新笔记将被标记为：$tags';
+  }
+
+  @override
+  String get spaceTextCriteriaWarning => '在此创建的笔记可能不符合该筛选器的文本条件。';
+
+  @override
+  String get spaceNoteTypeWarning => '在此创建的笔记可能不符合该筛选器的笔记类型。';
+
+  @override
+  String get tagExistingNotesTitle => '为现有笔记添加标签？';
+
+  @override
+  String tagExistingNotesBody(int count, String name, String tags) {
+    return '同时为“$name”中现有的 $count 条笔记添加标签：$tags';
+  }
+
+  @override
+  String get tagExistingNotesConfirm => '添加标签';
+
+  @override
+  String get notNow => '暂不';
+
+  @override
+  String get addToSpaceMenu => '添加到空间…';
+
+  @override
+  String get addToSpaceTitle => '添加到空间';
+
+  @override
+  String get addToSpaceHint => '勾选的空间会为这条笔记添加标签；取消勾选会移除其他空间不再需要的标签。';
+
+  @override
+  String addToSpaceHintPlural(int count) {
+    return '勾选的空间会为这 $count 条笔记添加标签；取消勾选会移除其他空间不再需要的标签。';
+  }
+
+  @override
+  String get spaceMembershipPartial => '部分所选笔记';
+
+  @override
+  String get spaceMembershipFailed => '无法更新空间归属';
+
+  @override
+  String get showInEverySpace => '在所有空间中显示';
+
+  @override
+  String get stopShowingInEverySpace => '停止在所有空间中显示';
+
+  @override
+  String get showInEverySpaceOn => '这条笔记现在会出现在所有空间中';
+
+  @override
+  String get showInEverySpaceOff => '这条笔记不再出现在所有空间中';
+
+  @override
+  String get addExistingNotesMenu => '添加已有笔记…';
+
+  @override
+  String addExistingNotesTitle(String name) {
+    return '将笔记添加到 $name';
+  }
+
+  @override
+  String get addExistingNotesNoSpace => '请先启用一个空间';
+
+  @override
+  String addExistingNotesNothingLeft(String name) {
+    return '所有笔记都已在 $name 中';
+  }
+
+  @override
+  String spaceJoinAdded(int count) {
+    return '已添加 $count 条';
+  }
+
+  @override
+  String spaceJoinHiddenTasks(int count, String name) {
+    return '有 $count 条未显示，因为 $name 只显示任务';
+  }
+
+  @override
+  String spaceJoinHiddenNotes(int count, String name) {
+    return '有 $count 条未显示，因为 $name 只显示笔记';
+  }
+
+  @override
+  String spaceJoinHiddenFilter(int count, String name) {
+    return '有 $count 条未显示，因为不符合 $name 的其他条件';
+  }
+
+  @override
+  String savedOutsideSpace(String name) {
+    return '已保存在 $name 之外';
+  }
+
+  @override
+  String get showAllNotes => '显示全部笔记';
+
+  @override
+  String includeNotesOutsideSpace(String name) {
+    return '包含 $name 以外的笔记';
+  }
+
+  @override
+  String spacesRetiredByTagChange(String names) {
+    return '$names 已不再是空间：其包含标签已被移除';
+  }
+
+  @override
+  String get focusOnThisTag => '聚焦此标签';
+
+  @override
+  String get focusOnTagUnusable => '包含逗号的标签不能用作空间。';
+
+  @override
+  String get focusOnTagReserved => '该标签为应用保留标签，不能用作空间。';
 }

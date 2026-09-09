@@ -8,6 +8,7 @@ import 'database_service.dart';
 import 'logger_service.dart';
 import 'service_locator.dart';
 import 'skill_service.dart';
+import 'space_scope_service.dart';
 
 /// Service for managing starter content (User Manual and starter apps)
 class StarterService {
@@ -241,6 +242,9 @@ Please refer to the attached PDF for detailed user manual.''';
     try {
       final skillService = SkillService(getIt<DatabaseService>());
       final skills = <Map<String, dynamic>>[];
+      // Space-blind for the same reason as `installStarterSkills` (C5): the
+      // `isInstalled` flag this computes is what the install screen greys out,
+      // and a Space must not make an installed skill look available again.
       final existing = await getIt<DatabaseService>().getNotesByTag(
         SkillService.agentSkillTag,
       );
@@ -283,6 +287,11 @@ Please refer to the attached PDF for detailed user manual.''';
   static Future<int> installStarterSkills({Set<String>? skillRefs}) async {
     final databaseService = getIt<DatabaseService>();
     final skillService = SkillService(databaseService);
+    // Correction C5: this set decides whether a starter skill is re-installed,
+    // so it must see every installed skill regardless of the active Space.
+    // `getNotesByTag` is space-blind by construction; anything that replaces it
+    // with `buildSkillIndex` must pass `allSpaces: true`, or activating a Space
+    // shrinks the set and already-installed skills are installed again.
     final existing = await databaseService.getNotesByTag(
       SkillService.agentSkillTag,
     );
@@ -309,7 +318,17 @@ Please refer to the attached PDF for detailed user manual.''';
         updatedAt: now,
         pinned: false,
         isArchived: false,
-        tags: const [SkillService.agentSkillTag, 'starter-skill'],
+        // `all-spaces` is part of the fixed tag list, not the Space stamp
+        // (invariant 7 forbids StarterService from stamping, and A2 forbids the
+        // stamp from adding this tag anyway). A starter skill ships with the
+        // app rather than with a Space, so it must stay reachable from every
+        // Space and from none — exactly what migration v47 does for the skills
+        // that predate this feature.
+        tags: const [
+          SkillService.agentSkillTag,
+          'starter-skill',
+          SpaceScopeService.allSpacesTag,
+        ],
         attachmentPaths: const [],
         subNotes: const [],
       );

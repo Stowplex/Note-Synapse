@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../models/note.dart';
 import '../services/service_locator.dart';
+import '../services/space_scope_service.dart';
 import '../services/tag_image_service.dart';
 import '../utils/date_utils.dart';
 import '../services/logger_service.dart';
@@ -194,15 +195,23 @@ class NoteCard extends StatelessWidget {
                       ],
                     ),
                   ],
-                  if (note.tags.isNotEmpty) ...[
+                  if (visibleTags(note.tags).isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 4,
                       runSpacing: 4,
-                      children: note.tags
-                          .take(3)
+                      children: visibleTags(note.tags)
                           .map(
                             (tag) => Chip(
+                              avatar: tag == SpaceScopeService.allSpacesTag
+                                  ? Icon(
+                                      Icons.public,
+                                      size: 14,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                    )
+                                  : null,
                               label: Text(
                                 tag,
                                 style: const TextStyle(fontSize: 12),
@@ -422,6 +431,31 @@ class NoteCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// The (at most three) tag chips this card shows.
+  ///
+  /// Inside a Space its own include-tags are dropped: every note in scope
+  /// carries them, so they take up the card's three slots to say nothing.
+  /// `all-spaces` is the opposite — only a subset carries it and it changes
+  /// what the card means — so it is hoisted to the front and therefore
+  /// survives the truncation instead of being the fourth tag nobody sees.
+  ///
+  /// The active Space is read from [SpaceScopeService] rather than from a
+  /// provider so the card stays usable in surfaces that render it outside an
+  /// [AppProvider]; it rebuilds because every list that shows cards rebuilds on
+  /// the provider's notify, and activation always notifies.
+  static List<String> visibleTags(List<String> tags) {
+    final spaceTags = getIt.isRegistered<SpaceScopeService>()
+        ? getIt<SpaceScopeService>().stampTags
+        : const <String>[];
+    const globe = SpaceScopeService.allSpacesTag;
+    final rest = [
+      for (final tag in tags)
+        if (tag != globe && !spaceTags.contains(tag)) tag,
+    ];
+    final shown = tags.contains(globe) ? [globe, ...rest] : rest;
+    return shown.take(3).toList();
   }
 
   Widget _buildTagImage(String imagePath) {

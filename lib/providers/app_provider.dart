@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -21,6 +22,7 @@ import '../services/logger_service.dart';
 import '../services/note_source_service.dart';
 import '../services/service_locator.dart';
 import '../services/model_storage_service.dart';
+import '../services/space_scope_service.dart';
 import '../services/tag_image_service.dart';
 import '../models/generation_context.dart';
 
@@ -28,13 +30,20 @@ class AppProvider extends ChangeNotifier {
   AppProvider({
     DatabaseService? databaseService,
     DataChangeNotifier? changeNotifier,
+    SpaceScopeService? spaceScope,
   }) : _databaseService = databaseService ?? DatabaseService(),
-       _changeNotifier = changeNotifier ?? DataChangeNotifier.shared() {
+       _changeNotifier = changeNotifier ?? DataChangeNotifier.shared(),
+       // The scope must be the *same* object the data-layer writers stamp with
+       // (`NoteModificationService`), and `AppProvider` is constructed directly
+       // in tests and widget trees as well as through the service locator, so
+       // it cannot rely on registration order.
+       _scope = spaceScope ?? SpaceScopeService.shared() {
     _changeSubscription = _changeNotifier.addListener(_onDataChanged);
   }
 
   final DatabaseService _databaseService;
   final DataChangeNotifier _changeNotifier;
+  final SpaceScopeService _scope;
   late final DataChangeSubscription _changeSubscription;
 
   /// Tail of the cache-mutation queue (see [_withCacheLock]). The tail future
@@ -62,6 +71,8 @@ class AppProvider extends ChangeNotifier {
   bool _reloadRequested = false;
   Future<void>? _loadDataInFlight;
   List<String>? _availableTagsCache;
+  List<String>? _scopedTagsCache;
+  List<Note>? _scopedNotesCache;
   int _dataVersion = 0;
   String? _error;
   bool _isDarkMode = false;
@@ -162,9 +173,12 @@ class AppProvider extends ChangeNotifier {
       if (event.filtersChanged)
         _databaseService
             .getAllFilters()
-            .then((filters) {
+            .then((filters) async {
               _filters = filters;
               cacheTouched = true;
+              // An external writer may have deleted or un-flagged the active
+              // Space; re-resolve before anyone reads `scopedNotes`.
+              await _syncSpaceState();
             })
             .catchError((Object e) {
               LoggerService.error(
@@ -303,6 +317,11 @@ class AppProvider extends ChangeNotifier {
       await _loadHierarchyPreference();
       await _loadOnboardingStatus();
 
+      // After `_filters`: the persisted space id is resolved against them, and
+      // an id that no longer names a usable Space is dropped here.
+      await _scope.load();
+      await _syncSpaceState();
+
       _error = null;
       _hasLoadedOnce = true;
       LoggerService.info('loadData completed successfully');
@@ -322,13 +341,26 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addNote(Note note, {bool fromShare = false}) =>
-      _withCacheLock(() async {
+  /// Persists a new note.
+  ///
+  /// The active Space's tags are unioned onto it first ([applySpaceTags]),
+  /// which is what files a note into the Space the user created it in. Pass
+  /// `applySpaceTags: false` from creators that already showed the tags and
+  /// let the user take them off — the stamp is a default, not a lock.
+  /// Orthogonal to [fromShare], which only routes the post-save navigation.
+  Future<void> addNote(
+    Note note, {
+    bool fromShare = false,
+    bool applySpaceTags = true,
+  }) => _withCacheLock(() async {
     try {
-      await _databaseService.insertNote(note);
+      // Stamped before the insert: the row is re-read below, so a stamp
+      // applied afterwards would never be persisted.
+      final stamped = applySpaceTags ? _scope.stamp(note) : note;
+      await _databaseService.insertNote(stamped);
 
       // Reload the note from database to get properly converted attachment paths
-      final addedNote = await _databaseService.getNote(note.id);
+      final addedNote = await _databaseService.getNote(stamped.id);
       if (addedNote != null) {
         _notes.add(addedNote);
         if (fromShare) {
@@ -589,11 +621,13 @@ class AppProvider extends ChangeNotifier {
       // Only persistence runs under the cache lock; the AI generation above
       // is slow and must not block other cache mutations.
       return await _withCacheLock(() async {
-        // Save all new notes and reload them from database
+        // Save all new notes and reload them from database. This path bypasses
+        // addNote entirely, so it has to apply the Space stamp itself.
         final List<Note> addedNotes = [];
         for (final note in newNotes) {
-          await _databaseService.insertNote(note);
-          final addedNote = await _databaseService.getNote(note.id);
+          final stamped = _scope.stamp(note);
+          await _databaseService.insertNote(stamped);
+          final addedNote = await _databaseService.getNote(stamped.id);
           if (addedNote != null) {
             addedNotes.add(addedNote);
           }
@@ -642,21 +676,41 @@ class AppProvider extends ChangeNotifier {
     }
   });
 
-  List<String> getAllAvailableTags() {
-    // Cached because this scans all notes and is called multiple times per
-    // build; invalidated in notifyListeners on any state change.
-    final cached = _availableTagsCache;
-    if (cached != null) return cached;
+  /// Every tag name in use, sorted.
+  ///
+  /// Scoped by default: inside a Space it lists the tags of [scopedNotes] and
+  /// drops the Space's own include-tags, which every note in scope carries and
+  /// which would therefore be a useless chip. With no active Space the two
+  /// modes are identical (`scopedNotes == notes`, no tags to subtract).
+  ///
+  /// Both variants are cached — this scans every note and runs several times
+  /// per build — and both are invalidated in [notifyListeners].
+  List<String> getAllAvailableTags({bool scoped = true}) {
+    if (!scoped) {
+      return _availableTagsCache ??= _collectTags(_notes, const []);
+    }
+    return _scopedTagsCache ??= _collectTags(scopedNotes, spaceTags);
+  }
+
+  static List<String> _collectTags(List<Note> notes, List<String> exclude) {
     final allTags = <String>{};
-    for (final note in _notes) {
+    for (final note in notes) {
       allTags.addAll(note.tags);
     }
-    return _availableTagsCache = List.unmodifiable(allTags.toList()..sort());
+    allTags.removeAll(exclude);
+    return List.unmodifiable(allTags.toList()..sort());
   }
 
   @override
   void notifyListeners() {
     _availableTagsCache = null;
+    // Deliberately NOT keyed on _dataVersion: deleteTag, replaceTag,
+    // batchUpdateTags, addTagToNote and upsertSubNoteInNote all rewrite
+    // `_notes` and notify WITHOUT bumping it, and joining/leaving a Space goes
+    // through batchUpdateTags — so a version-keyed scope would go stale
+    // exactly when membership changes. Every mutator does reach here.
+    _scopedTagsCache = null;
+    _scopedNotesCache = null;
     super.notifyListeners();
   }
 
@@ -664,6 +718,357 @@ class AppProvider extends ChangeNotifier {
     _tags = await _databaseService.getAllTags();
     notifyListeners();
   });
+
+  // ===========================================================================
+  // Spaces
+  //
+  // A Space is a Filter with `isSpace == true` and non-empty `includeTags`.
+  // Activating one narrows every list (never access) and stamps newly created
+  // notes with its include-tags. `SpaceScopeService` holds the activation and
+  // does the tag arithmetic; this provider is the only object that can resolve
+  // a persisted space id against the filter list, so it owns activation.
+  //
+  // Design: .claude/plans/2026-09-08-project-space-design.md
+  // ===========================================================================
+
+  /// Filters usable as a Space: flagged, and with something to scope by.
+  List<Filter> get spaces => _filters.where(_isUsableSpace).toList();
+
+  /// Whether [filter] can act as a Space.
+  ///
+  /// Flagged, with something to scope and stamp by, and with tags that survive
+  /// storage: the `filters` table keeps `includeTags` **comma-joined**
+  /// (`database_service.dart` `insertFilter`/`getAllFilters`), so a tag
+  /// containing a comma comes back as two tags that no note carries. Such a
+  /// filter would scope to nothing and stamp names that do not exist, so it is
+  /// never a Space — it cannot be listed, activated, or stamped with, and a
+  /// rename that puts a comma into a Space's tag retires that Space here
+  /// rather than silently emptying it.
+  ///
+  /// A reserved tag ([SpaceScopeService.isReservedTag]) disqualifies a filter
+  /// for the same reason: `all-spaces` as an include-tag would stamp the
+  /// cross-Space escape onto every note created in the Space (A2), make
+  /// leaving it a permanent no-op, and hide it from the chip list (A9); the
+  /// `agent-skill` tag would turn every new note into a malformed skill.
+  /// Migration v47 guarantees `all-spaces` exists as a real tag row, so it is
+  /// offered by every tag picker — this is the one place that has to refuse
+  /// it, and being the single definition of "is this filter a Space" it covers
+  /// *Focus on this tag*, *Use as space*, *Activate as space* and a filter row
+  /// restored from a backup at once.
+  static bool _isUsableSpace(Filter filter) =>
+      filter.isSpace &&
+      filter.includeTags.isNotEmpty &&
+      !filter.includeTags.any((tag) => tag.contains(',')) &&
+      !filter.includeTags.any(SpaceScopeService.isReservedTag);
+
+  /// The active Space's filter, or null when none is active — including when
+  /// the persisted id no longer resolves to a usable space (a *dangling* id,
+  /// which means "unscoped", never "empty list").
+  Filter? get activeSpace => _spaceById(_scope.activeSpaceId);
+
+  /// The active Space's include-tags: what membership is measured against and
+  /// what new notes are stamped with. Empty when no Space is active.
+  List<String> get spaceTags => activeSpace?.includeTags ?? const [];
+
+  /// The notes visible in the active Space, in `notes` order.
+  ///
+  /// The predicate is the Space filter evaluated with `includeArchived` forced
+  /// true (the Active/Pinned/Archived/All tabs decide archived-ness for
+  /// themselves), ORed with "the note carries `all-spaces`" — an unconditional
+  /// escape that also overrides the Space's excludeTags, includeText and
+  /// noteTypes.
+  ///
+  /// With no active Space this holds every note, in `notes` order (A3: equal
+  /// content — not the identical object).
+  ///
+  /// **Always unmodifiable, in both branches.** A caller that mutates the
+  /// result must fail at the default state too, not only once a Space happens
+  /// to be active. The no-Space branch is an [UnmodifiableListView], so it
+  /// stays O(1) and stays live as `_notes` is rewritten in place.
+  List<Note> get scopedNotes {
+    final space = activeSpace;
+    if (space == null) return UnmodifiableListView(_notes);
+    return _scopedNotesCache ??= List.unmodifiable(
+      _notes.where((n) => _isInSpace(space, n)).toList(),
+    );
+  }
+
+  /// Whether [note] belongs to Space [space] (see [scopedNotes]).
+  ///
+  /// The authoritative membership predicate: the whole Space `Filter` is
+  /// evaluated, so `excludeTags`, `includeText` and `noteTypes` all count.
+  /// `SpaceScopeService.noteInScope` is the deliberately wider tags-only
+  /// approximation for callers that cannot reach the `Filter`.
+  static bool _isInSpace(Filter space, Note note) =>
+      note.tags.contains(SpaceScopeService.allSpacesTag) ||
+      _matchesFilterCriteria(space, note, includeArchived: true);
+
+  Filter? _spaceById(String? id) {
+    if (id == null) return null;
+    for (final filter in _filters) {
+      if (filter.id == id) {
+        return _isUsableSpace(filter) ? filter : null;
+      }
+    }
+    return null;
+  }
+
+  /// Activate the Space with [id], or pass null to leave every Space.
+  ///
+  /// Returns whether the request was honoured: a filter that is missing, not
+  /// flagged `isSpace`, or carrying no include-tags is rejected outright
+  /// (an empty stamp would scope nothing and tag nothing). Callers get a
+  /// boolean rather than a thrown error because the UI's only reasonable
+  /// response is to leave the current scope alone and say so.
+  ///
+  /// Runs under [_withCacheLock], which serializes it against `_doLoadData`.
+  /// A reload holds the lock across `_scope.load()`; an activation slipping in
+  /// there would be read back stale — `load()` would adopt the *previous* id,
+  /// drop the stamp tags, and the reload's own `_syncSpaceState()` would
+  /// re-activate the previous Space while prefs still named the new one.
+  ///
+  /// It calls only unlocked helpers ([_spaceById], [_applySpaceState] — which
+  /// reaches no further than `_scope.save()`), so the non-reentrancy rule
+  /// holds. The locked filter mutators must keep reaching this state through
+  /// [_syncSpaceState] rather than through here.
+  Future<bool> setActiveSpace(String? id) => _withCacheLock(() async {
+    if (id != null && _spaceById(id) == null) return false;
+    _scopedNotesCache = null;
+    _scopedTagsCache = null;
+    await _applySpaceState(id, persist: true);
+    notifyListeners();
+    return true;
+  });
+
+  /// Re-resolves the *current* activation against `_filters` and republishes
+  /// it to [SpaceScopeService], together with a fresh snapshot of every Space.
+  ///
+  /// This is what the filter mutators call: an id whose filter was deleted,
+  /// un-flagged or emptied deactivates here, and its persisted value is
+  /// dropped so it cannot come back on the next launch.
+  ///
+  /// Lock-free on purpose: called from inside locked filter mutators, and
+  /// [_withCacheLock] is non-reentrant.
+  Future<void> _syncSpaceState() => _applySpaceState(_scope.activeSpaceId);
+
+  Future<void> _applySpaceState(String? id, {bool persist = false}) async {
+    _scope.setSpaceSnapshots([
+      for (final filter in spaces)
+        SpaceSnapshot(id: filter.id, includeTags: filter.includeTags),
+    ]);
+
+    final space = _spaceById(id);
+    final wasSet = _scope.activeSpaceId != null;
+    _scope.setActive(
+      space?.id,
+      space?.includeTags ?? const [],
+      name: space?.name,
+    );
+    // A dangling or just-deleted id must not survive a restart either.
+    if (persist || (wasSet && space == null)) await _scope.save();
+  }
+
+  /// Adds [noteIds] to the Space [spaceId] by stamping its include-tags.
+  ///
+  /// Returns false when [spaceId] is not a usable Space, or when the write
+  /// failed ([batchUpdateTags] swallows its exception, so a caller that ignored
+  /// the result would report a join that never happened). An empty [noteIds]
+  /// is a vacuous success.
+  ///
+  /// The answer comes from [batchUpdateTags]'s own return value, never from
+  /// the shared `_error` field: clearing `_error` to use it as a success flag
+  /// would wipe an error the UI is showing and could blame this join for an
+  /// unrelated queued failure.
+  Future<bool> joinSpace(List<String> noteIds, String spaceId) async {
+    final space = _spaceById(spaceId);
+    if (space == null) return false;
+    if (noteIds.isEmpty) return true;
+    // Outside any lock by contract: batchUpdateTags takes the (non-reentrant)
+    // cache lock itself.
+    return batchUpdateTags(noteIds, space.includeTags, const []);
+  }
+
+  /// Removes [noteIds] from the Space [spaceId].
+  ///
+  /// Removes the Space's include-tags **minus** any tag another Space the note
+  /// still belongs to also requires — leaving Thesis `{thesis, 2026}` on a note
+  /// that is also in Reading `{reading, 2026}` drops `thesis` and keeps `2026`.
+  /// `all-spaces` is never removed: it is not membership, it is an override.
+  ///
+  /// The removal set is per note, so notes are grouped by it and each group
+  /// gets its own [batchUpdateTags] pass. Reports success the same way
+  /// [joinSpace] does.
+  Future<bool> leaveSpace(List<String> noteIds, String spaceId) async {
+    final space = _spaceById(spaceId);
+    if (space == null) return false;
+    if (noteIds.isEmpty) return true;
+
+    final others = spaces.where((s) => s.id != space.id).toList();
+    final groups = <String, List<String>>{};
+    final removals = <String, List<String>>{};
+    for (final noteId in noteIds) {
+      final note = _noteById(noteId);
+      if (note == null) continue;
+      final remove = _leaveSet(space, others, note);
+      if (remove.isEmpty) continue;
+      // Filters store their tag lists comma-joined, so a comma cannot
+      // occur inside a Space tag and is a safe grouping separator.
+      final key = (List<String>.from(remove)..sort()).join(',');
+      groups.putIfAbsent(key, () => <String>[]).add(noteId);
+      removals[key] = remove;
+    }
+    if (groups.isEmpty) return true;
+
+    // Every group is attempted even after one fails — a partial leave is worse
+    // than a complete one — and the caller is told if any of them did.
+    var ok = true;
+    for (final entry in groups.entries) {
+      final passed = await batchUpdateTags(
+        entry.value,
+        const [],
+        removals[entry.key]!,
+      );
+      ok = ok && passed;
+    }
+    return ok;
+  }
+
+  /// How many of [noteIds] the Space [spaceId] still does not show.
+  ///
+  /// A join stamps the Space's include-tags, but the Space's *own* criteria can
+  /// go on rejecting the note — `noteTypes` (a tasks-only Space swallowing a
+  /// note), `excludeTags`, `includeText`. That is the "M not shown because
+  /// *Space* only shows tasks" half of the post-join feedback, and it must be
+  /// measured with the whole filter, not with the tag stamp.
+  ///
+  /// Notes carrying `all-spaces` are shown unconditionally (A1) and so are
+  /// never counted. Ids that no longer resolve to a note are skipped.
+  int notesHiddenBySpace(List<String> noteIds, String spaceId) {
+    final space = _spaceById(spaceId);
+    if (space == null) return 0;
+    var hidden = 0;
+    for (final id in noteIds) {
+      final note = _noteById(id);
+      if (note == null) continue;
+      if (!_isInSpace(space, note)) hidden++;
+    }
+    return hidden;
+  }
+
+  /// The tags [note] loses when it leaves [space], given the [others] it might
+  /// still belong to (see [leaveSpace]).
+  static List<String> _leaveSet(Filter space, List<Filter> others, Note note) {
+    final keep = <String>{};
+    for (final other in others) {
+      // Membership is evaluated on the note as it stands. Only tags the other
+      // Space does NOT require are ever removed, so its membership is
+      // unaffected by the removal and needs no second evaluation.
+      if (!other.includeTags.every(note.tags.contains)) continue;
+      keep.addAll(other.includeTags);
+    }
+    return [
+      for (final tag in space.includeTags)
+        if (tag != SpaceScopeService.allSpacesTag &&
+            !keep.contains(tag) &&
+            note.tags.contains(tag))
+          tag,
+    ];
+  }
+
+  Note? _noteById(String id) {
+    for (final note in _notes) {
+      if (note.id == id) return note;
+    }
+    return null;
+  }
+
+  // ---------------------------------------------------------------- G8: tags
+  //
+  // A tag lives in two places: on notes, and inside `filters.includeTags` /
+  // `excludeTags`. Renaming or deleting one used to rewrite the notes only,
+  // which left every filter pointing at a name nothing carries. For a Space
+  // that is not cosmetic: the include-tags ARE the scope and the stamp, so a
+  // rename silently emptied the Space and a delete left it stamping nothing.
+
+  List<String> _spacesInvalidatedByTags = const [];
+
+  /// Names of Spaces that stopped being Spaces during the most recent
+  /// [deleteTag] or [replaceTag], newest call wins.
+  ///
+  /// A Space is its include-tags; deleting the last one leaves nothing to scope
+  /// or stamp by, so the flag is dropped and the Space deactivates. That is the
+  /// one way a Space can disappear without the user asking for it, so the
+  /// caller (the tag management screen) reads this straight after awaiting the
+  /// call and says so. Empty on every call that invalidated nothing.
+  List<String> get spacesInvalidatedByLastTagChange => _spacesInvalidatedByTags;
+
+  /// Rewrites [tagName] out of every filter's tag lists — renamed to
+  /// [replacement], or dropped when it is null.
+  ///
+  /// Matching is per **whole tag**: the lists are `List<String>`, so `thesis`
+  /// never touches `thesis-2026`. Renaming onto a name a filter already carries
+  /// dedups instead of duplicating. A Space left with no include-tags loses its
+  /// `isSpace` flag, because an empty stamp is not a Space.
+  ///
+  /// Lock-free on purpose: called from inside the locked tag mutators, and
+  /// [_withCacheLock] is non-reentrant. Returns whether anything changed.
+  Future<bool> _rewriteFiltersForTag(String tagName, String? replacement) async {
+    final spacesBefore = {for (final f in spaces) f.id: f.name};
+    var changed = false;
+
+    for (var i = 0; i < _filters.length; i++) {
+      final filter = _filters[i];
+      final include = _rewriteTagList(filter.includeTags, tagName, replacement);
+      final exclude = _rewriteTagList(filter.excludeTags, tagName, replacement);
+      if (include == null && exclude == null) continue;
+
+      final nextInclude = include ?? filter.includeTags;
+      var updated = filter.copyWith(
+        includeTags: nextInclude,
+        excludeTags: exclude ?? filter.excludeTags,
+        updatedAt: DateTime.now(),
+      );
+      // Not a Space any more. Tested with the same predicate that decides
+      // whether a Space is usable, not merely "empty": a rename to `a,b`
+      // leaves a non-empty include-tag list that the comma-joined `filters`
+      // column splits on the next launch, so un-flagging only on emptiness
+      // wrote `isSpace: 1` back and the Space came back after a restart —
+      // scoping to nothing and stamping two tag names that do not exist.
+      if (updated.isSpace && !_isUsableSpace(updated)) {
+        updated = updated.copyWith(isSpace: false);
+      }
+
+      await _databaseService.updateFilter(updated);
+      _filters[i] = updated;
+      changed = true;
+    }
+
+    _spacesInvalidatedByTags = changed
+        ? [
+            for (final entry in spacesBefore.entries)
+              if (_spaceById(entry.key) == null) entry.value,
+          ]
+        : const [];
+    return changed;
+  }
+
+  /// [tags] with [tagName] renamed to [replacement] (or removed when null),
+  /// preserving order and dropping duplicates. Null when nothing matched, so
+  /// the caller can skip the write.
+  static List<String>? _rewriteTagList(
+    List<String> tags,
+    String tagName,
+    String? replacement,
+  ) {
+    if (!tags.contains(tagName)) return null;
+    final result = <String>[];
+    for (final tag in tags) {
+      final next = tag == tagName ? replacement : tag;
+      if (next == null) continue;
+      if (!result.contains(next)) result.add(next);
+    }
+    return result;
+  }
 
   // --- Agent / AI Features ---
 
@@ -679,6 +1084,7 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> deleteTag(String tagName) => _withCacheLock(() async {
+    _spacesInvalidatedByTags = const [];
     try {
       // Clean up tag image file before deleting the tag
       final tagImageService = getIt<TagImageService>();
@@ -705,6 +1111,10 @@ class AppProvider extends ChangeNotifier {
 
       // Reload tags to update the list
       _tags = await _databaseService.getAllTags();
+
+      // Filters carry the tag too, and a Space's include-tags ARE its scope.
+      await _syncFiltersAfterTagRewrite(await _rewriteFiltersForTag(tagName, null));
+
       notifyListeners();
       _error = null;
     } catch (e) {
@@ -716,6 +1126,7 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> replaceTag(String oldTagName, String newTagName) =>
       _withCacheLock(() async {
+    _spacesInvalidatedByTags = const [];
     try {
       // Migrate image from old tag to new tag if new tag has no image
       final tagImageService = getIt<TagImageService>();
@@ -749,6 +1160,14 @@ class AppProvider extends ChangeNotifier {
 
       // Reload tags to update the list
       _tags = await _databaseService.getAllTags();
+
+      // Rename the tag inside every filter as well, so a Space whose
+      // include-tag was renamed keeps scoping and re-points its stamp instead
+      // of silently emptying itself.
+      await _syncFiltersAfterTagRewrite(
+        await _rewriteFiltersForTag(oldTagName, newTagName),
+      );
+
       notifyListeners();
       _error = null;
     } catch (e) {
@@ -758,10 +1177,30 @@ class AppProvider extends ChangeNotifier {
     }
   });
 
+  /// Republishes the Space state after a tag rewrite touched the filters.
+  ///
+  /// [_syncSpaceState] is what re-points the active Space's stamp at the new
+  /// tag name — and what deactivates it when the rewrite left it unusable. The
+  /// caller then calls [notifyListeners], which is how every filter mutation in
+  /// this provider publishes itself ([addFilter], [updateFilter],
+  /// [deleteFilter] do exactly this and nothing more).
+  ///
+  /// Deliberately does **not** `publish` a `filtersChanged`
+  /// [DataChangeEvent]: that channel carries changes made *outside* the
+  /// provider (raw plugin SQL, `NoteModificationService`) so the provider can
+  /// refresh its caches, and `AppProvider` is its only subscriber. Publishing
+  /// here would loop straight back into `_onDataChanged`, re-reading from the
+  /// database the filters that were just written to it and rebuilding every
+  /// listener a second time.
+  Future<void> _syncFiltersAfterTagRewrite(bool changed) async {
+    if (!changed) return;
+    await _syncSpaceState();
+  }
+
   List<Note> getTasksForDate(DateTime date) {
     final dateStr =
         '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-    return _notes
+    return scopedNotes
         .where(
           (note) =>
               note.isTask &&
@@ -791,7 +1230,7 @@ class AppProvider extends ChangeNotifier {
   }
 
   List<Note> getNotesForDate(DateTime date) {
-    return _notes
+    return scopedNotes
         .where(
           (note) =>
               !note.isArchived &&
@@ -938,6 +1377,9 @@ class AppProvider extends ChangeNotifier {
       _filters = [];
       _error = null;
 
+      // The Space's filter is gone with the rest, so the activation goes too.
+      await _syncSpaceState();
+
       // Reset theme to default (light mode)
       _isDarkMode = false;
       await _saveThemePreference();
@@ -1080,7 +1522,14 @@ class AppProvider extends ChangeNotifier {
     }
   });
 
-  Future<void> batchUpdateTags(
+  /// Adds and removes tags across [noteIds] in one pass.
+  ///
+  /// Returns whether the pass succeeded. Failures are *also* surfaced through
+  /// `error` for the UI, but callers that need to know the outcome of their own
+  /// call must use the return value: `_error` is shared mutable state, so
+  /// reading it back cannot distinguish this failure from an error that was
+  /// already on screen or from an unrelated queued write's.
+  Future<bool> batchUpdateTags(
     List<String> noteIds,
     List<String> tagsToAdd,
     List<String> tagsToRemove,
@@ -1126,9 +1575,11 @@ class AppProvider extends ChangeNotifier {
         _tags = await _databaseService.getAllTags();
         notifyListeners();
       }
+      return true;
     } catch (e) {
       _error = e.toString();
       notifyListeners();
+      return false;
     }
   });
 
@@ -1220,6 +1671,7 @@ class AppProvider extends ChangeNotifier {
     try {
       await _databaseService.insertFilter(filter);
       _filters.add(filter);
+      await _syncSpaceState();
       notifyListeners();
       _error = null;
     } catch (e) {
@@ -1235,6 +1687,9 @@ class AppProvider extends ChangeNotifier {
       final filterIndex = _filters.indexWhere((f) => f.id == filter.id);
       if (filterIndex != -1) {
         _filters[filterIndex] = filter;
+        // Un-flagging `isSpace` or emptying its include-tags deactivates the
+        // Space; editing them re-points the stamp.
+        await _syncSpaceState();
         notifyListeners();
       }
       _error = null;
@@ -1249,6 +1704,8 @@ class AppProvider extends ChangeNotifier {
     try {
       await _databaseService.deleteFilter(filterId);
       _filters.removeWhere((filter) => filter.id == filterId);
+      // Deleting the active Space's filter deactivates it.
+      await _syncSpaceState();
       notifyListeners();
       _error = null;
     } catch (e) {
@@ -1258,46 +1715,22 @@ class AppProvider extends ChangeNotifier {
     }
   });
 
-  List<Note> getFilteredNotes(Filter filter) {
-    List<Note> filteredNotes = _notes;
-
-    // Filter by archived status
-    if (!filter.includeArchived) {
-      filteredNotes = filteredNotes.where((note) => !note.isArchived).toList();
-    }
-
-    // Filter by text content
-    if (filter.includeText?.isNotEmpty == true) {
-      final query = filter.includeText!.toLowerCase();
-      filteredNotes = filteredNotes.where((note) {
-        return note.title.toLowerCase().contains(query) ||
-            note.content.toLowerCase().contains(query) ||
-            note.tags.any((tag) => tag.toLowerCase().contains(query));
-      }).toList();
-    }
-
-    // Filter by tags (AND logic - note must have ALL selected tags)
-    if (filter.includeTags.isNotEmpty) {
-      filteredNotes = filteredNotes.where((note) {
-        return filter.includeTags.every(
-          (selectedTag) => note.tags.contains(selectedTag),
-        );
-      }).toList();
-    }
-
-    // Filter by exclude tags (note must NOT have ANY of the excluded tags)
-    if (filter.excludeTags.isNotEmpty) {
-      filteredNotes = filteredNotes.where((note) {
-        return !note.tags.any((tag) => filter.excludeTags.contains(tag));
-      }).toList();
-    }
-
-    // Filter by note types
-    if (filter.noteTypes.isNotEmpty) {
-      filteredNotes = filteredNotes.where((note) {
-        return filter.noteTypes.contains(note.type);
-      }).toList();
-    }
+  /// Notes matching [filter], pinned first and newest first.
+  ///
+  /// [base] is the list to filter, defaulting to every note. Scoped callers
+  /// pass [scopedNotes]: this method is what backs the saved-filter tabs, so
+  /// without an explicit base a saved filter selected inside a Space would
+  /// reach straight past the Space and show notes from outside it.
+  List<Note> getFilteredNotes(Filter filter, {List<Note>? base}) {
+    final filteredNotes = (base ?? _notes)
+        .where(
+          (note) => _matchesFilterCriteria(
+            filter,
+            note,
+            includeArchived: filter.includeArchived,
+          ),
+        )
+        .toList();
 
     // Sort by pinned status first, then by creation date
     filteredNotes.sort((a, b) {
@@ -1307,6 +1740,40 @@ class AppProvider extends ChangeNotifier {
     });
 
     return filteredNotes;
+  }
+
+  /// Whether [note] satisfies [filter]'s criteria.
+  ///
+  /// [includeArchived] overrides the filter's own flag so the Space scope can
+  /// evaluate the same criteria with archived notes kept in: inside a Space,
+  /// archived-ness is decided by the tab, not by the Space's filter.
+  static bool _matchesFilterCriteria(
+    Filter filter,
+    Note note, {
+    required bool includeArchived,
+  }) {
+    if (!includeArchived && note.isArchived) return false;
+
+    final text = filter.includeText;
+    if (text != null && text.isNotEmpty) {
+      final query = text.toLowerCase();
+      final matchesText =
+          note.title.toLowerCase().contains(query) ||
+          note.content.toLowerCase().contains(query) ||
+          note.tags.any((tag) => tag.toLowerCase().contains(query));
+      if (!matchesText) return false;
+    }
+
+    // Include tags are ANDed: the note must carry all of them.
+    if (!filter.includeTags.every(note.tags.contains)) return false;
+
+    if (note.tags.any(filter.excludeTags.contains)) return false;
+
+    if (filter.noteTypes.isNotEmpty && !filter.noteTypes.contains(note.type)) {
+      return false;
+    }
+
+    return true;
   }
 
   // User App management methods

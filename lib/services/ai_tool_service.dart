@@ -81,6 +81,15 @@ class AiToolRuntime {
   UserAppRuntimeBridge? _bridge;
   Completer<void>? _loadCompleter;
 
+  /// The Space payload the live page last saw.
+  ///
+  /// Mirrors `UserAppWebView._lastSpaceJson`: the event means "the Space
+  /// changed", so re-dispatching an identical payload before every tool call
+  /// would tell a generated tool to re-run its queries on every invocation.
+  /// Seeded when the bridge is built, because the bootstrap script bakes that
+  /// same value into the page.
+  String? _lastSpaceJson;
+
   // Console log collection for invoke operations
   bool _isCollectingConsoleLogs = false;
   final List<String> _consoleLogBuffer = [];
@@ -107,6 +116,8 @@ class AiToolRuntime {
       onModificationRequest: onModificationRequest,
       onSqlWriteApprovalRequest: onSqlWriteApprovalRequest,
     );
+    // What `buildBootstrapScript()` below is about to publish to the page.
+    _lastSpaceJson = _bridge!.buildSpaceJson();
 
     _headlessWebView = HeadlessInAppWebView(
       initialData: InAppWebViewInitialData(
@@ -193,6 +204,15 @@ class AiToolRuntime {
     GenerationContext generationContext,
   ) async {
     await _ensureRunning();
+    // Republish the Space before every call. This runtime keeps its WebView
+    // alive across invocations *and* across Space switches, and it is the one
+    // consumer of the bridge with no subscriber to the provider — the
+    // interactive `UserAppWebView` listens and forwards, a headless tool has
+    // no widget tree to listen from. Without this a generated tool follows
+    // half of the documented contract: it scopes its queries by `space.tags`
+    // from the boot-time value and never receives `synapse:spacechanged`, so
+    // it keeps scoping to a Space the user has left.
+    await _publishSpaceIfChanged();
     final controller = _controller;
     if (controller == null) {
       throw Exception(
@@ -264,6 +284,17 @@ class AiToolRuntime {
     }
   }
 
+  /// Tells the live page the Space changed — when, and only when, the payload
+  /// it would see actually changed. Same guard as `UserAppWebView`.
+  Future<void> _publishSpaceIfChanged() async {
+    final bridge = _bridge;
+    if (bridge == null) return;
+    final spaceJson = bridge.buildSpaceJson();
+    if (spaceJson == _lastSpaceJson) return;
+    _lastSpaceJson = spaceJson;
+    await bridge.notifySpaceChanged();
+  }
+
   Future<void> dispose() async {
     try {
       if (_headlessWebView != null) {
@@ -280,6 +311,7 @@ class AiToolRuntime {
       _controller = null;
       _bridge = null;
       _loadCompleter = null;
+      _lastSpaceJson = null;
     }
   }
 }

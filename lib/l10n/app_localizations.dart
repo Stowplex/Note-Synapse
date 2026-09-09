@@ -10141,6 +10141,276 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show less'**
   String get showLess;
+
+  /// No description provided for @switchSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch space'**
+  String get switchSpace;
+
+  /// No description provided for @manageSpaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage spaces…'**
+  String get manageSpaces;
+
+  /// No description provided for @manageSpacesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage Spaces'**
+  String get manageSpacesTitle;
+
+  /// No description provided for @noSpacesYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No spaces yet'**
+  String get noSpacesYet;
+
+  /// No description provided for @noSpacesYetHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn a filter into a space with \"Use as space\" in the filter editor.'**
+  String get noSpacesYetHint;
+
+  /// No description provided for @spaceUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'That space is no longer available'**
+  String get spaceUnavailable;
+
+  /// No description provided for @leaveSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave space'**
+  String get leaveSpace;
+
+  /// No description provided for @activateAsSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Activate as space'**
+  String get activateAsSpace;
+
+  /// No description provided for @stopUsingAsSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop using as space'**
+  String get stopUsingAsSpace;
+
+  /// No description provided for @spaceRowLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Space: {name}'**
+  String spaceRowLabel(String name);
+
+  /// No description provided for @useAsSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Use as space'**
+  String get useAsSpace;
+
+  /// No description provided for @useAsSpaceDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Activating a space narrows every list to its notes and tags new notes with its include tags.'**
+  String get useAsSpaceDescription;
+
+  /// No description provided for @useAsSpaceNeedsIncludeTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Add at least one include tag: a space without include tags would scope nothing and tag nothing.'**
+  String get useAsSpaceNeedsIncludeTags;
+
+  /// No description provided for @spaceStampPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'New notes will be tagged: {tags}'**
+  String spaceStampPreview(String tags);
+
+  /// No description provided for @spaceTextCriteriaWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes you create here may not match this filter\'s text criteria.'**
+  String get spaceTextCriteriaWarning;
+
+  /// No description provided for @spaceNoteTypeWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes you create here may not match this filter\'s note types.'**
+  String get spaceNoteTypeWarning;
+
+  /// No description provided for @tagExistingNotesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag existing notes?'**
+  String get tagExistingNotesTitle;
+
+  /// No description provided for @tagExistingNotesBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Also tag the {count} {count, plural, =1{note} other{notes}} currently in \"{name}\" with: {tags}'**
+  String tagExistingNotesBody(int count, String name, String tags);
+
+  /// No description provided for @tagExistingNotesConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag notes'**
+  String get tagExistingNotesConfirm;
+
+  /// No description provided for @notNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get notNow;
+
+  /// No description provided for @addToSpaceMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to space…'**
+  String get addToSpaceMenu;
+
+  /// No description provided for @addToSpaceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to space'**
+  String get addToSpaceTitle;
+
+  /// No description provided for @addToSpaceHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Checked spaces tag this note; unchecking removes the tags no other space still needs.'**
+  String get addToSpaceHint;
+
+  /// No description provided for @addToSpaceHintPlural.
+  ///
+  /// In en, this message translates to:
+  /// **'Checked spaces tag these {count} notes; unchecking removes the tags no other space still needs.'**
+  String addToSpaceHintPlural(int count);
+
+  /// No description provided for @spaceMembershipPartial.
+  ///
+  /// In en, this message translates to:
+  /// **'Some of the selected notes'**
+  String get spaceMembershipPartial;
+
+  /// No description provided for @spaceMembershipFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not update space membership'**
+  String get spaceMembershipFailed;
+
+  /// No description provided for @showInEverySpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Show in every space'**
+  String get showInEverySpace;
+
+  /// Multi-select action label to remove the all-spaces tag
+  ///
+  /// In en, this message translates to:
+  /// **'Stop showing in every space'**
+  String get stopShowingInEverySpace;
+
+  /// No description provided for @showInEverySpaceOn.
+  ///
+  /// In en, this message translates to:
+  /// **'This note now shows in every space'**
+  String get showInEverySpaceOn;
+
+  /// No description provided for @showInEverySpaceOff.
+  ///
+  /// In en, this message translates to:
+  /// **'This note no longer shows in every space'**
+  String get showInEverySpaceOff;
+
+  /// No description provided for @addExistingNotesMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Add existing notes…'**
+  String get addExistingNotesMenu;
+
+  /// No description provided for @addExistingNotesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add notes to {name}'**
+  String addExistingNotesTitle(String name);
+
+  /// No description provided for @addExistingNotesNoSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Activate a space first'**
+  String get addExistingNotesNoSpace;
+
+  /// No description provided for @addExistingNotesNothingLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'Every note is already in {name}'**
+  String addExistingNotesNothingLeft(String name);
+
+  /// No description provided for @spaceJoinAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} added'**
+  String spaceJoinAdded(int count);
+
+  /// No description provided for @spaceJoinHiddenTasks.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} not shown because {name} only shows tasks'**
+  String spaceJoinHiddenTasks(int count, String name);
+
+  /// No description provided for @spaceJoinHiddenNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} not shown because {name} only shows notes'**
+  String spaceJoinHiddenNotes(int count, String name);
+
+  /// No description provided for @spaceJoinHiddenFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} not shown because of {name}\'s other criteria'**
+  String spaceJoinHiddenFilter(int count, String name);
+
+  /// No description provided for @savedOutsideSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved outside {name}'**
+  String savedOutsideSpace(String name);
+
+  /// No description provided for @showAllNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all notes'**
+  String get showAllNotes;
+
+  /// No description provided for @includeNotesOutsideSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Include notes outside {name}'**
+  String includeNotesOutsideSpace(String name);
+
+  /// No description provided for @spacesRetiredByTagChange.
+  ///
+  /// In en, this message translates to:
+  /// **'{names} is no longer a space: its include tags are gone'**
+  String spacesRetiredByTagChange(String names);
+
+  /// Long-press action on a tag chip: make the tag a Space and activate it
+  ///
+  /// In en, this message translates to:
+  /// **'Focus on this tag'**
+  String get focusOnThisTag;
+
+  /// Why a tag cannot become a Space (filters store include tags comma-joined)
+  ///
+  /// In en, this message translates to:
+  /// **'A tag containing a comma cannot be used as a space.'**
+  String get focusOnTagUnusable;
+
+  /// Why a reserved tag (all-spaces, agent-skill) cannot become a Space
+  ///
+  /// In en, this message translates to:
+  /// **'This tag is reserved by the app and cannot be used as a space.'**
+  String get focusOnTagReserved;
 }
 
 class _AppLocalizationsDelegate

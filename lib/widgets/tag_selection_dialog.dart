@@ -10,6 +10,7 @@ import '../screens/tag_management_screen.dart';
 import '../services/service_locator.dart';
 import '../services/tag_image_service.dart';
 import 'hierarchy_dialog.dart';
+import 'tag_focus_action.dart';
 
 class TagSelectionDialog extends StatefulWidget {
   final List<String> initialSelectedTags;
@@ -22,6 +23,16 @@ class TagSelectionDialog extends StatefulWidget {
   final bool showManageTagsButton;
   final bool returnAsSet;
 
+  /// Whether long-pressing a tag chip offers *Focus on this tag*, which turns
+  /// the tag into a Space and activates it.
+  ///
+  /// Opt-in, because this dialog is also the "which tags does this note carry"
+  /// editor and the plugin `pickTags` sheet — surfaces where changing the whole
+  /// app's scope is not a plausible intent. It is switched on where the user is
+  /// already narrowing what they are looking at (the notes and calendar tag
+  /// filters, via [MultiSelectTagFilter]).
+  final bool enableSpaceFocus;
+
   const TagSelectionDialog({
     super.key,
     this.initialSelectedTags = const [],
@@ -33,6 +44,7 @@ class TagSelectionDialog extends StatefulWidget {
     this.confirmLabelBuilder,
     this.showManageTagsButton = false,
     this.returnAsSet = false,
+    this.enableSpaceFocus = false,
   });
 
   @override
@@ -177,6 +189,19 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
     return CircleAvatar(radius: 8, backgroundImage: imageProvider);
   }
 
+  /// Adds the *Focus on this tag* long-press to [chip] when the host opted in.
+  ///
+  /// A wrapping detector rather than a chip parameter: neither [FilterChip],
+  /// [ActionChip] nor [Chip] exposes `onLongPress`, and their internal `InkWell`
+  /// only claims the tap, so the long press is uncontested.
+  Widget _withFocusAction(String tag, Widget chip) {
+    if (!widget.enableSpaceFocus) return chip;
+    return GestureDetector(
+      onLongPress: () => showTagFocusSheet(context, tag),
+      child: chip,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -252,19 +277,25 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
                                 final isDerived = _filterDerivedTags.contains(
                                   tag,
                                 );
-                                return Chip(
-                                  avatar: _buildTagAvatar(tag),
-                                  label: Text(tag),
-                                  backgroundColor: isDerived
-                                      ? Colors.purple.withOpacity(0.1)
-                                      : null,
-                                  deleteIcon: const Icon(Icons.close, size: 18),
-                                  onDeleted: () {
-                                    setState(() {
-                                      _selectedTags.remove(tag);
-                                      _filterDerivedTags.remove(tag);
-                                    });
-                                  },
+                                return _withFocusAction(
+                                  tag,
+                                  Chip(
+                                    avatar: _buildTagAvatar(tag),
+                                    label: Text(tag),
+                                    backgroundColor: isDerived
+                                        ? Colors.purple.withOpacity(0.1)
+                                        : null,
+                                    deleteIcon: const Icon(
+                                      Icons.close,
+                                      size: 18,
+                                    ),
+                                    onDeleted: () {
+                                      setState(() {
+                                        _selectedTags.remove(tag);
+                                        _filterDerivedTags.remove(tag);
+                                      });
+                                    },
+                                  ),
                                 );
                               }).toList(),
                             ),
@@ -352,23 +383,29 @@ class _TagSelectionDialogState extends State<TagSelectionDialog> {
                                 // Use FilterChip for filter scenarios (allowEmptySelection) to show selected state
                                 // Use ActionChip for regular tag selection (add-only mode)
                                 if (widget.allowEmptySelection) {
-                                  return FilterChip(
-                                    avatar: _buildTagAvatar(tag),
-                                    label: Text(tag),
-                                    selected: isSelected,
-                                    onSelected: (selected) {
-                                      _handleTagSelection(tag);
-                                    },
+                                  return _withFocusAction(
+                                    tag,
+                                    FilterChip(
+                                      avatar: _buildTagAvatar(tag),
+                                      label: Text(tag),
+                                      selected: isSelected,
+                                      onSelected: (selected) {
+                                        _handleTagSelection(tag);
+                                      },
+                                    ),
                                   );
                                 } else {
-                                  return ActionChip(
-                                    avatar: _buildTagAvatar(tag),
-                                    label: Text(tag),
-                                    onPressed: () {
-                                      setState(() {
-                                        _selectedTags.add(tag);
-                                      });
-                                    },
+                                  return _withFocusAction(
+                                    tag,
+                                    ActionChip(
+                                      avatar: _buildTagAvatar(tag),
+                                      label: Text(tag),
+                                      onPressed: () {
+                                        setState(() {
+                                          _selectedTags.add(tag);
+                                        });
+                                      },
+                                    ),
                                   );
                                 }
                               }).toList(),

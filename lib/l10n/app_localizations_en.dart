@@ -5871,4 +5871,179 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get showLess => 'Show less';
+
+  @override
+  String get switchSpace => 'Switch space';
+
+  @override
+  String get manageSpaces => 'Manage spaces…';
+
+  @override
+  String get manageSpacesTitle => 'Manage Spaces';
+
+  @override
+  String get noSpacesYet => 'No spaces yet';
+
+  @override
+  String get noSpacesYetHint =>
+      'Turn a filter into a space with \"Use as space\" in the filter editor.';
+
+  @override
+  String get spaceUnavailable => 'That space is no longer available';
+
+  @override
+  String get leaveSpace => 'Leave space';
+
+  @override
+  String get activateAsSpace => 'Activate as space';
+
+  @override
+  String get stopUsingAsSpace => 'Stop using as space';
+
+  @override
+  String spaceRowLabel(String name) {
+    return 'Space: $name';
+  }
+
+  @override
+  String get useAsSpace => 'Use as space';
+
+  @override
+  String get useAsSpaceDescription =>
+      'Activating a space narrows every list to its notes and tags new notes with its include tags.';
+
+  @override
+  String get useAsSpaceNeedsIncludeTags =>
+      'Add at least one include tag: a space without include tags would scope nothing and tag nothing.';
+
+  @override
+  String spaceStampPreview(String tags) {
+    return 'New notes will be tagged: $tags';
+  }
+
+  @override
+  String get spaceTextCriteriaWarning =>
+      'Notes you create here may not match this filter\'s text criteria.';
+
+  @override
+  String get spaceNoteTypeWarning =>
+      'Notes you create here may not match this filter\'s note types.';
+
+  @override
+  String get tagExistingNotesTitle => 'Tag existing notes?';
+
+  @override
+  String tagExistingNotesBody(int count, String name, String tags) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'notes',
+      one: 'note',
+    );
+    return 'Also tag the $count $_temp0 currently in \"$name\" with: $tags';
+  }
+
+  @override
+  String get tagExistingNotesConfirm => 'Tag notes';
+
+  @override
+  String get notNow => 'Not now';
+
+  @override
+  String get addToSpaceMenu => 'Add to space…';
+
+  @override
+  String get addToSpaceTitle => 'Add to space';
+
+  @override
+  String get addToSpaceHint =>
+      'Checked spaces tag this note; unchecking removes the tags no other space still needs.';
+
+  @override
+  String addToSpaceHintPlural(int count) {
+    return 'Checked spaces tag these $count notes; unchecking removes the tags no other space still needs.';
+  }
+
+  @override
+  String get spaceMembershipPartial => 'Some of the selected notes';
+
+  @override
+  String get spaceMembershipFailed => 'Could not update space membership';
+
+  @override
+  String get showInEverySpace => 'Show in every space';
+
+  @override
+  String get stopShowingInEverySpace => 'Stop showing in every space';
+
+  @override
+  String get showInEverySpaceOn => 'This note now shows in every space';
+
+  @override
+  String get showInEverySpaceOff => 'This note no longer shows in every space';
+
+  @override
+  String get addExistingNotesMenu => 'Add existing notes…';
+
+  @override
+  String addExistingNotesTitle(String name) {
+    return 'Add notes to $name';
+  }
+
+  @override
+  String get addExistingNotesNoSpace => 'Activate a space first';
+
+  @override
+  String addExistingNotesNothingLeft(String name) {
+    return 'Every note is already in $name';
+  }
+
+  @override
+  String spaceJoinAdded(int count) {
+    return '$count added';
+  }
+
+  @override
+  String spaceJoinHiddenTasks(int count, String name) {
+    return '$count not shown because $name only shows tasks';
+  }
+
+  @override
+  String spaceJoinHiddenNotes(int count, String name) {
+    return '$count not shown because $name only shows notes';
+  }
+
+  @override
+  String spaceJoinHiddenFilter(int count, String name) {
+    return '$count not shown because of $name\'s other criteria';
+  }
+
+  @override
+  String savedOutsideSpace(String name) {
+    return 'Saved outside $name';
+  }
+
+  @override
+  String get showAllNotes => 'Show all notes';
+
+  @override
+  String includeNotesOutsideSpace(String name) {
+    return 'Include notes outside $name';
+  }
+
+  @override
+  String spacesRetiredByTagChange(String names) {
+    return '$names is no longer a space: its include tags are gone';
+  }
+
+  @override
+  String get focusOnThisTag => 'Focus on this tag';
+
+  @override
+  String get focusOnTagUnusable =>
+      'A tag containing a comma cannot be used as a space.';
+
+  @override
+  String get focusOnTagReserved =>
+      'This tag is reserved by the app and cannot be used as a space.';
 }

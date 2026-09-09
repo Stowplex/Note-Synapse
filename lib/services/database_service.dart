@@ -91,7 +91,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 46; // Target schema version
+  static const int DATABASE_VERSION = 47; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -221,7 +221,8 @@ class DatabaseService {
         includeArchived INTEGER NOT NULL DEFAULT 0, -- Whether to include archived notes
         isPinned INTEGER NOT NULL DEFAULT 0, -- Whether filter is pinned to top
         createdAt INTEGER NOT NULL, -- Creation timestamp
-        updatedAt INTEGER NOT NULL -- Last update timestamp
+        updatedAt INTEGER NOT NULL, -- Last update timestamp
+        isSpace INTEGER NOT NULL DEFAULT 0 -- Whether filter is usable as an activatable Space
       )
   ''';
 
@@ -782,11 +783,19 @@ class DatabaseService {
   static Future<int> _detectActualSchemaVersion(Database db) async {
     int detected = 19; // Minimum supported version
 
+    // Check for isSpace in filters (v47)
+    if (detected < 47) {
+      final filtersCols = await db.rawQuery("PRAGMA table_info('filters')");
+      if (filtersCols.any((c) => c['name'] == 'isSpace')) detected = 47;
+    }
+
     // Check for tag_images table (v41)
-    final tagImagesCheck = await db.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='tag_images'",
-    );
-    if (tagImagesCheck.isNotEmpty) detected = 41;
+    if (detected < 41) {
+      final tagImagesCheck = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='tag_images'",
+      );
+      if (tagImagesCheck.isNotEmpty) detected = 41;
+    }
 
     // Check for notes_fts table (v31/v36)
     if (detected < 36) {
@@ -919,7 +928,113 @@ class DatabaseService {
           'Create tag_workflow_bindings table for tag-to-workflow binding infrastructure',
       execute: _migrateToVersion45,
     ),
+    47: MigrationStep(
+      description:
+          'Add isSpace to filters; tag existing agent-skill notes all-spaces',
+      execute: _migrateToVersion47,
+    ),
   };
+
+  /// The reserved tag name migration 47 writes. A frozen copy of
+  /// `SpaceScopeService.allSpacesTag` — see [_migrateToVersion47].
+  static const String _allSpacesTagV47 = 'all-spaces';
+
+  /// Row id of the reserved `all-spaces` tag minted by [_migrateToVersion47].
+  ///
+  /// **This literal must never change.** Every database mints the tag
+  /// independently — the live one when it upgrades, and every backup migrated
+  /// by [migrateBackupDatabase] — and recovery merges the two by *name*
+  /// (`RecoveryScreen._mergeTags`) while inserting the backup's `note_tags`
+  /// rows verbatim afterwards, with no id remap. A per-database random uuid
+  /// would therefore leave every restored skill note pointing at a tag id that
+  /// exists in no `tags` row: the note would lose `all-spaces` and become
+  /// invisible in every Space, which is exactly what the back-fill exists to
+  /// prevent. A fixed id makes both sides id-equal, so the merge is a no-op.
+  static const String _allSpacesTagIdV47 =
+      'a115face-0000-4000-8000-000000000047';
+
+  /// v47: filters gain the [Filter.isSpace] role flag, and every skill that
+  /// already exists becomes visible from every Space.
+  ///
+  /// Without the second step every skill a user already has would vanish the
+  /// first time they activate a Space (a space-scoped skill is one that
+  /// carries the space's tags; a pre-existing skill carries none).
+  ///
+  /// Both steps are idempotent and use raw SQL only: this runs inside the
+  /// database's own connection (also for backups, via [migrateBackupDatabase]),
+  /// so calling an instance helper that awaits the `database` getter would
+  /// deadlock.
+  ///
+  /// Both reserved tag names are written as literals — [_allSpacesTagV47] and
+  /// `'agent-skill'` — rather than read from `SpaceScopeService.allSpacesTag`
+  /// or `SkillService.agentSkillTag`: a migration is frozen history, so it
+  /// must keep writing these exact strings even if either constant is later
+  /// renamed (and importing those services here would drag
+  /// `shared_preferences` and the service locator into the database layer).
+  /// The migration test asserts the pairing by reading the constants, so a
+  /// rename fails there instead of silently rewriting what v47 wrote.
+  static Future<void> _migrateToVersion47(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    // 1. Add the column, guarded so a re-run is a no-op.
+    final filterColumns = await db.rawQuery("PRAGMA table_info('filters')");
+    if (!filterColumns.any((col) => col['name'] == 'isSpace')) {
+      await db.execute(
+        'ALTER TABLE filters ADD COLUMN isSpace INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+
+    // 2. Ensure the reserved all-spaces tag row exists, reusing it if the
+    // user already has one. Shaped exactly like _getOrCreateTagId creates it,
+    // except for the id: see [_allSpacesTagIdV47] for why that one is fixed.
+    final existingAllSpaces = await db.query(
+      'tags',
+      where: 'name = ?',
+      whereArgs: [_allSpacesTagV47],
+      limit: 1,
+    );
+    final String allSpacesTagId;
+    if (existingAllSpaces.isNotEmpty) {
+      allSpacesTagId = existingAllSpaces.first['id'] as String;
+    } else {
+      allSpacesTagId = _allSpacesTagIdV47;
+      await db.insert('tags', {
+        'id': allSpacesTagId,
+        'name': _allSpacesTagV47,
+        'color': '#2196F3',
+        'createdAt': DateTime.now().millisecondsSinceEpoch,
+        'usageCount': 0,
+      });
+    }
+
+    // 3. Link it to every note carrying agent-skill. INSERT OR IGNORE against
+    // the (noteId, tagId) primary key makes a second run a no-op; the EXISTS
+    // guard skips note_tags rows orphaned by a database written while foreign
+    // keys were off, which would abort the statement rather than be ignored.
+    final skillTag = await db.query(
+      'tags',
+      where: 'name = ?',
+      whereArgs: ['agent-skill'],
+      limit: 1,
+    );
+    if (skillTag.isEmpty) return;
+    final skillTagId = skillTag.first['id'] as String;
+
+    final linked = await db.rawInsert(
+      '''
+      INSERT OR IGNORE INTO note_tags (noteId, tagId)
+      SELECT nt.noteId, ?
+      FROM note_tags nt
+      WHERE nt.tagId = ?
+        AND EXISTS (SELECT 1 FROM notes n WHERE n.id = nt.noteId)
+      ''',
+      [allSpacesTagId, skillTagId],
+    );
+    LoggerService.info(
+      'v47: tagged $linked existing skill notes with $_allSpacesTagV47',
+    );
+  }
 
   static Future<void> _migrateToVersion43(
     Database db, {
@@ -3015,6 +3130,7 @@ class DatabaseService {
           .join(','),
       'includeArchived': filter.includeArchived ? 1 : 0,
       'isPinned': filter.isPinned ? 1 : 0,
+      'isSpace': filter.isSpace ? 1 : 0,
       'createdAt': filter.createdAt.millisecondsSinceEpoch,
       'updatedAt': filter.updatedAt.millisecondsSinceEpoch,
     };
@@ -3061,6 +3177,7 @@ class DatabaseService {
         noteTypes: noteTypes,
         includeArchived: (maps[i]['includeArchived'] ?? 0) == 1,
         isPinned: (maps[i]['isPinned'] ?? 0) == 1,
+        isSpace: (maps[i]['isSpace'] ?? 0) == 1,
         createdAt: _validateTimestamp(
           maps[i]['createdAt'],
           'createdAt',
@@ -3116,6 +3233,7 @@ class DatabaseService {
       noteTypes: noteTypes,
       includeArchived: (map['includeArchived'] ?? 0) == 1,
       isPinned: (map['isPinned'] ?? 0) == 1,
+      isSpace: (map['isSpace'] ?? 0) == 1,
       createdAt: _validateTimestamp(map['createdAt'], 'createdAt', map['id']),
       updatedAt: _validateTimestamp(map['updatedAt'], 'updatedAt', map['id']),
     );
@@ -3136,6 +3254,7 @@ class DatabaseService {
           .join(','),
       'includeArchived': filter.includeArchived ? 1 : 0,
       'isPinned': filter.isPinned ? 1 : 0,
+      'isSpace': filter.isSpace ? 1 : 0,
       'createdAt': filter.createdAt.millisecondsSinceEpoch,
       'updatedAt': filter.updatedAt.millisecondsSinceEpoch,
     };
@@ -3912,13 +4031,49 @@ class DatabaseService {
   }
 
   // Get all conversations
+  /// SQL testing whether the conversation in scope (`c`) carries one tag, named
+  /// by a `?` placeholder. A correlated EXISTS rather than a join, so ANDing
+  /// and ORing several of them cannot multiply rows — which is what lets the
+  /// `all-spaces` escape be a plain OR.
+  static const String _conversationHasTagExists =
+      'EXISTS (SELECT 1 FROM conversation_tags ct JOIN tags t ON t.id = ct.tagId '
+      'WHERE ct.conversationId = c.id AND t.name = ?)';
+
+  /// Conversations, newest first.
+  ///
+  /// [tagNames] are the **caller's own** requirement and are ANDed
+  /// unconditionally: a match must carry every one of them, in or out of a
+  /// Space.
+  ///
+  /// [scopeTags] are the active Space's tags. They are ANDed among themselves
+  /// in a group of their own, and [includeAllSpacesTag] ORs the reserved
+  /// `all-spaces` tag around **that group only**:
+  ///
+  ///     t1 AND t2 AND ((s1 AND s2) OR all-spaces)
+  ///
+  /// so a conversation marked as visible everywhere shows up inside a Space
+  /// (design §4.12) while the caller's own chips still have to match. This
+  /// mirrors [searchNotesFTS] deliberately, and for the same reason: merging
+  /// the two lists and ORing around the whole conjunction turns "tag `urgent`
+  /// in this Space" into "tag `urgent`, OR anything marked all-spaces", which
+  /// returns every cross-Space conversation, none of which has `urgent`. That
+  /// is the M5 blocker, and the two-list signature is what stops it recurring.
+  ///
+  /// The flag does nothing without [scopeTags] — with no Space there is no
+  /// scope to escape, so it fails closed. Left unset, the query is exactly
+  /// what it has always been.
   Future<List<Conversation>> getAllConversations({
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
+    List<String>? scopeTags,
     bool includeEmpty = true,
+    bool includeAllSpacesTag = false,
   }) async {
     final db = await database;
+
+    final requiredTags = tagNames ?? const <String>[];
+    final spaceTags = scopeTags ?? const <String>[];
 
     final filters = <String>[];
     final filterArgs = <dynamic>[];
@@ -3932,6 +4087,59 @@ class DatabaseService {
       final idsPlaceholder = List.filled(conversationIds.length, '?').join(',');
       filters.add('c.id IN ($idsPlaceholder)');
       filterArgs.addAll(conversationIds);
+    }
+
+    if (spaceTags.isNotEmpty) {
+      // Correlated EXISTS instead of the join+HAVING shape below: an OR cannot
+      // be expressed as a `COUNT(DISTINCT t.name) = ?` and a join would return
+      // one row per matching tag.
+      String conjunctionOf(List<String> names) =>
+          List.filled(names.length, _conversationHasTagExists)
+              .join('\n          AND ');
+
+      final tagSegments = <String>[];
+      final tagArgs = <dynamic>[];
+
+      // The caller's own tags, outside the OR: they narrow within the Space,
+      // they are never escaped by `all-spaces` (A7).
+      if (requiredTags.isNotEmpty) {
+        tagSegments.add(conjunctionOf(requiredTags));
+        tagArgs.addAll(requiredTags);
+      }
+
+      if (includeAllSpacesTag) {
+        tagSegments.add(
+          '((${conjunctionOf(spaceTags)})'
+          '\n          OR $_conversationHasTagExists)',
+        );
+        tagArgs
+          ..addAll(spaceTags)
+          ..add(_allSpacesTag);
+      } else {
+        tagSegments.add(conjunctionOf(spaceTags));
+        tagArgs.addAll(spaceTags);
+      }
+
+      final whereSegments = <String>[...tagSegments, ...filters];
+      if (!includeEmpty) {
+        whereSegments.add('''
+          EXISTS (
+            SELECT 1 FROM conversation_message_mapping cmm
+            WHERE cmm.conversationId = c.id
+          )
+        ''');
+      }
+
+      final maps = await db.rawQuery(
+        '''
+        SELECT c.*
+        FROM conversations c
+        WHERE ${whereSegments.join(' AND ')}
+        ORDER BY c.updatedAt DESC
+      ''',
+        <dynamic>[...tagArgs, ...filterArgs],
+      );
+      return maps.map((map) => _mapToConversation(map)).toList();
     }
 
     if (tagNames != null && tagNames.isNotEmpty) {
@@ -5087,16 +5295,59 @@ class DatabaseService {
   }
   // --- Agent / AI Features ---
 
-  /// Search notes using Full-Text Search
-  Future<List<Note>> searchNotesFTS(String query, {List<String>? tags}) async {
+  /// The reserved "visible from every Space" tag, mirroring
+  /// `SpaceScopeService.allSpacesTag`. Spelled out rather than imported so the
+  /// database layer does not pull `shared_preferences` in for one string (the
+  /// same reason [_allSpacesTagV47] is a literal). The scoped-search tests
+  /// tag their fixtures with `SpaceScopeService.allSpacesTag` and expect them
+  /// found, so the two cannot drift apart silently.
+  static const String _allSpacesTag = 'all-spaces';
+
+  /// SQL testing whether the note in scope (`n`) carries one tag, named by a
+  /// `?` placeholder. A correlated EXISTS rather than a join, so ANDing
+  /// several of them cannot multiply rows.
+  static const String _noteHasTagExists =
+      'EXISTS (SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tagId '
+      'WHERE nt.noteId = n.id AND t.name = ?)';
+
+  /// Search notes using Full-Text Search.
+  ///
+  /// [tags] are the **caller's own** requirement and are ANDed unconditionally:
+  /// a match must carry every one of them, in or out of a Space.
+  ///
+  /// [scopeTags] are the active Space's tags. They are ANDed among themselves
+  /// in a group of their own, and [includeAllSpacesTag] ORs the reserved
+  /// `all-spaces` tag around **that group only**:
+  ///
+  ///     t1 AND t2 AND ((s1 AND s2) OR all-spaces)
+  ///
+  /// so a note marked visible everywhere is found by a Space-scoped search even
+  /// though it carries none of the Space's tags — while the caller's own tags
+  /// still have to match (A7: explicit tags are ANDed *within* the space
+  /// scope). Merging the two lists and ORing around the whole conjunction is
+  /// the bug this shape exists to prevent: a search for tag `invoice` inside a
+  /// Space would return every `all-spaces` note, none of which has `invoice`,
+  /// and migration v47 put `all-spaces` on every `agent-skill` note.
+  ///
+  /// Appending `all-spaces` as one more AND term would instead require every
+  /// match to be an `all-spaces` note. The flag does nothing without
+  /// [scopeTags] — with no Space there is no scope to escape. Left false, the
+  /// query is exactly what it has always been.
+  Future<List<Note>> searchNotesFTS(
+    String query, {
+    List<String>? tags,
+    List<String>? scopeTags,
+    bool includeAllSpacesTag = false,
+  }) async {
     final db = await database;
     // Wrap the query as a phrase to avoid accidental FTS syntax errors.
     final sanitizedQuery = '"$query"';
-    final hasTags = tags != null && tags.isNotEmpty;
+    final requiredTags = tags ?? const <String>[];
+    final spaceTags = scopeTags ?? const <String>[];
 
     try {
       String sql = '''
-        SELECT n.* 
+        SELECT n.*
         FROM notes_fts fts
         JOIN notes n ON fts.rowid = n.rowid
         WHERE notes_fts MATCH ?
@@ -5104,17 +5355,25 @@ class DatabaseService {
 
       List<Object?> args = [sanitizedQuery];
 
-      if (hasTags) {
-        for (final tag in tags) {
-          sql += '''
-            AND EXISTS (
-              SELECT 1
-              FROM note_tags nt
-              JOIN tags t ON t.id = nt.tagId
-              WHERE nt.noteId = n.id AND t.name = ?
-            )
-          ''';
-          args.add(tag);
+      String conjunctionOf(List<String> names) =>
+          List.filled(names.length, _noteHasTagExists).join('\n            AND ');
+
+      if (requiredTags.isNotEmpty) {
+        sql += '\n            AND ${conjunctionOf(requiredTags)}';
+        args.addAll(requiredTags);
+      }
+
+      if (spaceTags.isNotEmpty) {
+        if (includeAllSpacesTag) {
+          sql +=
+              '\n            AND ((${conjunctionOf(spaceTags)})'
+              '\n            OR $_noteHasTagExists)';
+          args
+            ..addAll(spaceTags)
+            ..add(_allSpacesTag);
+        } else {
+          sql += '\n            AND ${conjunctionOf(spaceTags)}';
+          args.addAll(spaceTags);
         }
       }
 
