@@ -217,6 +217,7 @@ void main() {
       expect(jsHandlers.containsKey('readAttachment'), isTrue);
       expect(jsHandlers.containsKey('saveTemp'), isTrue);
       expect(jsHandlers.containsKey('saveNotes'), isTrue);
+      expect(jsHandlers.containsKey('openMerge'), isTrue);
       expect(jsHandlers.containsKey('ttsSpeak'), isTrue);
       expect(jsHandlers.containsKey('ttsStop'), isTrue);
       expect(jsHandlers.containsKey('ttsGetLanguages'), isTrue);
@@ -530,6 +531,47 @@ void main() {
         },
       );
 
+      test(
+        'session:true rolls the saved login forward from Set-Cookie',
+        () async {
+          _seedSession(sessionStorage, 'example.com');
+          await grantService.grant('test-uuid', 'example.com');
+
+          final result = await jsHandlers['proxyFetch']!([
+            {'url': 'https://example.com/api', 'session': true},
+          ]);
+
+          expect(result['status'], isNot('error'));
+          // The mock response sets `sid=secret`; the stored session was on
+          // `sid=xyz` and must now hold the rotated value instead of decaying.
+          final stored =
+              jsonDecode(sessionStorage.data['web_session_example.com']!)
+                  as Map<String, dynamic>;
+          final cookies = stored['cookies'] as List;
+          expect(cookies.single['name'], 'sid');
+          expect(cookies.single['value'], 'secret');
+          expect(stored['refreshedAt'], isNotNull);
+          // Set-Cookie still never reaches JS.
+          expect(
+            (result['headers'] as Map).keys.map((k) => k.toString().toLowerCase()),
+            isNot(contains('set-cookie')),
+          );
+        },
+      );
+
+      test(
+        'a response for a domain with no saved login creates nothing',
+        () async {
+          final result = await jsHandlers['proxyFetch']!([
+            {'url': 'https://example.com/api', 'session': true},
+          ]);
+
+          expect(result['status'], isNot('error'));
+          expect(sessionStorage.data.containsKey('web_session_example.com'),
+              isFalse);
+        },
+      );
+
       test('multipart with a non-ASCII filename does not crash', () async {
         final result = await jsHandlers['proxyFetch']!([
           {
@@ -824,6 +866,71 @@ void main() {
         verify(mockAppProvider.addNote(any)).called(2);
       });
 
+      test('saveNotes returns the created ids in input order', () async {
+        final notesData = [
+          {'title': 'First', 'content': ''},
+          {'title': 'Boom', 'content': ''},
+          {'title': 'Third', 'content': ''},
+        ];
+
+        when(mockModificationService.buildNote(any)).thenAnswer((
+          invocation,
+        ) async {
+          final data =
+              invocation.positionalArguments.first as Map<String, dynamic>;
+          final title = data['title'] as String;
+          // A note that cannot be built is skipped, so its id must not appear.
+          if (title == 'Boom') throw Exception('bad note');
+          return Note(
+            id: 'id-$title',
+            title: title,
+            content: '',
+            type: NoteType.note,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+        });
+        when(mockAppProvider.addNote(any)).thenAnswer((_) async {});
+
+        final result = await jsHandlers['saveNotes']!([notesData]);
+
+        expect(result['success'], isTrue);
+        expect(result['savedNoteIds'], ['id-First', 'id-Third']);
+        expect(result['savedCount'], 2);
+      });
+
+      test('saveNotes skips entries that are not objects', () async {
+        final notesData = <dynamic>[
+          'not a note',
+          {'title': 'Real', 'content': ''},
+          42,
+          null,
+        ];
+
+        when(mockModificationService.buildNote(any)).thenAnswer((
+          invocation,
+        ) async {
+          final data =
+              invocation.positionalArguments.first as Map<String, dynamic>;
+          return Note(
+            id: 'id-${data['title']}',
+            title: data['title'] as String,
+            content: '',
+            type: NoteType.note,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+        });
+        when(mockAppProvider.addNote(any)).thenAnswer((_) async {});
+
+        final result = await jsHandlers['saveNotes']!([notesData]);
+
+        expect(result['success'], isTrue);
+        expect(result['savedNoteIds'], ['id-Real']);
+        expect(result['savedCount'], 1);
+        verify(mockModificationService.buildNote(any)).called(1);
+      });
+
       test('deleteNotes requires session approval', () async {
         final noteIds = ['id1', 'id2'];
 
@@ -983,6 +1090,306 @@ void main() {
 
         final result = await jsHandlers['copy-to-clipboard']!(['text']);
         expect(result['success'], isTrue);
+      });
+    });
+
+    group('openMerge', () {
+      Note noteWith(String id) => Note(
+        id: id,
+        title: 'Title $id',
+        content: 'Content $id',
+        type: NoteType.note,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      /// Registers a bridge whose [onOpenMerge] is [onOpenMerge] and returns
+      /// the `openMerge` handler it installed.
+      JavaScriptHandlerCallback handlerWith(OpenMergeCallback? onOpenMerge) {
+        UserAppRuntimeBridge(
+          app: bridge.app,
+          appProvider: mockAppProvider,
+          revisionNumber: 1,
+          isInteractive: true,
+          onOpenMerge: onOpenMerge,
+        ).registerJavaScriptHandlers(mockWebViewController);
+        return jsHandlers['openMerge']!;
+      }
+
+      test('resolves ids and returns the merged note id', () async {
+        when(
+          mockDatabaseService.getNote('a'),
+        ).thenAnswer((_) async => noteWith('a'));
+        when(
+          mockDatabaseService.getNote('b'),
+        ).thenAnswer((_) async => noteWith('b'));
+
+        List<Note>? received;
+        final handler = handlerWith((notes) async {
+          received = notes;
+          return noteWith('merged');
+        });
+
+        final result = await handler([
+          ['a', 'b'],
+        ]);
+
+        expect(result['success'], isTrue);
+        expect(result['mergedNoteId'], 'merged');
+        expect(result['cancelled'], isNull);
+        expect(received?.map((n) => n.id).toList(), ['a', 'b']);
+      });
+
+      test('accepts note objects as well as id strings', () async {
+        when(
+          mockDatabaseService.getNote('a'),
+        ).thenAnswer((_) async => noteWith('a'));
+        when(
+          mockDatabaseService.getNote('b'),
+        ).thenAnswer((_) async => noteWith('b'));
+
+        List<Note>? received;
+        final handler = handlerWith((notes) async {
+          received = notes;
+          return noteWith('merged');
+        });
+
+        final result = await handler([
+          [
+            {'id': 'a'},
+            'b',
+          ],
+        ]);
+
+        expect(result['success'], isTrue);
+        expect(received?.map((n) => n.id).toList(), ['a', 'b']);
+      });
+
+      test('reports cancelled when the screen pops without a note', () async {
+        when(
+          mockDatabaseService.getNote('a'),
+        ).thenAnswer((_) async => noteWith('a'));
+        when(
+          mockDatabaseService.getNote('b'),
+        ).thenAnswer((_) async => noteWith('b'));
+
+        final handler = handlerWith((notes) async => null);
+
+        final result = await handler([
+          ['a', 'b'],
+        ]);
+
+        expect(result['success'], isTrue);
+        expect(result['cancelled'], isTrue);
+        expect(result['mergedNoteId'], isNull);
+      });
+
+      test('is unsupported when the host provides no callback', () async {
+        final handler = handlerWith(null);
+
+        final result = await handler([
+          ['a', 'b'],
+        ]);
+
+        expect(result['success'], isFalse);
+        expect(result['error'], contains('not supported in this context'));
+        verifyNever(mockDatabaseService.getNote(any));
+      });
+
+      test('refuses fewer than two resolvable notes', () async {
+        when(
+          mockDatabaseService.getNote('a'),
+        ).thenAnswer((_) async => noteWith('a'));
+        // 'gone' resolves to null - a note that was deleted since the app
+        // last saw it.
+        when(mockDatabaseService.getNote('gone')).thenAnswer((_) async => null);
+
+        var opened = false;
+        final handler = handlerWith((notes) async {
+          opened = true;
+          return null;
+        });
+
+        final result = await handler([
+          ['a', 'gone'],
+        ]);
+
+        expect(result['success'], isFalse);
+        expect(result['error'], contains('at least two notes'));
+        expect(opened, isFalse);
+      });
+
+      test('refuses an empty note list', () async {
+        var opened = false;
+        final handler = handlerWith((notes) async {
+          opened = true;
+          return null;
+        });
+
+        final result = await handler([<dynamic>[]]);
+
+        expect(result['success'], isFalse);
+        expect(result['error'], contains('at least two notes'));
+        expect(opened, isFalse);
+      });
+
+      test('refuses the same id twice', () async {
+        when(
+          mockDatabaseService.getNote('a'),
+        ).thenAnswer((_) async => noteWith('a'));
+
+        var opened = false;
+        final handler = handlerWith((notes) async {
+          opened = true;
+          return null;
+        });
+
+        final result = await handler([
+          ['a', 'a'],
+        ]);
+
+        expect(result['success'], isFalse);
+        expect(result['error'], contains('at least two notes'));
+        expect(opened, isFalse);
+      });
+
+      test('refuses ids that resolve to the same note', () async {
+        // What block-scope ids do: every transient id resolves to its parent
+        // note, so an app launched on two blocks of one note has one source.
+        when(
+          mockDatabaseService.getNote('block-1'),
+        ).thenAnswer((_) async => noteWith('parent'));
+        when(
+          mockDatabaseService.getNote('block-2'),
+        ).thenAnswer((_) async => noteWith('parent'));
+
+        var opened = false;
+        final handler = handlerWith((notes) async {
+          opened = true;
+          return null;
+        });
+
+        final result = await handler([
+          ['block-1', 'block-2'],
+        ]);
+
+        expect(result['success'], isFalse);
+        expect(result['error'], contains('at least two notes'));
+        expect(opened, isFalse);
+      });
+
+      test('keeps the first of each repeated note', () async {
+        when(
+          mockDatabaseService.getNote('a'),
+        ).thenAnswer((_) async => noteWith('a'));
+        when(
+          mockDatabaseService.getNote('b'),
+        ).thenAnswer((_) async => noteWith('b'));
+
+        List<Note>? received;
+        final handler = handlerWith((notes) async {
+          received = notes;
+          return noteWith('merged');
+        });
+
+        final result = await handler([
+          ['a', 'b', 'a'],
+        ]);
+
+        expect(result['success'], isTrue);
+        expect(received?.map((n) => n.id).toList(), ['a', 'b']);
+      });
+
+      test('reports a failure when the host callback throws', () async {
+        when(
+          mockDatabaseService.getNote('a'),
+        ).thenAnswer((_) async => noteWith('a'));
+        when(
+          mockDatabaseService.getNote('b'),
+        ).thenAnswer((_) async => noteWith('b'));
+
+        // What an unmounted host does instead of returning null, which the
+        // plugin would read as the user cancelling.
+        final handler = handlerWith((notes) async {
+          throw StateError('user app view is no longer mounted');
+        });
+
+        final result = await handler([
+          ['a', 'b'],
+        ]);
+
+        expect(result['success'], isFalse);
+        expect(result['error'], contains('no longer mounted'));
+        expect(result['cancelled'], isNull);
+        expect(result['mergedNoteId'], isNull);
+      });
+
+      test('refuses an argument that is not a list', () async {
+        var opened = false;
+        final handler = handlerWith((notes) async {
+          opened = true;
+          return null;
+        });
+
+        final result = await handler(['not-a-list']);
+
+        expect(result['success'], isFalse);
+        expect(result['error'], contains('expects an array'));
+        expect(result['error'], isNot(contains('is not a subtype of')));
+        expect(opened, isFalse);
+      });
+
+      test('skips an entry whose id is not a string', () async {
+        when(
+          mockDatabaseService.getNote('a'),
+        ).thenAnswer((_) async => noteWith('a'));
+
+        var opened = false;
+        final handler = handlerWith((notes) async {
+          opened = true;
+          return null;
+        });
+
+        final result = await handler([
+          [
+            {'id': 1},
+            'a',
+          ],
+        ]);
+
+        // Skipped like an unresolvable id, so the call fails on the count
+        // rather than on a raw Dart cast.
+        expect(result['success'], isFalse);
+        expect(result['error'], contains('at least two notes'));
+        expect(result['error'], isNot(contains('is not a subtype of')));
+        expect(opened, isFalse);
+      });
+
+      test('a malformed entry does not abort the rest of the call', () async {
+        when(
+          mockDatabaseService.getNote('a'),
+        ).thenAnswer((_) async => noteWith('a'));
+        when(
+          mockDatabaseService.getNote('b'),
+        ).thenAnswer((_) async => noteWith('b'));
+
+        List<Note>? received;
+        final handler = handlerWith((notes) async {
+          received = notes;
+          return noteWith('merged');
+        });
+
+        final result = await handler([
+          [
+            {'id': 1},
+            'a',
+            42,
+            'b',
+          ],
+        ]);
+
+        expect(result['success'], isTrue);
+        expect(received?.map((n) => n.id).toList(), ['a', 'b']);
       });
     });
 
@@ -2027,6 +2434,9 @@ class MockResponseHeaders extends Fake implements HttpHeaders {
 
   @override
   String? value(String name) => _values[name.toLowerCase()]?.join(', ');
+
+  @override
+  List<String>? operator [](String name) => _values[name.toLowerCase()];
 
   @override
   void forEach(void Function(String name, List<String> values) action) {

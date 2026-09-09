@@ -52,6 +52,19 @@ class _TagManagementScreenState extends State<TagManagementScreen>
     super.dispose();
   }
 
+  /// Reports any Space the last tag change retired.
+  ///
+  /// A Space *is* its include-tags, so deleting the last one leaves nothing to
+  /// scope or stamp by and the flag is dropped. Nothing else in the app takes a
+  /// Space away from the user, so it cannot happen quietly.
+  void _reportRetiredSpaces(AppProvider appProvider, AppLocalizations l10n) {
+    final retired = appProvider.spacesInvalidatedByLastTagChange;
+    if (retired.isEmpty) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l10n.spacesRetiredByTagChange(retired.join(', ')))),
+    );
+  }
+
   Future<void> _loadTagsWithUsage() async {
     setState(() {
       _isLoading = true;
@@ -116,7 +129,10 @@ class _TagManagementScreenState extends State<TagManagementScreen>
       final workflowService = getIt<TagWorkflowService>();
       final skillService = getIt<SkillService>();
       final bindings = await workflowService.getAllBindings();
-      final skillIndex = await skillService.buildSkillIndex();
+      // Management surface: it edits workflow bindings for skills that may
+      // live in any Space, so it lists the whole library rather than what the
+      // active Space can reach.
+      final skillIndex = await skillService.buildSkillIndex(allSpaces: true);
 
       if (!mounted) return;
       setState(() {
@@ -189,6 +205,9 @@ class _TagManagementScreenState extends State<TagManagementScreen>
               backgroundColor: Colors.green,
             ),
           );
+          // Deleting a Space's last include tag retires the Space. That is the
+          // only way one disappears without the user asking, so say it.
+          _reportRetiredSpaces(appProvider, l10n);
 
           // Reload the tags
           await _loadTagsWithUsage();
@@ -961,9 +980,14 @@ class _TagManagementScreenState extends State<TagManagementScreen>
 
     if (confirmed == true) {
       try {
-        // Execute each rule
+        // Execute each rule, collecting Spaces that stopped being Spaces along
+        // the way — the getter reports the last call only.
+        final retired = <String>[];
         for (final rule in _dedupRules) {
           await appProvider.replaceTag(rule.leftTag, rule.rightTag);
+          for (final name in appProvider.spacesInvalidatedByLastTagChange) {
+            if (!retired.contains(name)) retired.add(name);
+          }
         }
 
         if (mounted) {
@@ -973,6 +997,15 @@ class _TagManagementScreenState extends State<TagManagementScreen>
               backgroundColor: Colors.green,
             ),
           );
+          if (retired.isNotEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  l10n.spacesRetiredByTagChange(retired.join(', ')),
+                ),
+              ),
+            );
+          }
 
           // Clear rules and reload tags
           setState(() {

@@ -7,7 +7,9 @@ import '../services/database_service.dart';
 import '../services/fork_service.dart';
 import '../services/logger_service.dart';
 import '../services/service_locator.dart';
+import '../services/space_scope_service.dart';
 import '../l10n/app_localizations.dart';
+import '../utils/date_utils.dart';
 import 'conversation_chat_screen.dart';
 import '../widgets/add_note_dialog.dart';
 import '../widgets/add_conversation_dialog.dart';
@@ -54,6 +56,28 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
       []; // Conversation IDs to highlight
   Map<String, List<String>> _nodeToConversationIds = {};
 
+  /// The chip list split into the two lists the query needs.
+  ///
+  /// The chips are seeded from the active Space (below) and stay editable, so
+  /// once the user adds one of their own the list holds both kinds — and the
+  /// two must **not** be merged into a single conjunction. `all-spaces` is an
+  /// unconditional override (A1) and may only escape the *Space's* half: with
+  /// one list, adding `urgent` inside Space `{thesis}` asks for
+  /// `(urgent AND thesis) OR all-spaces` and returns every cross-Space
+  /// conversation, none of which is urgent. This is the same shape M5 shipped
+  /// as a blocker and fixed for note search; the two-list split is the fix.
+  ///
+  /// A chip the user removed is gone from both lists: leaving the Space's tag
+  /// off is how the user widens the tree, so the scope follows the chips
+  /// rather than overriding them.
+  ///
+  /// The split lives on the service so this screen and the filters dialog it
+  /// opens cannot drift apart — before M7 the dialog ANDed while the tree
+  /// ORed, and a cross-Space conversation was in the graph but missing from
+  /// the list.
+  ({List<String>? tagNames, List<String>? scopeTags, bool orAllSpaces})
+  get _tagQuery => SpaceScopeService.shared().partitionChips(_selectedFilterTags);
+
   @override
   void initState() {
     super.initState();
@@ -63,6 +87,10 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
         !widget.filterByActiveConversations) {
       _highlightedConversationIds = widget.activeConversationIds!;
     }
+    // Seed the tag filter from the active Space, so the tree opens on the
+    // conversations of the Space the user is working in. The chips stay
+    // editable: this is a starting point, not a lock.
+    _selectedFilterTags = List<String>.of(SpaceScopeService.shared().stampTags);
     _initializeTree();
   }
 
@@ -158,14 +186,16 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
           widget.activeConversationIds != null &&
           widget.activeConversationIds!.isNotEmpty;
 
+      final tagQuery = _tagQuery;
       _tree = await _conversationService.refreshConversationTree(
         maxAge: hasActiveConversationFilter ? null : _selectedTimeRange,
         conversationIds: hasActiveConversationFilter
             ? widget.activeConversationIds
             : null,
-        tagNames: hasActiveConversationFilter
-            ? null
-            : (_selectedFilterTags.isEmpty ? null : _selectedFilterTags),
+        tagNames: hasActiveConversationFilter ? null : tagQuery.tagNames,
+        scopeTags: hasActiveConversationFilter ? null : tagQuery.scopeTags,
+        includeAllSpacesTag:
+            !hasActiveConversationFilter && tagQuery.orAllSpaces,
       );
       await _fetchNodeConversationIds();
       if (_tree == null) {
@@ -248,14 +278,16 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
           widget.activeConversationIds != null &&
           widget.activeConversationIds!.isNotEmpty;
 
+      final tagQuery = _tagQuery;
       _tree = await _conversationService.refreshConversationTree(
         maxAge: hasActiveConversationFilter ? null : _selectedTimeRange,
         conversationIds: hasActiveConversationFilter
             ? widget.activeConversationIds
             : null,
-        tagNames: hasActiveConversationFilter
-            ? null
-            : (_selectedFilterTags.isEmpty ? null : _selectedFilterTags),
+        tagNames: hasActiveConversationFilter ? null : tagQuery.tagNames,
+        scopeTags: hasActiveConversationFilter ? null : tagQuery.scopeTags,
+        includeAllSpacesTag:
+            !hasActiveConversationFilter && tagQuery.orAllSpaces,
       );
       await _fetchNodeConversationIds();
       if (_tree == null) {
@@ -1597,19 +1629,6 @@ class _ConversTreeScreenState extends State<ConversationTreeScreen> {
     return [aiMessage];
   }
 
-  String _formatTimestamp(DateTime timestamp) {
-    final l10n = AppLocalizations.of(context)!;
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return l10n.justNow;
-    }
-  }
+  String _formatTimestamp(DateTime timestamp) =>
+      AppDateUtils.formatRelative(timestamp, AppLocalizations.of(context)!);
 }

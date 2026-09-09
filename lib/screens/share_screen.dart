@@ -11,6 +11,7 @@ import 'package:html2md/html2md.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
+import '../models/note_source.dart';
 import '../services/approval_service.dart';
 import '../services/share_service.dart';
 import '../services/ai_service.dart';
@@ -19,13 +20,16 @@ import '../services/service_locator.dart';
 import '../services/logger_service.dart';
 import '../services/web_content_extraction_service.dart';
 import '../services/web_session_service.dart';
+import '../services/user_app_session_service.dart';
 import '../services/media_attachment_service.dart';
 import '../services/network_provider.dart';
+import '../services/note_source_service.dart';
 import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/remote_image_utils.dart';
 import '../utils/html_rules.dart';
 import '../utils/markdown_cleaner.dart';
+import '../utils/note_metadata.dart';
 import '../utils/web_content_processor.dart';
 import '../widgets/approval_dialog.dart';
 import 'note_selection_dialog.dart';
@@ -41,6 +45,31 @@ class ShareScreen extends StatefulWidget {
 }
 
 class _ShareScreenState extends State<ShareScreen> {
+  /// Leaves the share flow once the user is done (saved, appended, cancelled).
+  ///
+  /// Normally this resets the stack to `/main`: a share intent can arrive over
+  /// any app state, so landing on a clean Home is the predictable result.
+  ///
+  /// A backgrounded User App is the exception. It *lives* in that stack, so
+  /// `removeUntil((route) => false)` would destroy the very app the user shared
+  /// into Note Synapse to get back to — clip a page, return to the mind map.
+  /// While one is alive, unwind only the routes the share flow itself pushed and
+  /// leave the user where they were, pill intact.
+  void _leaveShareFlow(
+    NavigatorState navigator,
+    ModalRoute<dynamic>? shareRoute,
+  ) {
+    final handled =
+        getIt.isRegistered<UserAppSessionService>() &&
+        getIt<UserAppSessionService>().unwindPreservingApp(
+          navigator,
+          shareRoute,
+        );
+    if (!handled) {
+      navigator.pushNamedAndRemoveUntil('/main', (route) => false);
+    }
+  }
+
   Note? _preparedNote;
   String? _error;
   bool _isLoading = true;
@@ -66,15 +95,40 @@ class _ShareScreenState extends State<ShareScreen> {
   /// Check if running on Linux (non-web)
   bool get _isLinux => !kIsWeb && Platform.isLinux;
 
+  /// Whether the active Space's tags have been offered on [_selectedTags].
+  /// Applied exactly once, so a top-up after the load cannot re-add a tag the
+  /// user has already taken off.
+  bool _spacePrefilled = false;
+
   @override
   void initState() {
     super.initState();
     _setupApprovalCallback();
+    _applySpacePrefill();
     _processSharedData();
-    // Load notes when the screen initializes
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AppProvider>().loadData();
+    // Load notes when the screen initializes.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final appProvider = context.read<AppProvider>();
+      await appProvider.loadData();
+      // A share intent can cold-start the app straight onto this route, so
+      // `initState` may run before the filters — and therefore the active
+      // Space — are known. Top up once here, when they are.
+      if (mounted && !_spacePrefilled) setState(_applySpacePrefill);
     });
+  }
+
+  /// Prefills the tag selection with the active Space's tags, so shared
+  /// content lands in the Space the user is working in.
+  ///
+  /// They render as removable chips below, which is what keeps the stamp a
+  /// default rather than a lock — and is why the save passes
+  /// `applySpaceTags: false`: re-stamping would put back exactly the tag the
+  /// user just took off. Never `all-spaces` (A2).
+  void _applySpacePrefill() {
+    final spaceTags = context.read<AppProvider>().spaceTags;
+    if (spaceTags.isEmpty) return;
+    _selectedTags.addAll(spaceTags);
+    _spacePrefilled = true;
   }
 
   @override
@@ -529,9 +583,11 @@ class _ShareScreenState extends State<ShareScreen> {
                   onPressed: () async {
                     // Clean up downloaded file on cancel
                     await _cleanupDownloadedFile();
-                    Navigator.of(
-                      context,
-                    ).pushNamedAndRemoveUntil('/main', (route) => false);
+                    if (!mounted) return;
+                    _leaveShareFlow(
+                      Navigator.of(context),
+                      ModalRoute.of(context),
+                    );
                   },
                   child: Text(l10n.cancel),
                 ),
@@ -613,10 +669,9 @@ class _ShareScreenState extends State<ShareScreen> {
                         children: _selectedTags.map((tag) {
                           return Chip(
                             label: Text(tag),
-                            backgroundColor:
-                                _filterDerivedTags.contains(tag)
-                                    ? Colors.purple.withOpacity(0.1)
-                                    : null,
+                            backgroundColor: _filterDerivedTags.contains(tag)
+                                ? Colors.purple.withOpacity(0.1)
+                                : null,
                             deleteIcon: const Icon(Icons.close, size: 18),
                             onDeleted: () {
                               setState(() {
@@ -744,7 +799,9 @@ class _ShareScreenState extends State<ShareScreen> {
   }
 
   void _openFilterSelectionForTags(
-      BuildContext context, AppProvider appProvider) {
+    BuildContext context,
+    AppProvider appProvider,
+  ) {
     showDialog(
       context: context,
       builder: (context) => HierarchyDialog(
@@ -754,8 +811,9 @@ class _ShareScreenState extends State<ShareScreen> {
           setState(() {
             for (final filterId in selectedIds) {
               try {
-                final filter =
-                    appProvider.filters.firstWhere((f) => f.id == filterId);
+                final filter = appProvider.filters.firstWhere(
+                  (f) => f.id == filterId,
+                );
                 for (final tag in filter.includeTags) {
                   if (!_selectedTags.contains(tag)) {
                     _selectedTags.add(tag);
@@ -1648,16 +1706,23 @@ class _ShareScreenState extends State<ShareScreen> {
     // to avoid using deactivated context
     ScaffoldMessengerState? scaffoldMessenger;
     NavigatorState? navigator;
+    ModalRoute<dynamic>? shareRoute;
     if (mounted) {
       scaffoldMessenger = ScaffoldMessenger.of(context);
       navigator = Navigator.of(context);
+      shareRoute = ModalRoute.of(context);
     }
 
     try {
       final appProvider = context.read<AppProvider>();
 
       if (_action == 'create') {
-        // Create note with edited title and tags
+        // Create note with edited title and tags. copyWith keeps `metadata`
+        // (the clip's `sources`, set by the extraction dialog) and addNote →
+        // insertNote persists it. The ingestion below only reaches the row
+        // through updateNote / NoteModificationService, which strip metadata
+        // instead of overwriting it, so nothing downstream clobbers the
+        // sources. Keep it that way.
         var finalNote = _preparedNote!.copyWith(
           title: _titleController.text.isNotEmpty
               ? _titleController.text
@@ -1681,7 +1746,10 @@ class _ShareScreenState extends State<ShareScreen> {
           );
         }
 
-        await appProvider.addNote(finalNote);
+        // No stamp: `initState` already prefilled `_selectedTags` with the
+        // Space's tags and the user can remove them, so stamping here would
+        // silently undo the opt-out (invariant 5).
+        await appProvider.addNote(finalNote, applySpaceTags: false);
 
         // Trigger AI content ingestion if needed (fire and forget)
         if (!finalNote.content.contains('> [!SUMMARY]')) {
@@ -1705,8 +1773,7 @@ class _ShareScreenState extends State<ShareScreen> {
               backgroundColor: Colors.green,
             ),
           );
-          // Navigate to main screen instead of just popping
-          navigator.pushNamedAndRemoveUntil('/main', (route) => false);
+          _leaveShareFlow(navigator, shareRoute);
         }
       } else {
         RemoteImageDownloadReport? downloadReport;
@@ -1734,6 +1801,27 @@ class _ShareScreenState extends State<ShareScreen> {
           ],
         );
 
+        // The clip's own source is merged in before the content update:
+        // updateNote notifies listeners synchronously, and an open detail
+        // screen reloads its sources on that notification, so the source
+        // must be stored by then. The order is safe because updateNote
+        // strips `metadata`, so the note's existing markers and sources —
+        // this one included — survive the content update. The service skips
+        // an empty list and never throws, and the lookup is guarded too:
+        // failing to record the source must not fail the append.
+        try {
+          await getIt<NoteSourceService>().addSources(
+            _selectedNote!.id,
+            NoteMetadata.readSources(
+              NoteMetadata.decode(_preparedNote!.metadata),
+            ),
+          );
+        } catch (e) {
+          LoggerService.warning(
+            '[ShareScreen] Failed to record source on append: $e',
+          );
+        }
+
         await appProvider.updateNote(updatedNote);
 
         // Trigger AI content ingestion if needed (fire and forget)
@@ -1758,11 +1846,15 @@ class _ShareScreenState extends State<ShareScreen> {
               backgroundColor: Colors.green,
             ),
           );
-          // Navigate to main screen instead of just popping
-          navigator.pushNamedAndRemoveUntil('/main', (route) => false);
+          _leaveShareFlow(navigator, shareRoute);
         }
       }
     } catch (e) {
+      // In append mode the source has already been merged into the target
+      // note's metadata by this point (addSources runs before updateNote), so
+      // a failure here leaves a recorded source on a note whose append did
+      // not land. Harmless — a retry de-duplicates on url — but worth a log.
+      LoggerService.error('[ShareScreen] Saving shared content failed: $e');
       setState(() {
         _isCreating = false;
       });
@@ -1802,6 +1894,11 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
   String? _downloadedFilePath;
   String? _activeAction;
   InAppWebViewController? _controller;
+
+  /// The URL the page ended on (after redirects), recorded in onLoadStop.
+  /// The clip's source falls back to it when the page cannot report its own
+  /// location.
+  String? _loadedUrl;
 
   @override
   void didChangeDependencies() {
@@ -1965,14 +2062,16 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
             else if (path.endsWith('.css'))
               language = 'css';
 
+            final fileName = path.split('/').last;
             final note = Note(
               id: const Uuid().v4(),
-              title: path.split('/').last,
+              title: fileName,
               content: '```$language\n$content\n```',
               type: NoteType.note,
               createdAt: DateTime.now(),
               updatedAt: DateTime.now(),
               tags: ['shared', 'code', 'web-clip'],
+              metadata: _downloadSourceMetadata(fileName),
             );
 
             if (!mounted) return;
@@ -2110,6 +2209,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 updatedAt: DateTime.now(),
                 attachmentPaths: [relativePath],
                 tags: ['shared', 'download', 'file'],
+                metadata: _downloadSourceMetadata(fileName),
               );
 
               if (!mounted) {
@@ -2191,6 +2291,33 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
       _isLoading = true;
       _status = AppLocalizations.of(context)!.loadingWebPage;
     });
+  }
+
+  /// `Note.metadata` for a note created from a downloaded file (raw code
+  /// file or blob attachment): a single file-kind source pointing at the
+  /// shared URL. Not built by `fromPageInfo`, so the clip time is passed
+  /// explicitly.
+  String _downloadSourceMetadata(String fileName) {
+    return NoteMetadata.encodeSources([
+      NoteSource(
+        kind: NoteSourceKind.file,
+        url: widget.url,
+        title: fileName,
+        method: NoteSourceMethod.download,
+        clippedAt: DateTime.now(),
+      ),
+    ]);
+  }
+
+  Future<void> _syncSessionCookies(String? loadedUrl) async {
+    try {
+      final service = getIt<WebSessionService>();
+      if (service.isSupported) {
+        await service.syncFromLiveJar(loadedUrl ?? widget.url);
+      }
+    } catch (e) {
+      LoggerService.warning('[ShareScreen] Failed to sync session cookies: $e');
+    }
   }
 
   Future<void> _restoreSessionCookies() async {
@@ -2371,7 +2498,17 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     return false;
   }
 
-  Future<String> _getCurrentPageBodyHtml() async {
+  /// Captures the current page as HTML plus the base URL that its relative
+  /// references resolve against.
+  ///
+  /// The base URL has to come from `document.baseURI` rather than
+  /// [_WebExtractionDialog.url]: it accounts for a `<base href>` element and
+  /// for any redirect the page went through, `body.innerHTML` never carries
+  /// the `<base>` tag itself (it lives in `<head>`), and the user may have
+  /// navigated away from the URL this dialog was opened with. When the page
+  /// reports no base URI there is no trustworthy substitute, so the pass is
+  /// skipped rather than fed a stale URL.
+  Future<WebContentJob> _getCurrentPageBodyHtml() async {
     if (_controller == null) {
       throw Exception('WebView controller not ready');
     }
@@ -2381,9 +2518,17 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     final result = await _controller!.evaluateJavascript(
       source: '''
         (function() {
+          var baseUri = '';
+          try {
+            baseUri = document.baseURI || window.location.href || '';
+          } catch (e) {
+            baseUri = '';
+          }
+
           var debug = {
             contentType: document.contentType,
             url: window.location.href,
+            baseUri: baseUri,
             hasBody: !!document.body,
             hasDocEl: !!document.documentElement,
             bodyTextLength: document.body ? document.body.innerText.length : -1,
@@ -2416,6 +2561,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                 return JSON.stringify({
                   status: 'success',
                   content: '<pre>' + escapeHtml(content) + '</pre>',
+                  baseUri: baseUri,
                   debug: debug
                 });
               } else {
@@ -2427,6 +2573,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
               return JSON.stringify({
                   status: 'success',
                   content: document.body.innerHTML,
+                  baseUri: baseUri,
                   debug: debug
               });
             }
@@ -2436,6 +2583,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
                return JSON.stringify({
                   status: 'success',
                   content: docContent,
+                  baseUri: baseUri,
                   debug: debug
                });
             }
@@ -2470,7 +2618,13 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
             "Extracted content is empty. Debug: ${jsonEncode(response['debug'])}",
           );
         }
-        return content;
+        final baseUri = response['baseUri'] as String?;
+        return (
+          html: content,
+          baseUrl: (baseUri == null || baseUri.trim().isEmpty)
+              ? null
+              : baseUri,
+        );
       } else {
         final message = response['message'] ?? 'Unknown error';
         final debug = response['debug'];
@@ -2496,6 +2650,28 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     return result?.toString().trim() ?? '';
   }
 
+  /// What the loaded page says about where it lives — the
+  /// `{href, canonical, ogUrl, siteName, title, byline, published}` map
+  /// [NoteSource.fromPageInfo] reads — with `href` falling back to
+  /// [_loadedUrl] when the page could not report one. Never throws: a
+  /// script failure yields a map holding at most that fallback.
+  Future<Map<String, dynamic>> _getPageSourceInfo() async {
+    var info = <String, dynamic>{};
+    try {
+      final result = await _controller?.evaluateJavascript(
+        source: WebContentExtractionService.pageSourceInfoScript,
+      );
+      info = WebContentExtractionService.parsePageSourceInfo(result);
+    } catch (e) {
+      LoggerService.warning('[ShareScreen] Failed to read page source: $e');
+    }
+    final href = info['href'];
+    if ((href is! String || href.trim().isEmpty) && _loadedUrl != null) {
+      info['href'] = _loadedUrl;
+    }
+    return info;
+  }
+
   Future<void> _performExtraction({required bool useAI}) async {
     if (_controller == null) {
       return;
@@ -2510,18 +2686,23 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
     });
 
     try {
-      final htmlContent = await _getCurrentPageBodyHtml();
+      final page = await _getCurrentPageBodyHtml();
 
       // Run heavy parsing in background isolate
       String finalContent = await compute(
         WebContentProcessor.processHtml,
-        htmlContent,
+        page,
       );
 
       var title = await _getCurrentPageTitle();
       if (title.isEmpty) {
         title = 'Web Content - ${DateTime.now().toString().substring(0, 16)}';
       }
+
+      // Where the clip came from, read now so it describes the page that
+      // was just captured (the AI step below can take a while). Never
+      // throws; the source itself is built after that step.
+      final pageInfo = await _getPageSourceInfo();
 
       final tags = <String>{'shared', 'web', 'extracted'};
       if (_readabilityEnabled) {
@@ -2543,6 +2724,25 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         tags.add('markdown');
       }
 
+      // The clip's source, kept in the note's `sources` metadata. Built
+      // after the AI step so the method records what actually happened: a
+      // failed AI pass falls back to plain extraction (no `ai_processed`
+      // tag) and must not claim `ai`. Best effort: if anything here fails
+      // the note is still created, just without a source.
+      String? metadata;
+      try {
+        final source = NoteSource.fromPageInfo(
+          pageInfo,
+          sharedUrl: widget.url,
+          method: tags.contains('ai_processed')
+              ? NoteSourceMethod.ai
+              : NoteSourceMethod.extract,
+        );
+        metadata = NoteMetadata.encodeSources([source]);
+      } catch (e) {
+        LoggerService.warning('[ShareScreen] Failed to record source: $e');
+      }
+
       // Process data URLs in the content
       final dataUrlResult = await _processDataUrls(finalContent);
       finalContent = dataUrlResult['content'] as String;
@@ -2557,6 +2757,7 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         updatedAt: DateTime.now(),
         tags: tags.toList(),
         attachmentPaths: newAttachments,
+        metadata: metadata,
       );
 
       final preview = title.isNotEmpty
@@ -2892,6 +3093,9 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
         if (!mounted) {
           return;
         }
+        // Even a stopped load ends somewhere; the clip's source falls back
+        // to this when the page cannot report its own location.
+        _loadedUrl = url?.toString();
         if (_stopRequested) {
           // Stop was already handled by the user pressing the stop button.
           return;
@@ -2901,6 +3105,11 @@ class _WebExtractionDialogState extends State<_WebExtractionDialog> {
           _status = l10n.webExtractionStatusReady;
           _errorMessage = null;
         });
+
+        // The site almost certainly rotated its session cookie while serving
+        // this page. Fold that back into the saved login so it rolls forward
+        // instead of decaying into an expired snapshot.
+        await _syncSessionCookies(url?.toString());
 
         if (_readabilityEnabled) {
           await _applyReadabilityMode();

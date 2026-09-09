@@ -303,8 +303,10 @@ class MarkerChatSendService {
       if (!conversationService.skillsEnabled && !includeImplicitIndex) {
         return '';
       }
+      // `ensureSkillIndex` rather than `skillIndex`: this prompt is built long
+      // after the session enabled skills, and the Space may have changed.
       final index = conversationService.skillsEnabled
-          ? conversationService.skillIndex
+          ? await conversationService.ensureSkillIndex()
           : await skillService.buildSkillIndex();
       if (index.isEmpty) return '';
       final budget =

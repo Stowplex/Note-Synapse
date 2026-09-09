@@ -10,11 +10,13 @@ import '../utils/file_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 import 'logger_service.dart';
 import 'service_locator.dart';
+import 'space_scope_service.dart';
 import 'tag_workflow_service.dart';
 
 class NoteModificationService {
   final DatabaseService _db;
   final DataChangeNotifier _changeNotifier;
+  final SpaceScopeService _spaceScope;
   final Uuid _uuid = const Uuid();
 
   /// Creates a NoteModificationService.
@@ -22,8 +24,18 @@ class NoteModificationService {
   /// [db] - The database service for persistence operations.
   /// [changeNotifier] - Receives post-commit change events so UI caches can
   /// refresh. Defaults to the process-wide shared notifier.
-  NoteModificationService(this._db, {DataChangeNotifier? changeNotifier})
-    : _changeNotifier = changeNotifier ?? DataChangeNotifier.shared();
+  /// [spaceScope] - Supplies the active Space's tags, which [createNote]
+  /// stamps onto new notes. Optional and named on purpose: this service is
+  /// constructed positionally in several tests, and a required parameter would
+  /// break them. Defaults to the process-wide shared scope, exactly like
+  /// [changeNotifier]: a private `SpaceScopeService()` would be permanently
+  /// unset and would silently stamp nothing.
+  NoteModificationService(
+    this._db, {
+    DataChangeNotifier? changeNotifier,
+    SpaceScopeService? spaceScope,
+  }) : _changeNotifier = changeNotifier ?? DataChangeNotifier.shared(),
+       _spaceScope = spaceScope ?? SpaceScopeService.shared();
 
   /// Publishes a post-commit change event. Enqueue-only by contract
   /// ([DataChangeNotifier.publish] never throws), so calling this can never
@@ -79,9 +91,12 @@ class NoteModificationService {
   /// an error.
   static const Map<String, String> _objectFieldHints = {
     'content':
-        '{"action": "append|prepend|replace", "text": "...", '
+        '{"action": "append|prepend|replace|replace_text", "text": "...", '
         '"section": "(optional) markdown heading to target", '
-        '"insert_position": "(optional) append|prepend within the section"}',
+        '"insert_position": "(optional) append|prepend within the section"} '
+        '— for replace_text, pass "old_text" and "new_text" instead of '
+        '"text" to change exactly one occurrence (e.g. check a checkbox); '
+        'action may be omitted when old_text and new_text are provided',
     'title': '{"new_title": "..."}',
     'tags': '{"added": ["tag1"], "removed": ["tag2"]}',
     'attachments': '{"added": ["file.png"], "removed": ["old.png"]}',
@@ -89,15 +104,48 @@ class NoteModificationService {
         '{"added": [{"name": "...", "content": "..."}], "removed": ["id"]}',
   };
 
+  static const Set<String> _recognizedModificationFields = {
+    'content',
+    'title',
+    'tags',
+    'link',
+    'attachments',
+    'subnote',
+  };
+
+  /// True when [modification] carries none of the recognized fields, i.e.
+  /// applying it would change nothing. AI-facing tool calls reject such
+  /// no-ops (see [_validateModificationShape]); callers that historically
+  /// relied on empty modifications being silent successes — ingestion, the
+  /// plugin bridge — should check this and skip the apply call instead.
+  static bool isNoOpModification(Map<String, dynamic> modification) =>
+      !modification.keys.any(_recognizedModificationFields.contains);
+
   /// Validates that each present modification field has the expected object
   /// shape, throwing a self-describing error the model can act on instead of
-  /// an opaque type-cast failure.
-  static void _validateModificationShape(Map<String, dynamic> modification) {
+  /// an opaque type-cast failure. [context] prefixes messages with the
+  /// batch position, e.g. `modifications[2]`.
+  static void _validateModificationShape(
+    Map<String, dynamic> modification, {
+    String context = 'modification',
+  }) {
+    final recognized = modification.keys
+        .where(_recognizedModificationFields.contains)
+        .toList();
+    if (recognized.isEmpty) {
+      throw Exception(
+        '$context contains no recognized fields, nothing to change. Provide '
+        'at least one of: ${_recognizedModificationFields.join(', ')}. '
+        'Example: {"content": {"action": "append", "text": "..."}}',
+      );
+    }
     _objectFieldHints.forEach((field, hint) {
       if (modification.containsKey(field) && modification[field] is! Map) {
-        final actual = modification[field].runtimeType;
+        final actual = modification[field] == null
+            ? 'null (remove the key if unused)'
+            : modification[field].runtimeType.toString();
         throw Exception(
-          'Invalid "$field" in modification: expected an object but got '
+          'Invalid "$field" in $context: expected an object but got '
           '$actual. The "$field" field must be shaped like: $hint',
         );
       }
@@ -154,17 +202,35 @@ class NoteModificationService {
     }
 
     final prepared = <_PreparedNoteUpdate>[];
-    for (final update in updates) {
-      final noteId = update['note_id'] as String?;
-      final modification = update['modification'] as Map<String, dynamic>?;
-      if (noteId == null || noteId.isEmpty) {
-        throw Exception('Each update must include a non-empty note_id.');
+    for (var index = 0; index < updates.length; index++) {
+      final update = updates[index];
+      // Checked extraction: raw casts here would surface as opaque
+      // "type 'X' is not a subtype" errors the model cannot act on.
+      final noteIdRaw = update['note_id'];
+      if (noteIdRaw is! String || noteIdRaw.isEmpty) {
+        throw Exception(
+          'modifications[$index].note_id: expected a non-empty string but '
+          'got ${noteIdRaw == null ? 'nothing' : noteIdRaw.runtimeType}.',
+        );
       }
-      if (modification == null) {
-        throw Exception('Each update must include a modification object.');
+      final modificationRaw = update['modification'];
+      if (modificationRaw is! Map) {
+        throw Exception(
+          'modifications[$index].modification: expected an object but got '
+          '${modificationRaw == null ? 'nothing' : '${modificationRaw.runtimeType} ($modificationRaw)'}. '
+          'The modification must be an object, for example: '
+          '{"content": {"action": "append", "text": "..."}}',
+        );
       }
+      final noteId = noteIdRaw;
+      final modification = modificationRaw.map(
+        (key, value) => MapEntry(key.toString(), value),
+      );
 
-      _validateModificationShape(modification);
+      _validateModificationShape(
+        modification,
+        context: 'modifications[$index]',
+      );
 
       final note = await _db.getNoteById(noteId);
       if (note == null) {
@@ -293,8 +359,13 @@ class NoteModificationService {
   }
 
   /// Creates and persists a new note. For UI-aware insertion, use buildNote + AppProvider.addNote.
+  ///
+  /// A note created while a Space is active is filed into it: the Space's
+  /// include-tags are unioned onto `data['tags']` before the note is built.
+  /// [buildNote] deliberately does not do this — it also backs previews, which
+  /// must not acquire tags they will never be saved with.
   Future<Note> createNote(Map<String, dynamic> data) async {
-    final note = await buildNote(data);
+    final note = await buildNote(_spaceScope.stampData(data));
     await _db.insertNote(note);
     // Publication is guarded rather than transactional here: insertNote owns
     // attachment-path conversion and cannot run against a transaction
@@ -430,10 +501,29 @@ class NoteModificationService {
     String currentContent,
     Map<String, dynamic> contentMod,
   ) {
-    final action = contentMod['action'] as String? ?? 'no-op';
+    // old_text + new_text without an action unambiguously mean
+    // replace_text — models often omit the action when supplying both
+    // (observed after misplaced-key lifting normalizes their arguments).
+    final inferredAction =
+        contentMod.containsKey('old_text') && contentMod.containsKey('new_text')
+        ? 'replace_text'
+        : 'no-op';
+    final action = contentMod['action'] as String? ?? inferredAction;
     final text = contentMod['text'] as String? ?? '';
     final section = contentMod['section'] as String?;
     final insertPosition = contentMod['insert_position'] as String? ?? action;
+
+    // Precise single-match replacement (e.g. checking off one list item)
+    // uses old_text/new_text instead of `text`, so it must run before the
+    // empty-text no-op guard below.
+    if (action == 'replace_text') {
+      return _applyReplaceTextModification(
+        currentContent,
+        oldText: contentMod['old_text'],
+        newText: contentMod['new_text'],
+        section: section,
+      );
+    }
 
     // Empty append/prepend operations are no-ops, but an empty replacement is
     // meaningful: it clears the note. Block-scoped updates already follow this
@@ -452,6 +542,75 @@ class NoteModificationService {
     }
 
     return applyWholeContentAction(currentContent, action, text);
+  }
+
+  /// Replaces exactly one occurrence of `old_text` with `new_text`,
+  /// optionally scoped to a markdown [section].
+  ///
+  /// - Zero matches: error (unless the edit was already applied — see below).
+  /// - Multiple matches: error instructing a longer `old_text` or a section.
+  /// - Already applied (`old_text` absent, `new_text` present exactly once):
+  ///   idempotent success, so a retry after a timeout cannot double-apply.
+  /// - Matching is exact — no fuzzy or partial-word mutation.
+  String _applyReplaceTextModification(
+    String content, {
+    required dynamic oldText,
+    required dynamic newText,
+    String? section,
+  }) {
+    if (oldText is! String || oldText.isEmpty) {
+      throw Exception(
+        'replace_text requires a non-empty "old_text" string. Shape: '
+        '{"action": "replace_text", "old_text": "- [ ] Title", '
+        '"new_text": "- [x] Title", "section": "(optional) ## Heading"}',
+      );
+    }
+    if (newText is! String) {
+      throw Exception(
+        'replace_text requires a "new_text" string (may be empty to delete '
+        'the matched text).',
+      );
+    }
+
+    final scope = (section != null && section.isNotEmpty)
+        ? _sliceSection(content, section)
+        : null;
+    final target = scope == null ? content : scope.body.join('\n');
+    final scopeLabel = scope == null ? 'the note' : 'section "$section"';
+
+    final matches = RegExp(RegExp.escape(oldText)).allMatches(target).length;
+    if (matches == 0) {
+      // Already-applied detection (retry safety): old_text is gone and
+      // new_text is present exactly once. Guarded by an overlap check so a
+      // coincidental pre-existing occurrence of new_text (unrelated to this
+      // edit) cannot masquerade as success: a genuine in-place edit like a
+      // checkbox flip shares most of its text with what it replaced.
+      if (newText.isNotEmpty &&
+          RegExp(RegExp.escape(newText)).allMatches(target).length == 1 &&
+          _sharedAffixLength(oldText, newText) * 2 >= newText.length) {
+        return content;
+      }
+      throw Exception(
+        'replace_text: "old_text" was not found in $scopeLabel; no changes '
+        'were made. Read the note and copy the text to replace exactly. If '
+        'you already applied this edit, no further action is needed.',
+      );
+    }
+    if (matches > 1) {
+      throw Exception(
+        'replace_text: "old_text" matched $matches places in $scopeLabel; no '
+        'changes were made. Provide a longer, unique old_text or add '
+        '"section" to disambiguate.',
+      );
+    }
+
+    final updatedTarget = target.replaceFirst(oldText, newText);
+    if (scope == null) return updatedTarget;
+    return [
+      ...scope.before,
+      ...updatedTarget.split('\n'),
+      ...scope.after,
+    ].join('\n');
   }
 
   /// Applies an `append` / `prepend` / `replace` content action to a whole
@@ -478,12 +637,27 @@ class NoteModificationService {
     }
   }
 
-  String _applySectionContentModification(
-    String content, {
-    required String section,
-    required String text,
-    required String insertPosition,
-  }) {
+  /// Combined length of the longest common prefix and suffix of two
+  /// strings, capped so overlapping prefix/suffix regions are not counted
+  /// twice. Used to judge whether new_text plausibly replaced old_text.
+  static int _sharedAffixLength(String a, String b) {
+    final maxShared = a.length < b.length ? a.length : b.length;
+    var prefix = 0;
+    while (prefix < maxShared && a[prefix] == b[prefix]) {
+      prefix++;
+    }
+    var suffix = 0;
+    while (suffix < maxShared - prefix &&
+        a[a.length - 1 - suffix] == b[b.length - 1 - suffix]) {
+      suffix++;
+    }
+    return prefix + suffix;
+  }
+
+  /// Slices [content] into the lines before a section body (including the
+  /// heading line), the section body itself, and everything after it.
+  /// Shared by section-scoped inserts and replace_text.
+  _SectionSlice _sliceSection(String content, String section) {
     final lines = content.split('\n');
     final headingIndex = lines.indexWhere((line) => line.trim() == section);
     if (headingIndex == -1) {
@@ -500,10 +674,23 @@ class NoteModificationService {
       }
     }
 
-    final sectionBodyStart = headingIndex + 1;
-    final before = lines.sublist(0, sectionBodyStart);
-    final body = lines.sublist(sectionBodyStart, sectionEnd);
-    final after = lines.sublist(sectionEnd);
+    return _SectionSlice(
+      before: lines.sublist(0, headingIndex + 1),
+      body: lines.sublist(headingIndex + 1, sectionEnd),
+      after: lines.sublist(sectionEnd),
+    );
+  }
+
+  String _applySectionContentModification(
+    String content, {
+    required String section,
+    required String text,
+    required String insertPosition,
+  }) {
+    final slice = _sliceSection(content, section);
+    final before = slice.before;
+    final body = slice.body;
+    final after = slice.after;
     final textLines = text.split('\n');
 
     late final List<String> newBody;
@@ -837,6 +1024,18 @@ class NoteModificationService {
         return TaskStatus.todo;
     }
   }
+}
+
+class _SectionSlice {
+  final List<String> before;
+  final List<String> body;
+  final List<String> after;
+
+  const _SectionSlice({
+    required this.before,
+    required this.body,
+    required this.after,
+  });
 }
 
 class _PreparedNoteUpdate {

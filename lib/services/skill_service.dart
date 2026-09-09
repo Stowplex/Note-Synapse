@@ -3,6 +3,7 @@ import 'package:note_synapse/models/note.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/prompts/prompt_template_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
+import 'package:note_synapse/services/space_scope_service.dart';
 
 class SkillMetadata {
   final String noteId;
@@ -38,9 +39,23 @@ class SkillService {
 
   final DatabaseService _db;
   final bool includeBundledSkills;
+  final SpaceScopeService _spaceScope;
   final Set<String> _loadedSkillNoteIds = {};
 
-  SkillService(this._db, {this.includeBundledSkills = false});
+  /// Creates a SkillService.
+  ///
+  /// [spaceScope] decides which skills [buildSkillIndex] can see. Optional and
+  /// named on purpose: this service is constructed positionally in
+  /// `StarterService` and in a dozen test files, and a required parameter
+  /// would break every one of them at compile time. Defaults to the
+  /// process-wide shared scope, exactly like [NoteModificationService]: a
+  /// privately constructed `SpaceScopeService()` is permanently unset, so it
+  /// would report every skill visible while looking like a scope.
+  SkillService(
+    this._db, {
+    this.includeBundledSkills = false,
+    SpaceScopeService? spaceScope,
+  }) : _spaceScope = spaceScope ?? SpaceScopeService.shared();
 
   // --- Parsing ---
 
@@ -142,15 +157,35 @@ class SkillService {
 
   // --- Index ---
 
-  Future<Map<String, SkillMetadata>> buildSkillIndex() async {
+  /// Every enabled `agent-skill` note that the active Space can reach.
+  ///
+  /// Visibility is [SpaceScopeService.skillVisible]'s 3×3 rule: a skill
+  /// carrying the active Space's include-tags is visible inside it, a skill
+  /// carrying `all-spaces` is visible everywhere, and an unfiled skill is
+  /// visible only when no Space is active.
+  ///
+  /// [allSpaces] escapes the scope entirely and lists the whole library. It is
+  /// for management surfaces that must show what exists rather than what is
+  /// reachable (the tag manager and the tag detail dialog), and for
+  /// `StarterService`, whose install must stay idempotent inside a Space. Every
+  /// prompt-facing call site leaves it false.
+  Future<Map<String, SkillMetadata>> buildSkillIndex({
+    bool allSpaces = false,
+  }) async {
     final notes = await _db.getNotesByTag(agentSkillTag);
     final index = <String, SkillMetadata>{};
     final usedRefs = <String>{};
     for (final Note note in notes) {
       final meta = parseSkillMetadata(note.id, note.content);
       if (meta != null && meta.enabled) {
+        // Refs are deduped BEFORE the visibility test, so a skill's skillRef
+        // does not shift when activating a Space hides one of its neighbours.
+        // A `skillRef` is quoted back by the model in `load_skill` calls and
+        // stored in conversation history; making it depend on the scope would
+        // silently re-point an old reference at a different skill.
         final stableRef = _dedupeSkillRef(meta.skillRef, usedRefs);
         usedRefs.add(stableRef);
+        if (!allSpaces && !_spaceScope.skillVisible(note.tags)) continue;
         index[note.id] = SkillMetadata(
           noteId: meta.noteId,
           skillRef: stableRef,
@@ -163,6 +198,10 @@ class SkillService {
       }
     }
     if (includeBundledSkills) {
+      // The bundled skill is an asset, not a note: it has no tags to test and
+      // it ships with the app rather than with any Space, so it counts as
+      // `all-spaces` and is added whatever Space is active. Deliberately
+      // outside the visibility test above.
       await _addBundledSkillIfNeeded(
         index,
         usedRefs,

@@ -1,6 +1,7 @@
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/skill_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
+import 'package:note_synapse/services/space_scope_service.dart';
 import 'note_tools.dart';
 
 class LoadSkillTool extends NativeTool {
@@ -54,13 +55,29 @@ class LoadSkillTool extends NativeTool {
       return {'error': 'skillRef or noteId is required'};
     }
 
-    // Return from cache if already loaded this session
+    // Return from cache if already loaded this session.
+    //
+    // Not a hole in the Space check below: a cache hit means this session
+    // already loaded that skill, so its content is in the model's context
+    // regardless, and the cache is cleared per session by [resetSession].
     if (_cache.containsKey(noteId)) return _cache[noteId]!;
 
     final db = getIt<DatabaseService>();
     final note = await db.getNote(noteId);
     final content = note?.content;
     if (content == null) return {'error': 'Skill note $noteId not found'};
+
+    // A skill hidden by the active Space must be unreachable, not merely
+    // unlisted (design decision 7). `buildSkillIndex` already filters what the
+    // model is *told* about, but a note id survives in conversation history
+    // across a Space switch, and the legacy `noteId` argument bypasses the
+    // index entirely — so a model quoting an id from earlier in the session
+    // could load a skill the current Space cannot see. Deliberately the same
+    // "not found" answer as a missing note: which Spaces a skill is filed
+    // under is not something a hidden skill should disclose.
+    if (!SpaceScopeService.shared().skillVisible(note!.tags)) {
+      return {'error': 'Skill note $noteId not found'};
+    }
 
     final meta = skillService.parseSkillMetadata(noteId, content);
     if (meta == null) {

@@ -134,7 +134,7 @@ void main() {
   });
 
   group(
-    'M1.7 filters/tag_workflow_bindings soft-delete — migration round-trip (v50 -> v51)',
+    'M1.7 filters/tag_workflow_bindings soft-delete — migration round-trip (v51 -> v52)',
     () {
       late Database preMigrationDb;
 
@@ -196,7 +196,7 @@ void main() {
           });
 
           final service = DatabaseService.createNew();
-          await service.migrateBackupDatabase(preMigrationDb, 50, 51);
+          await service.migrateBackupDatabase(preMigrationDb, 51, 52);
 
           expect(await _hasColumn(preMigrationDb, 'filters', '__deleted__'), isTrue);
           expect(
@@ -215,7 +215,7 @@ void main() {
       );
 
       test(
-        'running the v50 -> v51 migration twice does not error and leaves '
+        'running the v51 -> v52 migration twice does not error and leaves '
         'schema/data unchanged the second time',
         () async {
           await preMigrationDb.insert('filters', {
@@ -231,10 +231,10 @@ void main() {
           });
 
           final service = DatabaseService.createNew();
-          await service.migrateBackupDatabase(preMigrationDb, 50, 51);
+          await service.migrateBackupDatabase(preMigrationDb, 51, 52);
           final afterFirst = await preMigrationDb.query('filters', orderBy: 'id');
 
-          await service.migrateBackupDatabase(preMigrationDb, 50, 51);
+          await service.migrateBackupDatabase(preMigrationDb, 51, 52);
           final afterSecond = await preMigrationDb.query('filters', orderBy: 'id');
 
           expect(afterSecond, equals(afterFirst));

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cartograph smoke</title>
+<style>
+  body { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0; padding: 16px;
+         background: #0e1013; color: #e8eaf0; }
+  .row { padding: 3px 0; border-bottom: 1px solid #262b36; }
+  .pass::before { content: 'PASS '; color: #34d399; }
+  .fail::before { content: 'FAIL '; color: #f87171; }
+  .fail { color: #f87171; }
+  pre { color: #8b93a5; white-space: pre-wrap; margin: 4px 0 8px 40px; }
+  #sum { padding: 12px 0; font-size: 15px; font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="sum">running…</div>
+<div id="out"></div>
+
+<script src="../plugins/src/md.js"></script>
+<script src="../plugins/src/edit.js"></script>
+<script src="../plugins/src/sidecar.js"></script>
+<script src="../plugins/src/layout.js"></script>
+<script src="../plugins/src/view.js"></script>
+<script src="../plugins/src/diff.js"></script>
+<script src="../plugins/src/ai.js"></script>
+<script src="../plugins/src/host.js"></script>
+<script src="../plugins/src/export.js"></script>
+<script>
+window.CG_FIXTURES = {};
+var FILES = ['plan.md', 'mixed.md', 'bullets.md', 'empty.md'];
+Promise.all(FILES.map(function (f) {
+  return fetch('fixtures/' + f).then(function (r) { return r.text(); }).then(function (t) { window.CG_FIXTURES[f] = t; });
+})).then(function () {
+  var s = document.createElement('script');
+  s.src = 'spec.js';
+  s.onload = go;
+  document.body.appendChild(s);
+});
+
+function go() {
+  var res = CG.spec.run();
+  var out = document.getElementById('out');
+  var fails = 0;
+  res.forEach(function (r) {
+    if (!r.pass) fails++;
+    var d = document.createElement('div');
+    d.className = 'row ' + (r.pass ? 'pass' : 'fail');
+    d.textContent = r.name;
+    out.appendChild(d);
+    if (!r.pass && r.detail) {
+      var p = document.createElement('pre');
+      p.textContent = r.detail;
+      out.appendChild(p);
+    }
+  });
+  var sum = (res.length - fails) + '/' + res.length + ' assertions passed';
+  document.getElementById('sum').textContent = sum;
+  document.title = fails ? 'SMOKE FAIL ' + sum : 'SMOKE OK ' + sum;
+  window.__SMOKE__ = { total: res.length, fails: fails, results: res };
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Big Bang harness</title>
+<style>
+  body { margin: 0; font: 13px -apple-system, system-ui, sans-serif; background: #0e1013; color: #e8eaf0;
+         display: flex; flex-direction: column; height: 100vh; }
+  header { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid #262b36; }
+  select, button { font: inherit; background: #1f232c; color: #e8eaf0; border: 1px solid #262b36;
+                   border-radius: 8px; padding: 5px 9px; }
+  #wrap { flex: 1; display: grid; place-items: center; background: #16181d; }
+  iframe { width: 390px; height: 780px; border: 1px solid #262b36; border-radius: 22px; background: #fff; }
+  label { color: #8b93a5; }
+  a { color: #7d90ff; }
+</style>
+</head>
+<body>
+<header>
+  <label>note</label>
+  <select id="pick">
+    <option value="board.md">board.md — a plain board</option>
+    <option value="around.md">around.md — body above and below</option>
+    <option value="empty.md">empty.md — never been a board</option>
+    <option value="mangled.md">mangled.md — hand-broken block</option>
+    <option value="truncated.md">truncated.md — unclosed fence</option>
+    <option value="future.md">future.md — written by a newer version</option>
+    <option value="indented.md">indented.md — fences that are not boards</option>
+    <option value="">(standalone launch — the board home)</option>
+    <option value="embed:board.md">(embed of board.md — read-mostly)</option>
+  </select>
+  <label>size</label>
+  <select id="size">
+    <option value="390x780">phone 390×780</option>
+    <option value="360x640">small 360×640</option>
+    <option value="768x900">tablet 768×900</option>
+  </select>
+  <button id="reload">reload</button>
+  <a href="auto_smoke.html" style="margin-left:auto">run smoke tests →</a>
+</header>
+<div id="wrap"><iframe id="f"></iframe></div>
+<script>
+var f = document.getElementById('f');
+// ?fixture=&size= let a screenshot run pick a state without clicking.
+(function () {
+  var q = new URLSearchParams(location.search);
+  if (q.get('fixture') !== null) document.getElementById('pick').value = q.get('fixture');
+  if (q.get('size')) document.getElementById('size').value = q.get('size');
+})();
+/*
+ * The notes the fixtures' cards point at. ?board= replaces the mock's default
+ * store, so without these every card would open as a tombstone - which is a
+ * state worth seeing on purpose, not by accident. mock-note-9 is deliberately
+ * left out of them.
+ */
+var SEED = [
+  { id: 'mock-note-2', title: 'Interview script', content: '## Warm up\n\n- Tell me about your week.\n- What did you ship?\n' },
+  { id: 'mock-note-3', title: 'Pricing', content: '# Pricing\n\nThree tiers, **annual only**.\n\n```js\nconst hidden = 1;\n```\n' }
+];
+
+/*
+ * The board home needs a library with boards in it, which the three notes
+ * above are not: a board is a note holding a ```synapse-bigbang block, and the
+ * home lists exactly those. These two are seeded so the standalone launch has
+ * something to list, with dates far enough apart to show the ordering.
+ */
+var BOARDS = [
+  {
+    id: 'board-alpha', title: 'Sprint planning', updatedAt: '2026-03-01T10:00:00Z',
+    content: '# Sprint planning\n\nWe agreed to cut scope on the importer.\n\n```synapse-bigbang\n' +
+      '{"v":1,"items":{"n1":{"k":"note","id":"mock-note-2","p":[0,0]},' +
+      '"n2":{"k":"note","id":"mock-note-3","p":[300,0]},"s1":{"k":"sticky","t":"call the vendor","p":[0,300]}}}' +
+      '\n```\n'
+  },
+  {
+    id: 'board-beta', title: 'Pricing map', updatedAt: '2026-01-05T10:00:00Z',
+    content: '# Pricing map\n\n```synapse-bigbang\n' +
+      '{"v":1,"items":{"n1":{"k":"note","id":"mock-note-3","p":[0,0]}}}\n```\n'
+  }
+];
+
+/*
+ * A canned AI answer, so *Suggest links* does something in a browser.
+ *
+ * There is no model behind the mock, and there is deliberately no simulation
+ * either: this reads the card ids straight back out of the prompt and pairs
+ * the first one with each of the others. It is enough to see the preview, the
+ * labels and Apply/Discard, and it also puts one deliberately bad line in -
+ * a card that is not on the board - so the dropping is visible too.
+ */
+function cannedAI(req) {
+  var ids = [];
+  String(req.prompt).split('\n').forEach(function (line) {
+    var m = /^(\S+) <DATA_ONLY_DOCUMENT>/.exec(line);
+    if (m) ids.push(m[1]);
+  });
+  if (ids.length < 2) return 'Nothing on this board looks related.';
+  var out = [];
+  for (var i = 1; i < ids.length && i < 4; i++) {
+    out.push(ids[0] + ' | ' + ids[i] + ' | mock suggestion ' + i);
+  }
+  out.push('zz9 | zz8 | a pair naming cards that are not on the board');
+  return 'Here is what I found:\n' + out.join('\n') + '\n';
+}
+
+function load() {
+  var name = document.getElementById('pick').value;
+  var dims = document.getElementById('size').value.split('x');
+  f.style.width = dims[0] + 'px';
+  f.style.height = dims[1] + 'px';
+  var seed = '&seed=' + encodeURIComponent(JSON.stringify(SEED));
+  if (!name) {
+    f.src = '../plugins/big-bang.html?standalone=1&seed=' +
+      encodeURIComponent(JSON.stringify(SEED.concat(BOARDS)));
+    return;
+  }
+  var embed = name.indexOf('embed:') === 0;
+  if (embed) name = name.slice(6);
+  fetch('fixtures/' + name).then(function (r) { return r.text(); }).then(function (t) {
+    f.src = '../plugins/big-bang.html?board=' + encodeURIComponent(t) + seed + (embed ? '&mode=embed' : '');
+  });
+}
+// The hook lives on the app's own window, so it has to be installed after the
+// frame navigates and before the first Suggest links.
+f.addEventListener('load', function () {
+  try { f.contentWindow.__BB_AI__ = cannedAI; } catch (e) { /* a cross-origin frame */ }
+});
+document.getElementById('pick').onchange = load;
+document.getElementById('size').onchange = load;
+document.getElementById('reload').onclick = load;
+load();
+</script>
+</body>
+</html>

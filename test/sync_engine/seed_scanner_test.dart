@@ -5,7 +5,7 @@
 //
 // **How "pre-existing" data is simulated, and why it is faithful.** A row
 // that predates M2.4's capture triggers is, by construction, a row with no
-// `sync_touch_log` evidence — `_migrateToVersion57` installs the triggers
+// `sync_touch_log` evidence — `_migrateToVersion58` installs the triggers
 // without backfilling, so every pre-migration row is in exactly that state.
 // Both `OutboxDrainer` and `SeedScanner` read only `sync_touch_log` and the
 // `sync_*` state tables, never anything that could tell them WHEN a row was

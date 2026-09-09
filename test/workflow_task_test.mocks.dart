@@ -1074,14 +1074,18 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
+    List<String>? scopeTags,
     bool? includeEmpty = true,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#getAllConversations, [], {
               #maxAge: maxAge,
               #conversationIds: conversationIds,
               #tagNames: tagNames,
+              #scopeTags: scopeTags,
               #includeEmpty: includeEmpty,
+              #includeAllSpacesTag: includeAllSpacesTag,
             }),
             returnValue: _i7.Future<List<_i17.Conversation>>.value(
               <_i17.Conversation>[],
@@ -1623,9 +1627,19 @@ class MockDatabaseService extends _i1.Mock implements _i3.DatabaseService {
   _i7.Future<List<_i8.Note>> searchNotesFTS(
     String? query, {
     List<String>? tags,
+    List<String>? scopeTags,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
-            Invocation.method(#searchNotesFTS, [query], {#tags: tags}),
+            Invocation.method(
+              #searchNotesFTS,
+              [query],
+              {
+                #tags: tags,
+                #scopeTags: scopeTags,
+                #includeAllSpacesTag: includeAllSpacesTag,
+              },
+            ),
             returnValue: _i7.Future<List<_i8.Note>>.value(<_i8.Note>[]),
           )
           as _i7.Future<List<_i8.Note>>);
@@ -2300,6 +2314,49 @@ class MockModelSelector extends _i1.Mock implements _i26.ModelSelector {
                   #generateFromPrompt,
                   [request],
                   {
+                    #temperature: temperature,
+                    #topK: topK,
+                    #topP: topP,
+                    #maxOutputTokens: maxOutputTokens,
+                    #generationContext: generationContext,
+                  },
+                ),
+              ),
+            ),
+          )
+          as _i7.Future<String>);
+
+  @override
+  _i7.Future<String> generateFromPromptExact(
+    _i22.PromptRequest? request, {
+    required _i27.ModelConfig? config,
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    _i23.GenerationContext? generationContext,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #generateFromPromptExact,
+              [request],
+              {
+                #config: config,
+                #temperature: temperature,
+                #topK: topK,
+                #topP: topP,
+                #maxOutputTokens: maxOutputTokens,
+                #generationContext: generationContext,
+              },
+            ),
+            returnValue: _i7.Future<String>.value(
+              _i9.dummyValue<String>(
+                this,
+                Invocation.method(
+                  #generateFromPromptExact,
+                  [request],
+                  {
+                    #config: config,
                     #temperature: temperature,
                     #topK: topK,
                     #topP: topP,

@@ -22,6 +22,8 @@ import '../services/conversation_service.dart';
 import '../services/chip_tap_handler.dart';
 import '../services/model_selector.dart';
 import '../services/service_locator.dart';
+import '../services/space_scope_service.dart';
+import '../services/prompts/space_scope_prompt.dart';
 import '../services/attachment_preprocessor.dart';
 import '../services/local_model_attachment_constraint_service.dart';
 import '../services/logger_service.dart';
@@ -41,6 +43,7 @@ import '../services/conversation_prompt_builder.dart';
 import '../widgets/chip_aware_ai_message_content.dart';
 import '../utils/file_utils.dart';
 import '../utils/conversation_title_directive.dart';
+import '../utils/date_utils.dart';
 import '../l10n/app_localizations.dart';
 import '../services/conversation_ai_engine.dart';
 import 'note_selection_dialog.dart';
@@ -64,6 +67,8 @@ import '../services/built_in_tools_service.dart';
 import '../services/context_manager_service.dart';
 import '../services/skill_service.dart';
 import '../services/tools/note_tools.dart';
+import '../services/tools/tool_outcome.dart';
+import '../services/tools/tool_param_validator.dart';
 import '../services/sql_query_service.dart';
 import '../widgets/agent_plan_review_widget.dart';
 import '../widgets/agent_task_tree_widget.dart';
@@ -194,6 +199,37 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       );
       return result;
     };
+  }
+
+  /// Rebuilds the conversation service's skill index when the Space scope
+  /// moved, then republishes the count this screen shows.
+  ///
+  /// The screen caches only the count, but that count is a scope-derived view
+  /// of the same index: leaving it stale tells the user "6 skills available"
+  /// in a Space that can reach two of them.
+  ///
+  /// No staleness guard of its own, on purpose, and **nothing returns before
+  /// the rebuild**. `ensureSkillIndex()` already returns the cached index
+  /// untouched when the scope has not moved, and the count comparison below
+  /// already suppresses a pointless `setState`, so a staleness check here was
+  /// redundant *and* invertible: flipping its one `!` made the screen rebuild
+  /// only when it was already fresh, which fed the previous Space's skills to
+  /// the model (the prompt reads the cached `skillIndex` getter, so this call
+  /// is what makes it fresh) with nothing to catch it. Awaiting the rebuild
+  /// first leaves no polarity that can suppress it.
+  ///
+  /// The `skillsEnabled` check below guards the *count*, not the rebuild:
+  /// while skills are off, `ensureSkillIndex()` answers with an empty map but
+  /// `_skillCount` holds the size of the whole skill library
+  /// ([_initSkillsWithModelCheck]), and zeroing it would hide the chip that
+  /// turns skills on.
+  Future<void> _refreshSkillIndexIfScopeChanged() async {
+    final index = await _conversationService.ensureSkillIndex();
+    if (!mounted) return;
+    if (!_conversationService.skillsEnabled) return;
+    if (index.length != _skillCount) {
+      setState(() => _skillCount = index.length);
+    }
   }
 
   void _initSkillsWithModelCheck() {
@@ -1133,6 +1169,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         final newConversation = await _conversationService.createConversation(
           title: title.length > 50 ? '${title.substring(0, 50)}...' : title,
           noteIds: noteIdSet.toList(),
+          // Files the conversation into the Space it was started in, so the
+          // conversation tree finds it there again.
+          tags: SpaceScopeService.shared().stampTags,
         );
         if (!mounted) return;
         setState(() {
@@ -1434,6 +1473,7 @@ $historyBuffer
     final l10n = AppLocalizations.of(context)!;
     final newConversation = await _conversationService.createConversation(
       title: l10n.newConversation,
+      tags: SpaceScopeService.shared().stampTags,
     );
     if (mounted) {
       Navigator.of(context).pushReplacement(
@@ -1532,10 +1572,24 @@ $historyBuffer
         enableTools: _hasAnyTools || _selectedModelFeatures.isNotEmpty,
         executeTool: (serviceName, toolName, params, context) async {
           return _runWithToolStatus(serviceName, toolName, () async {
+            // Validate against the declared schema BEFORE approval or
+            // execution — the same boundary ChatToolSession.executeTool
+            // applies, so all chat surfaces behave identically.
+            final validation = ToolParamValidator.validateAndNormalize(
+              toolName: toolName,
+              params: params,
+              inputSchema: _findActiveToolSchema(serviceName, toolName),
+            );
+            if (validation.failure != null) {
+              return validation.failure!.serialize();
+            }
+            params = validation.params;
+
             // Handle AI Tools
             if (_aiToolBundles.containsKey(serviceName)) {
               final runtime = await _getAiToolRuntime(serviceName);
-              return runtime.invoke(toolName, params, context);
+              final result = await runtime.invoke(toolName, params, context);
+              return ToolOutcome.fromAiToolResult(toolName, result).serialize();
             }
 
             // Handle System Tools (native tools from AgentService)
@@ -1546,9 +1600,15 @@ $historyBuffer
                   .firstOrNull;
               if (nativeTool != null) {
                 final result = await nativeTool.execute(params);
-                return result is String ? result : result.toString();
+                return ToolOutcome.fromNativeResult(
+                  toolName,
+                  result,
+                ).serialize();
               }
-              return 'Error: System tool "$toolName" not found';
+              return ToolOutcome.failure(
+                code: ToolOutcome.codeNotFound,
+                message: 'System tool "$toolName" not found',
+              ).serialize();
             }
 
             // Handle Skill Tools (load_skill + skill-discovered tools)
@@ -1568,7 +1628,10 @@ $historyBuffer
                     resultStr,
                   );
                 }
-                return resultStr;
+                return ToolOutcome.fromNativeResult(
+                  toolName,
+                  result,
+                ).serialize();
               }
               // Skill-discovered native (builtin) tool — route to native execution
               if (_conversationService.skillDiscoveredNativeToolNames.contains(
@@ -1580,9 +1643,15 @@ $historyBuffer
                     .firstOrNull;
                 if (nativeTool != null) {
                   final result = await nativeTool.execute(params);
-                  return result is String ? result : result.toString();
+                  return ToolOutcome.fromNativeResult(
+                    toolName,
+                    result,
+                  ).serialize();
                 }
-                return 'Error: Native tool "$toolName" not found';
+                return ToolOutcome.failure(
+                  code: ToolOutcome.codeNotFound,
+                  message: 'Native tool "$toolName" not found',
+                ).serialize();
               }
               // Skill-discovered user_defined tool — route via AI tool bundle
               for (final entry
@@ -1594,7 +1663,15 @@ $historyBuffer
                     entry.key,
                     entry.value,
                   );
-                  return runtime.invoke(toolName, params, context);
+                  final result = await runtime.invoke(
+                    toolName,
+                    params,
+                    context,
+                  );
+                  return ToolOutcome.fromAiToolResult(
+                    toolName,
+                    result,
+                  ).serialize();
                 }
               }
               // Skill-discovered MCP tool — use the real endpoint name
@@ -1611,7 +1688,10 @@ $historyBuffer
                   generationContext: context,
                 );
               }
-              return 'Error: Skill tool "$toolName" not found';
+              return ToolOutcome.failure(
+                code: ToolOutcome.codeNotFound,
+                message: 'Skill tool "$toolName" not found',
+              ).serialize();
             }
 
             // Handle MCP Tools
@@ -1684,6 +1764,12 @@ $historyBuffer
   Future<PromptMessage> _buildConversationSystemMessage({
     required bool hasInlineContext,
   }) async {
+    // The session's skill index was built when skills were enabled; the user
+    // may have switched Space since. Re-check before it reaches the prompt, and
+    // keep the "N available" chip honest about what this Space can actually
+    // reach.
+    await _refreshSkillIndexIfScopeChanged();
+
     final lines = <String>[
       'Engage in a multi-turn conversation grounded in the provided note context message and attachments.',
       'Treat all prior messages as immutable history for KV-cache friendly reuse.',
@@ -1722,6 +1808,19 @@ $historyBuffer
     final currentModel = getIt<ModelSelector>().currentModel;
     final isLocalModel = currentModel?.usesNativeToolDeclarations ?? false;
 
+    // Decision 5: when a Space is active the note tools are scoped, and the
+    // model is told so rather than quietly handed a subset. Only worth saying
+    // where those tools exist — in chat they arrive through a loaded skill, so
+    // a session without them has nothing scoped to announce. Both halves of
+    // that decision live in buildChatSpaceScopeSection, where a test can reach
+    // them.
+    final spaceScopeSection = buildChatSpaceScopeSection(
+      _conversationService.skillDiscoveredNativeToolNames,
+    );
+    if (spaceScopeSection.isNotEmpty) {
+      lines.add(spaceScopeSection);
+    }
+
     final taskContext = lines.join('\n');
     final systemAddOn = PromptConfigurationService.instance.getValue(
       ChatPromptConfiguration.systemAddendumId,
@@ -1737,6 +1836,9 @@ $historyBuffer
       final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
         combinedTools,
         maxBudgetTokens: budget,
+        // Cloud chat models get per-tool declarations, so direct calls are
+        // preferred (constrained decoding validates their arguments).
+        preferDirectCalls: true,
       );
       if (mcpToolsPrompt.trim().isNotEmpty) {
         contextBuffer
@@ -3871,21 +3973,8 @@ $historyBuffer
     );
   }
 
-  String _formatTimestamp(DateTime timestamp) {
-    final l10n = AppLocalizations.of(context)!;
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return l10n.justNow;
-    }
-  }
+  String _formatTimestamp(DateTime timestamp) =>
+      AppDateUtils.formatRelative(timestamp, AppLocalizations.of(context)!);
 
   void _showMissingNotesAlert(List<String> missingNoteIds) {
     showDialog(
@@ -3981,13 +4070,31 @@ $historyBuffer
     }
   }
 
+  /// The declared input schema for a tool in the active tool map, if any.
+  /// Missing schemas disable validation for that call (fail open).
+  Map<String, dynamic>? _findActiveToolSchema(
+    String serviceName,
+    String toolName,
+  ) {
+    try {
+      final schema = _buildActiveToolsMap()[serviceName]
+          ?.where((tool) => tool.name == toolName)
+          .firstOrNull
+          ?.inputSchema;
+      return schema == null || schema.isEmpty ? null : schema;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Creates a tool executor that captures the current context and runtimes.
   ToolExecutor _createToolExecutor() {
     return (serviceName, toolName, params, ctx) async {
       // Handle AI Tools
       if (_aiToolBundles.containsKey(serviceName)) {
         final runtime = await _getAiToolRuntime(serviceName);
-        return runtime.invoke(toolName, params, ctx);
+        final result = await runtime.invoke(toolName, params, ctx);
+        return ToolOutcome.fromAiToolResult(toolName, result).serialize();
       }
       // Handle System Tools (native tools from AgentService)
       if (serviceName == BuiltInToolsService.systemToolsServiceKey) {
@@ -3997,9 +4104,12 @@ $historyBuffer
             .firstOrNull;
         if (nativeTool != null) {
           final result = await nativeTool.execute(params);
-          return result is String ? result : result.toString();
+          return ToolOutcome.fromNativeResult(toolName, result).serialize();
         }
-        return 'Error: System tool "$toolName" not found';
+        return ToolOutcome.failure(
+          code: ToolOutcome.codeNotFound,
+          message: 'System tool "$toolName" not found',
+        ).serialize();
       }
       // Handle MCP Tools
       return McpToolIntegrationService.executeToolCall(

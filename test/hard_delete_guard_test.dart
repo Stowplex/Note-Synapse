@@ -20,7 +20,7 @@
 //  2. The guard is not overly broad: ordinary INSERT/UPDATE against all
 //     four tables still works completely normally.
 //  3. Migration round-trip (DATABASE_VERSION 49 -> 50): an existing,
-//     already-on-v49 database (post-M1.4, no guard yet) gains the guard
+//     already-on-v50 database (post-M1.4, no guard yet) gains the guard
 //     triggers after migrating, and a real DELETE against any of the four
 //     tables then throws — while data already in the table is untouched by
 //     the migration itself (pure-additive, CREATE TRIGGER IF NOT EXISTS).
@@ -419,16 +419,16 @@ void main() {
     },
   );
 
-  group('M1.5 hard-delete guard — migration round-trip (v49 -> v50)', () {
+  group('M1.5 hard-delete guard — migration round-trip (v50 -> v51)', () {
     late Database preMigrationDb;
 
     setUp(() async {
       preMigrationDb = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
 
-      // v49 shape: every CREATE TABLE from the current schema constants
+      // v50 shape: every CREATE TABLE from the current schema constants
       // (which, as of M1.4, already include __deleted__/deletedAt), but
       // deliberately NOT run through _onCreate, so none of the M1.5 guard
-      // triggers exist yet — exactly what an existing v49 install looks
+      // triggers exist yet — exactly what an existing v50 install looks
       // like today, before this migration runs.
       for (final statement in DatabaseService.getSchema()) {
         await preMigrationDb.execute(statement);
@@ -448,7 +448,7 @@ void main() {
     });
 
     test(
-      'migrating v49 -> v50 installs the guard trigger on all four tables, '
+      'migrating v50 -> v51 installs the guard trigger on all four tables, '
       'and existing data survives untouched',
       () async {
         await preMigrationDb.insert('user_apps', {
@@ -464,13 +464,13 @@ void main() {
         });
 
         final service = DatabaseService.createNew();
-        await service.migrateBackupDatabase(preMigrationDb, 49, 50);
+        await service.migrateBackupDatabase(preMigrationDb, 50, 51);
 
         for (final table in _hardDeleteGuardedTables) {
           expect(
             await _hasGuardTrigger(preMigrationDb, table),
             isTrue,
-            reason: '$table should have the guard trigger after migrating to v50',
+            reason: '$table should have the guard trigger after migrating to v51',
           );
         }
 
@@ -485,12 +485,12 @@ void main() {
     );
 
     test(
-      'running the v49 -> v50 migration twice does not error (CREATE '
+      'running the v50 -> v51 migration twice does not error (CREATE '
       'TRIGGER IF NOT EXISTS is idempotent)',
       () async {
         final service = DatabaseService.createNew();
-        await service.migrateBackupDatabase(preMigrationDb, 49, 50);
-        await service.migrateBackupDatabase(preMigrationDb, 49, 50);
+        await service.migrateBackupDatabase(preMigrationDb, 50, 51);
+        await service.migrateBackupDatabase(preMigrationDb, 50, 51);
 
         for (final table in _hardDeleteGuardedTables) {
           expect(await _hasGuardTrigger(preMigrationDb, table), isTrue);

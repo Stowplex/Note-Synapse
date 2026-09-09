@@ -160,7 +160,7 @@ void main() {
 
   group(
     'M1.8 relationships/conversation_attachments soft-delete — migration '
-    'round-trip (v51 -> v52)',
+    'round-trip (v52 -> v53)',
     () {
       late Database preMigrationDb;
 
@@ -250,7 +250,7 @@ void main() {
           });
 
           final service = DatabaseService.createNew();
-          await service.migrateBackupDatabase(preMigrationDb, 51, 52);
+          await service.migrateBackupDatabase(preMigrationDb, 52, 53);
 
           expect(
             await _hasColumn(preMigrationDb, 'relationships', '__deleted__'),
@@ -278,7 +278,7 @@ void main() {
       );
 
       test(
-        'running the v51 -> v52 migration twice does not error and leaves '
+        'running the v52 -> v53 migration twice does not error and leaves '
         'schema/data unchanged the second time',
         () async {
           await preMigrationDb.insert('notes', {
@@ -306,13 +306,13 @@ void main() {
           });
 
           final service = DatabaseService.createNew();
-          await service.migrateBackupDatabase(preMigrationDb, 51, 52);
+          await service.migrateBackupDatabase(preMigrationDb, 52, 53);
           final afterFirst = await preMigrationDb.query(
             'relationships',
             orderBy: 'id',
           );
 
-          await service.migrateBackupDatabase(preMigrationDb, 51, 52);
+          await service.migrateBackupDatabase(preMigrationDb, 52, 53);
           final afterSecond = await preMigrationDb.query(
             'relationships',
             orderBy: 'id',

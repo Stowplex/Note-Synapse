@@ -154,7 +154,7 @@ void main() {
 
   group(
     'M1.12 conversations/conversation_messages soft-delete — migration '
-    'round-trip (v54 -> v55)',
+    'round-trip (v55 -> v56)',
     () {
       late Database preMigrationDb;
 
@@ -217,7 +217,7 @@ void main() {
           });
 
           final service = DatabaseService.createNew();
-          await service.migrateBackupDatabase(preMigrationDb, 54, 55);
+          await service.migrateBackupDatabase(preMigrationDb, 55, 56);
 
           expect(
             await _hasColumn(preMigrationDb, 'conversations', '__deleted__'),
@@ -245,7 +245,7 @@ void main() {
       );
 
       test(
-        'running the v54 -> v55 migration twice does not error and leaves '
+        'running the v55 -> v56 migration twice does not error and leaves '
         'schema/data unchanged the second time',
         () async {
           await preMigrationDb.insert('conversations', {
@@ -258,8 +258,8 @@ void main() {
           });
 
           final service = DatabaseService.createNew();
-          await service.migrateBackupDatabase(preMigrationDb, 54, 55);
-          await service.migrateBackupDatabase(preMigrationDb, 54, 55);
+          await service.migrateBackupDatabase(preMigrationDb, 55, 56);
+          await service.migrateBackupDatabase(preMigrationDb, 55, 56);
 
           final cols = await _tableInfo(preMigrationDb, 'conversations');
           expect(cols.where((c) => c['name'] == '__deleted__').length, 1);

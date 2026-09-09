@@ -113,6 +113,7 @@
        * This function fetches the webpage, and converts it to markdown.
        * The markdown field contains the cleaned, readable content in markdown format, which is ideal for further processing or display.
        * The function may throw an error if the URL is invalid, the page cannot be loaded, or WebView is not supported on the platform.
+       * Image and link URLs in `markdown` are already absolute - relative references in the page are resolved against its base URL before conversion, so there is no need to re-resolve them. In-page anchors (`#section`) are the one exception and are left as-is.
    - Synapse.originFetch(url: string, options?: object) - Perform an HTTP request from INSIDE a real browser (WebView) context loaded at the target's origin, so the browser's cookie jar, session, and Sec-Fetch semantics apply. Use this (instead of proxyFetch) for resources that require a real browser context - e.g. endpoints protected by a login session the user established via an in-app browser login, or hosts that reject plain HTTP clients.
      Param format:
        url: string                    // HTTP(S) URL to request
@@ -138,10 +139,10 @@
        * Use proxyFetch for ordinary API calls; reach for originFetch only when a browser session/context is required.
    - Synapse.downloadFile(url: string, options?: object) => { status: 'success' | 'error', statusCode?, mime?, uri?, bytes?, error? } - Download an authenticated file using the user's LIVE saved-login cookies (freshest available), following redirects, streaming the bytes to a synapsetemp:// URI (returned as `uri`). PERMISSION-GATED by the same per-app+domain grant as session requests. options: { headers?: object } to add/override request headers. Errors: 'permission_denied'/'permission_required' (grant), 'auth_required' (the server returned a login page instead of the file). With no saved login for the domain the file is fetched unauthenticated — no prompt, no grant. Use for large login-gated downloads (e.g. a generated media file on a login-protected CDN); save the returned uri via saveNotes attachments.
    - Synapse.session.* - Use a web login the user established inside the app to make authenticated requests to a site (e.g. a service with no public API). Cookies stay on the Dart side; combine with proxyFetch/originFetch to call the site as the logged-in user.
-     - Synapse.session.status(domainOrUrl: string) => { success, loggedIn: boolean, domain: string, savedAt?: string }
-         Check whether a saved login exists for a domain. No permission needed. Call this first.
+     - Synapse.session.status(domainOrUrl: string) => { success, loggedIn: boolean, domain: string, savedAt?: string, refreshedAt?: string, expiresAt?: string, expiringSoon: boolean }
+         Check whether a saved login exists for a domain. No permission needed. Call this first. `refreshedAt` is when the stored cookies last rolled forward on their own (the app merges rotated cookies from session requests automatically, so an actively-used login stays alive without the user doing anything). `expiresAt` is the furthest-out cookie expiry and `expiringSoon` is true within 3 days of it — use them to offer a re-login before a request actually fails, rather than after.
      - Synapse.session.requestLogin({ url: string }) => { success, loggedIn: boolean, domain: string, error?: string }
-         Open an in-app browser at `url` so the user can sign in; the session is captured automatically on success. Returns error 'no_ui' if called with no UI available (e.g. a background tool run) — in that case ask the user to open the app's login screen. Call when status() reports loggedIn=false.
+         Open an in-app browser at `url` so the user can sign in; the session is captured automatically on success. Also the way to REFRESH an expired login: when a login for that domain already exists the browser clears its stale cookies first and re-captures in place, so the user does not lose this app's approved access. Returns error 'no_ui' if called with no UI available (e.g. a background tool run) — in that case ask the user to open the app's login screen. Call when status() reports loggedIn=false or when an authenticated request comes back with a login redirect.
      - Synapse.session.getCookies(domainOrUrl: string) => { success, domain: string, cookies?: [{ name, value, domain?, path? }], error?: string }
          Read the saved cookies for a domain. PERMISSION-GATED: the first call prompts the user to approve this app's access to that login; once approved it is remembered until the user revokes it in Web Logins settings, deletes that saved login, or uninstalls the app — so a previously-approved call can start returning 'permission_required' again. The saved login is resolved before the grant, so with none you get 'no_session' and no prompt. Errors: 'permission_denied' (user declined), 'permission_required' (approval UI unavailable), 'no_session' (no saved login). Only use when you must compute something from a cookie value in-app; to simply send authenticated requests, prefer proxyFetch with the saved session instead of handling cookie values yourself.
    - Synapse.crypto.digest(algorithm: string, data: object) => { success, hex?: string, error?: string } - Compute a hash. algorithm is 'sha1' or 'sha256'; data is { text: string } or { base64: string }. Returns the lowercase hex digest. Use for content hashing (e.g. detecting whether a note changed since last sync). The Web Crypto API is unavailable in this environment, so use this instead.
@@ -183,7 +184,16 @@
          * completionPercentage: number (optional, 0.0-1.0)
          * pinned: boolean (optional, default: false) - Whether note is pinned
          * isArchived: boolean (optional, default: false) - Whether note is archived
-      Response format: {success: boolean, savedCount?: number, error?: string}
+      Response format: {success: boolean, savedCount?: number, savedNoteIds?: array of strings, error?: string}
+      Usage notes:
+        * savedNoteIds holds the IDs of the notes that were created, in the same
+          order as the notes that saved successfully. Use it when the app needs to
+          refer to a note it just created (e.g. to link to it or open it) - there
+          is no need to search for the note afterwards.
+        * An entry that is not an object, and one that failed to save, are both
+          skipped, so savedNoteIds can be shorter than the array you passed in
+          and the positions do not line up with it. savedCount is always
+          savedNoteIds.length.
     - Synapse.updateNotes(notes: array) - Update existing notes in the database (REQUIRES USER APPROVAL)
       Param format: array of objects. Each object MUST contain an 'id' field.
       Response format: {success, updatedCount, errors?}
@@ -285,6 +295,32 @@
      Usage notes:
        * If notes is empty, opens the default AI actions screen (similar to tapping the AI action button on main_screen without selecting any notes)
        * If notes is not empty, opens the AI actions screen with the list of notes (similar to AI action button on main_screen with notes selected)
+       * Notes can be provided as an array of note IDs (strings) or note objects with an 'id' field
+   - Synapse.openMerge(notes: array) - Open the note merge screen on a list of notes and wait for the result
+     Param format:
+       - notes: array of note objects or note IDs (strings). MUST resolve to at least two DISTINCT notes.
+     Response format: {success: boolean, mergedNoteId?: string, cancelled?: boolean, error?: string}
+     Usage notes:
+       * The user drives the merge screen; the call resolves only once they leave it
+       * On a completed merge, success is true and mergedNoteId is the ID of the merged note.
+         The merge screen can either create a new note OR rewrite the FIRST source note in
+         place, so mergedNoteId MAY be one of the IDs you passed in. Treat the result as an
+         upsert: if you already track that ID, refresh it instead of adding a second entry
+       * The merge screen owns what happens to the source notes, and it is more than
+         archiving: rewriting the first source replaces its title, content, tags and
+         attachments, linking back to the sources is ON by default (it writes note
+         relationships), and attachment ownership moves off the sources. Do NOT assume the
+         sources came through untouched - re-read any source note you still display
+       * success:true with cancelled:true means no note came back. Usually the user backed
+         out, but it also covers rarer cases where a merge did save and the result was not
+         returned. Do NOT automatically retry the merge on cancelled - a retry can create a
+         second merged note. Ask the user, or re-read the notes first
+       * Fewer than two DISTINCT notes resolving (empty array, one note, the same ID twice,
+         or IDs that no longer exist) returns success:false with an error; check the count
+         before calling
+       * A block-scope entry resolves to its PARENT note (see Synapse.Notes), so openMerge
+         always merges whole notes, never blocks. An app launched on several blocks of one
+         note resolves them all to that one note and the call is refused
        * Notes can be provided as an array of note IDs (strings) or note objects with an 'id' field
    - Synapse.tts.speak(text: string, options?: object) - Read text aloud with the device text-to-speech engine
      Param format:
@@ -618,9 +654,45 @@
    await Synapse.openAIActions(noteIds);
    ```
 
+   CORRECT openMerge Usage Examples:
+   ```javascript
+   // Merge two notes and use the note that came back
+   const sources = ['note-id-1', 'note-id-2'];
+   const result1 = await Synapse.openMerge(sources);
+   if (result1.success && result1.mergedNoteId) {
+     // The merged ID may be one of the sources, so remove the OTHER sources only
+     const gone = sources.filter(id => id !== result1.mergedNoteId);
+     console.log('Merged into', result1.mergedNoteId, '- dropped', gone);
+   } else if (result1.cancelled) {
+     // No note came back. Do not call openMerge again on its own.
+     console.log('Nothing merged');
+   } else {
+     console.error('Error:', result1.error);
+   }
+   
+   // Merging the notes the app was launched with (needs at least two DISTINCT
+   // notes; block-scope entries resolve to their parent note)
+   const noteIds = [...new Set(
+     Synapse.Notes.map(note => note.parentNoteId || note.id)
+   )];
+   if (noteIds.length >= 2) {
+     const result2 = await Synapse.openMerge(noteIds);
+     if (result2.mergedNoteId) {
+       await Synapse.openNote(result2.mergedNoteId);
+     }
+   }
+   ```
+
    - Synapse.Notes (array, read-only) - The notes the app was launched with.
      Each entry is an object with id, title, content, tags, createdAt, updatedAt,
-     isTask, status, pinned, isArchived, and attachmentPaths.
+     isTask, status, pinned, isArchived, attachmentPaths, and sources.
+     `sources` (array) is where the note's content was clipped from: each entry
+     is { id, url, title?, siteName?, clippedAt?, kind, method } - `url` is the
+     page or file the content came from, `clippedAt` an ISO-8601 UTC timestamp,
+     `kind` 'web' | 'file', `method` 'extract' | 'ai' | 'download' | 'manual' |
+     'import'; optional fields are absent when unknown. It is empty unless the
+     note was clipped from the web or given a source by hand, so never rely on
+     it being non-empty; when it is, cite `url` when attributing the content.
 
      BLOCK SCOPE: when the user launched the app on a selected block of a note
      rather than on whole notes, the entry additionally has:
@@ -630,8 +702,8 @@
      transient id that exists just for this app session. Treat the entry as an
      ordinary note: reading `content` and calling Synapse.updateNotes with that
      `id` both work, and every write is applied back over that block's range in
-     the parent note. `title`, `tags` and `attachmentPaths` are inherited from
-     the parent note, so Synapse.readAttachment works unchanged.
+     the parent note. `title`, `tags`, `attachmentPaths` and `sources` are
+     inherited from the parent note, so Synapse.readAttachment works unchanged.
      Notes:
        * A block-scoped write is CONTENT-ONLY: title, tags, attachments, link,
          subnote and task fields are ignored with a warning. Target parentNoteId
@@ -655,6 +727,47 @@
      ```synapse-app``` fenced block. Values from URI queries are strings; values
      from fenced blocks preserve their YAML/JSON types (numbers, arrays,
      nested objects).
+
+   - Synapse.space (object|null, read-only) - The Space the user is currently
+     working in, or null when none is active. A Space is a saved filter the user
+     activated as a scope: while one is active the app's own note lists are
+     narrowed to it and newly created notes are tagged with its tags.
+     Shape: { id: string, name: string, tags: string[] } - `tags` are the
+     Space's include-tags (every note in the Space carries all of them), and
+     `name` is arbitrary user text, so render it as text, never as HTML.
+     Notes:
+       * SCOPE YOUR QUERIES. When Synapse.space is non-null, a plugin that reads
+         notes should narrow its runQuery to the Space's tags, or the user sees
+         notes from outside the Space they are working in. Match on the tag
+         tables, not on the notes table:
+           const space = Synapse.space;
+           const tagFilter = space
+             ? space.tags.map(t =>
+                 "EXISTS (SELECT 1 FROM note_tags nt JOIN tags tg ON tg.id = nt.tagId "
+                 + "WHERE nt.noteId = n.id AND tg.name = '" + t.replace(/'/g, "''") + "')")
+               .join(' AND ')
+             : '1=1';
+           const rows = await Synapse.runQuery(
+             `SELECT n.* FROM notes n WHERE ${tagFilter} ORDER BY n.updatedAt DESC LIMIT 50`);
+         A note tagged 'all-spaces' is shown in every Space by the app itself; to
+         match that, OR `EXISTS (... tg.name = 'all-spaces')` around the
+         **Space tag group only** - a tag your app requires stays ANDed
+         outside it:
+           WHERE myTag AND ((space1 AND space2) OR allSpaces)
+         Never `(myTag AND space1) OR allSpaces`: that returns every note tagged
+         'all-spaces' whether or not it has myTag, and every agent-skill note
+         carries 'all-spaces'.
+       * The user can switch or leave a Space while your app is still open. The
+         window fires a 'synapse:spacechanged' CustomEvent whose `detail` is the
+         new value (null on leave); Synapse.space is updated before it fires, so
+         either source is fine:
+           window.addEventListener('synapse:spacechanged', (e) => {
+             render(e.detail);   // same object as Synapse.space
+           });
+         Re-run your queries from that handler - an app that reads Synapse.space
+         only at startup will keep showing another Space's notes.
+       * Do NOT persist the id: a Space is a filter the user can delete or stop
+         using as a Space at any time.
 
    ### Embedding apps inline in markdown
 

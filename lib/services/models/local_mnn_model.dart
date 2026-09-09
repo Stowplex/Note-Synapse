@@ -614,14 +614,32 @@ class LocalMnnModel extends AIModel {
         declarations.add({
           'name': tool.name,
           'description': tool.description ?? tool.name,
-          'parameters': tool.inputSchema ?? {
-            'type': 'object',
-            'properties': <String, dynamic>{},
-          },
+          'parameters': _stripDocumentationKeywords(
+            tool.inputSchema ??
+                {'type': 'object', 'properties': <String, dynamic>{}},
+          ),
         });
       }
     }
     return declarations;
+  }
+
+  /// Removes documentation-only JSON-Schema keywords (`examples`) before the
+  /// schema is fed to the constrained-decoding runtime, which only
+  /// understands structural keywords.
+  static Map<String, dynamic> _stripDocumentationKeywords(
+    Map<String, dynamic> schema,
+  ) {
+    final copy = <String, dynamic>{};
+    schema.forEach((key, value) {
+      if (key == 'examples') return;
+      if (value is Map<String, dynamic>) {
+        copy[key] = _stripDocumentationKeywords(value);
+      } else {
+        copy[key] = value;
+      }
+    });
+    return copy;
   }
 
   @override

@@ -5,6 +5,7 @@ import '../models/conversation.dart';
 import '../services/conversation_service.dart';
 import '../services/logger_service.dart';
 import '../services/service_locator.dart';
+import '../services/space_scope_service.dart';
 import '../screens/conversation_chat_screen.dart';
 import '../providers/app_provider.dart';
 import '../widgets/tag_selection_dialog.dart';
@@ -49,10 +50,19 @@ class _LinearHistoryDialogState extends State<LinearHistoryDialog> {
 
   Future<void> _loadConversations() async {
     setState(() => _isLoading = true);
+    // The same split the conversation tree applies to the same chip list: this
+    // dialog is opened from the tree with its tags, so loading them as one
+    // plain conjunction made the two disagree — the tree ORed the cross-Space
+    // escape around the Space's tags while this list ANDed, so a conversation
+    // marked "show everywhere" was a node in the graph and missing from the
+    // list beside it.
+    final tagQuery = SpaceScopeService.shared().partitionChips(_selectedTags);
     // Optimized: Fetch only non-empty conversations directly from database
     final conversations = await _conversationService.getAllConversations(
       maxAge: _selectedTimeRange,
-      tagNames: _selectedTags.isEmpty ? null : _selectedTags,
+      tagNames: tagQuery.tagNames,
+      scopeTags: tagQuery.scopeTags,
+      includeAllSpacesTag: tagQuery.orAllSpaces,
       includeEmpty: false,
     );
 

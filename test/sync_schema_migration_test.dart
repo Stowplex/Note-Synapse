@@ -159,10 +159,10 @@ void main() {
     });
 
     test(
-      'migrating v46 -> v47 creates all fifteen sync tables',
+      'migrating v46 -> v48 creates all fifteen sync tables',
       () async {
         final service = DatabaseService.createNew();
-        await service.migrateBackupDatabase(preMigrationDb, 46, 47);
+        await service.migrateBackupDatabase(preMigrationDb, 46, 48);
 
         final tables = await _tableNames(preMigrationDb);
         expect(
@@ -181,10 +181,10 @@ void main() {
       },
     );
 
-    test('running the v46 -> v47 migration twice does not error', () async {
+    test('running the v46 -> v48 migration twice does not error', () async {
       final service = DatabaseService.createNew();
 
-      await service.migrateBackupDatabase(preMigrationDb, 46, 47);
+      await service.migrateBackupDatabase(preMigrationDb, 46, 48);
       final tablesAfterFirst = await _tableNames(preMigrationDb);
       final indexAfterFirst = await _indexNames(
         preMigrationDb,
@@ -192,8 +192,8 @@ void main() {
       );
 
       // Second run must be a no-op, not an error (CREATE TABLE/INDEX IF NOT
-      // EXISTS throughout _migrateToVersion47).
-      await service.migrateBackupDatabase(preMigrationDb, 46, 47);
+      // EXISTS throughout _migrateToVersion48).
+      await service.migrateBackupDatabase(preMigrationDb, 46, 48);
       final tablesAfterSecond = await _tableNames(preMigrationDb);
       final indexAfterSecond = await _indexNames(
         preMigrationDb,

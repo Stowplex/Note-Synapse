@@ -49,6 +49,10 @@ void main() {
     getIt.registerSingleton<TagImageService>(TagImageService(mockDb));
 
     when(mockProvider.notes).thenReturn(testNotes);
+    // NoteSelectionDialog defaults to the Space scope (M5); with no active
+    // Space that is every note, and the escape switch is not rendered.
+    when(mockProvider.scopedNotes).thenReturn(testNotes);
+    when(mockProvider.activeSpace).thenReturn(null);
     when(mockProvider.addListener(any)).thenReturn(null);
     when(mockProvider.removeListener(any)).thenReturn(null);
     when(mockProvider.hasListeners).thenReturn(false);

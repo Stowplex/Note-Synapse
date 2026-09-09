@@ -18,7 +18,7 @@
 //  2. The guard is not overly broad: ordinary INSERT/UPDATE against every
 //     one of the ten tables still works completely normally.
 //  3. Migration round-trip (DATABASE_VERSION 55 -> 56): an existing,
-//     already-on-v55 database (post-M1.12, no guard yet on these ten
+//     already-on-v56 database (post-M1.12, no guard yet on these ten
 //     tables) gains the guard triggers after migrating, and a real DELETE
 //     against any of them then throws afterward — while data already in
 //     the tables is untouched by the migration itself (pure-additive,
@@ -63,7 +63,7 @@ const _newlyGuardedTables = [
 
 /// The original four M1.5 tables -- exactly what migration step 50 must
 /// install, and ONLY those, even now that `_hardDeleteGuardedTables` has
-/// grown to fourteen entries (see `_migrateToVersion50`'s own doc comment
+/// grown to fourteen entries (see `_migrateToVersion51`'s own doc comment
 /// in database_service.dart for the bug this guards against).
 const _originalGuardedTables = [
   'user_apps',
@@ -316,8 +316,8 @@ void main() {
   });
 
   group('M1.13 broad hard-delete guard rollout — migration round-trip '
-      '(v55 -> v56)', () {
-    // Deliberately does NOT hand-reconstruct a "v55 shape" database from
+      '(v56 -> v57)', () {
+    // Deliberately does NOT hand-reconstruct a "v56 shape" database from
     // DatabaseService.getSchema() the way other milestones' migration
     // round-trip tests do (see e.g. filters_workflow_bindings_soft_delete_
     // test.dart): getSchema() itself deliberately omits several tables
@@ -326,11 +326,11 @@ void main() {
     // tags_identity_schema_test.dart's own doc comment for this same,
     // pre-existing, unrelated gap), which would require re-deriving every
     // one of those tables' CURRENT shape by hand here just to stand up a
-    // realistic v55 database. Since v55 -> v56 is purely additive (ten new
+    // realistic v56 database. Since v56 -> v57 is purely additive (ten new
     // guard triggers, no column/table change at all -- every one of these
-    // tables' `__deleted__` column already existed by v55), an actual
+    // tables' `__deleted__` column already existed by v56), an actual
     // fresh (current-version) install with just those ten triggers dropped
-    // is byte-for-byte the same "v55 shape" this migration is meant to
+    // is byte-for-byte the same "v56 shape" this migration is meant to
     // upgrade from, without needing to reconstruct anything by hand.
     late DatabaseService preMigrationService;
     late Database preMigrationDb;
@@ -353,7 +353,7 @@ void main() {
     });
 
     test(
-      'migrating v55 -> v56 installs the guard trigger on all ten tables, '
+      'migrating v56 -> v57 installs the guard trigger on all ten tables, '
       'and existing data survives untouched',
       () async {
         await preMigrationDb.insert('notes', {
@@ -365,13 +365,13 @@ void main() {
           'updatedAt': 1000,
         });
 
-        await preMigrationService.migrateBackupDatabase(preMigrationDb, 55, 56);
+        await preMigrationService.migrateBackupDatabase(preMigrationDb, 56, 57);
 
         for (final table in _newlyGuardedTables) {
           expect(
             await _hasGuardTrigger(preMigrationDb, table),
             isTrue,
-            reason: '$table should have the guard trigger after migrating to v56',
+            reason: '$table should have the guard trigger after migrating to v57',
           );
         }
 
@@ -386,11 +386,11 @@ void main() {
     );
 
     test(
-      'running the v55 -> v56 migration twice does not error (CREATE '
+      'running the v56 -> v57 migration twice does not error (CREATE '
       'TRIGGER IF NOT EXISTS is idempotent)',
       () async {
-        await preMigrationService.migrateBackupDatabase(preMigrationDb, 55, 56);
-        await preMigrationService.migrateBackupDatabase(preMigrationDb, 55, 56);
+        await preMigrationService.migrateBackupDatabase(preMigrationDb, 56, 57);
+        await preMigrationService.migrateBackupDatabase(preMigrationDb, 56, 57);
 
         for (final table in _newlyGuardedTables) {
           expect(await _hasGuardTrigger(preMigrationDb, table), isTrue);
@@ -400,15 +400,15 @@ void main() {
   });
 
   group(
-    'M1.13 real multi-step upgrade chain (v49 -> v56, the chain a real '
+    'M1.13 real multi-step upgrade chain (v50 -> v57, the chain a real '
     'pre-M1.5 device upgrading today would actually run) -- regression '
-    'test for the _migrateToVersion50 over-installation bug',
+    'test for the _migrateToVersion51 over-installation bug',
     () {
-      // The bug this group exists to catch: _migrateToVersion50 used to
+      // The bug this group exists to catch: _migrateToVersion51 used to
       // iterate the SHARED `_hardDeleteGuardTriggerStatements` field
       // directly. That field reflects `_hardDeleteGuardedTables`, which
       // M1.13 grew from 4 to 14 entries -- so a real device migrating
-      // straight from v49 to v56 in one run (exactly what
+      // straight from v50 to v57 in one run (exactly what
       // `migrateBackupDatabase`/the real app-upgrade path both do) would
       // have installed all fourteen guard triggers at step 50, contradicting
       // that step's own doc comment/log message ("installs the four
@@ -418,20 +418,20 @@ void main() {
       // ADD COLUMN`, nothing that could trip a trigger before its own
       // dedicated step installs it) but a latent trap for any future
       // migration ever inserted between 50 and 56. Fixed by giving
-      // `_migrateToVersion50` its own frozen, local four-table list.
+      // `_migrateToVersion51` its own frozen, local four-table list.
       //
       // Uses a fresh (current-shape) database with every guard trigger
-      // dropped, rather than hand-reconstructing a literal v49 DDL
-      // snapshot (see the v55->v56 group's own doc comment above for why
+      // dropped, rather than hand-reconstructing a literal v50 DDL
+      // snapshot (see the v56->v57 group's own doc comment above for why
       // that reconstruction is unnecessary/expensive: getSchema() omits
       // several tables added outside it in _onCreate, and every ADD
       // COLUMN migration in this chain, 51-55, is independently
       // idempotent -- verified by their own `if (!columnNames.contains(...))`
       // guards -- so re-running them against a database that already has
       // the columns is a safe, faithful no-op, identical in effect to
-      // running them against a genuinely pre-v51..v55 database). This
+      // running them against a genuinely pre-v52..v56 database). This
       // exercises the exact same `_migrationSteps` map and the exact same
-      // step functions a real v49 device hitting this app today would run,
+      // step functions a real v50 device hitting this app today would run,
       // for every version in the chain: 51 (filters/tag_workflow_bindings
       // __deleted__), 52 (relationships/conversation_attachments
       // __deleted__), 53 (notes __deleted__), 54 (subnotes/attachments
@@ -461,7 +461,7 @@ void main() {
         'tables -- not all fourteen -- even though the shared '
         'guarded-table list has since grown to fourteen',
         () async {
-          await service.migrateBackupDatabase(db, 49, 50);
+          await service.migrateBackupDatabase(db, 50, 51);
 
           for (final table in _originalGuardedTables) {
             expect(
@@ -483,7 +483,7 @@ void main() {
       );
 
       test(
-        'the full v49 -> v56 chain ends with all fourteen tables guarded, '
+        'the full v50 -> v57 chain ends with all fourteen tables guarded, '
         'data intact, and a real delete throwing for every one of them',
         () async {
           await service.insertUserApp(
@@ -500,13 +500,13 @@ void main() {
           );
           await service.insertNote(_buildNote('note-1'));
 
-          await service.migrateBackupDatabase(db, 49, 56);
+          await service.migrateBackupDatabase(db, 50, 57);
 
           for (final table in [..._originalGuardedTables, ..._newlyGuardedTables]) {
             expect(
               await _hasGuardTrigger(db, table),
               isTrue,
-              reason: '$table must be guarded after the full v49 -> v56 chain',
+              reason: '$table must be guarded after the full v50 -> v57 chain',
             );
           }
 
@@ -530,8 +530,8 @@ void main() {
         'running the full chain twice does not error (every step is '
         'independently idempotent)',
         () async {
-          await service.migrateBackupDatabase(db, 49, 56);
-          await service.migrateBackupDatabase(db, 49, 56);
+          await service.migrateBackupDatabase(db, 50, 57);
+          await service.migrateBackupDatabase(db, 50, 57);
 
           for (final table in [..._originalGuardedTables, ..._newlyGuardedTables]) {
             expect(await _hasGuardTrigger(db, table), isTrue);

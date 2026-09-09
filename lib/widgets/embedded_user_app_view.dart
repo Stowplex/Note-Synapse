@@ -7,6 +7,7 @@ import '../screens/ai_action_screen.dart';
 import '../screens/conversation_chat_screen.dart';
 import '../screens/immersive_note_screen.dart';
 import '../screens/note_detail_screen.dart';
+import '../screens/note_merge_screen.dart';
 import '../screens/user_app_view_screen.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
@@ -228,6 +229,18 @@ class _EmbeddedUserAppViewState extends State<EmbeddedUserAppView> {
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => AIActionScreen(selectedNotes: notes),
+          ),
+        );
+      },
+      onOpenMerge: (notes) async {
+        // Throw rather than return null: null is how the bridge reports the
+        // user cancelling the merge, and being unmounted is not that.
+        if (!mounted) {
+          throw StateError('embedded user app view is no longer mounted');
+        }
+        return Navigator.of(context).push<Note>(
+          MaterialPageRoute(
+            builder: (_) => NoteMergeScreen(notes: notes),
           ),
         );
       },

@@ -10621,6 +10621,1344 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not update the search exclusion'**
   String get searchExcludeNoteFailed;
+
+  /// No description provided for @protocolStudies.
+  ///
+  /// In en, this message translates to:
+  /// **'Protocol studies'**
+  String get protocolStudies;
+
+  /// No description provided for @protocolStudiesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture and study website HTTP workflows'**
+  String get protocolStudiesSubtitle;
+
+  /// No description provided for @newProtocolStudy.
+  ///
+  /// In en, this message translates to:
+  /// **'New protocol study'**
+  String get newProtocolStudy;
+
+  /// No description provided for @studyWithLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Study protocol'**
+  String get studyWithLogin;
+
+  /// No description provided for @protocolStudyEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No saved protocol studies yet.'**
+  String get protocolStudyEmpty;
+
+  /// No description provided for @protocolStudyUrlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a website URL'**
+  String get protocolStudyUrlHint;
+
+  /// No description provided for @protocolStudyStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start study'**
+  String get protocolStudyStart;
+
+  /// No description provided for @protocolStudySave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save study'**
+  String get protocolStudySave;
+
+  /// No description provided for @protocolStudySaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Protocol study saved'**
+  String get protocolStudySaved;
+
+  /// No description provided for @protocolStudyNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Network'**
+  String get protocolStudyNetwork;
+
+  /// No description provided for @protocolStudyRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'requests'**
+  String get protocolStudyRequests;
+
+  /// No description provided for @protocolStudySelectRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'Select the requests that belong to the workflow.'**
+  String get protocolStudySelectRequests;
+
+  /// No description provided for @protocolStudyNoRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching requests captured yet.'**
+  String get protocolStudyNoRequests;
+
+  /// No description provided for @protocolStudyRawLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Raw request and response data stays in the private protocol study workspace.'**
+  String get protocolStudyRawLocal;
+
+  /// No description provided for @protocolStudySharedState.
+  ///
+  /// In en, this message translates to:
+  /// **'No saved login was selected. The in-app WebView may still contain shared ambient login state.'**
+  String get protocolStudySharedState;
+
+  /// No description provided for @protocolStudyCaptureLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture stopped at the configured size or event limit.'**
+  String get protocolStudyCaptureLimit;
+
+  /// No description provided for @protocolStudyAnalyze.
+  ///
+  /// In en, this message translates to:
+  /// **'Synthesize workflow'**
+  String get protocolStudyAnalyze;
+
+  /// No description provided for @protocolStudyChooseModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose analysis model'**
+  String get protocolStudyChooseModel;
+
+  /// No description provided for @protocolStudyRemoteDisclosure.
+  ///
+  /// In en, this message translates to:
+  /// **'Check fields whose values the remote AI may see. Use the visibility control to omit irrelevant fields entirely.'**
+  String get protocolStudyRemoteDisclosure;
+
+  /// No description provided for @protocolStudyLocalDisclosure.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose only the fields this on-device model needs. Request/response pairs are analyzed separately to fit smaller context windows.'**
+  String get protocolStudyLocalDisclosure;
+
+  /// No description provided for @protocolStudyOutboundPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Review exact AI payload'**
+  String get protocolStudyOutboundPreview;
+
+  /// No description provided for @protocolStudySendForAnalysis.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyze with this model'**
+  String get protocolStudySendForAnalysis;
+
+  /// No description provided for @protocolStudyAnalyzingPair.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyzing pair {current} of {total}'**
+  String protocolStudyAnalyzingPair(int current, int total);
+
+  /// No description provided for @protocolStudyRedacted.
+  ///
+  /// In en, this message translates to:
+  /// **'redacted fields'**
+  String get protocolStudyRedacted;
+
+  /// No description provided for @protocolStudyExcluded.
+  ///
+  /// In en, this message translates to:
+  /// **'excluded fields'**
+  String get protocolStudyExcluded;
+
+  /// No description provided for @protocolStudyIncludeField.
+  ///
+  /// In en, this message translates to:
+  /// **'Include field in analysis'**
+  String get protocolStudyIncludeField;
+
+  /// No description provided for @protocolStudyExcludeField.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude field from analysis'**
+  String get protocolStudyExcludeField;
+
+  /// No description provided for @protocolStudyMutationWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This request may mutate website state. Run the minimal repro anyway?'**
+  String get protocolStudyMutationWarning;
+
+  /// No description provided for @protocolStudyRunRepro.
+  ///
+  /// In en, this message translates to:
+  /// **'Run minimal repro'**
+  String get protocolStudyRunRepro;
+
+  /// No description provided for @protocolStudyReproResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimal repro result'**
+  String get protocolStudyReproResult;
+
+  /// No description provided for @protocolStudyExportNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Save sanitized note'**
+  String get protocolStudyExportNote;
+
+  /// No description provided for @protocolStudyNoteSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Sanitized protocol report saved as a note'**
+  String get protocolStudyNoteSaved;
+
+  /// No description provided for @protocolStudyCreateTool.
+  ///
+  /// In en, this message translates to:
+  /// **'Create AI tool / skill'**
+  String get protocolStudyCreateTool;
+
+  /// No description provided for @protocolStudyCreateApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Create User App'**
+  String get protocolStudyCreateApp;
+
+  /// No description provided for @protocolStudyFidelityWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture fidelity is platform-dependent. Service workers and WebSockets are not captured; bodies may be truncated.'**
+  String get protocolStudyFidelityWarning;
+
+  /// No description provided for @protocolStudyDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete study'**
+  String get protocolStudyDelete;
+
+  /// No description provided for @protocolStudyDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this private protocol study and its raw data?'**
+  String get protocolStudyDeleteConfirm;
+
+  /// No description provided for @protocolStudyNoModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure an AI model before synthesizing the workflow.'**
+  String get protocolStudyNoModel;
+
+  /// No description provided for @protocolStudyAnalysisFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Workflow synthesis failed'**
+  String get protocolStudyAnalysisFailed;
+
+  /// No description provided for @protocolStudyResponseBodyLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Response body limit'**
+  String get protocolStudyResponseBodyLimit;
+
+  /// No description provided for @protocolStudyApplyRecommendations.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply cautious recommendations'**
+  String get protocolStudyApplyRecommendations;
+
+  /// No description provided for @protocolStudyModelLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Model'**
+  String get protocolStudyModelLabel;
+
+  /// No description provided for @protocolStudyDestinationLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Destination'**
+  String get protocolStudyDestinationLabel;
+
+  /// No description provided for @protocolStudyDisclosed.
+  ///
+  /// In en, this message translates to:
+  /// **'disclosed'**
+  String get protocolStudyDisclosed;
+
+  /// No description provided for @protocolStudyAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get protocolStudyAll;
+
+  /// No description provided for @protocolStudyForm.
+  ///
+  /// In en, this message translates to:
+  /// **'Form'**
+  String get protocolStudyForm;
+
+  /// No description provided for @protocolStudyViewRaw.
+  ///
+  /// In en, this message translates to:
+  /// **'View raw request and response'**
+  String get protocolStudyViewRaw;
+
+  /// No description provided for @protocolStudyRequestHeaders.
+  ///
+  /// In en, this message translates to:
+  /// **'Request headers'**
+  String get protocolStudyRequestHeaders;
+
+  /// No description provided for @protocolStudyRequestBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Request body'**
+  String get protocolStudyRequestBody;
+
+  /// No description provided for @protocolStudyResponseHeaders.
+  ///
+  /// In en, this message translates to:
+  /// **'Response headers'**
+  String get protocolStudyResponseHeaders;
+
+  /// No description provided for @protocolStudyResponseBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Response body'**
+  String get protocolStudyResponseBody;
+
+  /// No description provided for @protocolStudyFinalUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Final URL'**
+  String get protocolStudyFinalUrl;
+
+  /// No description provided for @protocolStudyNotCaptured.
+  ///
+  /// In en, this message translates to:
+  /// **'not captured'**
+  String get protocolStudyNotCaptured;
+
+  /// No description provided for @protocolStudyParameters.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameters'**
+  String get protocolStudyParameters;
+
+  /// No description provided for @protocolStudyNoneIdentified.
+  ///
+  /// In en, this message translates to:
+  /// **'None identified'**
+  String get protocolStudyNoneIdentified;
+
+  /// No description provided for @protocolStudyWorkflow.
+  ///
+  /// In en, this message translates to:
+  /// **'Workflow'**
+  String get protocolStudyWorkflow;
+
+  /// No description provided for @protocolStudyCaveats.
+  ///
+  /// In en, this message translates to:
+  /// **'Caveats'**
+  String get protocolStudyCaveats;
+
+  /// No description provided for @protocolStudyOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'optional'**
+  String get protocolStudyOptional;
+
+  /// No description provided for @protocolStudyTruncated.
+  ///
+  /// In en, this message translates to:
+  /// **'truncated'**
+  String get protocolStudyTruncated;
+
+  /// No description provided for @protocolStudyStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get protocolStudyStatus;
+
+  /// No description provided for @protocolStudyNewExample.
+  ///
+  /// In en, this message translates to:
+  /// **'Start next example'**
+  String get protocolStudyNewExample;
+
+  /// No description provided for @protocolStudyExampleNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording example {number}'**
+  String protocolStudyExampleNumber(int number);
+
+  /// No description provided for @protocolStudyMarkParameter.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as reusable parameter'**
+  String get protocolStudyMarkParameter;
+
+  /// No description provided for @protocolStudyTransportMetadata.
+  ///
+  /// In en, this message translates to:
+  /// **'Transport metadata'**
+  String get protocolStudyTransportMetadata;
+
+  /// No description provided for @protocolStudyPartial.
+  ///
+  /// In en, this message translates to:
+  /// **'partial'**
+  String get protocolStudyPartial;
+
+  /// No description provided for @protocolStudyReviewSanitizedNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Review sanitized note'**
+  String get protocolStudyReviewSanitizedNote;
+
+  /// No description provided for @protocolStudyDiscardSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard session record'**
+  String get protocolStudyDiscardSession;
+
+  /// No description provided for @protocolStudyDiscardSessionConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard this unsaved raw protocol study? It cannot be recovered.'**
+  String get protocolStudyDiscardSessionConfirm;
+
+  /// No description provided for @protocolStudyReplay.
+  ///
+  /// In en, this message translates to:
+  /// **'Replay request'**
+  String get protocolStudyReplay;
+
+  /// No description provided for @protocolStudyReplayResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'Replayed response'**
+  String get protocolStudyReplayResponse;
+
+  /// No description provided for @protocolStudyReplayFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Replay failed'**
+  String get protocolStudyReplayFailed;
+
+  /// No description provided for @protocolStudyReplayedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Replayed at'**
+  String get protocolStudyReplayedAt;
+
+  /// No description provided for @protocolStudyReplayUsedSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Used live session cookies'**
+  String get protocolStudyReplayUsedSession;
+
+  /// No description provided for @protocolStudyCapturePage.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture rendered page'**
+  String get protocolStudyCapturePage;
+
+  /// No description provided for @protocolStudyPageCaptured.
+  ///
+  /// In en, this message translates to:
+  /// **'Rendered page snapshot captured'**
+  String get protocolStudyPageCaptured;
+
+  /// No description provided for @protocolStudyPageSnapshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Page'**
+  String get protocolStudyPageSnapshot;
+
+  /// No description provided for @minutesAgoShort.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}m ago'**
+  String minutesAgoShort(int count);
+
+  /// No description provided for @hoursAgoShort.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}h ago'**
+  String hoursAgoShort(int count);
+
+  /// No description provided for @daysAgoShort.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}d ago'**
+  String daysAgoShort(int count);
+
+  /// No description provided for @done.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get done;
+
+  /// No description provided for @refreshLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh login'**
+  String get refreshLogin;
+
+  /// No description provided for @webLoginRefreshHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in again to refresh this login. Your saved app permissions are kept.'**
+  String get webLoginRefreshHint;
+
+  /// No description provided for @webLoginRefreshed.
+  ///
+  /// In en, this message translates to:
+  /// **'Login refreshed for {domain}'**
+  String webLoginRefreshed(String domain);
+
+  /// No description provided for @webLoginRefreshDiscarded.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh cancelled — your previous login was restored.'**
+  String get webLoginRefreshDiscarded;
+
+  /// No description provided for @clearSiteCookies.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear cookies for this site'**
+  String get clearSiteCookies;
+
+  /// No description provided for @webLoginCookiesCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Cookies cleared. Sign in again, then tap Save login.'**
+  String get webLoginCookiesCleared;
+
+  /// No description provided for @webLoginExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired — refresh to sign in again'**
+  String get webLoginExpired;
+
+  /// No description provided for @webLoginExpiresInDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =0{Expires today — refresh soon} =1{Expires tomorrow — refresh soon} other{Expires in {days} days — refresh soon}}'**
+  String webLoginExpiresInDays(int days);
+
+  /// No description provided for @webLoginValidUntil.
+  ///
+  /// In en, this message translates to:
+  /// **'Valid until {date}'**
+  String webLoginValidUntil(String date);
+
+  /// No description provided for @webLoginNoExpiry.
+  ///
+  /// In en, this message translates to:
+  /// **'No expiry set by the site'**
+  String get webLoginNoExpiry;
+
+  /// No description provided for @webLoginSavedAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved {time}'**
+  String webLoginSavedAgo(String time);
+
+  /// No description provided for @webLoginRefreshedAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Refreshed {time}'**
+  String webLoginRefreshedAgo(String time);
+
+  /// No description provided for @runInBackground.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep running in background'**
+  String get runInBackground;
+
+  /// No description provided for @appRunningInBackground.
+  ///
+  /// In en, this message translates to:
+  /// **'{appName} is running'**
+  String appRunningInBackground(String appName);
+
+  /// No description provided for @closeBackgroundApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Close app'**
+  String get closeBackgroundApp;
+
+  /// No description provided for @closeBackgroundAppConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Close \"{appName}\"? Anything unsaved in the app will be lost.'**
+  String closeBackgroundAppConfirm(String appName);
+
+  /// No description provided for @backgroundAppClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed \"{appName}\" — only one app can run in the background.'**
+  String backgroundAppClosed(String appName);
+
+  /// No description provided for @mergeNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge notes'**
+  String get mergeNotes;
+
+  /// No description provided for @mergeWith.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge with…'**
+  String get mergeWith;
+
+  /// No description provided for @mergeTabMerged.
+  ///
+  /// In en, this message translates to:
+  /// **'Merged ({count})'**
+  String mergeTabMerged(int count);
+
+  /// No description provided for @mergeAddNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Add notes'**
+  String get mergeAddNotes;
+
+  /// No description provided for @mergeSelectNotesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select notes to merge'**
+  String get mergeSelectNotesTitle;
+
+  /// No description provided for @mergeNeedsSecondNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick at least one more note to merge with.'**
+  String get mergeNeedsSecondNote;
+
+  /// No description provided for @mergeRemoveSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from merge'**
+  String get mergeRemoveSource;
+
+  /// No description provided for @mergeRemoveSourceBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocks already taken from \"{title}\" stay in the merged note. The note itself is not changed.'**
+  String mergeRemoveSourceBody(String title);
+
+  /// No description provided for @mergeAddAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Add all'**
+  String get mergeAddAll;
+
+  /// No description provided for @mergeRemoveAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove all'**
+  String get mergeRemoveAll;
+
+  /// No description provided for @mergeBlocksAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'{added} of {total} blocks added'**
+  String mergeBlocksAdded(int added, int total);
+
+  /// No description provided for @mergeAddToMerged.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to merged'**
+  String get mergeAddToMerged;
+
+  /// No description provided for @mergeRemoveFromMerged.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from merged'**
+  String get mergeRemoveFromMerged;
+
+  /// No description provided for @mergeAddSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Add this section ({count} blocks)'**
+  String mergeAddSection(int count);
+
+  /// No description provided for @mergeCopyText.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy text'**
+  String get mergeCopyText;
+
+  /// No description provided for @mergeSelectText.
+  ///
+  /// In en, this message translates to:
+  /// **'Select text…'**
+  String get mergeSelectText;
+
+  /// No description provided for @mergeCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get mergeCopied;
+
+  /// No description provided for @mergeEditedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Changed in the merged note'**
+  String get mergeEditedTitle;
+
+  /// No description provided for @mergeEditedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This block was changed or removed in the merged note. Edit it there, or add another copy.'**
+  String get mergeEditedBody;
+
+  /// No description provided for @mergeAddAnotherCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Add another copy'**
+  String get mergeAddAnotherCopy;
+
+  /// No description provided for @mergeForget.
+  ///
+  /// In en, this message translates to:
+  /// **'Forget'**
+  String get mergeForget;
+
+  /// No description provided for @mergeArrange.
+  ///
+  /// In en, this message translates to:
+  /// **'Arrange'**
+  String get mergeArrange;
+
+  /// No description provided for @mergeEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get mergeEdit;
+
+  /// No description provided for @mergeInsertHere.
+  ///
+  /// In en, this message translates to:
+  /// **'Next block goes here'**
+  String get mergeInsertHere;
+
+  /// No description provided for @mergeInsertingAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Inserting at position {position}'**
+  String mergeInsertingAt(int position);
+
+  /// No description provided for @mergeEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap blocks in a note tab to add them here, or switch to Edit and paste.'**
+  String get mergeEmptyHint;
+
+  /// No description provided for @mergeUseCombinedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Use \"{title}\"'**
+  String mergeUseCombinedTitle(String title);
+
+  /// No description provided for @mergeSaveAsNew.
+  ///
+  /// In en, this message translates to:
+  /// **'Save as new note'**
+  String get mergeSaveAsNew;
+
+  /// No description provided for @mergeReplaceNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace \"{title}\"'**
+  String mergeReplaceNote(String title);
+
+  /// No description provided for @mergeReplaceWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{\"{title}\" gets this content and title. The other note is not changed.} other{\"{title}\" gets this content and title. The other {count} notes are not changed.}}'**
+  String mergeReplaceWarning(String title, int count);
+
+  /// No description provided for @mergeLinkBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Link back to source notes'**
+  String get mergeLinkBack;
+
+  /// No description provided for @mergeArchiveOthers.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive the other source notes'**
+  String get mergeArchiveOthers;
+
+  /// No description provided for @mergeDiscardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard merged note?'**
+  String get mergeDiscardTitle;
+
+  /// No description provided for @mergeDiscardBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocks you added and text you typed will be lost.'**
+  String get mergeDiscardBody;
+
+  /// No description provided for @mergeDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get mergeDiscard;
+
+  /// No description provided for @mergedInto.
+  ///
+  /// In en, this message translates to:
+  /// **'Merged into \"{title}\"'**
+  String mergedInto(String title);
+
+  /// No description provided for @mergeNothingToSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Add at least one block or some text first.'**
+  String get mergeNothingToSave;
+
+  /// No description provided for @mergeSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the merged note: {error}'**
+  String mergeSaveFailed(String error);
+
+  /// No description provided for @mergeBlockFromNote.
+  ///
+  /// In en, this message translates to:
+  /// **'From \"{title}\"'**
+  String mergeBlockFromNote(String title);
+
+  /// No description provided for @mergeRemoveBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get mergeRemoveBlock;
+
+  /// No description provided for @mergeOtherAttachments.
+  ///
+  /// In en, this message translates to:
+  /// **'Other attachments to keep'**
+  String get mergeOtherAttachments;
+
+  /// No description provided for @mergeArchiveOthersPinned.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned notes are left as they are.'**
+  String get mergeArchiveOthersPinned;
+
+  /// No description provided for @navPadUnitChar.
+  ///
+  /// In en, this message translates to:
+  /// **'Char'**
+  String get navPadUnitChar;
+
+  /// No description provided for @navPadUnitToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Token'**
+  String get navPadUnitToken;
+
+  /// No description provided for @navPadUnitLine.
+  ///
+  /// In en, this message translates to:
+  /// **'Line'**
+  String get navPadUnitLine;
+
+  /// No description provided for @navPadUnitBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Block'**
+  String get navPadUnitBlock;
+
+  /// No description provided for @navPadModeMove.
+  ///
+  /// In en, this message translates to:
+  /// **'Move'**
+  String get navPadModeMove;
+
+  /// No description provided for @navPadModeSelect.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get navPadModeSelect;
+
+  /// No description provided for @navPadUnitTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Move by {unit}'**
+  String navPadUnitTooltip(String unit);
+
+  /// No description provided for @navPadModeTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to switch move/select · hold to expand selection · swipe down to shrink'**
+  String get navPadModeTooltip;
+
+  /// No description provided for @navPadMoveUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Up'**
+  String get navPadMoveUp;
+
+  /// No description provided for @navPadMoveDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Down'**
+  String get navPadMoveDown;
+
+  /// No description provided for @navPadMoveBackward.
+  ///
+  /// In en, this message translates to:
+  /// **'Backward'**
+  String get navPadMoveBackward;
+
+  /// No description provided for @navPadMoveForward.
+  ///
+  /// In en, this message translates to:
+  /// **'Forward'**
+  String get navPadMoveForward;
+
+  /// No description provided for @navPadSwitchSide.
+  ///
+  /// In en, this message translates to:
+  /// **'Move pad to the other side'**
+  String get navPadSwitchSide;
+
+  /// No description provided for @navPadHide.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide navigation pad'**
+  String get navPadHide;
+
+  /// No description provided for @navPadShow.
+  ///
+  /// In en, this message translates to:
+  /// **'Show navigation pad'**
+  String get navPadShow;
+
+  /// No description provided for @navPadLabelLineStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Line start'**
+  String get navPadLabelLineStart;
+
+  /// No description provided for @navPadLabelLineEnd.
+  ///
+  /// In en, this message translates to:
+  /// **'Line end'**
+  String get navPadLabelLineEnd;
+
+  /// No description provided for @navPadLabelBlockStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Block start'**
+  String get navPadLabelBlockStart;
+
+  /// No description provided for @navPadLabelBlockEnd.
+  ///
+  /// In en, this message translates to:
+  /// **'Block end'**
+  String get navPadLabelBlockEnd;
+
+  /// No description provided for @navPadLabelPrevBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous block'**
+  String get navPadLabelPrevBlock;
+
+  /// No description provided for @navPadLabelNextBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Next block'**
+  String get navPadLabelNextBlock;
+
+  /// No description provided for @navPadLabelExpand.
+  ///
+  /// In en, this message translates to:
+  /// **'Expanded'**
+  String get navPadLabelExpand;
+
+  /// No description provided for @navPadLabelShrink.
+  ///
+  /// In en, this message translates to:
+  /// **'Shrunk'**
+  String get navPadLabelShrink;
+
+  /// No description provided for @source.
+  ///
+  /// In en, this message translates to:
+  /// **'Source'**
+  String get source;
+
+  /// No description provided for @clippedFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'Clipped from'**
+  String get clippedFrom;
+
+  /// No description provided for @clippedRelative.
+  ///
+  /// In en, this message translates to:
+  /// **'clipped {when}'**
+  String clippedRelative(String when);
+
+  /// No description provided for @openOriginal.
+  ///
+  /// In en, this message translates to:
+  /// **'Open original'**
+  String get openOriginal;
+
+  /// No description provided for @copyLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy link'**
+  String get copyLink;
+
+  /// No description provided for @linkCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Link copied'**
+  String get linkCopied;
+
+  /// No description provided for @editSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit source'**
+  String get editSource;
+
+  /// No description provided for @removeSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove source'**
+  String get removeSource;
+
+  /// No description provided for @removeSourceConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove this source from the note? The note\'s content stays as it is.'**
+  String get removeSourceConfirm;
+
+  /// No description provided for @addSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Add source'**
+  String get addSource;
+
+  /// No description provided for @addSourceMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Add source…'**
+  String get addSourceMenu;
+
+  /// No description provided for @sourceSiteName.
+  ///
+  /// In en, this message translates to:
+  /// **'Site name'**
+  String get sourceSiteName;
+
+  /// No description provided for @invalidUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid http(s) link'**
+  String get invalidUrl;
+
+  /// No description provided for @duplicateSourceUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'This link is already a source of this note'**
+  String get duplicateSourceUrl;
+
+  /// No description provided for @moreSources.
+  ///
+  /// In en, this message translates to:
+  /// **'+{count} more'**
+  String moreSources(int count);
+
+  /// No description provided for @showLess.
+  ///
+  /// In en, this message translates to:
+  /// **'Show less'**
+  String get showLess;
+
+  /// No description provided for @switchSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch space'**
+  String get switchSpace;
+
+  /// No description provided for @manageSpaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage spaces…'**
+  String get manageSpaces;
+
+  /// No description provided for @manageSpacesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage Spaces'**
+  String get manageSpacesTitle;
+
+  /// No description provided for @noSpacesYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No spaces yet'**
+  String get noSpacesYet;
+
+  /// No description provided for @noSpacesYetHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn a filter into a space with \"Use as space\" in the filter editor.'**
+  String get noSpacesYetHint;
+
+  /// No description provided for @spaceUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'That space is no longer available'**
+  String get spaceUnavailable;
+
+  /// No description provided for @leaveSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave space'**
+  String get leaveSpace;
+
+  /// No description provided for @activateAsSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Activate as space'**
+  String get activateAsSpace;
+
+  /// No description provided for @stopUsingAsSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop using as space'**
+  String get stopUsingAsSpace;
+
+  /// No description provided for @spaceRowLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Space: {name}'**
+  String spaceRowLabel(String name);
+
+  /// No description provided for @useAsSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Use as space'**
+  String get useAsSpace;
+
+  /// No description provided for @useAsSpaceDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Activating a space narrows every list to its notes and tags new notes with its include tags.'**
+  String get useAsSpaceDescription;
+
+  /// No description provided for @useAsSpaceNeedsIncludeTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Add at least one include tag: a space without include tags would scope nothing and tag nothing.'**
+  String get useAsSpaceNeedsIncludeTags;
+
+  /// No description provided for @spaceStampPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'New notes will be tagged: {tags}'**
+  String spaceStampPreview(String tags);
+
+  /// No description provided for @spaceTextCriteriaWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes you create here may not match this filter\'s text criteria.'**
+  String get spaceTextCriteriaWarning;
+
+  /// No description provided for @spaceNoteTypeWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes you create here may not match this filter\'s note types.'**
+  String get spaceNoteTypeWarning;
+
+  /// No description provided for @tagExistingNotesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag existing notes?'**
+  String get tagExistingNotesTitle;
+
+  /// No description provided for @tagExistingNotesBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Also tag the {count} {count, plural, =1{note} other{notes}} currently in \"{name}\" with: {tags}'**
+  String tagExistingNotesBody(int count, String name, String tags);
+
+  /// No description provided for @tagExistingNotesConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag notes'**
+  String get tagExistingNotesConfirm;
+
+  /// No description provided for @notNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get notNow;
+
+  /// No description provided for @addToSpaceMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to space…'**
+  String get addToSpaceMenu;
+
+  /// No description provided for @addToSpaceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to space'**
+  String get addToSpaceTitle;
+
+  /// No description provided for @addToSpaceHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Checked spaces tag this note; unchecking removes the tags no other space still needs.'**
+  String get addToSpaceHint;
+
+  /// No description provided for @addToSpaceHintPlural.
+  ///
+  /// In en, this message translates to:
+  /// **'Checked spaces tag these {count} notes; unchecking removes the tags no other space still needs.'**
+  String addToSpaceHintPlural(int count);
+
+  /// No description provided for @spaceMembershipPartial.
+  ///
+  /// In en, this message translates to:
+  /// **'Some of the selected notes'**
+  String get spaceMembershipPartial;
+
+  /// No description provided for @spaceMembershipFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not update space membership'**
+  String get spaceMembershipFailed;
+
+  /// No description provided for @showInEverySpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Show in every space'**
+  String get showInEverySpace;
+
+  /// Multi-select action label to remove the all-spaces tag
+  ///
+  /// In en, this message translates to:
+  /// **'Stop showing in every space'**
+  String get stopShowingInEverySpace;
+
+  /// No description provided for @showInEverySpaceOn.
+  ///
+  /// In en, this message translates to:
+  /// **'This note now shows in every space'**
+  String get showInEverySpaceOn;
+
+  /// No description provided for @showInEverySpaceOff.
+  ///
+  /// In en, this message translates to:
+  /// **'This note no longer shows in every space'**
+  String get showInEverySpaceOff;
+
+  /// No description provided for @addExistingNotesMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Add existing notes…'**
+  String get addExistingNotesMenu;
+
+  /// No description provided for @addExistingNotesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add notes to {name}'**
+  String addExistingNotesTitle(String name);
+
+  /// No description provided for @addExistingNotesNoSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Activate a space first'**
+  String get addExistingNotesNoSpace;
+
+  /// No description provided for @addExistingNotesNothingLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'Every note is already in {name}'**
+  String addExistingNotesNothingLeft(String name);
+
+  /// No description provided for @spaceJoinAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} added'**
+  String spaceJoinAdded(int count);
+
+  /// No description provided for @spaceJoinHiddenTasks.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} not shown because {name} only shows tasks'**
+  String spaceJoinHiddenTasks(int count, String name);
+
+  /// No description provided for @spaceJoinHiddenNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} not shown because {name} only shows notes'**
+  String spaceJoinHiddenNotes(int count, String name);
+
+  /// No description provided for @spaceJoinHiddenFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} not shown because of {name}\'s other criteria'**
+  String spaceJoinHiddenFilter(int count, String name);
+
+  /// No description provided for @savedOutsideSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved outside {name}'**
+  String savedOutsideSpace(String name);
+
+  /// No description provided for @showAllNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all notes'**
+  String get showAllNotes;
+
+  /// No description provided for @includeNotesOutsideSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Include notes outside {name}'**
+  String includeNotesOutsideSpace(String name);
+
+  /// No description provided for @spacesRetiredByTagChange.
+  ///
+  /// In en, this message translates to:
+  /// **'{names} is no longer a space: its include tags are gone'**
+  String spacesRetiredByTagChange(String names);
+
+  /// Long-press action on a tag chip: make the tag a Space and activate it
+  ///
+  /// In en, this message translates to:
+  /// **'Focus on this tag'**
+  String get focusOnThisTag;
+
+  /// Why a tag cannot become a Space (filters store include tags comma-joined)
+  ///
+  /// In en, this message translates to:
+  /// **'A tag containing a comma cannot be used as a space.'**
+  String get focusOnTagUnusable;
+
+  /// Why a reserved tag (all-spaces, agent-skill) cannot become a Space
+  ///
+  /// In en, this message translates to:
+  /// **'This tag is reserved by the app and cannot be used as a space.'**
+  String get focusOnTagReserved;
 }
 
 class _AppLocalizationsDelegate

@@ -82,7 +82,7 @@ class _Device {
 
 /// Reproduces a row that predates M2.4's capture triggers: inserted
 /// normally, then its `sync_touch_log` evidence cleared — exactly the state
-/// `_migrateToVersion57` leaves every pre-migration row in, since it installs
+/// `_migrateToVersion58` leaves every pre-migration row in, since it installs
 /// the triggers without backfilling.
 Future<void> _makePreExisting(Database db) async {
   await db.delete('sync_touch_log');
@@ -1023,7 +1023,7 @@ void main() {
   // 4a. The batch-layout wedge, closed by recording what a commit covers
   // =========================================================================
   //
-  // Before `sync_publish_intent.opAuthorSeqsJson` (schema v61), the resume
+  // Before `sync_publish_intent.opAuthorSeqsJson` (schema v62), the resume
   // procedure re-derived an interrupted commit's contents by trying the
   // batch today's constants would form and then every shorter prefix. Every
   // candidate was therefore <= today's constants, so a release that LOWERED
@@ -1195,7 +1195,7 @@ void main() {
     );
 
     test(
-      'a pre-v61 intent (opAuthorSeqsJson NULL, one operation per commit) '
+      'a pre-v62 intent (opAuthorSeqsJson NULL, one operation per commit) '
       'still resumes through the legacy v1 path',
       () async {
         final backend = MockSyncBackend();
@@ -1238,7 +1238,7 @@ void main() {
           'payloadHash': payloadHash,
           'authorId': authorId,
           'deviceSeq': 1,
-          'opAuthorSeqsJson': null, // the pre-v61 shape
+          'opAuthorSeqsJson': null, // the pre-v62 shape
           'status': 'pending',
           'createdAt': 1000,
           'confirmedAt': null,

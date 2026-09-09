@@ -57,6 +57,9 @@ class _MultiFunctionScreenState extends State<MultiFunctionScreen> {
           showDeleteAction: false,
           showEditAction: false,
           showRevisionHistory: false,
+          // Tab body, not a pushed route — it is already permanently reachable
+          // via its tab, and ModalRoute.of here is MainScreen's own route.
+          canRunInBackground: false,
           extraActions: [
             PopupMenuButton<String>(
               onSelected: (value) {

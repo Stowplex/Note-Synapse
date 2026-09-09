@@ -28,6 +28,8 @@ void main() {
 
   setUp(() {
     mockAppProvider = MockAppProvider();
+    // Export and copy read each note's sources; these notes have none.
+    when(mockAppProvider.getNoteSources(any)).thenAnswer((_) async => []);
     l10n = AppLocalizationsEn();
     log.clear();
 

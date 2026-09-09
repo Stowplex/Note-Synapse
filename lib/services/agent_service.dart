@@ -17,6 +17,8 @@ import 'tag_workflow_service.dart';
 import 'tools/figure_tools.dart';
 import 'tools/load_skill_tool.dart';
 import 'tools/note_tools.dart';
+import 'tools/tool_outcome.dart';
+import 'tools/tool_param_validator.dart';
 import 'tools/read_task_result_tool.dart';
 import 'ai_service.dart';
 import 'agentic_settings_service.dart';
@@ -34,6 +36,8 @@ import 'database_service.dart';
 import 'service_locator.dart';
 
 import 'prompts/ai_prompts.dart';
+import 'prompts/space_scope_prompt.dart';
+import 'space_scope_service.dart';
 import '../utils/think_tag_utils.dart';
 import '../utils/token_estimator.dart';
 
@@ -1188,6 +1192,10 @@ If no findings worth preserving, return: []
   // Skill state
   bool _skillsEnabled = true;
   Map<String, SkillMetadata> _skillIndex = {};
+
+  /// [SpaceScopeService.scopeVersion] the cached [_skillIndex] was built
+  /// against. `-1` means "no index built", which no real version can equal.
+  int _skillIndexScopeVersion = -1;
   final List<McpTool> _skillDiscoveredTools = [];
   final Map<String, String> _skillToolServiceNames = {};
   LoadSkillTool? _loadSkillTool;
@@ -1251,8 +1259,10 @@ If no findings worth preserving, return: []
 
     if (_skillsEnabled) {
       _skillIndex = await getIt<SkillService>().buildSkillIndex();
+      _skillIndexScopeVersion = SpaceScopeService.shared().scopeVersion;
     } else {
       _skillIndex = {};
+      _skillIndexScopeVersion = -1;
     }
 
     _currentThought = 'Generating plan...';
@@ -1345,6 +1355,11 @@ Example: "identify knowledge gaps in transformer notes":
 '''
         : '';
 
+    // Decision 5: a Space narrows the note tools, and the model is told so.
+    final spaceScopeSection = hasNoteTools
+        ? buildSpaceScopePromptSection()
+        : '';
+
     final skillIndexSection = () {
       if (!_skillsEnabled) return '';
       final skillSvc = getIt<SkillService>();
@@ -1389,6 +1404,7 @@ Choose an appropriate strategy based on the objective and available tools:
 - Each step builds on previous results
 - Example: "Find notes about X and summarize them"
 $noteExplorationSection
+$spaceScopeSection
 
 ## TASK CONFIGURATION
 
@@ -1985,7 +2001,7 @@ Use the source note above as "this note" for the workflow. Do not search for a c
       orElse: () => _UnknownTool(),
     );
     if (nativeTool is! _UnknownTool) {
-      return nativeTool.execute(args);
+      return _validateAndExecuteNativeTool(nativeTool, args);
     }
 
     final skillDiscoveredBuiltin =
@@ -1996,15 +2012,61 @@ Use the source note above as "this note" for the workflow. Do not search for a c
           )
         : _UnknownTool();
     if (skillDiscoveredBuiltin is! _UnknownTool) {
-      return skillDiscoveredBuiltin.execute(args);
+      return _validateAndExecuteNativeTool(skillDiscoveredBuiltin, args);
     }
 
     throw 'Tool $toolName not found.';
   }
 
+  /// Validates args against the tool's declared schema before execution, so
+  /// structurally invalid calls fail with a path-specific error (and trigger
+  /// neither approval dialogs nor side effects) instead of surfacing a raw
+  /// type-cast error from inside the tool.
+  Future<dynamic> _validateAndExecuteNativeTool(
+    NativeTool tool,
+    Map<String, dynamic> args,
+  ) async {
+    final validation = ToolParamValidator.validateAndNormalize(
+      toolName: tool.name,
+      params: args,
+      inputSchema: tool.inputSchema,
+    );
+    final invalid = validation.failure;
+    if (invalid != null) {
+      return {'error': invalid.message, 'code': invalid.code};
+    }
+    return tool.execute(validation.params);
+  }
+
+  /// Rebuilds [_skillIndex] when the Space scope moved since it was built.
+  ///
+  /// A run can span several Space switches (the user keeps working while the
+  /// agent thinks), and the index feeds every task prompt. Pull rather than
+  /// push: [SpaceScopeService.scopeVersion] exists so a cached, scope-derived
+  /// index can check itself instead of subscribing to a listener that would
+  /// have to be unsubscribed.
+  @visibleForTesting
+  Future<void> refreshSkillIndexIfScopeChanged() async {
+    if (!_skillsEnabled) return;
+    final version = SpaceScopeService.shared().scopeVersion;
+    if (version == _skillIndexScopeVersion) return;
+    _skillIndex = await getIt<SkillService>().buildSkillIndex();
+    _skillIndexScopeVersion = version;
+  }
+
   Future<String> _resolveSkillNoteId(Map<String, dynamic> args) async {
     final noteId = (args['noteId'] as String? ?? '').trim();
     if (noteId.isNotEmpty) {
+      // The legacy `noteId` argument bypasses the skill index, which is where
+      // Space filtering happens — and note ids survive in conversation history
+      // across a Space switch, so a model quoting one from earlier could pin a
+      // skill this Space cannot see (design decision 7). The `skillRef` path
+      // below needs no such check: it resolves through the already-filtered
+      // index. Answering '' is what `load_skill` handling treats as "nothing
+      // to pin", the same as an unresolvable ref.
+      final note = await _databaseService.getNote(noteId);
+      if (note == null) return '';
+      if (!SpaceScopeService.shared().skillVisible(note.tags)) return '';
       return noteId;
     }
 
@@ -2023,6 +2085,7 @@ Use the source note above as "this note" for the workflow. Do not search for a c
 
     final refreshedIndex = await getIt<SkillService>().buildSkillIndex();
     _skillIndex = refreshedIndex;
+    _skillIndexScopeVersion = SpaceScopeService.shared().scopeVersion;
     return getIt<SkillService>().resolveNoteIdForSkillRef(
           refreshedIndex,
           skillRef,
@@ -2328,6 +2391,93 @@ Use the source note above as "this note" for the workflow. Do not search for a c
     }
   }
 
+  /// Whether an identical (canonical-key) call to the same tool has already
+  /// failed DETERMINISTICALLY in this task. Retryable failures (transport
+  /// blips, marked via the ToolOutcome envelope) never block a retry —
+  /// mirroring the chat engine, which dedupes only non-retryable failures.
+  bool _hasIdenticalFailedCall(
+    AgentTask task,
+    String serviceName,
+    String toolName,
+    Map<String, dynamic> params,
+  ) {
+    final qualified = '$serviceName.$toolName';
+    final identity = canonicalToolCallKey(
+      serviceName: serviceName,
+      toolName: toolName,
+      params: params,
+    );
+    return task.toolExecutionRecords.any((record) {
+      if (record.succeeded || record.toolName != qualified) return false;
+      final recordedFailure = ToolOutcome.tryParseFailure(record.result);
+      if (recordedFailure != null && recordedFailure.retryable) return false;
+      return canonicalToolCallKey(
+            serviceName: serviceName,
+            toolName: toolName,
+            params: record.args,
+          ) ==
+          identity;
+    });
+  }
+
+  /// Deterministic failures allowed per tool per task before the tool is
+  /// blocked, however the arguments vary. Mirrors the chat engine's
+  /// circuit breaker for argument-variant retry loops.
+  static const int _maxDeterministicFailuresPerTool = 3;
+
+  /// Number of non-retryable failed records for [qualifiedToolName].
+  /// Envelope-marked retryable (transport) failures don't count.
+  int _deterministicFailureStrikes(AgentTask task, String qualifiedToolName) {
+    return task.toolExecutionRecords.where((record) {
+      if (record.succeeded || record.toolName != qualifiedToolName) {
+        return false;
+      }
+      final failure = ToolOutcome.tryParseFailure(record.result);
+      return failure == null || !failure.retryable;
+    }).length;
+  }
+
+  /// Detects structured failures that do not throw: native `{'error': ...}`
+  /// maps and serialized [ToolOutcome] envelopes. Returns null for success.
+  ToolOutcome? _classifyStructuredFailure(dynamic result) {
+    if (result is Map && result['error'] != null) {
+      final outcome = ToolOutcome.fromNativeResult('tool', result);
+      return outcome.success ? null : outcome;
+    }
+    if (result is String) {
+      return ToolOutcome.tryParseFailure(result);
+    }
+    return null;
+  }
+
+  /// Harness-owned disclosure for agent answers, mirroring the chat engine:
+  /// mutating tools that were attempted but never succeeded are reported in
+  /// the final result deterministically, regardless of the model's claims.
+  String _withMutationFailureDisclosure(AgentTask task, String answer) {
+    // Derived from NativeTool.isMutating so newly added mutating tools are
+    // covered automatically. Remote MCP tools cannot be classified here and
+    // are not included.
+    final mutatingTools = {
+      for (final tool in nativeTools)
+        if (tool.isMutating) tool.name,
+    };
+    bool matches(String recordName, String tool) =>
+        recordName == tool || recordName.endsWith('.$tool');
+    final failed = <String>[];
+    for (final tool in mutatingTools) {
+      final records = task.toolExecutionRecords
+          .where((record) => matches(record.toolName, tool))
+          .toList();
+      if (records.isNotEmpty && records.every((record) => !record.succeeded)) {
+        failed.add(tool);
+      }
+    }
+    if (failed.isEmpty) return answer;
+    return '$answer\n\n⚠️ Tool execution report: ${failed.join(', ')} did '
+        'not succeed during this task, so those changes were NOT applied. '
+        'If the answer above claims otherwise, disregard that claim.';
+  }
+
   String? _validateWikiIngestAnswer(AgentTask task, String answerContent) {
     final normalized = answerContent.toLowerCase();
     final isPartial =
@@ -2538,6 +2688,10 @@ Use the source note above as "this note" for the workflow. Do not search for a c
   }
 
   Future<void> _performTask(AgentTask task, String globalContext) async {
+    // The index was built when the run started; the user may have switched
+    // Space since. Re-check before it reaches this task's prompt.
+    await refreshSkillIndexIfScopeChanged();
+
     // Check for max turns
     final turnsUsed = _countTaskTurns(task);
     if (turnsUsed >= task.maxTurns) {
@@ -2770,6 +2924,10 @@ Current task depth: ${task.depth} / $_cachedMaxSubtaskDepth
       return index;
     }();
 
+    // Decision 5: the executor is the loop that actually calls the note tools,
+    // so it must carry the same announcement the planner does.
+    final spaceScopeSection = buildSpaceScopePromptSection();
+
     final prompt =
         '''
 You are an intelligent agent working on a task.
@@ -2780,6 +2938,7 @@ $globalContext
 
 Available Tools:
 $toolsDesc
+$spaceScopeSection
 
 ## ITERATION PROTOCOL
 
@@ -2995,7 +3154,7 @@ $taskSkillSection''';
             return;
           }
 
-          task.result = result;
+          task.result = _withMutationFailureDisclosure(task, result);
 
           task.status = AgentTaskStatus.completed;
           task.executionHistory.add('Final deliverable produced directly.');
@@ -3046,7 +3205,7 @@ $taskSkillSection''';
             notifyListeners();
             return;
           }
-          task.result = answerContent;
+          task.result = _withMutationFailureDisclosure(task, answerContent);
           task.status = AgentTaskStatus.completed;
           // Store full answer content for findings extraction and context propagation
           task.executionHistory.add('Answer: $answerContent');
@@ -3155,45 +3314,70 @@ $taskSkillSection''';
 
       dynamic result;
       var toolSucceeded = true;
-      try {
-        if (serviceName == _systemToolServiceName) {
-          result = await _executeSystemTool(
-            toolName: toolName,
-            args: params,
-            allowedNativeTools: currentAllowedNative,
-          );
-        } else {
-          final generationContext = GenerationContext(
-            values: {'type': 'agent_tool_exec'},
-          );
-          if (_toolExecutor != null) {
-            result = await _toolExecutor!(
-              serviceName,
-              toolName,
-              params,
-              generationContext,
+      if (_hasIdenticalFailedCall(task, serviceName, toolName, params) ||
+          _deterministicFailureStrikes(task, '$serviceName.$toolName') >=
+              _maxDeterministicFailuresPerTool) {
+        // Byte-equivalent repeat of a call that already failed — do not
+        // execute it again; a failed turn still consumes a turn, so this
+        // also stops burn-down loops.
+        result =
+            'This exact call to $serviceName.$toolName already failed and '
+            'was NOT executed again. Change the arguments, use a different '
+            'tool, or report the failure honestly in your final answer. '
+            'Never claim this operation succeeded.';
+        toolSucceeded = false;
+        _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+            'Repeated failing tool call skipped: $serviceName.$toolName';
+      } else {
+        try {
+          if (serviceName == _systemToolServiceName) {
+            result = await _executeSystemTool(
+              toolName: toolName,
+              args: params,
+              allowedNativeTools: currentAllowedNative,
             );
           } else {
-            final endpoints = await getIt<McpService>().getEndpoints();
-            final ids = endpoints.map((e) => e.id).toList();
-            result = await McpToolIntegrationService.executeToolCall(
-              serviceName: serviceName,
-              toolName: toolName,
-              parameters: params,
-              enabledEndpointIds: ids,
-              generationContext: generationContext,
+            final generationContext = GenerationContext(
+              values: {'type': 'agent_tool_exec'},
             );
+            if (_toolExecutor != null) {
+              result = await _toolExecutor!(
+                serviceName,
+                toolName,
+                params,
+                generationContext,
+              );
+            } else {
+              final endpoints = await getIt<McpService>().getEndpoints();
+              final ids = endpoints.map((e) => e.id).toList();
+              result = await McpToolIntegrationService.executeToolCall(
+                serviceName: serviceName,
+                toolName: toolName,
+                parameters: params,
+                enabledEndpointIds: ids,
+                generationContext: generationContext,
+              );
+            }
           }
-        }
-      } catch (e) {
-        final errorStr = "Error executing $serviceName.$toolName: $e";
-        LoggerService.error(errorStr);
-        result = errorStr;
-        toolSucceeded = false;
+        } catch (e) {
+          final errorStr = "Error executing $serviceName.$toolName: $e";
+          LoggerService.error(errorStr);
+          result = errorStr;
+          toolSucceeded = false;
 
-        // Also set as last execution error for explicit visibility
-        _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
-            "Tool Execution Error: $e";
+          // Also set as last execution error for explicit visibility
+          _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+              "Tool Execution Error: $e";
+        }
+
+        // Structured failures don't throw: native tools return
+        // {'error': ...} maps and the shared boundary returns serialized
+        // ToolOutcome envelopes. Record them as failures so retry
+        // discipline and final-answer disclosure see the truth.
+        final structuredFailure = _classifyStructuredFailure(result);
+        if (structuredFailure != null) {
+          toolSucceeded = false;
+        }
       }
 
       // Intercept load_skill results to route to context and resolve tool URIs
@@ -3455,41 +3639,65 @@ Call tools when you need information. When you have a complete answer, respond w
 
       dynamic result;
       var toolSucceeded = true;
-      try {
-        if (serviceName == _systemToolServiceName) {
-          result = await _executeSystemTool(
-            toolName: toolName,
-            args: params,
-            allowedNativeTools: currentAllowedNative,
-          );
-        } else {
-          final generationContext = GenerationContext(
-            values: {'type': 'agent_tool_exec'},
-          );
-          if (_toolExecutor != null) {
-            result = await _toolExecutor!(
-              serviceName,
-              toolName,
-              params,
-              generationContext,
+      if (_hasIdenticalFailedCall(task, serviceName, toolName, params) ||
+          _deterministicFailureStrikes(task, '$serviceName.$toolName') >=
+              _maxDeterministicFailuresPerTool) {
+        // Same discipline as the XML path: never re-execute a
+        // byte-equivalent call that already failed deterministically.
+        result =
+            'This exact call to $serviceName.$toolName already failed and '
+            'was NOT executed again. Change the arguments, use a different '
+            'tool, or report the failure honestly in your final answer. '
+            'Never claim this operation succeeded.';
+        toolSucceeded = false;
+        _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+            'Repeated failing tool call skipped: $serviceName.$toolName';
+      } else {
+        try {
+          if (serviceName == _systemToolServiceName) {
+            result = await _executeSystemTool(
+              toolName: toolName,
+              args: params,
+              allowedNativeTools: currentAllowedNative,
             );
           } else {
-            final endpoints = await getIt<McpService>().getEndpoints();
-            final ids = endpoints.map((e) => e.id).toList();
-            result = await McpToolIntegrationService.executeToolCall(
-              serviceName: serviceName,
-              toolName: toolName,
-              parameters: params,
-              enabledEndpointIds: ids,
-              generationContext: generationContext,
+            final generationContext = GenerationContext(
+              values: {'type': 'agent_tool_exec'},
             );
+            if (_toolExecutor != null) {
+              result = await _toolExecutor!(
+                serviceName,
+                toolName,
+                params,
+                generationContext,
+              );
+            } else {
+              final endpoints = await getIt<McpService>().getEndpoints();
+              final ids = endpoints.map((e) => e.id).toList();
+              result = await McpToolIntegrationService.executeToolCall(
+                serviceName: serviceName,
+                toolName: toolName,
+                parameters: params,
+                enabledEndpointIds: ids,
+                generationContext: generationContext,
+              );
+            }
           }
+        } catch (e) {
+          final errorStr = 'Error executing $serviceName.$toolName: $e';
+          LoggerService.error(errorStr);
+          result = errorStr;
+          toolSucceeded = false;
+          _contextManager.getContext(task.contextNodeId ?? '')?.lastError =
+              'Tool Execution Error: $e';
         }
-      } catch (e) {
-        final errorStr = 'Error executing $serviceName.$toolName: $e';
-        LoggerService.error(errorStr);
-        result = errorStr;
-        toolSucceeded = false;
+
+        // Structured failures ({'error': ...} maps and ToolOutcome
+        // envelopes) don't throw; record them as failures so retry
+        // discipline and disclosure see the truth.
+        if (_classifyStructuredFailure(result) != null) {
+          toolSucceeded = false;
+        }
       }
 
       // Handle load_skill results
@@ -3586,7 +3794,7 @@ Call tools when you need information. When you have a complete answer, respond w
         notifyListeners();
         return;
       }
-      task.result = cleanedText;
+      task.result = _withMutationFailureDisclosure(task, cleanedText);
       task.status = AgentTaskStatus.completed;
       task.executionHistory.add('Final deliverable produced directly.');
       if (task.contextNodeId != null) {
@@ -3975,6 +4183,8 @@ class _UnknownTool implements NativeTool {
   String get name => 'unknown';
   @override
   String get description => 'Legacy placeholder';
+  @override
+  bool get isMutating => false;
   @override
   Map<String, dynamic> get inputSchema => {};
   @override

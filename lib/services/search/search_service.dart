@@ -57,6 +57,14 @@ enum SearchLayer { lexical, semantic, figure }
 /// not the user); [user] sees everything.
 enum SearchAudience { user, ai }
 
+/// The reserved "visible from every Space" tag, mirroring
+/// `SpaceScopeService.allSpacesTag`. Spelled out rather than imported to keep
+/// this retrieval layer free of `shared_preferences` for one string — the same
+/// reason `DatabaseService` keeps its own copy. The scoped-search tests tag
+/// their fixtures with `SpaceScopeService.allSpacesTag` and expect them found,
+/// so the two cannot drift apart silently.
+const String allSpacesTag = 'all-spaces';
+
 /// Query-time visibility scope (plan §1.5). Mirrors saved-filter semantics:
 /// archived notes are hidden unless [includeArchived]. Room for type
 /// scopes later.
@@ -64,6 +72,8 @@ class NoteFilterContext {
   const NoteFilterContext({
     this.includeArchived = false,
     this.requiredTags,
+    this.scopeTags,
+    this.includeAllSpacesTag = false,
     this.sourceTypes,
     this.noteId,
   });
@@ -75,7 +85,30 @@ class NoteFilterContext {
   /// means no tag constraint. Applied DURING result accumulation, so tagged
   /// notes ranked below untagged ones are still found rather than being
   /// truncated away with the top slice.
+  ///
+  /// This is the **caller's own** requirement. It is never escaped by
+  /// [includeAllSpacesTag] — see [scopeTags].
   final List<String>? requiredTags;
+
+  /// The active Space's tags. ANDed among themselves as their own group, and
+  /// [includeAllSpacesTag] ORs the reserved `all-spaces` tag around **that
+  /// group only**:
+  ///
+  ///     t1 AND t2 AND ((s1 AND s2) OR all-spaces)
+  ///
+  /// so a note marked visible everywhere is found inside a Space even though
+  /// it carries none of the Space's tags, while [requiredTags] still has to
+  /// match. Kept as a separate list from [requiredTags] for exactly the
+  /// reason `DatabaseService.searchNotesFTS` does: merging them and ORing
+  /// around the whole conjunction turns "tag `invoice` in this Space" into
+  /// "tag `invoice`, OR anything tagged `all-spaces`", which since migration
+  /// v47 means every agent-skill note.
+  final List<String>? scopeTags;
+
+  /// Whether the reserved `all-spaces` tag escapes [scopeTags]. Does nothing
+  /// without [scopeTags] — with no Space there is no scope to escape, so it
+  /// fails closed.
+  final bool includeAllSpacesTag;
 
   /// Chunk `sourceType`s results may come from — `meta`, `note_body`,
   /// `subnote`, `annotation`, `attachment_text`, `attachment_ocr`, `figure`.
@@ -777,7 +810,10 @@ class SearchService {
     int chunksPerNote,
   ) async {
     final requiredTags = scope.requiredTags;
-    final hasTagFilter = requiredTags != null && requiredTags.isNotEmpty;
+    final scopeTags = scope.scopeTags;
+    final hasScopeFilter = scopeTags != null && scopeTags.isNotEmpty;
+    final hasTagFilter =
+        (requiredTags != null && requiredTags.isNotEmpty) || hasScopeFilter;
     final sourceTypes = scope.sourceTypes;
     final hasSourceFilter = sourceTypes != null && sourceTypes.isNotEmpty;
     final onlyNoteId = scope.noteId;
@@ -826,10 +862,8 @@ class SearchService {
           continue;
         }
         if (hasTagFilter &&
-            !requiredTags.every(
-              (tag) => tagsByNote[row.noteId]?.contains(tag) ?? false,
-            )) {
-          // Note lacks a required tag (AND semantics).
+            !_satisfiesTagScope(scope, tagsByNote[row.noteId])) {
+          // Note lacks a required tag, or falls outside the active Space.
           continue;
         }
         visibleCount++;
@@ -905,6 +939,30 @@ class SearchService {
     chunkKey: row.chunkKey,
   );
 
+  /// Whether a note carrying [noteTags] passes [scope]'s tag rules.
+  ///
+  /// Two independent gates, matching `DatabaseService.searchNotesFTS`:
+  /// `requiredTags` are ANDed unconditionally (the caller's own filter, never
+  /// escapable), while `scopeTags` are ANDed as a group that the reserved
+  /// `all-spaces` tag can OR its way past when `includeAllSpacesTag` is set.
+  ///
+  /// A null [noteTags] means the note has no tags loaded — treated as no tags
+  /// at all, so it fails any non-empty requirement.
+  static bool _satisfiesTagScope(
+    NoteFilterContext scope,
+    Set<String>? noteTags,
+  ) {
+    final tags = noteTags ?? const <String>{};
+
+    final required = scope.requiredTags;
+    if (required != null && !required.every(tags.contains)) return false;
+
+    final scopeTags = scope.scopeTags;
+    if (scopeTags == null || scopeTags.isEmpty) return true;
+    if (scopeTags.every(tags.contains)) return true;
+    return scope.includeAllSpacesTag && tags.contains(allSpacesTag);
+  }
+
   /// Batch-loads tag names for [noteIds] into [cache] — one IN() query per
   /// call covering only the ids not already cached (a visibility page holds
   /// at most [_visibilityPageSize] distinct notes, well under SQLite's
@@ -957,16 +1015,19 @@ class SearchService {
     // screen semantics of an empty search box.
     final folded = foldForMatch(query);
     final matchAll = folded.trim().isEmpty;
-    // requiredTags applies here too (AND semantics over the in-memory
-    // note.tags), keeping the fallback consistent with the FTS path.
+    // requiredTags / scopeTags apply here too (over the in-memory note.tags),
+    // keeping the fallback consistent with the FTS path.
     final requiredTags = scope.requiredTags;
-    final hasTagFilter = requiredTags != null && requiredTags.isNotEmpty;
+    final scopeTags = scope.scopeTags;
+    final hasTagFilter =
+        (requiredTags != null && requiredTags.isNotEmpty) ||
+        (scopeTags != null && scopeTags.isNotEmpty);
     final onlyNoteId = scope.noteId;
     final matched = [
       for (final note in notes)
         if ((onlyNoteId == null || note.id == onlyNoteId) &&
             (scope.includeArchived || !note.isArchived) &&
-            (!hasTagFilter || requiredTags.every(note.tags.contains)) &&
+            (!hasTagFilter || _satisfiesTagScope(scope, note.tags.toSet())) &&
             (matchAll || _matchesFoldedQuery(note, folded)))
           note,
     ];

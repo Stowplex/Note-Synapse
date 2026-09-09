@@ -112,51 +112,62 @@ void main() {
     return rows.length;
   }
 
-  group('trigger installation — fresh install has exactly the expected set', () {
-    test('105 sync_touch_ triggers exist: 14 entity AFTER INSERT + 80 field '
-        'AFTER UPDATE + 5*2 OR-Set AFTER INSERT/DELETE', () async {
-      // 80 field triggers = the pre-M2.7 61, plus M2.7's tags.name/
-      // tags.color (design doc § Architecture 11.6(e) needs a remote tag's
-      // name to detect a same-name collision — see database_service.dart's
-      // tags SyncEntityCaptureScope doc comment), plus M2.8's own
-      // sync-scope-exclusion-reasoning audit findings: relationships.type
-      // (1); conversation_attachments.{filePath,fileName,fileType,
-      // isRelativePath} (4); attachments.{filePath,fileName,fileType,
-      // isRelativePath} (4); app_revisions.{revisionNumber,userPrompt,
-      // aiResponse,attachmentPaths} (4); user_app_libraries.{name,
-      // usage_instructions} (2); user_app_library_dependencies.
-      // {original_url,local_path} (2) — 17 more, 63+17=80. See each
-      // column's own finding at its SyncEntityCaptureScope doc comment in
-      // database_service.dart.
-      final triggers = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='trigger' "
-        "AND name LIKE 'sync_touch_%'",
-      );
-      expect(triggers.length, 105);
-    });
+  group(
+    'trigger installation — fresh install has exactly the expected set',
+    () {
+      test('106 sync_touch_ triggers exist: 14 entity AFTER INSERT + 81 field '
+          'AFTER UPDATE + 5*2 OR-Set AFTER INSERT/DELETE', () async {
+        // 81 field triggers = the 80 below, plus filters.isSpace, which the
+        // merge with main's Spaces feature added to the filters sync scope for
+        // the same reason isPinned is there (a role flag the user sets through
+        // updateFilter must reach their other devices).
+        //
+        // 80 field triggers = the pre-M2.7 61, plus M2.7's tags.name/
+        // tags.color (design doc § Architecture 11.6(e) needs a remote tag's
+        // name to detect a same-name collision — see database_service.dart's
+        // tags SyncEntityCaptureScope doc comment), plus M2.8's own
+        // sync-scope-exclusion-reasoning audit findings: relationships.type
+        // (1); conversation_attachments.{filePath,fileName,fileType,
+        // isRelativePath} (4); attachments.{filePath,fileName,fileType,
+        // isRelativePath} (4); app_revisions.{revisionNumber,userPrompt,
+        // aiResponse,attachmentPaths} (4); user_app_libraries.{name,
+        // usage_instructions} (2); user_app_library_dependencies.
+        // {original_url,local_path} (2) — 17 more, 63+17=80. See each
+        // column's own finding at its SyncEntityCaptureScope doc comment in
+        // database_service.dart.
+        final triggers = await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='trigger' "
+          "AND name LIKE 'sync_touch_%'",
+        );
+        expect(triggers.length, 106);
+      });
 
-    test('running _onCreate-installed statements again is a safe no-op '
-        '(idempotency, mirroring the hard-delete guard\'s own precedent)', () async {
-      // Re-open a second connection against a fresh DB and just confirm the
-      // count is stable across two independently-created databases (the
-      // real idempotency guarantee — CREATE TRIGGER IF NOT EXISTS — is
-      // exercised for real by the migration round-trip test below, which
-      // literally runs the installer twice against the same connection).
-      final second = DatabaseService.createNew();
-      final db2 = await second.database;
-      final triggers = await db2.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='trigger' "
-        "AND name LIKE 'sync_touch_%'",
+      test(
+        'running _onCreate-installed statements again is a safe no-op '
+        '(idempotency, mirroring the hard-delete guard\'s own precedent)',
+        () async {
+          // Re-open a second connection against a fresh DB and just confirm the
+          // count is stable across two independently-created databases (the
+          // real idempotency guarantee — CREATE TRIGGER IF NOT EXISTS — is
+          // exercised for real by the migration round-trip test below, which
+          // literally runs the installer twice against the same connection).
+          final second = DatabaseService.createNew();
+          final db2 = await second.database;
+          final triggers = await db2.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='trigger' "
+            "AND name LIKE 'sync_touch_%'",
+          );
+          expect(triggers.length, 106);
+          await second.close();
+        },
       );
-      expect(triggers.length, 105);
-      await second.close();
-    });
-  });
+    },
+  );
 
-  group('migration round-trip (v56 -> v57)', () {
-    test('migrating an existing v56 database installs all 105 triggers, '
+  group('migration round-trip (v57 -> v58)', () {
+    test('migrating an existing v57 database installs all 106 triggers, '
         'twice, safely', () async {
-      // M2.7/M2.8 finding: _migrateToVersion57 (database_service.dart)
+      // M2.7/M2.8 finding: _migrateToVersion58 (database_service.dart)
       // reuses the CURRENT, live `_syncMutationCaptureTriggerStatements`
       // list rather than a hand-frozen historical one (its own doc comment
       // says so explicitly: "there is no earlier, narrower historical scope
@@ -168,12 +179,12 @@ void main() {
       // revisionNumber/userPrompt/aiResponse/attachmentPaths;
       // user_app_libraries' name/usage_instructions;
       // user_app_library_dependencies' original_url/local_path — see each
-      // one's own SyncEntityCaptureScope doc comment), a v56->57 migration
-      // installs all 105 triggers, not the 85 a purely historical snapshot
+      // one's own SyncEntityCaptureScope doc comment), a v57->57 migration
+      // installs all 106 triggers, not the 85 a purely historical snapshot
       // would have. This is harmless (idempotent CREATE TRIGGER IF NOT
-      // EXISTS, no data touched) — the separate v59/v60 migrations below
+      // EXISTS, no data touched) — the separate v60/v61 migrations below
       // exist for the real upgrade path this test doesn't cover: a device
-      // already AT v57/58/59 when it receives this build, where v57 does
+      // already AT v58/58/59 when it receives this build, where v58 does
       // NOT re-run.
       final preMigrationDb = await databaseFactoryFfi.openDatabase(
         inMemoryDatabasePath,
@@ -186,7 +197,7 @@ void main() {
       // the M1.5/M1.13 guard triggers, and (per its own doc comment,
       // "AI-facing schema documentation... sync machinery is not user
       // content") a few tables it never lists at all, including
-      // tag_workflow_bindings — a real v56 install would already have all
+      // tag_workflow_bindings — a real v57 install would already have all
       // of these from earlier migrations. Recreate the minimal slice this
       // migration actually depends on: sync_touch_log itself, plus
       // tag_workflow_bindings (one of the fourteen sync-scope entity
@@ -224,40 +235,42 @@ void main() {
       expect(before, isEmpty);
 
       final service = DatabaseService.createNew();
-      await service.migrateBackupDatabase(preMigrationDb, 56, 57);
+      await service.migrateBackupDatabase(preMigrationDb, 57, 58);
 
       final after = await preMigrationDb.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='trigger' "
         "AND name LIKE 'sync_touch_%'",
       );
-      expect(after.length, 105);
+      expect(after.length, 106);
 
       // Running it again must be a safe no-op (CREATE TRIGGER IF NOT
       // EXISTS throughout).
-      await service.migrateBackupDatabase(preMigrationDb, 56, 57);
+      await service.migrateBackupDatabase(preMigrationDb, 57, 58);
       final afterTwice = await preMigrationDb.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='trigger' "
         "AND name LIKE 'sync_touch_%'",
       );
-      expect(afterTwice.length, 105);
+      expect(afterTwice.length, 106);
 
       await service.close();
       await preMigrationDb.close();
     });
   });
 
-  group('migration round-trip (v56 -> v59, M2.7 tags.name/color addendum)', () {
-    test('migrating an existing v56 database all the way to v59 installs all 105 triggers '
-        '(v57 alone already installs the live/current full set, including the M2.8 findings — '
-        'see the v56->v57 test above), including tags.name/tags.color, twice, safely', () async {
-      final preMigrationDb = await databaseFactoryFfi.openDatabase(
-        inMemoryDatabasePath,
-        options: OpenDatabaseOptions(singleInstance: false),
-      );
-      for (final statement in DatabaseService.getSchema()) {
-        await preMigrationDb.execute(statement);
-      }
-      await preMigrationDb.execute('''
+  group('migration round-trip (v57 -> v60, M2.7 tags.name/color addendum)', () {
+    test(
+      'migrating an existing v57 database all the way to v60 installs all 106 triggers '
+      '(v58 alone already installs the live/current full set, including the M2.8 findings — '
+      'see the v57->v58 test above), including tags.name/tags.color, twice, safely',
+      () async {
+        final preMigrationDb = await databaseFactoryFfi.openDatabase(
+          inMemoryDatabasePath,
+          options: OpenDatabaseOptions(singleInstance: false),
+        );
+        for (final statement in DatabaseService.getSchema()) {
+          await preMigrationDb.execute(statement);
+        }
+        await preMigrationDb.execute('''
         CREATE TABLE IF NOT EXISTS tag_workflow_bindings (
           pattern TEXT PRIMARY KEY,
           isPrefix INTEGER NOT NULL DEFAULT 0,
@@ -267,7 +280,7 @@ void main() {
           __deleted__ INTEGER NOT NULL DEFAULT 0
         )
       ''');
-      await preMigrationDb.execute('''
+        await preMigrationDb.execute('''
         CREATE TABLE IF NOT EXISTS sync_touch_log (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           entityTable TEXT NOT NULL,
@@ -278,62 +291,77 @@ void main() {
           processedAt INTEGER
         )
       ''');
-      await preMigrationDb.execute('CREATE TABLE _schema_version (version INTEGER NOT NULL)');
-      await preMigrationDb.insert('_schema_version', {'version': 56});
+        await preMigrationDb.execute(
+          'CREATE TABLE _schema_version (version INTEGER NOT NULL)',
+        );
+        await preMigrationDb.insert('_schema_version', {'version': 56});
 
-      final service = DatabaseService.createNew();
-      await service.migrateBackupDatabase(preMigrationDb, 56, 59);
+        final service = DatabaseService.createNew();
+        await service.migrateBackupDatabase(preMigrationDb, 57, 60);
 
-      final after = await preMigrationDb.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='trigger' "
-        "AND name LIKE 'sync_touch_%'",
-      );
-      expect(after.length, 105);
-      final names = after.map((r) => r['name'] as String).toSet();
-      expect(names, containsAll(['sync_touch_tags_au_name', 'sync_touch_tags_au_color']));
+        final after = await preMigrationDb.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='trigger' "
+          "AND name LIKE 'sync_touch_%'",
+        );
+        expect(after.length, 106);
+        final names = after.map((r) => r['name'] as String).toSet();
+        expect(
+          names,
+          containsAll(['sync_touch_tags_au_name', 'sync_touch_tags_au_color']),
+        );
 
-      // A real UPDATE against tags.name now actually fires the new trigger.
-      await preMigrationDb.insert('tags', {
-        'id': 'tagX',
-        'name': 'old',
-        'color': '#fff',
-        'createdAt': 1000,
-        'usageCount': 0,
-        '__deleted__': 0,
-        'redirectTarget': null,
-      });
-      await preMigrationDb.update('tags', {'name': 'new'}, where: 'id = ?', whereArgs: ['tagX']);
-      final touches = await preMigrationDb.query(
-        'sync_touch_log',
-        where: 'entityTable = ? AND entityId = ? AND fieldName = ?',
-        whereArgs: ['tags', 'tagX', 'name'],
-      );
-      expect(touches, isNotEmpty);
+        // A real UPDATE against tags.name now actually fires the new trigger.
+        await preMigrationDb.insert('tags', {
+          'id': 'tagX',
+          'name': 'old',
+          'color': '#fff',
+          'createdAt': 1000,
+          'usageCount': 0,
+          '__deleted__': 0,
+          'redirectTarget': null,
+        });
+        await preMigrationDb.update(
+          'tags',
+          {'name': 'new'},
+          where: 'id = ?',
+          whereArgs: ['tagX'],
+        );
+        final touches = await preMigrationDb.query(
+          'sync_touch_log',
+          where: 'entityTable = ? AND entityId = ? AND fieldName = ?',
+          whereArgs: ['tags', 'tagX', 'name'],
+        );
+        expect(touches, isNotEmpty);
 
-      // Running it again must be a safe no-op.
-      await service.migrateBackupDatabase(preMigrationDb, 56, 59);
-      final afterTwice = await preMigrationDb.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='trigger' "
-        "AND name LIKE 'sync_touch_%'",
-      );
-      expect(afterTwice.length, 105);
+        // Running it again must be a safe no-op.
+        await service.migrateBackupDatabase(preMigrationDb, 57, 60);
+        final afterTwice = await preMigrationDb.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='trigger' "
+          "AND name LIKE 'sync_touch_%'",
+        );
+        expect(afterTwice.length, 106);
 
-      await service.close();
-      await preMigrationDb.close();
-    });
+        await service.close();
+        await preMigrationDb.close();
+      },
+    );
   });
 
-  group('migration round-trip (v56 -> v60, M2.8 sync-scope-exclusion-reasoning audit findings)', () {
-    test('migrating an existing v56 database all the way to v60 installs all 105 triggers, '
-        'including every M2.8 audit finding, twice, safely', () async {
-      final preMigrationDb = await databaseFactoryFfi.openDatabase(
-        inMemoryDatabasePath,
-        options: OpenDatabaseOptions(singleInstance: false),
-      );
-      for (final statement in DatabaseService.getSchema()) {
-        await preMigrationDb.execute(statement);
-      }
-      await preMigrationDb.execute('''
+  group(
+    'migration round-trip (v57 -> v61, M2.8 sync-scope-exclusion-reasoning audit findings)',
+    () {
+      test(
+        'migrating an existing v57 database all the way to v61 installs all 106 triggers, '
+        'including every M2.8 audit finding, twice, safely',
+        () async {
+          final preMigrationDb = await databaseFactoryFfi.openDatabase(
+            inMemoryDatabasePath,
+            options: OpenDatabaseOptions(singleInstance: false),
+          );
+          for (final statement in DatabaseService.getSchema()) {
+            await preMigrationDb.execute(statement);
+          }
+          await preMigrationDb.execute('''
         CREATE TABLE IF NOT EXISTS tag_workflow_bindings (
           pattern TEXT PRIMARY KEY,
           isPrefix INTEGER NOT NULL DEFAULT 0,
@@ -343,7 +371,7 @@ void main() {
           __deleted__ INTEGER NOT NULL DEFAULT 0
         )
       ''');
-      await preMigrationDb.execute('''
+          await preMigrationDb.execute('''
         CREATE TABLE IF NOT EXISTS sync_touch_log (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           entityTable TEXT NOT NULL,
@@ -354,80 +382,89 @@ void main() {
           processedAt INTEGER
         )
       ''');
-      await preMigrationDb.execute('CREATE TABLE _schema_version (version INTEGER NOT NULL)');
-      await preMigrationDb.insert('_schema_version', {'version': 56});
+          await preMigrationDb.execute(
+            'CREATE TABLE _schema_version (version INTEGER NOT NULL)',
+          );
+          await preMigrationDb.insert('_schema_version', {'version': 56});
 
-      final service = DatabaseService.createNew();
-      await service.migrateBackupDatabase(preMigrationDb, 56, 60);
+          final service = DatabaseService.createNew();
+          await service.migrateBackupDatabase(preMigrationDb, 57, 61);
 
-      final after = await preMigrationDb.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='trigger' "
-        "AND name LIKE 'sync_touch_%'",
+          final after = await preMigrationDb.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='trigger' "
+            "AND name LIKE 'sync_touch_%'",
+          );
+          expect(after.length, 106);
+          final names = after.map((r) => r['name'] as String).toSet();
+          expect(
+            names,
+            containsAll([
+              'sync_touch_relationships_au_type',
+              'sync_touch_conversation_attachments_au_filePath',
+              'sync_touch_conversation_attachments_au_fileName',
+              'sync_touch_conversation_attachments_au_fileType',
+              'sync_touch_conversation_attachments_au_isRelativePath',
+              'sync_touch_attachments_au_filePath',
+              'sync_touch_attachments_au_fileName',
+              'sync_touch_attachments_au_fileType',
+              'sync_touch_attachments_au_isRelativePath',
+              'sync_touch_app_revisions_au_revisionNumber',
+              'sync_touch_app_revisions_au_userPrompt',
+              'sync_touch_app_revisions_au_aiResponse',
+              'sync_touch_app_revisions_au_attachmentPaths',
+              'sync_touch_user_app_libraries_au_name',
+              'sync_touch_user_app_libraries_au_usage_instructions',
+              'sync_touch_user_app_library_dependencies_au_original_url',
+              'sync_touch_user_app_library_dependencies_au_local_path',
+            ]),
+          );
+
+          // A real UPDATE against relationships.type now actually fires the
+          // new trigger (the same "prove it, don't just assert trigger
+          // existence" standard the v60 test above applies to tags.name).
+          await preMigrationDb.insert('notes', {
+            'id': 'note1',
+            'title': 'T1',
+            'content': 'C1',
+            'type': 'note',
+            'createdAt': 1000,
+            'updatedAt': 1000,
+          });
+          await preMigrationDb.insert('relationships', {
+            'id': 'relX',
+            'fromNoteId': 'note1',
+            'toNoteId': 'note1',
+            'type': 'related',
+            'createdAt': 1000,
+            '__deleted__': 0,
+          });
+          await preMigrationDb.update(
+            'relationships',
+            {'type': 'causality'},
+            where: 'id = ?',
+            whereArgs: ['relX'],
+          );
+          final touches = await preMigrationDb.query(
+            'sync_touch_log',
+            where: 'entityTable = ? AND entityId = ? AND fieldName = ?',
+            whereArgs: ['relationships', 'relX', 'type'],
+          );
+          expect(touches, isNotEmpty);
+
+          // Running it again must be a safe no-op.
+          await service.migrateBackupDatabase(preMigrationDb, 57, 61);
+          final afterTwice = await preMigrationDb.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='trigger' "
+            "AND name LIKE 'sync_touch_%'",
+          );
+          expect(afterTwice.length, 106);
+
+          await service.close();
+          await preMigrationDb.close();
+        },
       );
-      expect(after.length, 105);
-      final names = after.map((r) => r['name'] as String).toSet();
-      expect(
-        names,
-        containsAll([
-          'sync_touch_relationships_au_type',
-          'sync_touch_conversation_attachments_au_filePath',
-          'sync_touch_conversation_attachments_au_fileName',
-          'sync_touch_conversation_attachments_au_fileType',
-          'sync_touch_conversation_attachments_au_isRelativePath',
-          'sync_touch_attachments_au_filePath',
-          'sync_touch_attachments_au_fileName',
-          'sync_touch_attachments_au_fileType',
-          'sync_touch_attachments_au_isRelativePath',
-          'sync_touch_app_revisions_au_revisionNumber',
-          'sync_touch_app_revisions_au_userPrompt',
-          'sync_touch_app_revisions_au_aiResponse',
-          'sync_touch_app_revisions_au_attachmentPaths',
-          'sync_touch_user_app_libraries_au_name',
-          'sync_touch_user_app_libraries_au_usage_instructions',
-          'sync_touch_user_app_library_dependencies_au_original_url',
-          'sync_touch_user_app_library_dependencies_au_local_path',
-        ]),
-      );
-
-      // A real UPDATE against relationships.type now actually fires the
-      // new trigger (the same "prove it, don't just assert trigger
-      // existence" standard the v59 test above applies to tags.name).
-      await preMigrationDb.insert('notes', {
-        'id': 'note1',
-        'title': 'T1',
-        'content': 'C1',
-        'type': 'note',
-        'createdAt': 1000,
-        'updatedAt': 1000,
-      });
-      await preMigrationDb.insert('relationships', {
-        'id': 'relX',
-        'fromNoteId': 'note1',
-        'toNoteId': 'note1',
-        'type': 'related',
-        'createdAt': 1000,
-        '__deleted__': 0,
-      });
-      await preMigrationDb.update('relationships', {'type': 'causality'}, where: 'id = ?', whereArgs: ['relX']);
-      final touches = await preMigrationDb.query(
-        'sync_touch_log',
-        where: 'entityTable = ? AND entityId = ? AND fieldName = ?',
-        whereArgs: ['relationships', 'relX', 'type'],
-      );
-      expect(touches, isNotEmpty);
-
-      // Running it again must be a safe no-op.
-      await service.migrateBackupDatabase(preMigrationDb, 56, 60);
-      final afterTwice = await preMigrationDb.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='trigger' "
-        "AND name LIKE 'sync_touch_%'",
-      );
-      expect(afterTwice.length, 105);
-
-      await service.close();
-      await preMigrationDb.close();
-    });
-  });
+    },
+  );
 
   group('entity-table completeness scan (every column accounted for)', () {
     final cases = <_EntityCase>[
@@ -524,6 +561,7 @@ void main() {
           'noteTypes': '',
           'includeArchived': 0,
           'isPinned': 0,
+          'isSpace': 0,
           'createdAt': 1000,
           'updatedAt': 1000,
           '__deleted__': 0,
@@ -536,6 +574,7 @@ void main() {
           'noteTypes': 'task',
           'includeArchived': 1,
           'isPinned': 1,
+          'isSpace': 1,
           'updatedAt': 2000,
           '__deleted__': 1,
         },
@@ -728,7 +767,13 @@ void main() {
           'attachmentPaths': 'a.png|b.png',
           '__deleted__': 1,
         },
-        excludedColumns: {'id', 'appId', 'revisionTimestamp', 'appCode', 'deletedAt'},
+        excludedColumns: {
+          'id',
+          'appId',
+          'revisionTimestamp',
+          'appCode',
+          'deletedAt',
+        },
       ),
       _EntityCase(
         table: 'user_app_libraries',
@@ -814,51 +859,36 @@ void main() {
           await seedFkPrerequisites();
         });
 
-        test('every real column is accounted for (sync-scope or documented exclusion)', () async {
-          final real = await realColumns(testCase.table);
-          final accounted = {
-            ...testCase.syncScopeUpdates.keys,
-            ...testCase.excludedColumns,
-          };
-          expect(
-            real,
-            accounted,
-            reason:
-                'A column exists in "${testCase.table}" that this test\'s '
-                'spec does not know about — it must be added to either '
-                'syncScopeUpdates (with a working trigger) or '
-                'excludedColumns (with a documented reason), matching '
-                '_syncEntityCaptureStatementGroups in database_service.dart. '
-                'Missing/extra: sync-scope+excluded=$accounted vs real=$real',
-          );
-        });
+        test(
+          'every real column is accounted for (sync-scope or documented exclusion)',
+          () async {
+            final real = await realColumns(testCase.table);
+            final accounted = {
+              ...testCase.syncScopeUpdates.keys,
+              ...testCase.excludedColumns,
+            };
+            expect(
+              real,
+              accounted,
+              reason:
+                  'A column exists in "${testCase.table}" that this test\'s '
+                  'spec does not know about — it must be added to either '
+                  'syncScopeUpdates (with a working trigger) or '
+                  'excludedColumns (with a documented reason), matching '
+                  '_syncEntityCaptureStatementGroups in database_service.dart. '
+                  'Missing/extra: sync-scope+excluded=$accounted vs real=$real',
+            );
+          },
+        );
 
-        test('AFTER INSERT produces exactly one whole-row __exists__ touch', () async {
-          // seedFkPrerequisites() may have already inserted this exact row
-          // (notes/conversations/conversation_messages/user_apps/
-          // user_app_libraries are both FK prerequisites AND their own test
-          // subject) -- in that case just verify the touch is already there
-          // instead of re-inserting (which would violate the PK).
-          final alreadySeeded = const {
-            'notes',
-            'conversations',
-            'conversation_messages',
-            'user_apps',
-            'user_app_libraries',
-          }.contains(testCase.table);
-          if (!alreadySeeded) {
-            await db.insert(testCase.table, testCase.baseRow);
-          }
-          expect(
-            await touchCount(testCase.table, testCase.idAsText),
-            1,
-            reason: '${testCase.table} AFTER INSERT must produce exactly '
-                'one fieldName=NULL touch row',
-          );
-        });
-
-        for (final entry in testCase.syncScopeUpdates.entries) {
-          test('AFTER UPDATE ${entry.key} produces a field touch, and only when the value actually changes', () async {
+        test(
+          'AFTER INSERT produces exactly one whole-row __exists__ touch',
+          () async {
+            // seedFkPrerequisites() may have already inserted this exact row
+            // (notes/conversations/conversation_messages/user_apps/
+            // user_app_libraries are both FK prerequisites AND their own test
+            // subject) -- in that case just verify the touch is already there
+            // instead of re-inserting (which would violate the PK).
             final alreadySeeded = const {
               'notes',
               'conversations',
@@ -869,146 +899,241 @@ void main() {
             if (!alreadySeeded) {
               await db.insert(testCase.table, testCase.baseRow);
             }
-            await db.delete('sync_touch_log'); // isolate this column's check
-
-            await db.update(
-              testCase.table,
-              {entry.key: entry.value},
-              where: '${testCase.idColumn} = ?',
-              whereArgs: [testCase.id],
-            );
             expect(
-              await touchCount(testCase.table, testCase.idAsText, field: entry.key),
+              await touchCount(testCase.table, testCase.idAsText),
               1,
-              reason: 'a genuine change to ${testCase.table}.${entry.key} '
-                  'must produce exactly one field touch',
+              reason:
+                  '${testCase.table} AFTER INSERT must produce exactly '
+                  'one fieldName=NULL touch row',
             );
+          },
+        );
 
-            // No-op: setting it to the SAME value again must not fire.
-            await db.delete('sync_touch_log');
-            await db.update(
-              testCase.table,
-              {entry.key: entry.value},
-              where: '${testCase.idColumn} = ?',
-              whereArgs: [testCase.id],
-            );
-            expect(
-              await touchCount(testCase.table, testCase.idAsText, field: entry.key),
-              0,
-              reason: 're-writing the same value must not fire the '
-                  'WHEN NEW.${entry.key} IS NOT OLD.${entry.key} guard',
-            );
-          });
+        for (final entry in testCase.syncScopeUpdates.entries) {
+          test(
+            'AFTER UPDATE ${entry.key} produces a field touch, and only when the value actually changes',
+            () async {
+              final alreadySeeded = const {
+                'notes',
+                'conversations',
+                'conversation_messages',
+                'user_apps',
+                'user_app_libraries',
+              }.contains(testCase.table);
+              if (!alreadySeeded) {
+                await db.insert(testCase.table, testCase.baseRow);
+              }
+              await db.delete('sync_touch_log'); // isolate this column's check
+
+              await db.update(
+                testCase.table,
+                {entry.key: entry.value},
+                where: '${testCase.idColumn} = ?',
+                whereArgs: [testCase.id],
+              );
+              expect(
+                await touchCount(
+                  testCase.table,
+                  testCase.idAsText,
+                  field: entry.key,
+                ),
+                1,
+                reason:
+                    'a genuine change to ${testCase.table}.${entry.key} '
+                    'must produce exactly one field touch',
+              );
+
+              // No-op: setting it to the SAME value again must not fire.
+              await db.delete('sync_touch_log');
+              await db.update(
+                testCase.table,
+                {entry.key: entry.value},
+                where: '${testCase.idColumn} = ?',
+                whereArgs: [testCase.id],
+              );
+              expect(
+                await touchCount(
+                  testCase.table,
+                  testCase.idAsText,
+                  field: entry.key,
+                ),
+                0,
+                reason:
+                    're-writing the same value must not fire the '
+                    'WHEN NEW.${entry.key} IS NOT OLD.${entry.key} guard',
+              );
+            },
+          );
         }
       });
     }
   });
 
-  group('OR-Set membership tables — AFTER INSERT/DELETE, with the disclosed fieldName deviation', () {
-    setUp(() async {
-      await db.insert('notes', {
-        'id': 'note1',
-        'title': 'T1',
-        'content': 'C1',
-        'type': 'note',
-        'createdAt': 1000,
-        'updatedAt': 1000,
+  group(
+    'OR-Set membership tables — AFTER INSERT/DELETE, with the disclosed fieldName deviation',
+    () {
+      setUp(() async {
+        await db.insert('notes', {
+          'id': 'note1',
+          'title': 'T1',
+          'content': 'C1',
+          'type': 'note',
+          'createdAt': 1000,
+          'updatedAt': 1000,
+        });
+        await db.insert('tags', {
+          'id': 'tag1',
+          'name': 'urgent',
+          'color': '#fff',
+          'createdAt': 1000,
+        });
+        await db.insert('conversations', {
+          'id': 'conv1',
+          'title': 'Conv1',
+          'createdAt': 1000,
+          'updatedAt': 1000,
+        });
+        await db.insert('conversation_messages', {
+          'id': 'msg1',
+          'type': 'user',
+          'content': 'hi',
+          'timestamp': 1000,
+        });
+        await db.insert('conversation_messages', {
+          'id': 'msg2',
+          'type': 'user',
+          'content': 'hi2',
+          'timestamp': 1000,
+        });
       });
-      await db.insert('tags', {
-        'id': 'tag1',
-        'name': 'urgent',
-        'color': '#fff',
-        'createdAt': 1000,
-      });
-      await db.insert('conversations', {
-        'id': 'conv1',
-        'title': 'Conv1',
-        'createdAt': 1000,
-        'updatedAt': 1000,
-      });
-      await db.insert('conversation_messages', {
-        'id': 'msg1',
-        'type': 'user',
-        'content': 'hi',
-        'timestamp': 1000,
-      });
-      await db.insert('conversation_messages', {
-        'id': 'msg2',
-        'type': 'user',
-        'content': 'hi2',
-        'timestamp': 1000,
-      });
-    });
 
-    test('note_tags -> notes.tags', () async {
-      await db.insert('note_tags', {'noteId': 'note1', 'tagId': 'tag1'});
-      expect(await touchCount('notes', 'note1', field: 'tags', member: 'tag1'), 1);
-      await db.delete('note_tags', where: 'noteId = ? AND tagId = ?', whereArgs: ['note1', 'tag1']);
-      expect(await touchCount('notes', 'note1', field: 'tags', member: 'tag1'), 2);
-    });
-
-    test('conversation_tags -> conversations.tags', () async {
-      await db.insert('conversation_tags', {'conversationId': 'conv1', 'tagId': 'tag1'});
-      expect(await touchCount('conversations', 'conv1', field: 'tags', member: 'tag1'), 1);
-    });
-
-    test('conversation_note_mapping -> conversations.noteIds', () async {
-      await db.insert('conversation_note_mapping', {
-        'conversationId': 'conv1',
-        'noteId': 'note1',
-        'createdAt': 1000,
+      test('note_tags -> notes.tags', () async {
+        await db.insert('note_tags', {'noteId': 'note1', 'tagId': 'tag1'});
+        expect(
+          await touchCount('notes', 'note1', field: 'tags', member: 'tag1'),
+          1,
+        );
+        await db.delete(
+          'note_tags',
+          where: 'noteId = ? AND tagId = ?',
+          whereArgs: ['note1', 'tag1'],
+        );
+        expect(
+          await touchCount('notes', 'note1', field: 'tags', member: 'tag1'),
+          2,
+        );
       });
-      expect(await touchCount('conversations', 'conv1', field: 'noteIds', member: 'note1'), 1);
-    });
 
-    test('conversation_message_mapping -> conversations.messageIds', () async {
-      await db.insert('conversation_message_mapping', {
-        'conversationId': 'conv1',
-        'messageId': 'msg1',
-        'createdAt': 1000,
+      test('conversation_tags -> conversations.tags', () async {
+        await db.insert('conversation_tags', {
+          'conversationId': 'conv1',
+          'tagId': 'tag1',
+        });
+        expect(
+          await touchCount(
+            'conversations',
+            'conv1',
+            field: 'tags',
+            member: 'tag1',
+          ),
+          1,
+        );
       });
-      expect(await touchCount('conversations', 'conv1', field: 'messageIds', member: 'msg1'), 1);
-    });
 
-    test('message_parents -> conversation_messages.parentMessageIds (msg1 owns a parent-set containing msg2)', () async {
-      await db.insert('message_parents', {
-        'id': 'mp1',
-        'messageId': 'msg1',
-        'parentMessageId': 'msg2',
-        'createdAt': 1000,
+      test('conversation_note_mapping -> conversations.noteIds', () async {
+        await db.insert('conversation_note_mapping', {
+          'conversationId': 'conv1',
+          'noteId': 'note1',
+          'createdAt': 1000,
+        });
+        expect(
+          await touchCount(
+            'conversations',
+            'conv1',
+            field: 'noteIds',
+            member: 'note1',
+          ),
+          1,
+        );
       });
-      expect(
-        await touchCount('conversation_messages', 'msg1', field: 'parentMessageIds', member: 'msg2'),
-        1,
+
+      test(
+        'conversation_message_mapping -> conversations.messageIds',
+        () async {
+          await db.insert('conversation_message_mapping', {
+            'conversationId': 'conv1',
+            'messageId': 'msg1',
+            'createdAt': 1000,
+          });
+          expect(
+            await touchCount(
+              'conversations',
+              'conv1',
+              field: 'messageIds',
+              member: 'msg1',
+            ),
+            1,
+          );
+        },
       );
-    });
 
-    test('conversations owning three independent OR-Sets stay distinguishable by fieldName', () async {
-      await db.insert('conversation_tags', {'conversationId': 'conv1', 'tagId': 'tag1'});
-      await db.insert('conversation_note_mapping', {
-        'conversationId': 'conv1',
-        'noteId': 'note1',
-        'createdAt': 1000,
-      });
-      await db.insert('conversation_message_mapping', {
-        'conversationId': 'conv1',
-        'messageId': 'msg1',
-        'createdAt': 1000,
-      });
-
-      final touches = await db.query(
-        'sync_touch_log',
-        where: "entityTable = 'conversations' AND entityId = 'conv1' AND fieldName IS NOT NULL",
+      test(
+        'message_parents -> conversation_messages.parentMessageIds (msg1 owns a parent-set containing msg2)',
+        () async {
+          await db.insert('message_parents', {
+            'id': 'mp1',
+            'messageId': 'msg1',
+            'parentMessageId': 'msg2',
+            'createdAt': 1000,
+          });
+          expect(
+            await touchCount(
+              'conversation_messages',
+              'msg1',
+              field: 'parentMessageIds',
+              member: 'msg2',
+            ),
+            1,
+          );
+        },
       );
-      final fieldNames = touches.map((r) => r['fieldName']).toSet();
-      expect(fieldNames, {'tags', 'noteIds', 'messageIds'});
-      // And each touch's memberUuid matches the member that was actually
-      // added under that field — no cross-contamination between the three
-      // sets sharing the same entityTable/entityId.
-      final byField = {for (final r in touches) r['fieldName']: r['memberUuid']};
-      expect(byField['tags'], 'tag1');
-      expect(byField['noteIds'], 'note1');
-      expect(byField['messageIds'], 'msg1');
-    });
-  });
+
+      test(
+        'conversations owning three independent OR-Sets stay distinguishable by fieldName',
+        () async {
+          await db.insert('conversation_tags', {
+            'conversationId': 'conv1',
+            'tagId': 'tag1',
+          });
+          await db.insert('conversation_note_mapping', {
+            'conversationId': 'conv1',
+            'noteId': 'note1',
+            'createdAt': 1000,
+          });
+          await db.insert('conversation_message_mapping', {
+            'conversationId': 'conv1',
+            'messageId': 'msg1',
+            'createdAt': 1000,
+          });
+
+          final touches = await db.query(
+            'sync_touch_log',
+            where:
+                "entityTable = 'conversations' AND entityId = 'conv1' AND fieldName IS NOT NULL",
+          );
+          final fieldNames = touches.map((r) => r['fieldName']).toSet();
+          expect(fieldNames, {'tags', 'noteIds', 'messageIds'});
+          // And each touch's memberUuid matches the member that was actually
+          // added under that field — no cross-contamination between the three
+          // sets sharing the same entityTable/entityId.
+          final byField = {
+            for (final r in touches) r['fieldName']: r['memberUuid'],
+          };
+          expect(byField['tags'], 'tag1');
+          expect(byField['noteIds'], 'note1');
+          expect(byField['messageIds'], 'msg1');
+        },
+      );
+    },
+  );
 }

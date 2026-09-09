@@ -7,6 +7,14 @@ class ActiveFiltersDialog extends StatelessWidget {
   final List<Filter> selectedFilters;
   final Set<String> additionalTags;
 
+  /// The active Space's name, when one is active. Shown as a top row with a
+  /// *Leave* action: this dialog is where the user goes to ask "why am I not
+  /// seeing everything", so the Space belongs at the top of the answer.
+  final String? spaceName;
+
+  /// Leaves the active Space. Null when no Space is active.
+  final VoidCallback? onLeaveSpace;
+
   final Function(Filter) onRemoveFilter;
   final VoidCallback onClearTags;
 
@@ -14,6 +22,8 @@ class ActiveFiltersDialog extends StatelessWidget {
     super.key,
     required this.selectedFilters,
     required this.additionalTags,
+    this.spaceName,
+    this.onLeaveSpace,
     required this.onRemoveFilter,
     required this.onClearTags,
   });
@@ -37,7 +47,16 @@ class ActiveFiltersDialog extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (selectedFilters.isEmpty && additionalTags.isEmpty)
+                    if (spaceName != null) ...[
+                      _buildSpaceRow(context, spaceName!),
+                      if (selectedFilters.isNotEmpty ||
+                          additionalTags.isNotEmpty)
+                        _buildSeparator(context, 'AND'),
+                    ],
+
+                    if (selectedFilters.isEmpty &&
+                        additionalTags.isEmpty &&
+                        spaceName == null)
                       const Text('No active filters.'),
 
                     ...selectedFilters.asMap().entries.map((entry) {
@@ -73,6 +92,42 @@ class ActiveFiltersDialog extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSpaceRow(BuildContext context, String name) {
+    final l10n = AppLocalizations.of(context)!;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(
+          context,
+        ).colorScheme.primaryContainer.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.workspaces_outlined, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              l10n.spaceRowLabel(name),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+          ),
+          if (onLeaveSpace != null)
+            TextButton(
+              onPressed: onLeaveSpace,
+              child: Text(l10n.leaveSpace),
+            ),
+        ],
       ),
     );
   }

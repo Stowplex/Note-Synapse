@@ -196,6 +196,49 @@ class MockModelSelector extends _i1.Mock implements _i2.ModelSelector {
           as _i3.Future<String>);
 
   @override
+  _i3.Future<String> generateFromPromptExact(
+    _i10.PromptRequest? request, {
+    required _i5.ModelConfig? config,
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    _i8.GenerationContext? generationContext,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #generateFromPromptExact,
+              [request],
+              {
+                #config: config,
+                #temperature: temperature,
+                #topK: topK,
+                #topP: topP,
+                #maxOutputTokens: maxOutputTokens,
+                #generationContext: generationContext,
+              },
+            ),
+            returnValue: _i3.Future<String>.value(
+              _i9.dummyValue<String>(
+                this,
+                Invocation.method(
+                  #generateFromPromptExact,
+                  [request],
+                  {
+                    #config: config,
+                    #temperature: temperature,
+                    #topK: topK,
+                    #topP: topP,
+                    #maxOutputTokens: maxOutputTokens,
+                    #generationContext: generationContext,
+                  },
+                ),
+              ),
+            ),
+          )
+          as _i3.Future<String>);
+
+  @override
   _i3.Future<List<Map<String, dynamic>>> generateFromPromptMultiPart(
     _i10.PromptRequest? request, {
     double? temperature,

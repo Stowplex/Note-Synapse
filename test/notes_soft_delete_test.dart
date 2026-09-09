@@ -168,7 +168,7 @@ void main() {
     });
   });
 
-  group('M1.10 notes soft-delete — migration round-trip (v52 -> v53)', () {
+  group('M1.10 notes soft-delete — migration round-trip (v53 -> v54)', () {
     late Database preMigrationDb;
 
     setUp(() async {
@@ -211,7 +211,7 @@ void main() {
         });
 
         final service = DatabaseService.createNew();
-        await service.migrateBackupDatabase(preMigrationDb, 52, 53);
+        await service.migrateBackupDatabase(preMigrationDb, 53, 54);
 
         expect(
           await _hasColumn(preMigrationDb, 'notes', '__deleted__'),
@@ -224,7 +224,7 @@ void main() {
       },
     );
 
-    test('running the v52 -> v53 migration twice does not error and leaves '
+    test('running the v53 -> v54 migration twice does not error and leaves '
         'schema/data unchanged the second time', () async {
       await preMigrationDb.insert('notes', {
         'id': 'note-1',
@@ -236,10 +236,10 @@ void main() {
       });
 
       final service = DatabaseService.createNew();
-      await service.migrateBackupDatabase(preMigrationDb, 52, 53);
+      await service.migrateBackupDatabase(preMigrationDb, 53, 54);
       final afterFirst = await preMigrationDb.query('notes', orderBy: 'id');
 
-      await service.migrateBackupDatabase(preMigrationDb, 52, 53);
+      await service.migrateBackupDatabase(preMigrationDb, 53, 54);
       final afterSecond = await preMigrationDb.query('notes', orderBy: 'id');
 
       expect(afterSecond, equals(afterFirst));

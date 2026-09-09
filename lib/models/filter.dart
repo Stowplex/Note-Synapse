@@ -14,6 +14,12 @@ class Filter {
   final List<NoteType> noteTypes;
   final bool includeArchived;
   final bool isPinned;
+
+  /// Whether this filter is usable as a *Space*: an activatable scope that
+  /// narrows every list and stamps new notes with [includeTags].
+  ///
+  /// This is a role flag, not part of the query — see [isChildOf].
+  final bool isSpace;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -26,6 +32,7 @@ class Filter {
     this.noteTypes = const [NoteType.note, NoteType.task],
     this.includeArchived = false,
     this.isPinned = false,
+    this.isSpace = false,
     required this.createdAt,
     required this.updatedAt,
   }) : id = id ?? const Uuid().v4();
@@ -42,6 +49,7 @@ class Filter {
     List<NoteType>? noteTypes,
     bool? includeArchived,
     bool? isPinned,
+    bool? isSpace,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -54,6 +62,7 @@ class Filter {
       noteTypes: noteTypes ?? this.noteTypes,
       includeArchived: includeArchived ?? this.includeArchived,
       isPinned: isPinned ?? this.isPinned,
+      isSpace: isSpace ?? this.isSpace,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -63,6 +72,12 @@ class Filter {
     return (includeText?.isNotEmpty == true) || includeTags.isNotEmpty;
   }
 
+  /// Whether this filter is a strict narrowing of [other].
+  ///
+  /// Only the *criteria* participate. [isPinned] and [isSpace] are role flags
+  /// describing how the filter is presented, not what it selects, so they are
+  /// deliberately ignored here and in [_isContentEqual]: flagging a filter as
+  /// a space must not move it in the hierarchy.
   bool isChildOf(Filter other) {
     if (id == other.id) return false;
 
@@ -107,6 +122,8 @@ class Filter {
     return true;
   }
 
+  /// Criteria-only equality. [isPinned] and [isSpace] are intentionally not
+  /// compared — see [isChildOf].
   bool _isContentEqual(Filter other) {
     if (includeText != other.includeText) return false;
     if (!_areStringListsEqual(includeTags, other.includeTags)) return false;

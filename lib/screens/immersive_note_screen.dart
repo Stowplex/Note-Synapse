@@ -56,6 +56,7 @@ import '../utils/file_utils.dart';
 import '../utils/conversation_title_directive.dart';
 import '../utils/native_capture_utils.dart';
 import '../utils/synapse_temp_utils.dart';
+import '../utils/date_utils.dart';
 import '../widgets/approval_dialog.dart';
 import '../widgets/heading_anchor_registry.dart';
 import '../widgets/interactive_checkbox_markdown.dart';
@@ -80,6 +81,8 @@ import '../models/in_note_marker.dart';
 import '../models/note_annotation.dart';
 import '../services/note_marker_service.dart';
 import '../services/note_annotation_service.dart';
+import '../services/tools/tool_outcome.dart';
+import '../services/tools/tool_param_validator.dart';
 import '../widgets/in_note_marker_badge.dart';
 import '../widgets/in_note_marker_preview.dart';
 import '../widgets/tool_orchestration_warning_dialog.dart';
@@ -613,6 +616,23 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       _aiToolBundles.isNotEmpty ||
       BuiltInToolsService.tools.isNotEmpty ||
       true; // Model features are always potential candidates
+
+  /// The declared input schema for a tool in the active tool map, if any.
+  /// Missing schemas disable validation for that call (fail open).
+  Map<String, dynamic>? _findActiveToolSchema(
+    String serviceName,
+    String toolName,
+  ) {
+    try {
+      final schema = _buildActiveToolsMap()[serviceName]
+          ?.where((tool) => tool.name == toolName)
+          .firstOrNull
+          ?.inputSchema;
+      return schema == null || schema.isEmpty ? null : schema;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Map<String, List<McpTool>> _buildActiveToolsMap() {
     final combined = <String, List<McpTool>>{};
@@ -5621,10 +5641,23 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
       enableTools: activeTools.isNotEmpty || _selectedModelFeatures.isNotEmpty,
       executeTool: (serviceName, toolName, params, context) async {
         return _runWithToolStatus(serviceName, toolName, () async {
+          // Validate against the declared schema BEFORE approval or
+          // execution — same boundary as ChatToolSession.executeTool.
+          final validation = ToolParamValidator.validateAndNormalize(
+            toolName: toolName,
+            params: params,
+            inputSchema: _findActiveToolSchema(serviceName, toolName),
+          );
+          if (validation.failure != null) {
+            return validation.failure!.serialize();
+          }
+          params = validation.params;
+
           // Handle AI Tools
           if (_aiToolBundles.containsKey(serviceName)) {
             final runtime = await _getAiToolRuntime(serviceName);
-            return runtime.invoke(toolName, params, context);
+            final result = await runtime.invoke(toolName, params, context);
+            return ToolOutcome.fromAiToolResult(toolName, result).serialize();
           }
 
           // Handle System Tools (native tools from AgentService)
@@ -5635,9 +5668,12 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 .firstOrNull;
             if (nativeTool != null) {
               final result = await nativeTool.execute(params);
-              return result is String ? result : result.toString();
+              return ToolOutcome.fromNativeResult(toolName, result).serialize();
             }
-            return 'Error: System tool "$toolName" not found';
+            return ToolOutcome.failure(
+              code: ToolOutcome.codeNotFound,
+              message: 'System tool "$toolName" not found',
+            ).serialize();
           }
 
           if (serviceName == ChatToolSession.skillToolsServiceKey) {
@@ -5656,7 +5692,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   resultStr,
                 );
               }
-              return resultStr;
+              return ToolOutcome.fromNativeResult(toolName, result).serialize();
             }
             if (_conversationService.skillDiscoveredNativeToolNames.contains(
               toolName,
@@ -5667,9 +5703,15 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   .firstOrNull;
               if (nativeTool != null) {
                 final result = await nativeTool.execute(params);
-                return result is String ? result : result.toString();
+                return ToolOutcome.fromNativeResult(
+                  toolName,
+                  result,
+                ).serialize();
               }
-              return 'Error: Native tool "$toolName" not found';
+              return ToolOutcome.failure(
+                code: ToolOutcome.codeNotFound,
+                message: 'Native tool "$toolName" not found',
+              ).serialize();
             }
             for (final entry
                 in _conversationService.skillDiscoveredBundles.entries) {
@@ -5680,7 +5722,11 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                   entry.key,
                   entry.value,
                 );
-                return runtime.invoke(toolName, params, context);
+                final result = await runtime.invoke(toolName, params, context);
+                return ToolOutcome.fromAiToolResult(
+                  toolName,
+                  result,
+                ).serialize();
               }
             }
             final endpointName =
@@ -5696,7 +5742,10 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                 generationContext: context,
               );
             }
-            return 'Error: Skill tool "$toolName" not found';
+            return ToolOutcome.failure(
+              code: ToolOutcome.codeNotFound,
+              message: 'Skill tool "$toolName" not found',
+            ).serialize();
           }
 
           // Handle MCP Tools
@@ -5756,6 +5805,9 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
     final mcpToolsPrompt = McpToolIntegrationService.buildMcpSystemPrompt(
       combinedTools,
       maxBudgetTokens: budget,
+      // Chat models get per-tool declarations, so direct calls are
+      // preferred (constrained decoding validates their arguments).
+      preferDirectCalls: true,
     );
 
     final systemAddOn = PromptConfigurationService.instance.getValue(
@@ -5773,6 +5825,8 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
         ..writeln()
         ..writeln(mcpToolsPrompt.trim());
     }
+    // Rebuild the session's index if the Space moved since skills were enabled.
+    await _conversationService.ensureSkillIndex();
     if (_conversationService.skillsEnabled &&
         _conversationService.skillIndex.isNotEmpty) {
       final isLocalModel =
@@ -7020,10 +7074,6 @@ class _RecallAnnotationsDialogState extends State<_RecallAnnotationsDialog> {
     );
   }
 
-  String _formatDate(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inDays > 0) return '${diff.inDays}d ago';
-    if (diff.inHours > 0) return '${diff.inHours}h ago';
-    return '${diff.inMinutes}m ago';
-  }
+  String _formatDate(DateTime dt) =>
+      AppDateUtils.formatRelative(dt, AppLocalizations.of(context)!);
 }

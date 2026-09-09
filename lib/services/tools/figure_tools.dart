@@ -122,6 +122,10 @@ class FigureSearchTool implements NativeTool {
   @override
   String get name => 'search_figures';
 
+  /// Read-only: this ranks material already in the index and never writes.
+  @override
+  bool get isMutating => false;
+
   @override
   String get description => '''
 Search the user's notes for visuals that already exist: figure/table regions extracted from PDFs, image attachments, and — when no figure region was extracted — the PDF pages that match. Ranked over the note index (semantic when a multimodal embedding provider is active, lexical otherwise).

@@ -149,7 +149,11 @@ class _TagDetailDialogState extends State<TagDetailDialog> {
       final binding = await _tagWorkflowService.getBindingByPattern(
         widget.tagName,
       );
-      final skillIndex = await getIt<SkillService>().buildSkillIndex();
+      // Management surface: binding a tag to a skill must be able to name a
+      // skill that belongs to another Space, so this lists everything.
+      final skillIndex = await getIt<SkillService>().buildSkillIndex(
+        allSpaces: true,
+      );
       if (!mounted) return;
       setState(() {
         _exactBinding = binding?.isPrefix == true ? null : binding;

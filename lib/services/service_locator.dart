@@ -9,9 +9,11 @@ import 'database_service.dart';
 import 'logger_service.dart';
 import 'note_modification_service.dart';
 import 'block_note_scope_service.dart';
+import 'note_merge_service.dart';
 import 'content_ingestion_service.dart';
 import 'conversation_service.dart';
 import 'user_app_service.dart';
+import 'user_app_session_service.dart';
 import 'model_storage_service.dart';
 import 'model_preference_service.dart';
 import 'model_selector.dart';
@@ -23,8 +25,10 @@ import 'agent_service.dart';
 import 'mcp_service.dart';
 import 'tag_image_service.dart';
 import 'note_marker_service.dart';
+import 'note_source_service.dart';
 import 'note_annotation_service.dart';
 import 'skill_service.dart';
+import 'space_scope_service.dart';
 import 'tag_workflow_service.dart';
 import 'fork_service.dart';
 import 'marker_chat_send_service.dart';
@@ -91,6 +95,12 @@ void setupServiceLocator() {
     getIt.registerLazySingleton<McpService>(() => McpService());
   }
 
+  // Holds the active Space. Pure tag arithmetic over prefs-backed state, so it
+  // has no dependencies; AppProvider pushes the resolved space into it.
+  if (!getIt.isRegistered<SpaceScopeService>()) {
+    getIt.registerLazySingleton<SpaceScopeService>(() => SpaceScopeService());
+  }
+
   if (!getIt.isRegistered<AppDomainGrantService>()) {
     getIt.registerLazySingleton<AppDomainGrantService>(
       () => AppDomainGrantService(),
@@ -124,6 +134,14 @@ void setupServiceLocator() {
     getIt.registerLazySingleton<TtsService>(() => TtsService());
   }
 
+  // Tracks the single User App allowed to keep running in the background.
+  // Pure in-memory navigator bookkeeping, so it has no dependencies.
+  if (!getIt.isRegistered<UserAppSessionService>()) {
+    getIt.registerLazySingleton<UserAppSessionService>(
+      () => UserAppSessionService(),
+    );
+  }
+
   // ============================================================
   // WAVE 2: Simple services - Depend only on DatabaseService
   // ============================================================
@@ -132,7 +150,14 @@ void setupServiceLocator() {
       () => NoteModificationService(
         getIt<DatabaseService>(),
         changeNotifier: getIt<DataChangeNotifier>(),
+        spaceScope: getIt<SpaceScopeService>(),
       ),
+    );
+  }
+
+  if (!getIt.isRegistered<NoteMergeService>()) {
+    getIt.registerLazySingleton<NoteMergeService>(
+      () => NoteMergeService(getIt<DatabaseService>()),
     );
   }
 
@@ -166,6 +191,12 @@ void setupServiceLocator() {
   if (!getIt.isRegistered<NoteMarkerService>()) {
     getIt.registerLazySingleton<NoteMarkerService>(
       () => NoteMarkerService(getIt<DatabaseService>()),
+    );
+  }
+
+  if (!getIt.isRegistered<NoteSourceService>()) {
+    getIt.registerLazySingleton<NoteSourceService>(
+      () => NoteSourceService(getIt<DatabaseService>()),
     );
   }
 

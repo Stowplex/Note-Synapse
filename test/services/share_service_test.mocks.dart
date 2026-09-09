@@ -6,14 +6,15 @@
 import 'dart:async' as _i9;
 import 'dart:ui' as _i2;
 
-import 'package:file_picker/file_picker.dart' as _i12;
+import 'package:file_picker/file_picker.dart' as _i13;
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i14;
+import 'package:mockito/src/dummies.dart' as _i15;
 import 'package:note_synapse/models/app_revision.dart' as _i3;
 import 'package:note_synapse/models/filter.dart' as _i8;
-import 'package:note_synapse/models/generation_context.dart' as _i13;
+import 'package:note_synapse/models/generation_context.dart' as _i14;
 import 'package:note_synapse/models/model_config.dart' as _i10;
 import 'package:note_synapse/models/note.dart' as _i6;
+import 'package:note_synapse/models/note_source.dart' as _i12;
 import 'package:note_synapse/models/relationship.dart' as _i11;
 import 'package:note_synapse/models/tag.dart' as _i7;
 import 'package:note_synapse/models/user_app.dart' as _i4;
@@ -152,6 +153,38 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
           as bool);
 
   @override
+  List<_i8.Filter> get spaces =>
+      (super.noSuchMethod(
+            Invocation.getter(#spaces),
+            returnValue: <_i8.Filter>[],
+          )
+          as List<_i8.Filter>);
+
+  @override
+  List<String> get spaceTags =>
+      (super.noSuchMethod(
+            Invocation.getter(#spaceTags),
+            returnValue: <String>[],
+          )
+          as List<String>);
+
+  @override
+  List<_i6.Note> get scopedNotes =>
+      (super.noSuchMethod(
+            Invocation.getter(#scopedNotes),
+            returnValue: <_i6.Note>[],
+          )
+          as List<_i6.Note>);
+
+  @override
+  List<String> get spacesInvalidatedByLastTagChange =>
+      (super.noSuchMethod(
+            Invocation.getter(#spacesInvalidatedByLastTagChange),
+            returnValue: <String>[],
+          )
+          as List<String>);
+
+  @override
   set newNoteFromShare(bool? value) => super.noSuchMethod(
     Invocation.setter(#newNoteFromShare, value),
     returnValueForMissingStub: null,
@@ -199,9 +232,17 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
   );
 
   @override
-  _i9.Future<void> addNote(_i6.Note? note, {bool? fromShare = false}) =>
+  _i9.Future<void> addNote(
+    _i6.Note? note, {
+    bool? fromShare = false,
+    bool? applySpaceTags = true,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#addNote, [note], {#fromShare: fromShare}),
+            Invocation.method(
+              #addNote,
+              [note],
+              {#fromShare: fromShare, #applySpaceTags: applySpaceTags},
+            ),
             returnValue: _i9.Future<void>.value(),
             returnValueForMissingStub: _i9.Future<void>.value(),
           )
@@ -306,11 +347,21 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
           as _i9.Future<List<_i6.Note>>);
 
   @override
+  _i9.Future<List<_i12.NoteSource>> getNoteSources(String? noteId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getNoteSources, [noteId]),
+            returnValue: _i9.Future<List<_i12.NoteSource>>.value(
+              <_i12.NoteSource>[],
+            ),
+          )
+          as _i9.Future<List<_i12.NoteSource>>);
+
+  @override
   _i9.Future<String> transformNote(
     _i6.Note? note,
     String? transformationPrompt, {
-    List<_i12.PlatformFile>? attachedFiles,
-    _i13.GenerationContext? generationContext,
+    List<_i13.PlatformFile>? attachedFiles,
+    _i14.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -322,7 +373,7 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
               },
             ),
             returnValue: _i9.Future<String>.value(
-              _i14.dummyValue<String>(
+              _i15.dummyValue<String>(
                 this,
                 Invocation.method(
                   #transformNote,
@@ -341,9 +392,9 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
   _i9.Future<List<_i6.Note>> createNewNotes(
     String? prompt,
     List<_i6.Note>? contextNotes, {
-    List<_i12.PlatformFile>? attachedFiles,
+    List<_i13.PlatformFile>? attachedFiles,
     bool? persist = true,
-    _i13.GenerationContext? generationContext,
+    _i14.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -377,9 +428,9 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
           as _i9.Future<void>);
 
   @override
-  List<String> getAllAvailableTags() =>
+  List<String> getAllAvailableTags({bool? scoped = true}) =>
       (super.noSuchMethod(
-            Invocation.method(#getAllAvailableTags, []),
+            Invocation.method(#getAllAvailableTags, [], {#scoped: scoped}),
             returnValue: <String>[],
           )
           as List<String>);
@@ -398,6 +449,38 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
             returnValueForMissingStub: _i9.Future<void>.value(),
           )
           as _i9.Future<void>);
+
+  @override
+  _i9.Future<bool> setActiveSpace(String? id) =>
+      (super.noSuchMethod(
+            Invocation.method(#setActiveSpace, [id]),
+            returnValue: _i9.Future<bool>.value(false),
+          )
+          as _i9.Future<bool>);
+
+  @override
+  _i9.Future<bool> joinSpace(List<String>? noteIds, String? spaceId) =>
+      (super.noSuchMethod(
+            Invocation.method(#joinSpace, [noteIds, spaceId]),
+            returnValue: _i9.Future<bool>.value(false),
+          )
+          as _i9.Future<bool>);
+
+  @override
+  _i9.Future<bool> leaveSpace(List<String>? noteIds, String? spaceId) =>
+      (super.noSuchMethod(
+            Invocation.method(#leaveSpace, [noteIds, spaceId]),
+            returnValue: _i9.Future<bool>.value(false),
+          )
+          as _i9.Future<bool>);
+
+  @override
+  int notesHiddenBySpace(List<String>? noteIds, String? spaceId) =>
+      (super.noSuchMethod(
+            Invocation.method(#notesHiddenBySpace, [noteIds, spaceId]),
+            returnValue: 0,
+          )
+          as int);
 
   @override
   _i9.Future<String?> getTagExtractionPrompt(String? tagId) =>
@@ -567,7 +650,7 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
           as _i9.Future<void>);
 
   @override
-  _i9.Future<void> batchUpdateTags(
+  _i9.Future<bool> batchUpdateTags(
     List<String>? noteIds,
     List<String>? tagsToAdd,
     List<String>? tagsToRemove,
@@ -578,10 +661,9 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
               tagsToAdd,
               tagsToRemove,
             ]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i9.Future<bool>.value(false),
           )
-          as _i9.Future<void>);
+          as _i9.Future<bool>);
 
   @override
   _i9.Future<void> upsertSubNoteInNote(String? noteId, _i6.SubNote? subNote) =>
@@ -637,9 +719,9 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
           as _i9.Future<void>);
 
   @override
-  List<_i6.Note> getFilteredNotes(_i8.Filter? filter) =>
+  List<_i6.Note> getFilteredNotes(_i8.Filter? filter, {List<_i6.Note>? base}) =>
       (super.noSuchMethod(
-            Invocation.method(#getFilteredNotes, [filter]),
+            Invocation.method(#getFilteredNotes, [filter], {#base: base}),
             returnValue: <_i6.Note>[],
           )
           as List<_i6.Note>);
@@ -714,7 +796,7 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
     List<String>? attachmentPaths,
     List<_i6.Note>? contextNotes,
     List<_i4.UserAppLibraryInfo>? libraries,
-    _i13.GenerationContext? generationContext,
+    _i14.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#createUserApp, [], {
@@ -752,7 +834,7 @@ class MockAppProvider extends _i1.Mock implements _i5.AppProvider {
     List<String>? attachmentPaths,
     List<_i6.Note>? contextNotes,
     List<_i4.UserAppLibraryInfo>? libraries,
-    _i13.GenerationContext? generationContext,
+    _i14.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#editUserApp, [], {

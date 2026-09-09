@@ -5,6 +5,7 @@ import 'package:note_synapse/services/approval_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/note_modification_service.dart';
+import 'package:note_synapse/services/note_source_service.dart';
 import 'package:note_synapse/services/tools/note_tools.dart';
 import 'package:note_synapse/models/note.dart';
 
@@ -27,6 +28,7 @@ void main() {
     getIt.registerSingleton<NoteModificationService>(
       mockNoteModificationService,
     );
+    getIt.registerSingleton<NoteSourceService>(NoteSourceService(mockDb));
     ApprovalService.resetSession();
     ApprovalService.onApprovalRequest = null;
   });
@@ -76,6 +78,80 @@ void main() {
       // This test would need a real note in the database
       // For now, we just verify the tool structure
       expect(tool.inputSchema['properties']['mode']['enum'], isNotEmpty);
+    });
+
+    group('sources', () {
+      final note = Note(
+        id: 'n1',
+        title: 'Clipped',
+        content: 'Body',
+        type: NoteType.note,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 2),
+        tags: const ['a'],
+      );
+
+      setUp(() {
+        when(mockDb.getNoteById('n1')).thenAnswer((_) async => note);
+        when(mockDb.getRelationships('n1')).thenAnswer((_) async => []);
+      });
+
+      test('description tells the model about sources', () {
+        expect(tool.description, contains('sources'));
+        expect(tool.description, contains('clippedAt'));
+      });
+
+      test(
+        'stat and full expose the clip origin, null fields omitted',
+        () async {
+          when(mockDb.getNoteMetadata('n1')).thenAnswer(
+            (_) async => {
+              'sources': [
+                {
+                  'id': 's1',
+                  'url': 'https://example.com/post/123',
+                  'title': 'Post title',
+                  'siteName': 'Example',
+                  'clippedAt': '2026-09-06T17:04:11.000Z',
+                  'kind': 'web',
+                  'method': 'extract',
+                },
+                {
+                  'id': 's2',
+                  'url': 'https://example.com/x',
+                  'method': 'manual',
+                },
+              ],
+            },
+          );
+          final expected = [
+            {
+              'url': 'https://example.com/post/123',
+              'title': 'Post title',
+              'siteName': 'Example',
+              'clippedAt': '2026-09-06T17:04:11.000Z',
+            },
+            {'url': 'https://example.com/x'},
+          ];
+
+          final stat = await tool.execute({'note_id': 'n1'});
+          final full = await tool.execute({'note_id': 'n1', 'mode': 'full'});
+
+          expect(stat['sources'], expected);
+          expect(full['metadata']['sources'], expected);
+          expect(full['metadata']['tags'], ['a']);
+        },
+      );
+
+      test('a hand-written note has an empty list', () async {
+        when(mockDb.getNoteMetadata('n1')).thenAnswer((_) async => null);
+
+        final stat = await tool.execute({'note_id': 'n1'});
+        final full = await tool.execute({'note_id': 'n1', 'mode': 'full'});
+
+        expect(stat['sources'], isEmpty);
+        expect(full['metadata']['sources'], isEmpty);
+      });
     });
   });
 
@@ -298,6 +374,132 @@ void main() {
 
       expect(result['status'], 'success');
       expect(fakeService.batchCalls, hasLength(1));
+    });
+
+    test('scalar modification item triggers neither approval nor execution '
+        '(trace payload: modification: 4)', () async {
+      var approvalRequests = 0;
+      ApprovalService.onApprovalRequest = (_) async {
+        approvalRequests++;
+        return ApprovalResult(approved: true);
+      };
+
+      final result = await tool.execute({
+        'modifications': [
+          {'note_id': 'cc1cf667', 'modification': 4},
+        ],
+      });
+
+      expect(result['code'], 'invalid_argument');
+      expect(result['error'], contains('modifications[0]'));
+      expect(result['error'], isNot(contains('is not a subtype')));
+      expect(approvalRequests, 0);
+      expect(fakeService.batchCalls, isEmpty);
+    });
+
+    test(
+      'malformed batch items are reported by index, not silently dropped',
+      () async {
+        ApprovalService.onApprovalRequest = (_) async =>
+            ApprovalResult(approved: true);
+
+        final result = await tool.execute({
+          'modifications': [
+            {
+              'note_id': 'n1',
+              'modification': {
+                'content': {'action': 'append', 'text': 'x'},
+              },
+            },
+            'Infinity',
+          ],
+        });
+
+        expect(result['code'], 'invalid_argument');
+        expect(result['error'], contains('modifications[1]'));
+        expect(result['error'], contains('Infinity'));
+        expect(fakeService.batchCalls, isEmpty);
+      },
+    );
+
+    test('empty modifications array is rejected', () async {
+      final result = await tool.execute({'modifications': []});
+      expect(result['code'], 'invalid_argument');
+      expect(result['error'], contains('non-empty'));
+    });
+
+    test('user denial carries the user_denied code', () async {
+      ApprovalService.onApprovalRequest = (_) async =>
+          ApprovalResult(approved: false);
+
+      final result = await tool.execute({
+        'modifications': [
+          {
+            'note_id': 'n1',
+            'modification': {
+              'content': {'action': 'append', 'text': 'x'},
+            },
+          },
+        ],
+      });
+
+      expect(result['code'], 'user_denied');
+      expect(fakeService.batchCalls, isEmpty);
+    });
+  });
+
+  group('ModifyNoteTool malformed arguments', () {
+    late ModifyNoteTool tool;
+
+    setUp(() {
+      tool = ModifyNoteTool();
+    });
+
+    test('string modification returns instructive error without approval '
+        '(trace payload: "Infinity")', () async {
+      var approvalRequests = 0;
+      ApprovalService.onApprovalRequest = (_) async {
+        approvalRequests++;
+        return ApprovalResult(approved: true);
+      };
+
+      final result = await tool.execute({
+        'note_id': 'n1',
+        'modification': 'Infinity',
+      });
+
+      expect(result['code'], 'invalid_argument');
+      expect(result['error'], contains('object'));
+      expect(result['error'], isNot(contains('is not a subtype')));
+      expect(approvalRequests, 0);
+    });
+
+    test('missing note_id (trace: note_id nested inside modification) '
+        'returns an instructive error instead of throwing', () async {
+      final result = await tool.execute({
+        'modification': {
+          'note_id': 'n1',
+          'content': {'action': 'replace', 'text': 'x'},
+        },
+      });
+
+      expect(result['code'], 'invalid_argument');
+      expect(result['error'], contains('note_id'));
+      expect(result['error'], isNot(contains('is not a subtype')));
+    });
+
+    test('user denial carries the user_denied code', () async {
+      ApprovalService.onApprovalRequest = (_) async =>
+          ApprovalResult(approved: false);
+
+      final result = await tool.execute({
+        'note_id': 'n1',
+        'modification': {
+          'content': {'action': 'append', 'text': 'x'},
+        },
+      });
+
+      expect(result['code'], 'user_denied');
     });
   });
 

@@ -8,6 +8,7 @@ import 'package:note_synapse/services/agent_service.dart';
 import 'package:note_synapse/services/context_manager_service.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/service_locator.dart';
+import 'package:note_synapse/services/skill_service.dart';
 import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
 import 'context_manager_service_test.mocks.dart';
@@ -407,6 +408,14 @@ void main() {
       // Register ContextManagerService so AgentService can find it
       final cms = ContextManagerService(mockModelSelector, mockAIService);
       getIt.registerSingleton<ContextManagerService>(cms);
+      // `_performTask` re-checks the Space scope against its cached skill index
+      // before building a task prompt, so the skill service must be resolvable
+      // here — and its lookup stubbed — exactly as in every other AgentService
+      // test.
+      getIt.registerSingleton<SkillService>(SkillService(mockDatabaseService));
+      when(
+        mockDatabaseService.getNotesByTag(any),
+      ).thenAnswer((_) async => const []);
       await registerTestPromptTemplateService();
 
       agentService = AgentService(

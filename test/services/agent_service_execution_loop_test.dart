@@ -352,5 +352,184 @@ void main() {
       );
       expect(task.result, equals('Done'));
     });
+
+    test('Skips a byte-equivalent repeat of a failed tool call', () async {
+      final task = AgentTask(
+        id: 't1',
+        name: 'task 1',
+        description: 'desc',
+        allowedTools: [],
+      );
+      when(
+        mockContextManager.getContext(any),
+      ).thenReturn(ContextNode(id: 'n', objective: 'o'));
+
+      // Same failing call twice (second with reordered keys), then answer.
+      final responses = [
+        '<Action type="tool"><ToolName>mock_tool</ToolName>'
+            '<Content>{"a":1,"b":2}</Content></Action>',
+        '<Action type="tool"><ToolName>mock_tool</ToolName>'
+            '<Content>{"b":2,"a":1}</Content></Action>',
+        '<Action type="answer"><Content>Done</Content></Action>',
+      ];
+      when(
+        mockAIService.generateWithAttachments(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((_) async => responses.removeAt(0));
+
+      var executions = 0;
+      agentService.toolExecutor = (service, tool, params, ctx) async {
+        executions++;
+        throw Exception('deterministic failure');
+      };
+      agentService.externalToolsForTest = {
+        'mock_service': [McpTool(name: 'mock_tool', description: 'mock')],
+      };
+
+      await agentService.performTaskForTest(task, 'ctx');
+      await agentService.performTaskForTest(task, 'ctx');
+      await agentService.performTaskForTest(task, 'ctx');
+
+      expect(executions, 1, reason: 'identical retry must not execute');
+      expect(
+        task.executionHistory.any(
+          (l) => l.contains('was NOT executed again'),
+        ),
+        isTrue,
+      );
+    });
+
+    test('Circuit breaker: variant failing calls are skipped after 3 '
+        'deterministic failures', () async {
+      final task = AgentTask(
+        id: 't1',
+        name: 'task 1',
+        description: 'desc',
+        allowedTools: [],
+      );
+      when(
+        mockContextManager.getContext(any),
+      ).thenReturn(ContextNode(id: 'n', objective: 'o'));
+
+      // Four different payloads — identity dedupe never fires.
+      final responses = [
+        for (var i = 1; i <= 4; i++)
+          '<Action type="tool"><ToolName>mock_tool</ToolName>'
+              '<Content>{"attempt":$i}</Content></Action>',
+        '<Action type="answer"><Content>Done</Content></Action>',
+      ];
+      when(
+        mockAIService.generateWithAttachments(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((_) async => responses.removeAt(0));
+
+      var executions = 0;
+      agentService.toolExecutor = (service, tool, params, ctx) async {
+        executions++;
+        throw Exception('deterministic failure ${params['attempt']}');
+      };
+      agentService.externalToolsForTest = {
+        'mock_service': [McpTool(name: 'mock_tool', description: 'mock')],
+      };
+
+      for (var i = 0; i < 5; i++) {
+        await agentService.performTaskForTest(task, 'ctx');
+      }
+
+      expect(executions, 3, reason: '4th variant must be skipped');
+      expect(
+        task.executionHistory.any(
+          (l) => l.contains('was NOT executed again'),
+        ),
+        isTrue,
+      );
+    });
+
+    test('Structured {"error": ...} tool results are recorded as failures',
+        () async {
+      final task = AgentTask(
+        id: 't1',
+        name: 'task 1',
+        description: 'desc',
+        allowedTools: [],
+      );
+      when(
+        mockContextManager.getContext(any),
+      ).thenReturn(ContextNode(id: 'n', objective: 'o'));
+
+      final responses = [
+        '<Action type="tool"><ToolName>mock_tool</ToolName>'
+            '<Content>{"x":1}</Content></Action>',
+        '<Action type="answer"><Content>Done</Content></Action>',
+      ];
+      when(
+        mockAIService.generateWithAttachments(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((_) async => responses.removeAt(0));
+
+      agentService.toolExecutor = (service, tool, params, ctx) async =>
+          '{"synapse_tool_outcome": 1, "error": {"code": "invalid_argument", '
+          '"message": "bad args", "retryable": false}}';
+      agentService.externalToolsForTest = {
+        'mock_service': [McpTool(name: 'mock_tool', description: 'mock')],
+      };
+
+      await agentService.performTaskForTest(task, 'ctx');
+      await agentService.performTaskForTest(task, 'ctx');
+
+      expect(task.toolExecutionRecords, hasLength(1));
+      expect(task.toolExecutionRecords.single.succeeded, isFalse);
+    });
+
+    test('Answer gets deterministic disclosure when all modify attempts '
+        'failed', () async {
+      final task = AgentTask(
+        id: 't1',
+        name: 'task 1',
+        description: 'desc',
+        allowedTools: [],
+      );
+      when(
+        mockContextManager.getContext(any),
+      ).thenReturn(ContextNode(id: 'n', objective: 'o'));
+
+      final responses = [
+        '<Action type="tool"><ToolName>modify_notes</ToolName>'
+            '<Content>{"modifications":[{"note_id":"n1","modification":4}]}'
+            '</Content></Action>',
+        '<Action type="answer"><Content>I updated your notes successfully!'
+            '</Content></Action>',
+      ];
+      when(
+        mockAIService.generateWithAttachments(
+          any,
+          any,
+          generationContext: anyNamed('generationContext'),
+        ),
+      ).thenAnswer((_) async => responses.removeAt(0));
+
+      agentService.toolExecutor = (service, tool, params, ctx) async =>
+          throw Exception('type cast failure');
+      agentService.externalToolsForTest = {
+        'mock_service': [McpTool(name: 'modify_notes', description: 'mock')],
+      };
+
+      await agentService.performTaskForTest(task, 'ctx');
+      await agentService.performTaskForTest(task, 'ctx');
+
+      expect(task.status, AgentTaskStatus.completed);
+      expect(task.result, contains('I updated your notes successfully!'));
+      expect(task.result, contains('Tool execution report'));
+      expect(task.result, contains('NOT applied'));
+    });
   });
 }

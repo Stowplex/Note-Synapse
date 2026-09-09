@@ -1,0 +1,1080 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cartograph app smoke</title>
+<style>
+  body { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0; padding: 16px;
+         background: #0e1013; color: #e8eaf0; }
+  .row { padding: 3px 0; border-bottom: 1px solid #262b36; }
+  .pass::before { content: 'PASS '; color: #34d399; }
+  .fail::before { content: 'FAIL '; color: #f87171; }
+  .fail { color: #f87171; }
+  pre { color: #8b93a5; white-space: pre-wrap; margin: 4px 0 8px 40px; }
+  #sum { padding: 12px 0; font-size: 15px; font-weight: 700; }
+  iframe { position: fixed; right: 8px; bottom: 8px; width: 390px; height: 700px; border: 1px solid #262b36; border-radius: 12px; }
+</style>
+</head>
+<body>
+<div id="sum">running…</div>
+<div id="out"></div>
+<iframe id="f"></iframe>
+<script>
+var results = [];
+function ok(name, cond, detail) { results.push({ name: name, pass: !!cond, detail: cond ? '' : (detail || '') }); }
+
+var FIXTURE = [
+  '# Plan',
+  '',
+  '## Design',
+  '- Colors',
+  '  - Palette',
+  '- [ ] Typography',
+  '',
+  '```js',
+  'const keep = 1;',
+  '```',
+  '',
+  '## Build',
+  '1. API',
+  '2. DB',
+  ''
+].join('\n');
+
+var f = document.getElementById('f');
+// The mock note carries one attachment, as a note with a PDF would.
+f.src = '../plugins/cartograph.html?md=' + encodeURIComponent(FIXTURE) + '&att=slides.pdf';
+
+function waitFor(test, ms) {
+  return new Promise(function (res, rej) {
+    var t0 = Date.now();
+    (function poll() {
+      var v;
+      try { v = test(); } catch (e) { v = null; }
+      if (v) return res(v);
+      if (Date.now() - t0 > (ms || 4000)) return rej(new Error('timeout'));
+      setTimeout(poll, 30);
+    })();
+  });
+}
+
+f.onload = function () {
+  var W = f.contentWindow;
+  waitFor(function () { return W.CG && W.CG.app && W.CG.app.S.booted && W.CG.app.S.doc; })
+    .then(function () { return run(W); })
+    .then(report)
+    .catch(function (e) {
+      ok('harness booted', false, String(e && e.message || e));
+      report();
+    });
+};
+
+function byText(S, t) {
+  return S.doc.nodes.filter(function (n) { return n.text === t; })[0];
+}
+function pick(W, sel, text) {
+  var all = Array.prototype.slice.call(W.document.querySelectorAll(sel));
+  for (var i = 0; i < all.length; i++) {
+    if ((all[i].textContent || '').indexOf(text) >= 0) return all[i];
+  }
+  return null;
+}
+function menuNamed(W, text) { return pick(W, '#sheet .menu-item', text); }
+function btnNamed(W, text) { return pick(W, '#sheet .btn', text); }
+function bbNamed(W, text) { return pick(W, '#bottombar .bb', text); }
+function sheetText(W) { return (W.document.querySelector('#sheet') || {}).textContent || ''; }
+function barText(W) { return (W.document.querySelector('#bottombar') || {}).textContent || ''; }
+function settle() { return new Promise(function (r) { setTimeout(r, 60); }); }
+
+function run(W) {
+  var app = W.CG.app, S = app.S, ops = app._ops;
+
+  ok('the app booted with the fixture', S.src.indexOf('## Design') >= 0);
+  ok('nodes rendered on the map', Object.keys(S.els).length >= 8, 'els=' + Object.keys(S.els).length);
+  ok('a single H1 became the map centre', S.vt.root.text === 'Plan' && S.vt.root.isRoot === true);
+
+  /* ---- a note_action launch asks first ---- */
+  ok('a note_action launch opens on a choice, not straight into the map',
+    W.document.getElementById('sheet').classList.contains('open'), 'sheet not open');
+  ok('the choice offers the note as written and an AI-generated map',
+    !!menuNamed(W, 'Map this note as written') && !!menuNamed(W, 'Generate a map with AI'), sheetText(W));
+  ok('with no map yet, none is offered to open', !menuNamed(W, 'Open the existing map'), sheetText(W));
+  ok('the map is already drawn behind the choice', Object.keys(S.els).length >= 8);
+  ok('asking wrote nothing', S.src === FIXTURE && S.undo.length === 0);
+  menuNamed(W, 'Map this note as written').click();
+  ok('choosing the note as written simply dismisses the sheet',
+    !W.document.getElementById('sheet').classList.contains('open') && S.src === FIXTURE);
+
+  // ---- add a child, then name it
+  var design = byText(S, 'Design');
+  S.selectedId = design.id;
+  ops.addChild(design);
+  return settle().then(function () {
+    ok('a new empty child was written into the markdown',
+      /- \[ \] Typography\n- \[ \] $/m.test(S.src) || /- \[ \] Typography\n- /.test(S.src), S.src);
+    ok('editing began on the new node', !!S.editingId);
+
+    // type into the live contenteditable, then commit with Enter
+    var field = S.els[S.editingId].querySelector('.label');
+    field.textContent = 'Spacing';
+    field.dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    return settle();
+  }).then(function () {
+    ok('the typed label reached the note', S.src.indexOf('Spacing') >= 0, S.src);
+    ok('a new item in a checklist is itself a task', /- \[ \] Spacing/.test(S.src), S.src);
+    ok('the code fence is untouched', S.src.indexOf('const keep = 1;') >= 0);
+    ok('Enter opened a following sibling', !!S.editingId);
+    // abandon the empty sibling
+    S.els[S.editingId].querySelector('.label').dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    return settle();
+  }).then(function () {
+    ok('abandoning a fresh node leaves no empty bullet', !/^[ \t]*- (\[[ x]\] )?$/m.test(S.src), S.src);
+    // ---- checkbox
+    var typo = byText(S, 'Typography');
+    ops.toggleCheck(typo);
+    return settle();
+  }).then(function () {
+    ok('ticking a task rewrites just that box', S.src.indexOf('- [x] Typography') >= 0, S.src);
+    var design = byText(S, 'Design');
+    var v = S.vt.byId[design.id];
+    ok('the branch rolls the task up', v && v.taskTotal >= 1 && v.taskDone >= 1, v ? v.taskDone + '/' + v.taskTotal : 'none');
+
+    // ---- indent / outdent
+    var spacing = byText(S, 'Spacing');
+    ops.indentNode(spacing);
+    return settle();
+  }).then(function () {
+    ok('indent nests under the bullet above', /- \[x\] Typography\n  - (\[ \] )?Spacing/.test(S.src), S.src);
+    ops.outdentNode(byText(S, 'Spacing'));
+    return settle();
+  }).then(function () {
+    ok('outdent lifts it back', /- \[x\] Typography\n- (\[ \] )?Spacing/.test(S.src), S.src);
+
+    // ---- reorder + ordered-list renumber
+    var db = byText(S, 'DB');
+    ops.nudge(db, -1);
+    return settle();
+  }).then(function () {
+    ok('moving an ordered item renumbers the run', /1\. DB\n2\. API/.test(S.src), S.src);
+
+    // ---- pin, and the sidecar it writes
+    var colors = byText(S, 'Colors');
+    S.pins[colors.id] = { x: 400, y: -150 };
+    W.CG.app.render();
+    return settle();
+  }).then(function () {
+    var box = S.boxes.get(byText(S, 'Colors').id);
+    ok('a pinned node is drawn at its pin', box && Math.round(box.x) === 400, box ? box.x : 'no box');
+    // force the sidecar to be written by making any edit
+    ops.toggleCheck(byText(S, 'Typography'));
+    return settle();
+  }).then(function () {
+    ok('the sidecar block was written into the note', S.src.indexOf('```synapse-cartograph') >= 0, S.src.slice(-260));
+    ok('the sidecar is one line of JSON',
+      /```synapse-cartograph\n\{[^\n]*\}\n```/.test(S.src), S.src.slice(S.src.indexOf('```synapse-cartograph')));
+
+    // ---- focus
+    var build = byText(S, 'Build');
+    ops.setFocus(build.id);
+    return settle();
+  }).then(function () {
+    ok('focus re-roots the map on that branch', S.vt.root.text === 'Build');
+    ok('focus is not written to the note', S.src.indexOf('focus') < 0);
+    ops.setFocus(null);
+    return settle();
+  }).then(function () {
+    // ---- search
+    S.query = 'api';
+    W.CG.app.render();
+    return settle();
+  }).then(function () {
+    var kept = S.vt.all.filter(function (v) { return v.keep; }).map(function (v) { return v.text; });
+    ok('search dims everything off the path', kept.indexOf('API') >= 0 && kept.indexOf('Colors') < 0, kept.join(','));
+    S.query = '';
+    W.CG.app.render();
+    return settle();
+  }).then(function () {
+    // ---- delete + undo
+    var before = S.src;
+    ops.removeNode(byText(S, 'Spacing'));
+    return settle().then(function () {
+      ok('delete removes the node', S.src.indexOf('Spacing') < 0, S.src);
+      W.CG.app.undo();
+      return settle().then(function () {
+        ok('undo restores it exactly', S.src === before, '\n--- before ---\n' + before + '\n--- after undo ---\n' + S.src);
+        ok('undo keeps the pin that was set before the edit', !!S.pins[byText(S, 'Colors').id], JSON.stringify(S.pins));
+      });
+    });
+  }).then(function () {
+    // ---- the note was actually written through the bridge (writes are debounced)
+    return new Promise(function (r) { setTimeout(r, 900); }).then(function () {
+    return W.Synapse.runQuery("SELECT content FROM notes WHERE id = 'mock-note-1'").then(function (r) {
+      var stored = r.data[0].content;
+      ok('the host note received the edits', stored.indexOf('Spacing') >= 0 && stored.indexOf('const keep = 1;') >= 0,
+        stored.slice(0, 300));
+    }); });
+  }).then(function () {
+    /*
+     * The on-screen keyboard must never cover the node being edited.
+     *
+     * Shrinking the frame is what Android does to the layout viewport when the
+     * keyboard opens, and it moves visualViewport the same way iOS does.
+     *
+     * Assertions use CG.app.nodeScreenRect(), the app's own geometry, rather
+     * than getBoundingClientRect(): headless Chrome under --virtual-time-budget
+     * never advances CSS transitions, so a painted rect stays frozen at the
+     * start of the transition even though the transform has been set.
+     */
+    var colors = byText(S, 'Colors');
+    S.selectedId = colors.id;
+    W.CG.app.render();
+    return settle().then(function () {
+      // park the node low in the frame, where a keyboard would swallow it
+      var box = S.boxes.get(colors.id);
+      S.ty = (f.clientHeight - 110) - (box.y + box.h / 2) * S.k;
+      W.CG.app.applyTransform();
+      W.CG.app._ops.beginEdit(colors.id);
+      return settle();
+    }).then(function () {
+      ok('editing began on the low node', S.editingId === colors.id, 'editingId=' + S.editingId);
+      var r = W.CG.app.nodeScreenRect(S.editingId);
+      var vis = W.CG.app.visibleRect();
+      ok('the node starts near the bottom of the frame', r.bottom > vis.bottom - 40,
+        'node bottom=' + Math.round(r.bottom) + ' visible bottom=' + Math.round(vis.bottom));
+      S.__tyBefore = S.ty;
+      S.__kBefore = S.k;
+      f.style.height = '360px';           // keyboard opens
+      return new Promise(function (r2) { setTimeout(r2, 1400); });
+    }).then(function () {
+      var vis = W.CG.app.visibleRect();
+      var r = W.CG.app.nodeScreenRect(S.editingId);
+      ok('the map was lifted when the keyboard opened',
+        Math.abs(S.ty - S.__tyBefore) > 40, 'ty ' + Math.round(S.__tyBefore) + ' -> ' + Math.round(S.ty));
+      ok('the edited node ends up above the keyboard',
+        r.bottom <= vis.bottom + 1 && r.top >= vis.top - 1,
+        'node=' + Math.round(r.top) + '..' + Math.round(r.bottom) + '  visible=' + Math.round(vis.top) + '..' + Math.round(vis.bottom));
+      ok('the correction has settled, with nothing left to move',
+        W.CG.app.keepEditingVisible() === false, 'a further correction was still pending');
+      ok('the visible band excludes the action bar',
+        vis.bottom < f.contentWindow.innerHeight - 20,
+        'visBottom=' + Math.round(vis.bottom) + ' innerHeight=' + f.contentWindow.innerHeight);
+
+      // typing more text grows the card; it must stay visible
+      var field = S.els[S.editingId].querySelector('.label');
+      field.textContent = 'Colour palette and the full type scale for every surface we ship';
+      field.dispatchEvent(new W.Event('input', { bubbles: true }));
+      return new Promise(function (r2) { setTimeout(r2, 700); });
+    }).then(function () {
+      var vis = W.CG.app.visibleRect();
+      var r = W.CG.app.nodeScreenRect(S.editingId);
+      ok('a card that grows while typing stays visible',
+        r.bottom <= vis.bottom + 1 && r.top >= vis.top - 1,
+        'node=' + Math.round(r.top) + '..' + Math.round(r.bottom) + '  visible=' + Math.round(vis.top) + '..' + Math.round(vis.bottom));
+      ok('the grown card is taller than one line', r.height > 20, 'h=' + Math.round(r.height));
+      S.els[S.editingId].querySelector('.label')
+        .dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      f.style.height = '700px';           // keyboard closes
+      return new Promise(function (r2) { setTimeout(r2, 300); });
+    }).then(function () {
+      // A keyboard is a height-only resize; re-fitting on one would throw away
+      // the frame the reader was typing into.
+      ok('the keyboard never re-fitted the map', S.k === S.__kBefore,
+        'k ' + S.__kBefore + ' -> ' + S.k);
+    });
+  }).then(function () {
+    /* =================================================================== */
+    /* v2: import, AI generation, AI refactor with a ghost preview          */
+    /* =================================================================== */
+    // Start from a known document so these do not depend on the edits above.
+    var V2 = ['# Plan', '', '## Build', '- API design', '- API docs',
+              '- Database schema', '- Caching layer', '', '## Ship', '- Beta', ''].join('\n');
+    W.CG.app.apply(V2);
+    return settle();
+  }).then(function () {
+
+    /* ---- import another note at a node ---- */
+    W.__CG_PICK__ = ['mock-note-2'];
+    var build = byText(S, 'Build');
+    W.CG.app._ops.importHere(build);
+    return settle().then(function () {
+      ok('the import sheet offers copy or link',
+        !!menuNamed(W, 'Copy it in') && !!menuNamed(W, 'Link to it instead'),
+        sheetText(W));
+      menuNamed(W, 'Copy it in').click();
+      return settle();
+    }).then(function () {
+      ok('the imported outline is grafted under the chosen node',
+        /## Build[\s\S]*Warm up[\s\S]*## Ship/.test(S.src), S.src);
+      ok('the import lands as a section, not a stray heading level',
+        /### Warm up/.test(S.src), S.src);
+      ok('the note still parses cleanly after an import', W.CG.md.coverageOf(S.src).length === 0);
+      W.CG.app.undo();
+      return settle();
+    });
+
+  }).then(function () {
+    ok('an import is one undo step', S.src.indexOf('Warm up') < 0, S.src);
+
+    /* ---- generate a map with AI, from the whole note ---- */
+    W.__CG_AI__ = ['# Plan\n\n## Build\n- API\n- Storage\n\n## Ship\n- Beta\n'];
+    W.__CG_AI_PROMPTS__ = []; W.__CG_AI_OPTS__ = [];
+    W.CG.app._ops.generateForCurrentNote();
+    return new Promise(function (r) { setTimeout(r, 300); }).then(function () {
+      ok('the generated map is previewed before anything is written',
+        !!btnNamed(W, 'Save map') && !!btnNamed(W, 'Try again'), sheetText(W));
+      ok('the source note is untouched until you save', S.src.indexOf('via=cartograph') < 0);
+      var opts = W.__CG_AI_OPTS__[0] || {};
+      ok('the note’s attachment is sent to the model with the text',
+        Array.isArray(opts.attachments) && opts.attachments[0] === '/mock/attachments/slides.pdf', JSON.stringify(opts));
+      ok('and the prompt names it', /slides\.pdf/.test(W.__CG_AI_PROMPTS__[0] || ''), W.__CG_AI_PROMPTS__[0]);
+      ok('the preview says the file was read', /read 1 attached file/.test(sheetText(W)), sheetText(W));
+      btnNamed(W, 'Save map').click();
+      return new Promise(function (r2) { setTimeout(r2, 400); });
+    }).then(function () {
+      ok('the map is saved as a companion note',
+        Object.keys(W.__mockNotes()).some(function (k) {
+          return /— map$/.test(W.__mockNotes()[k].title);
+        }), Object.keys(W.__mockNotes()).map(function (k) { return W.__mockNotes()[k].title; }).join(', '));
+      ok('the source note gains exactly one map link',
+        (S.src.match(/via=cartograph/g) || []).length === 1, S.src.slice(-200));
+      ok('the map link is undoable like any other edit', S.undo.length > 0);
+    });
+
+  }).then(function () {
+    /* ---- regenerating replaces, it does not pile up ---- */
+    var before = Object.keys(W.__mockNotes()).length;
+    W.__CG_AI__ = ['# Plan\n\n## Build\n- API only\n'];
+    W.CG.app._ops.generateForCurrentNote();
+    return settle().then(function () {
+      ok('an existing map is noticed rather than duplicated',
+        !!menuNamed(W, 'Regenerate it') && !!menuNamed(W, 'Open the existing map'), sheetText(W));
+      menuNamed(W, 'Regenerate it').click();
+      return new Promise(function (r) { setTimeout(r, 300); });
+    }).then(function () {
+      btnNamed(W, 'Save map').click();
+      return new Promise(function (r) { setTimeout(r, 400); });
+    }).then(function () {
+      ok('regeneration creates no second map note',
+        Object.keys(W.__mockNotes()).length === before,
+        before + ' -> ' + Object.keys(W.__mockNotes()).length);
+      ok('regeneration adds no second link',
+        (S.src.match(/via=cartograph/g) || []).length === 1, S.src.slice(-200));
+      var mapId = W.CG.host.mapIdIn(S.src);
+      ok('the existing map note now holds the new outline',
+        W.__mockNotes()[mapId].content.indexOf('API only') >= 0, W.__mockNotes()[mapId].content);
+    });
+
+  }).then(function () {
+    /* ---- a note that is only a PDF is still a note ---- */
+    W.__CG_AI__ = ['# Lecture slides\n\n## Week 1\n- Intro\n'];
+    W.__CG_AI_PROMPTS__ = []; W.__CG_AI_OPTS__ = [];
+    var before = Object.keys(W.__mockNotes()).length;
+    W.CG.app._ops.generateFor({ id: 'mock-note-5', title: 'Lecture slides', content: '', tags: [] }, function () {});
+    return new Promise(function (r) { setTimeout(r, 300); }).then(function () {
+      ok('an attachments-only note is not refused as empty', W.__CG_AI_PROMPTS__.length === 1, 'prompts=' + W.__CG_AI_PROMPTS__.length);
+      ok('its attachments are looked up and sent',
+        ((W.__CG_AI_OPTS__[0] || {}).attachments || [])[0] === '/mock/attachments/slides.pdf', JSON.stringify(W.__CG_AI_OPTS__[0]));
+      ok('the prompt says the files are the whole note', /no text of its own/.test(W.__CG_AI_PROMPTS__[0] || ''));
+      ok('the result is previewed like any other', !!btnNamed(W, 'Save map'), sheetText(W));
+      btnNamed(W, 'Save map').click();
+      return new Promise(function (r2) { setTimeout(r2, 400); });
+    }).then(function () {
+      ok('saving creates the companion and links it from the PDF note',
+        Object.keys(W.__mockNotes()).length === before + 1 &&
+        /via=cartograph/.test(W.__mockNotes()['mock-note-5'].content), W.__mockNotes()['mock-note-5'].content);
+
+      /* ---- and a note with neither text nor files is still refused ---- */
+      W.__CG_AI_PROMPTS__ = [];
+      W.CG.app._ops.generateFor({ id: 'mock-note-2', title: 'Blank', content: '   \n', tags: [], attachments: [] }, function () {});
+      return settle();
+    }).then(function () {
+      ok('a truly empty note makes no AI call', W.__CG_AI_PROMPTS__.length === 0);
+      ok('and says why', /no text and no attachments/.test((W.document.getElementById('toast') || {}).textContent || ''));
+    });
+
+  }).then(function () {
+    /* ---- AI refactor: select, merge, preview, apply ---- */
+    var design = byText(S, 'API design'), docs = byText(S, 'API docs');
+    W.CG.app._ops.enterSelect(design.id);
+    S.multi[docs.id] = true;
+    W.CG.app.render();
+    return settle().then(function () {
+      ok('two nodes can be selected at once', Object.keys(S.multi).length === 2);
+      ok('the bar offers the operations that need a selection',
+        !!bbNamed(W, 'Merge') && !!bbNamed(W, 'Group'), barText(W));
+      W.__CG_AI__ = ['- API design and docs\n- Storage\n  - Database schema\n  - Caching layer\n'];
+      W.CG.app._ops.runOp('merge');
+      return new Promise(function (r) { setTimeout(r, 300); });
+    }).then(function () {
+      ok('a proposal is previewed rather than applied', !!S.ghost, 'no ghost was built');
+      ok('the note is not written while the preview is up',
+        S.src.indexOf('API design and docs') < 0, S.src);
+      ok('the preview says a node was merged', /merged/.test(S.ghost.headline), S.ghost.headline);
+      ok('the merged-away node is drawn as a ghost',
+        S.vt.all.some(function (v) { return v.kind === 'ghost' && /API docs/.test(v.text); }),
+        S.vt.all.map(function (v) { return v.kind + ':' + v.text; }).join(' | '));
+      ok('the new grouping node is marked as new',
+        Object.keys(S.ghost.cls.byNew).some(function (k) {
+          return S.ghost.cls.byNew[k].state === 'new' && S.ghost.cls.byNew[k].to.text === 'Storage';
+        }));
+      ok('only the chosen branch is in play',
+        S.ghost.src.indexOf('## Ship') >= 0 && S.ghost.src.indexOf('- Beta') >= 0, S.ghost.src);
+      W.CG.app._ops.applyGhost();
+      return settle();
+    }).then(function () {
+      ok('applying the proposal writes it to the note',
+        /- API design and docs/.test(S.src) && S.src.indexOf('- API docs\n') < 0, S.src);
+      ok('the rest of the note is untouched by the refactor',
+        /## Ship\n- Beta/.test(S.src), S.src);
+      ok('select mode ends once a proposal is applied', S.selectMode === false && !S.ghost);
+      ok('a refactor is one undo step', S.undo.length > 0);
+    });
+
+  }).then(function () {
+    /* ---- discarding a proposal changes nothing ---- */
+    var before = S.src;
+    var build = byText(S, 'Build');
+    W.__CG_AI__ = ['- Everything\n'];
+    W.CG.app._ops.runRefactor('regroup', build, []);
+    return new Promise(function (r) { setTimeout(r, 300); }).then(function () {
+      ok('a destructive proposal still previews first', !!S.ghost);
+      ok('the preview counts what would be lost', /removed|merged/.test(S.ghost.headline), S.ghost.headline);
+      W.CG.app._ops.discardGhost();
+      return settle();
+    }).then(function () {
+      ok('discarding leaves the note exactly as it was', S.src === before);
+    });
+
+  }).then(function () {
+    /* ---- the AI can answer badly, and that must not corrupt anything ---- */
+    var before = S.src;
+    var build = byText(S, 'Build');
+    W.__CG_AI__ = ['I am sorry, I cannot help with that.'];
+    W.CG.app._ops.runRefactor('regroup', build, []);
+    return new Promise(function (r) { setTimeout(r, 300); }).then(function () {
+      ok('an answer with no outline in it is refused', !S.ghost);
+      ok('a refused answer leaves the note untouched', S.src === before);
+      W.__CG_AI__ = [''];
+      W.CG.app._ops.runRefactor('regroup', byText(S, 'Build'), []);
+      return new Promise(function (r) { setTimeout(r, 300); });
+    }).then(function () {
+      ok('an empty answer is refused too', !S.ghost && S.src === before);
+    });
+
+  }).then(function () {
+    /* =================================================================== */
+    /* move to a different parent                                           */
+    /* =================================================================== */
+    var V3 = ['# Plan', '', '## Design', '- Colors', '  - Palette', '- Type',
+              '', '## Build', '- API', '- DB', ''].join('\n');
+    W.CG.app.apply(V3);
+    return settle();
+  }).then(function () {
+    var colors = byText(S, 'Colors');
+    var targets = W.CG.app._ops.moveTargets([colors]);
+    var names = targets.map(function (t) { return t.top ? 'Top level' : t.node.text; });
+    ok('the picker offers the top level and other branches',
+      names.indexOf('Top level') >= 0 && names.indexOf('Build') >= 0, names.join(','));
+    ok('the picker does not offer the node itself', names.indexOf('Colors') < 0, names.join(','));
+    ok('the picker does not offer anything inside it', names.indexOf('Palette') < 0, names.join(','));
+    ok('the picker does not offer the parent it already has',
+      names.indexOf('Design') < 0, names.join(','));
+
+    W.CG.app._ops.movePicker([colors]);
+    return settle();
+  }).then(function () {
+    var rows = W.document.querySelectorAll('#sheet .move-row');
+    ok('the picker renders a row per destination', rows.length >= 3, 'rows=' + rows.length);
+    var q = W.document.getElementById('moveq');
+    q.value = 'build';
+    q.dispatchEvent(new W.Event('input', { bubbles: true }));
+    return settle();
+  }).then(function () {
+    var rows = W.document.querySelectorAll('#sheet .move-row');
+    ok('searching narrows the destinations', rows.length === 1 && /Build/.test(rows[0].textContent),
+      Array.prototype.map.call(rows, function (r) { return r.textContent; }).join(','));
+    var before = S.undo.length;
+    rows[0].click();
+    return settle().then(function () {
+      ok('the node lands under the chosen parent',
+        /## Build\n- API\n- DB\n- Colors\n  - Palette/.test(S.src), S.src);
+      ok('it is gone from where it was', !/## Design\n- Colors/.test(S.src), S.src);
+      ok('a move is a single undo step', S.undo.length === before + 1,
+        before + ' -> ' + S.undo.length);
+      ok('the moved node is selected so you can see where it went',
+        S.selectedId && S.vt.byId[S.selectedId] && S.vt.byId[S.selectedId].text === 'Colors',
+        S.selectedId ? (S.vt.byId[S.selectedId] || {}).text : 'nothing selected');
+      W.CG.app.undo();
+      return settle();
+    }).then(function () {
+      ok('undo puts it back exactly', /## Design\n- Colors\n  - Palette\n- Type/.test(S.src), S.src);
+    });
+
+  }).then(function () {
+    /* ---- a section moved under a bullet converts, and says so first ---- */
+    var build = byText(S, 'Build');
+    var targets = W.CG.app._ops.moveTargets([build]);
+    ok('moving a section under a bullet is offered, not hidden',
+      targets.some(function (t) { return !t.top && t.node.text === 'Colors'; }),
+      targets.map(function (t) { return t.top ? 'Top' : t.node.text; }).join(','));
+    W.CG.app._ops.movePicker([build]);
+    return settle().then(function () {
+      var row = pick(W, '#sheet .move-row', 'Colors');
+      ok('the row warns that the section will become a bullet',
+        !!row && /becomes a bullet/.test(row.textContent), row ? row.textContent : 'no row');
+      row.click();
+      return settle();
+    }).then(function () {
+      ok('the section arrives as bullets, correctly nested',
+        /- Colors\n  - Palette\n  - Build\n    - API\n    - DB/.test(S.src), S.src);
+      ok('no stray heading is left behind', !/#+ Build/.test(S.src), S.src);
+      ok('the note still parses cleanly', W.CG.md.coverageOf(S.src).length === 0);
+      W.CG.app.undo();
+      return settle();
+    });
+
+  }).then(function () {
+    /* ---- moving a multi-selection ---- */
+    var api = byText(S, 'API'), db = byText(S, 'DB');
+    W.CG.app._ops.enterSelect(api.id);
+    S.multi[db.id] = true;
+    W.CG.app.render();
+    return settle().then(function () {
+      ok('select mode offers Move', !!bbNamed(W, 'Move'), barText(W));
+      W.CG.app._ops.movePicker(W.CG.app._ops ? [api, db] : []);
+      return settle();
+    }).then(function () {
+      var row = pick(W, '#sheet .move-row', 'Type');
+      ok('a destination inside another branch is offered for a multi-selection', !!row, sheetText(W));
+      row.click();
+      return settle();
+    }).then(function () {
+      ok('both nodes move together, in document order',
+        /- Type\n  - API\n  - DB/.test(S.src), S.src);
+      ok('they are gone from the branch they left', /## Build\s*$/.test(S.src.replace(/\n+$/, '')), S.src);
+      ok('select mode ends after a move', S.selectMode === false);
+    });
+
+  }).then(function () {
+    /* =================================================================== */
+    /* links between unrelated nodes                                        */
+    /* =================================================================== */
+    var V4 = ['# Plan', '', '## Design', '- Colors', '  - Palette', '- Type',
+              '', '## Build', '- API', '- DB', ''].join('\n');
+    W.CG.app.apply(V4);
+    return settle();
+  }).then(function () {
+    var colors = byText(S, 'Colors');
+    W.CG.app._ops.linkPicker(colors);
+    return settle().then(function () {
+      var labels = Array.prototype.map.call(
+        W.document.querySelectorAll('#sheet .move-row'), function (r) { return r.textContent; });
+      ok('the link picker does not offer the node itself',
+        !labels.some(function (l) { return l.trim() === 'Colors'; }), labels.join(','));
+      ok('unlike Move to…, it DOES offer the node\u2019s own child',
+        labels.some(function (l) { return /Palette/.test(l); }), labels.join(','));
+      ok('and its parent, which Move to… hides',
+        labels.some(function (l) { return /Design/.test(l); }), labels.join(','));
+      ok('there is no Top level row: you cannot link to the root',
+        !labels.some(function (l) { return /Top level/.test(l); }), labels.join(','));
+
+      var before = S.undo.length;
+      pick(W, '#sheet .move-row', 'API').click();
+      return settle().then(function () {
+        ok('the link is written as a markdown anchor in the body',
+          /- Colors\n\n  \[\u2192 API\]\(#api\)/.test(S.src), S.src);
+        ok('the node\u2019s label is untouched', !!byText(S, 'Colors'), 'label changed');
+        ok('linking is one undo step', S.undo.length === before + 1);
+        ok('an edge now joins them', S.vt.crossLinks.length === 1,
+          JSON.stringify(S.vt.crossLinks));
+      });
+    });
+
+  }).then(function () {
+    /* ---- the edge has a handle you can actually hit ---- */
+    var handles = W.document.querySelectorAll('#stage .cg-link');
+    ok('the link is drawn with a handle', handles.length === 1, 'handles=' + handles.length);
+    var h = handles[0];
+    var r = h.getBoundingClientRect();
+    // Counter-scaled, so it holds its size on screen however far the map is
+    // zoomed out - the whole point of putting it outside the diagram content.
+    ok('the handle holds a real touch size whatever the zoom', r.width >= 24 && r.height >= 24,
+      Math.round(r.width) + 'x' + Math.round(r.height) + ' at k=' + S.k.toFixed(2));
+
+    // tap it, through the real gesture path
+    ['pointerdown', 'pointerup'].forEach(function (type) {
+      h.dispatchEvent(new W.PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: 7,
+        clientX: r.left + r.width / 2, clientY: r.top + r.height / 2
+      }));
+    });
+    return settle().then(function () {
+      ok('tapping the link selects both of its ends', S.selectMode === true &&
+        Object.keys(S.multi).length === 2, 'selectMode=' + S.selectMode +
+        ' selected=' + Object.keys(S.multi).length);
+      var texts = Object.keys(S.multi).map(function (id) { return S.vt.byId[id].text; }).sort();
+      ok('and they are the right two nodes', texts.join(',') === 'API,Colors', texts.join(','));
+      ok('so the AI operations become available', !!bbNamed(W, 'Merge') && !!bbNamed(W, 'Group'),
+        barText(W));
+      ok('the bar offers Unlink for a pair that is already linked', !!bbNamed(W, 'Unlink'), barText(W));
+    });
+
+  }).then(function () {
+    /* ---- unlink from the bar ---- */
+    var before = S.src;
+    bbNamed(W, 'Unlink').click();
+    return settle().then(function () {
+      ok('unlinking removes the link line', S.src.indexOf('#api)') < 0, S.src);
+      ok('and leaves the rest of the note exactly as it was',
+        S.src === before.replace(/\n\n  \[\u2192 API\]\(#api\)/, ''),
+        JSON.stringify(S.src));
+      ok('the edge is gone', S.vt.crossLinks.length === 0);
+      ok('select mode ends after unlinking', S.selectMode === false);
+    });
+
+  }).then(function () {
+    /* ---- linking from a two-node selection ---- */
+    var type = byText(S, 'Type'), db = byText(S, 'DB');
+    W.CG.app._ops.enterSelect(type.id);
+    S.multi[db.id] = true;
+    W.CG.app.render();
+    return settle().then(function () {
+      ok('two selected but unlinked nodes are offered Link', !!bbNamed(W, 'Link'), barText(W));
+      bbNamed(W, 'Link').click();
+      return settle();
+    }).then(function () {
+      ok('the pair is linked from the earlier node', /- Type\n\n  \[\u2192 DB\]\(#db\)/.test(S.src), S.src);
+      ok('and an edge appears', S.vt.crossLinks.length === 1);
+    });
+
+  }).then(function () {
+    /* ---- a rename on the map carries its links ---- */
+    var db = byText(S, 'DB');
+    S.selectedId = db.id;
+    W.CG.app.render();
+    return settle().then(function () {
+      W.CG.app._ops.beginEdit(db.id);
+      return settle();
+    }).then(function () {
+      var field = S.els[S.editingId].querySelector('.label');
+      field.textContent = 'Database';
+      field.dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      // Escape discards; commit properly instead
+      W.CG.app._ops.beginEdit(byText(S, 'DB').id);
+      return settle();
+    }).then(function () {
+      var field = S.els[S.editingId].querySelector('.label');
+      field.textContent = 'Database';
+      field.dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      return settle();
+    }).then(function () {
+      ok('renaming the target repoints the anchor', /\(#database\)/.test(S.src), S.src);
+      ok('and refreshes the generated label', /\[\u2192 Database\]/.test(S.src), S.src);
+      ok('so the link survives the rename', S.vt.crossLinks.length === 1,
+        JSON.stringify(S.vt.crossLinks));
+      ok('the note still parses cleanly', W.CG.md.coverageOf(S.src).length === 0);
+    });
+
+  }).then(function () {
+    /* =================================================================== */
+    /* attached notes as first-class cards                                  */
+    /* =================================================================== */
+    var V5 = ['# Plan', '', '## Design', '- Colors', '- Type', '', '## Build', '- API', ''].join('\n');
+    W.CG.app.apply(V5);
+    return settle();
+  }).then(function () {
+    /* ---- several notes attach at once ---- */
+    W.__CG_PICK__ = [['mock-note-2', 'mock-note-3']];
+    var before = S.undo.length;
+    W.CG.app._ops.attachExisting(byText(S, 'Colors'));
+    return settle().then(function () {
+      ok('every note the picker returned is attached, not just the first',
+        (S.src.match(/synapseresource:\/\/note\//g) || []).length === 2, S.src);
+      ok('attaching several notes is one undo step', S.undo.length === before + 1,
+        before + ' -> ' + S.undo.length);
+      ok('both become cards on the map',
+        S.vt.all.filter(function (v) { return v.kind === 'note'; }).length === 2);
+      ok('the node\u2019s own label is untouched', !!byText(S, 'Colors'));
+    });
+
+  }).then(function () {
+    /* ---- a card can be selected, but not merged ---- */
+    var card = S.vt.all.filter(function (v) { return v.kind === 'note'; })[0];
+    W.CG.app._ops.enterSelect(card.id);
+    return settle().then(function () {
+      ok('a card can be selected', !!S.multi[card.id]);
+      ok('Merge is withheld when a card is selected', !bbNamed(W, 'Merge'), barText(W));
+      ok('Group is withheld too', !bbNamed(W, 'Group'), barText(W));
+      ok('but Move and Link are offered', !!bbNamed(W, 'Move') && !!bbNamed(W, 'Link'), barText(W));
+
+      // add a node to the selection: now it is mixed
+      S.multi[byText(S, 'API').id] = true;
+      W.CG.app.render();
+      return settle();
+    }).then(function () {
+      ok('a mixed selection still offers Link', !!bbNamed(W, 'Link'), barText(W));
+      bbNamed(W, 'Move').click();
+      return settle();
+    }).then(function () {
+      // closeSheet only hides the sheet, so its previous contents linger in the
+      // DOM: assert it never OPENED rather than that it holds no rows.
+      ok('but Move on a mixed selection is refused rather than attempted',
+        !W.document.getElementById('sheet').classList.contains('open'),
+        'a picker opened: ' + sheetText(W).slice(0, 80));
+      W.CG.app._ops.exitSelect();
+      return settle();
+    });
+
+  }).then(function () {
+    /* ---- move a card to another node ---- */
+    var card = S.vt.all.filter(function (v) { return v.kind === 'note'; })[0];
+    var noteId = card.noteId;
+    W.CG.app._ops.moveCardsPicker([card]);
+    return settle().then(function () {
+      var labels = Array.prototype.map.call(
+        W.document.querySelectorAll('#sheet .move-row'), function (r) { return r.textContent; });
+      ok('the card move picker offers other nodes',
+        labels.some(function (l) { return /API/.test(l); }), labels.join(','));
+      ok('but not the node it is already on',
+        !labels.some(function (l) { return l.trim() === 'Colors'; }), labels.join(','));
+      pick(W, '#sheet .move-row', 'API').click();
+      return settle();
+    }).then(function () {
+      ok('the card moves to the chosen node',
+        new RegExp('- API\\n\\n  \\[[^\\]]*\\]\\(synapseresource://note/' + noteId).test(S.src), S.src);
+      ok('and leaves the other attachment where it was',
+        (S.src.match(/synapseresource:\/\/note\//g) || []).length === 2, S.src);
+      ok('the note still parses cleanly', W.CG.md.coverageOf(S.src).length === 0);
+    });
+
+  }).then(function () {
+    /* ---- a card can link to a node, and the link is the card's own ---- */
+    var card = S.vt.all.filter(function (v) { return v.kind === 'note'; })[0];
+    W.CG.app._ops.cardLinkPicker(card);
+    return settle().then(function () {
+      ok('the card link picker offers nodes',
+        !!pick(W, '#sheet .move-row', 'Type'), sheetText(W));
+      ok('and other attached notes as card-to-card targets',
+        !!pick(W, '#sheet .move-row', 'attached note'), sheetText(W));
+      pick(W, '#sheet .move-row', 'Type').click();
+      return settle();
+    }).then(function () {
+      ok('the link is written on the card\u2019s own line',
+        /synapseresource:\/\/note\/[^)]*\) \u2192 \[\u2192 Type\]\(#type\)/.test(S.src), S.src);
+      var fromCard = S.vt.crossLinks.filter(function (l) { return l.fromCard; });
+      ok('the edge starts at the card, not at the node holding it',
+        fromCard.length === 1 && S.vt.byId[fromCard[0].to].text === 'Type',
+        JSON.stringify(S.vt.crossLinks));
+      var owner = S.vt.byId[fromCard[0].from].ref;
+      ok('and the node owning the card claims none of it',
+        (W.CG.md.splitLinks(owner).own || []).length === 0);
+    });
+
+  }).then(function () {
+    /* ---- tapping a card link selects the card and its target ---- */
+    var h = W.document.querySelector('#stage .cg-link');
+    ok('a card link gets a handle like any other', !!h);
+    var r = h.getBoundingClientRect();
+    ['pointerdown', 'pointerup'].forEach(function (t) {
+      h.dispatchEvent(new W.PointerEvent(t, {
+        bubbles: true, cancelable: true, pointerId: 9,
+        clientX: r.left + r.width / 2, clientY: r.top + r.height / 2
+      }));
+    });
+    return settle().then(function () {
+      var kinds = Object.keys(S.multi).map(function (id) { return S.vt.byId[id].kind; }).sort();
+      ok('tapping it selects the card and the node it points at',
+        Object.keys(S.multi).length === 2 && kinds.join(',') === 'item,note', kinds.join(','));
+      ok('Unlink is offered for the pair', !!bbNamed(W, 'Unlink'), barText(W));
+      bbNamed(W, 'Unlink').click();
+      return settle();
+    }).then(function () {
+      ok('unlinking removes the card\u2019s link but keeps the attachment',
+        S.src.indexOf('#type)') < 0 &&
+        (S.src.match(/synapseresource:\/\/note\//g) || []).length === 2, S.src);
+    });
+
+  }).then(function () {
+    /* ---- detaching takes the card's own links with it ---- */
+    var card = S.vt.all.filter(function (v) { return v.kind === 'note'; })[0];
+    W.CG.app._ops.performCardLink(card, { kind: 'node', path: [0, 0, 1] });
+    return settle().then(function () {
+      var again = S.vt.all.filter(function (v) { return v.kind === 'note'; })[0];
+      W.CG.app._ops.detachNote(again);
+      return settle();
+    }).then(function () {
+      ok('detaching leaves no orphaned link behind',
+        (S.src.match(/synapseresource:\/\/note\//g) || []).length === 1, S.src);
+      ok('and the note still parses cleanly', W.CG.md.coverageOf(S.src).length === 0);
+    });
+
+  }).then(function () {
+    /* =================================================================== */
+    /* comments                                                             */
+    /* =================================================================== */
+    var V4 = ['# Plan', '', '## Design', '- Colors', '- Type', '', '  [→ Colors](#colors)', '', '## Build', '- API', ''].join('\n');
+    W.CG.app.apply(V4);
+    return settle();
+  }).then(function () {
+    var colors = byText(S, 'Colors');
+    var before = S.undo.length;
+    var c = ops.createComment([ops.anchorFromView(colors.id)], colors.id);
+    S.__cid = c && c.id;
+    ok('a comment can be created on a node', !!c && !!S.comments[c.id] && S.comments[c.id].anchors[0].n === colors.id);
+    ok('it is drawn on the map', !!W.document.querySelector('.cg-comment[data-cid="' + c.id + '"]'));
+    ok('a dotted line joins it to the node', W.document.querySelectorAll('#edges path.cg-cline').length === 1);
+    ok('it is not a node', S.vt.all.length === 6 && !S.vt.byId[c.id], 'views=' + S.vt.all.length);
+    ok('creating opens it for typing', S.editingId === 'comment:' + c.id);
+    ok('an unwritten comment reaches neither the note nor the undo stack', S.src.indexOf('"c":') < 0 && S.undo.length === before);
+    var field = W.document.querySelector('.cg-comment[data-cid="' + c.id + '"] .label');
+    field.textContent = 'Check with brand';
+    field.dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    return settle().then(function () {
+      ok('committing writes the comment into the sidecar',
+        /"c":\[\{"i":"c[a-z0-9]+","t":"Check with brand"/.test(S.src), S.src.slice(-300));
+      ok('and nowhere else in the note', S.src.split('```synapse-cartograph')[0].indexOf('Check with brand') < 0);
+      ok('a comment is one undo step', S.undo.length === before + 1);
+      ok('no node was added for it', S.doc.nodes.length === 7, 'nodes=' + S.doc.nodes.length);
+      ok('the note still parses cleanly', W.CG.md.coverageOf(S.src).length === 0);
+      ok('the comment gets its own action bar',
+        !!bbNamed(W, 'Attach') && !!bbNamed(W, 'Detach') && !!bbNamed(W, 'Delete') && !bbNamed(W, 'Child'), barText(W));
+    });
+
+  }).then(function () {
+    /* ---- it rides along with the node it points at ---- */
+    var cid = S.__cid, colors = byText(S, 'Colors');
+    var o1 = S.cpos[cid], b0 = S.boxes.get(colors.id);
+    S.pins[colors.id] = { x: 700, y: 300 };
+    W.CG.app.render();
+    return settle().then(function () {
+      var o2 = S.cpos[cid], b1 = S.boxes.get(colors.id);
+      ok('the node actually moved', Math.abs(b1.x - b0.x) > 50, b0.x + ' -> ' + b1.x);
+      // Measured from the node's centre: a pinned node grows a pin pill, so
+      // its top-left is not a stable reference.
+      ok('moving the node carries the comment along',
+        Math.abs((o2.x - (b1.x + b1.w / 2)) - (o1.x - (b0.x + b0.w / 2))) < 1 &&
+        Math.abs((o2.y - (b1.y + b1.h / 2)) - (o1.y - (b0.y + b0.h / 2))) < 1,
+        [o1.x, o1.y, b0.x, b0.y, o2.x, o2.y, b1.x, b1.y].map(Math.round).join(','));
+      delete S.pins[colors.id];
+      W.CG.app.render();
+      return settle();
+    });
+
+  }).then(function () {
+    /* ---- one comment, several targets, including a link ---- */
+    var cid = S.__cid;
+    var abs = { x: S.cpos[cid].x, y: S.cpos[cid].y };
+    // Every edit re-parses and renumbers node ids, so nodes are looked up afresh each step.
+    ops.attachComment(cid, ops.anchorFromView(byText(S, 'Type').id));
+    return settle().then(function () {
+      ok('a comment can point at a second node', S.comments[cid].anchors.length === 2);
+      ok('attaching does not move it', Math.abs(S.cpos[cid].x - abs.x) < 1 && Math.abs(S.cpos[cid].y - abs.y) < 1,
+        JSON.stringify([abs, S.cpos[cid]]));
+      ok('two dotted lines now', W.document.querySelectorAll('#edges path.cg-cline').length === 2);
+      var l = S.vt.crossLinks[0];
+      ok('the fixture has a node link to point at', !!l);
+      ops.attachComment(cid, ops.linkAnchor(l.from, l.to));
+      return settle();
+    }).then(function () {
+      var a = S.comments[cid].anchors[2];
+      ok('a comment can point at a link', a && a.kind === 'link', JSON.stringify(S.comments[cid].anchors));
+      ok('the link anchor is named by both ends', ops.anchorLabel(a) === 'Type → Colors', ops.anchorLabel(a));
+      ok('three lines, one per target', W.document.querySelectorAll('#edges path.cg-cline').length === 3);
+      ok('the sidecar records the link as a pair', /"l":\[\{"n":"n[a-z0-9]+"\},\{"n":"n[a-z0-9]+"\}\]/.test(S.src), S.src.slice(-320));
+      var again = ops.anchorFromView(byText(S, 'Type').id);
+      ok('the anchor to refuse is a real one', !!again);
+      ops.attachComment(cid, again);
+      ok('attaching twice to the same thing is refused', S.comments[cid].anchors.length === 3);
+      ops.detachComment(cid, ops.anchorFromView(byText(S, 'Type').id));
+      return settle();
+    }).then(function () {
+      ok('one target can be detached on its own', S.comments[cid].anchors.length === 2 &&
+        !S.comments[cid].anchors.some(function (a) { return a.kind === 'node' && a.n === byText(S, 'Type').id; }));
+    });
+
+  }).then(function () {
+    /* ---- dragging it somewhere keeps it anchored ---- */
+    var cid = S.__cid, c = S.comments[cid];
+    ops.commitComments(function () { ops.placeComment(c, { x: 900, y: 900 }); });
+    return settle().then(function () {
+      var b = S.boxes.get(byText(S, 'Colors').id);
+      ok('the comment is drawn where it was put', Math.abs(S.cpos[cid].x - 900) < 1 && Math.abs(S.cpos[cid].y - 900) < 1, JSON.stringify(S.cpos[cid]));
+      ok('but is stored as an offset from its node, not an absolute spot',
+        Math.abs(c.pos.x - (900 - (b.x + b.w / 2))) < 1, JSON.stringify(c.pos));
+      ok('the map fits around it too', S.lastResult.bbox.x1 >= 900);
+    });
+
+  }).then(function () {
+    /* ---- search reaches comments ---- */
+    var cid = S.__cid;
+    S.query = 'brand';
+    W.CG.app.render();
+    return settle().then(function () {
+      ok('a comment matching the search is lit',
+        W.document.querySelector('.cg-comment[data-cid="' + cid + '"]').classList.contains('match'));
+      ok('and counted among the hits', S.matches.indexOf('comment:' + cid) >= 0, JSON.stringify(S.matches));
+      S.query = 'API';
+      W.CG.app.render();
+      return settle();
+    }).then(function () {
+      ok('a comment that does not match is dimmed with the rest',
+        W.document.querySelector('.cg-comment[data-cid="' + cid + '"]').classList.contains('dim'));
+      S.query = '';
+      W.CG.app.render();
+      return settle();
+    });
+
+  }).then(function () {
+    /* ---- losing the node it hung off ---- */
+    var cid = S.__cid, colors = byText(S, 'Colors');
+    var abs = { x: S.cpos[cid].x, y: S.cpos[cid].y };
+    ops.removeNode(colors);
+    return settle().then(function () {
+      var c = S.comments[cid];
+      ok('the comment outlives the node it pointed at', !!c);
+      ok('its anchors on that node (and the link into it) are gone', c.anchors.length === 0, JSON.stringify(c.anchors));
+      ok('and it stays where it was last seen', Math.abs(c.pos.x - abs.x) < 1 && Math.abs(c.pos.y - abs.y) < 1,
+        JSON.stringify([abs, c.pos]));
+      W.CG.app.undo();
+      return settle();
+    }).then(function () {
+      var c = S.comments[cid];
+      ok('undoing the deletion brings the anchors back', c && c.anchors.length === 2 && !!byText(S, 'Colors'), JSON.stringify(c && c.anchors));
+    });
+
+  }).then(function () {
+    /* ---- a fresh comment abandoned with Escape leaves nothing ---- */
+    var n0 = Object.keys(S.comments).length, u0 = S.undo.length, src0 = S.src;
+    var c = ops.createComment([], byText(S, 'API').id);
+    ok('a floating comment needs no anchor', !!c && c.anchors.length === 0);
+    var field = W.document.querySelector('.cg-comment[data-cid="' + c.id + '"] .label');
+    field.dispatchEvent(new W.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    return settle().then(function () {
+      ok('abandoning it removes it', Object.keys(S.comments).length === n0 && !W.document.querySelector('.cg-comment[data-cid="' + c.id + '"]'));
+      ok('with no trace in the note or the undo stack', S.src === src0 && S.undo.length === u0);
+    });
+
+  }).then(function () {
+    /* ---- delete and undo ---- */
+    var cid = S.__cid;
+    ops.deleteComment(cid);
+    return settle().then(function () {
+      ok('deleting removes the comment', !S.comments[cid] && S.src.indexOf('Check with brand') < 0);
+      W.CG.app.undo();
+      return settle();
+    }).then(function () {
+      ok('undo brings it back, anchors and all', !!S.comments[cid] && S.comments[cid].anchors.length === 2 &&
+        !!W.document.querySelector('.cg-comment[data-cid="' + cid + '"]'));
+    });
+
+  }).then(function () {
+    /* ---- a reopened note finds its comments again ---- */
+    var st = { pins: {}, collapsed: {}, comments: {} };
+    var doc2 = W.CG.md.parse(S.src);
+    W.CG.sidecar.apply(doc2, st);
+    var c = st.comments[S.__cid];
+    ok('the comment is read back from the note', !!c && c.text === 'Check with brand');
+    ok('pointing at the right node in the fresh parse',
+      c && doc2.byId[c.anchors[0].n] && doc2.byId[c.anchors[0].n].text === 'Colors', JSON.stringify(c && c.anchors));
+
+  }).then(function () {
+    /* =================================================================== */
+    /* export                                                               */
+    /* =================================================================== */
+    W.__mockUpdates = [];
+    return ops.exportMap('png').then(function (okd) {
+      ok('exporting resolves', okd === true);
+      var upd = (W.__mockUpdates[W.__mockUpdates.length - 1] || [])[0];
+      var added = upd && upd.modification && upd.modification.attachments && upd.modification.attachments.added;
+      ok('the export is attached to the note being mapped', !!upd && upd.id === S.noteId, JSON.stringify(upd && upd.id));
+      ok('as one base64 PNG named after the note',
+        !!added && added.length === 1 && added[0].type === 'base64' && added[0].mimeType === 'image/png' &&
+        /— map\.png$/.test(added[0].fileName), JSON.stringify(added && added[0] && [added[0].type, added[0].mimeType, added[0].fileName]));
+      ok('the bytes are a PNG', !!added && /^iVBORw0KGgo/.test(added[0].data || ''), (added && added[0].data || '').slice(0, 20));
+      ok('nothing earlier was removed on a first export', !upd.modification.attachments.removed);
+      S.__png = added && added[0].data;
+      // Draw it back and make sure it is not a blank sheet.
+      return new Promise(function (resolve) {
+        var img = new W.Image();
+        img.onload = function () {
+          var cv = W.document.createElement('canvas');
+          cv.width = img.width; cv.height = img.height;
+          var ctx = cv.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          var px = ctx.getImageData(0, 0, cv.width, cv.height).data;
+          var dark = 0;
+          for (var i = 0; i < px.length; i += 4 * 37) if (px[i] < 200 || px[i + 1] < 200 || px[i + 2] < 200) dark++;
+          resolve({ w: img.width, h: img.height, dark: dark });
+        };
+        img.onerror = function () { resolve(null); };
+        img.src = 'data:image/png;base64,' + S.__png;
+      });
+    }).then(function (r) {
+      ok('the PNG decodes', !!r, 'image did not load');
+      ok('and is drawn at 2x', !!r && r.w > 400 && r.h > 200, r && (r.w + 'x' + r.h));
+      ok('and is not blank', !!r && r.dark > 20, r && ('dark samples=' + r.dark));
+    });
+
+  }).then(function () {
+    /* ---- exporting again replaces, it does not pile up ---- */
+    var note = W.__mockNotes()[S.noteId];
+    var firstPath = note.attachments.filter(function (a) { return /— map\.png$/.test(a.fileName); })[0].path;
+    return ops.exportMap('png').then(function () {
+      var upd = (W.__mockUpdates[W.__mockUpdates.length - 1] || [])[0];
+      var removed = upd.modification.attachments.removed || [];
+      ok('a second export removes the first file in the same write', removed.length === 1 && removed[0] === firstPath, JSON.stringify(removed));
+      ok('the human name is sent again, not the stored one', upd.modification.attachments.added[0].fileName === firstPath.split('/').pop().replace(/_[0-9a-f-]{36}\.png$/, '.png'));
+      var maps = note.attachments.filter(function (a) { return /— map\.png$/.test(a.fileName); });
+      ok('the note ends up with exactly one map image', maps.length === 1, 'maps=' + maps.length);
+      ok('the user’s own attachment is untouched', note.attachments.some(function (a) { return a.fileName === 'slides.pdf'; }));
+    });
+
+  }).then(function () {
+    /* ---- a block-scoped launch attaches to the parent note ---- */
+    var n0 = W.Synapse.Notes[0];
+    n0.isBlockScope = true; n0.parentNoteId = 'mock-note-2';
+    ok('a block launch targets its parent note', ops.exportTargetNoteId() === 'mock-note-2', ops.exportTargetNoteId());
+    delete n0.isBlockScope; delete n0.parentNoteId;
+    ok('a whole-note launch targets itself', ops.exportTargetNoteId() === S.noteId);
+
+    /* ---- refused while a proposal is pending ---- */
+    S.ghost = { headline: 'stub' };
+    var n = W.__mockUpdates.length;
+    return ops.exportMap('png').then(function (okd) {
+      S.ghost = null;
+      ok('export is refused while a proposal is pending', okd === false && W.__mockUpdates.length === n);
+    });
+
+  }).then(function () {
+    // ---- outline view renders the same tree, and lists comments after it
+    var btn = W.document.querySelector('#viewToggle button[data-mode="outline"]');
+    btn.click();
+    return settle().then(function () {
+      var rows = W.document.querySelectorAll('#ol-list .ol-row:not(.comment)');
+      ok('the outline lists every node', rows.length === S.vt.all.length, rows.length + ' vs ' + S.vt.all.length);
+      var crow = W.document.querySelector('#ol-list .ol-row.comment');
+      ok('the outline lists the comment after the tree', !!crow && /Check with brand/.test(crow.textContent), crow && crow.textContent);
+      ok('with what it points at', !!crow && /→ Colors, Type → Colors/.test(crow.textContent), crow && crow.textContent);
+      ok('but no comment sneaks into the tree itself', rows.length === S.doc.nodes.length - 1, rows.length + ' vs ' + (S.doc.nodes.length - 1));
+    });
+  });
+}
+
+function report() {
+  var out = document.getElementById('out');
+  var fails = 0;
+  results.forEach(function (r) {
+    if (!r.pass) fails++;
+    var d = document.createElement('div');
+    d.className = 'row ' + (r.pass ? 'pass' : 'fail');
+    d.textContent = r.name;
+    out.appendChild(d);
+    if (!r.pass && r.detail) { var p = document.createElement('pre'); p.textContent = r.detail; out.appendChild(p); }
+  });
+  var sum = (results.length - fails) + '/' + results.length + ' app assertions passed';
+  document.getElementById('sum').textContent = sum;
+  document.title = fails ? 'APP FAIL ' + sum : 'APP OK ' + sum;
+}
+</script>
+</body>
+</html>

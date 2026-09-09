@@ -19,7 +19,9 @@ class _FakeTagWorkflowService extends Fake implements TagWorkflowService {
 
 class _FakeSkillService extends Fake implements SkillService {
   @override
-  Future<Map<String, SkillMetadata>> buildSkillIndex() async => const {};
+  Future<Map<String, SkillMetadata>> buildSkillIndex({
+    bool allSpaces = false,
+  }) async => const {};
 }
 
 // Mock AppProvider
@@ -50,6 +52,14 @@ class MockAppProvider extends Mock implements AppProvider {
   Future<void> deleteTag(String? tagName) => super.noSuchMethod(
     Invocation.method(#deleteTag, [tagName]),
     returnValue: Future.value(),
+  );
+
+  // Read right after a tag delete or rename: deleting a Space's last include
+  // tag retires the Space, and the screen is where the user is told.
+  @override
+  List<String> get spacesInvalidatedByLastTagChange => super.noSuchMethod(
+    Invocation.getter(#spacesInvalidatedByLastTagChange),
+    returnValue: <String>[],
   );
 }
 

@@ -148,6 +148,14 @@ class MockConversationService extends _i1.Mock
           as Map<String, _i12.SkillMetadata>);
 
   @override
+  bool get isSkillIndexStale =>
+      (super.noSuchMethod(
+            Invocation.getter(#isSkillIndexStale),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
   List<_i8.McpTool> get skillDiscoveredTools =>
       (super.noSuchMethod(
             Invocation.getter(#skillDiscoveredTools),
@@ -199,6 +207,16 @@ class MockConversationService extends _i1.Mock
           as _i2.LoadSkillTool);
 
   @override
+  _i14.Future<Map<String, _i12.SkillMetadata>> ensureSkillIndex() =>
+      (super.noSuchMethod(
+            Invocation.method(#ensureSkillIndex, []),
+            returnValue: _i14.Future<Map<String, _i12.SkillMetadata>>.value(
+              <String, _i12.SkillMetadata>{},
+            ),
+          )
+          as _i14.Future<Map<String, _i12.SkillMetadata>>);
+
+  @override
   _i14.Future<void> enableSkills() =>
       (super.noSuchMethod(
             Invocation.method(#enableSkills, []),
@@ -226,11 +244,13 @@ class MockConversationService extends _i1.Mock
   _i14.Future<_i3.Conversation> createConversation({
     required String? title,
     List<String>? noteIds = const [],
+    List<String>? tags = const [],
   }) =>
       (super.noSuchMethod(
             Invocation.method(#createConversation, [], {
               #title: title,
               #noteIds: noteIds,
+              #tags: tags,
             }),
             returnValue: _i14.Future<_i3.Conversation>.value(
               _FakeConversation_1(
@@ -238,6 +258,7 @@ class MockConversationService extends _i1.Mock
                 Invocation.method(#createConversation, [], {
                   #title: title,
                   #noteIds: noteIds,
+                  #tags: tags,
                 }),
               ),
             ),
@@ -381,15 +402,19 @@ class MockConversationService extends _i1.Mock
   _i14.Future<List<_i3.Conversation>> getAllConversations({
     Duration? maxAge,
     List<String>? tagNames,
+    List<String>? scopeTags,
     List<String>? conversationIds,
     bool? includeEmpty = true,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#getAllConversations, [], {
               #maxAge: maxAge,
               #tagNames: tagNames,
+              #scopeTags: scopeTags,
               #conversationIds: conversationIds,
               #includeEmpty: includeEmpty,
+              #includeAllSpacesTag: includeAllSpacesTag,
             }),
             returnValue: _i14.Future<List<_i3.Conversation>>.value(
               <_i3.Conversation>[],
@@ -490,12 +515,16 @@ class MockConversationService extends _i1.Mock
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
+    List<String>? scopeTags,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationTree, [], {
               #maxAge: maxAge,
               #conversationIds: conversationIds,
               #tagNames: tagNames,
+              #scopeTags: scopeTags,
+              #includeAllSpacesTag: includeAllSpacesTag,
             }),
             returnValue: _i14.Future<_i3.ConversationTree?>.value(),
           )
@@ -506,12 +535,16 @@ class MockConversationService extends _i1.Mock
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
+    List<String>? scopeTags,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#refreshConversationTree, [], {
               #maxAge: maxAge,
               #conversationIds: conversationIds,
               #tagNames: tagNames,
+              #scopeTags: scopeTags,
+              #includeAllSpacesTag: includeAllSpacesTag,
             }),
             returnValue: _i14.Future<_i3.ConversationTree?>.value(),
           )
@@ -1750,14 +1783,18 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
+    List<String>? scopeTags,
     bool? includeEmpty = true,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#getAllConversations, [], {
               #maxAge: maxAge,
               #conversationIds: conversationIds,
               #tagNames: tagNames,
+              #scopeTags: scopeTags,
               #includeEmpty: includeEmpty,
+              #includeAllSpacesTag: includeAllSpacesTag,
             }),
             returnValue: _i14.Future<List<_i3.Conversation>>.value(
               <_i3.Conversation>[],
@@ -2299,9 +2336,19 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
   _i14.Future<List<_i17.Note>> searchNotesFTS(
     String? query, {
     List<String>? tags,
+    List<String>? scopeTags,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
-            Invocation.method(#searchNotesFTS, [query], {#tags: tags}),
+            Invocation.method(
+              #searchNotesFTS,
+              [query],
+              {
+                #tags: tags,
+                #scopeTags: scopeTags,
+                #includeAllSpacesTag: includeAllSpacesTag,
+              },
+            ),
             returnValue: _i14.Future<List<_i17.Note>>.value(<_i17.Note>[]),
           )
           as _i14.Future<List<_i17.Note>>);
@@ -2767,6 +2814,15 @@ class MockAgentService extends _i1.Mock implements _i27.AgentService {
     Invocation.method(#cancel, []),
     returnValueForMissingStub: null,
   );
+
+  @override
+  _i14.Future<void> refreshSkillIndexIfScopeChanged() =>
+      (super.noSuchMethod(
+            Invocation.method(#refreshSkillIndexIfScopeChanged, []),
+            returnValue: _i14.Future<void>.value(),
+            returnValueForMissingStub: _i14.Future<void>.value(),
+          )
+          as _i14.Future<void>);
 
   @override
   _i14.Future<void> runWorkflowTask({
@@ -3398,6 +3454,49 @@ class MockModelSelector extends _i1.Mock implements _i35.ModelSelector {
                   #generateFromPrompt,
                   [request],
                   {
+                    #temperature: temperature,
+                    #topK: topK,
+                    #topP: topP,
+                    #maxOutputTokens: maxOutputTokens,
+                    #generationContext: generationContext,
+                  },
+                ),
+              ),
+            ),
+          )
+          as _i14.Future<String>);
+
+  @override
+  _i14.Future<String> generateFromPromptExact(
+    _i39.PromptRequest? request, {
+    required _i30.ModelConfig? config,
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    _i38.GenerationContext? generationContext,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #generateFromPromptExact,
+              [request],
+              {
+                #config: config,
+                #temperature: temperature,
+                #topK: topK,
+                #topP: topP,
+                #maxOutputTokens: maxOutputTokens,
+                #generationContext: generationContext,
+              },
+            ),
+            returnValue: _i14.Future<String>.value(
+              _i15.dummyValue<String>(
+                this,
+                Invocation.method(
+                  #generateFromPromptExact,
+                  [request],
+                  {
+                    #config: config,
                     #temperature: temperature,
                     #topK: topK,
                     #topP: topP,

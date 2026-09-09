@@ -159,7 +159,7 @@ void main() {
     );
   });
 
-  group('M1.3 tags identity schema — migration round-trip (v47 -> v48)', () {
+  group('M1.3 tags identity schema — migration round-trip (v48 -> v49)', () {
     late Database preMigrationDb;
 
     setUp(() async {
@@ -167,7 +167,7 @@ void main() {
         inMemoryDatabasePath,
       );
 
-      // Build a v47 (pre-M1.3) database: every current-schema statement
+      // Build a v48 (pre-M1.3) database: every current-schema statement
       // EXCEPT the (now-updated) tags table and its new partial index,
       // replaced with the literal old-schema equivalents, plus the two
       // tag-referencing child tables getSchema() omits.
@@ -257,7 +257,7 @@ void main() {
         });
 
         final service = DatabaseService.createNew();
-        await service.migrateBackupDatabase(preMigrationDb, 47, 48);
+        await service.migrateBackupDatabase(preMigrationDb, 48, 49);
 
         // New columns present, existing rows carry the documented defaults.
         expect(await _hasColumn(preMigrationDb, 'tags', '__deleted__'), isTrue);
@@ -321,7 +321,7 @@ void main() {
     );
 
     test(
-      'running the v47 -> v48 migration twice does not error and leaves '
+      'running the v48 -> v49 migration twice does not error and leaves '
       'schema/data unchanged the second time',
       () async {
         await preMigrationDb.insert('tags', {
@@ -333,15 +333,15 @@ void main() {
         });
 
         final service = DatabaseService.createNew();
-        await service.migrateBackupDatabase(preMigrationDb, 47, 48);
+        await service.migrateBackupDatabase(preMigrationDb, 48, 49);
         final afterFirst = await preMigrationDb.query('tags', orderBy: 'id');
 
         // Second run is guarded by the __deleted__-column idempotency
-        // check inside _migrateToVersion48 (see its doc comment), not by
+        // check inside _migrateToVersion49 (see its doc comment), not by
         // an unconditional rename dance that would fail the second time
         // (tags_old already having been dropped) or duplicate the index
         // (already IF NOT EXISTS).
-        await service.migrateBackupDatabase(preMigrationDb, 47, 48);
+        await service.migrateBackupDatabase(preMigrationDb, 48, 49);
         final afterSecond = await preMigrationDb.query('tags', orderBy: 'id');
 
         expect(afterSecond, equals(afterFirst));

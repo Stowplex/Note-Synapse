@@ -137,7 +137,7 @@ void main() {
     });
   });
 
-  group('M1.11 migration round-trip (v53 -> v54)', () {
+  group('M1.11 migration round-trip (v54 -> v55)', () {
     late Database preMigrationDb;
 
     setUp(() async {
@@ -206,7 +206,7 @@ void main() {
         });
 
         final service = DatabaseService.createNew();
-        await service.migrateBackupDatabase(preMigrationDb, 53, 54);
+        await service.migrateBackupDatabase(preMigrationDb, 54, 55);
 
         expect(
           await _hasColumn(preMigrationDb, 'subnotes', '__deleted__'),
@@ -227,7 +227,7 @@ void main() {
       },
     );
 
-    test('running the v53 -> v54 migration twice does not error and leaves '
+    test('running the v54 -> v55 migration twice does not error and leaves '
         'schema/data unchanged the second time', () async {
       await preMigrationDb.insert('subnotes', {
         'id': 'sub-1',
@@ -239,10 +239,10 @@ void main() {
       });
 
       final service = DatabaseService.createNew();
-      await service.migrateBackupDatabase(preMigrationDb, 53, 54);
+      await service.migrateBackupDatabase(preMigrationDb, 54, 55);
       final afterFirst = await preMigrationDb.query('subnotes', orderBy: 'id');
 
-      await service.migrateBackupDatabase(preMigrationDb, 53, 54);
+      await service.migrateBackupDatabase(preMigrationDb, 54, 55);
       final afterSecond = await preMigrationDb.query('subnotes', orderBy: 'id');
 
       expect(afterSecond, equals(afterFirst));

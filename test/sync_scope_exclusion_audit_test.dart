@@ -148,8 +148,14 @@ final List<TableAudit> kTableAudits = [
     idColumn: 'id',
     excluded: const [
       ExcludedColumn('id', 'primary key'),
-      ExcludedColumn('noteId', 'owner FK, never reassigned in place — a subnote "move" is delete-and-recreate'),
-      ExcludedColumn('createdAt', 'derived at materialization time from the __exists__ operation\'s own HLC'),
+      ExcludedColumn(
+        'noteId',
+        'owner FK, never reassigned in place — a subnote "move" is delete-and-recreate',
+      ),
+      ExcludedColumn(
+        'createdAt',
+        'derived at materialization time from the __exists__ operation\'s own HLC',
+      ),
     ],
     insertSites: {
       'lib/services/database_service.dart::insertSubNote',
@@ -165,7 +171,10 @@ final List<TableAudit> kTableAudits = [
     idColumn: 'id',
     excluded: const [
       ExcludedColumn('id', 'primary key'),
-      ExcludedColumn('createdAt', 'derived at materialization time from the __exists__ operation\'s own HLC'),
+      ExcludedColumn(
+        'createdAt',
+        'derived at materialization time from the __exists__ operation\'s own HLC',
+      ),
       ExcludedColumn(
         'usageCount',
         'confirmed dead: every live insert site pins it to the literal constant 0, and no update call site '
@@ -177,6 +186,15 @@ final List<TableAudit> kTableAudits = [
       'lib/services/database_service.dart::insertTag',
       'lib/services/database_service.dart::getOrCreateLiveTagId',
       'lib/services/database_service.dart::replaceTag',
+      // Migration 47 mints the reserved `all-spaces` tag. Re-examined against
+      // every excluded column, as this audit requires: `id` is a *frozen
+      // literal* (_allSpacesTagIdV47) precisely so every database mints the
+      // same row and recovery's merge-by-name is a no-op — the opposite of a
+      // per-row-varying value; `createdAt` is a local wall-clock but stays
+      // excluded, so replicas derive their own from the __exists__ HLC as
+      // they do for every other tag; `usageCount` is pinned to the literal 0,
+      // matching the live insert sites the exclusion reasoning was built on.
+      'lib/services/database_service.dart::_migrateToVersion47',
     },
     updateSites: {
       'lib/services/database_service.dart::deleteTag',
@@ -188,7 +206,10 @@ final List<TableAudit> kTableAudits = [
     idColumn: 'id',
     excluded: const [
       ExcludedColumn('id', 'primary key'),
-      ExcludedColumn('createdAt', 'derived at materialization time from the __exists__ operation\'s own HLC'),
+      ExcludedColumn(
+        'createdAt',
+        'derived at materialization time from the __exists__ operation\'s own HLC',
+      ),
     ],
     insertSites: {'lib/services/database_service.dart::insertFilter'},
     updateSites: {
@@ -203,7 +224,10 @@ final List<TableAudit> kTableAudits = [
       ExcludedColumn('id', 'primary key'),
       ExcludedColumn('fromNoteId', 'endpoint FK, never reassigned in place'),
       ExcludedColumn('toNoteId', 'endpoint FK, never reassigned in place'),
-      ExcludedColumn('createdAt', 'derived at materialization time from the __exists__ operation\'s own HLC'),
+      ExcludedColumn(
+        'createdAt',
+        'derived at materialization time from the __exists__ operation\'s own HLC',
+      ),
     ],
     insertSites: {
       'lib/services/database_service.dart::insertRelationship',
@@ -230,7 +254,10 @@ final List<TableAudit> kTableAudits = [
     idColumn: 'id',
     excluded: const [
       ExcludedColumn('id', 'primary key'),
-      ExcludedColumn('createdAt', 'derived at materialization time from the __exists__ operation\'s own HLC'),
+      ExcludedColumn(
+        'createdAt',
+        'derived at materialization time from the __exists__ operation\'s own HLC',
+      ),
       ExcludedColumn(
         'noteIds',
         'confirmed dead: both the live insert site and the live update site unconditionally pin it to the '
@@ -260,7 +287,9 @@ final List<TableAudit> kTableAudits = [
             'own HLC (the live update site round-trips the same unchanged value, never actually changing it)',
       ),
     ],
-    insertSites: {'lib/services/database_service.dart::insertConversationMessage'},
+    insertSites: {
+      'lib/services/database_service.dart::insertConversationMessage',
+    },
     updateSites: {
       'lib/services/database_service.dart::updateConversationMessage',
       'lib/services/database_service.dart::_deleteMessagesBatch',
@@ -272,9 +301,14 @@ final List<TableAudit> kTableAudits = [
     excluded: const [
       ExcludedColumn('id', 'primary key'),
       ExcludedColumn('messageId', 'owner FK, never reassigned in place'),
-      ExcludedColumn('createdAt', 'derived at materialization time from the __exists__ operation\'s own HLC'),
+      ExcludedColumn(
+        'createdAt',
+        'derived at materialization time from the __exists__ operation\'s own HLC',
+      ),
     ],
-    insertSites: {'lib/services/database_service.dart::insertConversationAttachment'},
+    insertSites: {
+      'lib/services/database_service.dart::insertConversationAttachment',
+    },
     updateSites: {
       'lib/services/database_service.dart::deleteConversationAttachment',
       'lib/services/database_service.dart::_deleteMessagesBatch',
@@ -293,11 +327,12 @@ final List<TableAudit> kTableAudits = [
     excluded: const [
       ExcludedColumn('id', 'primary key'),
       ExcludedColumn('noteId', 'owner FK, never reassigned in place'),
-      ExcludedColumn('createdAt', 'derived at materialization time from the __exists__ operation\'s own HLC'),
+      ExcludedColumn(
+        'createdAt',
+        'derived at materialization time from the __exists__ operation\'s own HLC',
+      ),
     ],
-    insertSites: {
-      'lib/services/database_service.dart::_insertAttachmentRow',
-    },
+    insertSites: {'lib/services/database_service.dart::_insertAttachmentRow'},
     updateSites: {
       'lib/services/database_service.dart::updateAttachmentAIContext',
       'lib/services/database_service.dart::updateAttachmentMetadata',
@@ -311,8 +346,14 @@ final List<TableAudit> kTableAudits = [
     idColumn: 'id',
     excluded: const [
       ExcludedColumn('id', 'primary key'),
-      ExcludedColumn('uuid', 'stable identity column (CLAUDE.md: "user_app.uuid is the effective primary key")'),
-      ExcludedColumn('createdAt', 'derived at materialization time from the __exists__ operation\'s own HLC'),
+      ExcludedColumn(
+        'uuid',
+        'stable identity column (CLAUDE.md: "user_app.uuid is the effective primary key")',
+      ),
+      ExcludedColumn(
+        'createdAt',
+        'derived at materialization time from the __exists__ operation\'s own HLC',
+      ),
     ],
     insertSites: {'lib/services/database_service.dart::insertUserApp'},
     updateSites: {
@@ -327,7 +368,10 @@ final List<TableAudit> kTableAudits = [
     excluded: const [
       ExcludedColumn('id', 'primary key'),
       ExcludedColumn('appId', 'owner FK, never reassigned in place'),
-      ExcludedColumn('revisionTimestamp', 'this table\'s createdAt-equivalent — derived from the __exists__ HLC'),
+      ExcludedColumn(
+        'revisionTimestamp',
+        'this table\'s createdAt-equivalent — derived from the __exists__ HLC',
+      ),
       ExcludedColumn(
         'deletedAt',
         'fallback-selection tie-break bookkeeping (computeAppRevisionVisibility), always written in the same '
@@ -361,8 +405,12 @@ final List<TableAudit> kTableAudits = [
             'content-addressed-blob-sync/M3-deferred reasoning as app_revisions.appCode above',
       ),
     ],
-    insertSites: {'lib/services/database_service.dart::insertUserAppLibraryDependency'},
-    updateSites: {'lib/services/database_service.dart::deleteUserAppLibraryDependency'},
+    insertSites: {
+      'lib/services/database_service.dart::insertUserAppLibraryDependency',
+    },
+    updateSites: {
+      'lib/services/database_service.dart::deleteUserAppLibraryDependency',
+    },
   ),
 ];
 
@@ -379,8 +427,12 @@ final RegExp _kFunctionStart = RegExp(
 final RegExp _kInsertCall = RegExp(r'\b(db|txn)\.(insert|rawInsert)\(');
 final RegExp _kUpdateCall = RegExp(r'\b(db|txn)\.(update|rawUpdate)\(');
 
-final RegExp _kInsertTableArg = RegExp(r"""\.insert\(\s*\n?\s*'([a-zA-Z_]+)'""");
-final RegExp _kUpdateTableArg = RegExp(r"""\.update\(\s*\n?\s*'([a-zA-Z_]+)'""");
+final RegExp _kInsertTableArg = RegExp(
+  r"""\.insert\(\s*\n?\s*'([a-zA-Z_]+)'""",
+);
+final RegExp _kUpdateTableArg = RegExp(
+  r"""\.update\(\s*\n?\s*'([a-zA-Z_]+)'""",
+);
 final RegExp _kRawInsertTableArg = RegExp(
   r'''\.rawInsert\(\s*\n?\s*['"]INSERT\s+(?:OR\s+\w+\s+)?INTO\s+(\w+)''',
   caseSensitive: false,
@@ -404,7 +456,11 @@ Map<String, Set<String>> _scanCallSites({
       .listSync(recursive: true)
       .whereType<File>()
       .where((f) => f.path.endsWith('.dart'))
-      .where((f) => !excludeDirs.any((d) => f.path.replaceAll('\\', '/').contains('/$d/')));
+      .where(
+        (f) => !excludeDirs.any(
+          (d) => f.path.replaceAll('\\', '/').contains('/$d/'),
+        ),
+      );
 
   for (final file in files) {
     final path = file.path.replaceAll('\\', '/');
@@ -435,29 +491,35 @@ Map<String, Set<String>> _scanCallSites({
         if (lines[j].contains(';')) break;
       }
       final bufStr = buf.toString();
-      final table = tableArgPattern.firstMatch(bufStr)?.group(1) ?? rawTableArgPattern.firstMatch(bufStr)?.group(1);
+      final table =
+          tableArgPattern.firstMatch(bufStr)?.group(1) ??
+          rawTableArgPattern.firstMatch(bufStr)?.group(1);
       if (table == null) continue;
-      byTable.putIfAbsent(table, () => {}).add('$path::${enclosingFunction(i)}');
+      byTable
+          .putIfAbsent(table, () => {})
+          .add('$path::${enclosingFunction(i)}');
     }
   }
   return byTable;
 }
 
-Map<String, Set<String>> scanInsertSites({String root = 'lib'}) => _scanCallSites(
-  root: root,
-  callPattern: _kInsertCall,
-  tableArgPattern: _kInsertTableArg,
-  rawTableArgPattern: _kRawInsertTableArg,
-  excludeDirs: const {'sync'},
-);
+Map<String, Set<String>> scanInsertSites({String root = 'lib'}) =>
+    _scanCallSites(
+      root: root,
+      callPattern: _kInsertCall,
+      tableArgPattern: _kInsertTableArg,
+      rawTableArgPattern: _kRawInsertTableArg,
+      excludeDirs: const {'sync'},
+    );
 
-Map<String, Set<String>> scanUpdateSites({String root = 'lib'}) => _scanCallSites(
-  root: root,
-  callPattern: _kUpdateCall,
-  tableArgPattern: _kUpdateTableArg,
-  rawTableArgPattern: _kRawUpdateTableArg,
-  excludeDirs: const {'sync'},
-);
+Map<String, Set<String>> scanUpdateSites({String root = 'lib'}) =>
+    _scanCallSites(
+      root: root,
+      callPattern: _kUpdateCall,
+      tableArgPattern: _kUpdateTableArg,
+      rawTableArgPattern: _kRawUpdateTableArg,
+      excludeDirs: const {'sync'},
+    );
 
 String _diffMessage(String label, Set<String> live, Set<String> baseline) {
   final added = live.difference(baseline).toList()..sort();
@@ -509,42 +571,71 @@ void main() {
 
   for (final audit in kTableAudits) {
     group(audit.table, () {
-      test('every excluded column exactly matches the checked-in, documented baseline', () async {
-        final realColumns = (await db.rawQuery("PRAGMA table_info('${audit.table}')"))
-            .map((r) => r['name'] as String)
-            .toSet();
-        final syncScopeColumns = DatabaseService.syncEntityCaptureScopes
-            .firstWhere((s) => s.table == audit.table)
-            .syncScopeColumns
-            .toSet();
-        final liveExcluded = realColumns.difference(syncScopeColumns);
-        expect(
-          liveExcluded,
-          audit.excludedColumnNames,
-          reason:
-              '${audit.table}: live-scanned excluded-column set (real columns minus syncScopeColumns) disagrees '
-              'with this file\'s checked-in baseline. A column newly missing from BOTH syncScopeColumns and this '
-              'baseline is exactly the class of silent gap this audit exists to prevent — added: '
-              '${liveExcluded.difference(audit.excludedColumnNames)}, removed: '
-              '${audit.excludedColumnNames.difference(liveExcluded)}',
-        );
-      });
+      test(
+        'every excluded column exactly matches the checked-in, documented baseline',
+        () async {
+          final realColumns = (await db.rawQuery(
+            "PRAGMA table_info('${audit.table}')",
+          )).map((r) => r['name'] as String).toSet();
+          final syncScopeColumns = DatabaseService.syncEntityCaptureScopes
+              .firstWhere((s) => s.table == audit.table)
+              .syncScopeColumns
+              .toSet();
+          final liveExcluded = realColumns.difference(syncScopeColumns);
+          expect(
+            liveExcluded,
+            audit.excludedColumnNames,
+            reason:
+                '${audit.table}: live-scanned excluded-column set (real columns minus syncScopeColumns) disagrees '
+                'with this file\'s checked-in baseline. A column newly missing from BOTH syncScopeColumns and this '
+                'baseline is exactly the class of silent gap this audit exists to prevent — added: '
+                '${liveExcluded.difference(audit.excludedColumnNames)}, removed: '
+                '${audit.excludedColumnNames.difference(liveExcluded)}',
+          );
+        },
+      );
 
       test('every excluded column has a non-empty, checked-in reason', () {
         for (final e in audit.excluded) {
-          expect(e.reason.trim(), isNotEmpty, reason: '${audit.table}.${e.column} has no documented reason');
+          expect(
+            e.reason.trim(),
+            isNotEmpty,
+            reason: '${audit.table}.${e.column} has no documented reason',
+          );
         }
       });
 
-      test('live INSERT call sites against this table exactly match the checked-in baseline', () {
-        final live = liveInsertSites[audit.table] ?? <String>{};
-        expect(live, audit.insertSites, reason: _diffMessage('${audit.table} INSERT sites', live, audit.insertSites));
-      });
+      test(
+        'live INSERT call sites against this table exactly match the checked-in baseline',
+        () {
+          final live = liveInsertSites[audit.table] ?? <String>{};
+          expect(
+            live,
+            audit.insertSites,
+            reason: _diffMessage(
+              '${audit.table} INSERT sites',
+              live,
+              audit.insertSites,
+            ),
+          );
+        },
+      );
 
-      test('live UPDATE call sites against this table exactly match the checked-in baseline', () {
-        final live = liveUpdateSites[audit.table] ?? <String>{};
-        expect(live, audit.updateSites, reason: _diffMessage('${audit.table} UPDATE sites', live, audit.updateSites));
-      });
+      test(
+        'live UPDATE call sites against this table exactly match the checked-in baseline',
+        () {
+          final live = liveUpdateSites[audit.table] ?? <String>{};
+          expect(
+            live,
+            audit.updateSites,
+            reason: _diffMessage(
+              '${audit.table} UPDATE sites',
+              live,
+              audit.updateSites,
+            ),
+          );
+        },
+      );
     });
   }
 }

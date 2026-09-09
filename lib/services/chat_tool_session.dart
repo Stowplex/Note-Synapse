@@ -19,6 +19,8 @@ import 'mcp_tool_integration_service.dart';
 import 'service_locator.dart';
 import 'skill_service.dart';
 import 'sql_query_service.dart';
+import 'tools/tool_outcome.dart';
+import 'tools/tool_param_validator.dart';
 import 'user_app_service.dart';
 
 typedef ToolStatusLabelBuilder =
@@ -381,9 +383,30 @@ class ChatToolSession extends ChangeNotifier {
     GenerationContext generationContext,
   ) {
     return runWithToolStatus(serviceName, toolName, () async {
+      // Validate against the tool's declared schema BEFORE approval or
+      // execution: structurally invalid calls must trigger neither approval
+      // dialogs nor side effects, and the model needs a path-specific error
+      // instead of a raw type-cast failure from deep inside a tool.
+      // Normalization coerces double-encoded/misplaced arguments, so the
+      // returned params — not the raw ones — are what get executed.
+      final validation = ToolParamValidator.validateAndNormalize(
+        toolName: toolName,
+        params: params,
+        inputSchema: _findToolSchema(context, serviceName, toolName),
+      );
+      if (validation.failure != null) {
+        return validation.failure!.serialize();
+      }
+      final effectiveParams = validation.params;
+
       if (aiToolBundles.containsKey(serviceName)) {
         final runtime = await _getAiToolRuntime(context, serviceName);
-        return runtime.invoke(toolName, params, generationContext);
+        final result = await runtime.invoke(
+          toolName,
+          effectiveParams,
+          generationContext,
+        );
+        return ToolOutcome.fromAiToolResult(toolName, result).serialize();
       }
 
       if (serviceName == BuiltInToolsService.systemToolsServiceKey) {
@@ -392,24 +415,51 @@ class ChatToolSession extends ChangeNotifier {
             .where((tool) => tool.name == toolName)
             .firstOrNull;
         if (nativeTool != null) {
-          final result = await nativeTool.execute(params);
-          return result is String ? result : result.toString();
+          final result = await nativeTool.execute(effectiveParams);
+          return ToolOutcome.fromNativeResult(toolName, result).serialize();
         }
-        return 'Error: System tool "$toolName" not found';
+        return ToolOutcome.failure(
+          code: ToolOutcome.codeNotFound,
+          message: 'System tool "$toolName" not found',
+        ).serialize();
       }
 
       if (serviceName == skillToolsServiceKey) {
-        return _executeSkillTool(context, toolName, params, generationContext);
+        return _executeSkillTool(
+          context,
+          toolName,
+          effectiveParams,
+          generationContext,
+        );
       }
 
       return McpToolIntegrationService.executeToolCall(
         serviceName: serviceName,
         toolName: toolName,
-        parameters: params,
+        parameters: effectiveParams,
         enabledEndpointIds: selectedMcpEndpointIds.toList(),
         generationContext: generationContext,
       );
     });
+  }
+
+  /// The declared input schema for a tool in the active tool map, if any.
+  /// Missing schemas disable validation for that call (fail open).
+  Map<String, dynamic>? _findToolSchema(
+    BuildContext context,
+    String serviceName,
+    String toolName,
+  ) {
+    try {
+      final tools = buildActiveToolsMap(context)[serviceName];
+      final schema = tools
+          ?.where((tool) => tool.name == toolName)
+          .firstOrNull
+          ?.inputSchema;
+      return schema == null || schema.isEmpty ? null : schema;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<String> _executeSkillTool(
@@ -439,9 +489,12 @@ class ChatToolSession extends ChangeNotifier {
           .firstOrNull;
       if (nativeTool != null) {
         final result = await nativeTool.execute(params);
-        return result is String ? result : result.toString();
+        return ToolOutcome.fromNativeResult(toolName, result).serialize();
       }
-      return 'Error: Native tool "$toolName" not found';
+      return ToolOutcome.failure(
+        code: ToolOutcome.codeNotFound,
+        message: 'Native tool "$toolName" not found',
+      ).serialize();
     }
 
     for (final entry in conversations.skillDiscoveredBundles.entries) {
@@ -451,7 +504,8 @@ class ChatToolSession extends ChangeNotifier {
           entry.key,
           entry.value,
         );
-        return runtime.invoke(toolName, params, generationContext);
+        final result = await runtime.invoke(toolName, params, generationContext);
+        return ToolOutcome.fromAiToolResult(toolName, result).serialize();
       }
     }
 
@@ -466,7 +520,10 @@ class ChatToolSession extends ChangeNotifier {
         generationContext: generationContext,
       );
     }
-    return 'Error: Skill tool "$toolName" not found';
+    return ToolOutcome.failure(
+      code: ToolOutcome.codeNotFound,
+      message: 'Skill tool "$toolName" not found',
+    ).serialize();
   }
 
   Future<String> runWithToolStatus(

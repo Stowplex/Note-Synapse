@@ -53,6 +53,10 @@ class _MultiSelectTagFilterState extends State<MultiSelectTagFilter> {
         allowEmptySelection: true,
         showManageTagsButton: true,
         returnAsSet: true,
+        // This is the "narrow what I am looking at" surface, so a long-press
+        // offering *Focus on this tag* — one action that makes the tag a Space
+        // and activates it — belongs here and nowhere else this dialog is used.
+        enableSpaceFocus: true,
       ),
     );
 

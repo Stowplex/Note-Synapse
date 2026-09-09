@@ -8,9 +8,11 @@ import '../approval_service.dart';
 import '../data_change_notifier.dart';
 import '../database_service.dart';
 import '../note_modification_service.dart';
+import '../note_source_service.dart';
 import '../logger_service.dart';
 import '../sql_query_service.dart';
 import '../service_locator.dart';
+import '../space_scope_service.dart';
 import '../../utils/file_utils.dart';
 
 import '../ai_service.dart';
@@ -23,6 +25,13 @@ abstract class NativeTool {
   String get name;
   String get description;
   Map<String, dynamic> get inputSchema;
+
+  /// Whether this tool changes persistent state (notes, database rows).
+  /// Drives honest-failure disclosure: a mutating tool that never succeeds
+  /// in a task must be reported in the final answer. Classes using
+  /// `implements` must declare this explicitly.
+  bool get isMutating => false;
+
   Future<dynamic> execute(Map<String, dynamic> args);
 }
 
@@ -42,13 +51,25 @@ class NoteSearchTool implements NativeTool {
   static const int _maxCandidatesWithoutTags = 200;
   static const int _maxCandidatesWithTags = 500;
 
+  /// Resolved through [SpaceScopeService.shared] rather than `getIt<...>()`:
+  /// this tool is constructed eagerly in `AgentService._nativeTools` and used
+  /// from tests that register only a database, so an unregistered scope must
+  /// degrade to "no active Space", not throw.
+  SpaceScopeService get _scope => SpaceScopeService.shared();
+
   @override
   String get name => 'search_notes';
 
   @override
-  String get description => '''
+  bool get isMutating => false;
+
+  @override
+  String get description =>
+      '''
 Search for notes using ranked full-text search (BM25). Matches note titles, bodies, subnotes, and annotations — and indexed attachment content as extraction layers come online. Returns matching notes with titles, IDs, best-match snippets, and tags, best matches first.
 Supports optional tag filtering for more targeted results.
+
+When the user is working inside a Space, this searches that Space only: results come from the Space's notes plus any note tagged `${SpaceScopeService.allSpacesTag}`. Tags you pass in `tags` are then required on top of that, so they narrow the search inside the Space rather than leaving it. Pass scope="all" to search the entire library instead.
 
 DISCOVERY TIP: Use this for keyword-based filtering across notes.
 Priority order for exploring user's notes:
@@ -66,7 +87,17 @@ Priority order for exploring user's notes:
       'tags': {
         'type': 'array',
         'items': {'type': 'string'},
-        'description': 'Optional list of tags to filter by.',
+        'description':
+            'Optional list of tags to filter by. Inside a Space these narrow '
+            'the search within the Space; they do not leave it.',
+      },
+      'scope': {
+        'type': 'string',
+        'enum': ['space', 'all'],
+        'description':
+            'Search scope. "space" (default) searches the active Space only; '
+            '"all" searches every note. Without an active Space the two are '
+            'identical.',
       },
     },
     'required': ['query'],
@@ -75,34 +106,59 @@ Priority order for exploring user's notes:
   @override
   Future<dynamic> execute(Map<String, dynamic> args) async {
     final query = args['query'] as String;
-    final tags = (args['tags'] as List?)?.cast<String>();
+    final requested = (args['tags'] as List?)?.cast<String>() ?? const [];
+
+    // A7: explicit tags COMPOSE with the Space — asking for tag X inside a
+    // Space means "X, in this Space". `scope: "all"` is the only escape and
+    // drops the Space entirely (invariant: scope narrows lists, never access).
+    //
+    // The two lists stay separate all the way down: only the Space's tags may
+    // be ORed away by `all-spaces`. Merging them first and ORing around the
+    // whole conjunction turns "tag `invoice` in this Space" into "tag
+    // `invoice`, OR any note tagged all-spaces" — which since migration v47
+    // means every agent-skill note.
+    final escaped = (args['scope'] as String?) == 'all';
+    final scoped = !escaped && _scope.isActive;
+    final scopeTags = scoped ? _scope.stampTags : const <String>[];
 
     final trimmedQuery = query.trim();
     if (trimmedQuery.isEmpty) {
-      // Tag-only lookup (AND semantics), unchanged from the pre-layered path.
-      if (tags == null || tags.isEmpty) return <Map<String, dynamic>>[];
-      final firstTagNotes = await _db.getNotesByTag(tags.first);
-      return [
-        for (final note in firstTagNotes)
-          if (tags.every(note.tags.contains)) _entry(note, _head(note.content)),
-      ];
+      // Tag-only lookup, unchanged from the pre-layered path: with no query
+      // there is nothing to rank, so this stays on the plain tag join rather
+      // than going through the index.
+      if (requested.isEmpty && scopeTags.isEmpty) {
+        return <Map<String, dynamic>>[];
+      }
+      final notes = await _tagOnlyLookup(
+        requested,
+        scopeTags,
+        orAllSpaces: scoped,
+      );
+      return [for (final note in notes) _entry(note, _head(note.content))];
     }
 
-    final hasTags = tags != null && tags.isNotEmpty;
+    // Any tag constraint — the caller's or the Space's — prunes results, so
+    // both earn the wider candidate slack below.
+    final hasTags = requested.isNotEmpty || scopeTags.isNotEmpty;
     final response = await _searchService.searchFused(
       query,
       // The AI audience excludes chunks from attachments with
       // includeInAIContext = false.
       audience: SearchAudience.ai,
       // The pre-layered FTS path never filtered archived notes; preserve that
-      // so agents keep finding archived material. The tag filter (AND
-      // semantics, exact tag-name match — the old SQL EXISTS-per-tag) runs
-      // INSIDE the search, during result accumulation, so tagged notes
-      // ranked below untagged material are still found rather than being
-      // truncated away with the top slice.
+      // so agents keep finding archived material. The tag filters run INSIDE
+      // the search, during result accumulation, so tagged notes ranked below
+      // untagged material are still found rather than being truncated away
+      // with the top slice.
+      //
+      // `requiredTags` and `scopeTags` stay separate all the way down for the
+      // reason A7 gives: only the Space's tags may be ORed away by
+      // `all-spaces`.
       filter: NoteFilterContext(
         includeArchived: true,
-        requiredTags: hasTags ? tags : null,
+        requiredTags: requested.isEmpty ? null : requested,
+        scopeTags: scopeTags.isEmpty ? null : scopeTags,
+        includeAllSpacesTag: scoped,
       ),
     );
     if (response.results.isEmpty) return <Map<String, dynamic>>[];
@@ -152,13 +208,52 @@ Priority order for exploring user's notes:
     return '${snippet.truncatedStart ? '…' : ''}${snippet.text}'
         '${snippet.truncatedEnd ? '…' : ''}';
   }
+
+  /// The no-query branch: every note carrying all of [requested] and, unless
+  /// `all-spaces` lets it off, all of [scopeTags].
+  ///
+  /// Scoped exactly like the FTS branch, including the composition rule: the
+  /// `all-spaces` escape ORs around the **Space's** tags only (A1), so a note
+  /// marked visible everywhere is returned even though it carries none of
+  /// them — but it must still carry every tag the caller asked for (A7).
+  /// Appending `all-spaces` as one more required tag would instead return only
+  /// `all-spaces` notes; skipping the [requested] re-test would return every
+  /// `all-spaces` note whatever was asked for.
+  Future<List<Note>> _tagOnlyLookup(
+    List<String> requested,
+    List<String> scopeTags, {
+    required bool orAllSpaces,
+  }) async {
+    final all = <String>[
+      ...requested,
+      for (final tag in scopeTags)
+        if (!requested.contains(tag)) tag,
+    ];
+    final primary = await _db.getNotesByTag(all.first);
+    final matches = primary
+        .where((note) => all.every(note.tags.contains))
+        .toList();
+    if (!orAllSpaces) return matches;
+
+    final seen = {for (final note in matches) note.id};
+    final everywhere = await _db.getNotesByTag(SpaceScopeService.allSpacesTag);
+    for (final note in everywhere) {
+      if (!requested.every(note.tags.contains)) continue;
+      if (seen.add(note.id)) matches.add(note);
+    }
+    return matches;
+  }
 }
 
 class NoteReadTool implements NativeTool {
   DatabaseService get _db => getIt<DatabaseService>();
+  NoteSourceService get _sourceService => getIt<NoteSourceService>();
 
   @override
   String get name => 'read_note';
+
+  @override
+  bool get isMutating => false;
 
   @override
   String get description => '''
@@ -169,6 +264,8 @@ Read a note with progressive discovery modes:
 - 'summary': Returns summary block or first 500 chars.
 - 'toc': Returns table of contents (headers from markdown).
 - 'full': Returns full text content. If extraction_guide is provided, uses AI to extract info from content and specified attachments.
+
+'stat' and 'full' also return `sources` (under `metadata` in 'full'): where a clipped note came from, as {url, title, siteName, clippedAt}. It is empty for notes written by hand; when it is not, cite the source url when quoting or attributing the note's content.
 
 Progressive discovery workflow:
 1. Call with mode='stat' to see note structure and attachment sizes
@@ -295,6 +392,7 @@ Progressive discovery workflow:
       'title': note.title,
       'line_count': lineCount,
       'tags': note.tags,
+      'sources': await _sourcesJson(note.id),
       'attachments': attachmentInfos,
       'linked_notes': linkedNotes,
       'subnotes': note.subNotes.map((s) => s.name).toList(),
@@ -303,6 +401,19 @@ Progressive discovery workflow:
           'Use mode="lines" to read specific line ranges, mode="pdf_pages" to read PDF pages, or mode="toc" for headers.',
     };
   }
+
+  /// Where [noteId] was clipped from, in the shape the description promises:
+  /// `{url, title, siteName, clippedAt}` per source, null fields omitted.
+  Future<List<Map<String, dynamic>>> _sourcesJson(String noteId) async => [
+    for (final s in await _sourceService.getSources(noteId))
+      {
+        'url': s.url,
+        if (s.title != null) 'title': s.title,
+        if (s.siteName != null) 'siteName': s.siteName,
+        if (s.clippedAt != null)
+          'clippedAt': s.clippedAt!.toUtc().toIso8601String(),
+      },
+  ];
 
   /// Get attachment info including PDF ToC with real page numbers
   Future<Map<String, dynamic>?> _getAttachmentInfo(String path) async {
@@ -639,6 +750,7 @@ $extractionGuide
         'metadata': {
           'tags': note.tags,
           'updatedAt': note.updatedAt.toIso8601String(),
+          'sources': await _sourcesJson(note.id),
         },
       };
     }
@@ -674,6 +786,9 @@ class RunSqlTool implements NativeTool {
 
   @override
   String get name => 'run_sql';
+
+  @override
+  bool get isMutating => true;
 
   @override
   String get description =>
@@ -768,6 +883,11 @@ class ListFiltersTool implements NativeTool {
   String get name => 'ls';
 
   @override
+  bool get isMutating => false;
+
+  SpaceScopeService get _scope => SpaceScopeService.shared();
+
+  @override
   String get description => '''
 Lists all tag filters (folders) in a tree structure. Use this to understand the organization of notes.
 Filters define sets of tags for organizing notes into logical groups.
@@ -775,6 +895,7 @@ Filters define sets of tags for organizing notes into logical groups.
 DISCOVERY TIP: This is the PREFERRED starting point for exploring notes.
 - Returns hierarchical structure of how notes are organized
 - Each filter shows its included tags and note count
+- The node marked `(active space)` is the Space the user is working inside; search_notes is scoped to it
 - Use this before search_notes or run_sql to understand the note taxonomy
 ''';
 
@@ -831,8 +952,13 @@ DISCOVERY TIP: This is the PREFERRED starting point for exploring notes.
       final buffer = StringBuffer();
       buffer.writeln("File System (Filters Hierarchy):");
 
+      // Decision 5: the scoping is announced. The agent's note searches are
+      // narrowed to this node, so the tree has to say which node that is.
+      final activeSpaceId = _scope.isActive ? _scope.activeSpaceId : null;
+
       void printNode(Filter node, String prefix) {
-        buffer.writeln("$prefix- [${node.name}]");
+        final marker = node.id == activeSpaceId ? ' (active space)' : '';
+        buffer.writeln("$prefix- [${node.name}]$marker");
         final indent = "$prefix  ";
 
         if (node.includeTags.isNotEmpty) {
@@ -871,8 +997,11 @@ class ModifyNoteTool implements NativeTool {
   String get name => 'modify_note';
 
   @override
+  bool get isMutating => true;
+
+  @override
   String get description =>
-      'Modify a note\'s content, title, tags, attachments, subnotes, or links. Supports whole-note append/prepend/replace and section-targeted markdown inserts.';
+      'Modify a note\'s content, title, tags, attachments, subnotes, or links. Supports whole-note append/prepend/replace, precise replace_text edits, and section-targeted markdown inserts. The "modification" argument must be an object of objects, e.g. {"content": {"old_text": "...", "new_text": "..."}}.';
 
   @override
   Map<String, dynamic> get inputSchema => {
@@ -889,12 +1018,51 @@ class ModifyNoteTool implements NativeTool {
       },
     },
     'required': ['note_id', 'modification'],
+    'examples': [
+      {
+        'note_id': '<note-id>',
+        'modification': {
+          'content': {
+            'action': 'replace_text',
+            'old_text': '- [ ] Book Title',
+            'new_text': '- [x] Book Title',
+            'section': '## 2026-07-31',
+          },
+        },
+      },
+    ],
   };
 
   @override
   Future<dynamic> execute(Map<String, dynamic> args) async {
-    final noteId = args['note_id'] as String;
-    final modification = args['modification'] as Map<String, dynamic>;
+    // Checked extraction before approval: structurally invalid calls must
+    // not trigger approval dialogs, and raw casts here would throw opaque
+    // type errors out of execute().
+    final noteIdRaw = args['note_id'];
+    if (noteIdRaw is! String || noteIdRaw.isEmpty) {
+      return {
+        'error':
+            'modify_note requires a top-level "note_id" string, got '
+            '${noteIdRaw == null ? 'nothing' : noteIdRaw.runtimeType}. Shape: '
+            '{"note_id": "...", "modification": {"content": {...}}}',
+        'code': 'invalid_argument',
+      };
+    }
+    final modificationRaw = args['modification'];
+    if (modificationRaw is! Map) {
+      return {
+        'error':
+            'modify_note requires "modification" to be an object, got '
+            '${modificationRaw == null ? 'nothing' : '${modificationRaw.runtimeType} ($modificationRaw)'}. '
+            'Example: {"note_id": "...", "modification": '
+            '{"content": {"action": "append", "text": "..."}}}',
+        'code': 'invalid_argument',
+      };
+    }
+    final noteId = noteIdRaw;
+    final modification = modificationRaw.map(
+      (key, value) => MapEntry(key.toString(), value),
+    );
 
     // Check approval before modification
     if (!ApprovalService.sessionApprovedNoteModifications) {
@@ -904,7 +1072,10 @@ class ModifyNoteTool implements NativeTool {
         source: 'Agent',
       );
       if (!approved) {
-        return {'error': 'User denied the note modification.'};
+        return {
+          'error': 'User denied the note modification.',
+          'code': 'user_denied',
+        };
       }
     }
 
@@ -930,6 +1101,9 @@ class ModifyNotesTool implements NativeTool {
 
   @override
   String get name => 'modify_notes';
+
+  @override
+  bool get isMutating => true;
 
   @override
   String get description =>
@@ -961,16 +1135,74 @@ class ModifyNotesTool implements NativeTool {
       },
     },
     'required': ['modifications'],
+    'examples': [
+      {
+        'modifications': [
+          {
+            'note_id': '<note-id>',
+            'modification': {
+              'content': {
+                'action': 'replace_text',
+                'old_text': '- [ ] Book Title',
+                'new_text': '- [x] Book Title',
+              },
+            },
+          },
+        ],
+      },
+    ],
   };
 
   @override
   Future<dynamic> execute(Map<String, dynamic> args) async {
-    final modifications = (args['modifications'] as List? ?? [])
-        .whereType<Map<String, dynamic>>()
-        .toList();
+    final modificationsRaw = args['modifications'];
+    if (modificationsRaw is! List || modificationsRaw.isEmpty) {
+      return {
+        'error':
+            'modify_notes requires a non-empty "modifications" array. Shape: '
+            '{"modifications": [{"note_id": "...", "modification": '
+            '{"content": {...}}}]}',
+        'code': 'invalid_argument',
+      };
+    }
 
-    if (modifications.isEmpty) {
-      return {'error': 'No note modifications provided.'};
+    // Validate every item by index BEFORE approval instead of silently
+    // dropping malformed ones — a dropped item would report "success" for
+    // work never done, and invalid calls must not raise approval dialogs.
+    final modifications = <Map<String, dynamic>>[];
+    for (var i = 0; i < modificationsRaw.length; i++) {
+      final item = modificationsRaw[i];
+      if (item is! Map) {
+        return {
+          'error':
+              'modifications[$i]: expected an object '
+              '{"note_id": "...", "modification": {...}} but got '
+              '${item == null ? 'null' : '${item.runtimeType} ($item)'}.',
+          'code': 'invalid_argument',
+        };
+      }
+      final noteId = item['note_id'];
+      if (noteId is! String || noteId.isEmpty) {
+        return {
+          'error':
+              'modifications[$i].note_id: expected a non-empty string but '
+              'got ${noteId == null ? 'nothing' : noteId.runtimeType}.',
+          'code': 'invalid_argument',
+        };
+      }
+      final modification = item['modification'];
+      if (modification is! Map) {
+        return {
+          'error':
+              'modifications[$i].modification: expected an object but got '
+              '${modification == null ? 'nothing' : '${modification.runtimeType} ($modification)'}. '
+              'Example: {"content": {"action": "append", "text": "..."}}',
+          'code': 'invalid_argument',
+        };
+      }
+      modifications.add(
+        item.map((key, value) => MapEntry(key.toString(), value)),
+      );
     }
 
     if (!ApprovalService.sessionApprovedNoteModifications) {
@@ -980,7 +1212,10 @@ class ModifyNotesTool implements NativeTool {
             source: 'Agent',
           );
       if (!approved) {
-        return {'error': 'User denied the note modification batch.'};
+        return {
+          'error': 'User denied the note modification batch.',
+          'code': 'user_denied',
+        };
       }
     }
 
@@ -1004,12 +1239,34 @@ class ModifyNotesTool implements NativeTool {
 const Map<String, dynamic> _modificationProperties = {
   'content': {
     'type': 'object',
+    'description':
+        'An OBJECT, never a plain string. For precise edits: '
+        '{"action": "replace_text", "old_text": "...", "new_text": "..."}; '
+        'action may be omitted when old_text and new_text are provided.',
     'properties': {
       'action': {
         'type': 'string',
-        'enum': ['append', 'prepend', 'replace', 'no-op'],
+        'enum': ['append', 'prepend', 'replace', 'replace_text', 'no-op'],
+        'description':
+            'Use replace_text (with old_text/new_text) for precise edits '
+            'such as checking off one list item; replace rewrites the whole '
+            'note or section. Inferred as replace_text when old_text and '
+            'new_text are given without an action.',
       },
-      'text': {'type': 'string'},
+      'text': {
+        'type': 'string',
+        'description': 'The text for append/prepend/replace actions.',
+      },
+      'old_text': {
+        'type': 'string',
+        'description':
+            'For replace_text: the exact existing text to replace. Must '
+            'match exactly one location; copy it verbatim from the note.',
+      },
+      'new_text': {
+        'type': 'string',
+        'description': 'For replace_text: the replacement text.',
+      },
       'section': {
         'type': 'string',
         'description':
@@ -1104,6 +1361,9 @@ class CreateNotesTool implements NativeTool {
 
   @override
   String get name => 'create_notes';
+
+  @override
+  bool get isMutating => true;
 
   @override
   String get description =>
@@ -1253,6 +1513,9 @@ class DeleteNoteTool implements NativeTool {
 
   @override
   String get name => 'delete_notes';
+
+  @override
+  bool get isMutating => true;
 
   @override
   String get description =>

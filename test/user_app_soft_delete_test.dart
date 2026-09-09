@@ -197,7 +197,7 @@ void main() {
     );
   });
 
-  group('M1.4 User-App soft-delete — migration round-trip (v48 -> v49)', () {
+  group('M1.4 User-App soft-delete — migration round-trip (v49 -> v50)', () {
     late Database preMigrationDb;
 
     setUp(() async {
@@ -290,7 +290,7 @@ void main() {
         });
 
         final service = DatabaseService.createNew();
-        await service.migrateBackupDatabase(preMigrationDb, 48, 49);
+        await service.migrateBackupDatabase(preMigrationDb, 49, 50);
 
         expect(await _hasColumn(preMigrationDb, 'user_apps', '__deleted__'), isTrue);
         expect(await _hasColumn(preMigrationDb, 'app_revisions', '__deleted__'), isTrue);
@@ -327,7 +327,7 @@ void main() {
     );
 
     test(
-      'running the v48 -> v49 migration twice does not error and leaves '
+      'running the v49 -> v50 migration twice does not error and leaves '
       'schema/data unchanged the second time',
       () async {
         await preMigrationDb.insert('user_apps', {
@@ -343,10 +343,10 @@ void main() {
         });
 
         final service = DatabaseService.createNew();
-        await service.migrateBackupDatabase(preMigrationDb, 48, 49);
+        await service.migrateBackupDatabase(preMigrationDb, 49, 50);
         final afterFirst = await preMigrationDb.query('user_apps', orderBy: 'id');
 
-        await service.migrateBackupDatabase(preMigrationDb, 48, 49);
+        await service.migrateBackupDatabase(preMigrationDb, 49, 50);
         final afterSecond = await preMigrationDb.query('user_apps', orderBy: 'id');
 
         expect(afterSecond, equals(afterFirst));

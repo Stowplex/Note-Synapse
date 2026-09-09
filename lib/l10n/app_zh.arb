@@ -389,7 +389,7 @@
   "deleteSelectedNotes": "删除选中的笔记",
   "openAIAction": "打开AI操作",
   "exitMultiSelectMode": "退出多选模式",
-  "searchNotes": "搜索笔记...",
+  "searchNotes": "搜索笔记",
   "allNotes": "所有笔记",
   "defaultNotes": "默认",
   "pinnedNotes": "置顶",
@@ -404,13 +404,17 @@
   "buildingSearchIndex": "正在构建搜索索引… {percent}%",
   "@buildingSearchIndex": {
     "placeholders": {
-      "percent": {"type": "int"}
+      "percent": {
+        "type": "int"
+      }
     }
   },
   "searchBadgePdfPage": "PDF · 第 {page} 页",
   "@searchBadgePdfPage": {
     "placeholders": {
-      "page": {"type": "int"}
+      "page": {
+        "type": "int"
+      }
     }
   },
   "searchBadgeAttachment": "附件",
@@ -1082,7 +1086,6 @@
   "triggerSyncRunning": "同步中…",
   "triggerSyncResult": "同步完成——已收集 {touches} 项、已初始化 {seeded} 项、拉取 {pulled} 项、推送 {pushed} 项",
   "triggerSyncError": "同步失败：{error}",
-
   "cloudSync": "云同步",
   "cloudSyncSubtitle": "通过 Google 云端硬盘在多台设备间同步笔记",
   "cloudSyncAccountSection": "Google 云端硬盘账号",
@@ -1135,13 +1138,17 @@
   "cloudSyncFolderName": "文件夹：{name}",
   "@cloudSyncFolderName": {
     "placeholders": {
-      "name": {"type": "String"}
+      "name": {
+        "type": "String"
+      }
     }
   },
   "cloudSyncFolderId": "文件夹 ID：{id}",
   "@cloudSyncFolderId": {
     "placeholders": {
-      "id": {"type": "String"}
+      "id": {
+        "type": "String"
+      }
     }
   },
   "cloudSyncFolderIdHint": "用这个 ID 来设置另一台设备。",
@@ -1155,22 +1162,32 @@
   "cloudSyncFolderPreviewHolds": "“{name}”中存放着一个于 {date} 创建的同步数据集。",
   "@cloudSyncFolderPreviewHolds": {
     "placeholders": {
-      "name": {"type": "String"},
-      "date": {"type": "String"}
+      "name": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
     }
   },
   "cloudSyncFolderPreviewEmpty": "“{name}”是一个 Note Synapse 同步文件夹，但里面还没有任何同步数据。如果你以为笔记应该在这里，请到另一台设备上核对 ID。",
   "@cloudSyncFolderPreviewEmpty": {
     "placeholders": {
-      "name": {"type": "String"}
+      "name": {
+        "type": "String"
+      }
     }
   },
   "cloudSyncFolderPreviewUse": "使用这个文件夹",
   "cloudSyncFolderAmbiguous": "你的云端硬盘中有 {count} 个名为“{name}”的文件夹，本设备无法判断哪一个存放着你的同步数据。请打开 Google 云端硬盘，重命名或删除你不想用于同步的那些文件夹，然后重试。",
   "@cloudSyncFolderAmbiguous": {
     "placeholders": {
-      "count": {"type": "int"},
-      "name": {"type": "String"}
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
     }
   },
   "cloudSyncFolderNotFound": "本应用无法访问该 ID 对应的文件夹。请确认你从另一台设备完整复制了 ID，并且两台设备使用的是同一个 Google 账号。",
@@ -1216,7 +1233,6 @@
   "cloudSyncLastRun": "上次运行：{time}",
   "cloudSyncNeverRun": "本设备尚未同步过",
   "cloudSyncEncryptionNotice": "此版本中，同步数据以未端到端加密的形式存储在你的 Google 云端硬盘中。这意味着 Google、能访问你 Google 账号的人，以及你分享这些文件的对象都可以读取其内容。",
-
   "dependencyLicenses": "依赖库许可证",
   "deletedEndpoint": "已删除端点：{name}",
   "errorDeletingEndpoint": "删除端点时出错：{error}",
@@ -2376,17 +2392,24 @@
   "revokeAppAccessConfirm": "移除“{appName}”对你 {domain} 登录的访问权限？",
   "@revokeAppAccessConfirm": {
     "placeholders": {
-      "appName": {"type": "String"},
-      "domain": {"type": "String"}
+      "appName": {
+        "type": "String"
+      },
+      "domain": {
+        "type": "String"
+      }
     }
   },
-  "searchNotes": "搜索笔记",
   "figureUnavailable": "此图已不可用 — 来源笔记或图片已被删除",
   "figureSourcePage": "{title} · 第{page}页",
   "@figureSourcePage": {
     "placeholders": {
-      "title": {"type": "String"},
-      "page": {"type": "int"}
+      "title": {
+        "type": "String"
+      },
+      "page": {
+        "type": "int"
+      }
     }
   },
   "figureOpenSource": "打开来源",
@@ -2396,70 +2419,104 @@
   "searchSubtitleReady": "{provider} · 语义搜索已开启",
   "@searchSubtitleReady": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchSubtitleIndexing": "{provider} · 正在索引 {percent}%",
   "@searchSubtitleIndexing": {
     "placeholders": {
-      "provider": {"type": "String"},
-      "percent": {"type": "int"}
+      "provider": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "int"
+      }
     }
   },
   "searchSubtitleSwitching": "正在切换到 {provider} — 已重建 {percent}%",
   "@searchSubtitleSwitching": {
     "placeholders": {
-      "provider": {"type": "String"},
-      "percent": {"type": "int"}
+      "provider": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "int"
+      }
     }
   },
   "searchSubtitleRevoked": "语义搜索已停用 — 重新启用 {provider} 以恢复",
   "@searchSubtitleRevoked": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchProviderReEnable": "重新启用",
   "searchSubtitleErrors": "{provider} · {count} 个错误",
   "@searchSubtitleErrors": {
     "placeholders": {
-      "provider": {"type": "String"},
-      "count": {"type": "int"}
+      "provider": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
     }
   },
   "searchIndexStatus": "索引状态",
   "searchIndexIdle": "已是最新 — 已索引 {chunks} 个片段",
   "@searchIndexIdle": {
     "placeholders": {
-      "chunks": {"type": "int"}
+      "chunks": {
+        "type": "int"
+      }
     }
   },
   "searchStageChunks": "正在索引笔记 — {done}/{total}",
   "@searchStageChunks": {
     "placeholders": {
-      "done": {"type": "int"},
-      "total": {"type": "int"}
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "searchStagePdfText": "正在读取 PDF 文字 — {done}/{total} 个附件",
   "@searchStagePdfText": {
     "placeholders": {
-      "done": {"type": "int"},
-      "total": {"type": "int"}
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "searchStageOcr": "正在识别 PDF 中的文字 — {done}/{total} 页",
   "@searchStageOcr": {
     "placeholders": {
-      "done": {"type": "int"},
-      "total": {"type": "int"}
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "searchStageEmbed": "正在生成向量 — {done}/{total} 个片段",
   "@searchStageEmbed": {
     "placeholders": {
-      "done": {"type": "int"},
-      "total": {"type": "int"}
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "searchEmbeddingProvider": "向量模型服务",
@@ -2472,13 +2529,17 @@
   "searchProviderDimensions": "{dims} 维",
   "@searchProviderDimensions": {
     "placeholders": {
-      "dims": {"type": "int"}
+      "dims": {
+        "type": "int"
+      }
     }
   },
   "searchProviderServedBy": "搜索仍由 {provider} 提供",
   "@searchProviderServedBy": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchProviderEndpoint": "接口地址",
@@ -2491,7 +2552,9 @@
   "searchProviderApiKeyFromChat": "已从你的 {model} 对话模型填入 — 若此接口需要不同密钥请替换。",
   "@searchProviderApiKeyFromChat": {
     "placeholders": {
-      "model": {"type": "String"}
+      "model": {
+        "type": "String"
+      }
     }
   },
   "searchProviderFieldsRequired": "请先填写接口地址和模型名称，然后再测试。",
@@ -2500,19 +2563,25 @@
   "searchTestOk": "连接正常 — 向量为 {dims} 维",
   "@searchTestOk": {
     "placeholders": {
-      "dims": {"type": "int"}
+      "dims": {
+        "type": "int"
+      }
     }
   },
   "searchTestDimensionsCorrected": "维度已更正为 {dims}，与接口返回一致",
   "@searchTestDimensionsCorrected": {
     "placeholders": {
-      "dims": {"type": "int"}
+      "dims": {
+        "type": "int"
+      }
     }
   },
   "searchTestFailed": "连接失败：{error}",
   "@searchTestFailed": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
   "searchTestRequired": "启用之前请先测试连接。",
@@ -2520,73 +2589,101 @@
   "searchProviderEnabled": "已启用 {provider}",
   "@searchProviderEnabled": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchProviderTurnedOff": "语义搜索已关闭 — 已存储的向量仍保留",
   "searchConsentTitle": "将笔记文本发送到 {provider}？",
   "@searchConsentTitle": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchConsentBody": "约 {chunks} 个笔记文本片段将发送到 {provider} 以建立语义索引。",
   "@searchConsentBody": {
     "placeholders": {
-      "chunks": {"type": "int"},
-      "provider": {"type": "String"}
+      "chunks": {
+        "type": "int"
+      },
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchConsentBodyWithImages": "约 {chunks} 个笔记文本片段和 {images} 张图片将发送到 {provider} 以建立语义索引。",
   "@searchConsentBodyWithImages": {
     "placeholders": {
-      "chunks": {"type": "int"},
-      "images": {"type": "int"},
-      "provider": {"type": "String"}
+      "chunks": {
+        "type": "int"
+      },
+      "images": {
+        "type": "int"
+      },
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchConsentBodyUnknown": "笔记会在建立索引的过程中发送到 {provider}，用于建立语义索引。",
   "@searchConsentBodyUnknown": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchConsentLargePdfsExcluded": "{count, plural, other{{count} 个大型 PDF 仍被排除，不会发送。}}",
   "@searchConsentLargePdfsExcluded": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "searchConsentWifiOnly": "批量索引默认仅在 Wi-Fi 下进行；搜索查询可使用任意网络。",
   "searchConsentSwitchDisclosure": "在重建索引完成之前，搜索将继续使用 {provider}。",
   "@searchConsentSwitchDisclosure": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchConsentStopServing": "立即停用 {provider}",
   "@searchConsentStopServing": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchConsentStoppedServing": "已停用 {provider} — 在重建索引完成前仅使用关键词搜索",
   "@searchConsentStoppedServing": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchConsentAccept": "发送并索引",
   "searchErrorAuth": "{provider} 拒绝了密钥 — 索引已暂停，请先修正密钥",
   "@searchErrorAuth": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchErrorNotInstalled": "{provider} 尚未下载到本设备",
   "@searchErrorNotInstalled": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchErrorDimensions": "接口返回的向量维度与配置的维度不一致",
@@ -2594,7 +2691,9 @@
   "searchErrorFailedChunks": "{count, plural, other{{count} 个片段无法生成向量}}",
   "@searchErrorFailedChunks": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "searchErrorFailedChunksHint": "这些片段只能通过重建索引重试 — 其他操作不会重新检查它们。",
@@ -2615,25 +2714,33 @@
   "searchInstallProgress": "正在下载 — {percent}%",
   "@searchInstallProgress": {
     "placeholders": {
-      "percent": {"type": "int"}
+      "percent": {
+        "type": "int"
+      }
     }
   },
   "searchInstallAuthFailed": "下载被拒绝 — 请在 HuggingFace 上接受模型许可并检查令牌。{error}",
   "@searchInstallAuthFailed": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
   "searchInstallTransientFailed": "下载失败 — 请检查网络后重试。{error}",
   "@searchInstallTransientFailed": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
   "searchInstallFailed": "下载失败：{error}",
   "@searchInstallFailed": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
   "searchModelInstalled": "模型已下载",
@@ -2643,21 +2750,29 @@
   "searchRebuildRunning": "正在重建 — {percent}%",
   "@searchRebuildRunning": {
     "placeholders": {
-      "percent": {"type": "int"}
+      "percent": {
+        "type": "int"
+      }
     }
   },
   "searchRebuildConfirmTitle": "重建搜索索引？",
   "searchRebuildConfirmBody": "将重新检查 {notes} 篇笔记和 {chunks} 个片段。",
   "@searchRebuildConfirmBody": {
     "placeholders": {
-      "notes": {"type": "int"},
-      "chunks": {"type": "int"}
+      "notes": {
+        "type": "int"
+      },
+      "chunks": {
+        "type": "int"
+      }
     }
   },
   "searchRebuildConfirmCost": "文本有变化的片段会再次发送到 {provider}；未变化的片段不会重新生成向量。",
   "@searchRebuildConfirmCost": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchRebuildStarted": "正在重建搜索索引…",
@@ -2679,33 +2794,45 @@
   "searchPdfPageCapSubtitle": "超过 {pages} 页的 PDF 不会自动索引，除非你手动开启",
   "@searchPdfPageCapSubtitle": {
     "placeholders": {
-      "pages": {"type": "int"}
+      "pages": {
+        "type": "int"
+      }
     }
   },
   "searchLargePdfsSkipped": "{count, plural, other{{count} 个大型 PDF 未被索引 — 请检查}}",
   "@searchLargePdfsSkipped": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "searchLargePdfsMore": "{count, plural, other{还有 {count} 个未显示}}",
   "@searchLargePdfsMore": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "searchLargePdfPages": "{title} · {pages} 页",
   "@searchLargePdfPages": {
     "placeholders": {
-      "title": {"type": "String"},
-      "pages": {"type": "int"}
+      "title": {
+        "type": "String"
+      },
+      "pages": {
+        "type": "int"
+      }
     }
   },
   "searchIndexAnyway": "仍然索引",
   "searchLargePdfQueued": "将开始索引 {name}",
   "@searchLargePdfQueued": {
     "placeholders": {
-      "name": {"type": "String"}
+      "name": {
+        "type": "String"
+      }
     }
   },
   "searchNoLargePdfs": "没有因体积被跳过的 PDF",
@@ -2714,7 +2841,9 @@
   "searchIndexOptionsSubtitle": "选择可以从 {name} 中提取哪些内容用于搜索。",
   "@searchIndexOptionsSubtitle": {
     "placeholders": {
-      "name": {"type": "String"}
+      "name": {
+        "type": "String"
+      }
     }
   },
   "searchIndexPurgeWarning": "关闭某项后，它已为该文件生成的内容会被删除——包括它的搜索片段、由它渲染出的图表截图，以及为语义搜索存储的向量。",
@@ -2725,8 +2854,12 @@
   "searchIndexOverCapSubtitle": "共 {pages} 页，超过 {cap} 页的上限，除非手动开启，否则会被跳过。",
   "@searchIndexOverCapSubtitle": {
     "placeholders": {
-      "pages": {"type": "int"},
-      "cap": {"type": "int"}
+      "pages": {
+        "type": "int"
+      },
+      "cap": {
+        "type": "int"
+      }
     }
   },
   "searchIndexAnywaySubtitle": "即使此 PDF 超过页数上限也继续索引。",
@@ -2744,5 +2877,532 @@
   "searchExcludeNoteConfirm": "排除",
   "searchExcludeNoteExcluded": "已将笔记从搜索中排除",
   "searchExcludeNoteIncluded": "笔记将重新被搜索索引",
-  "searchExcludeNoteFailed": "无法更新搜索排除设置"
+  "searchExcludeNoteFailed": "无法更新搜索排除设置",
+  "protocolStudies": "协议研究",
+  "protocolStudiesSubtitle": "捕获并研究网站 HTTP 工作流程",
+  "newProtocolStudy": "新建协议研究",
+  "studyWithLogin": "研究协议",
+  "protocolStudyEmpty": "尚未保存协议研究。",
+  "protocolStudyUrlHint": "输入网站网址",
+  "protocolStudyStart": "开始研究",
+  "protocolStudySave": "保存研究",
+  "protocolStudySaved": "协议研究已保存",
+  "protocolStudyNetwork": "网络",
+  "protocolStudyRequests": "个请求",
+  "protocolStudySelectRequests": "请选择属于此工作流程的请求。",
+  "protocolStudyNoRequests": "尚未捕获符合条件的请求。",
+  "protocolStudyRawLocal": "原始请求和响应数据仅保存在私有协议研究工作区。",
+  "protocolStudySharedState": "未选择已保存登录。应用内 WebView 仍可能包含共享的登录状态。",
+  "protocolStudyCaptureLimit": "捕获已达到配置的大小或事件上限。",
+  "protocolStudyAnalyze": "合成工作流程",
+  "protocolStudyChooseModel": "选择分析模型",
+  "protocolStudyRemoteDisclosure": "勾选允许远程 AI 查看值的字段。使用可见性按钮可完全排除无关字段。",
+  "protocolStudyLocalDisclosure": "只选择此设备端模型需要的字段。请求和响应会逐对分析，以适应较小的上下文窗口。",
+  "protocolStudyOutboundPreview": "检查发送给 AI 的完整内容",
+  "protocolStudySendForAnalysis": "使用此模型分析",
+  "protocolStudyAnalyzingPair": "正在分析第 {current}/{total} 对",
+  "@protocolStudyAnalyzingPair": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "protocolStudyRedacted": "个字段已隐藏",
+  "protocolStudyExcluded": "个字段已排除",
+  "protocolStudyIncludeField": "在分析中包含字段",
+  "protocolStudyExcludeField": "从分析中排除字段",
+  "protocolStudyMutationWarning": "此请求可能会修改网站状态。仍要运行最小复现吗？",
+  "protocolStudyRunRepro": "运行最小复现",
+  "protocolStudyReproResult": "最小复现结果",
+  "protocolStudyExportNote": "保存脱敏笔记",
+  "protocolStudyNoteSaved": "脱敏协议报告已保存为笔记",
+  "protocolStudyCreateTool": "创建 AI 工具 / 技能",
+  "protocolStudyCreateApp": "创建用户应用",
+  "protocolStudyFidelityWarning": "捕获完整度取决于平台。不会捕获 Service Worker 和 WebSocket；正文可能被截断。",
+  "protocolStudyDelete": "删除研究",
+  "protocolStudyDeleteConfirm": "删除此私有协议研究及其原始数据？",
+  "protocolStudyNoModel": "请先配置 AI 模型，再合成工作流程。",
+  "protocolStudyAnalysisFailed": "工作流程合成失败",
+  "protocolStudyResponseBodyLimit": "响应正文大小上限",
+  "protocolStudyApplyRecommendations": "应用谨慎建议",
+  "protocolStudyModelLabel": "模型",
+  "protocolStudyDestinationLabel": "目标地址",
+  "protocolStudyDisclosed": "个字段已披露",
+  "protocolStudyAll": "全部",
+  "protocolStudyForm": "表单",
+  "protocolStudyViewRaw": "查看原始请求和响应",
+  "protocolStudyRequestHeaders": "请求头",
+  "protocolStudyRequestBody": "请求正文",
+  "protocolStudyResponseHeaders": "响应头",
+  "protocolStudyResponseBody": "响应正文",
+  "protocolStudyFinalUrl": "最终网址",
+  "protocolStudyNotCaptured": "未捕获",
+  "protocolStudyParameters": "参数",
+  "protocolStudyNoneIdentified": "未识别到参数",
+  "protocolStudyWorkflow": "工作流程",
+  "protocolStudyCaveats": "注意事项",
+  "protocolStudyOptional": "可选",
+  "protocolStudyTruncated": "已截断",
+  "protocolStudyStatus": "状态",
+  "protocolStudyNewExample": "开始下一个示例",
+  "protocolStudyExampleNumber": "正在记录示例 {number}",
+  "@protocolStudyExampleNumber": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "protocolStudyMarkParameter": "标记为可复用参数",
+  "protocolStudyTransportMetadata": "传输元数据",
+  "protocolStudyPartial": "部分捕获",
+  "protocolStudyReviewSanitizedNote": "检查脱敏笔记",
+  "protocolStudyDiscardSession": "丢弃会话记录",
+  "protocolStudyDiscardSessionConfirm": "丢弃这份尚未保存的原始协议研究吗？丢弃后无法恢复。",
+  "protocolStudyReplay": "重放请求",
+  "protocolStudyReplayResponse": "重放响应",
+  "protocolStudyReplayFailed": "重放失败",
+  "protocolStudyReplayedAt": "重放时间",
+  "protocolStudyReplayUsedSession": "使用了实时会话 Cookie",
+  "protocolStudyCapturePage": "捕获渲染页面",
+  "protocolStudyPageCaptured": "已捕获渲染页面快照",
+  "protocolStudyPageSnapshot": "页面",
+  "minutesAgoShort": "{count}分钟前",
+  "@minutesAgoShort": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "hoursAgoShort": "{count}小时前",
+  "@hoursAgoShort": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "daysAgoShort": "{count}天前",
+  "@daysAgoShort": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "done": "完成",
+  "refreshLogin": "刷新登录",
+  "webLoginRefreshHint": "重新登录以刷新此登录信息，已授权应用的权限会保留。",
+  "webLoginRefreshed": "已刷新 {domain} 的登录",
+  "@webLoginRefreshed": {
+    "placeholders": {
+      "domain": {
+        "type": "String"
+      }
+    }
+  },
+  "webLoginRefreshDiscarded": "已取消刷新，原有登录已恢复。",
+  "clearSiteCookies": "清除此站点的 Cookie",
+  "webLoginCookiesCleared": "Cookie 已清除。请重新登录，然后点按“保存登录”。",
+  "webLoginExpired": "已过期 — 刷新以重新登录",
+  "webLoginExpiresInDays": "{days, plural, =0{今天过期 — 请尽快刷新} =1{明天过期 — 请尽快刷新} other{{days} 天后过期 — 请尽快刷新}}",
+  "@webLoginExpiresInDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "webLoginValidUntil": "有效期至 {date}",
+  "@webLoginValidUntil": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "webLoginNoExpiry": "站点未设置过期时间",
+  "webLoginSavedAgo": "保存于 {time}",
+  "@webLoginSavedAgo": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "webLoginRefreshedAgo": "刷新于 {time}",
+  "@webLoginRefreshedAgo": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "runInBackground": "后台保持运行",
+  "appRunningInBackground": "{appName} 正在运行",
+  "@appRunningInBackground": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "closeBackgroundApp": "关闭应用",
+  "closeBackgroundAppConfirm": "确定关闭“{appName}”吗？应用中未保存的内容将会丢失。",
+  "@closeBackgroundAppConfirm": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "backgroundAppClosed": "已关闭“{appName}”——同一时间只能有一个应用在后台运行。",
+  "@backgroundAppClosed": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeNotes": "合并笔记",
+  "mergeWith": "与其他笔记合并…",
+  "mergeTabMerged": "合并结果 ({count})",
+  "@mergeTabMerged": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergeAddNotes": "添加笔记",
+  "mergeSelectNotesTitle": "选择要合并的笔记",
+  "mergeNeedsSecondNote": "请至少再选择一篇笔记进行合并。",
+  "mergeRemoveSource": "从合并中移除",
+  "mergeRemoveSourceBody": "已从“{title}”中选取的区块会保留在合并结果中。笔记本身不会被修改。",
+  "@mergeRemoveSourceBody": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeAddAll": "全部添加",
+  "mergeRemoveAll": "全部移除",
+  "mergeBlocksAdded": "已添加 {added} / {total} 个区块",
+  "@mergeBlocksAdded": {
+    "placeholders": {
+      "added": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "mergeAddToMerged": "添加到合并结果",
+  "mergeRemoveFromMerged": "从合并结果中移除",
+  "mergeAddSection": "添加此章节（{count} 个区块）",
+  "@mergeAddSection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergeCopyText": "复制文本",
+  "mergeSelectText": "选择文本…",
+  "mergeCopied": "已复制",
+  "mergeEditedTitle": "已在合并结果中修改",
+  "mergeEditedBody": "此区块已在合并结果中被修改或删除。请在那里编辑，或再添加一份副本。",
+  "mergeAddAnotherCopy": "再添加一份",
+  "mergeForget": "忽略",
+  "mergeArrange": "排列",
+  "mergeEdit": "编辑",
+  "mergeInsertHere": "下一个区块插入此处",
+  "mergeInsertingAt": "插入到位置 {position}",
+  "@mergeInsertingAt": {
+    "placeholders": {
+      "position": {
+        "type": "int"
+      }
+    }
+  },
+  "mergeEmptyHint": "在笔记标签页中点按区块即可添加到这里，或切换到“编辑”后粘贴。",
+  "mergeUseCombinedTitle": "使用“{title}”",
+  "@mergeUseCombinedTitle": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeSaveAsNew": "另存为新笔记",
+  "mergeReplaceNote": "替换“{title}”",
+  "@mergeReplaceNote": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeReplaceWarning": "{count, plural, other{“{title}”将使用此内容和标题。其余 {count} 篇笔记不会改变。}}",
+  "@mergeReplaceWarning": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergeLinkBack": "链接回来源笔记",
+  "mergeArchiveOthers": "归档其他来源笔记",
+  "mergeDiscardTitle": "放弃合并结果？",
+  "mergeDiscardBody": "已添加的区块和已输入的文本将会丢失。",
+  "mergeDiscard": "放弃",
+  "mergedInto": "已合并到“{title}”",
+  "@mergedInto": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeNothingToSave": "请先添加至少一个区块或输入一些文本。",
+  "mergeSaveFailed": "无法保存合并结果：{error}",
+  "@mergeSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeBlockFromNote": "来自“{title}”",
+  "@mergeBlockFromNote": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeRemoveBlock": "移除",
+  "mergeOtherAttachments": "其他要保留的附件",
+  "mergeArchiveOthersPinned": "已置顶的笔记会保持不变。",
+  "navPadUnitChar": "字符",
+  "navPadUnitToken": "词",
+  "navPadUnitLine": "行",
+  "navPadUnitBlock": "块",
+  "navPadModeMove": "移动",
+  "navPadModeSelect": "选择",
+  "navPadUnitTooltip": "按{unit}移动",
+  "@navPadUnitTooltip": {
+    "placeholders": {
+      "unit": {
+        "type": "String"
+      }
+    }
+  },
+  "navPadModeTooltip": "点按切换移动/选择 · 长按扩展选区 · 下滑收缩",
+  "navPadMoveUp": "向上",
+  "navPadMoveDown": "向下",
+  "navPadMoveBackward": "向前",
+  "navPadMoveForward": "向后",
+  "navPadSwitchSide": "把导航键移到另一侧",
+  "navPadHide": "隐藏导航键",
+  "navPadShow": "显示导航键",
+  "navPadLabelLineStart": "行首",
+  "navPadLabelLineEnd": "行尾",
+  "navPadLabelBlockStart": "块首",
+  "navPadLabelBlockEnd": "块尾",
+  "navPadLabelPrevBlock": "上一块",
+  "navPadLabelNextBlock": "下一块",
+  "navPadLabelExpand": "已扩展",
+  "navPadLabelShrink": "已收缩",
+  "source": "来源",
+  "clippedFrom": "剪藏自",
+  "clippedRelative": "{when}剪藏",
+  "@clippedRelative": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "openOriginal": "打开原文",
+  "copyLink": "复制链接",
+  "linkCopied": "链接已复制",
+  "editSource": "编辑来源",
+  "removeSource": "移除来源",
+  "removeSourceConfirm": "要从笔记中移除此来源吗？笔记内容不会改变。",
+  "addSource": "添加来源",
+  "addSourceMenu": "添加来源…",
+  "sourceSiteName": "网站名称",
+  "invalidUrl": "请输入有效的 http(s) 链接",
+  "duplicateSourceUrl": "此链接已是该笔记的来源",
+  "moreSources": "还有 {count} 个",
+  "@moreSources": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "showLess": "收起",
+  "switchSpace": "切换空间",
+  "manageSpaces": "管理空间…",
+  "manageSpacesTitle": "管理空间",
+  "noSpacesYet": "还没有空间",
+  "noSpacesYetHint": "在筛选器编辑器中打开“用作空间”，即可把筛选器变成空间。",
+  "spaceUnavailable": "该空间已不可用",
+  "leaveSpace": "退出空间",
+  "activateAsSpace": "设为当前空间",
+  "stopUsingAsSpace": "取消用作空间",
+  "spaceRowLabel": "空间：{name}",
+  "@spaceRowLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "useAsSpace": "用作空间",
+  "useAsSpaceDescription": "启用空间后，所有列表只显示该空间的笔记，新建笔记会自动带上它的包含标签。",
+  "useAsSpaceNeedsIncludeTags": "请至少添加一个包含标签：没有包含标签的空间既限定不了范围，也标记不了笔记。",
+  "spaceStampPreview": "新笔记将被标记为：{tags}",
+  "@spaceStampPreview": {
+    "placeholders": {
+      "tags": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceTextCriteriaWarning": "在此创建的笔记可能不符合该筛选器的文本条件。",
+  "spaceNoteTypeWarning": "在此创建的笔记可能不符合该筛选器的笔记类型。",
+  "tagExistingNotesTitle": "为现有笔记添加标签？",
+  "tagExistingNotesBody": "同时为“{name}”中现有的 {count} 条笔记添加标签：{tags}",
+  "@tagExistingNotesBody": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      },
+      "tags": {
+        "type": "String"
+      }
+    }
+  },
+  "tagExistingNotesConfirm": "添加标签",
+  "notNow": "暂不",
+  "addToSpaceMenu": "添加到空间…",
+  "addToSpaceTitle": "添加到空间",
+  "addToSpaceHint": "勾选的空间会为这条笔记添加标签；取消勾选会移除其他空间不再需要的标签。",
+  "addToSpaceHintPlural": "勾选的空间会为这 {count} 条笔记添加标签；取消勾选会移除其他空间不再需要的标签。",
+  "@addToSpaceHintPlural": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spaceMembershipPartial": "部分所选笔记",
+  "spaceMembershipFailed": "无法更新空间归属",
+  "showInEverySpace": "在所有空间中显示",
+  "stopShowingInEverySpace": "停止在所有空间中显示",
+  "showInEverySpaceOn": "这条笔记现在会出现在所有空间中",
+  "showInEverySpaceOff": "这条笔记不再出现在所有空间中",
+  "addExistingNotesMenu": "添加已有笔记…",
+  "addExistingNotesTitle": "将笔记添加到 {name}",
+  "@addExistingNotesTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "addExistingNotesNoSpace": "请先启用一个空间",
+  "addExistingNotesNothingLeft": "所有笔记都已在 {name} 中",
+  "@addExistingNotesNothingLeft": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceJoinAdded": "已添加 {count} 条",
+  "@spaceJoinAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spaceJoinHiddenTasks": "有 {count} 条未显示，因为 {name} 只显示任务",
+  "@spaceJoinHiddenTasks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceJoinHiddenNotes": "有 {count} 条未显示，因为 {name} 只显示笔记",
+  "@spaceJoinHiddenNotes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceJoinHiddenFilter": "有 {count} 条未显示，因为不符合 {name} 的其他条件",
+  "@spaceJoinHiddenFilter": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "savedOutsideSpace": "已保存在 {name} 之外",
+  "@savedOutsideSpace": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "showAllNotes": "显示全部笔记",
+  "includeNotesOutsideSpace": "包含 {name} 以外的笔记",
+  "@includeNotesOutsideSpace": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "spacesRetiredByTagChange": "{names} 已不再是空间：其包含标签已被移除",
+  "@spacesRetiredByTagChange": {
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "focusOnThisTag": "聚焦此标签",
+  "focusOnTagUnusable": "包含逗号的标签不能用作空间。",
+  "focusOnTagReserved": "该标签为应用保留标签，不能用作空间。"
 }

@@ -74,7 +74,7 @@
   "geminiApiKey": "Gemini API Key",
   "continueButton": "Continue",
   "apiKeySecurityNote": "Your API key is stored securely on your device and never shared.",
-  "pleaseEnterApiKey": "Please enter your API key",
+  "pleaseEnterApiKey": "Please enter an API key",
   "failedToSaveApiKey": "Failed to save API key: {error}",
   "notes": "Notes",
   "calendar": "Calendar",
@@ -376,9 +376,15 @@
   "retryPattern": "Retry delays: {base}s → {second}s → {third}s",
   "@retryPattern": {
     "placeholders": {
-      "base": {"type": "String"},
-      "second": {"type": "String"},
-      "third": {"type": "String"}
+      "base": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      },
+      "third": {
+        "type": "String"
+      }
     }
   },
   "networkSettingsUpdated": "Network settings updated",
@@ -388,7 +394,7 @@
   "deleteSelectedNotes": "Delete Selected Notes",
   "openAIAction": "Open AI Action",
   "exitMultiSelectMode": "Exit Multi-Select Mode",
-  "searchNotes": "Search notes...",
+  "searchNotes": "Search notes",
   "allNotes": "All Notes",
   "defaultNotes": "Default",
   "pinnedNotes": "Pinned",
@@ -403,13 +409,17 @@
   "buildingSearchIndex": "Building search index… {percent}%",
   "@buildingSearchIndex": {
     "placeholders": {
-      "percent": {"type": "int"}
+      "percent": {
+        "type": "int"
+      }
     }
   },
   "searchBadgePdfPage": "PDF · p.{page}",
   "@searchBadgePdfPage": {
     "placeholders": {
-      "page": {"type": "int"}
+      "page": {
+        "type": "int"
+      }
     }
   },
   "searchBadgeAttachment": "Attachment",
@@ -461,7 +471,7 @@
   "transformNoteHint": "Describe how you want to transform this note...",
   "createNewNotesHint": "Describe what new notes you want to create...",
   "enterYourPrompt": "Enter your prompt:",
-  "attachFiles": "Attach Files",
+  "attachFiles": "Attach files",
   "attachFile": "Attach File",
   "selectFromDevice": "Select from Device",
   "enterUri": "Enter URI",
@@ -506,7 +516,7 @@
   "unknown": "Unknown",
   "noNotesAvailable": "No notes available",
   "errorLoadingNotes": "Error loading notes: {error}",
-  "noteCreatedSuccessfully": "Note created successfully!",
+  "noteCreatedSuccessfully": "Note \"{title}\" created successfully",
   "errorCreatingNote": "Error creating note: {error}",
   "noteUpdatedSuccessfully": "Note updated successfully!",
   "errorUpdatingNote": "Error updating note: {error}",
@@ -551,8 +561,6 @@
   "errorAddingRelationship": "Error adding relationship: {error}",
   "errorRemovingRelationship": "Error removing relationship: {error}",
   "audioRecording": "Audio Recording",
-  "startRecording": "Start Recording",
-  "stopRecording": "Stop Recording",
   "playAudio": "Play Audio",
   "pauseAudio": "Pause Audio",
   "recordingInProgress": "Recording in progress...",
@@ -578,8 +586,6 @@
   "subNote": "Sub-note",
   "addTag": "Add tag",
   "noTagsYet": "No tags yet. Tap \"Add tag\" to add some.",
-  "tags": "Tags",
-  "linkedNotes": "Linked Notes",
   "addLink": "Add Link",
   "insertAttachmentLink": "Insert Attachment Link",
   "insertToolLink": "Insert Tool Link",
@@ -596,31 +602,24 @@
     }
   },
   "noSpecificPage": "No specific page",
-  "aiActions": "AI Actions",
   "attach": "Attach",
   "recordAudio": "Record Audio",
   "status": "Status",
   "toDo": "To Do",
-  "inProgress": "In Progress",
-  "completed": "Completed",
   "cancelled": "Cancelled",
   "scheduled": "Scheduled",
   "content": "Content",
   "checkbox": "Checkbox",
-  "title": "Title",
   "bold": "Bold",
   "created": "Created",
   "updated": "Updated",
   "markComplete": "Mark Complete",
   "markIncomplete": "Mark Incomplete",
   "noLinkedNotesYet": "No linked notes yet",
-  "allNotes": "All Notes",
   "tasks": "Tasks",
-  "notes": "Notes",
   "month": "Month",
   "week": "Week",
   "twoWeeks": "2 Weeks",
-  "today": "Today",
   "january": "Jan",
   "february": "Feb",
   "march": "Mar",
@@ -659,7 +658,7 @@
   "shareNotes": "Share Notes",
   "shareAsPdf": "Share as PDF",
   "shareAsText": "Share as Text",
-  "copyToClipboard": "Copy to Clipboard",
+  "copyToClipboard": "Copy to clipboard",
   "shareSubNotesAndLinkedNotes": "Share sub-notes and linked notes",
   "shareDialogTitle": "Share Notes",
   "shareDialogDescription": "Choose how you want to share the selected notes",
@@ -723,7 +722,6 @@
   "includeTags": "Include Tags",
   "includeTagsHint": "Select tags to filter by",
   "includeArchivedNotes": "Include archived notes",
-  "update": "Update",
   "create": "Create",
   "selectTags": "Select Tags",
   "apply": "Apply",
@@ -819,7 +817,7 @@
   "stepHint": "Enter a step description",
   "createApp": "Create App",
   "creatingApp": "Creating app...",
-  "appCreatedSuccessfully": "App created successfully!",
+  "appCreatedSuccessfully": "App created successfully",
   "appCreationFailed": "App creation failed",
   "appCreated": "Created",
   "appCantCreate": "Can't Create",
@@ -827,7 +825,6 @@
   "toApp": "To App",
   "console": "Console",
   "edit": "Edit",
-  "delete": "Delete",
   "confirmDeleteApp": "Are you sure you want to delete this app?",
   "appDeletedSuccessfully": "App deleted successfully!",
   "errorDeletingApp": "Error deleting app: {error}",
@@ -854,7 +851,6 @@
   "consoleOutput": "Console Output",
   "noConsoleOutput": "No console output yet",
   "clearConsole": "Clear Console",
-  "copyToClipboard": "Copy to clipboard",
   "consoleOutputCopied": "Console output copied to clipboard",
   "appState": "App State",
   "saveState": "Save State",
@@ -868,7 +864,6 @@
   "stateCleared": "State cleared successfully!",
   "noState": "No state",
   "appGenerationPrompt": "Create a single-page self-contained HTML application based on the following requirements:\n\nApp Name: {name}\nDescription: {description}\nSteps: {steps}\n\nRequirements:\n1. The HTML must be completely self-contained with embedded CSS and JavaScript\n2. Do not reference any external resources\n3. Document the purpose, requirements, and approach in comments\n4. Use the following APIs to interact with the Flutter app:\n   - Synapse.runQuery(sql: string) - Query the app's database\n   - Synapse.storeAppState(state) - Store JSON serialized state\n   - Synapse.loadAppState() - Load saved state\n   - Synapse.chatAI(prompt) - Send prompt to AI and get response\n\nGenerate the complete HTML application now.",
-  "editApp": "Edit App",
   "deleteApp": "Delete App",
   "aiDebugOverlay": "AI Debug Log",
   "aiDebugOverlaySubtitle": "View AI request/response logs",
@@ -885,7 +880,6 @@
   "libraryUsageHint": "Describe how to use this library",
   "libraryLink": "Library Link",
   "libraryLinkHint": "Enter JavaScript library URL",
-  "addLink": "Add Link",
   "removeLibrary": "Remove Library",
   "removeLink": "Remove Link",
   "noAiLogsAvailable": "No AI logs available",
@@ -894,7 +888,6 @@
   "body": "Body",
   "statusCode": "Status Code",
   "error": "Error",
-  "duration": "Duration",
   "importApp": "Import App",
   "viewApp": "View App",
   "exportApp": "Export App",
@@ -928,7 +921,6 @@
   "yamlFileReadSuccessfully": "YAML file read successfully",
   "yamlStructureValidated": "YAML structure validated",
   "appDataExtracted": "App data extracted",
-  "appCreatedSuccessfully": "App created successfully",
   "processingLibrary": "Processing library: {libraryName}",
   "downloadingLibrary": "Downloading library: {libraryName}...",
   "downloadingDependency": "Downloading: {fileName}...",
@@ -993,9 +985,6 @@
   "audioProcessingDescription": "Can transcribe and analyze audio",
   "videoProcessing": "Video Processing",
   "videoProcessingDescription": "Can analyze video content",
-  "continueButton": "Continue",
-  "getApiKey": "Get API Key",
-  "pleaseEnterApiKey": "Please enter an API key",
   "geminiModelDescription": "Google's most advanced model with full multimodal capabilities",
   "openaiCompatibleModelDescription": "Compatible with OpenAI API endpoints with configurable capabilities",
   "geminiModelDescriptionDetailed": "Google's most advanced model with full multimodal capabilities including document understanding.",
@@ -1031,7 +1020,6 @@
   "exportLogs": "Export Logs",
   "previousExports": "Previous Exports",
   "saveAgain": "Save Again",
-  "delete": "Delete",
   "backupAllNotes": "Backup All Notes",
   "backupAllNotesDescription": "Create a complete backup of all your notes and attachments. The backup will be saved as a zip file that you can download.",
   "creatingBackup": "Creating Backup...",
@@ -1063,7 +1051,6 @@
   "importLogs": "Import Logs",
   "selectBackupFile": "Select Backup File",
   "selectBackupFileDescription": "Choose a backup zip file to restore from",
-  "importCompletedSuccessfully": "Import completed successfully!",
   "importFailed": "Import failed: {error}",
   "invalidBackupFile": "Invalid backup file format",
   "backupVersionTooNew": "Backup is from a newer version of the app. Please update the app first.",
@@ -1096,7 +1083,6 @@
   "errorLoadingEndpoints": "Error loading endpoints: {error}",
   "addMcpEndpoint": "Add MCP Endpoint",
   "addMcpEndpointTitle": "Add MCP Endpoint",
-  "name": "Name",
   "nameHint": "My MCP Server",
   "baseUrl": "Base URL",
   "baseUrlHint": "https://api.example.com or https://server.smithery.ai/@user/server/mcp?api_key=xxx",
@@ -1147,19 +1133,28 @@
   "triggerSyncResult": "Sync complete — drained {touches}, seeded {seeded}, pulled {pulled}, pushed {pushed}",
   "@triggerSyncResult": {
     "placeholders": {
-      "touches": {"type": "int"},
-      "seeded": {"type": "int"},
-      "pulled": {"type": "int"},
-      "pushed": {"type": "int"}
+      "touches": {
+        "type": "int"
+      },
+      "seeded": {
+        "type": "int"
+      },
+      "pulled": {
+        "type": "int"
+      },
+      "pushed": {
+        "type": "int"
+      }
     }
   },
   "triggerSyncError": "Sync failed: {error}",
   "@triggerSyncError": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
-
   "cloudSync": "Cloud Sync",
   "cloudSyncSubtitle": "Sync your notes across devices using Google Drive",
   "cloudSyncAccountSection": "Google Drive account",
@@ -1177,7 +1172,9 @@
   "cloudSyncConnectError": "Could not connect: {error}",
   "@cloudSyncConnectError": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
   "cloudSyncDisconnect": "Disconnect",
@@ -1196,7 +1193,9 @@
   "cloudSyncDatasetError": "Dataset setup failed: {error}",
   "@cloudSyncDatasetError": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
   "cloudSyncDatasetMissing": "Sync dataset is missing",
@@ -1213,25 +1212,47 @@
   "cloudSyncStorageScan": "Check for reclaimable files",
   "cloudSyncStorageNone": "Nothing to reclaim — every stored file is still in use.",
   "cloudSyncStoragePending": "{count, plural, =1{1 file is no longer used and is waiting out its safety period} other{{count} files are no longer used and are waiting out their safety period}}",
-  "@cloudSyncStoragePending": {"placeholders": {"count": {"type": "int"}}},
+  "@cloudSyncStoragePending": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "cloudSyncStorageEligible": "{count, plural, =1{1 file can be deleted now} other{{count} files can be deleted now}}",
-  "@cloudSyncStorageEligible": {"placeholders": {"count": {"type": "int"}}},
+  "@cloudSyncStorageEligible": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "cloudSyncStorageBlocked": "These files can only be deleted while this is the only device in the dataset. Another device is a member, and there is no way yet to know it will not need them.",
   "cloudSyncStorageDelete": "Delete now",
   "cloudSyncStorageConfirm": "Delete these files from Drive permanently? They are no longer used by any note, tag or mini app on this device, and have been unused long enough to be safe to remove. This cannot be undone.",
   "cloudSyncStorageDeleted": "{count, plural, =1{Deleted 1 file} other{Deleted {count} files}}",
-  "@cloudSyncStorageDeleted": {"placeholders": {"count": {"type": "int"}}},
+  "@cloudSyncStorageDeleted": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "cloudSyncFolderContinue": "Continue",
   "cloudSyncFolderName": "Folder: {name}",
   "@cloudSyncFolderName": {
     "placeholders": {
-      "name": {"type": "String"}
+      "name": {
+        "type": "String"
+      }
     }
   },
   "cloudSyncFolderId": "Folder ID: {id}",
   "@cloudSyncFolderId": {
     "placeholders": {
-      "id": {"type": "String"}
+      "id": {
+        "type": "String"
+      }
     }
   },
   "cloudSyncFolderIdHint": "Use this ID to set up another device.",
@@ -1245,22 +1266,32 @@
   "cloudSyncFolderPreviewHolds": "“{name}” holds a sync dataset started on {date}.",
   "@cloudSyncFolderPreviewHolds": {
     "placeholders": {
-      "name": {"type": "String"},
-      "date": {"type": "String"}
+      "name": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
     }
   },
   "cloudSyncFolderPreviewEmpty": "“{name}” is a Note Synapse sync folder, but it has no sync data in it yet. If you expected your notes to be there, check the ID on the other device.",
   "@cloudSyncFolderPreviewEmpty": {
     "placeholders": {
-      "name": {"type": "String"}
+      "name": {
+        "type": "String"
+      }
     }
   },
   "cloudSyncFolderPreviewUse": "Use this folder",
   "cloudSyncFolderAmbiguous": "{count} folders in your Drive are called “{name}”, so this device cannot tell which one holds your sync data. Open Google Drive and rename or remove the ones you do not want to sync with, then try again.",
   "@cloudSyncFolderAmbiguous": {
     "placeholders": {
-      "count": {"type": "int"},
-      "name": {"type": "String"}
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
     }
   },
   "cloudSyncFolderNotFound": "No folder with that ID is available to this app. Check that you copied the whole ID from the other device, and that both devices use the same Google account.",
@@ -1274,7 +1305,9 @@
   "cloudSyncResetError": "Reset failed: {error}",
   "@cloudSyncResetError": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
   "cloudSyncNowSection": "Sync",
@@ -1283,34 +1316,60 @@
   "cloudSyncSeeding": "Preparing existing data — {table} ({done} of {total} tables), {operations} operations so far",
   "@cloudSyncSeeding": {
     "placeholders": {
-      "table": {"type": "String"},
-      "done": {"type": "int"},
-      "total": {"type": "int"},
-      "operations": {"type": "int"}
+      "table": {
+        "type": "String"
+      },
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "operations": {
+        "type": "int"
+      }
     }
   },
   "cloudSyncPushing": "Uploading changes — {done} of {total} batches, {operations} changes sent",
   "@cloudSyncPushing": {
     "placeholders": {
-      "done": {"type": "int"},
-      "total": {"type": "int"},
-      "operations": {"type": "int"}
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "operations": {
+        "type": "int"
+      }
     }
   },
   "cloudSyncNowResult": "Sync complete — drained {touches}, seeded {seeded}, pulled {pulled}, pushed {pushed}",
   "@cloudSyncNowResult": {
     "placeholders": {
-      "touches": {"type": "int"},
-      "seeded": {"type": "int"},
-      "pulled": {"type": "int"},
-      "pushed": {"type": "int"}
+      "touches": {
+        "type": "int"
+      },
+      "seeded": {
+        "type": "int"
+      },
+      "pulled": {
+        "type": "int"
+      },
+      "pushed": {
+        "type": "int"
+      }
     }
   },
   "cloudSyncDegraded": "Sync finished, but some data did not sync",
   "cloudSyncHealthDatasetMissing": "The sync dataset this device joined is no longer in Drive, so nothing can sync. Reset sync on this device to start over.",
   "cloudSyncHealthLogDiverged": "{count, plural, =1{This device's sync history no longer matches the copy in Drive, so its changes cannot be uploaded} other{{count} of this device's sync histories no longer match the copies in Drive, so its changes cannot be uploaded}}. Reset sync on this device to start over.",
   "@cloudSyncHealthLogDiverged": {
-    "placeholders": {"count": {"type": "int"}}
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "userAppNoRunnableCode": "This app's code hasn't arrived on this device",
   "userAppNoRunnableCodeDetail": "Its details synced, but app code isn't uploaded to cloud sync yet. Open it on the device where you created it.",
@@ -1319,33 +1378,88 @@
   "aiToolCodeNotSynced": "Unavailable — this tool's code hasn't arrived on this device yet.",
   "cloudSyncHealthTablesNotSynced": "{count, plural, =1{1 kind of item does not sync yet} other{{count} kinds of item do not sync yet}}: {detail}",
   "@cloudSyncHealthTablesNotSynced": {
-    "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "detail": {
+        "type": "String"
+      }
+    }
   },
   "cloudSyncHealthOperationsFailed": "{count, plural, =1{1 change from another device could not be applied} other{{count} changes from other devices could not be applied}}: {detail}",
   "@cloudSyncHealthOperationsFailed": {
-    "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "detail": {
+        "type": "String"
+      }
+    }
   },
   "cloudSyncHealthWaitingOnEntity": "{count, plural, =1{1 change is waiting for an item that has not arrived} other{{count} changes are waiting for items that have not arrived}}: {detail}",
   "@cloudSyncHealthWaitingOnEntity": {
-    "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "detail": {
+        "type": "String"
+      }
+    }
   },
   "cloudSyncHealthWaitingOnDot": "{count, plural, =1{1 removal is waiting for a change this device has not seen yet} other{{count} removals are waiting for changes this device has not seen yet}}: {detail}",
   "@cloudSyncHealthWaitingOnDot": {
-    "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "detail": {
+        "type": "String"
+      }
+    }
   },
   "cloudSyncHealthMembershipNotBuilt": "{count, plural, =1{1 link could not be recreated} other{{count} links could not be recreated}}: {detail}",
   "@cloudSyncHealthMembershipNotBuilt": {
-    "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "detail": {
+        "type": "String"
+      }
+    }
   },
   "cloudSyncHealthIdentityConflict": "{count, plural, =1{1 item from another device could not be added} other{{count} items from another device could not be added}}, because this device already has a copy of it: {detail}",
   "cloudSyncHealthAttachmentBytesMissing": "{count, plural, =1{1 attachment file has not arrived yet: {detail}} other{{count} attachment files have not arrived yet: {detail}}}",
-  "@cloudSyncHealthAttachmentBytesMissing": {"placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}},
+  "@cloudSyncHealthAttachmentBytesMissing": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
   "@cloudSyncHealthIdentityConflict": {
-    "placeholders": {"count": {"type": "int"}, "detail": {"type": "String"}}
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "detail": {
+        "type": "String"
+      }
+    }
   },
   "cloudSyncHealthSince": "waiting since {time}",
   "@cloudSyncHealthSince": {
-    "placeholders": {"time": {"type": "String"}}
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
   },
   "syncItemsSubnotes": "Sub-tasks",
   "syncItemsRelationships": "Note links",
@@ -1358,20 +1472,22 @@
   "cloudSyncNowError": "Sync failed: {error}",
   "@cloudSyncNowError": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
   "cloudSyncLastRun": "Last run: {time}",
   "@cloudSyncLastRun": {
     "placeholders": {
-      "time": {"type": "String"}
+      "time": {
+        "type": "String"
+      }
     }
   },
   "cloudSyncNeverRun": "Not synced on this device yet",
   "cloudSyncEncryptionNotice": "Sync data is stored in your Google Drive without end-to-end encryption in this version. That means Google, anyone with access to your Google account, and anyone you share these files with can read it.",
-
   "dependencyLicenses": "Dependency Library Licenses",
-
   "refreshedToolsFor": "Refreshed tools for {name}",
   "bookmarkPage": "Bookmark Page",
   "page": "Page",
@@ -1452,7 +1568,7 @@
   "markAllAs": "Mark all as",
   "archiveAll": "Archive All",
   "unarchiveAll": "Unarchive All",
-  "selectAll": "Select All",
+  "selectAll": "Select all",
   "deselectAll": "Deselect All",
   "noteType": "Note Type",
   "excludeTags": "Exclude Tags",
@@ -1473,7 +1589,7 @@
   "selectView": "Select View",
   "switchToCalendar": "Switch to Calendar",
   "rawDataManager": "Raw Data Manager",
-  "rawDataManagerSubtitle": "Manage raw database and file system",
+  "rawDataManagerSubtitle": "Inspect and modify raw database data",
   "files": "Files",
   "database": "Database",
   "tables": "Tables",
@@ -1531,7 +1647,6 @@
   "viewTools": "View Tools",
   "noMcpEndpointsConfigured": "No MCP endpoints configured",
   "clickAddMcpEndpointToGetStarted": "Click \"Add MCP Endpoint\" to get started",
-  "updated": "Updated",
   "noteActionApp": "Note Action App",
   "noteActionApps": "Note Action Apps",
   "noteActionAppSubtitle": "This type of app will operate specifically on pre-selected notes",
@@ -1564,7 +1679,7 @@
   "addImage": "Add Image",
   "noLibrariesAddedYet": "No libraries added yet. Click \"Add Library\" to get started.",
   "conversation": "Conversation",
-    "aiConversation": "AI Conversation",
+  "aiConversation": "AI Conversation",
   "aiConversationDescription": "Start a conversation with AI about your notes",
   "startConversation": "Start Conversation",
   "conversationTree": "Conversation Tree",
@@ -1587,8 +1702,7 @@
   "expand": "Expand",
   "collapse": "Collapse",
   "annotate": "Annotate",
-  "askAiHint": "Ask the AI about this note...",
-  "send": "Send",
+  "askAiHint": "Ask AI about DB schema or errors...",
   "startConversationHint": "Start by asking the AI about your note.",
   "attachmentMissing": "Attachment not found.",
   "unsupportedAttachment": "Unsupported attachment type ({type}).",
@@ -1610,7 +1724,6 @@
     }
   },
   "cancellingRequest": "Cancelling request...",
-  "attachFiles": "Attach files",
   "takePhotoAttachment": "Take photo",
   "mcpTools": "MCP Tools",
   "mcpAndLocalTools": "MCP & Local Tools",
@@ -1669,7 +1782,6 @@
   "selectInteractionToViewDetails": "Select an interaction to view details",
   "deleteInteraction": "Delete Interaction",
   "deleteInteractionConfirm": "Are you sure you want to delete this interaction and all its descendants? This action cannot be undone.",
-  "delete": "Delete",
   "interactionDeletedSuccessfully": "Interaction deleted successfully",
   "errorDeletingInteraction": "Error deleting interaction: {error}",
   "forkFromHere": "Fork from here",
@@ -1696,24 +1808,20 @@
   "noteTitle": "Note Title",
   "enterNoteTitlePrompt": "Enter a title for the new note:",
   "noteTitleHint": "Note title",
-  "createNote": "Create Note",
-  "noteCreatedSuccessfully": "Note \"{title}\" created successfully",
   "multipleNotesCreatedSuccessfully": "{count} notes created successfully",
-  "errorCreatingNote": "Error creating note: {error}",
   "aiNoteCreator": "AI Note Creator",
   "aiNoteCreatorInstructions": "The AI will use the conversation content, along with any additional context you provide below, to create note(s) based on your prompt.",
   "prompt": "Prompt",
   "promptHint": "Describe what you want the AI to do...",
-      "promptTip": "Tip: The default \"Summarize\" will create a concise summary. You can change this to any instruction like \"Extract action items\", \"Create a detailed outline\", etc.",
-      "additionalContextNotes": "Additional Context Notes ({count})",
-      "@additionalContextNotes": {
-        "placeholders": {
-          "count": {
-            "type": "num"
-          }
-        }
-      },
-      "addNotes": "Add Notes",
+  "promptTip": "Tip: The default \"Summarize\" will create a concise summary. You can change this to any instruction like \"Extract action items\", \"Create a detailed outline\", etc.",
+  "additionalContextNotes": "Additional Context Notes ({count})",
+  "@additionalContextNotes": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
   "noAdditionalNotesSelected": "No additional notes selected. The AI will only use the conversation content.",
   "proceed": "Proceed",
   "pleaseEnterPrompt": "Please enter a prompt",
@@ -1729,7 +1837,6 @@
   "whatWouldYouLikeToDo": "What would you like to do?",
   "createNewNoteWithThisContent": "Create a new note with this content",
   "addThisContentToExistingNote": "Add this content to an existing note",
-  "searchNotes": "Search notes...",
   "selectNote": "Select a note...",
   "showingNotes": "Showing {filteredCount} of {totalCount} notes",
   "@showingNotes": {
@@ -1744,11 +1851,8 @@
   },
   "noteDetails": "Note Details",
   "contentPreview": "Content Preview",
-  "createNote": "Create Note",
-  "appendToNote": "Append to Note",
   "selectedTags": "Selected tags:",
   "availableTags": "Available tags:",
-  "urlDetected": "URL Detected",
   "webContentExtractionNotSupportedLinux": "Web content extraction is not supported on Linux.",
   "pleaseUseOtherPlatformsForWebExtraction": "Please use Android, iOS, or Web to extract web content.",
   "shareUrlChoiceTitle": "Choose how to handle this link.",
@@ -1781,7 +1885,6 @@
   "extractingWithAi": "Extracting with AI...",
   "asIs": "As-Is",
   "loadingWebPage": "Loading web page...",
-  "extractingContent": "Extracting content...",
   "imageDetected": "Image Detected",
   "extractImageContent": "Extract Image Content",
   "extractingImageContent": "Extracting...",
@@ -1789,10 +1892,6 @@
   "extractPdfContent": "Extract PDF Content",
   "extractingPdfContent": "Extracting...",
   "sharedImage": "Shared Image",
-  "title": "Title",
-  "content": "Content",
-  "attachments": "Attachments",
-  "tags": "Tags",
   "pleaseSelectNoteToAppend": "Please select a note to append to",
   "contentAppendedSuccessfully": "Content appended successfully!",
   "extractingWebContent": "Extracting Web Content",
@@ -1852,309 +1951,303 @@
     }
   },
   "unknownImage": "Unknown image",
-      "unknownPdf": "Unknown PDF",
-    "newConversation": "New Conversation",
-      "conversations": "Conversations",
-      "oneHourAgo": "1 hour ago",
-      "twelveHoursAgo": "12 hours ago",
-      "oneDayAgo": "1 day ago",
-      "threeDaysAgo": "3 days ago",
-      "sevenDaysAgo": "7 days ago",
-      "fifteenDaysAgo": "15 days ago",
-      "oneMonthAgo": "1 month ago",
-      "sixMonthsAgo": "6 months ago",
-      "allTime": "All time",
-      "custom": "Custom",
-      "first": "First",
-      "last": "Last",
-      "deleteInteractionWhatToDelete": "What do you want to delete?",
-      "deleteOnlyNodesInFilter": "Delete only nodes in this filter",
-      "deleteNodeAndDescendants": "Delete this node and all descendants",
-      "tokenTab": "Token",
-      "oauthTab": "OAuth",
-      "autoConfigure": "Auto Configure",
-      "login": "Login",
-      "authorizationEndpoint": "Authorization Endpoint",
-      "tokenEndpoint": "Token Endpoint",
-      "clientId": "Client ID",
-      "clientSecretOptionalForPkce": "Client Secret (Optional for PKCE)",
-      "scope": "Scope",
-      "usePkceNoClientSecret": "Use PKCE (no client secret)",
-      "oauthDiscoveryMetadataUrlOptional": "OAuth Discovery Page: Metadata URL (optional)",
-      "discover": "Discover",
-      "registerClient": "Register Client",
-      "register": "Register",
-      "editMcpEndpoint": "Edit MCP Endpoint",
-      "metadataUrlOptional": "Metadata URL (optional)",
-      "metadataUrlOptionalHint": "Leave blank to auto-detect using RFC 9728",
-      "oauthDiscovery": "OAuth Discovery",
-      "openInTree": "Open in Tree",
-      "addConversationDialogTitle": "Add Conversation",
-      "addConversationDialogMessage": "How would you like to create this conversation?",
-      "addDirectly": "Add directly",
-      "addDirectlyDescription": "Create the conversation directly with selected nodes as context",
-      "addWithAIProcessing": "Add with AI processing",
-      "addWithAIProcessingDescription": "Use AI to process the content first (e.g., summarize) then create the conversation",
-      "conversationTitle": "Conversation Title",
-      "enterConversationTitlePrompt": "Enter a title for the new conversation:",
-      "conversationTitleHint": "Conversation title",
-      "createConversation": "Create Conversation",
-      "conversationCreatedSuccessfully": "Conversation \"{title}\" created successfully",
-      "@conversationCreatedSuccessfully": {
-        "placeholders": {
-          "title": {
-            "type": "String"
-          }
-        }
+  "unknownPdf": "Unknown PDF",
+  "newConversation": "New Conversation",
+  "oneHourAgo": "1 hour ago",
+  "twelveHoursAgo": "12 hours ago",
+  "oneDayAgo": "1 day ago",
+  "threeDaysAgo": "3 days ago",
+  "sevenDaysAgo": "7 days ago",
+  "fifteenDaysAgo": "15 days ago",
+  "oneMonthAgo": "1 month ago",
+  "sixMonthsAgo": "6 months ago",
+  "allTime": "All time",
+  "custom": "Custom",
+  "first": "First",
+  "last": "Last",
+  "deleteInteractionWhatToDelete": "What do you want to delete?",
+  "deleteOnlyNodesInFilter": "Delete only nodes in this filter",
+  "deleteNodeAndDescendants": "Delete this node and all descendants",
+  "tokenTab": "Token",
+  "oauthTab": "OAuth",
+  "autoConfigure": "Auto Configure",
+  "login": "Login",
+  "authorizationEndpoint": "Authorization Endpoint",
+  "tokenEndpoint": "Token Endpoint",
+  "clientId": "Client ID",
+  "clientSecretOptionalForPkce": "Client Secret (Optional for PKCE)",
+  "scope": "Scope",
+  "usePkceNoClientSecret": "Use PKCE (no client secret)",
+  "oauthDiscoveryMetadataUrlOptional": "OAuth Discovery Page: Metadata URL (optional)",
+  "discover": "Discover",
+  "registerClient": "Register Client",
+  "register": "Register",
+  "editMcpEndpoint": "Edit MCP Endpoint",
+  "metadataUrlOptional": "Metadata URL (optional)",
+  "metadataUrlOptionalHint": "Leave blank to auto-detect using RFC 9728",
+  "oauthDiscovery": "OAuth Discovery",
+  "openInTree": "Open in Tree",
+  "addConversationDialogTitle": "Add Conversation",
+  "addConversationDialogMessage": "How would you like to create this conversation?",
+  "addDirectly": "Add directly",
+  "addDirectlyDescription": "Create the conversation directly with selected nodes as context",
+  "addWithAIProcessing": "Add with AI processing",
+  "addWithAIProcessingDescription": "Use AI to process the content first (e.g., summarize) then create the conversation",
+  "conversationTitle": "Conversation Title",
+  "enterConversationTitlePrompt": "Enter a title for the new conversation:",
+  "conversationTitleHint": "Conversation title",
+  "createConversation": "Create Conversation",
+  "conversationCreatedSuccessfully": "Conversation \"{title}\" created successfully",
+  "@conversationCreatedSuccessfully": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "errorCreatingConversation": "Error creating conversation: {error}",
+  "@errorCreatingConversation": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "aiConversationCreator": "AI Conversation Creator",
+  "aiConversationCreatorInstructions": "The AI will process the conversation content, along with any additional context you provide below, to create a conversation based on your prompt.",
+  "selectRelationshipType": "Select Relationship Type",
+  "selectRelationshipTypeForNotes": "Select the type of relationship for {noteCount} {noteCount, plural, =1{note} other{notes}}:",
+  "@selectRelationshipTypeForNotes": {
+    "placeholders": {
+      "noteCount": {
+        "type": "int"
+      }
+    }
+  },
+  "relationshipType": "Relationship Type",
+  "linkNotes": "Link {noteCount} {noteCount, plural, =1{Note} other{Notes}}",
+  "@linkNotes": {
+    "placeholders": {
+      "noteCount": {
+        "type": "int"
+      }
+    }
+  },
+  "customRelationshipType": "Custom Relationship Type",
+  "enterCustomRelationshipType": "Enter custom relationship type",
+  "customEllipsis": "Custom...",
+  "confirmRemoveLink": "Are you sure you want to remove this link?",
+  "remove": "Remove",
+  "linkNotesDialogTitle": "Link Notes",
+  "link": "Link",
+  "linkNoteTo": "Link \"{noteTitle}\" to:",
+  "@linkNoteTo": {
+    "placeholders": {
+      "noteTitle": {
+        "type": "String"
+      }
+    }
+  },
+  "audioTranscription": "Audio Transcription",
+  "transcribingAudio": "Transcribing audio...",
+  "transcriptionAddedToNote": "Transcription added to note",
+  "errorTranscribingAudio": "Error transcribing audio: {error}",
+  "@errorTranscribingAudio": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorAddingTranscription": "Error adding transcription: {error}",
+  "@errorAddingTranscription": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "newNoteFromShareCreated": "New note from share created successfully!",
+  "mediaDownloadsHeader": "Media attachments",
+  "mediaDownloadsDescription": "Choose which images to download locally for offline use.",
+  "clearAll": "Clear all",
+  "noRemoteImagesDetected": "No remote images detected in this content.",
+  "mediaPreviewLabel": "Preview",
+  "imageUrlLabel": "Image URL",
+  "downloadToLocalLabel": "Download to local?",
+  "mediaDownloadFailed": "Failed to download {count, plural, one {# image} other {# images}}.",
+  "@mediaDownloadFailed": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "mediaDownloadNoneAvailable": "No remote images available in this note.",
+  "mediaDownloadAlreadyCached": "All remote images are already cached locally.",
+  "mediaDownloadSuccess": "Downloaded {count, plural, one {# image} other {# images}} to attachments.",
+  "@mediaDownloadSuccess": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "mediaDownloadPartial": "Downloaded {successCount, plural, one {# image} other {# images}}, failed {failureCount, plural, one {#} other {#}}.",
+  "@mediaDownloadPartial": {
+    "placeholders": {
+      "successCount": {
+        "type": "num"
       },
-      "errorCreatingConversation": "Error creating conversation: {error}",
-      "@errorCreatingConversation": {
-        "placeholders": {
-          "error": {
-            "type": "String"
-          }
-        }
+      "failureCount": {
+        "type": "num"
+      }
+    }
+  },
+  "mediaDownloadFailedGeneric": "Failed to download images: {error}",
+  "@mediaDownloadFailedGeneric": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "fetchRemoteImages": "Fetch remote images",
+  "gettingStarted": "Getting Started",
+  "gettingStartedSubtitle": "Install user manual, starter apps, and starter skills",
+  "installUserManual": "Install User Manual",
+  "installUserManualSubtitle": "Install or update the user manual note",
+  "installStarterApps": "Install Starter Apps",
+  "installStarterAppsSubtitle": "Browse and install pre-configured apps",
+  "userManualInfo": "User Manual Information",
+  "installed": "Installed",
+  "notInstalled": "Not Installed",
+  "currentVersion": "Current Version",
+  "latestVersion": "Latest Version",
+  "lastUpdated": "Last Updated",
+  "newVersionAvailable": "New version available!",
+  "updateUserManual": "Update User Manual",
+  "reinstallUserManual": "Reinstall User Manual",
+  "installing": "Installing...",
+  "updateUserManualConfirm": "A newer version ({newVersion}) of the User Manual is available. Your current version is {oldVersion}. Do you want to update?",
+  "@updateUserManualConfirm": {
+    "placeholders": {
+      "oldVersion": {
+        "type": "String"
       },
-      "aiConversationCreator": "AI Conversation Creator",
-      "aiConversationCreatorInstructions": "The AI will process the conversation content, along with any additional context you provide below, to create a conversation based on your prompt.",
-      "selectRelationshipType": "Select Relationship Type",
-      "selectRelationshipTypeForNotes": "Select the type of relationship for {noteCount} {noteCount, plural, =1{note} other{notes}}:",
-      "@selectRelationshipTypeForNotes": {
-        "placeholders": {
-          "noteCount": {
-            "type": "int"
-          }
-        }
+      "newVersion": {
+        "type": "String"
+      }
+    }
+  },
+  "userManualInstalledSuccessfully": "User Manual installed successfully!",
+  "userManualUpdatedSuccessfully": "User Manual updated successfully!",
+  "errorInstallingUserManual": "Error installing User Manual: {error}",
+  "@errorInstallingUserManual": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "whatIsUserManual": "What is User Manual?",
+  "userManualDescription": "The User Manual is a comprehensive guide to Note Synapse. It includes detailed instructions, tips, and best practices for using the app effectively.",
+  "noStarterAppsAvailable": "No starter apps available",
+  "noAppsSelected": "No apps selected",
+  "appsSelected": "{count} {count, plural, one {app} other {apps}} selected",
+  "@appsSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "proceedWithInstallation": "Install Selected Apps",
+  "starterAppsInstalledSuccessfully": "{count} {count, plural, one {app} other {apps}} installed successfully!",
+  "@starterAppsInstalledSuccessfully": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "starterAppsInstallFailed": "Failed to install {count} {count, plural, one {app} other {apps}}",
+  "@starterAppsInstallFailed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "starterAppsPartialInstall": "Installed {successCount} {successCount, plural, one {app} other {apps}}, failed {failureCount} {failureCount, plural, one {app} other {apps}}",
+  "@starterAppsPartialInstall": {
+    "placeholders": {
+      "successCount": {
+        "type": "int"
       },
-      "relationshipType": "Relationship Type",
-      "linkNotes": "Link {noteCount} {noteCount, plural, =1{Note} other{Notes}}",
-      "@linkNotes": {
-        "placeholders": {
-          "noteCount": {
-            "type": "int"
-          }
-        }
-      },
-      "customRelationshipType": "Custom Relationship Type",
-      "enterCustomRelationshipType": "Enter custom relationship type",
-      "customEllipsis": "Custom...",
-      "confirmRemoveLink": "Are you sure you want to remove this link?",
-      "remove": "Remove",
-      "linkNotesDialogTitle": "Link Notes",
-      "link": "Link",
-      "linkNoteTo": "Link \"{noteTitle}\" to:",
-      "@linkNoteTo": {
-        "placeholders": {
-          "noteTitle": {
-            "type": "String"
-          }
-        }
-      },
-      "audioTranscription": "Audio Transcription",
-      "transcribingAudio": "Transcribing audio...",
-      "transcriptionAddedToNote": "Transcription added to note",
-      "errorTranscribingAudio": "Error transcribing audio: {error}",
-      "@errorTranscribingAudio": {
-        "placeholders": {
-          "error": {
-            "type": "String"
-          }
-        }
-      },
-      "errorAddingTranscription": "Error adding transcription: {error}",
-      "@errorAddingTranscription": {
-        "placeholders": {
-          "error": {
-            "type": "String"
-          }
-        }
-      },
-      "newNoteFromShareCreated": "New note from share created successfully!",
-      "mediaDownloadsHeader": "Media attachments",
-      "mediaDownloadsDescription": "Choose which images to download locally for offline use.",
-      "selectAll": "Select all",
-      "clearAll": "Clear all",
-      "noRemoteImagesDetected": "No remote images detected in this content.",
-      "mediaPreviewLabel": "Preview",
-      "imageUrlLabel": "Image URL",
-      "downloadToLocalLabel": "Download to local?",
-      "mediaDownloadFailed": "Failed to download {count, plural, one {# image} other {# images}}.",
-      "@mediaDownloadFailed": {
-        "placeholders": {
-          "count": {
-            "type": "num"
-          }
-        }
-      },
-      "mediaDownloadNoneAvailable": "No remote images available in this note.",
-      "mediaDownloadAlreadyCached": "All remote images are already cached locally.",
-      "mediaDownloadSuccess": "Downloaded {count, plural, one {# image} other {# images}} to attachments.",
-      "@mediaDownloadSuccess": {
-        "placeholders": {
-          "count": {
-            "type": "num"
-          }
-        }
-      },
-      "mediaDownloadPartial": "Downloaded {successCount, plural, one {# image} other {# images}}, failed {failureCount, plural, one {#} other {#}}.",
-      "@mediaDownloadPartial": {
-        "placeholders": {
-          "successCount": {
-            "type": "num"
-          },
-          "failureCount": {
-            "type": "num"
-          }
-        }
-      },
-      "mediaDownloadFailedGeneric": "Failed to download images: {error}",
-      "@mediaDownloadFailedGeneric": {
-        "placeholders": {
-          "error": {}
-        }
-      },
-      "fetchRemoteImages": "Fetch remote images",
-      "gettingStarted": "Getting Started",
-      "gettingStartedSubtitle": "Install user manual, starter apps, and starter skills",
-      "installUserManual": "Install User Manual",
-      "installUserManualSubtitle": "Install or update the user manual note",
-      "installStarterApps": "Install Starter Apps",
-      "installStarterAppsSubtitle": "Browse and install pre-configured apps",
-      "userManualInfo": "User Manual Information",
-      "status": "Status",
-      "installed": "Installed",
-      "notInstalled": "Not Installed",
-      "currentVersion": "Current Version",
-      "latestVersion": "Latest Version",
-      "lastUpdated": "Last Updated",
-      "newVersionAvailable": "New version available!",
-      "updateUserManual": "Update User Manual",
-      "reinstallUserManual": "Reinstall User Manual",
-      "installing": "Installing...",
-      "updateUserManualConfirm": "A newer version ({newVersion}) of the User Manual is available. Your current version is {oldVersion}. Do you want to update?",
-      "@updateUserManualConfirm": {
-        "placeholders": {
-          "oldVersion": {
-            "type": "String"
-          },
-          "newVersion": {
-            "type": "String"
-          }
-        }
-      },
-      "userManualInstalledSuccessfully": "User Manual installed successfully!",
-      "userManualUpdatedSuccessfully": "User Manual updated successfully!",
-      "errorInstallingUserManual": "Error installing User Manual: {error}",
-      "@errorInstallingUserManual": {
-        "placeholders": {
-          "error": {
-            "type": "String"
-          }
-        }
-      },
-      "whatIsUserManual": "What is User Manual?",
-      "userManualDescription": "The User Manual is a comprehensive guide to Note Synapse. It includes detailed instructions, tips, and best practices for using the app effectively.",
-      "noStarterAppsAvailable": "No starter apps available",
-      "noAppsSelected": "No apps selected",
-      "appsSelected": "{count} {count, plural, one {app} other {apps}} selected",
-      "@appsSelected": {
-        "placeholders": {
-          "count": {
-            "type": "int"
-          }
-        }
-      },
-      "deselectAll": "Deselect All",
-      "proceedWithInstallation": "Install Selected Apps",
-      "starterAppsInstalledSuccessfully": "{count} {count, plural, one {app} other {apps}} installed successfully!",
-      "@starterAppsInstalledSuccessfully": {
-        "placeholders": {
-          "count": {
-            "type": "int"
-          }
-        }
-      },
-      "starterAppsInstallFailed": "Failed to install {count} {count, plural, one {app} other {apps}}",
-      "@starterAppsInstallFailed": {
-        "placeholders": {
-          "count": {
-            "type": "int"
-          }
-        }
-      },
-      "starterAppsPartialInstall": "Installed {successCount} {successCount, plural, one {app} other {apps}}, failed {failureCount} {failureCount, plural, one {app} other {apps}}",
-      "@starterAppsPartialInstall": {
-        "placeholders": {
-          "successCount": {
-            "type": "int"
-          },
-          "failureCount": {
-            "type": "int"
-          }
-        }
-      },
-      "errorInstallingStarterApps": "Error installing starter apps: {error}",
-      "@errorInstallingStarterApps": {
-        "placeholders": {
-          "error": {
-            "type": "String"
-          }
-        }
-      },
-      "installStarterSkills": "Install Starter Skills",
-      "installStarterSkillsSubtitle": "Browse bundled skills and install them as transparent skill notes",
-      "noStarterSkillsAvailable": "No starter skills available",
-      "noStarterSkillsSelected": "No starter skills selected",
-      "installSelectedSkills": "Install Selected Skills",
-      "starterSkillsInstalledSuccessfully": "{count} {count, plural, one {skill} other {skills}} installed successfully!",
-      "@starterSkillsInstalledSuccessfully": {
-        "placeholders": {
-          "count": {
-            "type": "int"
-          }
-        }
-      },
-      "errorLoadingStarterSkills": "Error loading starter skills: {error}",
-      "@errorLoadingStarterSkills": {
-        "placeholders": {
-          "error": {
-            "type": "String"
-          }
-        }
-      },
-      "errorInstallingStarterSkills": "Error installing starter skills: {error}",
-      "@errorInstallingStarterSkills": {
-        "placeholders": {
-          "error": {
-            "type": "String"
-          }
-        }
-      },
-      "skillRefLabel": "skillRef: {ref}",
-      "@skillRefLabel": {
-        "placeholders": {
-          "ref": {
-            "type": "String"
-          }
-        }
-      },
-      "sourceLabel": "Source: {source}",
-      "@sourceLabel": {
-        "placeholders": {
-          "source": {
-            "type": "String"
-          }
-        }
-      },
+      "failureCount": {
+        "type": "int"
+      }
+    }
+  },
+  "errorInstallingStarterApps": "Error installing starter apps: {error}",
+  "@errorInstallingStarterApps": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "installStarterSkills": "Install Starter Skills",
+  "installStarterSkillsSubtitle": "Browse bundled skills and install them as transparent skill notes",
+  "noStarterSkillsAvailable": "No starter skills available",
+  "noStarterSkillsSelected": "No starter skills selected",
+  "installSelectedSkills": "Install Selected Skills",
+  "starterSkillsInstalledSuccessfully": "{count} {count, plural, one {skill} other {skills}} installed successfully!",
+  "@starterSkillsInstalledSuccessfully": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "errorLoadingStarterSkills": "Error loading starter skills: {error}",
+  "@errorLoadingStarterSkills": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingStarterSkills": "Error installing starter skills: {error}",
+  "@errorInstallingStarterSkills": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "skillRefLabel": "skillRef: {ref}",
+  "@skillRefLabel": {
+    "placeholders": {
+      "ref": {
+        "type": "String"
+      }
+    }
+  },
+  "sourceLabel": "Source: {source}",
+  "@sourceLabel": {
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
   "rawDataManagerTitle": "Raw Data Manager",
-  "rawDataManagerSubtitle": "Advanced tools for file and database management",
   "advancedToolTitle": "Advanced Tool",
   "advancedToolWarning": "This tool provides raw access to your application data and database. Improper use can lead to PERMANENT DATA LOSS or corruption.\n\nOnly use this if you know what you are doing or have been instructed by support.",
   "iUnderstand": "I Understand",
   "fileManagerTab": "File Manager",
   "databaseManagerTab": "Database Manager",
   "warningDataInstability": "Warning: Direct data modification can cause app instability.",
-  "attachments": "Attachments",
   "cache": "Cache",
   "root": "Root",
   "itemsCount": "{count} items",
@@ -2165,7 +2258,6 @@
       }
     }
   },
-  "deselectAll": "Deselect All",
   "selectUnused": "Select Unused",
   "noFilesFound": "No files found",
   "used": "Used",
@@ -2263,7 +2355,6 @@
       }
     }
   },
-  "askAiHint": "Ask AI about DB schema or errors...",
   "askAiAboutNoteHint": "Ask AI about this note...",
   "openDbFileTooltip": "Open DB File",
   "resetToDefaultDbTooltip": "Reset to Default DB",
@@ -2272,8 +2363,6 @@
   "taskRescheduled": "Task rescheduled",
   "recoveryManager": "Recovery Manager",
   "backupAndRestore": "Backup & Restore",
-  "rawDataManagerTitle": "Raw Data Manager",
-  "rawDataManagerSubtitle": "Inspect and modify raw database data",
   "databaseNotConnected": "Database not connected",
   "fileUsageUnavailable": "File usage status unavailable",
   "fileUsageDetails": "File Usage Details",
@@ -2297,8 +2386,6 @@
   "noteNoLongerExists": "Note no longer exists",
   "messageNoLongerExists": "Message no longer exists",
   "showDetails": "Show Details",
-  "close": "Close",
-
   "saveFindings": "Save Findings",
   "saveFindingsToNote": "Save findings to note",
   "attachNotesToPlan": "Attach Notes to Plan",
@@ -2421,7 +2508,9 @@
   "insertUserAppConfigureTitle": "Embed {appName}",
   "@insertUserAppConfigureTitle": {
     "placeholders": {
-      "appName": { "type": "String" }
+      "appName": {
+        "type": "String"
+      }
     }
   },
   "insertUserAppSize": "Size",
@@ -2464,13 +2553,17 @@
   "errorLoadingModelPreferences": "Error loading model preferences: {error}",
   "@errorLoadingModelPreferences": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
   "errorSavingModelPreferences": "Error saving preferences: {error}",
   "@errorSavingModelPreferences": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
   "scratchpad": "Scratchpad",
@@ -2482,7 +2575,9 @@
   "selectTagsForNotes": "Select Tags for {count} {count, plural, =1{Note} other{Notes}}",
   "@selectTagsForNotes": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "webLogins": "Web Logins",
@@ -2494,14 +2589,18 @@
   "loginSaved": "Login saved for {domain}",
   "@loginSaved": {
     "placeholders": {
-      "domain": {"type": "String"}
+      "domain": {
+        "type": "String"
+      }
     }
   },
   "deleteLogin": "Delete login",
   "deleteLoginConfirm": "Delete the saved login for {domain}? Clipping pages on this site will no longer be authenticated, and any apps you gave access to this login will lose it.",
   "@deleteLoginConfirm": {
     "placeholders": {
-      "domain": {"type": "String"}
+      "domain": {
+        "type": "String"
+      }
     }
   },
   "deleteLoginFailed": "Could not delete this login. Please try again.",
@@ -2515,11 +2614,14 @@
   "revokeAppAccessConfirm": "Remove \"{appName}\" access to your {domain} login?",
   "@revokeAppAccessConfirm": {
     "placeholders": {
-      "appName": {"type": "String"},
-      "domain": {"type": "String"}
+      "appName": {
+        "type": "String"
+      },
+      "domain": {
+        "type": "String"
+      }
     }
   },
-  "searchNotes": "Search notes",
   "figureUnavailable": "Figure no longer available — the source note or figure was removed",
   "@figureUnavailable": {
     "description": "Placeholder shown in place of an image when a synapseresource://figure or attachment URI cannot be resolved"
@@ -2528,8 +2630,12 @@
   "@figureSourcePage": {
     "description": "Provenance label under a retrieved figure: owning note title and 1-based page",
     "placeholders": {
-      "title": {"type": "String"},
-      "page": {"type": "int"}
+      "title": {
+        "type": "String"
+      },
+      "page": {
+        "type": "int"
+      }
     }
   },
   "figureOpenSource": "Open source",
@@ -2548,28 +2654,40 @@
   "searchSubtitleReady": "{provider} · semantic search on",
   "@searchSubtitleReady": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchSubtitleIndexing": "{provider} · indexing {percent}%",
   "@searchSubtitleIndexing": {
     "placeholders": {
-      "provider": {"type": "String"},
-      "percent": {"type": "int"}
+      "provider": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "int"
+      }
     }
   },
   "searchSubtitleSwitching": "Switching to {provider} — {percent}% re-indexed",
   "@searchSubtitleSwitching": {
     "placeholders": {
-      "provider": {"type": "String"},
-      "percent": {"type": "int"}
+      "provider": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "int"
+      }
     }
   },
   "searchSubtitleRevoked": "Semantic search off — re-enable {provider} to resume",
   "@searchSubtitleRevoked": {
     "description": "Subtitle when the configured provider was explicitly stopped (\"Stop using X now\"): it stays unserved across sweeps and restarts until re-enabled, so reporting backfill progress would imply it comes back on its own",
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchProviderReEnable": "Re-enable",
@@ -2579,43 +2697,65 @@
   "searchSubtitleErrors": "{provider} · {count} errors",
   "@searchSubtitleErrors": {
     "placeholders": {
-      "provider": {"type": "String"},
-      "count": {"type": "int"}
+      "provider": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
     }
   },
   "searchIndexStatus": "Index status",
   "searchIndexIdle": "Up to date — {chunks} indexed chunks",
   "@searchIndexIdle": {
     "placeholders": {
-      "chunks": {"type": "int"}
+      "chunks": {
+        "type": "int"
+      }
     }
   },
   "searchStageChunks": "Indexing notes — {done}/{total}",
   "@searchStageChunks": {
     "placeholders": {
-      "done": {"type": "int"},
-      "total": {"type": "int"}
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "searchStagePdfText": "Reading PDF text — {done}/{total} attachments",
   "@searchStagePdfText": {
     "placeholders": {
-      "done": {"type": "int"},
-      "total": {"type": "int"}
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "searchStageOcr": "Recognizing text in PDFs — {done}/{total} pages",
   "@searchStageOcr": {
     "placeholders": {
-      "done": {"type": "int"},
-      "total": {"type": "int"}
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "searchStageEmbed": "Creating embeddings — {done}/{total} chunks",
   "@searchStageEmbed": {
     "placeholders": {
-      "done": {"type": "int"},
-      "total": {"type": "int"}
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "searchEmbeddingProvider": "Embedding provider",
@@ -2628,13 +2768,17 @@
   "searchProviderDimensions": "{dims} dimensions",
   "@searchProviderDimensions": {
     "placeholders": {
-      "dims": {"type": "int"}
+      "dims": {
+        "type": "int"
+      }
     }
   },
   "searchProviderServedBy": "Searches are still served by {provider}",
   "@searchProviderServedBy": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchProviderEndpoint": "Endpoint URL",
@@ -2648,7 +2792,9 @@
   "@searchProviderApiKeyFromChat": {
     "description": "Shown when the key field was prefilled from an already-configured chat model that talks to the same provider",
     "placeholders": {
-      "model": {"type": "String"}
+      "model": {
+        "type": "String"
+      }
     }
   },
   "searchProviderFieldsRequired": "Enter an endpoint URL and a model name before testing.",
@@ -2660,19 +2806,25 @@
   "searchTestOk": "Connection OK — {dims}-dimensional vectors",
   "@searchTestOk": {
     "placeholders": {
-      "dims": {"type": "int"}
+      "dims": {
+        "type": "int"
+      }
     }
   },
   "searchTestDimensionsCorrected": "Dimensions corrected to {dims} to match the endpoint",
   "@searchTestDimensionsCorrected": {
     "placeholders": {
-      "dims": {"type": "int"}
+      "dims": {
+        "type": "int"
+      }
     }
   },
   "searchTestFailed": "Connection failed: {error}",
   "@searchTestFailed": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
   "searchTestRequired": "Run the connection test before enabling this provider.",
@@ -2680,74 +2832,102 @@
   "searchProviderEnabled": "{provider} enabled",
   "@searchProviderEnabled": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchProviderTurnedOff": "Semantic search off — stored vectors were kept",
   "searchConsentTitle": "Send note text to {provider}?",
   "@searchConsentTitle": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchConsentBody": "About {chunks} chunks of note text will be sent to {provider} to build the semantic index.",
   "@searchConsentBody": {
     "placeholders": {
-      "chunks": {"type": "int"},
-      "provider": {"type": "String"}
+      "chunks": {
+        "type": "int"
+      },
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchConsentBodyWithImages": "About {chunks} chunks of note text and {images} images will be sent to {provider} to build the semantic index.",
   "@searchConsentBodyWithImages": {
     "placeholders": {
-      "chunks": {"type": "int"},
-      "images": {"type": "int"},
-      "provider": {"type": "String"}
+      "chunks": {
+        "type": "int"
+      },
+      "images": {
+        "type": "int"
+      },
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchConsentBodyUnknown": "Your notes will be sent to {provider} as they are indexed, to build the semantic index.",
   "@searchConsentBodyUnknown": {
     "description": "Consent body when nothing is chunked yet (fresh install): an estimate of 0 would understate what actually uploads once chunking runs",
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchConsentLargePdfsExcluded": "{count, plural, =1{1 large PDF stays excluded and is not sent.} other{{count} large PDFs stay excluded and are not sent.}}",
   "@searchConsentLargePdfsExcluded": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "searchConsentWifiOnly": "Bulk indexing runs on Wi-Fi only by default; search queries may use any network.",
   "searchConsentSwitchDisclosure": "Until re-indexing completes, searches will continue to use {provider}.",
   "@searchConsentSwitchDisclosure": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchConsentStopServing": "Stop using {provider} now",
   "@searchConsentStopServing": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchConsentStoppedServing": "{provider} is no longer used — keyword search until re-indexing completes",
   "@searchConsentStoppedServing": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchConsentAccept": "Send and index",
   "searchErrorAuth": "{provider} rejected the key — indexing is halted until it is fixed",
   "@searchErrorAuth": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchErrorNotInstalled": "{provider} is not on this device yet",
   "@searchErrorNotInstalled": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchErrorDimensions": "The endpoint's vector size does not match the configured dimensions",
@@ -2755,7 +2935,9 @@
   "searchErrorFailedChunks": "{count, plural, =1{1 chunk could not be embedded} other{{count} chunks could not be embedded}}",
   "@searchErrorFailedChunks": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "searchErrorFailedChunksHint": "These are retried by a rebuild — nothing else re-checks them.",
@@ -2779,25 +2961,33 @@
   "searchInstallProgress": "Downloading — {percent}%",
   "@searchInstallProgress": {
     "placeholders": {
-      "percent": {"type": "int"}
+      "percent": {
+        "type": "int"
+      }
     }
   },
   "searchInstallAuthFailed": "Download rejected — accept the model licence on HuggingFace and check your token. {error}",
   "@searchInstallAuthFailed": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
   "searchInstallTransientFailed": "Download failed — check the connection and try again. {error}",
   "@searchInstallTransientFailed": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
   "searchInstallFailed": "Download failed: {error}",
   "@searchInstallFailed": {
     "placeholders": {
-      "error": {"type": "String"}
+      "error": {
+        "type": "String"
+      }
     }
   },
   "searchModelInstalled": "Model downloaded",
@@ -2807,21 +2997,29 @@
   "searchRebuildRunning": "Rebuilding — {percent}%",
   "@searchRebuildRunning": {
     "placeholders": {
-      "percent": {"type": "int"}
+      "percent": {
+        "type": "int"
+      }
     }
   },
   "searchRebuildConfirmTitle": "Rebuild the search index?",
   "searchRebuildConfirmBody": "{notes} notes and {chunks} chunks will be re-checked.",
   "@searchRebuildConfirmBody": {
     "placeholders": {
-      "notes": {"type": "int"},
-      "chunks": {"type": "int"}
+      "notes": {
+        "type": "int"
+      },
+      "chunks": {
+        "type": "int"
+      }
     }
   },
   "searchRebuildConfirmCost": "Chunks whose text changed are sent to {provider} again; unchanged chunks are not re-embedded.",
   "@searchRebuildConfirmCost": {
     "placeholders": {
-      "provider": {"type": "String"}
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchRebuildStarted": "Rebuilding the search index…",
@@ -2843,34 +3041,46 @@
   "searchPdfPageCapSubtitle": "PDFs longer than {pages} pages are skipped unless you opt them in",
   "@searchPdfPageCapSubtitle": {
     "placeholders": {
-      "pages": {"type": "int"}
+      "pages": {
+        "type": "int"
+      }
     }
   },
   "searchLargePdfsSkipped": "{count, plural, =1{1 large PDF not indexed — review} other{{count} large PDFs not indexed — review}}",
   "@searchLargePdfsSkipped": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "searchLargePdfsMore": "{count, plural, =1{1 more not shown} other{{count} more not shown}}",
   "@searchLargePdfsMore": {
     "description": "Overflow row when more skipped PDFs exist than the list renders",
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "searchLargePdfPages": "{title} · {pages} pages",
   "@searchLargePdfPages": {
     "placeholders": {
-      "title": {"type": "String"},
-      "pages": {"type": "int"}
+      "title": {
+        "type": "String"
+      },
+      "pages": {
+        "type": "int"
+      }
     }
   },
   "searchIndexAnyway": "Index anyway",
   "searchLargePdfQueued": "{name} will be indexed",
   "@searchLargePdfQueued": {
     "placeholders": {
-      "name": {"type": "String"}
+      "name": {
+        "type": "String"
+      }
     }
   },
   "searchNoLargePdfs": "No PDFs are being skipped for size",
@@ -2885,7 +3095,9 @@
   "searchIndexOptionsSubtitle": "Choose what may be extracted from {name} for search.",
   "@searchIndexOptionsSubtitle": {
     "placeholders": {
-      "name": {"type": "String"}
+      "name": {
+        "type": "String"
+      }
     }
   },
   "searchIndexPurgeWarning": "Turning an option off deletes what it already produced for this file — its search chunks, any figure crops rendered from it, and the vectors stored for semantic search.",
@@ -2896,8 +3108,12 @@
   "searchIndexOverCapSubtitle": "{pages} pages — longer than the {cap}-page limit, so this PDF is skipped unless you opt it in.",
   "@searchIndexOverCapSubtitle": {
     "placeholders": {
-      "pages": {"type": "int"},
-      "cap": {"type": "int"}
+      "pages": {
+        "type": "int"
+      },
+      "cap": {
+        "type": "int"
+      }
     }
   },
   "searchIndexAnywaySubtitle": "Keep indexing this PDF even when it is longer than the page limit.",
@@ -2915,5 +3131,544 @@
   "searchExcludeNoteConfirm": "Exclude",
   "searchExcludeNoteExcluded": "Note excluded from search",
   "searchExcludeNoteIncluded": "Note will be indexed for search again",
-  "searchExcludeNoteFailed": "Could not update the search exclusion"
+  "searchExcludeNoteFailed": "Could not update the search exclusion",
+  "protocolStudies": "Protocol studies",
+  "protocolStudiesSubtitle": "Capture and study website HTTP workflows",
+  "newProtocolStudy": "New protocol study",
+  "studyWithLogin": "Study protocol",
+  "protocolStudyEmpty": "No saved protocol studies yet.",
+  "protocolStudyUrlHint": "Enter a website URL",
+  "protocolStudyStart": "Start study",
+  "protocolStudySave": "Save study",
+  "protocolStudySaved": "Protocol study saved",
+  "protocolStudyNetwork": "Network",
+  "protocolStudyRequests": "requests",
+  "protocolStudySelectRequests": "Select the requests that belong to the workflow.",
+  "protocolStudyNoRequests": "No matching requests captured yet.",
+  "protocolStudyRawLocal": "Raw request and response data stays in the private protocol study workspace.",
+  "protocolStudySharedState": "No saved login was selected. The in-app WebView may still contain shared ambient login state.",
+  "protocolStudyCaptureLimit": "Capture stopped at the configured size or event limit.",
+  "protocolStudyAnalyze": "Synthesize workflow",
+  "protocolStudyChooseModel": "Choose analysis model",
+  "protocolStudyRemoteDisclosure": "Check fields whose values the remote AI may see. Use the visibility control to omit irrelevant fields entirely.",
+  "protocolStudyLocalDisclosure": "Choose only the fields this on-device model needs. Request/response pairs are analyzed separately to fit smaller context windows.",
+  "protocolStudyOutboundPreview": "Review exact AI payload",
+  "protocolStudySendForAnalysis": "Analyze with this model",
+  "protocolStudyAnalyzingPair": "Analyzing pair {current} of {total}",
+  "@protocolStudyAnalyzingPair": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "protocolStudyRedacted": "redacted fields",
+  "protocolStudyExcluded": "excluded fields",
+  "protocolStudyIncludeField": "Include field in analysis",
+  "protocolStudyExcludeField": "Exclude field from analysis",
+  "protocolStudyMutationWarning": "This request may mutate website state. Run the minimal repro anyway?",
+  "protocolStudyRunRepro": "Run minimal repro",
+  "protocolStudyReproResult": "Minimal repro result",
+  "protocolStudyExportNote": "Save sanitized note",
+  "protocolStudyNoteSaved": "Sanitized protocol report saved as a note",
+  "protocolStudyCreateTool": "Create AI tool / skill",
+  "protocolStudyCreateApp": "Create User App",
+  "protocolStudyFidelityWarning": "Capture fidelity is platform-dependent. Service workers and WebSockets are not captured; bodies may be truncated.",
+  "protocolStudyDelete": "Delete study",
+  "protocolStudyDeleteConfirm": "Delete this private protocol study and its raw data?",
+  "protocolStudyNoModel": "Configure an AI model before synthesizing the workflow.",
+  "protocolStudyAnalysisFailed": "Workflow synthesis failed",
+  "protocolStudyResponseBodyLimit": "Response body limit",
+  "protocolStudyApplyRecommendations": "Apply cautious recommendations",
+  "protocolStudyModelLabel": "Model",
+  "protocolStudyDestinationLabel": "Destination",
+  "protocolStudyDisclosed": "disclosed",
+  "protocolStudyAll": "All",
+  "protocolStudyForm": "Form",
+  "protocolStudyViewRaw": "View raw request and response",
+  "protocolStudyRequestHeaders": "Request headers",
+  "protocolStudyRequestBody": "Request body",
+  "protocolStudyResponseHeaders": "Response headers",
+  "protocolStudyResponseBody": "Response body",
+  "protocolStudyFinalUrl": "Final URL",
+  "protocolStudyNotCaptured": "not captured",
+  "protocolStudyParameters": "Parameters",
+  "protocolStudyNoneIdentified": "None identified",
+  "protocolStudyWorkflow": "Workflow",
+  "protocolStudyCaveats": "Caveats",
+  "protocolStudyOptional": "optional",
+  "protocolStudyTruncated": "truncated",
+  "protocolStudyStatus": "Status",
+  "protocolStudyNewExample": "Start next example",
+  "protocolStudyExampleNumber": "Recording example {number}",
+  "@protocolStudyExampleNumber": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "protocolStudyMarkParameter": "Mark as reusable parameter",
+  "protocolStudyTransportMetadata": "Transport metadata",
+  "protocolStudyPartial": "partial",
+  "protocolStudyReviewSanitizedNote": "Review sanitized note",
+  "protocolStudyDiscardSession": "Discard session record",
+  "protocolStudyDiscardSessionConfirm": "Discard this unsaved raw protocol study? It cannot be recovered.",
+  "protocolStudyReplay": "Replay request",
+  "protocolStudyReplayResponse": "Replayed response",
+  "protocolStudyReplayFailed": "Replay failed",
+  "protocolStudyReplayedAt": "Replayed at",
+  "protocolStudyReplayUsedSession": "Used live session cookies",
+  "protocolStudyCapturePage": "Capture rendered page",
+  "protocolStudyPageCaptured": "Rendered page snapshot captured",
+  "protocolStudyPageSnapshot": "Page",
+  "minutesAgoShort": "{count}m ago",
+  "@minutesAgoShort": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "hoursAgoShort": "{count}h ago",
+  "@hoursAgoShort": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "daysAgoShort": "{count}d ago",
+  "@daysAgoShort": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "done": "Done",
+  "refreshLogin": "Refresh login",
+  "webLoginRefreshHint": "Sign in again to refresh this login. Your saved app permissions are kept.",
+  "webLoginRefreshed": "Login refreshed for {domain}",
+  "@webLoginRefreshed": {
+    "placeholders": {
+      "domain": {
+        "type": "String"
+      }
+    }
+  },
+  "webLoginRefreshDiscarded": "Refresh cancelled — your previous login was restored.",
+  "clearSiteCookies": "Clear cookies for this site",
+  "webLoginCookiesCleared": "Cookies cleared. Sign in again, then tap Save login.",
+  "webLoginExpired": "Expired — refresh to sign in again",
+  "webLoginExpiresInDays": "{days, plural, =0{Expires today — refresh soon} =1{Expires tomorrow — refresh soon} other{Expires in {days} days — refresh soon}}",
+  "@webLoginExpiresInDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "webLoginValidUntil": "Valid until {date}",
+  "@webLoginValidUntil": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "webLoginNoExpiry": "No expiry set by the site",
+  "webLoginSavedAgo": "Saved {time}",
+  "@webLoginSavedAgo": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "webLoginRefreshedAgo": "Refreshed {time}",
+  "@webLoginRefreshedAgo": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "runInBackground": "Keep running in background",
+  "appRunningInBackground": "{appName} is running",
+  "@appRunningInBackground": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "closeBackgroundApp": "Close app",
+  "closeBackgroundAppConfirm": "Close \"{appName}\"? Anything unsaved in the app will be lost.",
+  "@closeBackgroundAppConfirm": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "backgroundAppClosed": "Closed \"{appName}\" — only one app can run in the background.",
+  "@backgroundAppClosed": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeNotes": "Merge notes",
+  "mergeWith": "Merge with…",
+  "mergeTabMerged": "Merged ({count})",
+  "@mergeTabMerged": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergeAddNotes": "Add notes",
+  "mergeSelectNotesTitle": "Select notes to merge",
+  "mergeNeedsSecondNote": "Pick at least one more note to merge with.",
+  "mergeRemoveSource": "Remove from merge",
+  "mergeRemoveSourceBody": "Blocks already taken from \"{title}\" stay in the merged note. The note itself is not changed.",
+  "@mergeRemoveSourceBody": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeAddAll": "Add all",
+  "mergeRemoveAll": "Remove all",
+  "mergeBlocksAdded": "{added} of {total} blocks added",
+  "@mergeBlocksAdded": {
+    "placeholders": {
+      "added": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "mergeAddToMerged": "Add to merged",
+  "mergeRemoveFromMerged": "Remove from merged",
+  "mergeAddSection": "Add this section ({count} blocks)",
+  "@mergeAddSection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergeCopyText": "Copy text",
+  "mergeSelectText": "Select text…",
+  "mergeCopied": "Copied",
+  "mergeEditedTitle": "Changed in the merged note",
+  "mergeEditedBody": "This block was changed or removed in the merged note. Edit it there, or add another copy.",
+  "mergeAddAnotherCopy": "Add another copy",
+  "mergeForget": "Forget",
+  "mergeArrange": "Arrange",
+  "mergeEdit": "Edit",
+  "mergeInsertHere": "Next block goes here",
+  "mergeInsertingAt": "Inserting at position {position}",
+  "@mergeInsertingAt": {
+    "placeholders": {
+      "position": {
+        "type": "int"
+      }
+    }
+  },
+  "mergeEmptyHint": "Tap blocks in a note tab to add them here, or switch to Edit and paste.",
+  "mergeUseCombinedTitle": "Use \"{title}\"",
+  "@mergeUseCombinedTitle": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeSaveAsNew": "Save as new note",
+  "mergeReplaceNote": "Replace \"{title}\"",
+  "@mergeReplaceNote": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeReplaceWarning": "{count, plural, =1{\"{title}\" gets this content and title. The other note is not changed.} other{\"{title}\" gets this content and title. The other {count} notes are not changed.}}",
+  "@mergeReplaceWarning": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergeLinkBack": "Link back to source notes",
+  "mergeArchiveOthers": "Archive the other source notes",
+  "mergeDiscardTitle": "Discard merged note?",
+  "mergeDiscardBody": "Blocks you added and text you typed will be lost.",
+  "mergeDiscard": "Discard",
+  "mergedInto": "Merged into \"{title}\"",
+  "@mergedInto": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeNothingToSave": "Add at least one block or some text first.",
+  "mergeSaveFailed": "Could not save the merged note: {error}",
+  "@mergeSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeBlockFromNote": "From \"{title}\"",
+  "@mergeBlockFromNote": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeRemoveBlock": "Remove",
+  "mergeOtherAttachments": "Other attachments to keep",
+  "mergeArchiveOthersPinned": "Pinned notes are left as they are.",
+  "navPadUnitChar": "Char",
+  "navPadUnitToken": "Token",
+  "navPadUnitLine": "Line",
+  "navPadUnitBlock": "Block",
+  "navPadModeMove": "Move",
+  "navPadModeSelect": "Select",
+  "navPadUnitTooltip": "Move by {unit}",
+  "@navPadUnitTooltip": {
+    "placeholders": {
+      "unit": {
+        "type": "String"
+      }
+    }
+  },
+  "navPadModeTooltip": "Tap to switch move/select · hold to expand selection · swipe down to shrink",
+  "navPadMoveUp": "Up",
+  "navPadMoveDown": "Down",
+  "navPadMoveBackward": "Backward",
+  "navPadMoveForward": "Forward",
+  "navPadSwitchSide": "Move pad to the other side",
+  "navPadHide": "Hide navigation pad",
+  "navPadShow": "Show navigation pad",
+  "navPadLabelLineStart": "Line start",
+  "navPadLabelLineEnd": "Line end",
+  "navPadLabelBlockStart": "Block start",
+  "navPadLabelBlockEnd": "Block end",
+  "navPadLabelPrevBlock": "Previous block",
+  "navPadLabelNextBlock": "Next block",
+  "navPadLabelExpand": "Expanded",
+  "navPadLabelShrink": "Shrunk",
+  "source": "Source",
+  "clippedFrom": "Clipped from",
+  "clippedRelative": "clipped {when}",
+  "@clippedRelative": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "openOriginal": "Open original",
+  "copyLink": "Copy link",
+  "linkCopied": "Link copied",
+  "editSource": "Edit source",
+  "removeSource": "Remove source",
+  "removeSourceConfirm": "Remove this source from the note? The note's content stays as it is.",
+  "addSource": "Add source",
+  "addSourceMenu": "Add source…",
+  "sourceSiteName": "Site name",
+  "invalidUrl": "Enter a valid http(s) link",
+  "duplicateSourceUrl": "This link is already a source of this note",
+  "moreSources": "+{count} more",
+  "@moreSources": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "showLess": "Show less",
+  "switchSpace": "Switch space",
+  "manageSpaces": "Manage spaces…",
+  "manageSpacesTitle": "Manage Spaces",
+  "noSpacesYet": "No spaces yet",
+  "noSpacesYetHint": "Turn a filter into a space with \"Use as space\" in the filter editor.",
+  "spaceUnavailable": "That space is no longer available",
+  "leaveSpace": "Leave space",
+  "activateAsSpace": "Activate as space",
+  "stopUsingAsSpace": "Stop using as space",
+  "spaceRowLabel": "Space: {name}",
+  "@spaceRowLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "useAsSpace": "Use as space",
+  "useAsSpaceDescription": "Activating a space narrows every list to its notes and tags new notes with its include tags.",
+  "useAsSpaceNeedsIncludeTags": "Add at least one include tag: a space without include tags would scope nothing and tag nothing.",
+  "spaceStampPreview": "New notes will be tagged: {tags}",
+  "@spaceStampPreview": {
+    "placeholders": {
+      "tags": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceTextCriteriaWarning": "Notes you create here may not match this filter's text criteria.",
+  "spaceNoteTypeWarning": "Notes you create here may not match this filter's note types.",
+  "tagExistingNotesTitle": "Tag existing notes?",
+  "tagExistingNotesBody": "Also tag the {count} {count, plural, =1{note} other{notes}} currently in \"{name}\" with: {tags}",
+  "@tagExistingNotesBody": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      },
+      "tags": {
+        "type": "String"
+      }
+    }
+  },
+  "tagExistingNotesConfirm": "Tag notes",
+  "notNow": "Not now",
+  "addToSpaceMenu": "Add to space…",
+  "addToSpaceTitle": "Add to space",
+  "addToSpaceHint": "Checked spaces tag this note; unchecking removes the tags no other space still needs.",
+  "addToSpaceHintPlural": "Checked spaces tag these {count} notes; unchecking removes the tags no other space still needs.",
+  "@addToSpaceHintPlural": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spaceMembershipPartial": "Some of the selected notes",
+  "spaceMembershipFailed": "Could not update space membership",
+  "showInEverySpace": "Show in every space",
+  "stopShowingInEverySpace": "Stop showing in every space",
+  "@stopShowingInEverySpace": {
+    "description": "Multi-select action label to remove the all-spaces tag"
+  },
+  "showInEverySpaceOn": "This note now shows in every space",
+  "showInEverySpaceOff": "This note no longer shows in every space",
+  "addExistingNotesMenu": "Add existing notes…",
+  "addExistingNotesTitle": "Add notes to {name}",
+  "@addExistingNotesTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "addExistingNotesNoSpace": "Activate a space first",
+  "addExistingNotesNothingLeft": "Every note is already in {name}",
+  "@addExistingNotesNothingLeft": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceJoinAdded": "{count} added",
+  "@spaceJoinAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spaceJoinHiddenTasks": "{count} not shown because {name} only shows tasks",
+  "@spaceJoinHiddenTasks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceJoinHiddenNotes": "{count} not shown because {name} only shows notes",
+  "@spaceJoinHiddenNotes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceJoinHiddenFilter": "{count} not shown because of {name}'s other criteria",
+  "@spaceJoinHiddenFilter": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "savedOutsideSpace": "Saved outside {name}",
+  "@savedOutsideSpace": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "showAllNotes": "Show all notes",
+  "includeNotesOutsideSpace": "Include notes outside {name}",
+  "@includeNotesOutsideSpace": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "spacesRetiredByTagChange": "{names} is no longer a space: its include tags are gone",
+  "@spacesRetiredByTagChange": {
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "focusOnThisTag": "Focus on this tag",
+  "focusOnTagUnusable": "A tag containing a comma cannot be used as a space.",
+  "focusOnTagReserved": "This tag is reserved by the app and cannot be used as a space.",
+  "@focusOnThisTag": {
+    "description": "Long-press action on a tag chip: make the tag a Space and activate it"
+  },
+  "@focusOnTagUnusable": {
+    "description": "Why a tag cannot become a Space (filters store include tags comma-joined)"
+  },
+  "@focusOnTagReserved": {
+    "description": "Why a reserved tag (all-spaces, agent-skill) cannot become a Space"
+  }
 }

@@ -6322,4 +6322,805 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchExcludeNoteFailed => 'Could not update the search exclusion';
+
+  @override
+  String get protocolStudies => 'Protocol studies';
+
+  @override
+  String get protocolStudiesSubtitle =>
+      'Capture and study website HTTP workflows';
+
+  @override
+  String get newProtocolStudy => 'New protocol study';
+
+  @override
+  String get studyWithLogin => 'Study protocol';
+
+  @override
+  String get protocolStudyEmpty => 'No saved protocol studies yet.';
+
+  @override
+  String get protocolStudyUrlHint => 'Enter a website URL';
+
+  @override
+  String get protocolStudyStart => 'Start study';
+
+  @override
+  String get protocolStudySave => 'Save study';
+
+  @override
+  String get protocolStudySaved => 'Protocol study saved';
+
+  @override
+  String get protocolStudyNetwork => 'Network';
+
+  @override
+  String get protocolStudyRequests => 'requests';
+
+  @override
+  String get protocolStudySelectRequests =>
+      'Select the requests that belong to the workflow.';
+
+  @override
+  String get protocolStudyNoRequests => 'No matching requests captured yet.';
+
+  @override
+  String get protocolStudyRawLocal =>
+      'Raw request and response data stays in the private protocol study workspace.';
+
+  @override
+  String get protocolStudySharedState =>
+      'No saved login was selected. The in-app WebView may still contain shared ambient login state.';
+
+  @override
+  String get protocolStudyCaptureLimit =>
+      'Capture stopped at the configured size or event limit.';
+
+  @override
+  String get protocolStudyAnalyze => 'Synthesize workflow';
+
+  @override
+  String get protocolStudyChooseModel => 'Choose analysis model';
+
+  @override
+  String get protocolStudyRemoteDisclosure =>
+      'Check fields whose values the remote AI may see. Use the visibility control to omit irrelevant fields entirely.';
+
+  @override
+  String get protocolStudyLocalDisclosure =>
+      'Choose only the fields this on-device model needs. Request/response pairs are analyzed separately to fit smaller context windows.';
+
+  @override
+  String get protocolStudyOutboundPreview => 'Review exact AI payload';
+
+  @override
+  String get protocolStudySendForAnalysis => 'Analyze with this model';
+
+  @override
+  String protocolStudyAnalyzingPair(int current, int total) {
+    return 'Analyzing pair $current of $total';
+  }
+
+  @override
+  String get protocolStudyRedacted => 'redacted fields';
+
+  @override
+  String get protocolStudyExcluded => 'excluded fields';
+
+  @override
+  String get protocolStudyIncludeField => 'Include field in analysis';
+
+  @override
+  String get protocolStudyExcludeField => 'Exclude field from analysis';
+
+  @override
+  String get protocolStudyMutationWarning =>
+      'This request may mutate website state. Run the minimal repro anyway?';
+
+  @override
+  String get protocolStudyRunRepro => 'Run minimal repro';
+
+  @override
+  String get protocolStudyReproResult => 'Minimal repro result';
+
+  @override
+  String get protocolStudyExportNote => 'Save sanitized note';
+
+  @override
+  String get protocolStudyNoteSaved =>
+      'Sanitized protocol report saved as a note';
+
+  @override
+  String get protocolStudyCreateTool => 'Create AI tool / skill';
+
+  @override
+  String get protocolStudyCreateApp => 'Create User App';
+
+  @override
+  String get protocolStudyFidelityWarning =>
+      'Capture fidelity is platform-dependent. Service workers and WebSockets are not captured; bodies may be truncated.';
+
+  @override
+  String get protocolStudyDelete => 'Delete study';
+
+  @override
+  String get protocolStudyDeleteConfirm =>
+      'Delete this private protocol study and its raw data?';
+
+  @override
+  String get protocolStudyNoModel =>
+      'Configure an AI model before synthesizing the workflow.';
+
+  @override
+  String get protocolStudyAnalysisFailed => 'Workflow synthesis failed';
+
+  @override
+  String get protocolStudyResponseBodyLimit => 'Response body limit';
+
+  @override
+  String get protocolStudyApplyRecommendations =>
+      'Apply cautious recommendations';
+
+  @override
+  String get protocolStudyModelLabel => 'Model';
+
+  @override
+  String get protocolStudyDestinationLabel => 'Destination';
+
+  @override
+  String get protocolStudyDisclosed => 'disclosed';
+
+  @override
+  String get protocolStudyAll => 'All';
+
+  @override
+  String get protocolStudyForm => 'Form';
+
+  @override
+  String get protocolStudyViewRaw => 'View raw request and response';
+
+  @override
+  String get protocolStudyRequestHeaders => 'Request headers';
+
+  @override
+  String get protocolStudyRequestBody => 'Request body';
+
+  @override
+  String get protocolStudyResponseHeaders => 'Response headers';
+
+  @override
+  String get protocolStudyResponseBody => 'Response body';
+
+  @override
+  String get protocolStudyFinalUrl => 'Final URL';
+
+  @override
+  String get protocolStudyNotCaptured => 'not captured';
+
+  @override
+  String get protocolStudyParameters => 'Parameters';
+
+  @override
+  String get protocolStudyNoneIdentified => 'None identified';
+
+  @override
+  String get protocolStudyWorkflow => 'Workflow';
+
+  @override
+  String get protocolStudyCaveats => 'Caveats';
+
+  @override
+  String get protocolStudyOptional => 'optional';
+
+  @override
+  String get protocolStudyTruncated => 'truncated';
+
+  @override
+  String get protocolStudyStatus => 'Status';
+
+  @override
+  String get protocolStudyNewExample => 'Start next example';
+
+  @override
+  String protocolStudyExampleNumber(int number) {
+    return 'Recording example $number';
+  }
+
+  @override
+  String get protocolStudyMarkParameter => 'Mark as reusable parameter';
+
+  @override
+  String get protocolStudyTransportMetadata => 'Transport metadata';
+
+  @override
+  String get protocolStudyPartial => 'partial';
+
+  @override
+  String get protocolStudyReviewSanitizedNote => 'Review sanitized note';
+
+  @override
+  String get protocolStudyDiscardSession => 'Discard session record';
+
+  @override
+  String get protocolStudyDiscardSessionConfirm =>
+      'Discard this unsaved raw protocol study? It cannot be recovered.';
+
+  @override
+  String get protocolStudyReplay => 'Replay request';
+
+  @override
+  String get protocolStudyReplayResponse => 'Replayed response';
+
+  @override
+  String get protocolStudyReplayFailed => 'Replay failed';
+
+  @override
+  String get protocolStudyReplayedAt => 'Replayed at';
+
+  @override
+  String get protocolStudyReplayUsedSession => 'Used live session cookies';
+
+  @override
+  String get protocolStudyCapturePage => 'Capture rendered page';
+
+  @override
+  String get protocolStudyPageCaptured => 'Rendered page snapshot captured';
+
+  @override
+  String get protocolStudyPageSnapshot => 'Page';
+
+  @override
+  String minutesAgoShort(int count) {
+    return '${count}m ago';
+  }
+
+  @override
+  String hoursAgoShort(int count) {
+    return '${count}h ago';
+  }
+
+  @override
+  String daysAgoShort(int count) {
+    return '${count}d ago';
+  }
+
+  @override
+  String get done => 'Done';
+
+  @override
+  String get refreshLogin => 'Refresh login';
+
+  @override
+  String get webLoginRefreshHint =>
+      'Sign in again to refresh this login. Your saved app permissions are kept.';
+
+  @override
+  String webLoginRefreshed(String domain) {
+    return 'Login refreshed for $domain';
+  }
+
+  @override
+  String get webLoginRefreshDiscarded =>
+      'Refresh cancelled — your previous login was restored.';
+
+  @override
+  String get clearSiteCookies => 'Clear cookies for this site';
+
+  @override
+  String get webLoginCookiesCleared =>
+      'Cookies cleared. Sign in again, then tap Save login.';
+
+  @override
+  String get webLoginExpired => 'Expired — refresh to sign in again';
+
+  @override
+  String webLoginExpiresInDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Expires in $days days — refresh soon',
+      one: 'Expires tomorrow — refresh soon',
+      zero: 'Expires today — refresh soon',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String webLoginValidUntil(String date) {
+    return 'Valid until $date';
+  }
+
+  @override
+  String get webLoginNoExpiry => 'No expiry set by the site';
+
+  @override
+  String webLoginSavedAgo(String time) {
+    return 'Saved $time';
+  }
+
+  @override
+  String webLoginRefreshedAgo(String time) {
+    return 'Refreshed $time';
+  }
+
+  @override
+  String get runInBackground => 'Keep running in background';
+
+  @override
+  String appRunningInBackground(String appName) {
+    return '$appName is running';
+  }
+
+  @override
+  String get closeBackgroundApp => 'Close app';
+
+  @override
+  String closeBackgroundAppConfirm(String appName) {
+    return 'Close \"$appName\"? Anything unsaved in the app will be lost.';
+  }
+
+  @override
+  String backgroundAppClosed(String appName) {
+    return 'Closed \"$appName\" — only one app can run in the background.';
+  }
+
+  @override
+  String get mergeNotes => 'Merge notes';
+
+  @override
+  String get mergeWith => 'Merge with…';
+
+  @override
+  String mergeTabMerged(int count) {
+    return 'Merged ($count)';
+  }
+
+  @override
+  String get mergeAddNotes => 'Add notes';
+
+  @override
+  String get mergeSelectNotesTitle => 'Select notes to merge';
+
+  @override
+  String get mergeNeedsSecondNote =>
+      'Pick at least one more note to merge with.';
+
+  @override
+  String get mergeRemoveSource => 'Remove from merge';
+
+  @override
+  String mergeRemoveSourceBody(String title) {
+    return 'Blocks already taken from \"$title\" stay in the merged note. The note itself is not changed.';
+  }
+
+  @override
+  String get mergeAddAll => 'Add all';
+
+  @override
+  String get mergeRemoveAll => 'Remove all';
+
+  @override
+  String mergeBlocksAdded(int added, int total) {
+    return '$added of $total blocks added';
+  }
+
+  @override
+  String get mergeAddToMerged => 'Add to merged';
+
+  @override
+  String get mergeRemoveFromMerged => 'Remove from merged';
+
+  @override
+  String mergeAddSection(int count) {
+    return 'Add this section ($count blocks)';
+  }
+
+  @override
+  String get mergeCopyText => 'Copy text';
+
+  @override
+  String get mergeSelectText => 'Select text…';
+
+  @override
+  String get mergeCopied => 'Copied';
+
+  @override
+  String get mergeEditedTitle => 'Changed in the merged note';
+
+  @override
+  String get mergeEditedBody =>
+      'This block was changed or removed in the merged note. Edit it there, or add another copy.';
+
+  @override
+  String get mergeAddAnotherCopy => 'Add another copy';
+
+  @override
+  String get mergeForget => 'Forget';
+
+  @override
+  String get mergeArrange => 'Arrange';
+
+  @override
+  String get mergeEdit => 'Edit';
+
+  @override
+  String get mergeInsertHere => 'Next block goes here';
+
+  @override
+  String mergeInsertingAt(int position) {
+    return 'Inserting at position $position';
+  }
+
+  @override
+  String get mergeEmptyHint =>
+      'Tap blocks in a note tab to add them here, or switch to Edit and paste.';
+
+  @override
+  String mergeUseCombinedTitle(String title) {
+    return 'Use \"$title\"';
+  }
+
+  @override
+  String get mergeSaveAsNew => 'Save as new note';
+
+  @override
+  String mergeReplaceNote(String title) {
+    return 'Replace \"$title\"';
+  }
+
+  @override
+  String mergeReplaceWarning(String title, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '\"$title\" gets this content and title. The other $count notes are not changed.',
+      one:
+          '\"$title\" gets this content and title. The other note is not changed.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get mergeLinkBack => 'Link back to source notes';
+
+  @override
+  String get mergeArchiveOthers => 'Archive the other source notes';
+
+  @override
+  String get mergeDiscardTitle => 'Discard merged note?';
+
+  @override
+  String get mergeDiscardBody =>
+      'Blocks you added and text you typed will be lost.';
+
+  @override
+  String get mergeDiscard => 'Discard';
+
+  @override
+  String mergedInto(String title) {
+    return 'Merged into \"$title\"';
+  }
+
+  @override
+  String get mergeNothingToSave => 'Add at least one block or some text first.';
+
+  @override
+  String mergeSaveFailed(String error) {
+    return 'Could not save the merged note: $error';
+  }
+
+  @override
+  String mergeBlockFromNote(String title) {
+    return 'From \"$title\"';
+  }
+
+  @override
+  String get mergeRemoveBlock => 'Remove';
+
+  @override
+  String get mergeOtherAttachments => 'Other attachments to keep';
+
+  @override
+  String get mergeArchiveOthersPinned => 'Pinned notes are left as they are.';
+
+  @override
+  String get navPadUnitChar => 'Char';
+
+  @override
+  String get navPadUnitToken => 'Token';
+
+  @override
+  String get navPadUnitLine => 'Line';
+
+  @override
+  String get navPadUnitBlock => 'Block';
+
+  @override
+  String get navPadModeMove => 'Move';
+
+  @override
+  String get navPadModeSelect => 'Select';
+
+  @override
+  String navPadUnitTooltip(String unit) {
+    return 'Move by $unit';
+  }
+
+  @override
+  String get navPadModeTooltip =>
+      'Tap to switch move/select · hold to expand selection · swipe down to shrink';
+
+  @override
+  String get navPadMoveUp => 'Up';
+
+  @override
+  String get navPadMoveDown => 'Down';
+
+  @override
+  String get navPadMoveBackward => 'Backward';
+
+  @override
+  String get navPadMoveForward => 'Forward';
+
+  @override
+  String get navPadSwitchSide => 'Move pad to the other side';
+
+  @override
+  String get navPadHide => 'Hide navigation pad';
+
+  @override
+  String get navPadShow => 'Show navigation pad';
+
+  @override
+  String get navPadLabelLineStart => 'Line start';
+
+  @override
+  String get navPadLabelLineEnd => 'Line end';
+
+  @override
+  String get navPadLabelBlockStart => 'Block start';
+
+  @override
+  String get navPadLabelBlockEnd => 'Block end';
+
+  @override
+  String get navPadLabelPrevBlock => 'Previous block';
+
+  @override
+  String get navPadLabelNextBlock => 'Next block';
+
+  @override
+  String get navPadLabelExpand => 'Expanded';
+
+  @override
+  String get navPadLabelShrink => 'Shrunk';
+
+  @override
+  String get source => 'Source';
+
+  @override
+  String get clippedFrom => 'Clipped from';
+
+  @override
+  String clippedRelative(String when) {
+    return 'clipped $when';
+  }
+
+  @override
+  String get openOriginal => 'Open original';
+
+  @override
+  String get copyLink => 'Copy link';
+
+  @override
+  String get linkCopied => 'Link copied';
+
+  @override
+  String get editSource => 'Edit source';
+
+  @override
+  String get removeSource => 'Remove source';
+
+  @override
+  String get removeSourceConfirm =>
+      'Remove this source from the note? The note\'s content stays as it is.';
+
+  @override
+  String get addSource => 'Add source';
+
+  @override
+  String get addSourceMenu => 'Add source…';
+
+  @override
+  String get sourceSiteName => 'Site name';
+
+  @override
+  String get invalidUrl => 'Enter a valid http(s) link';
+
+  @override
+  String get duplicateSourceUrl => 'This link is already a source of this note';
+
+  @override
+  String moreSources(int count) {
+    return '+$count more';
+  }
+
+  @override
+  String get showLess => 'Show less';
+
+  @override
+  String get switchSpace => 'Switch space';
+
+  @override
+  String get manageSpaces => 'Manage spaces…';
+
+  @override
+  String get manageSpacesTitle => 'Manage Spaces';
+
+  @override
+  String get noSpacesYet => 'No spaces yet';
+
+  @override
+  String get noSpacesYetHint =>
+      'Turn a filter into a space with \"Use as space\" in the filter editor.';
+
+  @override
+  String get spaceUnavailable => 'That space is no longer available';
+
+  @override
+  String get leaveSpace => 'Leave space';
+
+  @override
+  String get activateAsSpace => 'Activate as space';
+
+  @override
+  String get stopUsingAsSpace => 'Stop using as space';
+
+  @override
+  String spaceRowLabel(String name) {
+    return 'Space: $name';
+  }
+
+  @override
+  String get useAsSpace => 'Use as space';
+
+  @override
+  String get useAsSpaceDescription =>
+      'Activating a space narrows every list to its notes and tags new notes with its include tags.';
+
+  @override
+  String get useAsSpaceNeedsIncludeTags =>
+      'Add at least one include tag: a space without include tags would scope nothing and tag nothing.';
+
+  @override
+  String spaceStampPreview(String tags) {
+    return 'New notes will be tagged: $tags';
+  }
+
+  @override
+  String get spaceTextCriteriaWarning =>
+      'Notes you create here may not match this filter\'s text criteria.';
+
+  @override
+  String get spaceNoteTypeWarning =>
+      'Notes you create here may not match this filter\'s note types.';
+
+  @override
+  String get tagExistingNotesTitle => 'Tag existing notes?';
+
+  @override
+  String tagExistingNotesBody(int count, String name, String tags) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'notes',
+      one: 'note',
+    );
+    return 'Also tag the $count $_temp0 currently in \"$name\" with: $tags';
+  }
+
+  @override
+  String get tagExistingNotesConfirm => 'Tag notes';
+
+  @override
+  String get notNow => 'Not now';
+
+  @override
+  String get addToSpaceMenu => 'Add to space…';
+
+  @override
+  String get addToSpaceTitle => 'Add to space';
+
+  @override
+  String get addToSpaceHint =>
+      'Checked spaces tag this note; unchecking removes the tags no other space still needs.';
+
+  @override
+  String addToSpaceHintPlural(int count) {
+    return 'Checked spaces tag these $count notes; unchecking removes the tags no other space still needs.';
+  }
+
+  @override
+  String get spaceMembershipPartial => 'Some of the selected notes';
+
+  @override
+  String get spaceMembershipFailed => 'Could not update space membership';
+
+  @override
+  String get showInEverySpace => 'Show in every space';
+
+  @override
+  String get stopShowingInEverySpace => 'Stop showing in every space';
+
+  @override
+  String get showInEverySpaceOn => 'This note now shows in every space';
+
+  @override
+  String get showInEverySpaceOff => 'This note no longer shows in every space';
+
+  @override
+  String get addExistingNotesMenu => 'Add existing notes…';
+
+  @override
+  String addExistingNotesTitle(String name) {
+    return 'Add notes to $name';
+  }
+
+  @override
+  String get addExistingNotesNoSpace => 'Activate a space first';
+
+  @override
+  String addExistingNotesNothingLeft(String name) {
+    return 'Every note is already in $name';
+  }
+
+  @override
+  String spaceJoinAdded(int count) {
+    return '$count added';
+  }
+
+  @override
+  String spaceJoinHiddenTasks(int count, String name) {
+    return '$count not shown because $name only shows tasks';
+  }
+
+  @override
+  String spaceJoinHiddenNotes(int count, String name) {
+    return '$count not shown because $name only shows notes';
+  }
+
+  @override
+  String spaceJoinHiddenFilter(int count, String name) {
+    return '$count not shown because of $name\'s other criteria';
+  }
+
+  @override
+  String savedOutsideSpace(String name) {
+    return 'Saved outside $name';
+  }
+
+  @override
+  String get showAllNotes => 'Show all notes';
+
+  @override
+  String includeNotesOutsideSpace(String name) {
+    return 'Include notes outside $name';
+  }
+
+  @override
+  String spacesRetiredByTagChange(String names) {
+    return '$names is no longer a space: its include tags are gone';
+  }
+
+  @override
+  String get focusOnThisTag => 'Focus on this tag';
+
+  @override
+  String get focusOnTagUnusable =>
+      'A tag containing a comma cannot be used as a space.';
+
+  @override
+  String get focusOnTagReserved =>
+      'This tag is reserved by the app and cannot be used as a space.';
 }

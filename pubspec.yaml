@@ -96,6 +96,11 @@ dependencies:
   
   # URL launcher
   url_launcher: ^6.2.1
+
+  # Registrable-domain boundaries for saved logins and protocol studies.
+  # This package embeds the complete Public Suffix List, including private
+  # suffix rules (for example, github.io).
+  tldts: ^0.0.1-beta
   
   # Deep links for OAuth redirect handling
   app_links: ^6.0.1
@@ -149,6 +154,9 @@ dependencies:
   
   # HTML to Markdown conversion
   html2md: ^1.3.2
+
+  # HTML parsing (used to resolve relative URLs in clipped web pages)
+  html: ^0.15.6
   
   # YAML parsing
   yaml: ^3.1.2
@@ -218,6 +226,8 @@ hooks:
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to

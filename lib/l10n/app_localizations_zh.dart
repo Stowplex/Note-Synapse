@@ -5970,4 +5970,769 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get searchExcludeNoteFailed => '无法更新搜索排除设置';
+
+  @override
+  String get protocolStudies => '协议研究';
+
+  @override
+  String get protocolStudiesSubtitle => '捕获并研究网站 HTTP 工作流程';
+
+  @override
+  String get newProtocolStudy => '新建协议研究';
+
+  @override
+  String get studyWithLogin => '研究协议';
+
+  @override
+  String get protocolStudyEmpty => '尚未保存协议研究。';
+
+  @override
+  String get protocolStudyUrlHint => '输入网站网址';
+
+  @override
+  String get protocolStudyStart => '开始研究';
+
+  @override
+  String get protocolStudySave => '保存研究';
+
+  @override
+  String get protocolStudySaved => '协议研究已保存';
+
+  @override
+  String get protocolStudyNetwork => '网络';
+
+  @override
+  String get protocolStudyRequests => '个请求';
+
+  @override
+  String get protocolStudySelectRequests => '请选择属于此工作流程的请求。';
+
+  @override
+  String get protocolStudyNoRequests => '尚未捕获符合条件的请求。';
+
+  @override
+  String get protocolStudyRawLocal => '原始请求和响应数据仅保存在私有协议研究工作区。';
+
+  @override
+  String get protocolStudySharedState => '未选择已保存登录。应用内 WebView 仍可能包含共享的登录状态。';
+
+  @override
+  String get protocolStudyCaptureLimit => '捕获已达到配置的大小或事件上限。';
+
+  @override
+  String get protocolStudyAnalyze => '合成工作流程';
+
+  @override
+  String get protocolStudyChooseModel => '选择分析模型';
+
+  @override
+  String get protocolStudyRemoteDisclosure =>
+      '勾选允许远程 AI 查看值的字段。使用可见性按钮可完全排除无关字段。';
+
+  @override
+  String get protocolStudyLocalDisclosure =>
+      '只选择此设备端模型需要的字段。请求和响应会逐对分析，以适应较小的上下文窗口。';
+
+  @override
+  String get protocolStudyOutboundPreview => '检查发送给 AI 的完整内容';
+
+  @override
+  String get protocolStudySendForAnalysis => '使用此模型分析';
+
+  @override
+  String protocolStudyAnalyzingPair(int current, int total) {
+    return '正在分析第 $current/$total 对';
+  }
+
+  @override
+  String get protocolStudyRedacted => '个字段已隐藏';
+
+  @override
+  String get protocolStudyExcluded => '个字段已排除';
+
+  @override
+  String get protocolStudyIncludeField => '在分析中包含字段';
+
+  @override
+  String get protocolStudyExcludeField => '从分析中排除字段';
+
+  @override
+  String get protocolStudyMutationWarning => '此请求可能会修改网站状态。仍要运行最小复现吗？';
+
+  @override
+  String get protocolStudyRunRepro => '运行最小复现';
+
+  @override
+  String get protocolStudyReproResult => '最小复现结果';
+
+  @override
+  String get protocolStudyExportNote => '保存脱敏笔记';
+
+  @override
+  String get protocolStudyNoteSaved => '脱敏协议报告已保存为笔记';
+
+  @override
+  String get protocolStudyCreateTool => '创建 AI 工具 / 技能';
+
+  @override
+  String get protocolStudyCreateApp => '创建用户应用';
+
+  @override
+  String get protocolStudyFidelityWarning =>
+      '捕获完整度取决于平台。不会捕获 Service Worker 和 WebSocket；正文可能被截断。';
+
+  @override
+  String get protocolStudyDelete => '删除研究';
+
+  @override
+  String get protocolStudyDeleteConfirm => '删除此私有协议研究及其原始数据？';
+
+  @override
+  String get protocolStudyNoModel => '请先配置 AI 模型，再合成工作流程。';
+
+  @override
+  String get protocolStudyAnalysisFailed => '工作流程合成失败';
+
+  @override
+  String get protocolStudyResponseBodyLimit => '响应正文大小上限';
+
+  @override
+  String get protocolStudyApplyRecommendations => '应用谨慎建议';
+
+  @override
+  String get protocolStudyModelLabel => '模型';
+
+  @override
+  String get protocolStudyDestinationLabel => '目标地址';
+
+  @override
+  String get protocolStudyDisclosed => '个字段已披露';
+
+  @override
+  String get protocolStudyAll => '全部';
+
+  @override
+  String get protocolStudyForm => '表单';
+
+  @override
+  String get protocolStudyViewRaw => '查看原始请求和响应';
+
+  @override
+  String get protocolStudyRequestHeaders => '请求头';
+
+  @override
+  String get protocolStudyRequestBody => '请求正文';
+
+  @override
+  String get protocolStudyResponseHeaders => '响应头';
+
+  @override
+  String get protocolStudyResponseBody => '响应正文';
+
+  @override
+  String get protocolStudyFinalUrl => '最终网址';
+
+  @override
+  String get protocolStudyNotCaptured => '未捕获';
+
+  @override
+  String get protocolStudyParameters => '参数';
+
+  @override
+  String get protocolStudyNoneIdentified => '未识别到参数';
+
+  @override
+  String get protocolStudyWorkflow => '工作流程';
+
+  @override
+  String get protocolStudyCaveats => '注意事项';
+
+  @override
+  String get protocolStudyOptional => '可选';
+
+  @override
+  String get protocolStudyTruncated => '已截断';
+
+  @override
+  String get protocolStudyStatus => '状态';
+
+  @override
+  String get protocolStudyNewExample => '开始下一个示例';
+
+  @override
+  String protocolStudyExampleNumber(int number) {
+    return '正在记录示例 $number';
+  }
+
+  @override
+  String get protocolStudyMarkParameter => '标记为可复用参数';
+
+  @override
+  String get protocolStudyTransportMetadata => '传输元数据';
+
+  @override
+  String get protocolStudyPartial => '部分捕获';
+
+  @override
+  String get protocolStudyReviewSanitizedNote => '检查脱敏笔记';
+
+  @override
+  String get protocolStudyDiscardSession => '丢弃会话记录';
+
+  @override
+  String get protocolStudyDiscardSessionConfirm => '丢弃这份尚未保存的原始协议研究吗？丢弃后无法恢复。';
+
+  @override
+  String get protocolStudyReplay => '重放请求';
+
+  @override
+  String get protocolStudyReplayResponse => '重放响应';
+
+  @override
+  String get protocolStudyReplayFailed => '重放失败';
+
+  @override
+  String get protocolStudyReplayedAt => '重放时间';
+
+  @override
+  String get protocolStudyReplayUsedSession => '使用了实时会话 Cookie';
+
+  @override
+  String get protocolStudyCapturePage => '捕获渲染页面';
+
+  @override
+  String get protocolStudyPageCaptured => '已捕获渲染页面快照';
+
+  @override
+  String get protocolStudyPageSnapshot => '页面';
+
+  @override
+  String minutesAgoShort(int count) {
+    return '$count分钟前';
+  }
+
+  @override
+  String hoursAgoShort(int count) {
+    return '$count小时前';
+  }
+
+  @override
+  String daysAgoShort(int count) {
+    return '$count天前';
+  }
+
+  @override
+  String get done => '完成';
+
+  @override
+  String get refreshLogin => '刷新登录';
+
+  @override
+  String get webLoginRefreshHint => '重新登录以刷新此登录信息，已授权应用的权限会保留。';
+
+  @override
+  String webLoginRefreshed(String domain) {
+    return '已刷新 $domain 的登录';
+  }
+
+  @override
+  String get webLoginRefreshDiscarded => '已取消刷新，原有登录已恢复。';
+
+  @override
+  String get clearSiteCookies => '清除此站点的 Cookie';
+
+  @override
+  String get webLoginCookiesCleared => 'Cookie 已清除。请重新登录，然后点按“保存登录”。';
+
+  @override
+  String get webLoginExpired => '已过期 — 刷新以重新登录';
+
+  @override
+  String webLoginExpiresInDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days 天后过期 — 请尽快刷新',
+      one: '明天过期 — 请尽快刷新',
+      zero: '今天过期 — 请尽快刷新',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String webLoginValidUntil(String date) {
+    return '有效期至 $date';
+  }
+
+  @override
+  String get webLoginNoExpiry => '站点未设置过期时间';
+
+  @override
+  String webLoginSavedAgo(String time) {
+    return '保存于 $time';
+  }
+
+  @override
+  String webLoginRefreshedAgo(String time) {
+    return '刷新于 $time';
+  }
+
+  @override
+  String get runInBackground => '后台保持运行';
+
+  @override
+  String appRunningInBackground(String appName) {
+    return '$appName 正在运行';
+  }
+
+  @override
+  String get closeBackgroundApp => '关闭应用';
+
+  @override
+  String closeBackgroundAppConfirm(String appName) {
+    return '确定关闭“$appName”吗？应用中未保存的内容将会丢失。';
+  }
+
+  @override
+  String backgroundAppClosed(String appName) {
+    return '已关闭“$appName”——同一时间只能有一个应用在后台运行。';
+  }
+
+  @override
+  String get mergeNotes => '合并笔记';
+
+  @override
+  String get mergeWith => '与其他笔记合并…';
+
+  @override
+  String mergeTabMerged(int count) {
+    return '合并结果 ($count)';
+  }
+
+  @override
+  String get mergeAddNotes => '添加笔记';
+
+  @override
+  String get mergeSelectNotesTitle => '选择要合并的笔记';
+
+  @override
+  String get mergeNeedsSecondNote => '请至少再选择一篇笔记进行合并。';
+
+  @override
+  String get mergeRemoveSource => '从合并中移除';
+
+  @override
+  String mergeRemoveSourceBody(String title) {
+    return '已从“$title”中选取的区块会保留在合并结果中。笔记本身不会被修改。';
+  }
+
+  @override
+  String get mergeAddAll => '全部添加';
+
+  @override
+  String get mergeRemoveAll => '全部移除';
+
+  @override
+  String mergeBlocksAdded(int added, int total) {
+    return '已添加 $added / $total 个区块';
+  }
+
+  @override
+  String get mergeAddToMerged => '添加到合并结果';
+
+  @override
+  String get mergeRemoveFromMerged => '从合并结果中移除';
+
+  @override
+  String mergeAddSection(int count) {
+    return '添加此章节（$count 个区块）';
+  }
+
+  @override
+  String get mergeCopyText => '复制文本';
+
+  @override
+  String get mergeSelectText => '选择文本…';
+
+  @override
+  String get mergeCopied => '已复制';
+
+  @override
+  String get mergeEditedTitle => '已在合并结果中修改';
+
+  @override
+  String get mergeEditedBody => '此区块已在合并结果中被修改或删除。请在那里编辑，或再添加一份副本。';
+
+  @override
+  String get mergeAddAnotherCopy => '再添加一份';
+
+  @override
+  String get mergeForget => '忽略';
+
+  @override
+  String get mergeArrange => '排列';
+
+  @override
+  String get mergeEdit => '编辑';
+
+  @override
+  String get mergeInsertHere => '下一个区块插入此处';
+
+  @override
+  String mergeInsertingAt(int position) {
+    return '插入到位置 $position';
+  }
+
+  @override
+  String get mergeEmptyHint => '在笔记标签页中点按区块即可添加到这里，或切换到“编辑”后粘贴。';
+
+  @override
+  String mergeUseCombinedTitle(String title) {
+    return '使用“$title”';
+  }
+
+  @override
+  String get mergeSaveAsNew => '另存为新笔记';
+
+  @override
+  String mergeReplaceNote(String title) {
+    return '替换“$title”';
+  }
+
+  @override
+  String mergeReplaceWarning(String title, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '“$title”将使用此内容和标题。其余 $count 篇笔记不会改变。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get mergeLinkBack => '链接回来源笔记';
+
+  @override
+  String get mergeArchiveOthers => '归档其他来源笔记';
+
+  @override
+  String get mergeDiscardTitle => '放弃合并结果？';
+
+  @override
+  String get mergeDiscardBody => '已添加的区块和已输入的文本将会丢失。';
+
+  @override
+  String get mergeDiscard => '放弃';
+
+  @override
+  String mergedInto(String title) {
+    return '已合并到“$title”';
+  }
+
+  @override
+  String get mergeNothingToSave => '请先添加至少一个区块或输入一些文本。';
+
+  @override
+  String mergeSaveFailed(String error) {
+    return '无法保存合并结果：$error';
+  }
+
+  @override
+  String mergeBlockFromNote(String title) {
+    return '来自“$title”';
+  }
+
+  @override
+  String get mergeRemoveBlock => '移除';
+
+  @override
+  String get mergeOtherAttachments => '其他要保留的附件';
+
+  @override
+  String get mergeArchiveOthersPinned => '已置顶的笔记会保持不变。';
+
+  @override
+  String get navPadUnitChar => '字符';
+
+  @override
+  String get navPadUnitToken => '词';
+
+  @override
+  String get navPadUnitLine => '行';
+
+  @override
+  String get navPadUnitBlock => '块';
+
+  @override
+  String get navPadModeMove => '移动';
+
+  @override
+  String get navPadModeSelect => '选择';
+
+  @override
+  String navPadUnitTooltip(String unit) {
+    return '按$unit移动';
+  }
+
+  @override
+  String get navPadModeTooltip => '点按切换移动/选择 · 长按扩展选区 · 下滑收缩';
+
+  @override
+  String get navPadMoveUp => '向上';
+
+  @override
+  String get navPadMoveDown => '向下';
+
+  @override
+  String get navPadMoveBackward => '向前';
+
+  @override
+  String get navPadMoveForward => '向后';
+
+  @override
+  String get navPadSwitchSide => '把导航键移到另一侧';
+
+  @override
+  String get navPadHide => '隐藏导航键';
+
+  @override
+  String get navPadShow => '显示导航键';
+
+  @override
+  String get navPadLabelLineStart => '行首';
+
+  @override
+  String get navPadLabelLineEnd => '行尾';
+
+  @override
+  String get navPadLabelBlockStart => '块首';
+
+  @override
+  String get navPadLabelBlockEnd => '块尾';
+
+  @override
+  String get navPadLabelPrevBlock => '上一块';
+
+  @override
+  String get navPadLabelNextBlock => '下一块';
+
+  @override
+  String get navPadLabelExpand => '已扩展';
+
+  @override
+  String get navPadLabelShrink => '已收缩';
+
+  @override
+  String get source => '来源';
+
+  @override
+  String get clippedFrom => '剪藏自';
+
+  @override
+  String clippedRelative(String when) {
+    return '$when剪藏';
+  }
+
+  @override
+  String get openOriginal => '打开原文';
+
+  @override
+  String get copyLink => '复制链接';
+
+  @override
+  String get linkCopied => '链接已复制';
+
+  @override
+  String get editSource => '编辑来源';
+
+  @override
+  String get removeSource => '移除来源';
+
+  @override
+  String get removeSourceConfirm => '要从笔记中移除此来源吗？笔记内容不会改变。';
+
+  @override
+  String get addSource => '添加来源';
+
+  @override
+  String get addSourceMenu => '添加来源…';
+
+  @override
+  String get sourceSiteName => '网站名称';
+
+  @override
+  String get invalidUrl => '请输入有效的 http(s) 链接';
+
+  @override
+  String get duplicateSourceUrl => '此链接已是该笔记的来源';
+
+  @override
+  String moreSources(int count) {
+    return '还有 $count 个';
+  }
+
+  @override
+  String get showLess => '收起';
+
+  @override
+  String get switchSpace => '切换空间';
+
+  @override
+  String get manageSpaces => '管理空间…';
+
+  @override
+  String get manageSpacesTitle => '管理空间';
+
+  @override
+  String get noSpacesYet => '还没有空间';
+
+  @override
+  String get noSpacesYetHint => '在筛选器编辑器中打开“用作空间”，即可把筛选器变成空间。';
+
+  @override
+  String get spaceUnavailable => '该空间已不可用';
+
+  @override
+  String get leaveSpace => '退出空间';
+
+  @override
+  String get activateAsSpace => '设为当前空间';
+
+  @override
+  String get stopUsingAsSpace => '取消用作空间';
+
+  @override
+  String spaceRowLabel(String name) {
+    return '空间：$name';
+  }
+
+  @override
+  String get useAsSpace => '用作空间';
+
+  @override
+  String get useAsSpaceDescription => '启用空间后，所有列表只显示该空间的笔记，新建笔记会自动带上它的包含标签。';
+
+  @override
+  String get useAsSpaceNeedsIncludeTags =>
+      '请至少添加一个包含标签：没有包含标签的空间既限定不了范围，也标记不了笔记。';
+
+  @override
+  String spaceStampPreview(String tags) {
+    return '新笔记将被标记为：$tags';
+  }
+
+  @override
+  String get spaceTextCriteriaWarning => '在此创建的笔记可能不符合该筛选器的文本条件。';
+
+  @override
+  String get spaceNoteTypeWarning => '在此创建的笔记可能不符合该筛选器的笔记类型。';
+
+  @override
+  String get tagExistingNotesTitle => '为现有笔记添加标签？';
+
+  @override
+  String tagExistingNotesBody(int count, String name, String tags) {
+    return '同时为“$name”中现有的 $count 条笔记添加标签：$tags';
+  }
+
+  @override
+  String get tagExistingNotesConfirm => '添加标签';
+
+  @override
+  String get notNow => '暂不';
+
+  @override
+  String get addToSpaceMenu => '添加到空间…';
+
+  @override
+  String get addToSpaceTitle => '添加到空间';
+
+  @override
+  String get addToSpaceHint => '勾选的空间会为这条笔记添加标签；取消勾选会移除其他空间不再需要的标签。';
+
+  @override
+  String addToSpaceHintPlural(int count) {
+    return '勾选的空间会为这 $count 条笔记添加标签；取消勾选会移除其他空间不再需要的标签。';
+  }
+
+  @override
+  String get spaceMembershipPartial => '部分所选笔记';
+
+  @override
+  String get spaceMembershipFailed => '无法更新空间归属';
+
+  @override
+  String get showInEverySpace => '在所有空间中显示';
+
+  @override
+  String get stopShowingInEverySpace => '停止在所有空间中显示';
+
+  @override
+  String get showInEverySpaceOn => '这条笔记现在会出现在所有空间中';
+
+  @override
+  String get showInEverySpaceOff => '这条笔记不再出现在所有空间中';
+
+  @override
+  String get addExistingNotesMenu => '添加已有笔记…';
+
+  @override
+  String addExistingNotesTitle(String name) {
+    return '将笔记添加到 $name';
+  }
+
+  @override
+  String get addExistingNotesNoSpace => '请先启用一个空间';
+
+  @override
+  String addExistingNotesNothingLeft(String name) {
+    return '所有笔记都已在 $name 中';
+  }
+
+  @override
+  String spaceJoinAdded(int count) {
+    return '已添加 $count 条';
+  }
+
+  @override
+  String spaceJoinHiddenTasks(int count, String name) {
+    return '有 $count 条未显示，因为 $name 只显示任务';
+  }
+
+  @override
+  String spaceJoinHiddenNotes(int count, String name) {
+    return '有 $count 条未显示，因为 $name 只显示笔记';
+  }
+
+  @override
+  String spaceJoinHiddenFilter(int count, String name) {
+    return '有 $count 条未显示，因为不符合 $name 的其他条件';
+  }
+
+  @override
+  String savedOutsideSpace(String name) {
+    return '已保存在 $name 之外';
+  }
+
+  @override
+  String get showAllNotes => '显示全部笔记';
+
+  @override
+  String includeNotesOutsideSpace(String name) {
+    return '包含 $name 以外的笔记';
+  }
+
+  @override
+  String spacesRetiredByTagChange(String names) {
+    return '$names 已不再是空间：其包含标签已被移除';
+  }
+
+  @override
+  String get focusOnThisTag => '聚焦此标签';
+
+  @override
+  String get focusOnTagUnusable => '包含逗号的标签不能用作空间。';
+
+  @override
+  String get focusOnTagReserved => '该标签为应用保留标签，不能用作空间。';
 }

@@ -14,6 +14,29 @@ class NoteSelectionDialog extends StatefulWidget {
   final List<String> initialSelectedNoteIds;
   final List<String>? initialTags;
 
+  /// Restricts the picker to exactly these notes instead of every note the
+  /// provider holds. *Add existing notes…* passes the complement of the active
+  /// Space, so the list cannot offer a note that is already in it.
+  final List<Note>? candidateNotes;
+
+  /// Notes listed ahead of the rest, whatever the default sort would do.
+  /// *Add existing notes…* puts the unfiled notes here: they are what a user
+  /// is normally filing, and the default newest-first order buries them.
+  final Set<String> priorityNoteIds;
+
+  /// The Space scope this dialog starts in.
+  ///
+  /// With no [candidateNotes] the picker lists `scopedNotes` — which is what
+  /// scopes AI context picking, merge and the plugin `pickNotes` in one place
+  /// — and offers *Include notes outside «Space»* to widen it back to every
+  /// note. Pass false to start widened.
+  ///
+  /// Ignored when [candidateNotes] is given: an explicit candidate list is the
+  /// caller's own answer to "which notes may be picked" (*Add existing notes…*
+  /// passes the **complement** of the scope, which a scoped default would
+  /// reduce to nothing), so the switch is not shown at all.
+  final bool scopeToSpace;
+
   const NoteSelectionDialog({
     super.key,
     required this.onNotesSelected,
@@ -21,6 +44,9 @@ class NoteSelectionDialog extends StatefulWidget {
     this.singleSelection = false,
     this.initialSelectedNoteIds = const [],
     this.initialTags,
+    this.candidateNotes,
+    this.priorityNoteIds = const {},
+    this.scopeToSpace = true,
   });
 
   @override
@@ -35,10 +61,15 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
   bool _initialized = false;
   List<String> _activeTagFilters = [];
 
+  /// False once the user has asked for notes from outside the active Space.
+  /// Only ever consulted when the caller gave no explicit [candidateNotes].
+  bool _scoped = true;
+
   @override
   void initState() {
     super.initState();
     _activeTagFilters = List.from(widget.initialTags ?? []);
+    _scoped = widget.scopeToSpace;
   }
 
   @override
@@ -154,6 +185,30 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
               ),
             ),
 
+            // Space escape. Shown only where the scope is actually in force:
+            // a Space is active and no explicit candidate list overrode it.
+            if (widget.candidateNotes == null)
+              Builder(
+                builder: (context) {
+                  final space = context.watch<AppProvider>().activeSpace;
+                  if (space == null) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: SwitchListTile(
+                      key: const ValueKey('include-outside-space'),
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: Text(
+                        l10n.includeNotesOutsideSpace(space.name),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      value: !_scoped,
+                      onChanged: (value) => setState(() => _scoped = !value),
+                    ),
+                  );
+                },
+              ),
+
             // Selected notes count
             if (_selectedNotes.isNotEmpty)
               Container(
@@ -185,7 +240,11 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
             Expanded(
               child: Consumer<AppProvider>(
                 builder: (context, appProvider, child) {
-                  final allNotes = appProvider.notes;
+                  // An explicit candidate list always wins: the caller has
+                  // already decided which notes may be picked.
+                  final allNotes =
+                      widget.candidateNotes ??
+                      (_scoped ? appProvider.scopedNotes : appProvider.notes);
 
                   // Use the service to filter and sort notes
                   var filteredNotes = _noteSelectionService.filterNotes(
@@ -200,6 +259,19 @@ class _NoteSelectionDialogState extends State<NoteSelectionDialog> {
                         (tag) => note.tags.contains(tag),
                       );
                     }).toList();
+                  }
+
+                  // Stable partition, applied last so it survives the
+                  // service's pinned-then-newest sort.
+                  if (widget.priorityNoteIds.isNotEmpty) {
+                    filteredNotes = [
+                      ...filteredNotes.where(
+                        (n) => widget.priorityNoteIds.contains(n.id),
+                      ),
+                      ...filteredNotes.where(
+                        (n) => !widget.priorityNoteIds.contains(n.id),
+                      ),
+                    ];
                   }
 
                   if (filteredNotes.isEmpty) {

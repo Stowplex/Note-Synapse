@@ -105,14 +105,14 @@ void main() {
   }
 
   test(
-    'migrating a v61 database to v62 creates the search index schema',
+    'migrating a v62 database to v63 creates the search index schema',
     () async {
       final dbName =
           'search_index_migration_test_${DateTime.now().microsecondsSinceEpoch}.db';
 
-      // 1. Create a fresh (v62) database, then strip it back to the v61
+      // 1. Create a fresh (v63) database, then strip it back to the v62
       // schema — every other table, including the fifteen sync_* control-
-      // plane tables and their triggers, stays exactly as v61 left it.
+      // plane tables and their triggers, stays exactly as v62 left it.
       final freshService = DatabaseService.createNew(databaseName: dbName);
       final freshDb = await freshService.database;
 
@@ -148,7 +148,7 @@ void main() {
       expect(migratedSql, expectedSql);
 
       // 4. Migration 62 is purely additive on top of the cloud-sync schema:
-      // the v61 control-plane tables it upgraded from are untouched.
+      // the v62 control-plane tables it upgraded from are untouched.
       final syncTables = await migratedDb.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='table' "
         "AND name LIKE 'sync\\_%' ESCAPE '\\'",
@@ -161,7 +161,7 @@ void main() {
           'sync_pending_ops',
           'sync_materialize_queue',
         ]),
-        reason: 'the v61 sync control plane must survive migration 62',
+        reason: 'the v62 sync control plane must survive migration 62',
       );
 
       await migratedService.close();

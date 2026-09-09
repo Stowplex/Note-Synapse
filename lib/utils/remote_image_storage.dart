@@ -11,6 +11,13 @@ class RemoteImageStorage {
   static final Map<String, Map<String, String>> _noteCache = {};
   static final Map<String, Future<Map<String, String>>> _inflightScans = {};
 
+  /// Drops the cached directory scan for [noteId], so files added under its
+  /// prefix by someone other than [saveImage] are picked up on next resolve.
+  static void invalidate(String noteId) {
+    _noteCache.remove(noteId);
+    _inflightScans.remove(noteId);
+  }
+
   static String _hashUrl(String url) {
     return sha256.convert(utf8.encode(url)).toString();
   }
@@ -25,9 +32,21 @@ class RemoteImageStorage {
 
     final future = _scanAttachments(noteId);
     _inflightScans[noteId] = future;
-    final result = await future;
-    _noteCache[noteId] = result;
-    _inflightScans.remove(noteId);
+    final Map<String, String> result;
+    try {
+      result = await future;
+    } catch (_) {
+      if (identical(_inflightScans[noteId], future)) {
+        _inflightScans.remove(noteId);
+      }
+      rethrow;
+    }
+    // An invalidate() during the scan drops the in-flight entry; do not let
+    // the now-stale result re-populate the cache.
+    if (identical(_inflightScans[noteId], future)) {
+      _noteCache[noteId] = result;
+      _inflightScans.remove(noteId);
+    }
     return result;
   }
 

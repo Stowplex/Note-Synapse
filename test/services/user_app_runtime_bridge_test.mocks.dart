@@ -4,34 +4,35 @@
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i13;
-import 'dart:typed_data' as _i28;
+import 'dart:typed_data' as _i29;
 import 'dart:ui' as _i2;
 
-import 'package:file_picker/file_picker.dart' as _i16;
+import 'package:file_picker/file_picker.dart' as _i17;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as _i8;
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i18;
+import 'package:mockito/src/dummies.dart' as _i19;
 import 'package:note_synapse/models/app_revision.dart' as _i3;
-import 'package:note_synapse/models/attachment.dart' as _i21;
-import 'package:note_synapse/models/conversation.dart' as _i22;
-import 'package:note_synapse/models/conversation_attachment.dart' as _i23;
-import 'package:note_synapse/models/dedup_rule.dart' as _i27;
+import 'package:note_synapse/models/attachment.dart' as _i22;
+import 'package:note_synapse/models/conversation.dart' as _i23;
+import 'package:note_synapse/models/conversation_attachment.dart' as _i24;
+import 'package:note_synapse/models/dedup_rule.dart' as _i28;
 import 'package:note_synapse/models/filter.dart' as _i12;
-import 'package:note_synapse/models/generation_context.dart' as _i17;
+import 'package:note_synapse/models/generation_context.dart' as _i18;
 import 'package:note_synapse/models/model_config.dart' as _i14;
 import 'package:note_synapse/models/note.dart' as _i9;
-import 'package:note_synapse/models/note_annotation.dart' as _i20;
+import 'package:note_synapse/models/note_annotation.dart' as _i21;
+import 'package:note_synapse/models/note_source.dart' as _i16;
 import 'package:note_synapse/models/relationship.dart' as _i15;
 import 'package:note_synapse/models/tag.dart' as _i11;
 import 'package:note_synapse/models/user_app.dart' as _i4;
-import 'package:note_synapse/models/workflow_binding_row.dart' as _i24;
+import 'package:note_synapse/models/workflow_binding_row.dart' as _i25;
 import 'package:note_synapse/providers/app_provider.dart' as _i10;
-import 'package:note_synapse/services/ai_service.dart' as _i25;
+import 'package:note_synapse/services/ai_service.dart' as _i26;
 import 'package:note_synapse/services/database_service.dart' as _i6;
-import 'package:note_synapse/services/note_modification_service.dart' as _i29;
-import 'package:note_synapse/services/prompts/prompt_models.dart' as _i26;
+import 'package:note_synapse/services/note_modification_service.dart' as _i30;
+import 'package:note_synapse/services/prompts/prompt_models.dart' as _i27;
 import 'package:note_synapse/services/sql_query_service.dart' as _i7;
-import 'package:note_synapse/services/user_app_service.dart' as _i19;
+import 'package:note_synapse/services/user_app_service.dart' as _i20;
 import 'package:sqflite/sqflite.dart' as _i5;
 
 // ignore_for_file: type=lint
@@ -253,6 +254,42 @@ class MockAppProvider extends _i1.Mock implements _i10.AppProvider {
           as bool);
 
   @override
+  List<_i12.Filter> get spaces =>
+      (super.noSuchMethod(
+            Invocation.getter(#spaces),
+            returnValue: <_i12.Filter>[],
+            returnValueForMissingStub: <_i12.Filter>[],
+          )
+          as List<_i12.Filter>);
+
+  @override
+  List<String> get spaceTags =>
+      (super.noSuchMethod(
+            Invocation.getter(#spaceTags),
+            returnValue: <String>[],
+            returnValueForMissingStub: <String>[],
+          )
+          as List<String>);
+
+  @override
+  List<_i9.Note> get scopedNotes =>
+      (super.noSuchMethod(
+            Invocation.getter(#scopedNotes),
+            returnValue: <_i9.Note>[],
+            returnValueForMissingStub: <_i9.Note>[],
+          )
+          as List<_i9.Note>);
+
+  @override
+  List<String> get spacesInvalidatedByLastTagChange =>
+      (super.noSuchMethod(
+            Invocation.getter(#spacesInvalidatedByLastTagChange),
+            returnValue: <String>[],
+            returnValueForMissingStub: <String>[],
+          )
+          as List<String>);
+
+  @override
   set newNoteFromShare(bool? value) => super.noSuchMethod(
     Invocation.setter(#newNoteFromShare, value),
     returnValueForMissingStub: null,
@@ -304,9 +341,17 @@ class MockAppProvider extends _i1.Mock implements _i10.AppProvider {
   );
 
   @override
-  _i13.Future<void> addNote(_i9.Note? note, {bool? fromShare = false}) =>
+  _i13.Future<void> addNote(
+    _i9.Note? note, {
+    bool? fromShare = false,
+    bool? applySpaceTags = true,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#addNote, [note], {#fromShare: fromShare}),
+            Invocation.method(
+              #addNote,
+              [note],
+              {#fromShare: fromShare, #applySpaceTags: applySpaceTags},
+            ),
             returnValue: _i13.Future<void>.value(),
             returnValueForMissingStub: _i13.Future<void>.value(),
           )
@@ -418,11 +463,24 @@ class MockAppProvider extends _i1.Mock implements _i10.AppProvider {
           as _i13.Future<List<_i9.Note>>);
 
   @override
+  _i13.Future<List<_i16.NoteSource>> getNoteSources(String? noteId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getNoteSources, [noteId]),
+            returnValue: _i13.Future<List<_i16.NoteSource>>.value(
+              <_i16.NoteSource>[],
+            ),
+            returnValueForMissingStub: _i13.Future<List<_i16.NoteSource>>.value(
+              <_i16.NoteSource>[],
+            ),
+          )
+          as _i13.Future<List<_i16.NoteSource>>);
+
+  @override
   _i13.Future<String> transformNote(
     _i9.Note? note,
     String? transformationPrompt, {
-    List<_i16.PlatformFile>? attachedFiles,
-    _i17.GenerationContext? generationContext,
+    List<_i17.PlatformFile>? attachedFiles,
+    _i18.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -434,7 +492,7 @@ class MockAppProvider extends _i1.Mock implements _i10.AppProvider {
               },
             ),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(
                   #transformNote,
@@ -447,7 +505,7 @@ class MockAppProvider extends _i1.Mock implements _i10.AppProvider {
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(
                   #transformNote,
@@ -466,9 +524,9 @@ class MockAppProvider extends _i1.Mock implements _i10.AppProvider {
   _i13.Future<List<_i9.Note>> createNewNotes(
     String? prompt,
     List<_i9.Note>? contextNotes, {
-    List<_i16.PlatformFile>? attachedFiles,
+    List<_i17.PlatformFile>? attachedFiles,
     bool? persist = true,
-    _i17.GenerationContext? generationContext,
+    _i18.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -506,9 +564,9 @@ class MockAppProvider extends _i1.Mock implements _i10.AppProvider {
           as _i13.Future<void>);
 
   @override
-  List<String> getAllAvailableTags() =>
+  List<String> getAllAvailableTags({bool? scoped = true}) =>
       (super.noSuchMethod(
-            Invocation.method(#getAllAvailableTags, []),
+            Invocation.method(#getAllAvailableTags, [], {#scoped: scoped}),
             returnValue: <String>[],
             returnValueForMissingStub: <String>[],
           )
@@ -528,6 +586,42 @@ class MockAppProvider extends _i1.Mock implements _i10.AppProvider {
             returnValueForMissingStub: _i13.Future<void>.value(),
           )
           as _i13.Future<void>);
+
+  @override
+  _i13.Future<bool> setActiveSpace(String? id) =>
+      (super.noSuchMethod(
+            Invocation.method(#setActiveSpace, [id]),
+            returnValue: _i13.Future<bool>.value(false),
+            returnValueForMissingStub: _i13.Future<bool>.value(false),
+          )
+          as _i13.Future<bool>);
+
+  @override
+  _i13.Future<bool> joinSpace(List<String>? noteIds, String? spaceId) =>
+      (super.noSuchMethod(
+            Invocation.method(#joinSpace, [noteIds, spaceId]),
+            returnValue: _i13.Future<bool>.value(false),
+            returnValueForMissingStub: _i13.Future<bool>.value(false),
+          )
+          as _i13.Future<bool>);
+
+  @override
+  _i13.Future<bool> leaveSpace(List<String>? noteIds, String? spaceId) =>
+      (super.noSuchMethod(
+            Invocation.method(#leaveSpace, [noteIds, spaceId]),
+            returnValue: _i13.Future<bool>.value(false),
+            returnValueForMissingStub: _i13.Future<bool>.value(false),
+          )
+          as _i13.Future<bool>);
+
+  @override
+  int notesHiddenBySpace(List<String>? noteIds, String? spaceId) =>
+      (super.noSuchMethod(
+            Invocation.method(#notesHiddenBySpace, [noteIds, spaceId]),
+            returnValue: 0,
+            returnValueForMissingStub: 0,
+          )
+          as int);
 
   @override
   _i13.Future<String?> getTagExtractionPrompt(String? tagId) =>
@@ -704,7 +798,7 @@ class MockAppProvider extends _i1.Mock implements _i10.AppProvider {
           as _i13.Future<void>);
 
   @override
-  _i13.Future<void> batchUpdateTags(
+  _i13.Future<bool> batchUpdateTags(
     List<String>? noteIds,
     List<String>? tagsToAdd,
     List<String>? tagsToRemove,
@@ -715,10 +809,10 @@ class MockAppProvider extends _i1.Mock implements _i10.AppProvider {
               tagsToAdd,
               tagsToRemove,
             ]),
-            returnValue: _i13.Future<void>.value(),
-            returnValueForMissingStub: _i13.Future<void>.value(),
+            returnValue: _i13.Future<bool>.value(false),
+            returnValueForMissingStub: _i13.Future<bool>.value(false),
           )
-          as _i13.Future<void>);
+          as _i13.Future<bool>);
 
   @override
   _i13.Future<void> upsertSubNoteInNote(String? noteId, _i9.SubNote? subNote) =>
@@ -774,9 +868,12 @@ class MockAppProvider extends _i1.Mock implements _i10.AppProvider {
           as _i13.Future<void>);
 
   @override
-  List<_i9.Note> getFilteredNotes(_i12.Filter? filter) =>
+  List<_i9.Note> getFilteredNotes(
+    _i12.Filter? filter, {
+    List<_i9.Note>? base,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#getFilteredNotes, [filter]),
+            Invocation.method(#getFilteredNotes, [filter], {#base: base}),
             returnValue: <_i9.Note>[],
             returnValueForMissingStub: <_i9.Note>[],
           )
@@ -862,7 +959,7 @@ class MockAppProvider extends _i1.Mock implements _i10.AppProvider {
     List<String>? attachmentPaths,
     List<_i9.Note>? contextNotes,
     List<_i4.UserAppLibraryInfo>? libraries,
-    _i17.GenerationContext? generationContext,
+    _i18.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#createUserApp, [], {
@@ -915,7 +1012,7 @@ class MockAppProvider extends _i1.Mock implements _i10.AppProvider {
     List<String>? attachmentPaths,
     List<_i9.Note>? contextNotes,
     List<_i4.UserAppLibraryInfo>? libraries,
-    _i17.GenerationContext? generationContext,
+    _i18.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#editUserApp, [], {
@@ -1156,7 +1253,7 @@ class MockAppProvider extends _i1.Mock implements _i10.AppProvider {
 /// A class which mocks [UserAppService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockUserAppService extends _i1.Mock implements _i19.UserAppService {
+class MockUserAppService extends _i1.Mock implements _i20.UserAppService {
   @override
   _i13.Future<List<_i4.UserApp>> getAllUserApps() =>
       (super.noSuchMethod(
@@ -1283,7 +1380,7 @@ class MockUserAppService extends _i1.Mock implements _i19.UserAppService {
     List<String>? attachmentPaths,
     List<_i9.Note>? contextNotes,
     List<_i4.UserAppLibraryInfo>? libraries,
-    _i17.GenerationContext? generationContext,
+    _i18.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#createUserApp, [], {
@@ -1374,7 +1471,7 @@ class MockUserAppService extends _i1.Mock implements _i19.UserAppService {
     List<String>? attachmentPaths,
     List<_i9.Note>? contextNotes,
     List<_i4.UserAppLibraryInfo>? libraries,
-    _i17.GenerationContext? generationContext,
+    _i18.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#editUserApp, [], {
@@ -1503,13 +1600,13 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
       (super.noSuchMethod(
             Invocation.method(#insertNote, [note]),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertNote, [note]),
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertNote, [note]),
               ),
@@ -1667,7 +1764,7 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i13.Future<Map<String, dynamic>?>);
 
   @override
-  _i13.Future<void> saveNoteAnnotation(_i20.NoteAnnotation? annotation) =>
+  _i13.Future<void> saveNoteAnnotation(_i21.NoteAnnotation? annotation) =>
       (super.noSuchMethod(
             Invocation.method(#saveNoteAnnotation, [annotation]),
             returnValue: _i13.Future<void>.value(),
@@ -1676,46 +1773,46 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i13.Future<void>);
 
   @override
-  _i13.Future<_i20.NoteAnnotation?> getNoteAnnotation(String? id) =>
+  _i13.Future<_i21.NoteAnnotation?> getNoteAnnotation(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getNoteAnnotation, [id]),
-            returnValue: _i13.Future<_i20.NoteAnnotation?>.value(),
+            returnValue: _i13.Future<_i21.NoteAnnotation?>.value(),
             returnValueForMissingStub:
-                _i13.Future<_i20.NoteAnnotation?>.value(),
+                _i13.Future<_i21.NoteAnnotation?>.value(),
           )
-          as _i13.Future<_i20.NoteAnnotation?>);
+          as _i13.Future<_i21.NoteAnnotation?>);
 
   @override
-  _i13.Future<List<_i20.NoteAnnotation>> getNoteAnnotationsForNote(
+  _i13.Future<List<_i21.NoteAnnotation>> getNoteAnnotationsForNote(
     String? noteId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getNoteAnnotationsForNote, [noteId]),
-            returnValue: _i13.Future<List<_i20.NoteAnnotation>>.value(
-              <_i20.NoteAnnotation>[],
+            returnValue: _i13.Future<List<_i21.NoteAnnotation>>.value(
+              <_i21.NoteAnnotation>[],
             ),
             returnValueForMissingStub:
-                _i13.Future<List<_i20.NoteAnnotation>>.value(
-                  <_i20.NoteAnnotation>[],
+                _i13.Future<List<_i21.NoteAnnotation>>.value(
+                  <_i21.NoteAnnotation>[],
                 ),
           )
-          as _i13.Future<List<_i20.NoteAnnotation>>);
+          as _i13.Future<List<_i21.NoteAnnotation>>);
 
   @override
-  _i13.Future<List<_i20.NoteAnnotation>> getNoteAnnotationsForAttachment(
+  _i13.Future<List<_i21.NoteAnnotation>> getNoteAnnotationsForAttachment(
     String? attachmentId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getNoteAnnotationsForAttachment, [attachmentId]),
-            returnValue: _i13.Future<List<_i20.NoteAnnotation>>.value(
-              <_i20.NoteAnnotation>[],
+            returnValue: _i13.Future<List<_i21.NoteAnnotation>>.value(
+              <_i21.NoteAnnotation>[],
             ),
             returnValueForMissingStub:
-                _i13.Future<List<_i20.NoteAnnotation>>.value(
-                  <_i20.NoteAnnotation>[],
+                _i13.Future<List<_i21.NoteAnnotation>>.value(
+                  <_i21.NoteAnnotation>[],
                 ),
           )
-          as _i13.Future<List<_i20.NoteAnnotation>>);
+          as _i13.Future<List<_i21.NoteAnnotation>>);
 
   @override
   _i13.Future<void> deleteNoteAnnotation(String? id) =>
@@ -1742,26 +1839,26 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i13.Future<void>);
 
   @override
-  _i13.Future<_i21.Attachment?> getAttachmentById(String? attachmentId) =>
+  _i13.Future<_i22.Attachment?> getAttachmentById(String? attachmentId) =>
       (super.noSuchMethod(
             Invocation.method(#getAttachmentById, [attachmentId]),
-            returnValue: _i13.Future<_i21.Attachment?>.value(),
-            returnValueForMissingStub: _i13.Future<_i21.Attachment?>.value(),
+            returnValue: _i13.Future<_i22.Attachment?>.value(),
+            returnValueForMissingStub: _i13.Future<_i22.Attachment?>.value(),
           )
-          as _i13.Future<_i21.Attachment?>);
+          as _i13.Future<_i22.Attachment?>);
 
   @override
-  _i13.Future<List<_i21.Attachment>> getAttachmentsForNote(String? noteId) =>
+  _i13.Future<List<_i22.Attachment>> getAttachmentsForNote(String? noteId) =>
       (super.noSuchMethod(
             Invocation.method(#getAttachmentsForNote, [noteId]),
-            returnValue: _i13.Future<List<_i21.Attachment>>.value(
-              <_i21.Attachment>[],
+            returnValue: _i13.Future<List<_i22.Attachment>>.value(
+              <_i22.Attachment>[],
             ),
-            returnValueForMissingStub: _i13.Future<List<_i21.Attachment>>.value(
-              <_i21.Attachment>[],
+            returnValueForMissingStub: _i13.Future<List<_i22.Attachment>>.value(
+              <_i22.Attachment>[],
             ),
           )
-          as _i13.Future<List<_i21.Attachment>>);
+          as _i13.Future<List<_i22.Attachment>>);
 
   @override
   _i13.Future<void> deleteNote(String? id) =>
@@ -1777,13 +1874,13 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
       (super.noSuchMethod(
             Invocation.method(#insertSubNote, [subNote, noteId]),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertSubNote, [subNote, noteId]),
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertSubNote, [subNote, noteId]),
               ),
@@ -1807,13 +1904,13 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
       (super.noSuchMethod(
             Invocation.method(#insertTag, [tag]),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertTag, [tag]),
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertTag, [tag]),
               ),
@@ -1895,13 +1992,13 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
       (super.noSuchMethod(
             Invocation.method(#insertRelationship, [relationship]),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertRelationship, [relationship]),
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertRelationship, [relationship]),
               ),
@@ -2049,13 +2146,13 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
       (super.noSuchMethod(
             Invocation.method(#getDatabasePath, []),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#getDatabasePath, []),
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#getDatabasePath, []),
               ),
@@ -2112,13 +2209,13 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
       (super.noSuchMethod(
             Invocation.method(#insertFilter, [filter]),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertFilter, [filter]),
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertFilter, [filter]),
               ),
@@ -2282,13 +2379,13 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
       (super.noSuchMethod(
             Invocation.method(#insertUserApp, [app]),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertUserApp, [app]),
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertUserApp, [app]),
               ),
@@ -2370,13 +2467,13 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
       (super.noSuchMethod(
             Invocation.method(#insertAppRevision, [revision]),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertAppRevision, [revision]),
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertAppRevision, [revision]),
               ),
@@ -2562,17 +2659,17 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i13.Future<Map<String, dynamic>?>);
 
   @override
-  _i13.Future<String> insertConversation(_i22.Conversation? conversation) =>
+  _i13.Future<String> insertConversation(_i23.Conversation? conversation) =>
       (super.noSuchMethod(
             Invocation.method(#insertConversation, [conversation]),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertConversation, [conversation]),
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertConversation, [conversation]),
               ),
@@ -2581,58 +2678,62 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i13.Future<String>);
 
   @override
-  _i13.Future<List<_i22.Conversation>> getAllConversations({
+  _i13.Future<List<_i23.Conversation>> getAllConversations({
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
+    List<String>? scopeTags,
     bool? includeEmpty = true,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#getAllConversations, [], {
               #maxAge: maxAge,
               #conversationIds: conversationIds,
               #tagNames: tagNames,
+              #scopeTags: scopeTags,
               #includeEmpty: includeEmpty,
+              #includeAllSpacesTag: includeAllSpacesTag,
             }),
-            returnValue: _i13.Future<List<_i22.Conversation>>.value(
-              <_i22.Conversation>[],
+            returnValue: _i13.Future<List<_i23.Conversation>>.value(
+              <_i23.Conversation>[],
             ),
             returnValueForMissingStub:
-                _i13.Future<List<_i22.Conversation>>.value(
-                  <_i22.Conversation>[],
+                _i13.Future<List<_i23.Conversation>>.value(
+                  <_i23.Conversation>[],
                 ),
           )
-          as _i13.Future<List<_i22.Conversation>>);
+          as _i13.Future<List<_i23.Conversation>>);
 
   @override
-  _i13.Future<List<_i22.ConversationMessage>> getConversationPreviewMessages(
+  _i13.Future<List<_i23.ConversationMessage>> getConversationPreviewMessages(
     String? conversationId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationPreviewMessages, [
               conversationId,
             ]),
-            returnValue: _i13.Future<List<_i22.ConversationMessage>>.value(
-              <_i22.ConversationMessage>[],
+            returnValue: _i13.Future<List<_i23.ConversationMessage>>.value(
+              <_i23.ConversationMessage>[],
             ),
             returnValueForMissingStub:
-                _i13.Future<List<_i22.ConversationMessage>>.value(
-                  <_i22.ConversationMessage>[],
+                _i13.Future<List<_i23.ConversationMessage>>.value(
+                  <_i23.ConversationMessage>[],
                 ),
           )
-          as _i13.Future<List<_i22.ConversationMessage>>);
+          as _i13.Future<List<_i23.ConversationMessage>>);
 
   @override
-  _i13.Future<_i22.Conversation?> getConversation(String? id) =>
+  _i13.Future<_i23.Conversation?> getConversation(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getConversation, [id]),
-            returnValue: _i13.Future<_i22.Conversation?>.value(),
-            returnValueForMissingStub: _i13.Future<_i22.Conversation?>.value(),
+            returnValue: _i13.Future<_i23.Conversation?>.value(),
+            returnValueForMissingStub: _i13.Future<_i23.Conversation?>.value(),
           )
-          as _i13.Future<_i22.Conversation?>);
+          as _i13.Future<_i23.Conversation?>);
 
   @override
-  _i13.Future<void> updateConversation(_i22.Conversation? conversation) =>
+  _i13.Future<void> updateConversation(_i23.Conversation? conversation) =>
       (super.noSuchMethod(
             Invocation.method(#updateConversation, [conversation]),
             returnValue: _i13.Future<void>.value(),
@@ -2667,18 +2768,18 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
 
   @override
   _i13.Future<String> insertConversationMessage(
-    _i22.ConversationMessage? message,
+    _i23.ConversationMessage? message,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#insertConversationMessage, [message]),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertConversationMessage, [message]),
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertConversationMessage, [message]),
               ),
@@ -2687,34 +2788,34 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i13.Future<String>);
 
   @override
-  _i13.Future<List<_i22.ConversationMessage>> getConversationMessages(
+  _i13.Future<List<_i23.ConversationMessage>> getConversationMessages(
     String? conversationId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationMessages, [conversationId]),
-            returnValue: _i13.Future<List<_i22.ConversationMessage>>.value(
-              <_i22.ConversationMessage>[],
+            returnValue: _i13.Future<List<_i23.ConversationMessage>>.value(
+              <_i23.ConversationMessage>[],
             ),
             returnValueForMissingStub:
-                _i13.Future<List<_i22.ConversationMessage>>.value(
-                  <_i22.ConversationMessage>[],
+                _i13.Future<List<_i23.ConversationMessage>>.value(
+                  <_i23.ConversationMessage>[],
                 ),
           )
-          as _i13.Future<List<_i22.ConversationMessage>>);
+          as _i13.Future<List<_i23.ConversationMessage>>);
 
   @override
-  _i13.Future<_i22.ConversationMessage?> getConversationMessage(String? id) =>
+  _i13.Future<_i23.ConversationMessage?> getConversationMessage(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationMessage, [id]),
-            returnValue: _i13.Future<_i22.ConversationMessage?>.value(),
+            returnValue: _i13.Future<_i23.ConversationMessage?>.value(),
             returnValueForMissingStub:
-                _i13.Future<_i22.ConversationMessage?>.value(),
+                _i13.Future<_i23.ConversationMessage?>.value(),
           )
-          as _i13.Future<_i22.ConversationMessage?>);
+          as _i13.Future<_i23.ConversationMessage?>);
 
   @override
   _i13.Future<void> updateConversationMessage(
-    _i22.ConversationMessage? message,
+    _i23.ConversationMessage? message,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#updateConversationMessage, [message]),
@@ -2761,18 +2862,18 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
 
   @override
   _i13.Future<String> insertConversationAttachment(
-    _i23.ConversationAttachment? attachment,
+    _i24.ConversationAttachment? attachment,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#insertConversationAttachment, [attachment]),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertConversationAttachment, [attachment]),
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertConversationAttachment, [attachment]),
               ),
@@ -2781,20 +2882,20 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i13.Future<String>);
 
   @override
-  _i13.Future<List<_i23.ConversationAttachment>> getConversationAttachments(
+  _i13.Future<List<_i24.ConversationAttachment>> getConversationAttachments(
     String? messageId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationAttachments, [messageId]),
-            returnValue: _i13.Future<List<_i23.ConversationAttachment>>.value(
-              <_i23.ConversationAttachment>[],
+            returnValue: _i13.Future<List<_i24.ConversationAttachment>>.value(
+              <_i24.ConversationAttachment>[],
             ),
             returnValueForMissingStub:
-                _i13.Future<List<_i23.ConversationAttachment>>.value(
-                  <_i23.ConversationAttachment>[],
+                _i13.Future<List<_i24.ConversationAttachment>>.value(
+                  <_i24.ConversationAttachment>[],
                 ),
           )
-          as _i13.Future<List<_i23.ConversationAttachment>>);
+          as _i13.Future<List<_i24.ConversationAttachment>>);
 
   @override
   _i13.Future<void> deleteConversationAttachment(String? id) =>
@@ -2816,7 +2917,7 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               #messageId: messageId,
             }),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertConversationMessageMapping, [], {
                   #conversationId: conversationId,
@@ -2825,7 +2926,7 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertConversationMessageMapping, [], {
                   #conversationId: conversationId,
@@ -2876,7 +2977,7 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               #parentMessageId: parentMessageId,
             }),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertMessageParent, [], {
                   #messageId: messageId,
@@ -2885,7 +2986,7 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertMessageParent, [], {
                   #messageId: messageId,
@@ -2965,7 +3066,7 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               #noteId: noteId,
             }),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertConversationNoteMapping, [], {
                   #conversationId: conversationId,
@@ -2974,7 +3075,7 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#insertConversationNoteMapping, [], {
                   #conversationId: conversationId,
@@ -3203,20 +3304,20 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i13.Future<String?>);
 
   @override
-  _i13.Future<List<_i22.ConversationMessage>> getMessagesForConversations(
+  _i13.Future<List<_i23.ConversationMessage>> getMessagesForConversations(
     List<String>? conversationIds,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getMessagesForConversations, [conversationIds]),
-            returnValue: _i13.Future<List<_i22.ConversationMessage>>.value(
-              <_i22.ConversationMessage>[],
+            returnValue: _i13.Future<List<_i23.ConversationMessage>>.value(
+              <_i23.ConversationMessage>[],
             ),
             returnValueForMissingStub:
-                _i13.Future<List<_i22.ConversationMessage>>.value(
-                  <_i22.ConversationMessage>[],
+                _i13.Future<List<_i23.ConversationMessage>>.value(
+                  <_i23.ConversationMessage>[],
                 ),
           )
-          as _i13.Future<List<_i22.ConversationMessage>>);
+          as _i13.Future<List<_i23.ConversationMessage>>);
 
   @override
   _i13.Future<Map<String, List<String>>> getConversationIdsForMessages(
@@ -3238,9 +3339,19 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
   _i13.Future<List<_i9.Note>> searchNotesFTS(
     String? query, {
     List<String>? tags,
+    List<String>? scopeTags,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
-            Invocation.method(#searchNotesFTS, [query], {#tags: tags}),
+            Invocation.method(
+              #searchNotesFTS,
+              [query],
+              {
+                #tags: tags,
+                #scopeTags: scopeTags,
+                #includeAllSpacesTag: includeAllSpacesTag,
+              },
+            ),
             returnValue: _i13.Future<List<_i9.Note>>.value(<_i9.Note>[]),
             returnValueForMissingStub: _i13.Future<List<_i9.Note>>.value(
               <_i9.Note>[],
@@ -3374,59 +3485,59 @@ class MockDatabaseService extends _i1.Mock implements _i6.DatabaseService {
           as _i13.Future<_i9.Note?>);
 
   @override
-  _i13.Future<_i24.WorkflowBindingRow?> getExactWorkflowBinding(
+  _i13.Future<_i25.WorkflowBindingRow?> getExactWorkflowBinding(
     String? tagName,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getExactWorkflowBinding, [tagName]),
-            returnValue: _i13.Future<_i24.WorkflowBindingRow?>.value(),
+            returnValue: _i13.Future<_i25.WorkflowBindingRow?>.value(),
             returnValueForMissingStub:
-                _i13.Future<_i24.WorkflowBindingRow?>.value(),
+                _i13.Future<_i25.WorkflowBindingRow?>.value(),
           )
-          as _i13.Future<_i24.WorkflowBindingRow?>);
+          as _i13.Future<_i25.WorkflowBindingRow?>);
 
   @override
-  _i13.Future<List<_i24.WorkflowBindingRow>> getPrefixWorkflowBindings() =>
+  _i13.Future<List<_i25.WorkflowBindingRow>> getPrefixWorkflowBindings() =>
       (super.noSuchMethod(
             Invocation.method(#getPrefixWorkflowBindings, []),
-            returnValue: _i13.Future<List<_i24.WorkflowBindingRow>>.value(
-              <_i24.WorkflowBindingRow>[],
+            returnValue: _i13.Future<List<_i25.WorkflowBindingRow>>.value(
+              <_i25.WorkflowBindingRow>[],
             ),
             returnValueForMissingStub:
-                _i13.Future<List<_i24.WorkflowBindingRow>>.value(
-                  <_i24.WorkflowBindingRow>[],
+                _i13.Future<List<_i25.WorkflowBindingRow>>.value(
+                  <_i25.WorkflowBindingRow>[],
                 ),
           )
-          as _i13.Future<List<_i24.WorkflowBindingRow>>);
+          as _i13.Future<List<_i25.WorkflowBindingRow>>);
 
   @override
-  _i13.Future<_i24.WorkflowBindingRow?> getWorkflowBindingByPattern(
+  _i13.Future<_i25.WorkflowBindingRow?> getWorkflowBindingByPattern(
     String? pattern,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#getWorkflowBindingByPattern, [pattern]),
-            returnValue: _i13.Future<_i24.WorkflowBindingRow?>.value(),
+            returnValue: _i13.Future<_i25.WorkflowBindingRow?>.value(),
             returnValueForMissingStub:
-                _i13.Future<_i24.WorkflowBindingRow?>.value(),
+                _i13.Future<_i25.WorkflowBindingRow?>.value(),
           )
-          as _i13.Future<_i24.WorkflowBindingRow?>);
+          as _i13.Future<_i25.WorkflowBindingRow?>);
 
   @override
-  _i13.Future<List<_i24.WorkflowBindingRow>> getAllWorkflowBindings() =>
+  _i13.Future<List<_i25.WorkflowBindingRow>> getAllWorkflowBindings() =>
       (super.noSuchMethod(
             Invocation.method(#getAllWorkflowBindings, []),
-            returnValue: _i13.Future<List<_i24.WorkflowBindingRow>>.value(
-              <_i24.WorkflowBindingRow>[],
+            returnValue: _i13.Future<List<_i25.WorkflowBindingRow>>.value(
+              <_i25.WorkflowBindingRow>[],
             ),
             returnValueForMissingStub:
-                _i13.Future<List<_i24.WorkflowBindingRow>>.value(
-                  <_i24.WorkflowBindingRow>[],
+                _i13.Future<List<_i25.WorkflowBindingRow>>.value(
+                  <_i25.WorkflowBindingRow>[],
                 ),
           )
-          as _i13.Future<List<_i24.WorkflowBindingRow>>);
+          as _i13.Future<List<_i25.WorkflowBindingRow>>);
 
   @override
-  _i13.Future<void> insertWorkflowBinding(_i24.WorkflowBindingRow? binding) =>
+  _i13.Future<void> insertWorkflowBinding(_i25.WorkflowBindingRow? binding) =>
       (super.noSuchMethod(
             Invocation.method(#insertWorkflowBinding, [binding]),
             returnValue: _i13.Future<void>.value(),
@@ -3516,11 +3627,11 @@ class MockSqlQueryService extends _i1.Mock implements _i7.SqlQueryService {
   String getQueryTypeDescription(_i7.SqlQueryType? queryType) =>
       (super.noSuchMethod(
             Invocation.method(#getQueryTypeDescription, [queryType]),
-            returnValue: _i18.dummyValue<String>(
+            returnValue: _i19.dummyValue<String>(
               this,
               Invocation.method(#getQueryTypeDescription, [queryType]),
             ),
-            returnValueForMissingStub: _i18.dummyValue<String>(
+            returnValueForMissingStub: _i19.dummyValue<String>(
               this,
               Invocation.method(#getQueryTypeDescription, [queryType]),
             ),
@@ -3579,7 +3690,7 @@ class MockSqlQueryService extends _i1.Mock implements _i7.SqlQueryService {
 /// A class which mocks [AIService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockAIService extends _i1.Mock implements _i25.AIService {
+class MockAIService extends _i1.Mock implements _i26.AIService {
   @override
   _i13.Future<void> initialize(_i10.AppProvider? appProvider) =>
       (super.noSuchMethod(
@@ -3591,12 +3702,12 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
 
   @override
   _i13.Future<String> executePrompt(
-    _i26.PromptRequest? request, {
+    _i27.PromptRequest? request, {
     double? temperature,
     int? topK,
     double? topP,
     int? maxOutputTokens,
-    _i17.GenerationContext? generationContext,
+    _i18.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -3611,7 +3722,7 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
               },
             ),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(
                   #executePrompt,
@@ -3627,7 +3738,7 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(
                   #executePrompt,
@@ -3649,8 +3760,8 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
   _i13.Future<String> transformNote(
     _i9.Note? note,
     String? transformationPrompt, {
-    List<_i16.PlatformFile>? attachedFiles,
-    _i17.GenerationContext? generationContext,
+    List<_i17.PlatformFile>? attachedFiles,
+    _i18.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -3662,7 +3773,7 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
               },
             ),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(
                   #transformNote,
@@ -3675,7 +3786,7 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(
                   #transformNote,
@@ -3694,7 +3805,7 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
   _i13.Future<String> transformBlock(
     String? blockContent,
     String? instruction, {
-    _i17.GenerationContext? generationContext,
+    _i18.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -3703,7 +3814,7 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
               {#generationContext: generationContext},
             ),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(
                   #transformBlock,
@@ -3713,7 +3824,7 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(
                   #transformBlock,
@@ -3728,8 +3839,8 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
   @override
   _i13.Future<String> generateWithAttachments(
     String? prompt,
-    List<_i16.PlatformFile>? attachedFiles, {
-    _i17.GenerationContext? generationContext,
+    List<_i17.PlatformFile>? attachedFiles, {
+    _i18.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -3738,7 +3849,7 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
               {#generationContext: generationContext},
             ),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(
                   #generateWithAttachments,
@@ -3748,7 +3859,7 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(
                   #generateWithAttachments,
@@ -3764,8 +3875,8 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
   _i13.Future<List<_i9.Note>> createNewNotes(
     String? prompt,
     List<_i9.Note>? contextNotes, {
-    List<_i16.PlatformFile>? attachedFiles,
-    _i17.GenerationContext? generationContext,
+    List<_i17.PlatformFile>? attachedFiles,
+    _i18.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -3788,13 +3899,13 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
       (super.noSuchMethod(
             Invocation.method(#transcribeAudio, [audioFilePath]),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#transcribeAudio, [audioFilePath]),
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#transcribeAudio, [audioFilePath]),
               ),
@@ -3814,7 +3925,7 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
               {#context: context},
             ),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(
                   #summarizeAudio,
@@ -3824,7 +3935,7 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(
                   #summarizeAudio,
@@ -3886,7 +3997,7 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
           as _i13.Future<Map<String, dynamic>>);
 
   @override
-  _i13.Future<List<_i27.DedupRule>> suggestDedupRules(
+  _i13.Future<List<_i28.DedupRule>> suggestDedupRules(
     List<String>? tagNames, {
     List<String>? protectedTags = const [],
   }) =>
@@ -3896,20 +4007,20 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
               [tagNames],
               {#protectedTags: protectedTags},
             ),
-            returnValue: _i13.Future<List<_i27.DedupRule>>.value(
-              <_i27.DedupRule>[],
+            returnValue: _i13.Future<List<_i28.DedupRule>>.value(
+              <_i28.DedupRule>[],
             ),
-            returnValueForMissingStub: _i13.Future<List<_i27.DedupRule>>.value(
-              <_i27.DedupRule>[],
+            returnValueForMissingStub: _i13.Future<List<_i28.DedupRule>>.value(
+              <_i28.DedupRule>[],
             ),
           )
-          as _i13.Future<List<_i27.DedupRule>>);
+          as _i13.Future<List<_i28.DedupRule>>);
 
   @override
   _i13.Future<String> generateApp(
     String? prompt, {
-    List<_i16.PlatformFile>? attachedFiles,
-    _i17.GenerationContext? generationContext,
+    List<_i17.PlatformFile>? attachedFiles,
+    _i18.GenerationContext? generationContext,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -3921,7 +4032,7 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
               },
             ),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(
                   #generateApp,
@@ -3934,7 +4045,7 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(
                   #generateApp,
@@ -3955,8 +4066,8 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
     double? temperature,
     int? topK,
     double? topP,
-    List<_i16.PlatformFile>? attachedFiles,
-    _i17.GenerationContext? generationContext,
+    List<_i17.PlatformFile>? attachedFiles,
+    _i18.GenerationContext? generationContext,
     List<String>? modelHint,
     String? voice,
   }) =>
@@ -3975,7 +4086,7 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
               },
             ),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(
                   #chatAI,
@@ -3993,7 +4104,7 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(
                   #chatAI,
@@ -4019,8 +4130,8 @@ class MockAIService extends _i1.Mock implements _i25.AIService {
     double? temperature,
     int? topK,
     double? topP,
-    List<_i16.PlatformFile>? attachedFiles,
-    _i17.GenerationContext? generationContext,
+    List<_i17.PlatformFile>? attachedFiles,
+    _i18.GenerationContext? generationContext,
     List<String>? modelHint,
     String? voice,
   }) =>
@@ -4193,7 +4304,7 @@ class MockInAppWebViewController extends _i1.Mock
   @override
   _i13.Future<void> postUrl({
     required _i8.WebUri? url,
-    required _i28.Uint8List? postData,
+    required _i29.Uint8List? postData,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#postUrl, [], {#url: url, #postData: postData}),
@@ -4442,17 +4553,17 @@ class MockInAppWebViewController extends _i1.Mock
           as bool);
 
   @override
-  _i13.Future<_i28.Uint8List?> takeScreenshot({
+  _i13.Future<_i29.Uint8List?> takeScreenshot({
     _i8.ScreenshotConfiguration? screenshotConfiguration,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#takeScreenshot, [], {
               #screenshotConfiguration: screenshotConfiguration,
             }),
-            returnValue: _i13.Future<_i28.Uint8List?>.value(),
-            returnValueForMissingStub: _i13.Future<_i28.Uint8List?>.value(),
+            returnValue: _i13.Future<_i29.Uint8List?>.value(),
+            returnValueForMissingStub: _i13.Future<_i29.Uint8List?>.value(),
           )
-          as _i13.Future<_i28.Uint8List?>);
+          as _i13.Future<_i29.Uint8List?>);
 
   @override
   _i13.Future<void> setOptions({
@@ -4546,13 +4657,13 @@ class MockInAppWebViewController extends _i1.Mock
       (super.noSuchMethod(
             Invocation.method(#getTRexRunnerHtml, []),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#getTRexRunnerHtml, []),
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#getTRexRunnerHtml, []),
               ),
@@ -4565,13 +4676,13 @@ class MockInAppWebViewController extends _i1.Mock
       (super.noSuchMethod(
             Invocation.method(#getTRexRunnerCss, []),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#getTRexRunnerCss, []),
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#getTRexRunnerCss, []),
               ),
@@ -5078,7 +5189,7 @@ class MockInAppWebViewController extends _i1.Mock
           as _i13.Future<void>);
 
   @override
-  _i13.Future<_i28.Uint8List?> createPdf({
+  _i13.Future<_i29.Uint8List?> createPdf({
     _i8.IOSWKPDFConfiguration? iosWKPdfConfiguration,
     _i8.PDFConfiguration? pdfConfiguration,
   }) =>
@@ -5087,19 +5198,19 @@ class MockInAppWebViewController extends _i1.Mock
               #iosWKPdfConfiguration: iosWKPdfConfiguration,
               #pdfConfiguration: pdfConfiguration,
             }),
-            returnValue: _i13.Future<_i28.Uint8List?>.value(),
-            returnValueForMissingStub: _i13.Future<_i28.Uint8List?>.value(),
+            returnValue: _i13.Future<_i29.Uint8List?>.value(),
+            returnValueForMissingStub: _i13.Future<_i29.Uint8List?>.value(),
           )
-          as _i13.Future<_i28.Uint8List?>);
+          as _i13.Future<_i29.Uint8List?>);
 
   @override
-  _i13.Future<_i28.Uint8List?> createWebArchiveData() =>
+  _i13.Future<_i29.Uint8List?> createWebArchiveData() =>
       (super.noSuchMethod(
             Invocation.method(#createWebArchiveData, []),
-            returnValue: _i13.Future<_i28.Uint8List?>.value(),
-            returnValueForMissingStub: _i13.Future<_i28.Uint8List?>.value(),
+            returnValue: _i13.Future<_i29.Uint8List?>.value(),
+            returnValueForMissingStub: _i13.Future<_i29.Uint8List?>.value(),
           )
-          as _i13.Future<_i28.Uint8List?>);
+          as _i13.Future<_i29.Uint8List?>);
 
   @override
   _i13.Future<bool> hasOnlySecureContent() =>
@@ -5212,7 +5323,7 @@ class MockInAppWebViewController extends _i1.Mock
   @override
   _i13.Future<void> loadSimulatedRequest({
     required _i8.URLRequest? urlRequest,
-    required _i28.Uint8List? data,
+    required _i29.Uint8List? data,
     _i8.URLResponse? urlResponse,
   }) =>
       (super.noSuchMethod(
@@ -5298,7 +5409,7 @@ class MockInAppWebViewController extends _i1.Mock
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockNoteModificationService extends _i1.Mock
-    implements _i29.NoteModificationService {
+    implements _i30.NoteModificationService {
   @override
   _i13.Future<_i9.Note> applyModifications(
     String? noteId,
@@ -5394,13 +5505,13 @@ class MockNoteModificationService extends _i1.Mock
       (super.noSuchMethod(
             Invocation.method(#processAttachment, [attachment]),
             returnValue: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#processAttachment, [attachment]),
               ),
             ),
             returnValueForMissingStub: _i13.Future<String>.value(
-              _i18.dummyValue<String>(
+              _i19.dummyValue<String>(
                 this,
                 Invocation.method(#processAttachment, [attachment]),
               ),
