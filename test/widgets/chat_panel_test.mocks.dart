@@ -80,6 +80,14 @@ class MockConversationService extends _i1.Mock
           as Map<String, _i6.SkillMetadata>);
 
   @override
+  bool get isSkillIndexStale =>
+      (super.noSuchMethod(
+            Invocation.getter(#isSkillIndexStale),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
   List<_i7.McpTool> get skillDiscoveredTools =>
       (super.noSuchMethod(
             Invocation.getter(#skillDiscoveredTools),
@@ -131,6 +139,16 @@ class MockConversationService extends _i1.Mock
           as _i2.LoadSkillTool);
 
   @override
+  _i9.Future<Map<String, _i6.SkillMetadata>> ensureSkillIndex() =>
+      (super.noSuchMethod(
+            Invocation.method(#ensureSkillIndex, []),
+            returnValue: _i9.Future<Map<String, _i6.SkillMetadata>>.value(
+              <String, _i6.SkillMetadata>{},
+            ),
+          )
+          as _i9.Future<Map<String, _i6.SkillMetadata>>);
+
+  @override
   _i9.Future<void> enableSkills() =>
       (super.noSuchMethod(
             Invocation.method(#enableSkills, []),
@@ -158,11 +176,13 @@ class MockConversationService extends _i1.Mock
   _i9.Future<_i3.Conversation> createConversation({
     required String? title,
     List<String>? noteIds = const [],
+    List<String>? tags = const [],
   }) =>
       (super.noSuchMethod(
             Invocation.method(#createConversation, [], {
               #title: title,
               #noteIds: noteIds,
+              #tags: tags,
             }),
             returnValue: _i9.Future<_i3.Conversation>.value(
               _FakeConversation_1(
@@ -170,6 +190,7 @@ class MockConversationService extends _i1.Mock
                 Invocation.method(#createConversation, [], {
                   #title: title,
                   #noteIds: noteIds,
+                  #tags: tags,
                 }),
               ),
             ),
@@ -313,15 +334,19 @@ class MockConversationService extends _i1.Mock
   _i9.Future<List<_i3.Conversation>> getAllConversations({
     Duration? maxAge,
     List<String>? tagNames,
+    List<String>? scopeTags,
     List<String>? conversationIds,
     bool? includeEmpty = true,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#getAllConversations, [], {
               #maxAge: maxAge,
               #tagNames: tagNames,
+              #scopeTags: scopeTags,
               #conversationIds: conversationIds,
               #includeEmpty: includeEmpty,
+              #includeAllSpacesTag: includeAllSpacesTag,
             }),
             returnValue: _i9.Future<List<_i3.Conversation>>.value(
               <_i3.Conversation>[],
@@ -422,12 +447,16 @@ class MockConversationService extends _i1.Mock
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
+    List<String>? scopeTags,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#getConversationTree, [], {
               #maxAge: maxAge,
               #conversationIds: conversationIds,
               #tagNames: tagNames,
+              #scopeTags: scopeTags,
+              #includeAllSpacesTag: includeAllSpacesTag,
             }),
             returnValue: _i9.Future<_i3.ConversationTree?>.value(),
           )
@@ -438,12 +467,16 @@ class MockConversationService extends _i1.Mock
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
+    List<String>? scopeTags,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#refreshConversationTree, [], {
               #maxAge: maxAge,
               #conversationIds: conversationIds,
               #tagNames: tagNames,
+              #scopeTags: scopeTags,
+              #includeAllSpacesTag: includeAllSpacesTag,
             }),
             returnValue: _i9.Future<_i3.ConversationTree?>.value(),
           )

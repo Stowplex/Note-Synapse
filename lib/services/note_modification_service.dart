@@ -10,11 +10,13 @@ import '../utils/file_type_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 import 'logger_service.dart';
 import 'service_locator.dart';
+import 'space_scope_service.dart';
 import 'tag_workflow_service.dart';
 
 class NoteModificationService {
   final DatabaseService _db;
   final DataChangeNotifier _changeNotifier;
+  final SpaceScopeService _spaceScope;
   final Uuid _uuid = const Uuid();
 
   /// Creates a NoteModificationService.
@@ -22,8 +24,18 @@ class NoteModificationService {
   /// [db] - The database service for persistence operations.
   /// [changeNotifier] - Receives post-commit change events so UI caches can
   /// refresh. Defaults to the process-wide shared notifier.
-  NoteModificationService(this._db, {DataChangeNotifier? changeNotifier})
-    : _changeNotifier = changeNotifier ?? DataChangeNotifier.shared();
+  /// [spaceScope] - Supplies the active Space's tags, which [createNote]
+  /// stamps onto new notes. Optional and named on purpose: this service is
+  /// constructed positionally in several tests, and a required parameter would
+  /// break them. Defaults to the process-wide shared scope, exactly like
+  /// [changeNotifier]: a private `SpaceScopeService()` would be permanently
+  /// unset and would silently stamp nothing.
+  NoteModificationService(
+    this._db, {
+    DataChangeNotifier? changeNotifier,
+    SpaceScopeService? spaceScope,
+  }) : _changeNotifier = changeNotifier ?? DataChangeNotifier.shared(),
+       _spaceScope = spaceScope ?? SpaceScopeService.shared();
 
   /// Publishes a post-commit change event. Enqueue-only by contract
   /// ([DataChangeNotifier.publish] never throws), so calling this can never
@@ -347,8 +359,13 @@ class NoteModificationService {
   }
 
   /// Creates and persists a new note. For UI-aware insertion, use buildNote + AppProvider.addNote.
+  ///
+  /// A note created while a Space is active is filed into it: the Space's
+  /// include-tags are unioned onto `data['tags']` before the note is built.
+  /// [buildNote] deliberately does not do this — it also backs previews, which
+  /// must not acquire tags they will never be saved with.
   Future<Note> createNote(Map<String, dynamic> data) async {
-    final note = await buildNote(data);
+    final note = await buildNote(_spaceScope.stampData(data));
     await _db.insertNote(note);
     // Publication is guarded rather than transactional here: insertNote owns
     // attachment-path conversion and cannot run against a transaction

@@ -510,6 +510,49 @@ class MockModelSelector extends _i1.Mock implements _i12.ModelSelector {
           as _i9.Future<String>);
 
   @override
+  _i9.Future<String> generateFromPromptExact(
+    _i17.PromptRequest? request, {
+    required _i11.ModelConfig? config,
+    double? temperature,
+    int? topK,
+    double? topP,
+    int? maxOutputTokens,
+    _i16.GenerationContext? generationContext,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #generateFromPromptExact,
+              [request],
+              {
+                #config: config,
+                #temperature: temperature,
+                #topK: topK,
+                #topP: topP,
+                #maxOutputTokens: maxOutputTokens,
+                #generationContext: generationContext,
+              },
+            ),
+            returnValue: _i9.Future<String>.value(
+              _i10.dummyValue<String>(
+                this,
+                Invocation.method(
+                  #generateFromPromptExact,
+                  [request],
+                  {
+                    #config: config,
+                    #temperature: temperature,
+                    #topK: topK,
+                    #topP: topP,
+                    #maxOutputTokens: maxOutputTokens,
+                    #generationContext: generationContext,
+                  },
+                ),
+              ),
+            ),
+          )
+          as _i9.Future<String>);
+
+  @override
   _i9.Future<List<Map<String, dynamic>>> generateFromPromptMultiPart(
     _i17.PromptRequest? request, {
     double? temperature,
@@ -1879,14 +1922,18 @@ class MockDatabaseService extends _i1.Mock implements _i5.DatabaseService {
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
+    List<String>? scopeTags,
     bool? includeEmpty = true,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#getAllConversations, [], {
               #maxAge: maxAge,
               #conversationIds: conversationIds,
               #tagNames: tagNames,
+              #scopeTags: scopeTags,
               #includeEmpty: includeEmpty,
+              #includeAllSpacesTag: includeAllSpacesTag,
             }),
             returnValue: _i9.Future<List<_i28.Conversation>>.value(
               <_i28.Conversation>[],
@@ -2406,9 +2453,19 @@ class MockDatabaseService extends _i1.Mock implements _i5.DatabaseService {
   _i9.Future<List<_i6.Note>> searchNotesFTS(
     String? query, {
     List<String>? tags,
+    List<String>? scopeTags,
+    bool? includeAllSpacesTag = false,
   }) =>
       (super.noSuchMethod(
-            Invocation.method(#searchNotesFTS, [query], {#tags: tags}),
+            Invocation.method(
+              #searchNotesFTS,
+              [query],
+              {
+                #tags: tags,
+                #scopeTags: scopeTags,
+                #includeAllSpacesTag: includeAllSpacesTag,
+              },
+            ),
             returnValue: _i9.Future<List<_i6.Note>>.value(<_i6.Note>[]),
           )
           as _i9.Future<List<_i6.Note>>);

@@ -22,6 +22,8 @@ import '../services/conversation_service.dart';
 import '../services/chip_tap_handler.dart';
 import '../services/model_selector.dart';
 import '../services/service_locator.dart';
+import '../services/space_scope_service.dart';
+import '../services/prompts/space_scope_prompt.dart';
 import '../services/attachment_preprocessor.dart';
 import '../services/local_model_attachment_constraint_service.dart';
 import '../services/logger_service.dart';
@@ -197,6 +199,37 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
       );
       return result;
     };
+  }
+
+  /// Rebuilds the conversation service's skill index when the Space scope
+  /// moved, then republishes the count this screen shows.
+  ///
+  /// The screen caches only the count, but that count is a scope-derived view
+  /// of the same index: leaving it stale tells the user "6 skills available"
+  /// in a Space that can reach two of them.
+  ///
+  /// No staleness guard of its own, on purpose, and **nothing returns before
+  /// the rebuild**. `ensureSkillIndex()` already returns the cached index
+  /// untouched when the scope has not moved, and the count comparison below
+  /// already suppresses a pointless `setState`, so a staleness check here was
+  /// redundant *and* invertible: flipping its one `!` made the screen rebuild
+  /// only when it was already fresh, which fed the previous Space's skills to
+  /// the model (the prompt reads the cached `skillIndex` getter, so this call
+  /// is what makes it fresh) with nothing to catch it. Awaiting the rebuild
+  /// first leaves no polarity that can suppress it.
+  ///
+  /// The `skillsEnabled` check below guards the *count*, not the rebuild:
+  /// while skills are off, `ensureSkillIndex()` answers with an empty map but
+  /// `_skillCount` holds the size of the whole skill library
+  /// ([_initSkillsWithModelCheck]), and zeroing it would hide the chip that
+  /// turns skills on.
+  Future<void> _refreshSkillIndexIfScopeChanged() async {
+    final index = await _conversationService.ensureSkillIndex();
+    if (!mounted) return;
+    if (!_conversationService.skillsEnabled) return;
+    if (index.length != _skillCount) {
+      setState(() => _skillCount = index.length);
+    }
   }
 
   void _initSkillsWithModelCheck() {
@@ -1136,6 +1169,9 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
         final newConversation = await _conversationService.createConversation(
           title: title.length > 50 ? '${title.substring(0, 50)}...' : title,
           noteIds: noteIdSet.toList(),
+          // Files the conversation into the Space it was started in, so the
+          // conversation tree finds it there again.
+          tags: SpaceScopeService.shared().stampTags,
         );
         if (!mounted) return;
         setState(() {
@@ -1437,6 +1473,7 @@ $historyBuffer
     final l10n = AppLocalizations.of(context)!;
     final newConversation = await _conversationService.createConversation(
       title: l10n.newConversation,
+      tags: SpaceScopeService.shared().stampTags,
     );
     if (mounted) {
       Navigator.of(context).pushReplacement(
@@ -1727,6 +1764,12 @@ $historyBuffer
   Future<PromptMessage> _buildConversationSystemMessage({
     required bool hasInlineContext,
   }) async {
+    // The session's skill index was built when skills were enabled; the user
+    // may have switched Space since. Re-check before it reaches the prompt, and
+    // keep the "N available" chip honest about what this Space can actually
+    // reach.
+    await _refreshSkillIndexIfScopeChanged();
+
     final lines = <String>[
       'Engage in a multi-turn conversation grounded in the provided note context message and attachments.',
       'Treat all prior messages as immutable history for KV-cache friendly reuse.',
@@ -1764,6 +1807,19 @@ $historyBuffer
     // wastes token budget.
     final currentModel = getIt<ModelSelector>().currentModel;
     final isLocalModel = currentModel?.usesNativeToolDeclarations ?? false;
+
+    // Decision 5: when a Space is active the note tools are scoped, and the
+    // model is told so rather than quietly handed a subset. Only worth saying
+    // where those tools exist — in chat they arrive through a loaded skill, so
+    // a session without them has nothing scoped to announce. Both halves of
+    // that decision live in buildChatSpaceScopeSection, where a test can reach
+    // them.
+    final spaceScopeSection = buildChatSpaceScopeSection(
+      _conversationService.skillDiscoveredNativeToolNames,
+    );
+    if (spaceScopeSection.isNotEmpty) {
+      lines.add(spaceScopeSection);
+    }
 
     final taskContext = lines.join('\n');
     final systemAddOn = PromptConfigurationService.instance.getValue(

@@ -725,6 +725,47 @@
      from fenced blocks preserve their YAML/JSON types (numbers, arrays,
      nested objects).
 
+   - Synapse.space (object|null, read-only) - The Space the user is currently
+     working in, or null when none is active. A Space is a saved filter the user
+     activated as a scope: while one is active the app's own note lists are
+     narrowed to it and newly created notes are tagged with its tags.
+     Shape: { id: string, name: string, tags: string[] } - `tags` are the
+     Space's include-tags (every note in the Space carries all of them), and
+     `name` is arbitrary user text, so render it as text, never as HTML.
+     Notes:
+       * SCOPE YOUR QUERIES. When Synapse.space is non-null, a plugin that reads
+         notes should narrow its runQuery to the Space's tags, or the user sees
+         notes from outside the Space they are working in. Match on the tag
+         tables, not on the notes table:
+           const space = Synapse.space;
+           const tagFilter = space
+             ? space.tags.map(t =>
+                 "EXISTS (SELECT 1 FROM note_tags nt JOIN tags tg ON tg.id = nt.tagId "
+                 + "WHERE nt.noteId = n.id AND tg.name = '" + t.replace(/'/g, "''") + "')")
+               .join(' AND ')
+             : '1=1';
+           const rows = await Synapse.runQuery(
+             `SELECT n.* FROM notes n WHERE ${tagFilter} ORDER BY n.updatedAt DESC LIMIT 50`);
+         A note tagged 'all-spaces' is shown in every Space by the app itself; to
+         match that, OR `EXISTS (... tg.name = 'all-spaces')` around the
+         **Space tag group only** - a tag your app requires stays ANDed
+         outside it:
+           WHERE myTag AND ((space1 AND space2) OR allSpaces)
+         Never `(myTag AND space1) OR allSpaces`: that returns every note tagged
+         'all-spaces' whether or not it has myTag, and every agent-skill note
+         carries 'all-spaces'.
+       * The user can switch or leave a Space while your app is still open. The
+         window fires a 'synapse:spacechanged' CustomEvent whose `detail` is the
+         new value (null on leave); Synapse.space is updated before it fires, so
+         either source is fine:
+           window.addEventListener('synapse:spacechanged', (e) => {
+             render(e.detail);   // same object as Synapse.space
+           });
+         Re-run your queries from that handler - an app that reads Synapse.space
+         only at startup will keep showing another Space's notes.
+       * Do NOT persist the id: a Space is a filter the user can delete or stop
+         using as a Space at any time.
+
    ### Embedding apps inline in markdown
 
    Any user app can be embedded inside notes and chat-message markdown. The

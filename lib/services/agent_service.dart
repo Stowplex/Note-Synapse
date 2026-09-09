@@ -35,6 +35,8 @@ import 'database_service.dart';
 import 'service_locator.dart';
 
 import 'prompts/ai_prompts.dart';
+import 'prompts/space_scope_prompt.dart';
+import 'space_scope_service.dart';
 import '../utils/think_tag_utils.dart';
 import '../utils/token_estimator.dart';
 
@@ -1188,6 +1190,10 @@ If no findings worth preserving, return: []
   // Skill state
   bool _skillsEnabled = true;
   Map<String, SkillMetadata> _skillIndex = {};
+
+  /// [SpaceScopeService.scopeVersion] the cached [_skillIndex] was built
+  /// against. `-1` means "no index built", which no real version can equal.
+  int _skillIndexScopeVersion = -1;
   final List<McpTool> _skillDiscoveredTools = [];
   final Map<String, String> _skillToolServiceNames = {};
   LoadSkillTool? _loadSkillTool;
@@ -1251,8 +1257,10 @@ If no findings worth preserving, return: []
 
     if (_skillsEnabled) {
       _skillIndex = await getIt<SkillService>().buildSkillIndex();
+      _skillIndexScopeVersion = SpaceScopeService.shared().scopeVersion;
     } else {
       _skillIndex = {};
+      _skillIndexScopeVersion = -1;
     }
 
     _currentThought = 'Generating plan...';
@@ -1345,6 +1353,11 @@ Example: "identify knowledge gaps in transformer notes":
 '''
         : '';
 
+    // Decision 5: a Space narrows the note tools, and the model is told so.
+    final spaceScopeSection = hasNoteTools
+        ? buildSpaceScopePromptSection()
+        : '';
+
     final skillIndexSection = () {
       if (!_skillsEnabled) return '';
       final skillSvc = getIt<SkillService>();
@@ -1389,6 +1402,7 @@ Choose an appropriate strategy based on the objective and available tools:
 - Each step builds on previous results
 - Example: "Find notes about X and summarize them"
 $noteExplorationSection
+$spaceScopeSection
 
 ## TASK CONFIGURATION
 
@@ -2022,9 +2036,35 @@ Use the source note above as "this note" for the workflow. Do not search for a c
     return tool.execute(validation.params);
   }
 
+  /// Rebuilds [_skillIndex] when the Space scope moved since it was built.
+  ///
+  /// A run can span several Space switches (the user keeps working while the
+  /// agent thinks), and the index feeds every task prompt. Pull rather than
+  /// push: [SpaceScopeService.scopeVersion] exists so a cached, scope-derived
+  /// index can check itself instead of subscribing to a listener that would
+  /// have to be unsubscribed.
+  @visibleForTesting
+  Future<void> refreshSkillIndexIfScopeChanged() async {
+    if (!_skillsEnabled) return;
+    final version = SpaceScopeService.shared().scopeVersion;
+    if (version == _skillIndexScopeVersion) return;
+    _skillIndex = await getIt<SkillService>().buildSkillIndex();
+    _skillIndexScopeVersion = version;
+  }
+
   Future<String> _resolveSkillNoteId(Map<String, dynamic> args) async {
     final noteId = (args['noteId'] as String? ?? '').trim();
     if (noteId.isNotEmpty) {
+      // The legacy `noteId` argument bypasses the skill index, which is where
+      // Space filtering happens — and note ids survive in conversation history
+      // across a Space switch, so a model quoting one from earlier could pin a
+      // skill this Space cannot see (design decision 7). The `skillRef` path
+      // below needs no such check: it resolves through the already-filtered
+      // index. Answering '' is what `load_skill` handling treats as "nothing
+      // to pin", the same as an unresolvable ref.
+      final note = await _databaseService.getNote(noteId);
+      if (note == null) return '';
+      if (!SpaceScopeService.shared().skillVisible(note.tags)) return '';
       return noteId;
     }
 
@@ -2043,6 +2083,7 @@ Use the source note above as "this note" for the workflow. Do not search for a c
 
     final refreshedIndex = await getIt<SkillService>().buildSkillIndex();
     _skillIndex = refreshedIndex;
+    _skillIndexScopeVersion = SpaceScopeService.shared().scopeVersion;
     return getIt<SkillService>().resolveNoteIdForSkillRef(
           refreshedIndex,
           skillRef,
@@ -2645,6 +2686,10 @@ Use the source note above as "this note" for the workflow. Do not search for a c
   }
 
   Future<void> _performTask(AgentTask task, String globalContext) async {
+    // The index was built when the run started; the user may have switched
+    // Space since. Re-check before it reaches this task's prompt.
+    await refreshSkillIndexIfScopeChanged();
+
     // Check for max turns
     final turnsUsed = _countTaskTurns(task);
     if (turnsUsed >= task.maxTurns) {
@@ -2877,6 +2922,10 @@ Current task depth: ${task.depth} / $_cachedMaxSubtaskDepth
       return index;
     }();
 
+    // Decision 5: the executor is the loop that actually calls the note tools,
+    // so it must carry the same announcement the planner does.
+    final spaceScopeSection = buildSpaceScopePromptSection();
+
     final prompt =
         '''
 You are an intelligent agent working on a task.
@@ -2887,6 +2936,7 @@ $globalContext
 
 Available Tools:
 $toolsDesc
+$spaceScopeSection
 
 ## ITERATION PROTOCOL
 

@@ -12,11 +12,13 @@ import '../note_source_service.dart';
 import '../logger_service.dart';
 import '../sql_query_service.dart';
 import '../service_locator.dart';
+import '../space_scope_service.dart';
 import '../../utils/file_utils.dart';
 
 import '../ai_service.dart';
 import '../../models/generation_context.dart';
 import '../../models/filter.dart';
+import '../../models/note.dart';
 
 abstract class NativeTool {
   String get name;
@@ -35,6 +37,12 @@ abstract class NativeTool {
 class NoteSearchTool implements NativeTool {
   DatabaseService get _db => getIt<DatabaseService>();
 
+  /// Resolved through [SpaceScopeService.shared] rather than `getIt<...>()`:
+  /// this tool is constructed eagerly in `AgentService._nativeTools` and used
+  /// from tests that register only a database, so an unregistered scope must
+  /// degrade to "no active Space", not throw.
+  SpaceScopeService get _scope => SpaceScopeService.shared();
+
   @override
   String get name => 'search_notes';
 
@@ -45,6 +53,8 @@ class NoteSearchTool implements NativeTool {
   String get description => '''
 Search for notes using full-text search. Returns matching notes with titles, IDs, snippets, and tags.
 Supports optional tag filtering for more targeted results.
+
+When the user is working inside a Space, this searches that Space only: results come from the Space's notes plus any note tagged `${SpaceScopeService.allSpacesTag}`. Tags you pass in `tags` are then required on top of that, so they narrow the search inside the Space rather than leaving it. Pass scope="all" to search the entire library instead.
 
 DISCOVERY TIP: Use this for keyword-based filtering across notes.
 Priority order for exploring user's notes:
@@ -62,7 +72,17 @@ Priority order for exploring user's notes:
       'tags': {
         'type': 'array',
         'items': {'type': 'string'},
-        'description': 'Optional list of tags to filter by.',
+        'description':
+            'Optional list of tags to filter by. Inside a Space these narrow '
+            'the search within the Space; they do not leave it.',
+      },
+      'scope': {
+        'type': 'string',
+        'enum': ['space', 'all'],
+        'description':
+            'Search scope. "space" (default) searches the active Space only; '
+            '"all" searches every note. Without an active Space the two are '
+            'identical.',
       },
     },
     'required': ['query'],
@@ -71,17 +91,32 @@ Priority order for exploring user's notes:
   @override
   Future<dynamic> execute(Map<String, dynamic> args) async {
     final query = args['query'] as String;
-    final tags = (args['tags'] as List?)?.cast<String>();
+    final requested = (args['tags'] as List?)?.cast<String>() ?? const [];
+
+    // A7: explicit tags COMPOSE with the Space — asking for tag X inside a
+    // Space means "X, in this Space". `scope: "all"` is the only escape and
+    // drops the Space entirely (invariant: scope narrows lists, never access).
+    //
+    // The two lists stay separate all the way down: only the Space's tags may
+    // be ORed away by `all-spaces`. Merging them first and ORing around the
+    // whole conjunction turns "tag `invoice` in this Space" into "tag
+    // `invoice`, OR any note tagged all-spaces" — which since migration v47
+    // means every agent-skill note.
+    final escaped = (args['scope'] as String?) == 'all';
+    final scoped = !escaped && _scope.isActive;
+    final scopeTags = scoped ? _scope.stampTags : const <String>[];
 
     final trimmedQuery = query.trim();
-    late final List notes;
-    if (trimmedQuery.isEmpty && tags != null && tags.isNotEmpty) {
-      final firstTagNotes = await _db.getNotesByTag(tags.first);
-      notes = firstTagNotes
-          .where((note) => tags.every(note.tags.contains))
-          .toList();
+    late final List<Note> notes;
+    if (trimmedQuery.isEmpty && (requested.isNotEmpty || scopeTags.isNotEmpty)) {
+      notes = await _tagOnlyLookup(requested, scopeTags, orAllSpaces: scoped);
     } else {
-      notes = await _db.searchNotesFTS(query, tags: tags);
+      notes = await _db.searchNotesFTS(
+        query,
+        tags: requested.isEmpty ? null : requested,
+        scopeTags: scopeTags.isEmpty ? null : scopeTags,
+        includeAllSpacesTag: scoped,
+      );
     }
 
     return notes
@@ -96,6 +131,41 @@ Priority order for exploring user's notes:
           },
         )
         .toList();
+  }
+
+  /// The no-query branch: every note carrying all of [requested] and, unless
+  /// `all-spaces` lets it off, all of [scopeTags].
+  ///
+  /// Scoped exactly like the FTS branch, including the composition rule: the
+  /// `all-spaces` escape ORs around the **Space's** tags only (A1), so a note
+  /// marked visible everywhere is returned even though it carries none of
+  /// them — but it must still carry every tag the caller asked for (A7).
+  /// Appending `all-spaces` as one more required tag would instead return only
+  /// `all-spaces` notes; skipping the [requested] re-test would return every
+  /// `all-spaces` note whatever was asked for.
+  Future<List<Note>> _tagOnlyLookup(
+    List<String> requested,
+    List<String> scopeTags, {
+    required bool orAllSpaces,
+  }) async {
+    final all = <String>[
+      ...requested,
+      for (final tag in scopeTags)
+        if (!requested.contains(tag)) tag,
+    ];
+    final primary = await _db.getNotesByTag(all.first);
+    final matches = primary
+        .where((note) => all.every(note.tags.contains))
+        .toList();
+    if (!orAllSpaces) return matches;
+
+    final seen = {for (final note in matches) note.id};
+    final everywhere = await _db.getNotesByTag(SpaceScopeService.allSpacesTag);
+    for (final note in everywhere) {
+      if (!requested.every(note.tags.contains)) continue;
+      if (seen.add(note.id)) matches.add(note);
+    }
+    return matches;
   }
 }
 
@@ -739,6 +809,8 @@ class ListFiltersTool implements NativeTool {
   @override
   bool get isMutating => false;
 
+  SpaceScopeService get _scope => SpaceScopeService.shared();
+
   @override
   String get description => '''
 Lists all tag filters (folders) in a tree structure. Use this to understand the organization of notes.
@@ -747,6 +819,7 @@ Filters define sets of tags for organizing notes into logical groups.
 DISCOVERY TIP: This is the PREFERRED starting point for exploring notes.
 - Returns hierarchical structure of how notes are organized
 - Each filter shows its included tags and note count
+- The node marked `(active space)` is the Space the user is working inside; search_notes is scoped to it
 - Use this before search_notes or run_sql to understand the note taxonomy
 ''';
 
@@ -803,8 +876,13 @@ DISCOVERY TIP: This is the PREFERRED starting point for exploring notes.
       final buffer = StringBuffer();
       buffer.writeln("File System (Filters Hierarchy):");
 
+      // Decision 5: the scoping is announced. The agent's note searches are
+      // narrowed to this node, so the tree has to say which node that is.
+      final activeSpaceId = _scope.isActive ? _scope.activeSpaceId : null;
+
       void printNode(Filter node, String prefix) {
-        buffer.writeln("$prefix- [${node.name}]");
+        final marker = node.id == activeSpaceId ? ' (active space)' : '';
+        buffer.writeln("$prefix- [${node.name}]$marker");
         final indent = "$prefix  ";
 
         if (node.includeTags.isNotEmpty) {

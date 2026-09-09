@@ -9,6 +9,7 @@ import '../widgets/note_card.dart';
 import '../widgets/multi_select_tag_filter.dart';
 import '../widgets/share_dialog.dart';
 import '../widgets/filter_tab_strip.dart';
+import '../widgets/space_switcher.dart';
 import '../widgets/tag_selection_dialog.dart';
 import '../models/filter.dart';
 import 'note_detail_screen.dart';
@@ -21,6 +22,8 @@ import '../services/import_service.dart';
 import '../services/logger_service.dart';
 import 'immersive_note_screen.dart';
 import 'note_merge_screen.dart';
+import '../widgets/space_picker_dialog.dart';
+import '../services/space_scope_service.dart';
 
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
@@ -114,7 +117,9 @@ class _NotesScreenState extends State<NotesScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final appProvider = context.watch<AppProvider>();
-    final notes = _filterNotes(appProvider.notes, appProvider);
+    // Composition order is scope → tab filter → tag chips → search: the Space
+    // decides which notes exist at all, and everything else narrows within it.
+    final notes = _filterNotes(appProvider.scopedNotes, appProvider);
 
     final allSelected =
         notes.isNotEmpty &&
@@ -129,7 +134,7 @@ class _NotesScreenState extends State<NotesScreen> {
       appBar: AppBar(
         title: _isMultiSelectMode
             ? Text('${_selectedNotes.length} ${l10n.selected}')
-            : Text(l10n.notes),
+            : SpaceSwitcher(fallbackTitle: l10n.notes),
         actions: [
           if (_isMultiSelectMode) ...[
             IconButton(
@@ -181,6 +186,16 @@ class _NotesScreenState extends State<NotesScreen> {
                   case 'delete':
                     if (_selectedNotes.isNotEmpty) {
                       _deleteSelectedNotes();
+                    }
+                    break;
+                  case 'add_to_space':
+                    if (_selectedNotes.isNotEmpty) {
+                      _addSelectedToSpace();
+                    }
+                    break;
+                  case 'show_everywhere':
+                    if (_selectedNotes.isNotEmpty) {
+                      _toggleShowSelectedInEverySpace();
                     }
                     break;
                   case 'archive_all':
@@ -237,6 +252,35 @@ class _NotesScreenState extends State<NotesScreen> {
                       const Icon(Icons.label, size: 20),
                       const SizedBox(width: 8),
                       Text('Select Tags'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'add_to_space',
+                  enabled: _selectedNotes.isNotEmpty,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.workspaces_outlined, size: 20),
+                      const SizedBox(width: 8),
+                      Text(l10n.addToSpaceMenu),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'show_everywhere',
+                  enabled: _selectedNotes.isNotEmpty,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.public, size: 20),
+                      const SizedBox(width: 8),
+                      // Action labels, not the snackbar confirmations:
+                      // showInEverySpaceOn/Off are past-tense, singular
+                      // sentences and belong to the toast, not to a menu.
+                      Text(
+                        _allSelectedShownEverywhere
+                            ? l10n.stopShowingInEverySpace
+                            : l10n.showInEverySpace,
+                      ),
                     ],
                   ),
                 ),
@@ -516,8 +560,12 @@ class _NotesScreenState extends State<NotesScreen> {
     }
   }
 
+  /// The visible list: [notes] (already scoped to the active Space) narrowed by
+  /// the selected tabs, then the tag chips, then the search box.
   List<Note> _filterNotes(List<Note> notes, AppProvider appProvider) {
-    List<Note> filteredNotes = notes;
+    // `scopedNotes` is unmodifiable and this method sorts in place at the end,
+    // so never sort the caller's list — copy up front.
+    List<Note> filteredNotes = List.of(notes);
 
     // Combine notes from all selected filters (Union)
     Set<String> noteIds = {};
@@ -529,8 +577,8 @@ class _NotesScreenState extends State<NotesScreen> {
       // But we need to handle other filters if 'all' is NOT selected.
       // Wait, if 'all' is selected, we start with ALL notes.
       // If we have 'all' AND 'pinned', do we show all? Yes.
-      // So if 'all' is present, we can just use 'notes' as base.
-      filteredNotes = notes;
+      // So if 'all' is present, we can just use 'notes' as base — which is
+      // already what `filteredNotes` holds (a copy of it).
     } else {
       for (final filterId in _selectedFilterIds) {
         List<Note> subset = [];
@@ -548,7 +596,10 @@ class _NotesScreenState extends State<NotesScreen> {
             final customFilter = appProvider.filters.firstWhere(
               (filter) => filter.id == filterId,
             );
-            subset = appProvider.getFilteredNotes(customFilter);
+            // `base:` keeps a saved filter inside the Space. Without it
+            // `getFilteredNotes` starts from every note and a custom tab
+            // would show notes from outside the active Space (C2).
+            subset = appProvider.getFilteredNotes(customFilter, base: notes);
           } catch (e) {
             // Filter might not exist (deleted?), skip
             continue;
@@ -616,6 +667,39 @@ class _NotesScreenState extends State<NotesScreen> {
         _selectedNotes = [note];
       });
     }
+  }
+
+  /// True when every selected note already carries the cross-space tag, which
+  /// is what turns the menu entry from "show" into "stop showing".
+  bool get _allSelectedShownEverywhere =>
+      _selectedNotes.isNotEmpty &&
+      _selectedNotes.every(
+        (n) => n.tags.contains(SpaceScopeService.allSpacesTag),
+      );
+
+  Future<void> _addSelectedToSpace() async {
+    final ids = _selectedNotes.map((n) => n.id).toList();
+    final changed = await SpacePickerDialog.show(context, ids);
+    if (changed && mounted) _exitMultiSelectMode();
+  }
+
+  Future<void> _toggleShowSelectedInEverySpace() async {
+    final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    final appProvider = context.read<AppProvider>();
+    final ids = _selectedNotes.map((n) => n.id).toList();
+    // Collapse the selection to one intent: if they are all already global,
+    // the action is to stop; otherwise bring the stragglers up to global.
+    final turnOn = !_allSelectedShownEverywhere;
+    final ok = await setShowInEverySpace(appProvider, ids, turnOn);
+    if (!mounted) return;
+    if (!ok) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.spaceMembershipFailed)),
+      );
+      return;
+    }
+    _exitMultiSelectMode();
   }
 
   void _exitMultiSelectMode() {

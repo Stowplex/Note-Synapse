@@ -38,7 +38,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
   CalendarFormat _calendarFormat = CalendarFormat.month;
   int _calendarKey = 0; // Add a key to force rebuild
   Set<String> _selectedTags = {};
-  List<String> _availableTags = [];
   String _selectedView = 'calendar'; // 'calendar', 'timeline', 'todo'
   Set<String> _selectedFilterIds = {'default'};
   Set<Note> _selectedNotes = {}; // For multi-select
@@ -167,17 +166,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     super.initState();
     _selectedDay = DateTime.now();
     _focusedDay = DateTime.now();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadTags();
-    });
-  }
-
-  void _loadTags() {
-    final appProvider = context.read<AppProvider>();
-    final allTags = appProvider.getAllAvailableTags();
-    setState(() {
-      _availableTags = ['all', ...allTags];
-    });
   }
 
   void _onTaskDropped(Note task, DateTime targetDate) {
@@ -254,6 +242,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
       updatedAt: now,
       scheduledAt: date.toIso8601String(),
       status: TaskStatus.todo,
+      // Prefilled, not stamped: the detail screen shows these as removable
+      // chips so the Space's tags stay a default the user can decline
+      // (invariant 5). Never `all-spaces` (A2).
+      tags: List<String>.of(context.read<AppProvider>().spaceTags),
     );
 
     Navigator.push(
@@ -267,6 +259,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    // Scoped by default (decision 3: the calendar honours the Space), and read
+    // live rather than cached in state: activating or leaving a Space changes
+    // which tags exist, and a list loaded once in initState would keep offering
+    // tags from outside the Space.
+    final availableTags = [
+      'all',
+      ...context.watch<AppProvider>().getAllAvailableTags(),
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -338,7 +338,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               icon: const Icon(Icons.view_module),
             ),
             MultiSelectTagFilter(
-              availableTags: _availableTags,
+              availableTags: availableTags,
               selectedTags: _selectedTags,
               onSelectionChanged: (selectedTags) {
                 setState(() {
@@ -367,15 +367,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ),
       body: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
-          // Load tags when data becomes available
-          if (!appProvider.isLoading &&
-              appProvider.notes.isNotEmpty &&
-              _availableTags.length <= 1) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _loadTags();
-            });
-          }
-
           if (_selectedView == 'timeline') {
             return Column(
               children: [
@@ -383,7 +374,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   selectedFilterIds: _selectedFilterIds,
                   additionalSelectedTags: _selectedTags,
                   customFilters: appProvider.filters,
-                  availableTags: _availableTags,
+                  availableTags: availableTags,
                   onFilterSelected: (ids) {
                     setState(() {
                       _selectedFilterIds = ids;
@@ -458,7 +449,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       selectedFilterIds: _selectedFilterIds,
                       additionalSelectedTags: _selectedTags,
                       customFilters: appProvider.filters,
-                      availableTags: _availableTags,
+                      availableTags: availableTags,
                       onFilterSelected: (ids) {
                         setState(() {
                           _selectedFilterIds = ids;
@@ -519,7 +510,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       },
                       eventLoader: (day) {
                         final filteredNotes = _filterNotes(
-                          appProvider.notes,
+                          appProvider.scopedNotes,
                           appProvider,
                         );
                         return filteredNotes.where((note) {
@@ -782,7 +773,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     AppLocalizations l10n,
   ) {
     final selectedDate = _selectedDay!;
-    final filteredNotes = _filterNotes(appProvider.notes, appProvider);
+    final filteredNotes = _filterNotes(appProvider.scopedNotes, appProvider);
 
     final tasks = filteredNotes
         .where((n) => n.isTask && _isTaskActiveOnDay(n, selectedDate))
@@ -1223,7 +1214,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
 
     final notes = _filterNotes(
-      appProvider.notes,
+      appProvider.scopedNotes,
       appProvider,
     ).where((n) => n.isTask).toList();
     if (notes.isEmpty) {
@@ -1830,8 +1821,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
+  /// The visible list: [notes] (already scoped to the active Space) narrowed
+  /// by the selected tabs, then the tag chips.
   List<Note> _filterNotes(List<Note> notes, AppProvider appProvider) {
-    List<Note> filteredNotes = notes;
+    // `scopedNotes` is unmodifiable (A10) and this list is handed on to
+    // grouping and sorting code, so never work on the caller's list — copy up
+    // front, exactly as notes_screen.dart does.
+    List<Note> filteredNotes = List.of(notes);
 
     // Combine notes from all selected filters (Union)
     Set<String> noteIds = {};
@@ -1839,7 +1835,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     // If 'all' is selected, it overrides everything else
     if (_selectedFilterIds.contains('all')) {
-      filteredNotes = notes;
+      // Already a copy of every scoped note; nothing more to narrow here.
     } else {
       for (final filterId in _selectedFilterIds) {
         List<Note> subset = [];
@@ -1857,7 +1853,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
             final customFilter = appProvider.filters.firstWhere(
               (filter) => filter.id == filterId,
             );
-            subset = appProvider.getFilteredNotes(customFilter);
+            // `base:` keeps a saved filter inside the Space. Without it
+            // `getFilteredNotes` starts from every note and a custom tab
+            // would show notes from outside the active Space (C2).
+            subset = appProvider.getFilteredNotes(customFilter, base: notes);
           } catch (e) {
             continue;
           }

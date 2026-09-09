@@ -16,6 +16,7 @@ import 'logger_service.dart';
 import 'mcp_service.dart';
 import 'service_locator.dart';
 import 'skill_service.dart';
+import 'space_scope_service.dart';
 import 'tools/load_skill_tool.dart';
 import 'tools/note_tools.dart';
 import 'user_app_service.dart';
@@ -29,6 +30,10 @@ class ConversationService {
   // The per-conversation skills toggle (Task 10) will call enableSkills() at session start.
   bool _skillsEnabled = false;
   Map<String, SkillMetadata> _skillIndex = {};
+
+  /// [SpaceScopeService.scopeVersion] the cached [_skillIndex] was built
+  /// against. `-1` means "no index built", which no real version can equal.
+  int _skillIndexScopeVersion = -1;
   final List<McpTool> _skillDiscoveredTools = [];
   LoadSkillTool? _loadSkillTool;
 
@@ -48,7 +53,31 @@ class ConversationService {
   bool get skillsEnabled => _skillsEnabled;
 
   /// Current skill index (noteId → SkillMetadata).
+  ///
+  /// A snapshot: it can be stale if the active Space changed since
+  /// [enableSkills]. Prompt-facing callers await [ensureSkillIndex] first.
   Map<String, SkillMetadata> get skillIndex => Map.unmodifiable(_skillIndex);
+
+  /// Whether the cached index was built against a Space scope that has since
+  /// moved.
+  bool get isSkillIndexStale =>
+      _skillsEnabled &&
+      _skillIndexScopeVersion != SpaceScopeService.shared().scopeVersion;
+
+  /// The skill index, rebuilt first when the Space scope moved since it was
+  /// built.
+  ///
+  /// Pull rather than push: the scope is not a listenable, and a chat session
+  /// can outlive several Space switches. Callers that feed the index into a
+  /// prompt must await this instead of reading [skillIndex], or a session
+  /// started in one Space keeps offering that Space's skills in another.
+  Future<Map<String, SkillMetadata>> ensureSkillIndex() async {
+    if (!_skillsEnabled) return const {};
+    if (!isSkillIndexStale) return skillIndex;
+    _skillIndex = await getIt<SkillService>().buildSkillIndex();
+    _skillIndexScopeVersion = SpaceScopeService.shared().scopeVersion;
+    return skillIndex;
+  }
 
   /// Tools discovered via skill tool URIs during this chat session.
   List<McpTool> get skillDiscoveredTools =>
@@ -100,11 +129,13 @@ class ConversationService {
     getIt<SkillService>().resetSession();
     _loadSkillTool?.resetSession();
     _skillIndex = await getIt<SkillService>().buildSkillIndex();
+    _skillIndexScopeVersion = SpaceScopeService.shared().scopeVersion;
   }
 
   /// Disables skills and clears all skill-related session state.
   void disableSkills() {
     _skillsEnabled = false;
+    _skillIndexScopeVersion = -1;
     _skillIndex = {};
     _skillDiscoveredTools.clear();
     _skillToolEndpointNames.clear();
@@ -201,9 +232,15 @@ class ConversationService {
   }
 
   // Create a new conversation
+  ///
+  /// [tags] files the conversation the way the note stamp files a note: the
+  /// chat screen passes the active Space's include-tags, so a conversation
+  /// started inside a Space is found again inside it. Empty by default, so
+  /// every existing caller is unchanged.
   Future<Conversation> createConversation({
     required String title,
     List<String> noteIds = const [],
+    List<String> tags = const [],
   }) async {
     var conversation = Conversation(
       id: _uuid.v4(),
@@ -214,6 +251,10 @@ class ConversationService {
     );
 
     await _databaseService.insertConversation(conversation);
+
+    if (tags.isNotEmpty) {
+      await _databaseService.addTagsToConversation(conversation.id, tags);
+    }
 
     // Add note mappings if provided
     if (noteIds.isNotEmpty) {
@@ -581,17 +622,25 @@ class ConversationService {
   }
 
   // Get all conversations
+  /// See [DatabaseService.getAllConversations]: [tagNames] are the caller's
+  /// own requirement, [scopeTags] are the active Space's, and
+  /// [includeAllSpacesTag] ORs the cross-Space escape around the scope group
+  /// only.
   Future<List<Conversation>> getAllConversations({
     Duration? maxAge,
     List<String>? tagNames,
+    List<String>? scopeTags,
     List<String>? conversationIds,
     bool includeEmpty = true,
+    bool includeAllSpacesTag = false,
   }) async {
     return await _databaseService.getAllConversations(
       maxAge: maxAge,
       tagNames: tagNames,
+      scopeTags: scopeTags,
       conversationIds: conversationIds,
       includeEmpty: includeEmpty,
+      includeAllSpacesTag: includeAllSpacesTag,
     );
   }
 
@@ -670,11 +719,15 @@ class ConversationService {
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
+    List<String>? scopeTags,
+    bool includeAllSpacesTag = false,
   }) async {
     final conversations = await _databaseService.getAllConversations(
       maxAge: maxAge,
       conversationIds: conversationIds,
       tagNames: tagNames,
+      scopeTags: scopeTags,
+      includeAllSpacesTag: includeAllSpacesTag,
     );
     if (conversations.isEmpty) return null;
 
@@ -686,11 +739,15 @@ class ConversationService {
     Duration? maxAge,
     List<String>? conversationIds,
     List<String>? tagNames,
+    List<String>? scopeTags,
+    bool includeAllSpacesTag = false,
   }) async {
     final conversations = await _databaseService.getAllConversations(
       maxAge: maxAge,
       conversationIds: conversationIds,
       tagNames: tagNames,
+      scopeTags: scopeTags,
+      includeAllSpacesTag: includeAllSpacesTag,
     );
     if (conversations.isEmpty) return null;
 

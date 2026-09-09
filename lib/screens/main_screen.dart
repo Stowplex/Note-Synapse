@@ -21,6 +21,7 @@ import 'settings_screen.dart';
 import 'world_clip/world_clip_flow_screen.dart';
 import '../services/logger_service.dart';
 import '../utils/file_utils.dart';
+import '../widgets/space_picker_dialog.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -128,6 +129,10 @@ class _MainScreenState extends State<MainScreen> {
 
   void _showAddNoteMenu(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    // Read once: the sheet is transient and the active Space cannot change
+    // while it is open, and a `watch` inside a route builder would subscribe
+    // a context that is about to be popped.
+    final activeSpace = context.read<AppProvider>().activeSpace;
 
     showModalBottomSheet(
       context: context,
@@ -217,6 +222,23 @@ class _MainScreenState extends State<MainScreen> {
                           _createNoteFromClipboard(context);
                         },
                       ),
+                      // Filing an existing note into the Space belongs beside
+                      // creating one: both answer "get something into here".
+                      // Only offered while a Space is active — there is no
+                      // complement to pick from otherwise.
+                      if (activeSpace != null)
+                        ListTile(
+                          leading: const Icon(Icons.playlist_add),
+                          title: Text(l10n.addExistingNotesMenu),
+                          subtitle: Text(
+                            l10n.addExistingNotesTitle(activeSpace.name),
+                          ),
+                          onTap: () {
+                            final host = this.context;
+                            Navigator.pop(context);
+                            showAddExistingNotesDialog(host);
+                          },
+                        ),
                       ListTile(
                         leading: const Icon(Icons.movie_creation_outlined),
                         title: Text(l10n.worldClip),
@@ -260,6 +282,11 @@ class _MainScreenState extends State<MainScreen> {
       updatedAt: now,
       scheduledAt: type == NoteType.task ? now.toIso8601String() : null,
       status: type == NoteType.task ? TaskStatus.todo : null,
+      // Prefilled with the active Space's tags rather than left to the stamp in
+      // `addNote`: the detail screen shows these as removable chips, which is
+      // what makes the stamp a default the user can decline (invariant 5). It
+      // is never `all-spaces` — that tag is only ever added deliberately (A2).
+      tags: List<String>.of(context.read<AppProvider>().spaceTags),
     );
 
     Navigator.push(

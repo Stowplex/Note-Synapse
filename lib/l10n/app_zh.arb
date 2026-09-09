@@ -2530,5 +2530,156 @@
       "count": {"type": "int"}
     }
   },
-  "showLess": "收起"
+  "showLess": "收起",
+  "switchSpace": "切换空间",
+  "manageSpaces": "管理空间…",
+  "manageSpacesTitle": "管理空间",
+  "noSpacesYet": "还没有空间",
+  "noSpacesYetHint": "在筛选器编辑器中打开“用作空间”，即可把筛选器变成空间。",
+  "spaceUnavailable": "该空间已不可用",
+  "leaveSpace": "退出空间",
+  "activateAsSpace": "设为当前空间",
+  "stopUsingAsSpace": "取消用作空间",
+  "spaceRowLabel": "空间：{name}",
+  "@spaceRowLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "useAsSpace": "用作空间",
+  "useAsSpaceDescription": "启用空间后，所有列表只显示该空间的笔记，新建笔记会自动带上它的包含标签。",
+  "useAsSpaceNeedsIncludeTags": "请至少添加一个包含标签：没有包含标签的空间既限定不了范围，也标记不了笔记。",
+  "spaceStampPreview": "新笔记将被标记为：{tags}",
+  "@spaceStampPreview": {
+    "placeholders": {
+      "tags": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceTextCriteriaWarning": "在此创建的笔记可能不符合该筛选器的文本条件。",
+  "spaceNoteTypeWarning": "在此创建的笔记可能不符合该筛选器的笔记类型。",
+  "tagExistingNotesTitle": "为现有笔记添加标签？",
+  "tagExistingNotesBody": "同时为“{name}”中现有的 {count} 条笔记添加标签：{tags}",
+  "@tagExistingNotesBody": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      },
+      "tags": {
+        "type": "String"
+      }
+    }
+  },
+  "tagExistingNotesConfirm": "添加标签",
+  "notNow": "暂不",
+  "addToSpaceMenu": "添加到空间…",
+  "addToSpaceTitle": "添加到空间",
+  "addToSpaceHint": "勾选的空间会为这条笔记添加标签；取消勾选会移除其他空间不再需要的标签。",
+  "addToSpaceHintPlural": "勾选的空间会为这 {count} 条笔记添加标签；取消勾选会移除其他空间不再需要的标签。",
+  "@addToSpaceHintPlural": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spaceMembershipPartial": "部分所选笔记",
+  "spaceMembershipFailed": "无法更新空间归属",
+  "showInEverySpace": "在所有空间中显示",
+  "stopShowingInEverySpace": "停止在所有空间中显示",
+  "showInEverySpaceOn": "这条笔记现在会出现在所有空间中",
+  "showInEverySpaceOff": "这条笔记不再出现在所有空间中",
+  "addExistingNotesMenu": "添加已有笔记…",
+  "addExistingNotesTitle": "将笔记添加到 {name}",
+  "@addExistingNotesTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "addExistingNotesNoSpace": "请先启用一个空间",
+  "addExistingNotesNothingLeft": "所有笔记都已在 {name} 中",
+  "@addExistingNotesNothingLeft": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceJoinAdded": "已添加 {count} 条",
+  "@spaceJoinAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spaceJoinHiddenTasks": "有 {count} 条未显示，因为 {name} 只显示任务",
+  "@spaceJoinHiddenTasks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceJoinHiddenNotes": "有 {count} 条未显示，因为 {name} 只显示笔记",
+  "@spaceJoinHiddenNotes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceJoinHiddenFilter": "有 {count} 条未显示，因为不符合 {name} 的其他条件",
+  "@spaceJoinHiddenFilter": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "savedOutsideSpace": "已保存在 {name} 之外",
+  "@savedOutsideSpace": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "showAllNotes": "显示全部笔记",
+  "includeNotesOutsideSpace": "包含 {name} 以外的笔记",
+  "@includeNotesOutsideSpace": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "spacesRetiredByTagChange": "{names} 已不再是空间：其包含标签已被移除",
+  "@spacesRetiredByTagChange": {
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "focusOnThisTag": "聚焦此标签",
+  "focusOnTagUnusable": "包含逗号的标签不能用作空间。",
+  "focusOnTagReserved": "该标签为应用保留标签，不能用作空间。"
 }

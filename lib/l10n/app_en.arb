@@ -2581,5 +2581,168 @@
       "count": {"type": "int"}
     }
   },
-  "showLess": "Show less"
+  "showLess": "Show less",
+  "switchSpace": "Switch space",
+  "manageSpaces": "Manage spaces…",
+  "manageSpacesTitle": "Manage Spaces",
+  "noSpacesYet": "No spaces yet",
+  "noSpacesYetHint": "Turn a filter into a space with \"Use as space\" in the filter editor.",
+  "spaceUnavailable": "That space is no longer available",
+  "leaveSpace": "Leave space",
+  "activateAsSpace": "Activate as space",
+  "stopUsingAsSpace": "Stop using as space",
+  "spaceRowLabel": "Space: {name}",
+  "@spaceRowLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "useAsSpace": "Use as space",
+  "useAsSpaceDescription": "Activating a space narrows every list to its notes and tags new notes with its include tags.",
+  "useAsSpaceNeedsIncludeTags": "Add at least one include tag: a space without include tags would scope nothing and tag nothing.",
+  "spaceStampPreview": "New notes will be tagged: {tags}",
+  "@spaceStampPreview": {
+    "placeholders": {
+      "tags": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceTextCriteriaWarning": "Notes you create here may not match this filter's text criteria.",
+  "spaceNoteTypeWarning": "Notes you create here may not match this filter's note types.",
+  "tagExistingNotesTitle": "Tag existing notes?",
+  "tagExistingNotesBody": "Also tag the {count} {count, plural, =1{note} other{notes}} currently in \"{name}\" with: {tags}",
+  "@tagExistingNotesBody": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      },
+      "tags": {
+        "type": "String"
+      }
+    }
+  },
+  "tagExistingNotesConfirm": "Tag notes",
+  "notNow": "Not now",
+  "addToSpaceMenu": "Add to space…",
+  "addToSpaceTitle": "Add to space",
+  "addToSpaceHint": "Checked spaces tag this note; unchecking removes the tags no other space still needs.",
+  "addToSpaceHintPlural": "Checked spaces tag these {count} notes; unchecking removes the tags no other space still needs.",
+  "@addToSpaceHintPlural": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spaceMembershipPartial": "Some of the selected notes",
+  "spaceMembershipFailed": "Could not update space membership",
+  "showInEverySpace": "Show in every space",
+  "stopShowingInEverySpace": "Stop showing in every space",
+  "@stopShowingInEverySpace": {
+    "description": "Multi-select action label to remove the all-spaces tag"
+  },
+  "showInEverySpaceOn": "This note now shows in every space",
+  "showInEverySpaceOff": "This note no longer shows in every space",
+  "addExistingNotesMenu": "Add existing notes…",
+  "addExistingNotesTitle": "Add notes to {name}",
+  "@addExistingNotesTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "addExistingNotesNoSpace": "Activate a space first",
+  "addExistingNotesNothingLeft": "Every note is already in {name}",
+  "@addExistingNotesNothingLeft": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceJoinAdded": "{count} added",
+  "@spaceJoinAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "spaceJoinHiddenTasks": "{count} not shown because {name} only shows tasks",
+  "@spaceJoinHiddenTasks": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceJoinHiddenNotes": "{count} not shown because {name} only shows notes",
+  "@spaceJoinHiddenNotes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "spaceJoinHiddenFilter": "{count} not shown because of {name}'s other criteria",
+  "@spaceJoinHiddenFilter": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "savedOutsideSpace": "Saved outside {name}",
+  "@savedOutsideSpace": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "showAllNotes": "Show all notes",
+  "includeNotesOutsideSpace": "Include notes outside {name}",
+  "@includeNotesOutsideSpace": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "spacesRetiredByTagChange": "{names} is no longer a space: its include tags are gone",
+  "@spacesRetiredByTagChange": {
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "focusOnThisTag": "Focus on this tag",
+  "focusOnTagUnusable": "A tag containing a comma cannot be used as a space.",
+  "focusOnTagReserved": "This tag is reserved by the app and cannot be used as a space.",
+  "@focusOnThisTag": {
+    "description": "Long-press action on a tag chip: make the tag a Space and activate it"
+  },
+  "@focusOnTagUnusable": {
+    "description": "Why a tag cannot become a Space (filters store include tags comma-joined)"
+  },
+  "@focusOnTagReserved": {
+    "description": "Why a reserved tag (all-spaces, agent-skill) cannot become a Space"
+  }
 }

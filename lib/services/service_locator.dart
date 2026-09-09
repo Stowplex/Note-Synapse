@@ -24,6 +24,7 @@ import 'note_marker_service.dart';
 import 'note_source_service.dart';
 import 'note_annotation_service.dart';
 import 'skill_service.dart';
+import 'space_scope_service.dart';
 import 'tag_workflow_service.dart';
 import 'fork_service.dart';
 import 'marker_chat_send_service.dart';
@@ -83,6 +84,12 @@ void setupServiceLocator() {
     getIt.registerLazySingleton<McpService>(() => McpService());
   }
 
+  // Holds the active Space. Pure tag arithmetic over prefs-backed state, so it
+  // has no dependencies; AppProvider pushes the resolved space into it.
+  if (!getIt.isRegistered<SpaceScopeService>()) {
+    getIt.registerLazySingleton<SpaceScopeService>(() => SpaceScopeService());
+  }
+
   if (!getIt.isRegistered<AppDomainGrantService>()) {
     getIt.registerLazySingleton<AppDomainGrantService>(
       () => AppDomainGrantService(),
@@ -132,6 +139,7 @@ void setupServiceLocator() {
       () => NoteModificationService(
         getIt<DatabaseService>(),
         changeNotifier: getIt<DataChangeNotifier>(),
+        spaceScope: getIt<SpaceScopeService>(),
       ),
     );
   }

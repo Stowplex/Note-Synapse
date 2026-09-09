@@ -46,6 +46,29 @@ class AddNoteDialog extends StatefulWidget {
 class _AddNoteDialogState extends State<AddNoteDialog> {
   Note? _appendTarget;
 
+  /// The tags a newly created note will carry: the active Space's stamp,
+  /// prefilled, and removable before the first (and only) save.
+  ///
+  /// Invariant 5 — the stamp is a default, not a lock — requires an
+  /// interactive creator to *show* the tags and let the user take them off.
+  /// This dialog previously applied the stamp with no chips at all and no
+  /// second screen to show them on: *Add as is* asks for a title and writes
+  /// immediately, so the tags were never visible and never refusable.
+  ///
+  /// Filled in [didChangeDependencies] rather than [initState] because it
+  /// reads the provider.
+  List<String>? _pendingTags;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _pendingTags ??= List<String>.of(context.read<AppProvider>().spaceTags);
+  }
+
+  void _removeTag(String tag) {
+    setState(() => _pendingTags!.remove(tag));
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -61,6 +84,7 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
           const SizedBox(height: 16),
           _buildAppendSelection(l10n),
           const SizedBox(height: 16),
+          _buildTagChips(l10n),
           _buildOptionCard(
             context: context,
             icon: Icons.note_add,
@@ -84,6 +108,45 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
           child: Text(l10n.cancel),
         ),
       ],
+    );
+  }
+
+  /// The removable tag row. Renders nothing when there is nothing to remove,
+  /// so the dialog is unchanged outside a Space.
+  ///
+  /// Only shown for the *create* paths: appending puts the content into a note
+  /// that already exists, and `updateNote` never stamps (A6).
+  Widget _buildTagChips(AppLocalizations l10n) {
+    final tags = _pendingTags ?? const <String>[];
+    if (tags.isEmpty || _appendTarget != null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l10n.tags,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final tag in tags)
+                Chip(
+                  label: Text(tag),
+                  deleteIcon: const Icon(Icons.close, size: 16),
+                  onDeleted: () => _removeTag(tag),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -307,7 +370,10 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
         subNotes: const [],
-        tags: const [],
+        // The chips shown above: the active Space's tags, so a note captured
+        // from a conversation lands in the Space the user is working in, minus
+        // any the user took off. Never `all-spaces` (A2).
+        tags: List<String>.of(_pendingTags ?? const []),
         attachmentPaths: allAttachments,
         scheduledAt: null,
         completeBy: null,
@@ -316,10 +382,19 @@ class _AddNoteDialogState extends State<AddNoteDialog> {
         isArchived: false,
       );
 
-      await appProvider.addNote(newNote);
+      // No stamp: the chips above are the tags, and the user may have removed
+      // some. Stamping here would put back exactly the tag they just took off
+      // and turn the opt-out into a no-op (invariant 5).
+      await appProvider.addNote(newNote, applySpaceTags: false);
 
       if (!mounted) return;
 
+      // Deliberately no "Saved outside <Space>" snackbar here, unlike the note
+      // editor and the share screen. This dialog returns an `AddNoteResult`
+      // and every caller shows its own success snackbar the moment it pops
+      // (`note_action_mixin.dart` `handleAddContentToNote`), which replaces
+      // whatever this route queued. A warning the user never sees is worse
+      // than none: it reads as covered.
       Navigator.of(context).pop(
         AddNoteResult.created([
           newNote,
