@@ -1,7 +1,7 @@
 model_type: gemini
 model_endpoint: https://generativelanguage.googleapis.com/v1beta
-model_name: gemini-3-flash-preview
-model_display_name: Gemini 3 Flash
+model_name: gemini-3.8-flash
+model_display_name: Gemini 3.8 Flash
 api_key_url: https://aistudio.google.com/app/apikey
 model_capabilities:
   - support_audio
