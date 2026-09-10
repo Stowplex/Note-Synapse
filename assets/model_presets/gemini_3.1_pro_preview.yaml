@@ -9,7 +9,7 @@ model_capabilities:
   - support_document_understanding
   - support_image
   - support_code_generation
-max_input_token: 2097152
+max_input_token: 1048576
 max_output_token: 65536
 supported_attachment_mime_types:
   - image/png
