@@ -5,6 +5,11 @@
 // for the real bundled asset, injects dev/synapse_stub.js as window.Synapse,
 // and drives it in headless Chrome.
 //
+// The app runs inside a phone-sized iframe (headless Chrome will not open a
+// window narrower than 500px), which also makes the on-screen keyboard
+// reproducible: the host shrinks the WebView when it opens, and the wrapper
+// shrinks the iframe the same way on request.
+//
 // Run with: node dev/run_ui_tests.mjs   (from contrib/diagram-studio/)
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -151,6 +156,16 @@ const probe = `
     el.id = 'UITEST';
     el.textContent = 'UITEST:' + out.join(';');
     document.body.appendChild(el);
+    if (window.parent !== window) window.parent.postMessage({ uitest: out.join(';') }, '*');
+  }
+  // Asks the wrapper to resize the iframe — what the host does to the WebView
+  // when the keyboard opens or closes. Headless Chrome under a virtual-time
+  // budget delivers no resize events of its own, so one is fired by hand.
+  async function setPageHeight(h) {
+    window.parent.postMessage({ resize: h }, '*');
+    await sleep(300);
+    window.dispatchEvent(new Event('resize'));
+    await sleep(400);
   }
 
   window.addEventListener('load', function () {
@@ -224,11 +239,98 @@ const probe = `
         await sleep(300);
         say('asciiPadded', $('asciiEditor').value.split('\\n').every(function (l) { return l.length === 5; }));
 
+        // A text box taking focus hides the footer: the keyboard shrinks the
+        // WebView and a footer riding up on it would cover the text box.
+        $('asciiEditor').focus();
+        await sleep(300);
+        say('footerHiddenWhileTyping', getComputedStyle(document.querySelector('footer')).display === 'none');
+        $('asciiEditor').blur();
+        await sleep(300);
+        say('footerBackAfterTyping', getComputedStyle(document.querySelector('footer')).display !== 'none');
+
+        // Choosing PNG here must survive a visit to the SVG-only Draw tab.
+        document.querySelector('#formatSeg button[data-format="png"]').click();
+        await sleep(200);
+
         // Draw tab must mount the vendored editor.
         document.querySelector('nav#tabs button[data-tab="draw"]').click();
         await sleep(700);
         say('drawMounted', $('drawSurface').children.length > 0);
         say('drawFormatLocked', document.querySelector('#formatSeg button[data-format="png"]').disabled);
+        say('drawShowsSvg', document.querySelector('#formatSeg button[data-format="svg"]').classList.contains('active'));
+        // The canvas is a workspace, not a document: it fills the space
+        // between the tab bar and the footer instead of scrolling inside it.
+        var mainEl = document.querySelector('main');
+        say('drawFillsMain', mainEl.scrollHeight <= mainEl.clientHeight + 1);
+        var surfaceRect = $('drawSurface').getBoundingClientRect();
+        var footerRect = document.querySelector('footer').getBoundingClientRect();
+        say('drawReachesFooter', Math.abs(surfaceRect.bottom + 8 - footerRect.top) <= 2);
+        var editorEl = $('drawSurface').querySelector('.imageEditorContainer');
+        say('editorFollowsSurface', !!editorEl && Math.abs(editorEl.getBoundingClientRect().height - surfaceRect.height) <= 2);
+        // Clear moved into the drawing toolbar, at the end of the tool row.
+        var clearBtn = null;
+        Array.prototype.forEach.call($('drawSurface').querySelectorAll('.toolbar-tool-row .toolbar-button'), function (b) {
+          if (/clear/i.test(b.textContent || '')) clearBtn = b;
+        });
+        say('clearInToolbar', !!clearBtn);
+        say('clearDisabledWhenEmpty', !!clearBtn && clearBtn.classList.contains('disabled'));
+        say('toolbarOneRow', !!editorEl && editorEl.querySelector('.toolbar-root').getBoundingClientRect().height < 60);
+
+        // Start a text box near the bottom of the canvas, then shrink the page
+        // the way the host does when the keyboard opens. The box must be
+        // panned back into the visible canvas, not left under the keyboard.
+        var textBtn = null;
+        Array.prototype.forEach.call($('drawSurface').querySelectorAll('.toolbar-tool-row .toolbar-button'), function (b) {
+          if (!textBtn && /text/i.test(b.textContent || '')) textBtn = b;
+        });
+        textBtn.click();
+        await sleep(200);
+        var area = $('drawSurface').querySelector('.imageEditorRenderArea');
+        var areaRect = area.getBoundingClientRect();
+        var tap = { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'touch', isPrimary: true,
+                    button: 0, buttons: 1, pressure: 0.5,
+                    clientX: areaRect.left + areaRect.width * 0.3, clientY: areaRect.top + areaRect.height * 0.85 };
+        area.dispatchEvent(new PointerEvent('pointerdown', tap));
+        await sleep(50);
+        area.dispatchEvent(new PointerEvent('pointerup', Object.assign({}, tap, { buttons: 0 })));
+        await sleep(300);
+        var box = $('drawSurface').querySelector('.textEditorOverlay textarea');
+        say('textBoxOpened', !!box);
+        if (box) { box.value = 'Hello'; box.dispatchEvent(new Event('input')); box.focus(); }
+        await sleep(300);
+        say('footerHiddenForTextBox', getComputedStyle(document.querySelector('footer')).display === 'none');
+        var fullHeight = window.innerHeight;
+        var keyboardHeight = Math.round(fullHeight * 0.55);
+        await setPageHeight(fullHeight - keyboardHeight);
+        say('pageShrank', window.innerHeight === fullHeight - keyboardHeight);
+        var shrunkArea = area.getBoundingClientRect();
+        var boxRect = box ? box.getBoundingClientRect() : null;
+        say('canvasShrankWithPage', shrunkArea.bottom <= window.innerHeight + 1);
+        say('textBoxRevealed', !!boxRect && boxRect.top >= shrunkArea.top && boxRect.bottom <= shrunkArea.bottom + 1);
+        say('textBoxStillFocused', document.activeElement === box);
+        say('footerStillHidden', getComputedStyle(document.querySelector('footer')).display === 'none');
+        // Android's back button closes the keyboard without blurring the text
+        // box: the page grows back and the footer must come back with it.
+        await setPageHeight(fullHeight);
+        say('footerBackWhenKeyboardCloses', getComputedStyle(document.querySelector('footer')).display !== 'none');
+        say('textBoxKeptFocus', document.activeElement === box);
+        // Commit the text; it becomes a component in the drawing.
+        box.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+        await sleep(300);
+        say('drawSaveEnabled', !$('saveButton').disabled);
+        say('clearEnabledAfterDrawing', !!clearBtn && !clearBtn.classList.contains('disabled'));
+        clearBtn.click();
+        await sleep(300);
+        say('clearEmptiesDrawing', $('saveButton').disabled);
+
+        // Back on Mermaid the PNG choice is intact, on screen and in storage.
+        document.querySelector('nav#tabs button[data-tab="mermaid"]').click();
+        await sleep(300);
+        say('pngKeptAfterDraw', document.querySelector('#formatSeg button[data-format="png"]').classList.contains('active'));
+        var storedPrefs = await Promise.resolve(window.Synapse.loadAppState());
+        say('pngKeptInPrefs', !!(storedPrefs && storedPrefs.data && storedPrefs.data.prefs && storedPrefs.data.prefs.format === 'png'));
+        document.querySelector('#formatSeg button[data-format="svg"]').click();
+        await sleep(200);
 
         // PNG rasterisation from the Mermaid tab.
         document.querySelector('nav#tabs button[data-tab="mermaid"]').click();
@@ -295,15 +397,38 @@ const probe = `
 const closeAt = html.lastIndexOf('</body>');
 writeFileSync(generated, html.slice(0, closeAt) + probe + html.slice(closeAt), 'utf8');
 
+// A 390x647 iframe is the WebView area of a mid-size phone once the host's
+// app bar and revision strip are taken off the top.
+const PHONE_W = 390;
+const PHONE_H = 647;
+const wrapper = join(here, '.harness.wrapper.html');
+writeFileSync(wrapper, `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0">
+<iframe id="app" width="${PHONE_W}" height="${PHONE_H}" style="border:0;display:block"></iframe>
+<script>
+  var frame = document.getElementById('app');
+  frame.src = 'file://${generated}' + location.search;
+  window.addEventListener('message', function (ev) {
+    if (!ev.data) return;
+    if (ev.data.resize) frame.height = ev.data.resize;
+    if (ev.data.uitest != null) {
+      var el = document.createElement('pre');
+      el.id = 'UITEST';
+      el.textContent = 'UITEST:' + ev.data.uitest;
+      document.body.appendChild(el);
+    }
+  });
+</script></body></html>`, 'utf8');
+
 function run(mode) {
   const dom = execFileSync(
     CHROME,
     ['--headless=new', '--disable-gpu', '--allow-file-access-from-files',
-     '--virtual-time-budget=30000', '--dump-dom', `file://${generated}?mode=${mode}`],
+     `--window-size=600,${PHONE_H + 20}`,
+     '--virtual-time-budget=30000', '--dump-dom', `file://${wrapper}?mode=${mode}`],
     { encoding: 'utf8', maxBuffer: 1024 * 1024 * 64, stdio: ['ignore', 'pipe', 'ignore'] }
   );
-  // Match the result ELEMENT, not the probe's own source text — the script
-  // body is in the DOM too and contains the same marker string.
+  // Match the result ELEMENT, not the wrapper's own script text — it contains
+  // the same marker string.
   const m = /<pre id="UITEST">UITEST:([^<]*)<\/pre>/.exec(dom);
   return m ? m[1] : null;
 }
@@ -341,8 +466,31 @@ for (const mode of ['note', 'block']) {
   expect('asciiPreviewSvg', 'true');
   expect('asciiWrapOff', 'off');
   expect('asciiPadded', 'true');
+  expect('footerHiddenWhileTyping', 'true');
+  expect('footerBackAfterTyping', 'true');
   expect('drawMounted', 'true');
   expect('drawFormatLocked', 'true');
+  expect('drawShowsSvg', 'true');
+  expect('drawFillsMain', 'true');
+  expect('drawReachesFooter', 'true');
+  expect('editorFollowsSurface', 'true');
+  expect('clearInToolbar', 'true');
+  expect('clearDisabledWhenEmpty', 'true');
+  expect('toolbarOneRow', 'true');
+  expect('textBoxOpened', 'true');
+  expect('footerHiddenForTextBox', 'true');
+  expect('pageShrank', 'true');
+  expect('canvasShrankWithPage', 'true');
+  expect('textBoxRevealed', 'true');
+  expect('textBoxStillFocused', 'true');
+  expect('footerStillHidden', 'true');
+  expect('footerBackWhenKeyboardCloses', 'true');
+  expect('textBoxKeptFocus', 'true');
+  expect('drawSaveEnabled', 'true');
+  expect('clearEnabledAfterDrawing', 'true');
+  expect('clearEmptiesDrawing', 'true');
+  expect('pngKeptAfterDraw', 'true');
+  expect('pngKeptInPrefs', 'true');
   expect('aiPreviewImg', 'true');
   expect('aiSaveEnabled', 'true');
   expect('aiChatCalls', '2');
@@ -362,6 +510,8 @@ for (const mode of ['note', 'block']) {
   }
 }
 
-if (!process.env.KEEP_HARNESS && existsSync(generated)) unlinkSync(generated);
+if (!process.env.KEEP_HARNESS) {
+  for (const f of [generated, wrapper]) if (existsSync(f)) unlinkSync(f);
+}
 console.log(failures === 0 ? '\nUI tests passed' : `\n${failures} UI assertions failed`);
 process.exit(failures === 0 ? 0 : 1);

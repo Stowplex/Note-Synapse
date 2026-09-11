@@ -11,6 +11,14 @@
     /*
       Mobile-first: Note Synapse ships Android + iOS only, so this is laid out
       for a narrow viewport with 44px minimum tap targets throughout.
+
+      Vertical space is the scarce resource. The host already shows the app's
+      name in its own app bar, so there is no in-page header; the tab bar and
+      a two-row footer are the only fixed chrome, and the Draw tab's canvas
+      takes everything in between. While the on-screen keyboard is up (any
+      text box focused) the footer is hidden as well — the keyboard shrinks
+      the whole WebView, and a footer riding up on top of it would otherwise
+      cover the very thing being typed into.
     */
     :root {
       --app-bg: #1e1e1e;
@@ -39,12 +47,6 @@
     }
     #app { display: flex; flex-direction: column; height: 100%; }
 
-    header {
-      display: flex; align-items: center; gap: 8px;
-      padding: 10px 12px; background: var(--panel-bg);
-      border-bottom: 1px solid var(--border); flex: none;
-    }
-    header h1 { font-size: 1rem; margin: 0; color: var(--heading); flex: 1 1 auto; }
     .badge {
       font-size: 0.7rem; padding: 3px 7px; border-radius: 10px;
       background: var(--panel-contrast); color: var(--muted); white-space: nowrap;
@@ -69,6 +71,12 @@
       max-height: 42vh; overflow-y: auto; display: none;
     }
     #blockPanel.open { display: block; }
+    .panel-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 10px 12px 6px; font-size: 0.75rem; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .panel-head .badge { text-transform: none; letter-spacing: 0; }
     .block-row {
       display: flex; align-items: center; gap: 10px; width: 100%;
       padding: 10px 12px; background: transparent; border: none;
@@ -95,16 +103,31 @@
 
     /* Tabs ------------------------------------------------------------- */
     nav#tabs { display: flex; flex: none; background: var(--panel-bg); border-bottom: 1px solid var(--border); }
-    nav#tabs button {
+    nav#tabs button[data-tab] {
       flex: 1 1 0; min-height: 46px; padding: 0 4px; border-radius: 0;
       background: transparent; color: var(--muted); font-size: 0.85rem; font-weight: 600;
       border-bottom: 3px solid transparent;
     }
     nav#tabs button.active { color: var(--heading); border-bottom-color: var(--accent); }
+    nav#tabs #blocksToggle {
+      flex: none; min-width: 46px; min-height: 46px; padding: 0; border-radius: 0;
+      border-left: 1px solid var(--border); font-size: 1.1rem;
+    }
 
-    main { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    main { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
     .tab { display: none; padding: 12px; }
     .tab.active { display: block; }
+
+    /*
+      The Draw tab is a workspace, not a document: nothing scrolls, and the
+      canvas takes every pixel the tab bar and footer leave. It shrinks with
+      the WebView when the keyboard opens instead of being pushed under the
+      footer, and grows back when the keyboard goes.
+    */
+    body.tab-draw main { display: flex; flex-direction: column; overflow: hidden; }
+    .tab[data-tab="draw"].active {
+      display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; padding: 8px;
+    }
 
     .panel { background: var(--panel-bg); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
     .panel-title { font-size: 0.75rem; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -125,6 +148,7 @@
     .preview-frame svg, .preview-frame img { max-width: 100%; height: auto; }
 
     .msg { padding: 10px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 10px; line-height: 1.4; }
+    #message { flex: none; cursor: pointer; }   /* tap to dismiss */
     .msg.error { background: var(--error-bg); color: var(--error-ink); }
     .msg.ok { background: var(--ok-bg); color: var(--ok-ink); }
     .msg.warn { background: var(--warn-bg); color: var(--warn-ink); }
@@ -147,7 +171,18 @@
     .caret-readout { font-size: 0.72rem; color: var(--muted); font-family: ui-monospace, monospace; }
 
     /* Draw ------------------------------------------------------------- */
-    #drawSurface { height: 58vh; min-height: 320px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+    #drawSurface { flex: 1 1 auto; min-height: 0; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+    /* js-draw's stylesheet pins its editor to 400px; it must follow the surface. */
+    #drawSurface .imageEditorContainer { height: 100%; min-height: 0; }
+    /*
+      Below 540px js-draw wraps its toolbar into two rows (actions above tools),
+      which on a phone costs a second strip of canvas. Keep the single-row
+      layout it uses on wider screens — the tool row scrolls sideways anyway —
+      with 44px buttons so one more tool fits before the swipe.
+    */
+    #drawSurface .toolbar-edge-toolbar { flex-wrap: nowrap; --toolbar-button-height: 44px; }
+    #drawSurface .toolbar-edge-toolbar > .toolbar-action-row { flex: none; }
+    #drawSurface .toolbar-edge-toolbar > .toolbar-tool-row { min-width: 0; }
     .imageditor-toolbar-root button, .toolbar-button { min-height: 40px; }
 
     /* AI --------------------------------------------------------------- */
@@ -159,12 +194,14 @@
       flex: none; background: var(--panel-bg); border-top: 1px solid var(--border);
       padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
     }
-    .seg-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
-    .seg-label { font-size: 0.72rem; color: var(--muted); flex: none; width: 52px; }
+    body.typing footer { display: none; }
+    .opt-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
     .seg { display: flex; flex: 1 1 auto; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    #formatSeg { flex: none; }
     .seg button {
-      flex: 1 1 0; min-height: 36px; padding: 0; border-radius: 0;
-      background: transparent; color: var(--muted); font-size: 0.78rem; font-weight: 600;
+      flex: 1 1 0; min-height: 40px; padding: 0 8px; border-radius: 0;
+      background: transparent; color: var(--muted); font-size: 0.76rem; font-weight: 600;
+      white-space: nowrap;
     }
     .seg button.active { background: var(--accent); color: var(--accent-ink); }
     .seg button:disabled { opacity: 0.3; }
@@ -173,25 +210,24 @@
 </head>
 <body>
   <div id="app">
-    <header>
-      <h1>Diagram Studio</h1>
-      <span class="badge" id="scopeBadge">…</span>
-      <button class="icon secondary" id="blocksToggle" aria-label="Show diagrams in this note">☰</button>
-    </header>
-
-    <div id="blockPanel">
-      <div id="blockRows"></div>
-      <div class="panel-actions">
-        <button class="secondary" id="newDiagramButton">+ New diagram</button>
-      </div>
-    </div>
-
     <nav id="tabs">
       <button data-tab="mermaid" class="active">Mermaid</button>
       <button data-tab="draw">Draw</button>
       <button data-tab="ascii">ASCII</button>
       <button data-tab="ai">AI</button>
+      <button class="secondary" id="blocksToggle" aria-label="Show diagrams in this note">☰</button>
     </nav>
+
+    <div id="blockPanel">
+      <div class="panel-head">
+        <span>Diagrams</span>
+        <span class="badge" id="scopeBadge">…</span>
+      </div>
+      <div id="blockRows"></div>
+      <div class="panel-actions">
+        <button class="secondary" id="newDiagramButton">+ New diagram</button>
+      </div>
+    </div>
 
     <main>
       <div id="message" class="msg hidden" style="margin:12px 12px 0"></div>
@@ -213,10 +249,8 @@
 
       <!-- Draw ------------------------------------------------------- -->
       <section class="tab" data-tab="draw">
+        <!-- Clear lives in the drawing toolbar, at the end of the tool row. -->
         <div id="drawSurface"></div>
-        <div class="panel-actions" style="padding-left:0;padding-right:0">
-          <button class="secondary" id="drawClear">Clear</button>
-        </div>
       </section>
 
       <!-- ASCII ------------------------------------------------------ -->
@@ -264,17 +298,13 @@
     </main>
 
     <footer>
-      <div class="seg-row">
-        <span class="seg-label">Format</span>
-        <div class="seg" id="formatSeg">
+      <div class="opt-row">
+        <div class="seg" id="formatSeg" role="group" aria-label="Image format">
           <button data-format="svg" class="active">SVG</button>
           <button data-format="png">PNG</button>
           <button data-format="jpg">JPG</button>
         </div>
-      </div>
-      <div class="seg-row">
-        <span class="seg-label">Place</span>
-        <div class="seg" id="positionSeg">
+        <div class="seg" id="positionSeg" role="group" aria-label="Where the image goes">
           <button data-position="above" class="active">Above source</button>
           <button data-position="below">Below source</button>
         </div>
@@ -326,6 +356,7 @@
     // ---------------------------------------------------------------
     // Messaging
     // ---------------------------------------------------------------
+    var messageTimer = null;
     function showMessage(text, kind, action) {
       var el = $('message');
       el.className = 'msg ' + (kind || 'error');
@@ -341,11 +372,64 @@
         el.appendChild(wrap);
       }
       el.classList.remove('hidden');
+      // Good news is a toast: on the Draw tab every line of banner is a line
+      // of canvas. Errors and warnings stay until dismissed or superseded.
+      if (messageTimer) clearTimeout(messageTimer);
+      messageTimer = null;
+      if (kind === 'ok' && !action) messageTimer = setTimeout(clearMessage, 4000);
     }
     function clearMessage() {
+      if (messageTimer) clearTimeout(messageTimer);
+      messageTimer = null;
       $('message').classList.add('hidden');
       $('message').textContent = '';
     }
+
+    // ---------------------------------------------------------------
+    // Keyboard
+    // ---------------------------------------------------------------
+    /*
+     There is no keyboard event to listen for inside a WebView. What can be
+     seen is that a text box takes focus, and then the host shrinks the page
+     to make room. Both are used: focus hides the footer straight away (the
+     keyboard is on its way, and a footer riding up on it would cover the
+     text box), and the page growing back to full height brings it back even
+     if the text box still has focus — Android's back button dismisses the
+     keyboard without blurring anything, and the user is then looking for
+     the Save button.
+
+     The check is deferred a beat: tapping a button briefly moves focus away
+     from a text box on Android, and reacting to that intermediate state
+     would make the footer flash in and out.
+    */
+    var typingTimer = null;
+    var typingSource = null;
+    var fullHeight = {};   // innerWidth → tallest innerHeight seen: the page with no keyboard
+    function isEditable(el) {
+      if (!el) return false;
+      if (el.tagName === 'TEXTAREA') return true;
+      if (el.tagName === 'INPUT') {
+        return !/^(button|checkbox|radio|range|color|file|submit|reset|image)$/i.test(el.type || '');
+      }
+      return !!el.isContentEditable;
+    }
+    function pageShrunk() {
+      var w = window.innerWidth, h = window.innerHeight;
+      if (!fullHeight[w] || h > fullHeight[w]) fullHeight[w] = h;
+      return h < fullHeight[w] - 80;
+    }
+    function syncTyping(source) {
+      typingSource = source;
+      if (typingTimer) clearTimeout(typingTimer);
+      typingTimer = setTimeout(function () {
+        typingTimer = null;
+        var editing = isEditable(document.activeElement);
+        var shrunk = pageShrunk();
+        document.body.classList.toggle('typing', editing && (shrunk || typingSource === 'focus'));
+      }, 120);
+    }
+    function onFocusChange() { syncTyping('focus'); }
+    function onViewportResize() { syncTyping('resize'); }
 
     function setBusy(on, label) {
       state.busy = on;
@@ -554,31 +638,46 @@
       }
 
       state.tab = name;
-      Array.prototype.forEach.call(document.querySelectorAll('nav#tabs button'), function (b) {
+      Array.prototype.forEach.call(document.querySelectorAll('nav#tabs button[data-tab]'), function (b) {
         b.classList.toggle('active', b.getAttribute('data-tab') === name);
       });
       Array.prototype.forEach.call(document.querySelectorAll('main .tab'), function (s) {
         s.classList.toggle('active', s.getAttribute('data-tab') === name);
       });
+      // The Draw tab is laid out as a fixed workspace rather than a
+      // scrolling document; see the stylesheet.
+      document.body.classList.toggle('tab-draw', name === 'draw');
 
-      // Draw is SVG-only: rasterising it would throw away the round trip that
-      // makes the drawing re-editable.
-      var drawOnly = name === 'draw';
-      Array.prototype.forEach.call(document.querySelectorAll('#formatSeg button'), function (b) {
-        var f = b.getAttribute('data-format');
-        b.disabled = drawOnly && f !== 'svg';
-      });
-      if (drawOnly) setFormat('svg');
-
+      renderFormatSeg();
       if (name === 'draw') ensureDrawSurface();
       if (!silent) { state.lastSvg = null; refreshSave(); }
     }
 
+    /**
+     * The format a save will actually produce. Draw is SVG-only, because
+     * rasterising it would throw away the round trip that makes the drawing
+     * re-editable; AI images arrive as PNG. The user's own choice is kept for
+     * the tabs where it applies, so visiting Draw does not silently reset a
+     * PNG preference.
+     */
+    function lockedFormat() {
+      if (state.tab === 'draw') return 'svg';
+      if (state.tab === 'ai') return 'png';
+      return null;
+    }
+    function renderFormatSeg() {
+      var locked = lockedFormat();
+      var shown = locked || state.format;
+      Array.prototype.forEach.call(document.querySelectorAll('#formatSeg button'), function (b) {
+        var f = b.getAttribute('data-format');
+        b.disabled = !!locked && f !== locked;
+        b.classList.toggle('active', f === shown);
+      });
+    }
+
     function setFormat(f) {
       state.format = f;
-      Array.prototype.forEach.call(document.querySelectorAll('#formatSeg button'), function (b) {
-        b.classList.toggle('active', b.getAttribute('data-format') === f);
-      });
+      renderFormatSeg();
       persistPrefs();
     }
     function setPosition(p) {
@@ -666,6 +765,9 @@
       GLYPHS.forEach(function (g) {
         var b = document.createElement('button');
         b.textContent = g;
+        // Keep focus (and the keyboard) on the editor: a tap on a button
+        // would otherwise blur it, and the caret with it.
+        b.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
         b.addEventListener('click', function (ev) {
           ev.preventDefault();
           insertAtCaret($('asciiEditor'), g);
@@ -976,8 +1078,14 @@
       $('blocksToggle').addEventListener('click', function () { toggleBlockPanel(); });
       $('newDiagramButton').addEventListener('click', startNewDiagram);
       $('saveButton').addEventListener('click', save);
+      $('message').addEventListener('click', clearMessage);
+      document.addEventListener('focusin', onFocusChange);
+      document.addEventListener('focusout', onFocusChange);
+      window.addEventListener('resize', onViewportResize);
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewportResize);
+      pageShrunk();   // record the full height before any keyboard appears
 
-      Array.prototype.forEach.call(document.querySelectorAll('nav#tabs button'), function (b) {
+      Array.prototype.forEach.call(document.querySelectorAll('nav#tabs button[data-tab]'), function (b) {
         b.addEventListener('click', function () { selectTab(b.getAttribute('data-tab')); });
       });
       Array.prototype.forEach.call(document.querySelectorAll('#formatSeg button'), function (b) {
@@ -994,9 +1102,6 @@
       $('asciiNormalise').addEventListener('click', function () {
         $('asciiEditor').value = DiagramAscii.padLines($('asciiEditor').value);
         renderAscii();
-      });
-      $('drawClear').addEventListener('click', function () {
-        if (state.drawSurface) { state.drawSurface.clear(); refreshSave(); }
       });
       $('aiGenerate').addEventListener('click', generateAi);
       $('aiReset').addEventListener('click', function () {
