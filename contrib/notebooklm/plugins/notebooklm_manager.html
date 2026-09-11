@@ -310,9 +310,15 @@
   // user's NotebookLM login cookies (established via Synapse.session). RPC ids
   // and param shapes were verified against the live service; keep them in this
   // one block since Google rotates them.
+  //
+  // Google rebranded NotebookLM to "Gemini Notebook" and moved the web app to
+  // notebook.google.com (the old host 301s there). The origin is therefore
+  // resolved at runtime: start from the default, adopt whatever allowlisted
+  // host the app page actually lands on, and remember it across launches.
   // ==========================================================================
   const NLM = {
-    ORIGIN: 'https://notebooklm.google.com',
+    DEFAULT_ORIGIN: 'https://notebook.google.com',
+    HOSTS: ['notebook.google.com', 'notebooklm.google.com'],
     RPC: {
       LIST: 'wXbhsf', CREATE: 'CCqFvf', DETAIL: 'rLM1Ne',
       ADD_SOURCE: 'izAoDd', DELETE_SOURCE: 'tGMBJ',
@@ -387,6 +393,26 @@
   // any auth failure.
   let tokens = { at: '', fsid: '', bl: '' };
 
+  // Origin every request targets. Updated by scrapeTokens() when the app page
+  // redirects to another allowlisted host; persisted via saveState().
+  let nlmOrigin = NLM.DEFAULT_ORIGIN;
+
+  // Classify where a page fetch landed: an allowlisted NotebookLM origin
+  // (returned as 'https://host'), 'login' for the Google sign-in flow, or
+  // null when there was no redirect / the target is unrecognised.
+  function classifyLanding(location, base) {
+    if (!location) return null;
+    let host;
+    try { host = new URL(location, base).host.toLowerCase(); } catch (_) { return null; }
+    if (host === 'accounts.google.com') return 'login';
+    if (NLM.HOSTS.indexOf(host) !== -1) return 'https://' + host;
+    return null;
+  }
+
+  function isAllowedOrigin(origin) {
+    return classifyLanding(origin, NLM.DEFAULT_ORIGIN) === origin;
+  }
+
   const domain = 'google.com';
 
   // ==========================================================================
@@ -410,11 +436,17 @@
         appState = Object.assign({ syncMap: {}, collections: {} }, res.data);
         if (!appState.syncMap) appState.syncMap = {};
         if (!appState.collections) appState.collections = {};
+        // Only adopt a stored origin while we're still on the default; a host
+        // learned from a live redirect this session always wins.
+        if (nlmOrigin === NLM.DEFAULT_ORIGIN && isAllowedOrigin(appState.origin)) {
+          nlmOrigin = appState.origin;
+        }
       }
     } catch (_) { /* first run: keep defaults */ }
   }
 
   async function saveState() {
+    appState.origin = nlmOrigin; // single write path ⇒ always persisted
     try { await Synapse.storeAppState(appState); } catch (_) {}
   }
 
@@ -464,10 +496,20 @@
   }
 
   async function scrapeTokens() {
-    const res = await Synapse.proxyFetch(NLM.ORIGIN + '/', {
+    const res = await Synapse.proxyFetch(nlmOrigin + '/', {
       session: true, responseMode: 'text',
     });
     if (res.status !== 'success') throw new Error(res.error || 'page fetch failed');
+    // proxyFetch follows GET redirects and reports the final hop. Dead cookies
+    // land on accounts.google.com; a rebrand/host move lands on another
+    // allowlisted host — adopt it so the RPCs below go where the tokens are
+    // valid (they're bound to the host that issued them).
+    const landed = classifyLanding(res.redirectedTo, nlmOrigin);
+    if (landed === 'login') throw new Error('not_logged_in');
+    if (landed && landed !== nlmOrigin) {
+      nlmOrigin = landed;
+      persistCollections().catch(() => {});
+    }
     const html = res.content ? res.content.data : '';
     const at = /"SNlM0e":"([^"]+)"/.exec(html);
     const fsid = /"FdrFJe":"([^"]+)"/.exec(html);
@@ -480,23 +522,68 @@
     return text.startsWith(")]}'") ? text.slice(4) : text;
   }
 
-  // Parse a batchexecute response, returning the decoded inner JSON for rpcId.
-  function parseBatchExecute(raw, rpcId) {
-    raw = stripAntiXssi(raw);
-    const lines = raw.split('\n');
-    for (const line of lines) {
+  // Every ["wrb.fr", rpcId, payload, …] row in a batchexecute response.
+  function rpcRows(raw) {
+    const out = [];
+    for (const line of stripAntiXssi(raw).split('\n')) {
       const trimmed = line.trim();
       if (!trimmed.startsWith('[')) continue;
       let rows;
       try { rows = JSON.parse(trimmed); } catch (_) { continue; }
       for (const row of rows) {
-        if (Array.isArray(row) && row[0] === 'wrb.fr' && row[1] === rpcId &&
-            typeof row[2] === 'string') {
-          return JSON.parse(row[2]);
-        }
+        if (Array.isArray(row) && row[0] === 'wrb.fr') out.push(row);
       }
     }
-    return null;
+    return out;
+  }
+
+  function findRpcRow(raw, rpcId) {
+    return rpcRows(raw).find((row) => row[1] === rpcId) || null;
+  }
+
+  // gRPC status names, for messages that are actionable without a lookup.
+  const GRPC_NAMES = {
+    3: 'INVALID_ARGUMENT', 5: 'NOT_FOUND', 7: 'PERMISSION_DENIED',
+    8: 'RESOURCE_EXHAUSTED', 9: 'FAILED_PRECONDITION', 13: 'INTERNAL',
+    14: 'UNAVAILABLE', 16: 'UNAUTHENTICATED',
+  };
+
+  // Structured per-RPC failure: the row carries a null payload and a gRPC
+  // status in slot 5 — [code, null, [[detailTypeUrl, detailData], …]] — with
+  // the HTTP status still 200. Returns {code, name, message} or null. The
+  // message is whatever user-facing text a UserDisplayableError detail holds.
+  function rpcStatus(row) {
+    if (!row || !Array.isArray(row[5]) || typeof row[5][0] !== 'number') return null;
+    const code = row[5][0];
+    let message = '';
+    const details = Array.isArray(row[5][2]) ? row[5][2] : [];
+    for (const d of details) {
+      if (Array.isArray(d) && typeof d[0] === 'string' &&
+          d[0].indexOf('UserDisplayableError') !== -1) {
+        message = collectStrings(d[1]).join('; ');
+        break;
+      }
+    }
+    return { code, name: GRPC_NAMES[code] || '', message };
+  }
+
+  // All non-empty strings in a nested array, depth-first (bounded).
+  function collectStrings(x, depth) {
+    depth = depth || 0;
+    if (depth > 20 || x == null) return [];
+    if (typeof x === 'string') return x.trim() ? [x.trim()] : [];
+    if (!Array.isArray(x)) return [];
+    let out = [];
+    for (const e of x) out = out.concat(collectStrings(e, depth + 1));
+    return out;
+  }
+
+  function rpcError(status) {
+    const err = new Error('nlm_error_' + status.code);
+    err.code = status.code;
+    err.grpcName = status.name;
+    err.userMessage = status.message;
+    return err;
   }
 
   // Extract the numeric error code from an ["er", …, <code>, …] envelope row.
@@ -526,9 +613,16 @@
     if (m === 'session_expired' || m === 'not_logged_in') {
       return 'Your NotebookLM session has expired — please reconnect.';
     }
+    if (m === 'nlm_error_drift' || m === 'nlm_error_empty') {
+      return 'NotebookLM answered with an unexpected response shape. ' +
+        'The service may have changed; the integration likely needs an update.';
+    }
     if (/^nlm_error_/.test(m)) {
-      return 'NotebookLM returned an error (code ' + m.replace('nlm_error_', '') +
-        '). This may be temporary; if it persists, the integration may need an update.';
+      let code = m.replace('nlm_error_', '');
+      if (e && e.grpcName) code += ' ' + e.grpcName;
+      const detail = e && e.userMessage ? ' ' + e.userMessage : '';
+      return 'NotebookLM returned an error (code ' + code + ').' + detail +
+        ' This may be temporary; if it persists, the integration may need an update.';
     }
     return m;
   }
@@ -538,23 +632,37 @@
     return m === 'session_expired' || m === 'not_logged_in';
   }
 
+  // Query-string tail shared by batchexecute and the streaming query endpoint.
+  // f.sid/bl are omitted when unknown rather than sent empty.
+  function sessionQuery() {
+    let q = '&hl=en&rt=c';
+    if (tokens.fsid) q += '&f.sid=' + encodeURIComponent(tokens.fsid);
+    if (tokens.bl) q += '&bl=' + encodeURIComponent(tokens.bl);
+    return q;
+  }
+
+  // Headers for an authenticated POST to the resolved origin.
+  function rpcHeaders() {
+    return {
+      'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
+      'x-goog-csrf-token': tokens.at,
+      'x-same-domain': '1',
+      'origin': nlmOrigin,
+      'referer': nlmOrigin + '/',
+    };
+  }
+
   async function batchExecute(rpcId, params, sourcePath, retried) {
     if (!tokens.at) await scrapeTokens();
     const fReq = JSON.stringify([[[rpcId, JSON.stringify(params), null, 'generic']]]);
-    const url = NLM.ORIGIN +
+    const url = nlmOrigin +
       '/_/LabsTailwindUi/data/batchexecute?rpcids=' + rpcId +
-      '&source-path=' + encodeURIComponent(sourcePath || '/') +
-      '&f.sid=' + encodeURIComponent(tokens.fsid) +
-      '&bl=' + encodeURIComponent(tokens.bl) + '&hl=en&rt=c';
+      '&source-path=' + encodeURIComponent(sourcePath || '/') + sessionQuery();
     const body = 'f.req=' + encodeURIComponent(fReq) +
       '&at=' + encodeURIComponent(tokens.at);
     const res = await Synapse.proxyFetch(url, {
       session: true, method: 'POST', responseMode: 'text',
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
-        'x-goog-csrf-token': tokens.at,
-        'x-same-domain': '1',
-      },
+      headers: rpcHeaders(),
       body,
     });
     if (res.status !== 'success') throw new Error(res.error || 'request failed');
@@ -584,7 +692,26 @@
       }
       throw new Error('nlm_error_' + code);
     }
-    return parseBatchExecute(raw, rpcId);
+
+    // The newer failure shape: HTTP 200, our rpc row present, payload null,
+    // gRPC status in slot 5. Without this check a dead session reads as an
+    // empty notebook list.
+    const row = findRpcRow(raw, rpcId);
+    const status = rpcStatus(row);
+    if (status) {
+      if (status.code === 16) { // UNAUTHENTICATED: stale at / dead cookies
+        if (!retried) {
+          tokens.at = '';
+          return await batchExecute(rpcId, params, sourcePath, true);
+        }
+        throw new Error('session_expired');
+      }
+      if (status.code === 8) throw new Error('rate_limited'); // RESOURCE_EXHAUSTED
+      throw rpcError(status);
+    }
+    // Our rpc id is missing while others answered: Google rotated the id.
+    if (!row && rpcRows(raw).length) throw new Error('nlm_error_drift');
+    return row && typeof row[2] === 'string' ? JSON.parse(row[2]) : null;
   }
 
   const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
@@ -592,8 +719,12 @@
   const nlmClient = {
     async listNotebooks() {
       const inner = await batchExecute(NLM.RPC.LIST, [null, 1, null, [2]]);
+      // A list call always carries a payload (possibly an empty list); none at
+      // all means the response shape changed — surface it instead of "No
+      // notebooks yet".
+      if (!Array.isArray(inner)) throw new Error('nlm_error_empty');
       const notebooks = [];
-      const rows = (inner && inner[0]) || [];
+      const rows = inner[0] || [];
       for (const entry of rows) {
         // [title, [sources...], notebookId, emoji, ...]
         if (Array.isArray(entry) && typeof entry[0] === 'string') {
@@ -615,15 +746,42 @@
     async addTextSource(notebookId, title, text) {
       const sourceData =
         [null, [title, text], null, 2, null, null, null, null, null, null, 1];
-      const inner = await batchExecute(
-        NLM.RPC.ADD_SOURCE,
-        [[sourceData], notebookId, [2],
-          [1, null, null, null, null, null, null, null, null, null, [1]]],
-        '/notebook/' + notebookId,
-      );
+      let inner;
+      try {
+        inner = await batchExecute(
+          NLM.RPC.ADD_SOURCE,
+          [[sourceData], notebookId, [2],
+            [1, null, null, null, null, null, null, null, null, null, [1]]],
+          '/notebook/' + notebookId,
+        );
+      } catch (e) {
+        // INVALID_ARGUMENT / FAILED_PRECONDITION are also returned when the
+        // source was accepted for async processing, so check whether it
+        // actually landed before giving up.
+        if (e && (e.code === 3 || e.code === 9)) {
+          const landed = await this._reconcileSource(notebookId, title);
+          if (landed) return landed;
+        }
+        throw e;
+      }
       const flat = JSON.stringify(inner || '');
       const ids = flat.match(UUID_RE) || [];
       return ids[0];
+    },
+
+    // Poll the source list a few times for a source with this title; returns
+    // its id or null. Listing failures never mask the caller's original error.
+    async _reconcileSource(notebookId, title) {
+      const want = (title || '').trim();
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt) await new Promise((r) => setTimeout(r, 1000 * attempt));
+        try {
+          const hit = (await this.listSourcesDetailed(notebookId))
+            .find((s) => s.title.trim() === want);
+          if (hit) return hit.id;
+        } catch (_) { /* keep polling */ }
+      }
+      return null;
     },
 
     async deleteSource(notebookId, sourceId) {
@@ -643,6 +801,23 @@
       return Array.from(new Set(ids));
     },
 
+    // [{id, title}] from the notebook detail: sources sit at detail[1], each
+    // [[id], title, metadata, [null, status]].
+    async listSourcesDetailed(notebookId) {
+      const inner = await batchExecute(
+        NLM.RPC.DETAIL, [notebookId], '/notebook/' + notebookId);
+      const detail = inner && Array.isArray(inner[0]) ? inner[0] : inner;
+      const rows = detail && Array.isArray(detail[1]) ? detail[1] : [];
+      const out = [];
+      for (const src of rows) {
+        if (!Array.isArray(src) || !Array.isArray(src[0])) continue;
+        const id = src[0][0];
+        if (typeof id !== 'string') continue;
+        out.push({ id, title: typeof src[1] === 'string' ? src[1] : '' });
+      }
+      return out;
+    },
+
     // Upload a local file as a source via Google's 3-step resumable upload
     // (validated to work over plain session-cookie HTTP — no browser context).
     // dataBase64 is the file's bytes; returns the new source id.
@@ -657,11 +832,13 @@
       if (!sourceId) throw new Error('file source registration failed');
 
       // Step 2: start the resumable upload session → x-goog-upload-url header.
-      const startRes = await Synapse.proxyFetch(NLM.ORIGIN + NLM.UPLOAD_PATH + '?authuser=0', {
+      const startRes = await Synapse.proxyFetch(nlmOrigin + NLM.UPLOAD_PATH + '?authuser=0', {
         session: true, method: 'POST', responseMode: 'text',
         headers: {
           'accept': '*/*',
           'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'origin': nlmOrigin,
+          'referer': nlmOrigin + '/',
           'x-goog-authuser': '0',
           'x-goog-upload-command': 'start',
           'x-goog-upload-header-content-length': String(b64ByteLength(dataBase64)),
@@ -703,17 +880,13 @@
       const params = [sourcesArray, question, null, [2, null, [1]], conversationId];
       const fReq = JSON.stringify([null, JSON.stringify(params)]);
       const reqid = Math.floor(100000 + Math.random() * 800000);
-      const url = NLM.ORIGIN + NLM.QUERY_PATH +
-        '?bl=' + encodeURIComponent(tokens.bl) + '&hl=en&_reqid=' + reqid +
-        '&rt=c&f.sid=' + encodeURIComponent(tokens.fsid);
+      const url = nlmOrigin + NLM.QUERY_PATH +
+        '?_reqid=' + reqid + sessionQuery();
       const body = 'f.req=' + encodeURIComponent(fReq) +
         '&at=' + encodeURIComponent(tokens.at);
       const res = await Synapse.proxyFetch(url, {
         session: true, method: 'POST', responseMode: 'text',
-        headers: {
-          'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
-          'x-goog-csrf-token': tokens.at, 'x-same-domain': '1',
-        },
+        headers: rpcHeaders(),
         body,
       });
       if (res.status !== 'success') throw new Error(res.error || 'query failed');
@@ -981,7 +1154,7 @@
   // ==========================================================================
   const nlmStudio = {
     notebookLink(notebookId) {
-      return NLM.ORIGIN + '/notebook/' + notebookId;
+      return nlmOrigin + '/notebook/' + notebookId;
     },
 
     // Kick off generation and schedule a background completion poll.
@@ -1217,7 +1390,7 @@
 
   async function connect() {
     $('authErr').textContent = '';
-    const res = await Synapse.session.requestLogin({ url: NLM.ORIGIN });
+    const res = await Synapse.session.requestLogin({ url: nlmOrigin + '/' });
     if (res && res.loggedIn) {
       tokens.at = '';
       await refreshAuth();
@@ -1450,7 +1623,7 @@
       const info = appState.collections[id];
       md += '## ' + (info.title || 'Untitled collection') + '\n';
       if (info.purpose) md += '*Purpose:* ' + info.purpose + '\n';
-      md += '[Open in NotebookLM](' + NLM.ORIGIN + '/notebook/' + id + ')\n\n';
+      md += '[Open in NotebookLM](' + nlmOrigin + '/notebook/' + id + ')\n\n';
       const entries = nlmSync.syncedEntries(id);
       md += 'Synced notes (' + entries.length + '):\n';
       for (const e of entries) {
