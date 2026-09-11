@@ -13,7 +13,9 @@ Launch **Diagram Studio** from the note actions menu. It replaces the older Merm
 | **ASCII** | the art itself, in whatever fence or paragraph it already lives in | a character-grid editor with a live render |
 | **AI** | an ` ```ai-diagram ` fence holding the prompt | describe the diagram, then refine it by conversation |
 
-You choose SVG, PNG or JPG for the rendered image at each save, and whether it goes above or below its source. Re-rendering replaces the previous image.
+You choose SVG, PNG or JPG for the rendered image at each save, and whether it goes above or below its source. Re-rendering replaces the previous image. Drawings are always saved as SVG so they stay editable, and AI images arrive as PNG.
+
+On the Draw tab the canvas fills the screen between the tabs and the save bar. The tool row scrolls sideways; at its end is a bin that clears the drawing (undo brings it back). While you type — a text box on the canvas, or any editor — the save bar steps out of the way of the keyboard and returns when the keyboard goes.
 
 ## Running It
 
