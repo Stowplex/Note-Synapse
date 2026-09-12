@@ -648,7 +648,9 @@ class UserAppViewScreenState extends State<UserAppViewScreen> with RouteAware {
           app: currentApp,
           revision: revision,
           selectedNotes: widget.selectedNotes ?? const [],
-          sourceLabel: 'App: ${currentApp.displayName(context)}',
+          sourceLabel: AppLocalizations.of(
+            context,
+          )!.approvalSourceApp(currentApp.displayName(context)),
           onOpenNote: (note, replaceWindow) async {
             if (!mounted) return;
             if (replaceWindow) {

@@ -25,6 +25,7 @@ class ApprovalRequest {
     required this.title,
     required this.description,
     required this.details,
+    this.source,
     this.warningMessage,
     this.sessionApprovalLabel,
   });
@@ -40,6 +41,12 @@ class ApprovalRequest {
 
   /// The details to display (SQL query string or modification map).
   final dynamic details;
+
+  /// User-visible identity of the operation requesting access.
+  ///
+  /// Kept separately from [description] so the dialog can build the sentence
+  /// in the active locale instead of trying to translate preformatted text.
+  final String? source;
 
   /// Optional warning message to display.
   final String? warningMessage;
@@ -73,6 +80,7 @@ class ApprovalRequest {
           ? '$source wants to execute a $queryTypeDescription operation:'
           : 'The operation wants to execute a $queryTypeDescription query:',
       details: sql,
+      source: source,
       warningMessage: 'This query will modify the database.',
       sessionApprovalLabel: 'Allow for this session',
     );
@@ -126,6 +134,7 @@ class ApprovalRequest {
               if (noteTitle != null) 'noteTitle': noteTitle,
               if (noteSnippet != null) 'noteSnippet': noteSnippet,
             },
+      source: source,
       warningMessage: null,
       sessionApprovalLabel: 'Allow for this session',
     );
@@ -153,6 +162,7 @@ class ApprovalRequest {
           ? '$source wants to delete ${isBatch ? '${noteIds.length} notes' : 'a note'}:'
           : 'The operation wants to delete ${isBatch ? '${noteIds.length} notes' : 'a note'}:',
       details: details,
+      source: source,
       warningMessage: 'This action cannot be undone.',
       sessionApprovalLabel: 'Allow for this session',
     );
@@ -170,6 +180,7 @@ class ApprovalRequest {
           ? '$source wants to use your saved login for:'
           : 'This app wants to use your saved login for:',
       details: domain,
+      source: source,
       warningMessage:
           'The app will be able to make requests as you on $domain and any of '
           'its subdomains, and to read that login’s cookies. Access lasts '

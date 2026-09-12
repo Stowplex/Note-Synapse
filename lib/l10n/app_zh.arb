@@ -2050,6 +2050,125 @@
   "runNoteActionAppOnSelection": "运行笔记操作应用",
   "approvalScopeBlockOnly": "仅作用于所选区块。",
   "approvalScopeWholeNote": "将作用于整条笔记，而不仅是所选区块。",
+  "approvalNoteModificationTitle": "允许修改笔记？",
+  "approvalBatchNoteModificationTitle": "允许批量修改笔记？",
+  "approvalSourceWantsModifyNote": "{source} 想要修改此笔记：",
+  "@approvalSourceWantsModifyNote": {
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "approvalSourceWantsModifyNotes": "{source} 想要修改 {count} 条笔记：",
+  "@approvalSourceWantsModifyNotes": {
+    "placeholders": {
+      "source": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "approvalOperationWantsModifyNote": "此操作想要修改笔记：",
+  "approvalOperationWantsModifyNotes": "此操作想要修改 {count} 条笔记：",
+  "@approvalOperationWantsModifyNotes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "approvalSourceApp": "应用：{name}",
+  "@approvalSourceApp": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "approvalSourceEmbeddedApp": "嵌入式应用：{name}",
+  "@approvalSourceEmbeddedApp": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "approvalAllowForSession": "在本次会话中允许",
+  "approvalDeny": "拒绝",
+  "approvalApprove": "允许",
+  "approvalNoteId": "笔记 ID：{id}",
+  "@approvalNoteId": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "approvalNoteLabel": "笔记：",
+  "approvalNoNotesSpecified": "未指定笔记",
+  "approvalShowFullChange": "查看完整更改",
+  "approvalBatchUpdate": "批量更新 {count} 条笔记",
+  "@approvalBatchUpdate": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "approvalBatchUpdatePreview": "批量更新 {count} 条笔记（显示前 {visibleCount} 条）：",
+  "@approvalBatchUpdatePreview": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "visibleCount": {
+        "type": "int"
+      }
+    }
+  },
+  "approvalUnknown": "未知",
+  "approvalSetTitle": "设置标题：“{value}”",
+  "approvalAppendContent": "追加内容：“{value}”",
+  "approvalInsertBefore": "在前面插入：“{value}”",
+  "approvalDeleteSelectedContent": "删除所选内容",
+  "approvalReplaceContentWith": "将内容替换为：“{value}”",
+  "approvalSetContent": "设置内容：“{value}”",
+  "approvalContent": "内容：{value}",
+  "approvalAddTags": "添加标签：{value}",
+  "approvalRemoveTags": "移除标签：{value}",
+  "approvalTags": "标签：{value}",
+  "approvalSetType": "设置类型：“{value}”",
+  "approvalSetStatus": "设置状态：“{value}”",
+  "approvalPinNote": "置顶笔记",
+  "approvalUnpinNote": "取消置顶笔记",
+  "approvalArchiveNote": "归档笔记",
+  "approvalUnarchiveNote": "取消归档笔记",
+  "approvalSetField": "设置 {field}：{value}",
+  "@approvalSetField": {
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@approvalSetTitle": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalAppendContent": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalInsertBefore": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalReplaceContentWith": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalSetContent": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalContent": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalAddTags": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalRemoveTags": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalTags": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalSetType": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalSetStatus": {"placeholders": {"value": {"type": "String"}}},
+  "approvalDetailsTruncated": "…（显示内容已截断）",
   "blockSelectionOutOfSync": "无法定位该区块：未能确认它在笔记中的位置，因此没有打开任何应用。笔记未被修改。",
   "deleteSelection": "删除区块",
   "confirmDeleteBlocks": "确定要删除 {count} 个区块吗？",

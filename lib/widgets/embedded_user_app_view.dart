@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/app_revision.dart';
 import '../models/note.dart';
 import '../models/user_app.dart';
@@ -183,7 +184,9 @@ class _EmbeddedUserAppViewState extends State<EmbeddedUserAppView> {
       revision: revision,
       selectedNotes: widget.selectedNotes,
       params: widget.params,
-      sourceLabel: 'Embedded app: ${app.displayName(context)}',
+      sourceLabel: AppLocalizations.of(
+        context,
+      )!.approvalSourceEmbeddedApp(app.displayName(context)),
       onOpenNote: (note, replaceWindow) async {
         if (!mounted) return;
         if (replaceWindow) {
