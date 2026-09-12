@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/user_app.dart';
+import '../utils/user_app_localization.dart';
 import '../utils/global_keys.dart';
 
 /// Floating handle for a User App that is running in the background.
@@ -77,8 +78,8 @@ class _UserAppBackgroundPillState extends State<UserAppBackgroundPill> {
     super.dispose();
   }
 
-  String get _initial {
-    final name = widget.app.name.trim();
+  String _initial(BuildContext context) {
+    final name = widget.app.displayName(context).trim();
     return name.isEmpty ? '?' : name.characters.first.toUpperCase();
   }
 
@@ -93,7 +94,9 @@ class _UserAppBackgroundPillState extends State<UserAppBackgroundPill> {
       context: navContext,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.closeBackgroundApp),
-        content: Text(l10n.closeBackgroundAppConfirm(widget.app.name)),
+        content: Text(
+          l10n.closeBackgroundAppConfirm(widget.app.displayName(context)),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -198,7 +201,9 @@ class _UserAppBackgroundPillState extends State<UserAppBackgroundPill> {
                   // and Tooltip's own long-press trigger would fight ours.
                   child: Semantics(
                     button: true,
-                    label: l10n.appRunningInBackground(widget.app.name),
+                    label: l10n.appRunningInBackground(
+                      widget.app.displayName(context),
+                    ),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(_size / 2),
                       onTap: widget.onResume,
@@ -230,7 +235,7 @@ class _UserAppBackgroundPillState extends State<UserAppBackgroundPill> {
                               height: 40,
                               alignment: Alignment.center,
                               child: Text(
-                                _initial,
+                                _initial(context),
                                 style: TextStyle(
                                   color: colorScheme.onPrimaryContainer,
                                   fontWeight: FontWeight.w700,
@@ -250,7 +255,7 @@ class _UserAppBackgroundPillState extends State<UserAppBackgroundPill> {
                                 child: Padding(
                                   padding: const EdgeInsets.only(right: 8),
                                   child: Text(
-                                    widget.app.name,
+                                    widget.app.displayName(context),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(

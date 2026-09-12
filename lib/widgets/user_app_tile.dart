@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/user_app.dart';
+import '../utils/user_app_localization.dart';
 
 /// Presentational tile for a single [UserApp].
 ///
@@ -37,7 +38,7 @@ class UserAppTile extends StatelessWidget {
           ),
         ),
         title: Text(
-          app.name,
+          app.displayName(context),
           style: const TextStyle(fontWeight: FontWeight.bold),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -45,9 +46,9 @@ class UserAppTile extends StatelessWidget {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (app.description.trim().isNotEmpty)
+            if (app.displayDescription(context).trim().isNotEmpty)
               Text(
-                app.description,
+                app.displayDescription(context),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),

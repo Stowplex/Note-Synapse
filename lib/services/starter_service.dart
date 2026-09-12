@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:yaml/yaml.dart';
 import '../models/note.dart';
+import '../models/user_app.dart';
 import 'data_change_notifier.dart';
 import 'database_service.dart';
 import 'logger_service.dart';
@@ -196,6 +197,9 @@ Please refer to the attached PDF for detailed user manual.''';
             final uuid = yamlData['uuid']?.toString() ?? '';
             final appTypeStr = yamlData['app_type']?.toString() ?? 'normal';
             final description = yamlData['description']?.toString() ?? '';
+            final i18n = userAppI18nFromJson(
+              _convertYamlValue(yamlData['i18n']),
+            );
 
             // Check if app is already installed
             final databaseService = getIt<DatabaseService>();
@@ -207,6 +211,7 @@ Please refer to the attached PDF for detailed user manual.''';
               'uuid': uuid,
               'appType': appTypeStr,
               'description': description,
+              'i18n': i18n,
               'isInstalled': isInstalled,
               'filePath': assetKey,
             });
@@ -281,6 +286,18 @@ Please refer to the attached PDF for detailed user manual.''';
   static Future<List<String>> _listBundledAssets() async {
     final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
     return manifest.listAssets();
+  }
+
+  static dynamic _convertYamlValue(dynamic value) {
+    if (value is Map) {
+      return <String, dynamic>{
+        for (final entry in value.entries)
+          if (entry.key is String)
+            entry.key as String: _convertYamlValue(entry.value),
+      };
+    }
+    if (value is List) return value.map(_convertYamlValue).toList();
+    return value;
   }
 
   /// Installs bundled starter skills as ordinary notes tagged `agent-skill`.

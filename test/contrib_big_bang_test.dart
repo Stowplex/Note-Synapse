@@ -10,9 +10,10 @@ void main() {
   const sourcePath = '$pluginRoot/big-bang.html';
 
   // In load order, which is the order the shell lists them in and the order
-  // build.sh inlines them: board.js first, because every other module reads
-  // its coercions at load time.
+  // build.sh inlines them: localization first so every module can translate
+  // its own chrome, then board.js before the model/runtime modules.
   const moduleNames = <String>[
+    'src/i18n.js',
     'src/board.js',
     'src/model.js',
     'src/host.js',
@@ -79,25 +80,40 @@ void main() {
         expect(manifest['license'], 'Apache-2.0', reason: file);
         expect(manifest['author'], isNotEmpty, reason: file);
         expect(manifest['description'], isNotEmpty, reason: file);
+        expect(manifest['i18n']['zh-CN']['name'], isNotEmpty, reason: file);
+        expect(
+          manifest['i18n']['zh-CN']['description'],
+          isNotEmpty,
+          reason: file,
+        );
         expect(html[file], startsWith('<!doctype html>'), reason: file);
       }
     });
 
-    test('the two launch types are told apart by uuid and name, not by code', () {
-      expect(manifests['Big_Bang.yaml']!['uuid'],
-          isNot(manifests['Big_Bang_This_Note.yaml']!['uuid']));
-      expect(manifests['Big_Bang.yaml']!['name'],
-          isNot(manifests['Big_Bang_This_Note.yaml']!['name']));
-      expect(manifests['Big_Bang.yaml']!['app_type'],
-          isNot(manifests['Big_Bang_This_Note.yaml']!['app_type']));
-      // One source file, emitted twice: a divergence here means one of the two
-      // was rebuilt and the other was not.
-      expect(
-        manifests['Big_Bang.yaml']!['code'],
-        manifests['Big_Bang_This_Note.yaml']!['code'],
-        reason: 'both apps must ship the same HTML - run plugins/build.sh',
-      );
-    });
+    test(
+      'the two launch types are told apart by uuid and name, not by code',
+      () {
+        expect(
+          manifests['Big_Bang.yaml']!['uuid'],
+          isNot(manifests['Big_Bang_This_Note.yaml']!['uuid']),
+        );
+        expect(
+          manifests['Big_Bang.yaml']!['name'],
+          isNot(manifests['Big_Bang_This_Note.yaml']!['name']),
+        );
+        expect(
+          manifests['Big_Bang.yaml']!['app_type'],
+          isNot(manifests['Big_Bang_This_Note.yaml']!['app_type']),
+        );
+        // One source file, emitted twice: a divergence here means one of the two
+        // was rebuilt and the other was not.
+        expect(
+          manifests['Big_Bang.yaml']!['code'],
+          manifests['Big_Bang_This_Note.yaml']!['code'],
+          reason: 'both apps must ship the same HTML - run plugins/build.sh',
+        );
+      },
+    );
 
     test('installable YAML exactly matches source with all modules inline', () {
       var expected = source;
@@ -128,8 +144,10 @@ void main() {
         // a second file from: a <script src> in it is a blank screen on a
         // phone, not an error at build time.
         expect(
-          RegExp(r'<script[^>]+\bsrc\s*=', caseSensitive: false)
-              .hasMatch(built),
+          RegExp(
+            r'<script[^>]+\bsrc\s*=',
+            caseSensitive: false,
+          ).hasMatch(built),
           isFalse,
           reason: '$file still loads an external script',
         );
@@ -150,7 +168,8 @@ void main() {
         expect(
           literals,
           greaterThan(0),
-          reason: 'no source holds a literal </script>, so the check below '
+          reason:
+              'no source holds a literal </script>, so the check below '
               'proves nothing',
         );
         expect(
@@ -197,7 +216,11 @@ void main() {
         'getCookies',
       ];
       for (final api in forbidden) {
-        expect(built, isNot(contains(api)), reason: 'Unexpected capability: $api');
+        expect(
+          built,
+          isNot(contains(api)),
+          reason: 'Unexpected capability: $api',
+        );
       }
     });
 

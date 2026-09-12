@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/app_revision.dart';
 import '../models/note.dart';
 import '../models/user_app.dart';
@@ -11,6 +12,7 @@ import '../screens/note_merge_screen.dart';
 import '../screens/user_app_view_screen.dart';
 import '../services/database_service.dart';
 import '../services/logger_service.dart';
+import '../utils/user_app_localization.dart';
 import 'user_app_web_view.dart';
 
 /// Renders a User App inline inside markdown (notes, chat messages).
@@ -136,7 +138,8 @@ class _EmbeddedUserAppViewState extends State<EmbeddedUserAppView> {
               }
               if (snapshot.hasError || snapshot.data == null) {
                 return _EmbeddedAppErrorCard(
-                  message: snapshot.error?.toString() ??
+                  message:
+                      snapshot.error?.toString() ??
                       'Unable to load embedded app',
                 );
               }
@@ -169,10 +172,8 @@ class _EmbeddedUserAppViewState extends State<EmbeddedUserAppView> {
     Navigator.of(context).push(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => UserAppViewScreen(
-          app: app,
-          selectedNotes: widget.selectedNotes,
-        ),
+        builder: (_) =>
+            UserAppViewScreen(app: app, selectedNotes: widget.selectedNotes),
       ),
     );
   }
@@ -183,20 +184,18 @@ class _EmbeddedUserAppViewState extends State<EmbeddedUserAppView> {
       revision: revision,
       selectedNotes: widget.selectedNotes,
       params: widget.params,
-      sourceLabel: 'Embedded app: ${app.name}',
+      sourceLabel: AppLocalizations.of(
+        context,
+      )!.approvalSourceEmbeddedApp(app.displayName(context)),
       onOpenNote: (note, replaceWindow) async {
         if (!mounted) return;
         if (replaceWindow) {
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => NoteDetailScreen(note: note),
-            ),
+            MaterialPageRoute(builder: (_) => NoteDetailScreen(note: note)),
           );
         } else {
           Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => NoteDetailScreen(note: note),
-            ),
+            MaterialPageRoute(builder: (_) => NoteDetailScreen(note: note)),
           );
         }
       },
@@ -239,9 +238,7 @@ class _EmbeddedUserAppViewState extends State<EmbeddedUserAppView> {
           throw StateError('embedded user app view is no longer mounted');
         }
         return Navigator.of(context).push<Note>(
-          MaterialPageRoute(
-            builder: (_) => NoteMergeScreen(notes: notes),
-          ),
+          MaterialPageRoute(builder: (_) => NoteMergeScreen(notes: notes)),
         );
       },
     );
@@ -281,11 +278,7 @@ class _FullscreenButton extends StatelessWidget {
             color: Colors.black.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(16),
           ),
-          child: const Icon(
-            Icons.fullscreen,
-            size: 16,
-            color: Colors.white,
-          ),
+          child: const Icon(Icons.fullscreen, size: 16, color: Colors.white),
         ),
       ),
     );

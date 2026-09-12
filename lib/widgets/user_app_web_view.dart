@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
@@ -116,12 +117,8 @@ class _UserAppWebViewState extends State<UserAppWebView> {
 
   /// The provider this view is subscribed to for Space changes, kept so the
   /// listener can be removed in [dispose] without a `BuildContext`.
-  AppProvider? _spaceSource;
-
-  /// The last payload published to the page, so an unrelated
-  /// `notifyListeners()` (the provider fires on every data change) does not
-  /// re-dispatch an event whose detail is identical.
-  String? _lastSpaceJson;
+  AppProvider? _contextSource;
+  int _bridgeGeneration = 0;
 
   @override
   void initState() {
@@ -131,23 +128,18 @@ class _UserAppWebViewState extends State<UserAppWebView> {
     // page only hears about it if something bridges the two. A background user
     // app keeps a live WebView, so the boot-time value alone would go stale.
     final provider = context.read<AppProvider>();
-    _spaceSource = provider..addListener(_publishSpaceIfChanged);
-    _lastSpaceJson = _bridge.buildSpaceJson();
+    _contextSource = provider..addListener(_publishContextIfChanged);
   }
 
   @override
   void dispose() {
-    _spaceSource?.removeListener(_publishSpaceIfChanged);
+    _contextSource?.removeListener(_publishContextIfChanged);
+    _bridge.detach();
     super.dispose();
   }
 
-  /// Dispatches `synapse:spacechanged` when — and only when — the payload the
-  /// page would see actually changed.
-  void _publishSpaceIfChanged() {
-    final spaceJson = _bridge.buildSpaceJson();
-    if (spaceJson == _lastSpaceJson) return;
-    _lastSpaceJson = spaceJson;
-    _bridge.notifySpaceChanged();
+  void _publishContextIfChanged() {
+    unawaited(_bridge.republishContextIfChanged());
   }
 
   @override
@@ -159,11 +151,12 @@ class _UserAppWebViewState extends State<UserAppWebView> {
     if (webViewReplaced ||
         !identical(oldWidget.selectedNotes, widget.selectedNotes) ||
         !identical(oldWidget.params, widget.params)) {
-      // A new app or revision gets a new WebView (its key changes), whose
-      // bootstrap must wait for the new bridge's sources like the first did.
-      if (webViewReplaced && widget.selectedNotes.isNotEmpty) {
-        _bridgeReady = false;
-      }
+      // Every bridge owns exactly one platform WebView/document lifetime.
+      // Notes/Params are bootstrap-only too, so replacing them must replace
+      // the WebView even when app id and revision number stay the same.
+      _bridge.detach();
+      _bridgeGeneration++;
+      _bridgeReady = false;
       _initBridge();
     }
   }
@@ -411,7 +404,9 @@ class _UserAppWebViewState extends State<UserAppWebView> {
     final htmlData = widget.revision.appCode;
 
     return InAppWebView(
-      key: ValueKey('${widget.app.id}:${widget.revision.revisionNumber}'),
+      key: ValueKey(
+        '${widget.app.id}:${widget.revision.revisionNumber}:$_bridgeGeneration',
+      ),
       initialData: InAppWebViewInitialData(
         data: htmlData,
         mimeType: 'text/html',
@@ -463,9 +458,11 @@ class _UserAppWebViewState extends State<UserAppWebView> {
         bridge.registerJavaScriptHandlers(controller);
       },
       onLoadStart: (controller, url) {
+        bridge.pageDidStartLoading();
         widget.onLoadStart?.call(controller, url);
       },
       onLoadStop: (controller, url) {
+        unawaited(bridge.pageDidFinishLoading());
         controller.evaluateJavascript(source: _clipboardShimScript);
         widget.onLoadStop?.call(controller, url);
       },

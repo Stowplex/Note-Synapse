@@ -68,7 +68,21 @@
   var BB = (global.BB = global.BB || {});
   var BOARD = BB.board, M = BB.model, HOST = BB.host, N = BB.notes, RENDER = BB.render, GEST = BB.gestures;
   var AI = BB.ai, EX = BB.export;
+  var I18n = BB.i18n;
   var A = (BB.app = {});
+
+  function tr(text) { return I18n ? I18n.text(text) : String(text == null ? '' : text); }
+  function applyStaticLanguage() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-i18n]'), function (node) {
+      node.textContent = tr(node.getAttribute('data-i18n'));
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-i18n-title]'), function (node) {
+      node.title = tr(node.getAttribute('data-i18n-title'));
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-i18n-placeholder]'), function (node) {
+      node.placeholder = tr(node.getAttribute('data-i18n-placeholder'));
+    });
+  }
 
   var EDIT_MS = 900;          // debounce after an edit
   var VIEW_MS = 2600;         // ... and after a pan or a zoom, which is cheaper
@@ -244,6 +258,8 @@
    * - the uuid of the `normal` app, which plugins/build.sh emits.
    */
   A.boot = function () {
+    if (I18n) I18n.setLanguage((global.Synapse && global.Synapse.locale) || 'en-US');
+    applyStaticLanguage();
     el.stage = $('stage'); el.scene = $('scene'); el.cards = $('cards'); el.edges = $('edges');
     el.groups = $('groups'); el.handles = $('handles');
     el.bin = $('bin'); el.bar = $('bottombar'); el.banner = $('banner'); el.hint = $('hint');
@@ -377,7 +393,7 @@
     S.mode = 'board';
     S.home = null;
     applyMode();
-    el.title.textContent = opts.title || 'Big Bang';
+    el.title.textContent = opts.title || tr('Big Bang');
     return HOST.loadBoard(noteId).then(function (r) {
       if (!r.ok) {
         S.booted = true;
@@ -573,7 +589,7 @@
         closeBoard();
         S.mode = 'home';
         S.booted = true;
-        el.title.textContent = 'Big Bang';
+        el.title.textContent = tr('Big Bang');
         applyMode();
         drawBars();
         return loadHome().then(function () { return true; });
@@ -745,16 +761,16 @@
     var ms = (now || Date.now()) - t;
     if (ms < 0) ms = 0;
     var mins = Math.floor(ms / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return mins + (mins === 1 ? ' minute ago' : ' minutes ago');
+    if (mins < 1) return tr('just now');
+    if (mins < 60) return tr(mins + (mins === 1 ? ' minute ago' : ' minutes ago'));
     var hours = Math.floor(mins / 60);
-    if (hours < 24) return hours + (hours === 1 ? ' hour ago' : ' hours ago');
+    if (hours < 24) return tr(hours + (hours === 1 ? ' hour ago' : ' hours ago'));
     var days = Math.floor(hours / 24);
-    if (days < 7) return days + (days === 1 ? ' day ago' : ' days ago');
-    if (days < 30) { var w = Math.floor(days / 7); return w + (w === 1 ? ' week ago' : ' weeks ago'); }
-    if (days < 365) { var mo = Math.floor(days / 30); return mo + (mo === 1 ? ' month ago' : ' months ago'); }
+    if (days < 7) return tr(days + (days === 1 ? ' day ago' : ' days ago'));
+    if (days < 30) { var w = Math.floor(days / 7); return tr(w + (w === 1 ? ' week ago' : ' weeks ago')); }
+    if (days < 365) { var mo = Math.floor(days / 30); return tr(mo + (mo === 1 ? ' month ago' : ' months ago')); }
     var y = Math.floor(days / 365);
-    return y + (y === 1 ? ' year ago' : ' years ago');
+    return tr(y + (y === 1 ? ' year ago' : ' years ago'));
   }
   A.ago = ago;
 
@@ -765,7 +781,7 @@
     var parts = [];
     var when = ago(b.updatedAt);
     if (when) parts.push(when);
-    if (typeof b.cards === 'number') parts.push(b.cards + (b.cards === 1 ? ' card' : ' cards'));
+    if (typeof b.cards === 'number') parts.push(tr(b.cards + (b.cards === 1 ? ' card' : ' cards')));
     return parts.join(' · ');
   }
   A.boardSub = boardSub;
@@ -782,12 +798,12 @@
     if (!e) return;
     e.textContent = '';
 
-    e.appendChild(homeRow(ICON.plus, 'New board', 'An empty canvas, in a note of its own',
+    e.appendChild(homeRow(ICON.plus, tr('New board'), tr('An empty canvas, in a note of its own'),
       function () { A.ops.newBoard(); }, 'cta'));
-    e.appendChild(homeRow(ICON.note, 'Open another note as a board',
-      'Its text is never touched', function () { A.ops.openPicked(); }));
+    e.appendChild(homeRow(ICON.note, tr('Open another note as a board'),
+      tr('Its text is never touched'), function () { A.ops.openPicked(); }));
 
-    e.appendChild(homeHead(S.home && S.home.loading ? 'Recent boards — looking…' : 'Recent boards'));
+    e.appendChild(homeHead(tr(S.home && S.home.loading ? 'Recent boards — looking…' : 'Recent boards')));
 
     var boards = (S.home && S.home.boards) || [];
     var failed = !!(S.home && S.home.error);
@@ -803,11 +819,11 @@
     if (failed) {
       var bad = document.createElement('div');
       bad.className = 'home-empty bad';
-      bad.textContent = boards.length
+      bad.textContent = tr(boards.length
         ? 'The next page of boards could not be read (' + S.home.error + ').'
-        : 'The boards could not be listed (' + S.home.error + ').';
+        : 'The boards could not be listed (' + S.home.error + ').');
       e.appendChild(bad);
-      e.appendChild(homeRow(ICON.more, 'Try again', null, function () {
+      e.appendChild(homeRow(ICON.more, tr('Try again'), null, function () {
         loadHome({ append: boards.length > 0 });
       }));
       return;
@@ -817,13 +833,13 @@
       if (S.home && S.home.loading) return;
       var none = document.createElement('div');
       none.className = 'home-empty';
-      none.textContent = 'No boards yet. Make one above, or open any note as a board - a board IS a note, and every note can be one.';
+      none.textContent = tr('No boards yet. Make one above, or open any note as a board - a board IS a note, and every note can be one.');
       e.appendChild(none);
       return;
     }
 
     if (S.home && S.home.more) {
-      e.appendChild(homeRow(ICON.more, 'Show more boards', null, function () {
+      e.appendChild(homeRow(ICON.more, tr('Show more boards'), null, function () {
         loadHome({ append: true });
       }));
     }
@@ -865,7 +881,7 @@
     var names = (titles || []).map(function (t) {
       return String(t == null ? '' : t).replace(/\s+/g, ' ').trim();
     }).filter(Boolean);
-    if (!names.length) return 'Big Bang board';
+    if (!names.length) return tr('Big Bang board');
     var head = names.slice(0, A.BOARD_NAMES);
     var rest = names.length - head.length;
     var text;
@@ -1138,7 +1154,7 @@
     relight();
     if (el.qcount) {
       el.qcount.textContent = !S.query ? ''
-        : (S.found && S.found.count ? S.found.count + ' of ' + countable() : 'nothing');
+        : tr(S.found && S.found.count ? S.found.count + ' of ' + countable() : 'nothing');
     }
     redraw();
     return S.found;
@@ -4106,7 +4122,7 @@
   function button(label, fn, cls) {
     var b = document.createElement('button');
     b.className = 'bb ' + (cls || '');
-    b.textContent = label;
+    b.textContent = tr(label);
     b.addEventListener('click', fn);
     return b;
   }
@@ -4121,7 +4137,7 @@
   function swatch(name, current, fn) {
     var b = button('', fn, 'sw' + (current === name ? ' on' : ''));
     b.style.setProperty('--sw', 'var(--c-' + name + ')');
-    b.title = name;
+    b.title = tr(name);
     return b;
   }
 
@@ -4138,7 +4154,7 @@
   function noteSpan(text) {
     var t = document.createElement('span');
     t.className = 'bnote';
-    t.textContent = text;
+    t.textContent = tr(text);
     return t;
   }
 
@@ -4152,7 +4168,7 @@
    */
   function optionBar(title, options, cls) {
     var bar = el.bar;
-    blabel(bar, title);
+    blabel(bar, tr(title));
     options.forEach(function (o) { bar.appendChild(o); });
     bar.appendChild(button('Back', function () { S.barMode = ''; drawBars(); }));
     bar.className = cls || 'one open';
@@ -4164,7 +4180,7 @@
       if (el.hint) el.hint.hidden = true;
       if (el.undo) el.undo.disabled = true;
       if (el.redo) el.redo.disabled = true;
-      if (el.badge) { el.badge.textContent = 'boards'; el.badge.className = ''; }
+      if (el.badge) { el.badge.textContent = tr('boards'); el.badge.className = ''; }
       return;
     }
     if (el.hint) {
@@ -4172,8 +4188,8 @@
       el.hint.hidden = n > 0 || !S.booted;
       if (!el.hint.hidden) {
         el.hint.textContent = S.readOnly
-          ? 'Nothing is drawn here. ' + (S.why || 'This board is read-only.')
-          : 'This board is empty. Add notes from the bar below, or press and hold anywhere to leave a sticky - its bar turns that sticky into a real note.';
+          ? tr('Nothing is drawn here.') + ' ' + tr(S.why || 'This board is read-only.')
+          : tr('This board is empty. Add notes from the bar below, or press and hold anywhere to leave a sticky - its bar turns that sticky into a real note.');
       }
     }
     if (el.undo) el.undo.disabled = !S.store || !S.store.canUndo();
@@ -4183,18 +4199,18 @@
     // A note write landed and the board could not record it. That outranks
     // "read-only", which says only that nothing MORE can be changed; this says
     // something already has been, and is not written down.
-    if (S.stranded) { b.textContent = 'not recorded'; b.className = 'warn'; return; }
-    if (S.readOnly) { b.textContent = 'read-only'; b.className = 'warn'; return; }
+    if (S.stranded) { b.textContent = tr('not recorded'); b.className = 'warn'; return; }
+    if (S.readOnly) { b.textContent = tr('read-only'); b.className = 'warn'; return; }
     // The merge screen is up. It is the one state where the board is waiting
     // for something that is not on the board.
-    if (S.merging) { b.textContent = 'merging…'; b.className = ''; return; }
+    if (S.merging) { b.textContent = tr('merging…'); b.className = ''; return; }
     // Two more waits on something that is not the board: a model that has been
     // asked a question, and a picture being drawn and attached.
-    if (S.suggesting) { b.textContent = 'thinking…'; b.className = ''; return; }
-    if (S.exporting) { b.textContent = 'exporting…'; b.className = ''; return; }
-    if (S.saving) { b.textContent = 'saving…'; b.className = ''; return; }
-    if (S.dirty) { b.textContent = 'unsaved'; b.className = ''; return; }
-    b.textContent = S.saves ? 'saved' : 'board';
+    if (S.suggesting) { b.textContent = tr('thinking…'); b.className = ''; return; }
+    if (S.exporting) { b.textContent = tr('exporting…'); b.className = ''; return; }
+    if (S.saving) { b.textContent = tr('saving…'); b.className = ''; return; }
+    if (S.dirty) { b.textContent = tr('unsaved'); b.className = ''; return; }
+    b.textContent = tr(S.saves ? 'saved' : 'board');
     b.className = 'ok';
   }
 
@@ -4207,7 +4223,7 @@
     e.className = S.banner.tone || '';
     var t = document.createElement('span');
     t.className = 'btext';
-    t.textContent = S.banner.text;
+    t.textContent = tr(S.banner.text);
     e.appendChild(t);
     (S.banner.actions || []).forEach(function (a) {
       e.appendChild(button(a.label, a.fn, 'small'));
@@ -4234,10 +4250,10 @@
      */
     if (S.mode === 'home') {
       var n = (S.home && S.home.boards && S.home.boards.length) || 0;
-      blabel(bar, S.home && S.home.loading ? 'Looking for boards…'
+      blabel(bar, tr(S.home && S.home.loading ? 'Looking for boards…'
         : (S.home && S.home.error ? 'The boards could not be listed.'
-          : n + (n === 1 ? ' board' : ' boards') + (S.home && S.home.more ? ' shown' : '')) +
-          (HOST.isMock ? ' · mock host' : ''), 'bnote');
+          : n + (n === 1 ? ' board' : ' boards') + (S.home && S.home.more ? ' shown' : ''))) +
+          (HOST.isMock ? ' · ' + tr('mock host') : ''), 'bnote');
       return;
     }
 
@@ -4260,7 +4276,7 @@
        * with them - a bar on a 390px phone that also carried the explanation
        * pushed Discard off the end of itself.
        */
-      blabel(bar, AI.summary(S.proposals.length));
+      blabel(bar, tr(AI.summary(S.proposals.length)));
       if (rw) bar.appendChild(button('Apply', function () { A.ops.applySuggestions(); }, 'on'));
       bar.appendChild(button('Discard', function () { A.ops.discardSuggestions(); }, 'danger'));
       bar.className = 'one open';
@@ -4329,7 +4345,7 @@
       var g = M.group(board, S.groupSel);
       if (g) {
         blabel(bar, g.t || 'Group');
-        blabel(bar, g.m.length + ' card' + (g.m.length === 1 ? '' : 's'), 'bnote');
+        blabel(bar, tr(g.m.length + ' card' + (g.m.length === 1 ? '' : 's')), 'bnote');
         if (rw) {
           bar.appendChild(button('Rename', function () { beginEdit(g.i); }));
           bar.appendChild(button('Colour', function () { S.barMode = 'colour'; drawBars(); }));
@@ -4356,7 +4372,7 @@
         }), 'sel');
         return;
       }
-      blabel(bar, ids.length + ' selected');
+      blabel(bar, tr(ids.length + ' selected'));
       if (rw && ids.length) {
         var two = ids.length === 2;
         var joined = two ? M.findLink(board, ids[0], ids[1]) : null;
@@ -4497,15 +4513,25 @@
     }
 
     var s = BOARD.summary(S.store.board);
-    blabel(bar, (s.notes + s.stickies) + ' card' + ((s.notes + s.stickies) === 1 ? '' : 's') +
-      (s.links ? ' · ' + s.links + ' link' + (s.links === 1 ? '' : 's') : '') +
-      (s.groups ? ' · ' + s.groups + ' group' + (s.groups === 1 ? '' : 's') : '') +
-      (s.annots ? ' · ' + s.annots + ' note' + (s.annots === 1 ? '' : 's') + ' in the margin' : '') +
-      (S.tombstones ? ' · ' + S.tombstones + ' missing' : '') +
-      // Said once, quietly: the cards are right, their chips are missing.
-      (S.noTags ? ' · tags unavailable' : '') +
-      (S.readOnly ? ' · read-only' : '') +
-      (HOST.isMock ? ' · mock host' : ''), 'bnote');
+    var summary = I18n && I18n.language === 'zh-CN'
+      ? (s.notes + s.stickies) + ' 张卡片' +
+        (s.links ? ' · ' + s.links + ' 条链接' : '') +
+        (s.groups ? ' · ' + s.groups + ' 个分组' : '') +
+        (s.annots ? ' · 边栏中 ' + s.annots + ' 条批注' : '') +
+        (S.tombstones ? ' · ' + S.tombstones + ' 项缺失' : '') +
+        (S.noTags ? ' · 标签不可用' : '') +
+        (S.readOnly ? ' · 只读' : '') +
+        (HOST.isMock ? ' · 模拟宿主' : '')
+      : (s.notes + s.stickies) + ' card' + ((s.notes + s.stickies) === 1 ? '' : 's') +
+        (s.links ? ' · ' + s.links + ' link' + (s.links === 1 ? '' : 's') : '') +
+        (s.groups ? ' · ' + s.groups + ' group' + (s.groups === 1 ? '' : 's') : '') +
+        (s.annots ? ' · ' + s.annots + ' note' + (s.annots === 1 ? '' : 's') + ' in the margin' : '') +
+        (S.tombstones ? ' · ' + S.tombstones + ' missing' : '') +
+        // Said once, quietly: the cards are right, their chips are missing.
+        (S.noTags ? ' · tags unavailable' : '') +
+        (S.readOnly ? ' · read-only' : '') +
+        (HOST.isMock ? ' · mock host' : '');
+    blabel(bar, summary, 'bnote');
   }
 
   // Opening a note is a host call, not a board edit: nothing is written, and
@@ -4550,6 +4576,17 @@
   };
 
   if (typeof global.addEventListener === 'function') {
+    global.addEventListener('synapse:localechanged', function (event) {
+      if (I18n) I18n.setLanguage((event && event.detail) || (global.Synapse && global.Synapse.locale));
+      applyStaticLanguage();
+      if (!S.booted) return;
+      if (S.mode === 'home') {
+        if (el.title) el.title.textContent = tr('Big Bang');
+        drawHome();
+      } else {
+        redraw();
+      }
+    });
     global.addEventListener('visibilitychange', function () {
       if (!global.document || global.document.visibilityState !== 'hidden') return;
       // A box with the caret in it holds text that is not in the board yet.

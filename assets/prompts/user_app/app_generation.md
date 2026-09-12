@@ -5,6 +5,11 @@ Description: {{{description}}}
 Steps: 
 - {{{stepsJoined}}}
 
+{{#uiLanguageTag}}
+Current Note Synapse UI language: {{{uiLanguageTag}}}
+Write your explanation in this language and make its dictionary entry complete.
+{{/uiLanguageTag}}
+
 {{{librariesSection}}}
 {{{noteContextSection}}}
 

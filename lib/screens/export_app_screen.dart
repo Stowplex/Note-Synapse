@@ -142,19 +142,19 @@ class _ExportAppScreenState extends State<ExportAppScreen> {
       final dependenciesYaml = <String>[];
 
       for (final dependency in dependencies) {
-        dependenciesYaml.add('      - link: ${dependency['original_url']}');
+        dependenciesYaml.add(
+          '      - link: ${jsonEncode(dependency['original_url']?.toString() ?? '')}',
+        );
       }
 
-      librariesYaml.add('  - name: ${library['name']}');
+      librariesYaml.add(
+        '  - name: ${jsonEncode(library['name']?.toString() ?? '')}',
+      );
       if (library['usage_instructions'] != null &&
           library['usage_instructions'].toString().isNotEmpty) {
-        librariesYaml.add('    instructions: |');
-        final instructions = library['usage_instructions'].toString().split(
-          '\n',
+        librariesYaml.add(
+          '    instructions: ${jsonEncode(library['usage_instructions'].toString())}',
         );
-        for (final instruction in instructions) {
-          librariesYaml.add('      $instruction');
-        }
       }
       if (dependenciesYaml.isNotEmpty) {
         librariesYaml.add('    dependencies:');
@@ -171,13 +171,35 @@ class _ExportAppScreenState extends State<ExportAppScreen> {
 
     // Build the YAML content
     final yamlLines = <String>[
-      'name: ${app.name}',
-      'uuid: ${app.uuid}',
-      'app_type: $appTypeString',
-      'description: ${app.description}',
-      'author: ${app.author}',
-      'license: ${app.license}',
+      'name: ${jsonEncode(app.name)}',
+      'uuid: ${jsonEncode(app.uuid)}',
+      'app_type: ${jsonEncode(appTypeString)}',
+      'description: ${jsonEncode(app.description)}',
+      'author: ${jsonEncode(app.author)}',
+      'license: ${jsonEncode(app.license)}',
     ];
+
+    final exportedI18n = app.name == widget.app.name
+        ? (app.description == widget.app.description
+              ? app.i18n
+              : app.i18nWithoutDescriptions)
+        : (app.description == widget.app.description
+              ? app.i18nWithoutNames
+              : const <String, UserAppLocalizedMetadata>{});
+    if (exportedI18n.isNotEmpty) {
+      yamlLines.add('i18n:');
+      final localeTags = exportedI18n.keys.toList()..sort();
+      for (final localeTag in localeTags) {
+        final metadata = exportedI18n[localeTag]!;
+        yamlLines.add('  ${jsonEncode(localeTag)}:');
+        if (metadata.name != null) {
+          yamlLines.add('    name: ${jsonEncode(metadata.name)}');
+        }
+        if (metadata.description != null) {
+          yamlLines.add('    description: ${jsonEncode(metadata.description)}');
+        }
+      }
+    }
 
     if (librariesYaml.isNotEmpty) {
       yamlLines.add('libraries:');

@@ -66,7 +66,11 @@ class RawWriteResult {
 /// Immutable and connection-keyed so per-call reads never race with
 /// close()/reopen resetting mutable service fields.
 class _CaptureState {
-  const _CaptureState(this.db, {required this.journalReady, required this.complete});
+  const _CaptureState(
+    this.db, {
+    required this.journalReady,
+    required this.complete,
+  });
 
   final Database db;
 
@@ -91,7 +95,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 47; // Target schema version
+  static const int DATABASE_VERSION = 48; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -239,6 +243,7 @@ class DatabaseService {
         selectedRevisionId TEXT, -- Currently active revision ID
         author TEXT DEFAULT "", -- Author name
         license TEXT DEFAULT "", -- License text
+        i18n TEXT, -- JSON object: locale -> localized name/description
         createdAt INTEGER NOT NULL, -- Creation timestamp
         updatedAt INTEGER NOT NULL -- Last update timestamp
       )
@@ -783,6 +788,12 @@ class DatabaseService {
   static Future<int> _detectActualSchemaVersion(Database db) async {
     int detected = 19; // Minimum supported version
 
+    // Check for localized User App metadata (v48) before older probes.
+    if (detected < 48) {
+      final appCols = await db.rawQuery("PRAGMA table_info('user_apps')");
+      if (appCols.any((c) => c['name'] == 'i18n')) detected = 48;
+    }
+
     // Check for isSpace in filters (v47)
     if (detected < 47) {
       final filtersCols = await db.rawQuery("PRAGMA table_info('filters')");
@@ -933,7 +944,26 @@ class DatabaseService {
           'Add isSpace to filters; tag existing agent-skill notes all-spaces',
       execute: _migrateToVersion47,
     ),
+    48: MigrationStep(
+      description: 'Add localized metadata to user_apps',
+      execute: _migrateToVersion48,
+    ),
   };
+
+  /// v48: optional localized User App package metadata.
+  static Future<void> _migrateToVersion48(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    final columns = await db.rawQuery("PRAGMA table_info('user_apps')");
+    // Some recovery fixtures and very old/minimal databases legitimately do
+    // not contain the optional User Apps subsystem. There is nothing to
+    // migrate in those databases; a later table creation uses the v48 DDL.
+    if (columns.isEmpty) return;
+    if (!columns.any((column) => column['name'] == 'i18n')) {
+      await db.execute('ALTER TABLE user_apps ADD COLUMN i18n TEXT');
+    }
+  }
 
   /// The reserved tag name migration 47 writes. A frozen copy of
   /// `SpaceScopeService.allSpacesTag` — see [_migrateToVersion47].
@@ -3297,6 +3327,7 @@ class DatabaseService {
       'selectedRevisionId': app.selectedRevisionId,
       'author': app.author,
       'license': app.license,
+      'i18n': app.i18n.isEmpty ? null : jsonEncode(userAppI18nToJson(app.i18n)),
       'createdAt': app.createdAt.millisecondsSinceEpoch,
       'updatedAt': app.updatedAt.millisecondsSinceEpoch,
     };
@@ -3317,7 +3348,7 @@ class DatabaseService {
     // App state should be loaded on-demand via getUserAppState().
     final maps = await db.rawQuery('''
       SELECT id, uuid, name, description, steps, htmlContent, type, 
-             selectedRevisionId, author, license, createdAt, updatedAt
+             selectedRevisionId, author, license, i18n, createdAt, updatedAt
       FROM user_apps
       ORDER BY createdAt DESC
     ''');
@@ -3333,7 +3364,7 @@ class DatabaseService {
     final maps = await db.rawQuery(
       '''
       SELECT id, uuid, name, description, steps, htmlContent, type, 
-             selectedRevisionId, author, license, createdAt, updatedAt
+             selectedRevisionId, author, license, i18n, createdAt, updatedAt
       FROM user_apps
       WHERE id = ?
     ''',
@@ -3351,7 +3382,7 @@ class DatabaseService {
     final maps = await db.rawQuery(
       '''
       SELECT id, uuid, name, description, steps, htmlContent, type,
-             selectedRevisionId, author, license, createdAt, updatedAt
+             selectedRevisionId, author, license, i18n, createdAt, updatedAt
       FROM user_apps
       WHERE uuid = ?
       LIMIT 1
@@ -3378,6 +3409,7 @@ class DatabaseService {
       'selectedRevisionId': app.selectedRevisionId,
       'author': app.author,
       'license': app.license,
+      'i18n': app.i18n.isEmpty ? null : jsonEncode(userAppI18nToJson(app.i18n)),
       'createdAt': app.createdAt.millisecondsSinceEpoch,
       'updatedAt': app.updatedAt.millisecondsSinceEpoch,
     };
@@ -3470,6 +3502,19 @@ class DatabaseService {
       }
     }
 
+    Map<String, UserAppLocalizedMetadata> parseI18n(dynamic raw) {
+      if (raw == null) return const {};
+      try {
+        final decoded = raw is String ? jsonDecode(raw) : raw;
+        return userAppI18nFromJson(decoded);
+      } catch (e) {
+        LoggerService.warning(
+          'Ignoring malformed localized metadata for app ${map['id']}: $e',
+        );
+        return const {};
+      }
+    }
+
     return UserApp(
       id: map['id'] as String,
       uuid:
@@ -3492,6 +3537,7 @@ class DatabaseService {
       selectedRevisionId: map['selectedRevisionId'] as String?,
       author: map['author'] as String? ?? '',
       license: map['license'] as String? ?? '',
+      i18n: parseI18n(map['i18n']),
       createdAt: parseTimestamp(map['createdAt']),
       updatedAt: parseTimestamp(map['updatedAt']),
     );
@@ -4093,9 +4139,10 @@ class DatabaseService {
       // Correlated EXISTS instead of the join+HAVING shape below: an OR cannot
       // be expressed as a `COUNT(DISTINCT t.name) = ?` and a join would return
       // one row per matching tag.
-      String conjunctionOf(List<String> names) =>
-          List.filled(names.length, _conversationHasTagExists)
-              .join('\n          AND ');
+      String conjunctionOf(List<String> names) => List.filled(
+        names.length,
+        _conversationHasTagExists,
+      ).join('\n          AND ');
 
       final tagSegments = <String>[];
       final tagArgs = <dynamic>[];
@@ -5355,8 +5402,10 @@ class DatabaseService {
 
       List<Object?> args = [sanitizedQuery];
 
-      String conjunctionOf(List<String> names) =>
-          List.filled(names.length, _noteHasTagExists).join('\n            AND ');
+      String conjunctionOf(List<String> names) => List.filled(
+        names.length,
+        _noteHasTagExists,
+      ).join('\n            AND ');
 
       if (requiredTags.isNotEmpty) {
         sql += '\n            AND ${conjunctionOf(requiredTags)}';

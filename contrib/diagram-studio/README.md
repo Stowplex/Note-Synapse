@@ -63,6 +63,33 @@ requires. The relative entries in `Synapse.Notes[].attachmentPaths` will not
 open. Block-scope renders are content-addressed by the host as
 `<parentNoteId>_<sha256(uri)><ext>`, so the URI is hashed to find the file.
 
+### The canvas and the keyboard
+
+The app runs in a WebView under the host's own app bar, on a phone. Vertical
+space is what there is least of, so there is no in-page header (the host
+already shows the app's name), the footer is two rows, and the Draw tab is
+laid out as a workspace rather than a document: nothing scrolls, and the
+canvas takes everything between the tab bar and the footer. js-draw pins its
+editor to 400px and wraps its toolbar into two rows below 540px; both are
+overridden, and Clear sits at the end of its tool row instead of in a row of
+its own under the canvas.
+
+The on-screen keyboard does not overlay the page — the host **shrinks the
+WebView** to make room, and a `flex: none` footer simply rides up on top of
+whatever was there. With the text tool that was the text box being typed
+into. Two things handle it, and both are needed:
+
+- The footer is hidden while something editable has focus. Focus is the only
+  signal available up front; the page growing back to full height brings the
+  footer back even if the box still has focus, because Android's back button
+  dismisses the keyboard without blurring anything.
+- The Draw tab pans the **drawing** so the text box stays inside the visible
+  canvas (`revealTextInput` in `src/draw.js`), on focus and on every resize.
+  The text tool anchors its box in canvas space, so the committed text still
+  lands where the user tapped, and the pan bypasses history so undo is
+  untouched. Scrolling the page instead would fight js-draw, whose overlay
+  clips to the canvas.
+
 ### Other things that bite
 
 - **Never trust `exportNotes().markdown`** for reading content — it is a
@@ -118,6 +145,12 @@ node dev/run_ui_tests.mjs          # the real shell in headless Chrome, both lau
 without a device: the block-scope splice/promote/prune cycle, the whole-note
 uuid renaming, absolute-vs-relative path rules, and `updateNotes` returning
 `success: true` with `updatedCount: 0`.
+
+The UI tests run the shell inside a 390×647 iframe — a phone's WebView area
+once the host's app bar is taken off — and shrink that iframe to stand in for
+the keyboard. Headless Chrome under a virtual-time budget delivers no `resize`
+events or ResizeObserver callbacks of its own, so the probe fires `resize` by
+hand after each change; a real WebView fires it itself.
 
 `dev/spike_jsdraw.html` is the round-trip spike kept for reference — it is what
 established that `loadFromSVG(toSVG())` preserves stroke geometry and converges

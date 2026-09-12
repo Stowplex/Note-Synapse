@@ -64,13 +64,45 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
     return modification is Map && modification['isBatch'] == true;
   }
 
+  AppLocalizations? get _l10n => AppLocalizations.of(context);
+
+  String get _dialogTitle {
+    if (widget.request.type != ApprovalType.noteModification) {
+      return widget.request.title;
+    }
+    final l10n = _l10n;
+    return _isBatchModification
+        ? l10n?.approvalBatchNoteModificationTitle ?? widget.request.title
+        : l10n?.approvalNoteModificationTitle ?? widget.request.title;
+  }
+
+  String get _dialogDescription {
+    if (widget.request.type != ApprovalType.noteModification) {
+      return widget.request.description;
+    }
+    final l10n = _l10n;
+    if (l10n == null) return widget.request.description;
+    final source = widget.request.source?.trim();
+    if (!_isBatchModification) {
+      return source == null || source.isEmpty
+          ? l10n.approvalOperationWantsModifyNote
+          : l10n.approvalSourceWantsModifyNote(source);
+    }
+    final details = widget.request.details;
+    final modification = details is Map ? details['modification'] : null;
+    final count = modification is Map ? modification['count'] as int? ?? 0 : 0;
+    return source == null || source.isEmpty
+        ? l10n.approvalOperationWantsModifyNotes(count)
+        : l10n.approvalSourceWantsModifyNotes(source, count);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
     return AlertDialog(
-      title: Text(widget.request.title),
+      title: Text(_dialogTitle),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -82,7 +114,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
             // Approve button stays put (it lives in `actions`, outside the
             // scroll view).
             Text(
-              widget.request.description,
+              _dialogDescription,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),
@@ -118,7 +150,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
         TextButton(
           onPressed: () =>
               Navigator.pop(context, ApprovalResult(approved: false)),
-          child: const Text('Deny'),
+          child: Text(_l10n?.approvalDeny ?? 'Deny'),
         ),
         TextButton(
           onPressed: () => Navigator.pop(
@@ -131,7 +163,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
           style: widget.request.warningMessage != null
               ? TextButton.styleFrom(foregroundColor: colorScheme.error)
               : null,
-          child: const Text('Approve'),
+          child: Text(_l10n?.approvalApprove ?? 'Approve'),
         ),
       ],
     );
@@ -145,7 +177,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
 
     if (title == null && snippet == null) {
       return SelectableText(
-        'Note ID: $noteId',
+        _l10n?.approvalNoteId(noteId) ?? 'Note ID: $noteId',
         style: const TextStyle(fontWeight: FontWeight.bold),
       );
     }
@@ -164,11 +196,11 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
           SelectableText.rich(
             TextSpan(
               children: [
-                const TextSpan(
-                  text: 'Note: ',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                TextSpan(
+                  text: _l10n?.approvalNoteLabel ?? 'Note: ',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                TextSpan(text: title ?? 'Untitled'),
+                TextSpan(text: title ?? _l10n?.untitled ?? 'Untitled'),
                 TextSpan(
                   text: ' ($noteId)',
                   style: TextStyle(
@@ -213,7 +245,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
         : <String>[];
 
     if (noteIds.isEmpty) {
-      return const Text('No notes specified');
+      return Text(_l10n?.approvalNoNotesSpecified ?? 'No notes specified');
     }
 
     return Container(
@@ -238,7 +270,10 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
                               children: [
                                 const TextSpan(text: '• '),
                                 TextSpan(
-                                  text: note['title'] ?? 'Untitled',
+                                  text:
+                                      note['title'] ??
+                                      _l10n?.untitled ??
+                                      'Untitled',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -327,7 +362,9 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
                   size: 16,
                 ),
                 label: Text(
-                  _detailsExpanded ? 'Show less' : 'Show full change',
+                  _detailsExpanded
+                      ? _l10n?.showLess ?? 'Show less'
+                      : _l10n?.approvalShowFullChange ?? 'Show full change',
                   style: const TextStyle(fontSize: 12),
                 ),
                 style: TextButton.styleFrom(
@@ -399,7 +436,9 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
           size: 16,
         ),
         label: Text(
-          _detailsExpanded ? 'Show less' : 'Show full change',
+          _detailsExpanded
+              ? _l10n?.showLess ?? 'Show less'
+              : _l10n?.approvalShowFullChange ?? 'Show full change',
           style: const TextStyle(fontSize: 12),
         ),
         style: TextButton.styleFrom(
@@ -441,7 +480,8 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
 
     if (updates.isEmpty) {
       return _buildTextContainer(
-        'Batch update of $totalCount notes',
+        _l10n?.approvalBatchUpdate(totalCount) ??
+            'Batch update of $totalCount notes',
         colorScheme,
       );
     }
@@ -457,12 +497,14 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Batch update of $totalCount notes (showing first ${updates.length}):',
+            _l10n?.approvalBatchUpdatePreview(totalCount, updates.length) ??
+                'Batch update of $totalCount notes '
+                    '(showing first ${updates.length}):',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
           ),
           const SizedBox(height: 8),
           ...updates.map((update) {
-            final id = update['id'] ?? 'unknown';
+            final id = update['id'] ?? _l10n?.approvalUnknown ?? 'unknown';
             final title = update['title'];
             final changes = update['changes'];
 
@@ -472,7 +514,10 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title != null ? '$title ($id)' : 'Note ID: $id',
+                    title != null
+                        ? '$title ($id)'
+                        : _l10n?.approvalNoteId(id.toString()) ??
+                              'Note ID: $id',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 11,
@@ -531,15 +576,16 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
             });
           },
         ),
-        Expanded(child: Text(widget.request.sessionApprovalLabel!)),
+        Expanded(
+          child: Text(
+            _l10n?.approvalAllowForSession ??
+                widget.request.sessionApprovalLabel!,
+          ),
+        ),
       ],
     );
   }
 
-  /// Localized: this is the one string in this dialog that the user must
-  /// understand to give informed consent, so it is not left hardcoded English
-  /// like the rest of the file. Falls back to English when no Localizations are
-  /// in scope (e.g. a bare widget test).
   /// The scope notice, rendered directly under the dialog description so no
   /// amount of plugin-supplied text can push it out of view.
   ///
@@ -583,7 +629,7 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
 
   String? _scopeNotice(dynamic modification) {
     if (modification is! Map) return null;
-    final l10n = AppLocalizations.of(context);
+    final l10n = _l10n;
     // Whole-note is checked FIRST so that if both keys are somehow present the
     // user sees the WIDER scope, never the reassuring one. Defence in depth:
     // the bridge already strips plugin-supplied `__` keys.
@@ -610,15 +656,20 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
         return;
       }
       if (key == 'title') {
-        buffer.writeln('• Set Title: "${value?.toString() ?? ''}"');
+        final text = value?.toString() ?? '';
+        buffer.writeln(
+          '• ${_l10n?.approvalSetTitle(text) ?? 'Set Title: "$text"'}',
+        );
       } else if (key == 'content') {
         if (value is Map && value['action'] == 'append') {
+          final text = value['text']?.toString() ?? '';
           buffer.writeln(
-            '• Append Content: "${value['text']?.toString() ?? ''}"',
+            '• ${_l10n?.approvalAppendContent(text) ?? 'Append Content: "$text"'}',
           );
         } else if (value is Map && value['action'] == 'prepend') {
+          final text = value['text']?.toString() ?? '';
           buffer.writeln(
-            '• Insert Before: "${value['text']?.toString() ?? ''}"',
+            '• ${_l10n?.approvalInsertBefore(text) ?? 'Insert Before: "$text"'}',
           );
         } else if (value is Map && value['action'] == 'replace') {
           final text = value['text']?.toString() ?? '';
@@ -626,37 +677,63 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
           // ('{action: replace, text: }') is unreadable at a consent surface.
           buffer.writeln(
             text.isEmpty
-                ? '• Delete the selected content'
-                : '• Replace Content With: "$text"',
+                ? '• ${_l10n?.approvalDeleteSelectedContent ?? 'Delete the selected content'}'
+                : '• ${_l10n?.approvalReplaceContentWith(text) ?? 'Replace Content With: "$text"'}',
           );
         } else if (value is String) {
-          buffer.writeln('• Set Content: "$value"');
+          buffer.writeln(
+            '• ${_l10n?.approvalSetContent(value) ?? 'Set Content: "$value"'}',
+          );
         } else {
-          buffer.writeln('• Content: ${value.toString()}');
+          final text = value.toString();
+          buffer.writeln(
+            '• ${_l10n?.approvalContent(text) ?? 'Content: $text'}',
+          );
         }
       } else if (key == 'tags') {
         if (value is Map) {
           final added = value['added'];
           final removed = value['removed'];
           if (added != null && (added is List) && added.isNotEmpty) {
-            buffer.writeln('• Add Tags: ${added.join(", ")}');
+            final text = added.join(', ');
+            buffer.writeln(
+              '• ${_l10n?.approvalAddTags(text) ?? 'Add Tags: $text'}',
+            );
           }
           if (removed != null && (removed is List) && removed.isNotEmpty) {
-            buffer.writeln('• Remove Tags: ${removed.join(", ")}');
+            final text = removed.join(', ');
+            buffer.writeln(
+              '• ${_l10n?.approvalRemoveTags(text) ?? 'Remove Tags: $text'}',
+            );
           }
         } else {
-          buffer.writeln('• Tags: $value');
+          final text = value.toString();
+          buffer.writeln('• ${_l10n?.approvalTags(text) ?? 'Tags: $text'}');
         }
       } else if (key == 'type') {
-        buffer.writeln('• Set Type: "$value"');
+        final text = value.toString();
+        buffer.writeln(
+          '• ${_l10n?.approvalSetType(text) ?? 'Set Type: "$text"'}',
+        );
       } else if (key == 'status') {
-        buffer.writeln('• Set Status: "$value"');
+        final text = value.toString();
+        buffer.writeln(
+          '• ${_l10n?.approvalSetStatus(text) ?? 'Set Status: "$text"'}',
+        );
       } else if (key == 'pinned') {
-        buffer.writeln('• ${value == true ? "Pin" : "Unpin"} Note');
+        buffer.writeln(
+          '• ${value == true ? _l10n?.approvalPinNote ?? 'Pin Note' : _l10n?.approvalUnpinNote ?? 'Unpin Note'}',
+        );
       } else if (key == 'isArchived') {
-        buffer.writeln('• ${value == true ? "Archive" : "Unarchive"} Note');
+        buffer.writeln(
+          '• ${value == true ? _l10n?.approvalArchiveNote ?? 'Archive Note' : _l10n?.approvalUnarchiveNote ?? 'Unarchive Note'}',
+        );
       } else {
-        buffer.writeln('• Set $key: ${value?.toString() ?? ''}');
+        final field = key.toString();
+        final text = value?.toString() ?? '';
+        buffer.writeln(
+          '• ${_l10n?.approvalSetField(field, text) ?? 'Set $field: $text'}',
+        );
       }
     });
 
@@ -673,5 +750,6 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
 
   String _capForRendering(String text) => text.length <= _maxDetailChars
       ? text
-      : '${text.substring(0, _maxDetailChars)}\n… (truncated for display)';
+      : '${text.substring(0, _maxDetailChars)}\n'
+            '${_l10n?.approvalDetailsTruncated ?? '… (truncated for display)'}';
 }

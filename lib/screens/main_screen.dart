@@ -10,6 +10,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../models/user_app.dart';
+import '../utils/user_app_localization.dart';
 import '../services/audio_recording_service.dart';
 import 'notes_screen.dart';
 import 'multi_function_screen.dart';
@@ -245,9 +246,11 @@ class _MainScreenState extends State<MainScreen> {
                         subtitle: Text(l10n.worldClipSubtitle),
                         onTap: () {
                           Navigator.pop(context);
-                          Navigator.of(context).push(MaterialPageRoute(
-                            builder: (_) => const WorldClipFlowScreen(),
-                          ));
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const WorldClipFlowScreen(),
+                            ),
+                          );
                         },
                       ),
                     ],
@@ -924,7 +927,7 @@ class _MainScreenState extends State<MainScreen> {
 
             return ListTile(
               leading: const Icon(Icons.web),
-              title: Text(app.name),
+              title: Text(app.displayName(context)),
               trailing: currentDefault == appId
                   ? const Icon(Icons.check)
                   : null,

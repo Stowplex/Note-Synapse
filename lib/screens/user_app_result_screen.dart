@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../models/user_app.dart';
+import '../utils/user_app_localization.dart';
 import 'user_app_view_screen.dart';
 
 class UserAppResultScreen extends StatelessWidget {
@@ -48,7 +49,7 @@ class UserAppResultScreen extends StatelessWidget {
               // Content
               if (isSuccess && app != null) ...[
                 Text(
-                  '${l10n.appCreatedSuccessfully} "${app!.name}"',
+                  '${l10n.appCreatedSuccessfully} "${app!.displayName(context)}"',
                   style: Theme.of(context).textTheme.bodyLarge,
                   textAlign: TextAlign.center,
                 ),

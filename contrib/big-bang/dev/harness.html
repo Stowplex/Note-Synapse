@@ -36,6 +36,8 @@
     <option value="768x900">tablet 768×900</option>
   </select>
   <button id="reload">reload</button>
+  <button id="langEn">English</button>
+  <button id="langZh">中文</button>
   <a href="auto_smoke.html" style="margin-left:auto">run smoke tests →</a>
 </header>
 <div id="wrap"><iframe id="f"></iframe></div>
@@ -128,6 +130,8 @@ f.addEventListener('load', function () {
 document.getElementById('pick').onchange = load;
 document.getElementById('size').onchange = load;
 document.getElementById('reload').onclick = load;
+document.getElementById('langEn').onclick = function () { try { f.contentWindow.setLocale('en-US'); } catch (e) {} };
+document.getElementById('langZh').onclick = function () { try { f.contentWindow.setLocale('zh-CN'); } catch (e) {} };
 load();
 </script>
 </body>

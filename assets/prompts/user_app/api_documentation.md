@@ -143,7 +143,7 @@
      - Synapse.session.getCookies(domainOrUrl: string) => { success, domain: string, cookies?: [{ name, value, domain?, path? }], error?: string }
          Read the saved cookies for a domain. PERMISSION-GATED: the first call prompts the user to approve this app's access to that login; once approved it is remembered until the user revokes it in Web Logins settings, deletes that saved login, or uninstalls the app — so a previously-approved call can start returning 'permission_required' again. The saved login is resolved before the grant, so with none you get 'no_session' and no prompt. Errors: 'permission_denied' (user declined), 'permission_required' (approval UI unavailable), 'no_session' (no saved login). Only use when you must compute something from a cookie value in-app; to simply send authenticated requests, prefer proxyFetch with the saved session instead of handling cookie values yourself.
    - Synapse.crypto.digest(algorithm: string, data: object) => { success, hex?: string, error?: string } - Compute a hash. algorithm is 'sha1' or 'sha256'; data is { text: string } or { base64: string }. Returns the lowercase hex digest. Use for content hashing (e.g. detecting whether a note changed since last sync). The Web Crypto API is unavailable in this environment, so use this instead.
-   - Synapse.exportNotes(noteIds: string[], options?: object) => { success, notes?: [{ id, title, markdown, attachments?: [{ id, path, fileName, mimeType }] }], error?: string } - Render notes to portable Markdown exactly as the app's own share/export does (sub-notes and linked notes inlined). options: { includeSubNotesAndLinkedNotes?: boolean (default true), includeAttachmentList?: boolean (default true) }. Each attachment `path` can be passed to proxyFetch multipart `attachmentPath` to upload the file. Prefer this over reassembling note content from runQuery.
+   - Synapse.exportNotes(noteIds: string[], options?: object) => { success, notes?: [{ id, title, markdown, attachments?: [{ id, path, fileName, mimeType }] }], error?: string } - Render notes to portable Markdown exactly as the app's own share/export does (sub-notes and linked notes inlined). options: { includeSubNotesAndLinkedNotes?: boolean (default true), includeAttachmentList?: boolean (default true), locale?: string (BCP-47; default `en-US` for backward-compatible output) }. Each attachment `path` can be passed to proxyFetch multipart `attachmentPath` to upload the file. Prefer this over reassembling note content from runQuery.
    - Synapse.pickNotes(options?: object) => { success, notes?: [{ id, title }], cancelled?: boolean, error?: string } - Show the native note picker (search, tag filters, card previews, multi/single select) and return the user's selection AS REFERENCES (ids/titles only, never content). options: { multiSelect?: boolean (default true), title?: string, initialTag?: string, preselectedIds?: string[] }. Use this to let the user choose which notes a plugin should act on without their content entering the AI conversation. Returns error 'no_ui' if no UI is available (e.g. a background task).
    - Synapse.pickTags(options?: object) => { success, tags?: string[], cancelled?: boolean, error?: string } - Show the native tag selection dialog (search, "Add from Filter", multi-select) and return the chosen tag names. options: { title?: string, preselectedTags?: string[] }. Use to let the user pick tags (e.g. to select which tagged notes to act on) rather than typing a tag name. Returns error 'no_ui' if no UI is available.
    - Synapse.tasks.* - Schedule your own AI tool to run later, so a long-running remote job can finish even after this app's UI is closed (e.g. poll a generation to completion). The scheduled tool runs headlessly; have it do its work and either reschedule itself or stop.
@@ -724,6 +724,16 @@
      ```synapse-app``` fenced block. Values from URI queries are strings; values
      from fenced blocks preserve their YAML/JSON types (numbers, arrays,
      nested objects).
+
+   - Synapse.locale (string, read-only) - The resolved Note Synapse UI locale
+     as a BCP-47 tag (`en-US` or `zh-CN` today). Use
+     `window.Synapse?.locale || navigator.language || 'en-US'` for old-host
+     compatibility. Match dictionary keys by case-insensitive exact tag after
+     normalizing `_` to `-`, then by an explicitly provided bare-language key,
+     then the app's `en-US` base. The host dispatches
+     `synapse:localechanged` on `window`; `event.detail` is the new tag and
+     `Synapse.locale` is updated before the event. Refresh visible strings and
+     accessibility attributes in place without reloading or resetting state.
 
    - Synapse.space (object|null, read-only) - The Space the user is currently
      working in, or null when none is active. A Space is a saved filter the user

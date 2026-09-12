@@ -8,6 +8,7 @@ import '../l10n/app_localizations.dart';
 import '../models/user_app.dart';
 import '../screens/main_screen.dart';
 import '../utils/global_keys.dart';
+import '../utils/user_app_localization.dart';
 
 /// A single running User App whose route is kept alive on the navigator stack.
 ///
@@ -135,7 +136,7 @@ class UserAppSessionService extends ChangeNotifier {
     if (l10n == null) return;
     final messenger = ScaffoldMessenger.maybeOf(context);
     messenger?.showSnackBar(
-      SnackBar(content: Text(l10n.backgroundAppClosed(app.name))),
+      SnackBar(content: Text(l10n.backgroundAppClosed(app.displayName(context)))),
     );
   }
 

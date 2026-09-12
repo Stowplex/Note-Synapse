@@ -89,9 +89,7 @@ Future<Database> _openRawV46(String dbName) async {
     path,
     options: OpenDatabaseOptions(singleInstance: false),
   );
-  await db.execute(
-    'PRAGMA user_version = ${DatabaseService.SQFLITE_VERSION}',
-  );
+  await db.execute('PRAGMA user_version = ${DatabaseService.SQFLITE_VERSION}');
   await db.execute('CREATE TABLE _schema_version (version INTEGER NOT NULL)');
   await db.insert('_schema_version', {'version': 46});
   await db.execute(_v46FiltersTable);
@@ -131,8 +129,8 @@ void main() {
     databaseFactory = databaseFactoryFfi;
   });
 
-  test('DATABASE_VERSION is 47', () {
-    expect(DatabaseService.DATABASE_VERSION, 47);
+  test('DATABASE_VERSION is 48', () {
+    expect(DatabaseService.DATABASE_VERSION, 48);
   });
 
   // getSchema() is the DDL DatabaseService exports about itself. It is what
@@ -149,17 +147,21 @@ void main() {
     expect(filtersDdl, contains('isSpace INTEGER NOT NULL DEFAULT 0'));
   });
 
-  test('a fresh database has the isSpace column at version 47', () async {
-    final service = DatabaseService.createNew();
-    final db = await service.database;
+  test(
+    'a fresh database has the isSpace and user-app i18n columns at version 48',
+    () async {
+      final service = DatabaseService.createNew();
+      final db = await service.database;
 
-    expect(await _columnsOf(db, 'filters'), contains('isSpace'));
-    expect(await _schemaVersionOf(db), 47);
+      expect(await _columnsOf(db, 'filters'), contains('isSpace'));
+      expect(await _columnsOf(db, 'user_apps'), contains('i18n'));
+      expect(await _schemaVersionOf(db), 48);
 
-    await service.close();
-  });
+      await service.close();
+    },
+  );
 
-  test('a v46 database is at 46, migrates to 47 and gains the column', () async {
+  test('a minimal v46 database migrates through 47 and 48', () async {
     final dbName = _uniqueName();
     final raw = await _openRawV46(dbName);
     expect(await _columnsOf(raw, 'filters'), isNot(contains('isSpace')));
@@ -170,7 +172,7 @@ void main() {
     final db = await service.database;
 
     expect(await _columnsOf(db, 'filters'), contains('isSpace'));
-    expect(await _schemaVersionOf(db), 47);
+    expect(await _schemaVersionOf(db), 48);
 
     await service.close();
   });
@@ -390,7 +392,7 @@ void main() {
     final secondDb = await second.database;
 
     expect(await _columnsOf(secondDb, 'filters'), contains('isSpace'));
-    expect(await _schemaVersionOf(secondDb), 47);
+    expect(await _schemaVersionOf(secondDb), 48);
     expect(await secondDb.query('tags'), tagsAfterFirst);
     expect(await secondDb.query('note_tags'), linksAfterFirst);
 
@@ -432,35 +434,37 @@ void main() {
     await service.close();
   });
 
-  test('_detectActualSchemaVersion recognises v47 by the isSpace column',
-      () async {
-    final dbName = _uniqueName();
+  test(
+    '_detectActualSchemaVersion recognises v47 by the isSpace column',
+    () async {
+      final dbName = _uniqueName();
 
-    // A fully migrated v47 database whose recorded version was corrupted to
-    // the sentinel. The probe must answer 47, so no migration is replayed.
-    final seed = DatabaseService.createNew(databaseName: dbName);
-    final seedDb = await seed.database;
-    await _insertTag(seedDb, 'tag-skill', 'agent-skill');
-    await _insertNote(seedDb, 'skill-1');
-    await seedDb.insert('note_tags', {
-      'noteId': 'skill-1',
-      'tagId': 'tag-skill',
-    });
-    await seedDb.update('_schema_version', {
-      'version': DatabaseService.SQFLITE_VERSION,
-    });
-    await seed.close();
+      // A fully migrated v47 database whose recorded version was corrupted to
+      // the sentinel. The probe must answer 47, so no migration is replayed.
+      final seed = DatabaseService.createNew(databaseName: dbName);
+      final seedDb = await seed.database;
+      await _insertTag(seedDb, 'tag-skill', 'agent-skill');
+      await _insertNote(seedDb, 'skill-1');
+      await seedDb.insert('note_tags', {
+        'noteId': 'skill-1',
+        'tagId': 'tag-skill',
+      });
+      await seedDb.update('_schema_version', {
+        'version': DatabaseService.SQFLITE_VERSION,
+      });
+      await seed.close();
 
-    final service = DatabaseService.createNew(databaseName: dbName);
-    final db = await service.database;
+      final service = DatabaseService.createNew(databaseName: dbName);
+      final db = await service.database;
 
-    expect(await _schemaVersionOf(db), 47);
-    // Detection stopped at 47, so the v47 data step did not run again: the
-    // skill note was never given all-spaces.
-    expect(await _notesWithTag(db, SpaceScopeService.allSpacesTag), isEmpty);
+      expect(await _schemaVersionOf(db), 48);
+      // Detection stopped at 47, so the v47 data step did not run again: the
+      // skill note was never given all-spaces.
+      expect(await _notesWithTag(db, SpaceScopeService.allSpacesTag), isEmpty);
 
-    await service.close();
-  });
+      await service.close();
+    },
+  );
 
   group('recovery restores the back-fill', () {
     // Every database mints the all-spaces tag on its own: the live one when it
@@ -508,8 +512,11 @@ void main() {
       return rows.single['id'] as String;
     }
 
-    Future<Database> openLikeRecovery(String path) => databaseFactory
-        .openDatabase(path, options: OpenDatabaseOptions(singleInstance: false));
+    Future<Database> openLikeRecovery(String path) =>
+        databaseFactory.openDatabase(
+          path,
+          options: OpenDatabaseOptions(singleInstance: false),
+        );
 
     /// Reproduces recovery's merge semantics for the three tables that matter
     /// here, in the order recovery applies them.
@@ -578,39 +585,41 @@ void main() {
       await backup.close();
     });
 
-    test('a restored skill note still resolves to a real all-spaces row',
-        () async {
-      final stagingPath = await buildMigratedSkillDb(
-        noteId: 'skill-live',
-        skillTagId: 'skill-tag-live',
-      );
-      final backupPath = await buildMigratedSkillDb(
-        noteId: 'skill-backup',
-        skillTagId: 'skill-tag-backup',
-      );
+    test(
+      'a restored skill note still resolves to a real all-spaces row',
+      () async {
+        final stagingPath = await buildMigratedSkillDb(
+          noteId: 'skill-live',
+          skillTagId: 'skill-tag-live',
+        );
+        final backupPath = await buildMigratedSkillDb(
+          noteId: 'skill-backup',
+          skillTagId: 'skill-tag-backup',
+        );
 
-      final staging = await openLikeRecovery(stagingPath);
-      final backup = await openLikeRecovery(backupPath);
-      final allSpacesId = await allSpacesTagIdOf(staging);
+        final staging = await openLikeRecovery(stagingPath);
+        final backup = await openLikeRecovery(backupPath);
+        final allSpacesId = await allSpacesTagIdOf(staging);
 
-      await mergeLikeRecovery(staging, backup);
+        await mergeLikeRecovery(staging, backup);
 
-      // One all-spaces row survives, keeping the id staging already had.
-      expect(await allSpacesTagIdOf(staging), allSpacesId);
+        // One all-spaces row survives, keeping the id staging already had.
+        expect(await allSpacesTagIdOf(staging), allSpacesId);
 
-      // Both skill notes resolve *through the tags table* to it. The restored
-      // one would be missing here if each database had minted its own uuid:
-      // _mergeTags would have left its note_tags row pointing at the backup's
-      // id, which no tags row carries. (The agent-skill link of the restored
-      // note is genuinely orphaned that way — a pre-existing recovery
-      // limitation for ordinary tags, and the reason this id is fixed.)
-      expect(await _notesWithTag(staging, SpaceScopeService.allSpacesTag), [
-        'skill-backup',
-        'skill-live',
-      ]);
+        // Both skill notes resolve *through the tags table* to it. The restored
+        // one would be missing here if each database had minted its own uuid:
+        // _mergeTags would have left its note_tags row pointing at the backup's
+        // id, which no tags row carries. (The agent-skill link of the restored
+        // note is genuinely orphaned that way — a pre-existing recovery
+        // limitation for ordinary tags, and the reason this id is fixed.)
+        expect(await _notesWithTag(staging, SpaceScopeService.allSpacesTag), [
+          'skill-backup',
+          'skill-live',
+        ]);
 
-      await staging.close();
-      await backup.close();
-    });
+        await staging.close();
+        await backup.close();
+      },
+    );
   });
 }

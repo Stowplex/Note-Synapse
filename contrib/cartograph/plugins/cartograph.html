@@ -462,30 +462,30 @@
 <body>
 <div id="app">
   <header id="topbar">
-    <button class="icon-btn" id="btnFocusOut" title="Back" hidden>
+    <button class="icon-btn" id="btnFocusOut" title="Back" data-i18n-title="Back" hidden>
       <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
     </button>
     <div id="crumbs"></div>
     <div class="seg" id="viewToggle">
-      <button data-mode="map" class="on">Map</button>
-      <button data-mode="outline">Outline</button>
+      <button data-mode="map" class="on" data-i18n="Map">Map</button>
+      <button data-mode="outline" data-i18n="Outline">Outline</button>
     </div>
-    <button class="icon-btn" id="btnHome" title="All maps" hidden>
+    <button class="icon-btn" id="btnHome" title="All maps" data-i18n-title="All maps" hidden>
       <svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7"/><path d="M6 10v9a1 1 0 001 1h10a1 1 0 001-1v-9"/></svg>
     </button>
-    <button class="icon-btn" id="btnAI" title="Generate a map with AI">
+    <button class="icon-btn" id="btnAI" title="Generate a map with AI" data-i18n-title="Generate a map with AI">
       <svg viewBox="0 0 24 24"><path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M18 15l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg>
     </button>
-    <button class="icon-btn" id="btnSearch" title="Search">
+    <button class="icon-btn" id="btnSearch" title="Search" data-i18n-title="Search">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
     </button>
-    <button class="icon-btn" id="btnUndo" title="Undo" disabled>
+    <button class="icon-btn" id="btnUndo" title="Undo" data-i18n-title="Undo" disabled>
       <svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></svg>
     </button>
-    <button class="icon-btn" id="btnFit" title="Fit">
+    <button class="icon-btn" id="btnFit" title="Fit" data-i18n-title="Fit">
       <svg viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4"/></svg>
     </button>
-    <button class="icon-btn" id="btnExpand" title="Open full screen" hidden>
+    <button class="icon-btn" id="btnExpand" title="Open full screen" data-i18n-title="Open full screen" hidden>
       <svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
     </button>
     <div id="status"></div>
@@ -493,7 +493,7 @@
 
   <div id="searchbar">
     <div class="search-row">
-      <input id="q" type="search" placeholder="Find in this map" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <input id="q" type="search" placeholder="Find in this map" data-i18n-placeholder="Find in this map" autocomplete="off" autocapitalize="off" spellcheck="false">
       <span id="hits"></span>
       <button class="icon-btn" id="btnPrev"><svg viewBox="0 0 24 24"><path d="M18 15l-6-6-6 6"/></svg></button>
       <button class="icon-btn" id="btnNext"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
@@ -522,6 +522,7 @@
   </div>
 </div>
 
+<script src="src/i18n.js"></script>
 <script src="src/md.js"></script>
 <script src="src/edit.js"></script>
 <script src="src/sidecar.js"></script>

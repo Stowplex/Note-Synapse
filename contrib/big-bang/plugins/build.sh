@@ -13,7 +13,7 @@ cd "$(dirname "$0")"
 SOURCE="big-bang.html"
 # In load order, which is also the order the shell lists them in. board.js
 # first: every other module reads its coercions at load time.
-MODULES=(board model host notes render gestures ai export app)
+MODULES=(i18n board model host notes render gestures ai export app)
 TMP_HTML="$(mktemp)"
 trap 'rm -f "$TMP_HTML"' EXIT
 
@@ -55,6 +55,7 @@ fi
 CODE="$(base64 < "$TMP_HTML" | tr -d '\n')"
 
 DESC='A canvas you throw notes onto. Notes become cards you can place, link, annotate, group and merge - spatial thinking over the notes you already have, with the board itself stored as an ordinary note. Draw links and label them, leave stickies and promote them into real notes, frame cards into groups and tag them, drop one card onto another to open the app own merge screen, search and focus to find your way around a big board, and embed a board read-only inside its own note. Nothing rewrites a note body: the board lives in one fenced block appended to it.'
+ZH_DESC='把笔记放上画布，自由摆放、链接、批注、分组与合并，用空间方式整理已有笔记。画板本身保存在普通笔记的代码块中，不会改写笔记正文。'
 
 # The same HTML ships twice. A `normal` launch arrives with no note and shows
 # the board home; a `note_action` launch arrives with one note and opens it as
@@ -71,13 +72,17 @@ emit() {
     printf 'uuid: %s\n' "$2"
     printf 'app_type: %s\n' "$3"
     printf 'description: "%s"\n' "$(yq "$DESC")"
+    printf 'i18n:\n'
+    printf '  zh-CN:\n'
+    printf '    name: "%s"\n' "$(yq "$5")"
+    printf '    description: "%s"\n' "$(yq "$ZH_DESC")"
     printf '%s\n' 'author: Bruce Li' 'license: Apache-2.0'
     printf 'code: %s\n' "$CODE"
   } > "$4"
   echo "Wrote $4"
 }
 
-emit 'Big Bang'            '9f6001dd-661d-4aa7-ba18-c54164b94338' 'normal'      'Big_Bang.yaml'
-emit 'Big Bang: this note' '51c3806d-b1e4-4fd4-b1ac-bb58124afef7' 'note_action' 'Big_Bang_This_Note.yaml'
+emit 'Big Bang'            '9f6001dd-661d-4aa7-ba18-c54164b94338' 'normal'      'Big_Bang.yaml'           '大爆炸'
+emit 'Big Bang: this note' '51c3806d-b1e4-4fd4-b1ac-bb58124afef7' 'note_action' 'Big_Bang_This_Note.yaml' '大爆炸：此笔记'
 
 echo "($(wc -c < "$TMP_HTML" | tr -d ' ') bytes of HTML)"

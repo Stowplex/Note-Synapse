@@ -5143,6 +5143,156 @@ class AppLocalizationsEn extends AppLocalizations {
       'Applies to the ENTIRE note, not just the selected block.';
 
   @override
+  String get approvalNoteModificationTitle => 'Allow Note Modification?';
+
+  @override
+  String get approvalBatchNoteModificationTitle =>
+      'Allow Batched Note Modification?';
+
+  @override
+  String approvalSourceWantsModifyNote(String source) {
+    return '$source wants to modify the note:';
+  }
+
+  @override
+  String approvalSourceWantsModifyNotes(String source, int count) {
+    return '$source wants to modify $count notes:';
+  }
+
+  @override
+  String get approvalOperationWantsModifyNote =>
+      'The operation wants to modify the note:';
+
+  @override
+  String approvalOperationWantsModifyNotes(int count) {
+    return 'The operation wants to modify $count notes:';
+  }
+
+  @override
+  String approvalSourceApp(String name) {
+    return 'App: $name';
+  }
+
+  @override
+  String approvalSourceEmbeddedApp(String name) {
+    return 'Embedded app: $name';
+  }
+
+  @override
+  String get approvalAllowForSession => 'Allow for this session';
+
+  @override
+  String get approvalDeny => 'Deny';
+
+  @override
+  String get approvalApprove => 'Approve';
+
+  @override
+  String approvalNoteId(String id) {
+    return 'Note ID: $id';
+  }
+
+  @override
+  String get approvalNoteLabel => 'Note: ';
+
+  @override
+  String get approvalNoNotesSpecified => 'No notes specified';
+
+  @override
+  String get approvalShowFullChange => 'Show full change';
+
+  @override
+  String approvalBatchUpdate(int count) {
+    return 'Batch update of $count notes';
+  }
+
+  @override
+  String approvalBatchUpdatePreview(int count, int visibleCount) {
+    return 'Batch update of $count notes (showing first $visibleCount):';
+  }
+
+  @override
+  String get approvalUnknown => 'unknown';
+
+  @override
+  String approvalSetTitle(String value) {
+    return 'Set Title: \"$value\"';
+  }
+
+  @override
+  String approvalAppendContent(String value) {
+    return 'Append Content: \"$value\"';
+  }
+
+  @override
+  String approvalInsertBefore(String value) {
+    return 'Insert Before: \"$value\"';
+  }
+
+  @override
+  String get approvalDeleteSelectedContent => 'Delete the selected content';
+
+  @override
+  String approvalReplaceContentWith(String value) {
+    return 'Replace Content With: \"$value\"';
+  }
+
+  @override
+  String approvalSetContent(String value) {
+    return 'Set Content: \"$value\"';
+  }
+
+  @override
+  String approvalContent(String value) {
+    return 'Content: $value';
+  }
+
+  @override
+  String approvalAddTags(String value) {
+    return 'Add Tags: $value';
+  }
+
+  @override
+  String approvalRemoveTags(String value) {
+    return 'Remove Tags: $value';
+  }
+
+  @override
+  String approvalTags(String value) {
+    return 'Tags: $value';
+  }
+
+  @override
+  String approvalSetType(String value) {
+    return 'Set Type: \"$value\"';
+  }
+
+  @override
+  String approvalSetStatus(String value) {
+    return 'Set Status: \"$value\"';
+  }
+
+  @override
+  String get approvalPinNote => 'Pin Note';
+
+  @override
+  String get approvalUnpinNote => 'Unpin Note';
+
+  @override
+  String get approvalArchiveNote => 'Archive Note';
+
+  @override
+  String get approvalUnarchiveNote => 'Unarchive Note';
+
+  @override
+  String approvalSetField(String field, String value) {
+    return 'Set $field: $value';
+  }
+
+  @override
+  String get approvalDetailsTruncated => '… (truncated for display)';
+
+  @override
   String get blockSelectionOutOfSync =>
       'This block cannot be targeted: its position in the note could not be confirmed, so no app was opened. The note was left unchanged.';
 
