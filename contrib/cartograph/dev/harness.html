@@ -32,6 +32,7 @@
     <option value="390x420">embed 390×420</option>
   </select>
   <button id="reload">reload</button>
+  <button id="en">en-US</button><button id="zh">zh-CN</button>
   <a href="auto_smoke.html" style="color:#7d90ff;margin-left:auto">run smoke tests →</a>
 </header>
 <div id="wrap"><iframe id="f"></iframe></div>
@@ -57,6 +58,8 @@ function load() {
 document.getElementById('pick').onchange = load;
 document.getElementById('size').onchange = load;
 document.getElementById('reload').onclick = load;
+document.getElementById('en').onclick = function () { f.contentWindow.setLocale('en-US'); };
+document.getElementById('zh').onclick = function () { f.contentWindow.setLocale('zh-CN'); };
 load();
 </script>
 </body>

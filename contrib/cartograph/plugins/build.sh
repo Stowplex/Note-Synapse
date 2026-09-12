@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 
 SOURCE="cartograph.html"
 OUTPUT="Cartograph.yaml"
-MODULES=(md edit sidecar layout view diff ai host export app)
+MODULES=(i18n md edit sidecar layout view diff ai host export app)
 TMP_HTML="$(mktemp)"
 trap 'rm -f "$TMP_HTML"' EXIT
 
@@ -49,6 +49,12 @@ emit() {
     printf 'app_type: %s\n' "$3"
     printf 'description: "%s"\n' "$(yq "$DESC")"
     printf '%s\n' 'author: Bruce Li' 'license: Apache-2.0'
+    printf '%s\n' 'i18n:' '  zh-CN:'
+    if [[ "$1" == 'Cartograph' ]]; then
+      printf '%s\n' '    name: 绘图志' '    description: 将笔记转为可编辑思维导图：标题和列表成为分支，导图上的每次修改都会写回 Markdown。支持拖拽重组、导图/大纲切换、聚焦、搜索筛选、AI 生成与重塑。'
+    else
+      printf '%s\n' '    name: 绘图志：当前笔记' '    description: 将当前笔记转为可编辑思维导图：标题和列表成为分支，所有修改直接写回 Markdown，并支持拖拽、聚焦、搜索以及 AI 重塑。'
+    fi
     printf 'code: %s\n' "$CODE"
   } > "$4"
   echo "Wrote $4"

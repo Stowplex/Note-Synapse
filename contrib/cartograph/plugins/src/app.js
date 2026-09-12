@@ -9,6 +9,20 @@
   'use strict';
   var CG = window.CG;
   var md = CG.md, edit = CG.edit, sidecar = CG.sidecar, layout = CG.layout, view = CG.view, host = CG.host;
+  var i18n = CG.i18n;
+  function tr(text) { return i18n.text(text); }
+
+  function applyStaticLanguage() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-i18n]'), function (node) {
+      node.textContent = tr(node.getAttribute('data-i18n'));
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-i18n-title]'), function (node) {
+      node.title = tr(node.getAttribute('data-i18n-title'));
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-i18n-placeholder]'), function (node) {
+      node.placeholder = tr(node.getAttribute('data-i18n-placeholder'));
+    });
+  }
 
   function $(sel) { return document.querySelector(sel); }
   var elStage, elEdges, elViewport, elBottom, elSheet, elScrim, elToast, elCrumbs, elOutline, elOlList, elOlSrc, elTrash, elEmpty;
@@ -164,7 +178,7 @@
     S.saveState = state;
     var t = $('#status');
     if (!t) return;
-    t.textContent = state === 'saving' ? 'saving…' : state === 'saved' ? 'saved' : state === 'unsaved' ? 'unsaved changes' : state === 'error' ? 'not saved' : '';
+    t.textContent = tr(state === 'saving' ? 'saving…' : state === 'saved' ? 'saved' : state === 'unsaved' ? 'unsaved changes' : state === 'error' ? 'not saved' : '');
   }
 
   function save() {
@@ -900,7 +914,7 @@
   function bb(label, icon, cls, fn) {
     var b = document.createElement('button');
     b.className = 'bb' + (cls ? ' ' + cls : '');
-    b.innerHTML = icon + '<span>' + label + '</span>';
+    b.innerHTML = icon + '<span>' + esc(tr(label)) + '</span>';
     b.onclick = fn;
     return b;
   }
@@ -1050,14 +1064,14 @@
   /* ===================================================================== */
 
   function toast(msg) {
-    elToast.textContent = msg;
+    elToast.textContent = tr(msg);
     elToast.classList.add('on');
     clearTimeout(elToast._t);
     elToast._t = setTimeout(function () { elToast.classList.remove('on'); }, 2200);
   }
 
   function openSheet(title, fill) {
-    elSheet.querySelector('.sheet-title').textContent = title;
+    elSheet.querySelector('.sheet-title').textContent = tr(title);
     var body = elSheet.querySelector('.sheet-body');
     body.textContent = '';
     fill(body);
@@ -1072,7 +1086,7 @@
   function menuItem(body, label, sub, icon, cls, fn) {
     var b = document.createElement('button');
     b.className = 'menu-item' + (cls ? ' ' + cls : '');
-    b.innerHTML = icon + '<span>' + esc(label) + (sub ? '<span class="sub">' + esc(sub) + '</span>' : '') + '</span>';
+    b.innerHTML = icon + '<span>' + esc(tr(label)) + (sub ? '<span class="sub">' + esc(tr(sub)) + '</span>' : '') + '</span>';
     b.onclick = function () { closeSheet(); fn(); };
     body.appendChild(b);
     return b;
@@ -2484,7 +2498,7 @@
   function busy(label) {
     var t = $('#status');
     if (!t) return;
-    if (label) { t.textContent = label; t.classList.add('busy'); }
+    if (label) { t.textContent = tr(label); t.classList.add('busy'); }
     else { t.classList.remove('busy'); setStatus(S.saveState); }
   }
 
@@ -2772,7 +2786,7 @@
   function section(parent, label) {
     var h = document.createElement('div');
     h.className = 'home-head';
-    h.textContent = label;
+    h.textContent = tr(label);
     parent.appendChild(h);
   }
 
@@ -2792,7 +2806,7 @@
 
     var lead = document.createElement('button');
     lead.className = 'home-cta';
-    lead.innerHTML = ICONS.ai + '<span>Generate a map from a note…</span>';
+    lead.innerHTML = ICONS.ai + '<span>' + esc(tr('Generate a map from a note…')) + '</span>';
     lead.onclick = function () {
       host.pickNotes({ multiSelect: false }).then(function (notes) {
         if (!notes.length) return;
@@ -2815,7 +2829,7 @@
     if (!S.home.loading && !S.home.maps.length) {
       var empty = document.createElement('div');
       empty.className = 'home-empty';
-      empty.textContent = 'No maps yet. Generate one above, or open any note as a map.';
+      empty.textContent = tr('No maps yet. Generate one above, or open any note as a map.');
       el.appendChild(empty);
     }
     S.home.maps.forEach(function (m) {
@@ -2825,7 +2839,7 @@
     });
 
     section(el, 'Any note');
-    el.appendChild(homeRow(ICONS.note, 'Open a note as a map…', 'Nothing is written until you change something', function () {
+    el.appendChild(homeRow(ICONS.note, tr('Open a note as a map…'), tr('Nothing is written until you change something'), function () {
       host.pickNotes({ multiSelect: false }).then(function (notes) {
         if (notes.length) openMapNote(notes[0].id);
       });
@@ -3367,7 +3381,7 @@
     function chip(label, on, fn) {
       var b = document.createElement('button');
       b.className = 'chip' + (on ? ' on' : '');
-      b.textContent = label;
+      b.textContent = tr(label);
       b.onclick = fn;
       wrap.appendChild(b);
     }
@@ -3556,6 +3570,8 @@
   /* ===================================================================== */
 
   function boot() {
+    i18n.setLanguage((window.Synapse && window.Synapse.locale) || navigator.language || 'en-US');
+    applyStaticLanguage();
     elStage = $('#stage'); elEdges = $('#edges'); elViewport = $('#viewport');
     elBottom = $('#bottombar'); elSheet = $('#sheet'); elScrim = $('#scrim');
     elToast = $('#toast'); elCrumbs = $('#crumbs'); elOutline = $('#outline');
@@ -3647,6 +3663,12 @@
             commitComments: commitComments,
             exportMap: exportMap, exportSheet: exportSheet, exportTargetNoteId: exportTargetNoteId }
   };
+
+  window.addEventListener('synapse:localechanged', function (event) {
+    i18n.setLanguage(event.detail);
+    applyStaticLanguage();
+    if (S.booted) render();
+  });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();

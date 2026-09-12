@@ -35,14 +35,12 @@ class AiToolAppBundle {
     required this.app,
     required this.revision,
     required this.serviceName,
-    required this.displayName,
     required this.toolDefinitions,
   });
 
   final UserApp app;
   final AppRevision revision;
   final String serviceName;
-  final String displayName;
   final List<AiToolDefinition> toolDefinitions;
 
   List<McpTool> toMcpTools() {
@@ -81,15 +79,6 @@ class AiToolRuntime {
   UserAppRuntimeBridge? _bridge;
   Completer<void>? _loadCompleter;
 
-  /// The Space payload the live page last saw.
-  ///
-  /// Mirrors `UserAppWebView._lastSpaceJson`: the event means "the Space
-  /// changed", so re-dispatching an identical payload before every tool call
-  /// would tell a generated tool to re-run its queries on every invocation.
-  /// Seeded when the bridge is built, because the bootstrap script bakes that
-  /// same value into the page.
-  String? _lastSpaceJson;
-
   // Console log collection for invoke operations
   bool _isCollectingConsoleLogs = false;
   final List<String> _consoleLogBuffer = [];
@@ -116,9 +105,6 @@ class AiToolRuntime {
       onModificationRequest: onModificationRequest,
       onSqlWriteApprovalRequest: onSqlWriteApprovalRequest,
     );
-    // What `buildBootstrapScript()` below is about to publish to the page.
-    _lastSpaceJson = _bridge!.buildSpaceJson();
-
     _headlessWebView = HeadlessInAppWebView(
       initialData: InAppWebViewInitialData(
         data: bundle.revision.appCode,
@@ -139,15 +125,23 @@ class AiToolRuntime {
         _controller = controller;
         _bridge!.registerJavaScriptHandlers(controller);
       },
-      onLoadStop: (controller, url) {
-        _loadCompleter?.complete();
+      onLoadStart: (controller, url) {
+        _bridge!.pageDidStartLoading();
+      },
+      onLoadStop: (controller, url) async {
+        await _bridge!.pageDidFinishLoading();
+        if (!(_loadCompleter?.isCompleted ?? true)) {
+          _loadCompleter!.complete();
+        }
       },
       onLoadError: (controller, url, code, message) {
-        _loadCompleter?.completeError(
-          Exception(
-            'Failed to load AI tool ${bundle.app.name}: $message ($code)',
-          ),
-        );
+        if (!(_loadCompleter?.isCompleted ?? true)) {
+          _loadCompleter!.completeError(
+            Exception(
+              'Failed to load AI tool ${bundle.app.name}: $message ($code)',
+            ),
+          );
+        }
       },
       onConsoleMessage: (controller, consoleMessage) {
         final levelLabel = consoleMessage.messageLevel
@@ -212,7 +206,7 @@ class AiToolRuntime {
     // half of the documented contract: it scopes its queries by `space.tags`
     // from the boot-time value and never receives `synapse:spacechanged`, so
     // it keeps scoping to a Space the user has left.
-    await _publishSpaceIfChanged();
+    await _bridge?.republishContextIfChanged();
     final controller = _controller;
     if (controller == null) {
       throw Exception(
@@ -284,17 +278,6 @@ class AiToolRuntime {
     }
   }
 
-  /// Tells the live page the Space changed — when, and only when, the payload
-  /// it would see actually changed. Same guard as `UserAppWebView`.
-  Future<void> _publishSpaceIfChanged() async {
-    final bridge = _bridge;
-    if (bridge == null) return;
-    final spaceJson = bridge.buildSpaceJson();
-    if (spaceJson == _lastSpaceJson) return;
-    _lastSpaceJson = spaceJson;
-    await bridge.notifySpaceChanged();
-  }
-
   Future<void> dispose() async {
     try {
       if (_headlessWebView != null) {
@@ -307,11 +290,11 @@ class AiToolRuntime {
         'Error disposing AI tool runtime for ${bundle.app.name}: $e',
       );
     } finally {
+      _bridge?.detach();
       _headlessWebView = null;
       _controller = null;
       _bridge = null;
       _loadCompleter = null;
-      _lastSpaceJson = null;
     }
   }
 }
@@ -415,7 +398,6 @@ class AiToolService {
       app: app,
       revision: revision,
       serviceName: serviceName,
-      displayName: app.name,
       toolDefinitions: toolDefinitions,
     );
   }

@@ -174,6 +174,7 @@
     }
 
     var synapse = {
+      locale: options.locale || 'en-US',
       Notes: [note],
       Params: {},
 
@@ -323,6 +324,12 @@
 
     return {
       synapse: synapse,
+      setLocale: function (tag) {
+        synapse.locale = tag;
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+          window.dispatchEvent(new CustomEvent('synapse:localechanged', { detail: tag }));
+        }
+      },
       note: note,
       log: log,
       get parentContent() { return parentContent; },

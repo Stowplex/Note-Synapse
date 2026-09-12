@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../l10n/app_localizations.dart';
+import '../models/user_app.dart';
 import '../services/starter_service.dart';
 import '../services/logger_service.dart';
+import '../utils/user_app_localization.dart';
 import 'import_app_screen.dart';
 
 class InstallStarterAppsScreen extends StatefulWidget {
@@ -34,7 +36,7 @@ class _InstallStarterAppsScreenState extends State<InstallStarterAppsScreen> {
       });
 
       final apps = await StarterService.getStarterApps();
-      
+
       setState(() {
         _starterApps = apps;
         _isLoading = false;
@@ -44,7 +46,7 @@ class _InstallStarterAppsScreenState extends State<InstallStarterAppsScreen> {
       setState(() {
         _isLoading = false;
       });
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -79,18 +81,17 @@ class _InstallStarterAppsScreenState extends State<InstallStarterAppsScreen> {
 
       for (final index in _selectedApps) {
         final app = _starterApps[index];
-        
+
         try {
           // Copy YAML asset to temporary file
           final tempFile = await _copyAssetToTempFile(app['filePath']);
-          
+
           // Navigate to import screen and wait for result
           final result = await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ImportAppScreen(
-                yamlFilePath: tempFile.path,
-              ),
+              builder: (context) =>
+                  ImportAppScreen(yamlFilePath: tempFile.path),
             ),
           );
 
@@ -126,10 +127,7 @@ class _InstallStarterAppsScreenState extends State<InstallStarterAppsScreen> {
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: backgroundColor,
-          ),
+          SnackBar(content: Text(message), backgroundColor: backgroundColor),
         );
 
         // Refresh the list
@@ -138,14 +136,14 @@ class _InstallStarterAppsScreenState extends State<InstallStarterAppsScreen> {
       }
     } catch (e) {
       LoggerService.error('Error installing starter apps: $e');
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              AppLocalizations.of(context)!.errorInstallingStarterApps(
-                e.toString(),
-              ),
+              AppLocalizations.of(
+                context,
+              )!.errorInstallingStarterApps(e.toString()),
             ),
             backgroundColor: Colors.red,
           ),
@@ -165,11 +163,9 @@ class _InstallStarterAppsScreenState extends State<InstallStarterAppsScreen> {
     final tempDir = await getTemporaryDirectory();
     final fileName = assetPath.split('/').last;
     final tempFile = File('${tempDir.path}/$fileName');
-    
-    await tempFile.writeAsBytes(
-      byteData.buffer.asUint8List(),
-    );
-    
+
+    await tempFile.writeAsBytes(byteData.buffer.asUint8List());
+
     return tempFile;
   }
 
@@ -223,189 +219,190 @@ class _InstallStarterAppsScreenState extends State<InstallStarterAppsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _starterApps.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.apps,
-                        size: 64,
-                        color: Colors.grey.shade400,
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.apps, size: 64, color: Colors.grey.shade400),
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.noStarterAppsAvailable,
+                    style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            )
+          : Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _starterApps.length,
+                    itemBuilder: (context, index) {
+                      final app = _starterApps[index];
+                      final isSelected = _selectedApps.contains(index);
+                      final isInstalled = app['isInstalled'] as bool;
+                      final i18n =
+                          app['i18n']
+                              as Map<String, UserAppLocalizedMetadata>? ??
+                          const {};
+                      final metadata = resolveUserAppLocalizedMetadata(
+                        i18n,
+                        userAppLocaleTag(Localizations.localeOf(context)),
+                      );
+                      final displayName = metadata?.name ?? app['name'];
+                      final displayDescription =
+                          metadata?.description ?? app['description'];
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: CheckboxListTile(
+                          value: isSelected,
+                          onChanged: _isInstalling
+                              ? null
+                              : (value) {
+                                  setState(() {
+                                    if (value == true) {
+                                      _selectedApps.add(index);
+                                    } else {
+                                      _selectedApps.remove(index);
+                                    }
+                                  });
+                                },
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  displayName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              if (isInstalled)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.shade50,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.green),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.check_circle,
+                                        size: 14,
+                                        color: Colors.green.shade700,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        l10n.installed,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.green.shade700,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 4),
+                              Text(
+                                '${l10n.type}: ${_getAppTypeDisplayName(app['appType'])}',
+                                style: TextStyle(
+                                  color: Colors.blue.shade700,
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                StarterService.getAppTypeExplanation(
+                                  app['appType'],
+                                ),
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 11,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                displayDescription,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ],
+                          ),
+                          isThreeLine: true,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).cardColor,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, -2),
                       ),
-                      const SizedBox(height: 16),
-                      Text(
-                        l10n.noStarterAppsAvailable,
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.grey.shade600,
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      if (_selectedApps.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            l10n.appsSelected(_selectedApps.length),
+                            style: TextStyle(
+                              color: Theme.of(context).primaryColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _isInstalling || _selectedApps.isEmpty
+                              ? null
+                              : _installSelectedApps,
+                          icon: _isInstalling
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.download),
+                          label: Text(
+                            _isInstalling
+                                ? l10n.installing
+                                : l10n.proceedWithInstallation,
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
                         ),
                       ),
                     ],
                   ),
-                )
-              : Column(
-                  children: [
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _starterApps.length,
-                        itemBuilder: (context, index) {
-                          final app = _starterApps[index];
-                          final isSelected = _selectedApps.contains(index);
-                          final isInstalled = app['isInstalled'] as bool;
-
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: CheckboxListTile(
-                              value: isSelected,
-                              onChanged: _isInstalling
-                                  ? null
-                                  : (value) {
-                                      setState(() {
-                                        if (value == true) {
-                                          _selectedApps.add(index);
-                                        } else {
-                                          _selectedApps.remove(index);
-                                        }
-                                      });
-                                    },
-                              title: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      app['name'],
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  if (isInstalled)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.green.shade50,
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: Colors.green,
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.check_circle,
-                                            size: 14,
-                                            color: Colors.green.shade700,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            l10n.installed,
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.green.shade700,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${l10n.type}: ${_getAppTypeDisplayName(app['appType'])}',
-                                    style: TextStyle(
-                                      color: Colors.blue.shade700,
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    StarterService.getAppTypeExplanation(
-                                      app['appType'],
-                                    ),
-                                    style: TextStyle(
-                                      color: Colors.grey.shade600,
-                                      fontSize: 11,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    app['description'],
-                                    style: const TextStyle(fontSize: 13),
-                                  ),
-                                ],
-                              ),
-                              isThreeLine: true,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 4,
-                            offset: const Offset(0, -2),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          if (_selectedApps.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: Text(
-                                l10n.appsSelected(_selectedApps.length),
-                                style: TextStyle(
-                                  color: Theme.of(context).primaryColor,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: _isInstalling || _selectedApps.isEmpty
-                                  ? null
-                                  : _installSelectedApps,
-                              icon: _isInstalling
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.download),
-                              label: Text(
-                                _isInstalling
-                                    ? l10n.installing
-                                    : l10n.proceedWithInstallation,
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 16),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
                 ),
+              ],
+            ),
     );
   }
 
@@ -423,4 +420,3 @@ class _InstallStarterAppsScreenState extends State<InstallStarterAppsScreen> {
     }
   }
 }
-

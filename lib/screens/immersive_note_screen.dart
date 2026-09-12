@@ -21,6 +21,7 @@ import '../models/note.dart';
 import '../models/attachment.dart';
 import '../models/tool_iteration_prompt.dart';
 import '../models/user_app.dart';
+import '../utils/user_app_localization.dart';
 import '../models/generation_context.dart';
 import '../models/model_config.dart';
 import '../providers/app_provider.dart';
@@ -851,7 +852,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
   String _resolveServiceLabel(String serviceName) {
     final aiBundle = _aiToolBundles[serviceName];
     if (aiBundle != null) {
-      return aiBundle.displayName;
+      return aiBundle.app.displayName(context);
     }
     return serviceName;
   }
@@ -2846,7 +2847,7 @@ class _ImmersiveNoteScreenState extends State<ImmersiveNoteScreen>
                             serviceName,
                           );
                           return FilterChip(
-                            label: Text(bundle.displayName),
+                            label: Text(bundle.app.displayName(context)),
                             selected: selected,
                             onSelected: (value) {
                               _toggleAiToolService(serviceName, value);

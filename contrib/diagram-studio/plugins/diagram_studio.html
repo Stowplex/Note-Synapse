@@ -212,20 +212,20 @@
   <div id="app">
     <nav id="tabs">
       <button data-tab="mermaid" class="active">Mermaid</button>
-      <button data-tab="draw">Draw</button>
+      <button data-tab="draw" data-i18n="draw">Draw</button>
       <button data-tab="ascii">ASCII</button>
       <button data-tab="ai">AI</button>
-      <button class="secondary" id="blocksToggle" aria-label="Show diagrams in this note">☰</button>
+      <button class="secondary" id="blocksToggle" data-i18n-aria="showDiagrams" aria-label="Show diagrams in this note">☰</button>
     </nav>
 
     <div id="blockPanel">
       <div class="panel-head">
-        <span>Diagrams</span>
+        <span data-i18n="diagrams">Diagrams</span>
         <span class="badge" id="scopeBadge">…</span>
       </div>
       <div id="blockRows"></div>
       <div class="panel-actions">
-        <button class="secondary" id="newDiagramButton">+ New diagram</button>
+        <button class="secondary" id="newDiagramButton" data-i18n="newDiagram">+ New diagram</button>
       </div>
     </div>
 
@@ -235,14 +235,14 @@
       <!-- Mermaid ---------------------------------------------------- -->
       <section class="tab active" data-tab="mermaid">
         <div class="panel">
-          <div class="panel-title">Diagram source</div>
+          <div class="panel-title" data-i18n="diagramSource">Diagram source</div>
           <textarea id="mermaidEditor" rows="8" spellcheck="false" autocapitalize="off"
                     autocorrect="off" autocomplete="off"
-                    placeholder="graph TD&#10;  A[Start] --> B{Choice}&#10;  B -->|yes| C[Do it]&#10;  B -->|no| D[Stop]"></textarea>
+                    data-i18n-placeholder="mermaidPlaceholder" placeholder="graph TD&#10;  A[Start] --> B{Choice}&#10;  B -->|yes| C[Do it]&#10;  B -->|no| D[Stop]"></textarea>
         </div>
         <div id="mermaidError" class="msg error hidden"></div>
         <div class="panel">
-          <div class="panel-title">Preview</div>
+          <div class="panel-title" data-i18n="preview">Preview</div>
           <div class="preview-frame" id="mermaidPreview"></div>
         </div>
       </section>
@@ -256,21 +256,21 @@
       <!-- ASCII ------------------------------------------------------ -->
       <section class="tab" data-tab="ascii">
         <div class="panel">
-          <div class="panel-title">Characters</div>
+          <div class="panel-title" data-i18n="characters">Characters</div>
           <div id="glyphBar"></div>
           <div class="panel-title" style="display:flex;justify-content:space-between;align-items:center">
-            <span>Art</span><span class="caret-readout" id="caretReadout">row 1, col 1</span>
+            <span data-i18n="art">Art</span><span class="caret-readout" id="caretReadout">row 1, col 1</span>
           </div>
           <!-- wrap=off is non-negotiable: soft wrapping destroys the grid. -->
           <textarea id="asciiEditor" rows="10" wrap="off" spellcheck="false"
                     autocapitalize="off" autocorrect="off" autocomplete="off"
-                    placeholder="+--------+      +--------+&#10;| Client |----->| Server |&#10;+--------+      +--------+"></textarea>
+                    data-i18n-placeholder="asciiPlaceholder" placeholder="+--------+      +--------+&#10;| Client |----->| Server |&#10;+--------+      +--------+"></textarea>
           <div class="panel-actions" style="padding:8px 0 0">
-            <button class="secondary" id="asciiNormalise">Pad to rectangle</button>
+            <button class="secondary" id="asciiNormalise" data-i18n="padRectangle">Pad to rectangle</button>
           </div>
         </div>
         <div class="panel">
-          <div class="panel-title">Preview</div>
+          <div class="panel-title" data-i18n="preview">Preview</div>
           <div class="preview-frame" id="asciiPreview"></div>
         </div>
       </section>
@@ -278,20 +278,20 @@
       <!-- AI --------------------------------------------------------- -->
       <section class="tab" data-tab="ai">
         <div class="panel">
-          <div class="panel-title">Describe the diagram</div>
-          <textarea id="aiPrompt" rows="3" placeholder="a system architecture diagram with a mobile app, an API gateway and two services"></textarea>
+          <div class="panel-title" data-i18n="describe">Describe the diagram</div>
+          <textarea id="aiPrompt" rows="3" data-i18n-placeholder="aiPlaceholder" placeholder="a system architecture diagram with a mobile app, an API gateway and two services"></textarea>
           <div class="panel-actions" style="padding:8px 0 0">
-            <button id="aiGenerate">Generate</button>
-            <button class="secondary" id="aiReset">Start over</button>
+            <button id="aiGenerate" data-i18n="generate">Generate</button>
+            <button class="secondary" id="aiReset" data-i18n="startOver">Start over</button>
           </div>
         </div>
         <div id="aiNotice" class="msg warn hidden"></div>
         <div class="panel hidden" id="aiHistoryPanel">
-          <div class="panel-title">Refinements</div>
+          <div class="panel-title" data-i18n="refinements">Refinements</div>
           <div id="aiHistory"></div>
         </div>
         <div class="panel">
-          <div class="panel-title">Preview</div>
+          <div class="panel-title" data-i18n="preview">Preview</div>
           <div class="preview-frame" id="aiPreview"></div>
         </div>
       </section>
@@ -299,20 +299,21 @@
 
     <footer>
       <div class="opt-row">
-        <div class="seg" id="formatSeg" role="group" aria-label="Image format">
+        <div class="seg" id="formatSeg" role="group" data-i18n-aria="imageFormat" aria-label="Image format">
           <button data-format="svg" class="active">SVG</button>
           <button data-format="png">PNG</button>
           <button data-format="jpg">JPG</button>
         </div>
-        <div class="seg" id="positionSeg" role="group" aria-label="Where the image goes">
-          <button data-position="above" class="active">Above source</button>
-          <button data-position="below">Below source</button>
+        <div class="seg" id="positionSeg" role="group" data-i18n-aria="imagePosition" aria-label="Where the image goes">
+          <button data-position="above" class="active" data-i18n="above">Above source</button>
+          <button data-position="below" data-i18n="below">Below source</button>
         </div>
       </div>
-      <button id="saveButton" disabled>Save to note</button>
+      <button id="saveButton" disabled data-i18n="addToNote">Add to note</button>
     </footer>
   </div>
 
+  <script src="src/i18n.js"></script>
   <script src="src/blocks.js"></script>
   <script src="src/writeback.js"></script>
   <script src="src/raster.js"></script>
@@ -336,6 +337,8 @@
                   '|', '-', '+', '<', '>', 'v', '^'];
 
     var $ = function (id) { return document.getElementById(id); };
+    var I18n = window.DiagramI18n;
+    var tr = function (key, vars) { return I18n.t(key, vars); };
 
     var state = {
       note: null,
@@ -442,10 +445,11 @@
     /** Says which of the two things Save will do, so neither is a surprise. */
     function saveLabel() {
       if (state.current) {
-        var what = state.current.kind === 'other' ? 'block' : state.current.kind + ' diagram';
-        return 'Replace this ' + what;
+        var what = state.current.kind === 'other'
+          ? tr('block') : tr('diagram', { kind: state.current.kind });
+        return tr('replace', { what: what });
       }
-      return 'Add to note';
+      return tr('addToNote');
     }
 
     function canSave() {
@@ -476,8 +480,7 @@
         var empty = document.createElement('div');
         empty.style.cssText = 'padding:12px;color:var(--muted);font-size:0.85rem';
         empty.textContent = state.writer.isBlockScope
-          ? 'This block has no diagram yet — pick a tab and start one.'
-          : 'No diagrams found in this note yet.';
+          ? tr('noBlockDiagram') : tr('noDiagrams');
         rows.appendChild(empty);
         return;
       }
@@ -494,10 +497,10 @@
         meta.className = 'block-meta';
         var kind = document.createElement('div');
         kind.className = 'block-kind';
-        kind.textContent = unit.kind === 'other' ? 'text block' : unit.kind;
+        kind.textContent = unit.kind === 'other' ? tr('textBlock') : unit.kind;
         var prev = document.createElement('div');
         prev.className = 'block-preview';
-        prev.textContent = (unit.body || '(image only)').split('\n')[0].slice(0, 60) || '(empty)';
+        prev.textContent = (unit.body || tr('imageOnly')).split('\n')[0].slice(0, 60) || tr('empty');
         meta.appendChild(kind);
         meta.appendChild(prev);
 
@@ -569,7 +572,7 @@
       rows.innerHTML = '';
       var head = document.createElement('div');
       head.style.cssText = 'padding:12px;color:var(--heading);font-size:0.85rem';
-      head.textContent = 'Where should the new diagram go?';
+      head.textContent = tr('insertQuestion');
       rows.appendChild(head);
 
       function option(label, at) {
@@ -583,18 +586,18 @@
           state.insertAt = at;
           toggleBlockPanel(false);
           resetActiveTab();
-          showMessage('New diagram will be added ' + label.toLowerCase() + '.', 'ok');
+          showMessage(tr('insertChosen', { where: label.toLowerCase() }), 'ok');
           renderBlockList();
         });
         rows.appendChild(row);
       }
 
       state.units.forEach(function (unit, i) {
-        var name = (unit.kind === 'other' ? 'text block' : unit.kind) + ' #' + (i + 1);
-        option('Before the ' + name, { unit: unit, where: 'before' });
-        option('After the ' + name, { unit: unit, where: 'after' });
+        var name = (unit.kind === 'other' ? tr('textBlock') : unit.kind) + ' #' + (i + 1);
+        option(tr('before', { name: name }), { unit: unit, where: 'before' });
+        option(tr('after', { name: name }), { unit: unit, where: 'after' });
       });
-      option('At the end of the note', null);
+      option(tr('end'), null);
       toggleBlockPanel(true);
     }
 
@@ -629,12 +632,7 @@
         state.current = null;
         state.insertAt = null;
         renderBlockList();
-        showMessage(
-          'Starting a new ' + name + ' diagram. The ' + '‘' +
-          'Save' + '’' + ' button adds it to the note and leaves the ' +
-          'block you were viewing alone.',
-          'ok'
-        );
+        showMessage(tr('newKind', { kind: name }), 'ok');
       }
 
       state.tab = name;
@@ -733,16 +731,16 @@
       var btn = document.createElement('button');
       btn.className = 'secondary';
       btn.style.marginTop = '8px';
-      btn.textContent = 'Fix with AI';
+      btn.textContent = tr('fixAi');
       btn.addEventListener('click', function () {
         btn.disabled = true;
-        btn.textContent = 'Asking…';
+        btn.textContent = tr('asking');
         Synapse.chatAI(
           'This Mermaid diagram does not parse. Return ONLY the corrected Mermaid ' +
           'source with no code fence, no explanation.\n\nError: ' + error + '\n\nSource:\n' + code
         ).then(function (res) {
           btn.disabled = false;
-          btn.textContent = 'Fix with AI';
+          btn.textContent = tr('fixAi');
           if (!res || !res.success) throw new Error((res && res.error) || 'unknown error');
           var fixed = String(res.response || '').replace(/^```[a-z]*\s*|\s*```$/g, '').trim();
           if (!fixed) throw new Error('the model returned nothing');
@@ -750,8 +748,8 @@
           scheduleMermaid();
         }).catch(function (e) {
           btn.disabled = false;
-          btn.textContent = 'Fix with AI';
-          showMessage('Could not get a fix: ' + (e && e.message ? e.message : e));
+          btn.textContent = tr('fixAi');
+          showMessage(tr('couldNotFix', { error: e && e.message ? e.message : e }));
         });
       });
       box.appendChild(btn);
@@ -790,7 +788,7 @@
       var el = $('asciiEditor');
       var upto = el.value.slice(0, el.selectionStart);
       var lines = upto.split('\n');
-      $('caretReadout').textContent = 'row ' + lines.length + ', col ' + (lines[lines.length - 1].length + 1);
+      $('caretReadout').textContent = tr('rowCol', { row: lines.length, col: lines[lines.length - 1].length + 1 });
     }
 
     var asciiTimer = null;
@@ -819,38 +817,36 @@
     function ensureDrawSurface() {
       if (state.drawSurface) return;
       if (!DiagramDraw.available()) {
-        showMessage('The drawing library did not load, so the Draw tab is unavailable.');
+        showMessage(tr('drawUnavailable'));
         return;
       }
       try {
         state.drawSurface = DiagramDraw.createSurface($('drawSurface'), {
           background: DIAGRAM_BG,
+          localization: I18n.editorLocalization(),
+          clearLabel: tr('clear'),
           onChange: refreshSave,
         });
       } catch (e) {
-        showMessage('The drawing surface could not start: ' + (e && e.message ? e.message : e));
+        showMessage(tr('drawStartError', { error: e && e.message ? e.message : e }));
       }
     }
 
     function loadDrawing(unit) {
       ensureDrawSurface();
       if (!state.drawSurface || !unit.renderRef) return;
-      setBusy(true, 'Loading…');
+      setBusy(true, tr('loading'));
       state.writer.readRender(unit.renderRef).then(function (found) {
         setBusy(false);
         if (!found || !found.text) {
           // Never silently open a blank canvas over an existing drawing.
-          showMessage(
-            'This drawing\'s image could not be read back, so it cannot be edited here. ' +
-            'The image in your note is untouched.',
-            'warn'
-          );
+          showMessage(tr('drawingUnreadable'), 'warn');
           return;
         }
         return state.drawSurface.loadSvg(found.text).then(refreshSave);
       }).catch(function (e) {
         setBusy(false);
-        showMessage('Could not load the drawing: ' + (e && e.message ? e.message : e), 'warn');
+        showMessage(tr('drawingLoadError', { error: e && e.message ? e.message : e }), 'warn');
       });
     }
 
@@ -878,7 +874,7 @@
         div.className = 'turn';
         var who = document.createElement('div');
         who.className = 'who';
-        who.textContent = i === 0 ? 'brief' : 'revision ' + i;
+        who.textContent = i === 0 ? tr('brief') : tr('revision', { number: i });
         var what = document.createElement('div');
         what.textContent = turn.instruction;
         div.appendChild(who);
@@ -889,27 +885,23 @@
 
     function generateAi() {
       var instruction = $('aiPrompt').value.trim();
-      if (!instruction) { showMessage('Describe the diagram you want first.'); return; }
+      if (!instruction) { showMessage(tr('describeFirst')); return; }
       clearMessage();
-      setBusy(true, 'Generating…');
+      setBusy(true, tr('generating'));
 
       state.ai.generate(aiKey(), instruction, { prompt: instruction }).then(function (res) {
         setBusy(false);
         state.aiImageUri = res.imageUri;
         var img = document.createElement('img');
         img.src = res.dataUri || res.imageUri;
-        img.alt = 'Generated diagram';
+        img.alt = tr('generatedAlt');
         $('aiPreview').innerHTML = '';
         $('aiPreview').appendChild(img);
 
         if (res.turn > 1) {
           // Be honest about what refinement actually did.
           var notice = $('aiNotice');
-          notice.textContent = res.usedPriorImage
-            ? 'Refined from the previous image. If the result looks unrelated rather than edited, ' +
-              'this backend may not support image-to-image editing — the instructions are still ' +
-              'being accumulated, so keep describing the whole diagram you want.'
-            : 'Generated from the accumulated description.';
+          notice.textContent = res.usedPriorImage ? tr('refined') : tr('accumulated');
           notice.classList.remove('hidden');
         }
         $('aiPrompt').value = '';
@@ -983,12 +975,13 @@
     function save() {
       if (state.busy) return;
       clearMessage();
-      setBusy(true, 'Saving…');
+      setBusy(true, tr('saving'));
 
       buildImage().then(function (image) {
         if (image.fellBack) {
-          showMessage('Could not convert to ' + state.format.toUpperCase() +
-            ' (' + image.reason + '), so the diagram was inserted as SVG.', 'warn');
+          showMessage(tr('rasterFallback', {
+            format: state.format.toUpperCase(), reason: image.reason
+          }), 'warn');
         }
         var src = currentSource();
         return state.writer.saveUnit({
@@ -1018,7 +1011,7 @@
         state.current = match;
         renderBlockList();
         refreshSave();
-        showMessage('Saved to the note.', 'ok');
+        showMessage(tr('saved'), 'ok');
       }).catch(function (e) {
         setBusy(false);
         showMessage(e && e.message ? e.message : String(e));
@@ -1031,8 +1024,8 @@
     function start() {
       var notes = (window.Synapse && window.Synapse.Notes) || [];
       if (!notes.length) {
-        $('scopeBadge').textContent = 'no note';
-        showMessage('Open Diagram Studio on a note, or on a selected block within one.');
+        $('scopeBadge').textContent = tr('noNote');
+        showMessage(tr('openOnNote'));
         document.querySelector('footer').classList.add('hidden');
         return;
       }
@@ -1045,7 +1038,7 @@
       });
       state.ai = DiagramAi.createSession({ synapse: window.Synapse });
 
-      $('scopeBadge').textContent = state.writer.isBlockScope ? 'selected block' : 'whole note';
+      $('scopeBadge').textContent = state.writer.isBlockScope ? tr('selectedBlock') : tr('wholeNote');
 
       buildGlyphBar();
       wireEvents();
@@ -1114,9 +1107,54 @@
       });
     }
 
+    function applyLanguage(tag) {
+      I18n.setLanguage(tag);
+      Array.prototype.forEach.call(document.querySelectorAll('[data-i18n]'), function (el) {
+        el.textContent = tr(el.getAttribute('data-i18n'));
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-i18n-placeholder]'), function (el) {
+        el.setAttribute('placeholder', tr(el.getAttribute('data-i18n-placeholder')));
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-i18n-aria]'), function (el) {
+        el.setAttribute('aria-label', tr(el.getAttribute('data-i18n-aria')));
+      });
+      if (state.writer) {
+        $('scopeBadge').textContent = state.writer.isBlockScope ? tr('selectedBlock') : tr('wholeNote');
+        renderBlockList();
+        renderAiThread();
+      }
+      updateCaretReadout();
+      refreshSave();
+
+      // js-draw reads its localization table only when mounted. Serialize and
+      // restore the drawing so a live language switch keeps every unsaved
+      // stroke and the dirty bit.
+      if (state.drawSurface) {
+        var svg = state.drawSurface.toSvg();
+        var dirty = state.drawSurface.dirty;
+        state.drawSurface.destroy();
+        state.drawSurface = null;
+        ensureDrawSurface();
+        if (state.drawSurface && svg) {
+          state.drawSurface.loadSvg(svg).then(function () {
+            state.drawSurface.dirty = dirty;
+            refreshSave();
+          });
+        }
+      }
+    }
+
+    window.addEventListener('synapse:localechanged', function (event) {
+      applyLanguage(event.detail);
+    });
+
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', start);
+      document.addEventListener('DOMContentLoaded', function () {
+        applyLanguage((window.Synapse && window.Synapse.locale) || navigator.language || 'en-US');
+        start();
+      });
     } else {
+      applyLanguage((window.Synapse && window.Synapse.locale) || navigator.language || 'en-US');
       start();
     }
   })();

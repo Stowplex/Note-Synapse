@@ -37,9 +37,10 @@ function eq(name, a, b) { ok(name, a === b, a === b ? '' : 'expected ' + JSON.st
 
 // The same inlining, written independently of the shell that does it: this
 // has to be able to disagree with build.sh, or it is asserting nothing.
-var MODULES = ['board', 'model', 'host', 'notes', 'render', 'gestures', 'ai', 'export', 'app'];
+var MODULES = ['i18n', 'board', 'model', 'host', 'notes', 'render', 'gestures', 'ai', 'export', 'app'];
 // The one line each module has and no other file does.
 var MARKER = {
+  i18n: 'BB.i18n =',
   board: '(BB.board = {})',
   model: '(BB.model = {})',
   host: '(BB.host = {})',
@@ -84,6 +85,20 @@ function readYaml(text) {
     var line = lines[i];
     if (i === lines.length - 1 && line === '') continue;
     if (!line.length) throw new Error('line ' + (i + 1) + ' is blank');
+    if (line === 'i18n:') {
+      if (Object.prototype.hasOwnProperty.call(map, 'i18n')) throw new Error('duplicate key i18n');
+      var locale = /^  ([A-Za-z]{2}(?:-[A-Za-z]{2})?):$/.exec(lines[++i] || '');
+      var localName = /^    name: "(.*)"$/.exec(lines[++i] || '');
+      var localDescription = /^    description: "(.*)"$/.exec(lines[++i] || '');
+      if (!locale || !localName || !localDescription) throw new Error('i18n is not the expected locale mapping');
+      map.i18n = {};
+      map.i18n[locale[1]] = {
+        name: JSON.parse('"' + localName[1] + '"'),
+        description: JSON.parse('"' + localDescription[1] + '"')
+      };
+      order.push('i18n');
+      continue;
+    }
     if (/^\s/.test(line)) throw new Error('line ' + (i + 1) + ' is indented, so it is not a top-level key');
     var m = /^([A-Za-z_][A-Za-z0-9_]*):[ ](.*)$/.exec(line);
     if (!m) throw new Error('line ' + (i + 1) + ' is not `key: value`: ' + JSON.stringify(line.slice(0, 40)));
@@ -132,13 +147,15 @@ APPS.forEach(function (app) {
   catch (e) { ok(app.file + ' parses as YAML', false, String(e && e.message)); return; }
   ok(app.file + ' parses as YAML', true);
   eq(app.file + ' has exactly the keys the host reads',
-    y.keys.join(','), 'name,uuid,app_type,description,author,license,code');
+    y.keys.join(','), 'name,uuid,app_type,description,i18n,author,license,code');
 
   eq(app.file + ' is named for what it is', y.map.name, app.name);
   eq(app.file + ' declares its launch type', y.map.app_type, app.type);
   eq(app.file + ' keeps its uuid', y.map.uuid, app.uuid);
   eq(app.file + ' is attributed', y.map.author, 'Bruce Li');
   eq(app.file + ' is licensed', y.map.license, 'Apache-2.0');
+  ok(app.file + ' carries a Simplified Chinese name',
+    !!(y.map.i18n && y.map.i18n['zh-CN'] && y.map.i18n['zh-CN'].name));
   ok(app.file + ' says what the app does', /board/i.test(y.map.description) && y.map.description.length > 120,
     y.map.description);
   ok(app.file + ' describes it in prose, not as its own name', y.map.description !== y.map.name);

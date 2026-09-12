@@ -56,6 +56,7 @@ import '../widgets/tag_selection_dialog.dart';
 import '../providers/app_provider.dart';
 import '../services/user_app_service.dart';
 import '../models/user_app.dart';
+import '../utils/user_app_localization.dart';
 import '../mixins/note_action_mixin.dart';
 import '../widgets/chat_message_action_row.dart';
 import '../widgets/message_branch_strip.dart';
@@ -976,7 +977,7 @@ class _ConversationChatScreenState extends State<ConversationChatScreen>
   String _resolveServiceLabel(String serviceName) {
     final aiBundle = _aiToolBundles[serviceName];
     if (aiBundle != null) {
-      return aiBundle.displayName;
+      return aiBundle.app.displayName(context);
     }
     return serviceName;
   }
@@ -2579,7 +2580,7 @@ $historyBuffer
                             serviceName,
                           );
                           return FilterChip(
-                            label: Text(bundle.displayName),
+                            label: Text(bundle.app.displayName(context)),
                             selected: selected,
                             onSelected: (value) {
                               _toggleAiToolService(serviceName, value);

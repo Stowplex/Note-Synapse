@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../models/user_app.dart';
+import '../utils/user_app_localization.dart';
 import '../models/note.dart';
 import 'user_app_view_screen.dart';
 import 'user_app_creation_screen.dart';
@@ -9,16 +10,15 @@ import 'user_app_creation_screen.dart';
 class NoteActionAppSelectionScreen extends StatefulWidget {
   final List<Note> selectedNotes;
 
-  const NoteActionAppSelectionScreen({
-    super.key,
-    required this.selectedNotes,
-  });
+  const NoteActionAppSelectionScreen({super.key, required this.selectedNotes});
 
   @override
-  State<NoteActionAppSelectionScreen> createState() => _NoteActionAppSelectionScreenState();
+  State<NoteActionAppSelectionScreen> createState() =>
+      _NoteActionAppSelectionScreenState();
 }
 
-class _NoteActionAppSelectionScreenState extends State<NoteActionAppSelectionScreen> {
+class _NoteActionAppSelectionScreenState
+    extends State<NoteActionAppSelectionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -29,9 +29,9 @@ class _NoteActionAppSelectionScreenState extends State<NoteActionAppSelectionScr
             const Text('Select Note Action App'),
             Text(
               '${widget.selectedNotes.length} notes selected',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.white70,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.white70),
             ),
           ],
         ),
@@ -52,11 +52,7 @@ class _NoteActionAppSelectionScreenState extends State<NoteActionAppSelectionScr
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.apps,
-                    size: 64,
-                    color: Colors.grey[400],
-                  ),
+                  Icon(Icons.apps, size: 64, color: Colors.grey[400]),
                   const SizedBox(height: 16),
                   Text(
                     'No Note Action Apps Available',
@@ -65,9 +61,9 @@ class _NoteActionAppSelectionScreenState extends State<NoteActionAppSelectionScr
                   const SizedBox(height: 8),
                   Text(
                     'Create a Note Action App first to use this feature.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[600],
-                    ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
@@ -99,19 +95,16 @@ class _NoteActionAppSelectionScreenState extends State<NoteActionAppSelectionScr
                 child: ListTile(
                   leading: CircleAvatar(
                     backgroundColor: Theme.of(context).colorScheme.primary,
-                    child: const Icon(
-                      Icons.apps,
-                      color: Colors.white,
-                    ),
+                    child: const Icon(Icons.apps, color: Colors.white),
                   ),
                   title: Text(
-                    app.name,
+                    app.displayName(context),
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(app.description),
+                      Text(app.displayDescription(context)),
                       const SizedBox(height: 4),
                       Text(
                         'Created: ${_formatDate(app.createdAt)}',
@@ -135,10 +128,8 @@ class _NoteActionAppSelectionScreenState extends State<NoteActionAppSelectionScr
   void _runNoteActionApp(UserApp app) {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (context) => UserAppViewScreen(
-          app: app,
-          selectedNotes: widget.selectedNotes,
-        ),
+        builder: (context) =>
+            UserAppViewScreen(app: app, selectedNotes: widget.selectedNotes),
       ),
     );
   }

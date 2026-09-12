@@ -5,6 +5,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/app_provider.dart';
 import '../services/built_in_tools_service.dart';
 import '../services/chat_tool_session.dart';
+import '../utils/user_app_localization.dart';
 import 'active_tool_count_badge.dart';
 import 'tool_orchestration_warning_dialog.dart';
 
@@ -321,7 +322,7 @@ class _AiToolSection extends StatelessWidget {
           children: session.aiToolBundles.entries.map((entry) {
             final selected = session.selectedAiToolServices.contains(entry.key);
             return FilterChip(
-              label: Text(entry.value.displayName),
+              label: Text(entry.value.app.displayName(context)),
               selected: selected,
               onSelected: (value) =>
                   session.toggleAiToolService(entry.key, value),

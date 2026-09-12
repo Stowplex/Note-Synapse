@@ -70,9 +70,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               leading: const Icon(Icons.movie_creation_outlined),
               title: Text(l10n.worldClipProjects),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => const WorldClipProjectsScreen(),
-              )),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const WorldClipProjectsScreen(),
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -240,7 +242,7 @@ class LanguageSettingsScreen extends StatelessWidget {
                   children: [
                     RadioListTile<Locale>(
                       title: Text(l10n.english),
-                      value: const Locale('en', ''),
+                      value: const Locale('en', 'US'),
                       groupValue: appProvider.locale,
                       onChanged: (Locale? value) {
                         if (value != null) {
@@ -256,7 +258,7 @@ class LanguageSettingsScreen extends StatelessWidget {
                     ),
                     RadioListTile<Locale>(
                       title: Text(l10n.chineseSimplified),
-                      value: const Locale('zh', ''),
+                      value: const Locale('zh', 'CN'),
                       groupValue: appProvider.locale,
                       onChanged: (Locale? value) {
                         if (value != null) {
@@ -1567,7 +1569,7 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
           children: [
             RadioListTile<Locale>(
               title: Text(l10n.english),
-              value: const Locale('en', ''),
+              value: const Locale('en', 'US'),
               groupValue: appProvider.locale,
               onChanged: (Locale? value) {
                 if (value != null) {
@@ -1584,7 +1586,7 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
             ),
             RadioListTile<Locale>(
               title: Text(l10n.chineseSimplified),
-              value: const Locale('zh', ''),
+              value: const Locale('zh', 'CN'),
               groupValue: appProvider.locale,
               onChanged: (Locale? value) {
                 if (value != null) {

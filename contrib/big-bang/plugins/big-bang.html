@@ -638,20 +638,20 @@
 <body>
 <div id="app">
   <header id="topbar">
-    <button class="icon-btn" id="btnHome" title="Boards" hidden>
+    <button class="icon-btn" id="btnHome" title="Boards" data-i18n-title="Boards" hidden>
       <svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7"/><path d="M6 10v9a1 1 0 001 1h10a1 1 0 001-1v-9"/></svg>
     </button>
     <div id="title">Big Bang</div>
-    <button class="icon-btn" id="btnSearch" title="Search this board">
+    <button class="icon-btn" id="btnSearch" title="Search this board" data-i18n-title="Search this board">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.4-4.4"/></svg>
     </button>
-    <button class="icon-btn" id="btnUndo" title="Undo" disabled>
+    <button class="icon-btn" id="btnUndo" title="Undo" data-i18n-title="Undo" disabled>
       <svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></svg>
     </button>
-    <button class="icon-btn" id="btnRedo" title="Redo" disabled>
+    <button class="icon-btn" id="btnRedo" title="Redo" data-i18n-title="Redo" disabled>
       <svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 000 10h3"/></svg>
     </button>
-    <button class="icon-btn" id="btnFit" title="Fit the board">
+    <button class="icon-btn" id="btnFit" title="Fit the board" data-i18n-title="Fit the board">
       <svg viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4"/></svg>
     </button>
     <div id="badge">…</div>
@@ -659,9 +659,9 @@
 
   <div id="searchbar" hidden>
     <input id="q" type="search" autocomplete="off" autocorrect="off" spellcheck="false"
-           enterkeyhint="search" placeholder="Search this board">
+           enterkeyhint="search" placeholder="Search this board" data-i18n-placeholder="Search this board">
     <span id="qcount"></span>
-    <button class="bb small" id="qdone">Done</button>
+    <button class="bb small" id="qdone" data-i18n="Done">Done</button>
   </div>
 
   <div id="banner" hidden></div>
@@ -684,6 +684,7 @@
   <footer id="bottombar"></footer>
 </div>
 
+<script src="src/i18n.js"></script>
 <script src="src/board.js"></script>
 <script src="src/model.js"></script>
 <script src="src/host.js"></script>

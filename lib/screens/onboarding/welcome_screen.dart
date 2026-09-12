@@ -65,7 +65,7 @@ class WelcomeScreen extends StatelessWidget {
                                 onSelected: (selected) {
                                   if (selected) {
                                     appProvider.changeLanguage(
-                                      const Locale('en', ''),
+                                      const Locale('en', 'US'),
                                     );
                                   }
                                 },
@@ -78,7 +78,7 @@ class WelcomeScreen extends StatelessWidget {
                                 onSelected: (selected) {
                                   if (selected) {
                                     appProvider.changeLanguage(
-                                      const Locale('zh', ''),
+                                      const Locale('zh', 'CN'),
                                     );
                                   }
                                 },

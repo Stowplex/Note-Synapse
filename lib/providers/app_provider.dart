@@ -76,7 +76,7 @@ class AppProvider extends ChangeNotifier {
   int _dataVersion = 0;
   String? _error;
   bool _isDarkMode = false;
-  Locale _locale = const Locale('en', '');
+  Locale _locale = const Locale('en', 'US');
   ModelConfig? _modelConfig;
   bool newNoteFromShare = false;
   List<String> _multiFunctionApps = [];
@@ -125,10 +125,7 @@ class AppProvider extends ChangeNotifier {
     _lockTail = release.future;
     return prev.then((_) async {
       try {
-        return await runZoned(
-          action,
-          zoneValues: {_cacheLockZoneKey: true},
-        );
+        return await runZoned(action, zoneValues: {_cacheLockZoneKey: true});
       } finally {
         release.complete();
       }
@@ -277,14 +274,15 @@ class AppProvider extends ChangeNotifier {
       _reloadRequested = true;
       return _loadDataInFlight!;
     }
-    _loadDataInFlight = () async {
-      do {
-        _reloadRequested = false;
-        await _doLoadData();
-      } while (_reloadRequested);
-    }().whenComplete(() {
-      _loadDataInFlight = null;
-    });
+    _loadDataInFlight =
+        () async {
+          do {
+            _reloadRequested = false;
+            await _doLoadData();
+          } while (_reloadRequested);
+        }().whenComplete(() {
+          _loadDataInFlight = null;
+        });
     return _loadDataInFlight!;
   }
 
@@ -408,54 +406,54 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> updateNoteContent(String noteId, String newContent) =>
       _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      final updatedNote = note.copyWith(
-        content: newContent,
-        updatedAt: DateTime.now(),
-      );
+          final note = _notes[noteIndex];
+          final updatedNote = note.copyWith(
+            content: newContent,
+            updatedAt: DateTime.now(),
+          );
 
-      // Update the note in the database
-      await _databaseService.updateNote(updatedNote);
+          // Update the note in the database
+          await _databaseService.updateNote(updatedNote);
 
-      // Update the local state immediately
-      _notes[noteIndex] = updatedNote;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+          // Update the local state immediately
+          _notes[noteIndex] = updatedNote;
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
+        }
+      });
 
   Future<void> updateTaskStatus(String noteId, TaskStatus status) =>
       _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      if (!note.isTask) return;
+          final note = _notes[noteIndex];
+          if (!note.isTask) return;
 
-      final updatedNote = note.copyWith(
-        status: status,
-        updatedAt: DateTime.now(),
-      );
+          final updatedNote = note.copyWith(
+            status: status,
+            updatedAt: DateTime.now(),
+          );
 
-      // Update the note in the database
-      await _databaseService.updateNote(updatedNote);
+          // Update the note in the database
+          await _databaseService.updateNote(updatedNote);
 
-      // Update the local state immediately
-      _notes[noteIndex] = updatedNote;
-      _dataVersion++;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+          // Update the local state immediately
+          _notes[noteIndex] = updatedNote;
+          _dataVersion++;
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
+        }
+      });
 
   Future<void> toggleNotePin(String noteId) => _withCacheLock(() async {
     try {
@@ -653,28 +651,28 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> addTagToNote(String noteId, String tagName) =>
       _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      if (note.tags.contains(tagName)) return; // Tag already exists
+          final note = _notes[noteIndex];
+          if (note.tags.contains(tagName)) return; // Tag already exists
 
-      final updatedTags = List<String>.from(note.tags)..add(tagName);
-      final updatedNote = note.copyWith(
-        tags: updatedTags,
-        updatedAt: DateTime.now(),
-      );
+          final updatedTags = List<String>.from(note.tags)..add(tagName);
+          final updatedNote = note.copyWith(
+            tags: updatedTags,
+            updatedAt: DateTime.now(),
+          );
 
-      await _databaseService.updateNote(updatedNote);
-      _notes[noteIndex] = updatedNote;
-      _tags = await _databaseService.getAllTags();
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+          await _databaseService.updateNote(updatedNote);
+          _notes[noteIndex] = updatedNote;
+          _tags = await _databaseService.getAllTags();
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
+        }
+      });
 
   /// Every tag name in use, sorted.
   ///
@@ -1012,7 +1010,10 @@ class AppProvider extends ChangeNotifier {
   ///
   /// Lock-free on purpose: called from inside the locked tag mutators, and
   /// [_withCacheLock] is non-reentrant. Returns whether anything changed.
-  Future<bool> _rewriteFiltersForTag(String tagName, String? replacement) async {
+  Future<bool> _rewriteFiltersForTag(
+    String tagName,
+    String? replacement,
+  ) async {
     final spacesBefore = {for (final f in spaces) f.id: f.name};
     var changed = false;
 
@@ -1113,7 +1114,9 @@ class AppProvider extends ChangeNotifier {
       _tags = await _databaseService.getAllTags();
 
       // Filters carry the tag too, and a Space's include-tags ARE its scope.
-      await _syncFiltersAfterTagRewrite(await _rewriteFiltersForTag(tagName, null));
+      await _syncFiltersAfterTagRewrite(
+        await _rewriteFiltersForTag(tagName, null),
+      );
 
       notifyListeners();
       _error = null;
@@ -1124,8 +1127,10 @@ class AppProvider extends ChangeNotifier {
     }
   });
 
-  Future<void> replaceTag(String oldTagName, String newTagName) =>
-      _withCacheLock(() async {
+  Future<void> replaceTag(
+    String oldTagName,
+    String newTagName,
+  ) => _withCacheLock(() async {
     _spacesInvalidatedByTags = const [];
     try {
       // Migrate image from old tag to new tag if new tag has no image
@@ -1289,7 +1294,7 @@ class AppProvider extends ChangeNotifier {
   }
 
   void changeLanguage(Locale locale) {
-    _locale = locale;
+    _locale = _canonicalSupportedLocale(locale);
     _saveLanguagePreference();
     notifyListeners();
   }
@@ -1309,11 +1314,21 @@ class AppProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final languageCode = prefs.getString('language_code') ?? 'en';
       final countryCode = prefs.getString('country_code') ?? '';
-      _locale = Locale(languageCode, countryCode);
+      _locale = _canonicalSupportedLocale(Locale(languageCode, countryCode));
       notifyListeners();
     } catch (e) {
       LoggerService.error('Error loading language preference: $e', error: e);
-      _locale = const Locale('en', ''); // Default to English
+      _locale = const Locale('en', 'US'); // Default to English
+    }
+  }
+
+  static Locale _canonicalSupportedLocale(Locale locale) {
+    switch (locale.languageCode.toLowerCase()) {
+      case 'zh':
+        return const Locale('zh', 'CN');
+      case 'en':
+      default:
+        return const Locale('en', 'US');
     }
   }
 
@@ -1397,130 +1412,129 @@ class AppProvider extends ChangeNotifier {
   // SubNote management methods
   Future<void> addSubNoteToNote(String noteId, SubNote subNote) =>
       _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      final updatedSubNotes = List<SubNote>.from(note.subNotes)..add(subNote);
-      final updatedNote = note.copyWith(
-        subNotes: updatedSubNotes,
-        updatedAt: DateTime.now(),
-      );
+          final note = _notes[noteIndex];
+          final updatedSubNotes = List<SubNote>.from(note.subNotes)
+            ..add(subNote);
+          final updatedNote = note.copyWith(
+            subNotes: updatedSubNotes,
+            updatedAt: DateTime.now(),
+          );
 
-      await _databaseService.updateNote(updatedNote);
-      _notes[noteIndex] = updatedNote;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+          await _databaseService.updateNote(updatedNote);
+          _notes[noteIndex] = updatedNote;
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
+        }
+      });
 
-  Future<void> updateSubNoteInNote(
-    String noteId,
-    SubNote updatedSubNote,
-  ) => _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+  Future<void> updateSubNoteInNote(String noteId, SubNote updatedSubNote) =>
+      _withCacheLock(() async {
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      final updatedSubNotes = note.subNotes
-          .map((sn) => sn.id == updatedSubNote.id ? updatedSubNote : sn)
-          .toList();
+          final note = _notes[noteIndex];
+          final updatedSubNotes = note.subNotes
+              .map((sn) => sn.id == updatedSubNote.id ? updatedSubNote : sn)
+              .toList();
 
-      final updatedNote = note.copyWith(
-        subNotes: updatedSubNotes,
-        updatedAt: DateTime.now(),
-      );
+          final updatedNote = note.copyWith(
+            subNotes: updatedSubNotes,
+            updatedAt: DateTime.now(),
+          );
 
-      await _databaseService.updateNote(updatedNote);
-      _notes[noteIndex] = updatedNote;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+          await _databaseService.updateNote(updatedNote);
+          _notes[noteIndex] = updatedNote;
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
+        }
+      });
 
   Future<void> deleteSubNoteFromNote(String noteId, String subNoteId) =>
       _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      final updatedSubNotes = note.subNotes
-          .where((sn) => sn.id != subNoteId)
-          .toList();
+          final note = _notes[noteIndex];
+          final updatedSubNotes = note.subNotes
+              .where((sn) => sn.id != subNoteId)
+              .toList();
 
-      final updatedNote = note.copyWith(
-        subNotes: updatedSubNotes,
-        updatedAt: DateTime.now(),
-      );
+          final updatedNote = note.copyWith(
+            subNotes: updatedSubNotes,
+            updatedAt: DateTime.now(),
+          );
 
-      await _databaseService.updateNote(updatedNote);
-      _notes[noteIndex] = updatedNote;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+          await _databaseService.updateNote(updatedNote);
+          _notes[noteIndex] = updatedNote;
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
+        }
+      });
 
   Future<void> toggleSubNoteCompletion(String noteId, String subNoteId) =>
       _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      final updatedSubNotes = note.subNotes.map((sn) {
-        if (sn.id == subNoteId) {
-          return sn.copyWith(isCompleted: !sn.isCompleted);
+          final note = _notes[noteIndex];
+          final updatedSubNotes = note.subNotes.map((sn) {
+            if (sn.id == subNoteId) {
+              return sn.copyWith(isCompleted: !sn.isCompleted);
+            }
+            return sn;
+          }).toList();
+
+          final updatedNote = note.copyWith(
+            subNotes: updatedSubNotes,
+            updatedAt: DateTime.now(),
+          );
+
+          await _databaseService.updateNote(updatedNote);
+          _notes[noteIndex] = updatedNote;
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
         }
-        return sn;
-      }).toList();
-
-      final updatedNote = note.copyWith(
-        subNotes: updatedSubNotes,
-        updatedAt: DateTime.now(),
-      );
-
-      await _databaseService.updateNote(updatedNote);
-      _notes[noteIndex] = updatedNote;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+      });
 
   Future<void> removeTagFromNote(String noteId, String tagName) =>
       _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      if (!note.tags.contains(tagName)) return; // Tag doesn't exist
+          final note = _notes[noteIndex];
+          if (!note.tags.contains(tagName)) return; // Tag doesn't exist
 
-      final updatedTags = List<String>.from(note.tags)..remove(tagName);
-      final updatedNote = note.copyWith(
-        tags: updatedTags,
-        updatedAt: DateTime.now(),
-      );
+          final updatedTags = List<String>.from(note.tags)..remove(tagName);
+          final updatedNote = note.copyWith(
+            tags: updatedTags,
+            updatedAt: DateTime.now(),
+          );
 
-      await _databaseService.updateNote(updatedNote);
-      _notes[noteIndex] = updatedNote;
-      _tags = await _databaseService.getAllTags();
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+          await _databaseService.updateNote(updatedNote);
+          _notes[noteIndex] = updatedNote;
+          _tags = await _databaseService.getAllTags();
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
+        }
+      });
 
   /// Adds and removes tags across [noteIds] in one pass.
   ///
@@ -1586,38 +1600,38 @@ class AppProvider extends ChangeNotifier {
   // Upsert subnote - either add new or update existing
   Future<void> upsertSubNoteInNote(String noteId, SubNote subNote) =>
       _withCacheLock(() async {
-    try {
-      final noteIndex = _notes.indexWhere((note) => note.id == noteId);
-      if (noteIndex == -1) return;
+        try {
+          final noteIndex = _notes.indexWhere((note) => note.id == noteId);
+          if (noteIndex == -1) return;
 
-      final note = _notes[noteIndex];
-      final existingSubNoteIndex = note.subNotes.indexWhere(
-        (sn) => sn.id == subNote.id,
-      );
+          final note = _notes[noteIndex];
+          final existingSubNoteIndex = note.subNotes.indexWhere(
+            (sn) => sn.id == subNote.id,
+          );
 
-      List<SubNote> updatedSubNotes;
-      if (existingSubNoteIndex >= 0) {
-        // Update existing subnote
-        updatedSubNotes = List<SubNote>.from(note.subNotes);
-        updatedSubNotes[existingSubNoteIndex] = subNote;
-      } else {
-        // Add new subnote
-        updatedSubNotes = List<SubNote>.from(note.subNotes)..add(subNote);
-      }
+          List<SubNote> updatedSubNotes;
+          if (existingSubNoteIndex >= 0) {
+            // Update existing subnote
+            updatedSubNotes = List<SubNote>.from(note.subNotes);
+            updatedSubNotes[existingSubNoteIndex] = subNote;
+          } else {
+            // Add new subnote
+            updatedSubNotes = List<SubNote>.from(note.subNotes)..add(subNote);
+          }
 
-      final updatedNote = note.copyWith(
-        subNotes: updatedSubNotes,
-        updatedAt: DateTime.now(),
-      );
+          final updatedNote = note.copyWith(
+            subNotes: updatedSubNotes,
+            updatedAt: DateTime.now(),
+          );
 
-      await _databaseService.updateNote(updatedNote);
-      _notes[noteIndex] = updatedNote;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  });
+          await _databaseService.updateNote(updatedNote);
+          _notes[noteIndex] = updatedNote;
+          notifyListeners();
+        } catch (e) {
+          _error = e.toString();
+          notifyListeners();
+        }
+      });
 
   // Reparent subnote from one note to another
   Future<void> reparentSubNote(

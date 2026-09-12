@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
@@ -133,6 +134,7 @@ void main() {
     mockWebViewController = MockInAppWebViewController();
     mockModificationService = MockNoteModificationService();
     fakeTtsService = RecordingTtsService();
+    when(mockAppProvider.locale).thenReturn(const Locale('en', 'US'));
 
     getIt.registerSingleton<AppProvider>(mockAppProvider);
     getIt.registerSingleton<UserAppService>(mockUserAppService);
@@ -260,6 +262,32 @@ void main() {
         final source = bridge.buildBootstrapScript().source;
         expect(source, contains('Params: {}'));
       });
+
+      test(
+        'emits canonical locale and republishes a live locale change',
+        () async {
+          final source = bridge.buildBootstrapScript().source;
+          expect(source, contains('locale: "en-US"'));
+
+          bridge.registerJavaScriptHandlers(mockWebViewController);
+          bridge.pageDidStartLoading();
+          when(mockAppProvider.locale).thenReturn(const Locale('zh', 'CN'));
+          await bridge.pageDidFinishLoading();
+
+          final captured = verify(
+            mockWebViewController.evaluateJavascript(
+              source: captureAnyNamed('source'),
+            ),
+          ).captured.cast<String>();
+          expect(captured, hasLength(1));
+          expect(
+            captured.single,
+            contains('window.Synapse.locale = nextLocale'),
+          );
+          expect(captured.single, contains('"zh-CN"'));
+          expect(captured.single, contains('synapse:localechanged'));
+        },
+      );
     });
 
     group('runQuery', () {
@@ -553,7 +581,9 @@ void main() {
           expect(stored['refreshedAt'], isNotNull);
           // Set-Cookie still never reaches JS.
           expect(
-            (result['headers'] as Map).keys.map((k) => k.toString().toLowerCase()),
+            (result['headers'] as Map).keys.map(
+              (k) => k.toString().toLowerCase(),
+            ),
             isNot(contains('set-cookie')),
           );
         },
@@ -567,8 +597,10 @@ void main() {
           ]);
 
           expect(result['status'], isNot('error'));
-          expect(sessionStorage.data.containsKey('web_session_example.com'),
-              isFalse);
+          expect(
+            sessionStorage.data.containsKey('web_session_example.com'),
+            isFalse,
+          );
         },
       );
 
@@ -1648,7 +1680,10 @@ void main() {
 
       final noContent = await jsHandlers['updateNotes']!([
         [
-          {'id': scope.tempNoteId, 'tags': ['x']},
+          {
+            'id': scope.tempNoteId,
+            'tags': ['x'],
+          },
         ],
       ]);
       expect(noContent['updatedCount'], 0);
@@ -2104,58 +2139,63 @@ void main() {
       verify(mockAppProvider.deleteNote('some-real-note')).called(1);
     });
 
-    test('runQuery re-reads a block like a note (the Table Studio save path)', () async {
-      // Table Studio (and any careful plugin) re-reads the note's current
-      // content with SQL before writing, and ABORTS if it gets no rows, so it
-      // never writes stale content. A transient id has no row, so without this
-      // the whole save fails with "Could not read the current note content".
-      when(
-        mockSqlQueryService.getQueryType(any),
-      ).thenReturn(SqlQueryType.select);
-      when(mockSqlQueryService.isReadOnlyQuery(any)).thenReturn(true);
-      when(
-        mockSqlQueryService.executeQuery(
-          any,
-          requireApprovalForWrites: anyNamed('requireApprovalForWrites'),
-          allowWriteOperations: anyNamed('allowWriteOperations'),
-        ),
-      ).thenAnswer(
-        (_) async => SqlQueryResult(
-          success: true,
-          data: [
-            // This mirrors the actual columns in the SELECT below. The old
-            // mock included an impossible `id`, which hid a bug where the
-            // bridge returned the entire parent note for content-only reads.
-            {'content': storedParent.content},
-          ],
-        ),
-      );
+    test(
+      'runQuery re-reads a block like a note (the Table Studio save path)',
+      () async {
+        // Table Studio (and any careful plugin) re-reads the note's current
+        // content with SQL before writing, and ABORTS if it gets no rows, so it
+        // never writes stale content. A transient id has no row, so without this
+        // the whole save fails with "Could not read the current note content".
+        when(
+          mockSqlQueryService.getQueryType(any),
+        ).thenReturn(SqlQueryType.select);
+        when(mockSqlQueryService.isReadOnlyQuery(any)).thenReturn(true);
+        when(
+          mockSqlQueryService.executeQuery(
+            any,
+            requireApprovalForWrites: anyNamed('requireApprovalForWrites'),
+            allowWriteOperations: anyNamed('allowWriteOperations'),
+          ),
+        ).thenAnswer(
+          (_) async => SqlQueryResult(
+            success: true,
+            data: [
+              // This mirrors the actual columns in the SELECT below. The old
+              // mock included an impossible `id`, which hid a bug where the
+              // bridge returned the entire parent note for content-only reads.
+              {'content': storedParent.content},
+            ],
+          ),
+        );
 
-      final result = await jsHandlers['runQuery']!([
-        "SELECT content FROM notes WHERE id = '${scope.tempNoteId}' LIMIT 1",
-      ]);
+        final result = await jsHandlers['runQuery']!([
+          "SELECT content FROM notes WHERE id = '${scope.tempNoteId}' LIMIT 1",
+        ]);
 
-      expect(result['success'], isTrue);
-      final rows = result['data'] as List;
-      expect(rows, hasLength(1));
-      // It must see the BLOCK's text, not the whole parent note — otherwise it
-      // would write the entire note back into the block's range.
-      expect(rows.first['content'], blockText);
-      expect(rows.first.containsKey('id'), isFalse);
+        expect(result['success'], isTrue);
+        final rows = result['data'] as List;
+        expect(rows, hasLength(1));
+        // It must see the BLOCK's text, not the whole parent note — otherwise it
+        // would write the entire note back into the block's range.
+        expect(rows.first['content'], blockText);
+        expect(rows.first.containsKey('id'), isFalse);
 
-      // The query the DB actually ran was rewritten to the real note id.
-      final ranSql =
-          verify(
-                mockSqlQueryService.executeQuery(
-                  captureAny,
-                  requireApprovalForWrites: anyNamed('requireApprovalForWrites'),
-                  allowWriteOperations: anyNamed('allowWriteOperations'),
-                ),
-              ).captured.last
-              as String;
-      expect(ranSql, contains(parentId));
-      expect(ranSql, isNot(contains(scope.tempNoteId)));
-    });
+        // The query the DB actually ran was rewritten to the real note id.
+        final ranSql =
+            verify(
+                  mockSqlQueryService.executeQuery(
+                    captureAny,
+                    requireApprovalForWrites: anyNamed(
+                      'requireApprovalForWrites',
+                    ),
+                    allowWriteOperations: anyNamed('allowWriteOperations'),
+                  ),
+                ).captured.last
+                as String;
+        expect(ranSql, contains(parentId));
+        expect(ranSql, isNot(contains(scope.tempNoteId)));
+      },
+    );
 
     test(
       'content-only fresh read cannot duplicate a note into an empty block',
@@ -2288,7 +2328,9 @@ void main() {
           verify(
                 mockSqlQueryService.executeQuery(
                   captureAny,
-                  requireApprovalForWrites: anyNamed('requireApprovalForWrites'),
+                  requireApprovalForWrites: anyNamed(
+                    'requireApprovalForWrites',
+                  ),
                   allowWriteOperations: anyNamed('allowWriteOperations'),
                 ),
               ).captured.last

@@ -14,6 +14,7 @@ void main() {
 
   // Order matters: it must match the order the modules appear in the HTML.
   const moduleNames = <String>[
+    'src/i18n.js',
     'src/blocks.js',
     'src/writeback.js',
     'src/raster.js',
@@ -62,6 +63,8 @@ void main() {
       expect(manifest['license'], 'Apache-2.0');
       expect(manifest['author'], isNotEmpty);
       expect(manifest['description'], isNotEmpty);
+      expect(manifest['i18n']['zh-CN']['name'], '图表工作室');
+      expect(manifest['i18n']['zh-CN']['description'], isNotEmpty);
       expect(embeddedHtml, startsWith('<!DOCTYPE html>'));
     });
 
@@ -135,10 +138,9 @@ void main() {
       expect(bundle, isNot(contains('importScripts')));
       expect(bundle, isNot(contains('@font-face')));
       // The only http(s) strings may be the SVG namespace and attribution.
-      final urls = RegExp(r'https?://[a-zA-Z0-9./_-]+')
-          .allMatches(bundle)
-          .map((m) => m.group(0)!)
-          .toSet();
+      final urls = RegExp(
+        r'https?://[a-zA-Z0-9./_-]+',
+      ).allMatches(bundle).map((m) => m.group(0)!).toSet();
       for (final url in urls) {
         expect(
           url.startsWith('http://www.w3.org/') ||
@@ -227,10 +229,7 @@ void main() {
             'copy in the database, so removing the starter asset is the whole '
             'retirement.',
       );
-      expect(
-        Directory('contrib/mermaid-block-renderer').existsSync(),
-        isFalse,
-      );
+      expect(Directory('contrib/mermaid-block-renderer').existsSync(), isFalse);
     });
   });
 }

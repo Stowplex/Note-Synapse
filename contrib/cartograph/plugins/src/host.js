@@ -103,6 +103,7 @@
     } catch (e) { /* not in a browser */ }
     global.__mockNotes = function () { return mock.notes; };
     global.Synapse = S = {
+      locale: mockParams.locale || 'en-US',
       Notes: mockStandalone ? [] : [mockNoteView(mock.notes['mock-note-1'])],
       Params: mockParams,
       exportNotes: function (ids) {
@@ -213,6 +214,12 @@
   }
 
   /* ------------------------------------------------------------------ api */
+
+  // Development harness helper mirroring the host's live locale event.
+  global.setLocale = function (tag) {
+    if (S) S.locale = tag;
+    global.dispatchEvent(new CustomEvent('synapse:localechanged', { detail: tag }));
+  };
 
   HOST.note = function () {
     var n = (S && S.Notes && S.Notes[0]) || null;

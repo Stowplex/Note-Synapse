@@ -4,16 +4,14 @@ import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/user_app.dart';
+import '../utils/user_app_localization.dart';
 import '../providers/app_provider.dart';
 import '../utils/synapse_resource_uri.dart';
 import 'user_app_tile.dart';
 
 /// Result returned by [AppEmbedPickerSheet] when the user taps Insert.
 class AppEmbedInsertion {
-  const AppEmbedInsertion({
-    required this.markdown,
-    this.selectionOffset = 0,
-  });
+  const AppEmbedInsertion({required this.markdown, this.selectionOffset = 0});
 
   /// Markdown text ready to be inserted at the caret.
   final String markdown;
@@ -25,6 +23,7 @@ class AppEmbedInsertion {
 }
 
 enum _SizePreset { small, medium, large, custom }
+
 enum _Step { pickApp, configure }
 
 /// Bottom sheet that lets the user choose a user app, pick a size, and
@@ -55,10 +54,12 @@ class _AppEmbedPickerSheetState extends State<AppEmbedPickerSheet> {
   UserApp? _selectedApp;
 
   _SizePreset _sizePreset = _SizePreset.medium;
-  final TextEditingController _customWidthController =
-      TextEditingController(text: '480');
-  final TextEditingController _customHeightController =
-      TextEditingController(text: '300');
+  final TextEditingController _customWidthController = TextEditingController(
+    text: '480',
+  );
+  final TextEditingController _customHeightController = TextEditingController(
+    text: '300',
+  );
 
   bool _passCurrentNote = true;
   bool _advanced = false;
@@ -149,8 +150,9 @@ class _AppEmbedPickerSheetState extends State<AppEmbedPickerSheet> {
         return false;
       }
       if (q.isEmpty) return true;
-      return a.name.toLowerCase().contains(q) ||
-          a.description.toLowerCase().contains(q);
+      return a.searchableMetadata.any(
+        (value) => value.toLowerCase().contains(q),
+      );
     }).toList();
   }
 
@@ -162,7 +164,7 @@ class _AppEmbedPickerSheetState extends State<AppEmbedPickerSheet> {
     return Column(
       children: [
         _buildSheetHeader(
-          l10n.insertUserAppConfigureTitle(app.name),
+          l10n.insertUserAppConfigureTitle(app.displayName(context)),
           onBack: () => setState(() => _step = _Step.pickApp),
         ),
         Expanded(
@@ -252,8 +254,7 @@ class _AppEmbedPickerSheetState extends State<AppEmbedPickerSheet> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
-                  onPressed: () =>
-                      setState(() => _step = _Step.pickApp),
+                  onPressed: () => setState(() => _step = _Step.pickApp),
                   child: Text(l10n.insertUserAppBackButton),
                 ),
                 const SizedBox(width: 8),
@@ -284,10 +285,7 @@ class _AppEmbedPickerSheetState extends State<AppEmbedPickerSheet> {
       child: Row(
         children: [
           if (onBack != null)
-            IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: onBack,
-            )
+            IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack)
           else
             const SizedBox(width: 8),
           Expanded(
@@ -367,10 +365,7 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 8, 0, 4),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelLarge,
-      ),
+      child: Text(label, style: Theme.of(context).textTheme.labelLarge),
     );
   }
 }

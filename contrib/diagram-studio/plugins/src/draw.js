@@ -69,6 +69,7 @@
       // Wheel events pan rather than scroll the page, which is what a finger
       // drag maps to inside a WebView.
       wheelEventsEnabled: 'only-if-focused',
+      localization: options.localization,
     });
 
     var toolbar = editor.addToolbar();
@@ -81,7 +82,7 @@
     var clearButton = null;
     try {
       clearButton = toolbar.addActionButton(
-        { label: 'Clear', icon: makeClearIcon() },
+        { label: options.clearLabel || 'Clear', icon: makeClearIcon() },
         clear,
         false
       );

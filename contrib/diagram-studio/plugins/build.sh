@@ -53,7 +53,11 @@ CODE="$(base64 < "$TMP_HTML" | tr -d '\n')"
     'app_type: note_action' \
     'description: A diagram studio for your notes - write Mermaid with a live preview, draw freehand, edit ASCII art on a character grid, or generate a diagram with AI and refine it, then store the result as SVG, PNG or JPG beside its editable source.' \
     'author: Note Synapse' \
-    'license: Apache-2.0'
+    'license: Apache-2.0' \
+    'i18n:' \
+    '  zh-CN:' \
+    '    name: 图表工作室' \
+    '    description: 在笔记中编写并实时预览 Mermaid、自由手绘、编辑 ASCII 字符画，或用 AI 生成和细化图表，再将 SVG、PNG 或 JPG 结果与可编辑源码一起保存。'
   printf 'code: %s\n' "$CODE"
 } > "$OUTPUT"
 

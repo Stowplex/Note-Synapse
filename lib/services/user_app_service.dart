@@ -507,6 +507,7 @@ class UserAppService {
         type,
         libraries: libraries,
         noteContext: noteContextPayload?.text,
+        uiLanguageTag: generationContext?.uiLanguageTag,
       );
 
       final attachedFiles = await _prepareAttachments(
@@ -574,6 +575,7 @@ Use these notes (including linked relationships) to ground the edits and incorpo
           'librariesFromService': _buildLibrariesSection(),
           'requirementsSection': _buildRequirementsSection(),
           'typeSpecificInstructions': typeInstructions,
+          'uiLanguageTag': generationContext?.uiLanguageTag,
         },
       );
 
@@ -602,6 +604,7 @@ Use these notes (including linked relationships) to ground the edits and incorpo
     UserAppType type, {
     List<UserAppLibraryInfo>? libraries,
     String? noteContext,
+    String? uiLanguageTag,
   }) {
     final templateService = getIt<PromptTemplateService>();
 
@@ -637,6 +640,7 @@ Use these notes (including linked relationships) to ground the edits and incorpo
         'requirementsSection': _buildRequirementsSection(),
         'databaseSchema': _buildDatabaseSchemaSection(),
         'typeSpecificInstructions': typeInstructions,
+        'uiLanguageTag': uiLanguageTag,
         'hasAddendum': trimmedAddOn != null && trimmedAddOn.isNotEmpty,
         'addendum': trimmedAddOn,
       },
@@ -1445,6 +1449,9 @@ IMPORTANT:
         type: originalApp.type,
         author: originalApp.author,
         license: originalApp.license,
+        // A clone must not appear under the original's translated name, but
+        // localized descriptions remain valid.
+        i18n: originalApp.i18nWithoutNames,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
         libraries: originalApp.libraries != null
@@ -1572,9 +1579,12 @@ IMPORTANT:
     UserAppType type, {
     List<UserAppLibraryInfo>? libraries,
     String? noteContext,
+    String? uiLanguageTag,
   }) => _buildAppGenerationPrompt(
         name, description, steps, type,
-        libraries: libraries, noteContext: noteContext,
+        libraries: libraries,
+        noteContext: noteContext,
+        uiLanguageTag: uiLanguageTag,
       );
 }
 
