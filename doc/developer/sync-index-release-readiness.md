@@ -28,14 +28,34 @@ the release ID, configured redirect, `drive.file` scope, and PKCE returned
 client.”** The JSON's `installed` key does not establish the OAuth platform
 type. The server identified this registration as Android.
 
-The Google Cloud owner must enable **Advanced settings → Custom URI scheme**
-for this client if retaining the current browser authorization flow, then
-retest consent, callback, token refresh, and Drive access on release devices.
-The app cannot change this Google-side setting. iOS requires its own valid
-platform registration and device verification; registering a callback in
-Info.plist alone does not prove Google will authorize it. See
-[Google's OAuth client settings](https://support.google.com/googleapi/answer/6158849?hl=en)
-and [Google's Android custom-scheme policy](https://developers.googleblog.com/improving-user-safety-in-oauth-flows-through-new-oauth-custom-uri-scheme-restrictions/).
+**Google's recommended Android approach:** Google Identity Services
+`AuthorizationClient`, using the Android registration
+whose package name and SHA-1 match the distributed app. Google recommends this
+API for Drive permissions; Credential Manager serves the separate sign-in
+purpose. After consent, subsequent `authorize()` calls can obtain access tokens
+without interaction while permissions remain granted. The current app-side
+refresh-token handling must be adapted to that model, including token
+invalidation and cases requiring renewed consent. See
+[Android's authorization guide](https://developer.android.com/identity/authorization).
+
+**Repository constraint:** `google_drive_auth_service.dart` and
+`test/no_gms_dependency_audit_test.dart` explicitly record a requirement to
+operate without Google Play Services. `AuthorizationClient` requires Play
+Services, so adopting it would change that supported-device requirement.
+The current browser flow implements the no-GMS choice. No native-authorization
+migration has been made; this is a product tradeoff to resolve, not a missing
+client ID or a callback typo.
+
+The Console's **Advanced settings → Custom URI scheme** opt-in can unblock
+the existing browser flow, but Google discourages it because custom schemes
+allow app impersonation. It is an exception when the recommended API cannot
+meet an app's needs, not the default release recommendation. See
+[Google's Android custom-scheme policy](https://developers.googleblog.com/improving-user-safety-in-oauth-flows-through-new-oauth-custom-uri-scheme-restrictions/).
+
+iOS requires its own iOS client registration and device verification; the
+Android client ID currently copied into the iOS callback settings does not
+satisfy that requirement. Registering a callback in Info.plist alone does not
+prove Google will authorize it. See [Google's platform-client policy](https://developers.google.com/identity/protocols/oauth2/policies#register_an_appropriate_oauth_client).
 
 ## Upgrade and correctness fixes
 
@@ -208,8 +228,9 @@ and 661 existing lint findings; it exits nonzero for those findings.
 Signed-device OAuth, native PDF/OCR end-to-end behavior, and real cloud
 transfer performance were not validated by these tests.
 
-Before describing this as complete cross-device sync, resolve the Google
-client setting, test signed release builds on both target platforms, and
+Before describing this as complete cross-device sync, resolve the Android
+authorization/no-GMS tradeoff, configure a separate iOS client, test signed
+release builds on both target platforms, and
 complete the unsupported data families and app identity reconciliation above.
 Use an existing-library fixture with substantial PDF/image attachments and
 downloaded app dependencies for device timing, interrupt/resume, and offline

@@ -9,21 +9,25 @@
 // The release ID was verified against the supplied installed-client JSON.
 // An unauthenticated authorization probe on 2026-09-12 identified this as an
 // Android client and returned: "Custom URI scheme is not enabled for your
-// Android client." Google Cloud must enable that client's Advanced settings
-// > Custom URI scheme for this browser + PKCE flow to proceed. Merely
-// replacing the client ID or registering a manifest callback cannot do so.
+// Android client." The current browser + PKCE flow therefore cannot proceed
+// with this client's default settings. Google recommends Identity Services
+// AuthorizationClient for Android Drive authorization, but it requires GMS.
 // https://support.google.com/googleapi/answer/6158849
+// https://developer.android.com/identity/authorization
 //
-// This app uses a system browser, PKCE and a private-use callback instead of
-// a Google Play Services dependency. Google disables custom URI schemes for
-// Android clients by default; do not infer the client type or server-side
-// permissions from the exported JSON's "installed" key or its filename.
+// This implementation currently uses a system browser, PKCE and a private-use
+// callback to satisfy the no-GMS requirement recorded in GoogleDriveAuthService
+// and test/no_gms_dependency_audit_test.dart. Google's custom-scheme opt-in is
+// an exception for apps that cannot use the recommended API, not the default
+// release recommendation: custom schemes permit app impersonation. Do not
+// infer client type or permissions from the JSON's "installed" key or filename.
 // https://developers.googleblog.com/improving-user-safety-in-oauth-flows-through-new-oauth-custom-uri-scheme-restrictions/
 //
 // Client IDs are public identifiers; no client secret belongs in the app.
 // Matching repository/build settings proves callback wiring, not Google-side
 // authorization. Validate the client registration and complete a real
-// authorization flow for each shipping platform, including iOS.
+// authorization flow for each shipping platform. iOS needs its own iOS client;
+// copying the Android client's callback into iOS settings does not provide one.
 
 import 'package:flutter/foundation.dart';
 
