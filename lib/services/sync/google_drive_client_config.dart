@@ -100,95 +100,19 @@ class GoogleDriveClientConfig {
   /// Console exactly as written here.
   static const String redirectPath = '/oauth2redirect';
 
-  /// Client ID used by `release` builds (and by `profile`, which carries no
-  /// `applicationIdSuffix` and so shares the release package name).
+  /// Client ID used by release and profile builds, matching the release
+  /// client configured in android/app/build.gradle.kts. Keep its reversed
+  /// scheme in ios/Flutter/Release.xcconfig consistent too.
   ///
-  /// **UNVERIFIED — its Google-side application type has not been
-  /// confirmed, and no real Connect has ever been attempted with it.** This
-  /// value was supplied for the milestone; nothing in this repository can
-  /// check what Google actually has on file for it. Two things must both be
-  /// true for it to work, and neither is verifiable from here:
-  ///
-  ///   1. It is an **iOS**-type client (see the file header). If it turns
-  ///      out to be an Android-type client, the first real Connect fails at
-  ///      Google with `redirect_uri_mismatch`, because an Android client's
-  ///      private-use redirect is `<package.name>:/oauth2redirect`, not the
-  ///      reversed client ID this app registers. The fix is to create an
-  ///      iOS-type client and replace this constant (plus
-  ///      `googleReversedClientIdRelease` in
-  ///      `android/app/build.gradle.kts` and `GOOGLE_REVERSED_CLIENT_ID` in
-  ///      `ios/Flutter/Release.xcconfig`); the drift test will name every
-  ///      file that still disagrees.
-  ///   2. `com.googleusercontent.apps.438894533578-i9ecrp6g518tdenpq5fo4dkv90ce2rig:/oauth2redirect`
-  ///      is registered as an authorized redirect URI for it.
-  ///
-  /// `test/google_drive_client_id_drift_test.dart` keeps this string
-  /// consistent with the Gradle/xcconfig/manifest/plist that consume it. It
-  /// deliberately makes no claim about Google's side — a green drift test
-  /// with a wrong-type client is exactly the silent failure this comment
-  /// exists to pre-empt.
-  /// **CORRECTION (first-Connect attempt): the `438894533578-…` client is
-  /// the user's *debug*-package client, not a release client — it has been
-  /// moved to [debugClientId] below. No release client exists yet.** The
-  /// doc above describes what a real release client must satisfy when one
-  /// is created; until then a release build correctly refuses to connect.
+  /// Repository tests verify these settings agree; the Google-side client
+  /// type and redirect registration still require a real authorization flow.
   static const String releaseClientId =
-      'replace-with-release-client-id$clientIdSuffix';
+      '438894533578-g0tpgg76soku9srh76hj21p14to3kc4c$clientIdSuffix';
 
-  /// Client ID used by `debug` builds — **PLACEHOLDER, NOT YET CREATED.**
-  ///
-  /// To fill this in:
-  ///   1. Google Cloud Console -> Credentials -> Create OAuth client ID.
-  ///   2. **Application type: iOS.** Not Android — see the file header for
-  ///      why (short version: only an iOS-type client gets a reversed-
-  ///      client-ID redirect, and Google has restricted custom URI schemes
-  ///      for new Android clients). Give it any bundle ID that is distinct
-  ///      from the release client's, e.g.
-  ///      `com.github.kkspeed.notesynapse.noteSynapse.debug`. The bundle ID
-  ///      is not load-bearing for this flow; a *separate client* is, because
-  ///      that is what yields a separate redirect scheme. There is no SHA-1
-  ///      to supply — iOS clients do not have one.
-  ///   3. Under that client's authorized redirect URIs, confirm
-  ///      `com.googleusercontent.apps.<new prefix>:/oauth2redirect` is
-  ///      present (Google normally provisions it automatically as the
-  ///      client's iOS URL scheme).
-  ///   4. Replace the value below with the new client ID.
-  ///   5. Replace `googleReversedClientIdDebug` in
-  ///      `android/app/build.gradle.kts` with
-  ///      `com.googleusercontent.apps.<new prefix>` — the drift test will
-  ///      fail until you do.
-  ///   6. Mirror the same scheme into `ios/Flutter/Debug.xcconfig`
-  ///      (`GOOGLE_REVERSED_CLIENT_ID`) — the drift test checks this too.
-  ///   7. Reinstall the app so the OS picks up the new scheme. Changing only
-  ///      the Dart constant is not enough; the scheme is registered at
-  ///      install time.
-  ///
-  /// If you only care about iOS, note that Debug and Release share one iOS
-  /// bundle ID and cannot be installed side by side, so there is nothing to
-  /// keep apart: setting this equal to [releaseClientId] (and mirroring that
-  /// into `Debug.xcconfig`) is a legitimate configuration.
-  ///
-  /// **What a debug build actually shows while this is a placeholder.**
-  /// [isConfigured] is false, so `GoogleDriveAuthService.connectionState()`
-  /// reports `notConfigured`, and `cloud_sync_screen.dart` renders the
-  /// account card in its "Not available in this build" state **with no
-  /// Connect button at all** — there is nothing to tap and therefore no way
-  /// for a user to reach a confusing Google error page (`invalid_client`).
-  /// [assertConfigured] is the belt-and-braces guard for every *other* way
-  /// in: a test, a future programmatic caller, or a UI change that starts
-  /// rendering the button unconditionally. It throws
-  /// [GoogleDriveClientNotConfiguredException], whose message names the
-  /// files above, rather than failing silently or crashing.
-  /// **FILLED IN — this is the real client, and its Google-side type is
-  /// still UNVERIFIED.** The `438894533578-…` client was originally pasted
-  /// into [releaseClientId] on the assumption it was a release client; it
-  /// is in fact registered against the **`.debug`** package, so it belongs
-  /// here. The two conditions in [releaseClientId]'s doc apply verbatim to
-  /// this constant instead: it must be an **iOS**-type client, and
-  /// `com.googleusercontent.apps.438894533578-i9ecrp6g518tdenpq5fo4dkv90ce2rig:/oauth2redirect`
-  /// must be an authorized redirect URI for it. Neither is checkable from
-  /// this repository — a green drift test proves only that this repo's own
-  /// files agree with each other.
+  /// Client ID used by debug builds. Its redirect scheme stays distinct
+  /// from release so side-by-side Android installations receive their own
+  /// authorization callbacks. Keep android/app/build.gradle.kts and
+  /// ios/Flutter/Debug.xcconfig aligned when replacing it.
   static const String debugClientId =
       '438894533578-i9ecrp6g518tdenpq5fo4dkv90ce2rig$clientIdSuffix';
 

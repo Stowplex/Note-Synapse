@@ -11,6 +11,14 @@
     /*
       Mobile-first: Note Synapse ships Android + iOS only, so this is laid out
       for a narrow viewport with 44px minimum tap targets throughout.
+
+      Vertical space is the scarce resource. The host already shows the app's
+      name in its own app bar, so there is no in-page header; the tab bar and
+      a two-row footer are the only fixed chrome, and the Draw tab's canvas
+      takes everything in between. While the on-screen keyboard is up (any
+      text box focused) the footer is hidden as well — the keyboard shrinks
+      the whole WebView, and a footer riding up on top of it would otherwise
+      cover the very thing being typed into.
     */
     :root {
       --app-bg: #1e1e1e;
@@ -39,12 +47,6 @@
     }
     #app { display: flex; flex-direction: column; height: 100%; }
 
-    header {
-      display: flex; align-items: center; gap: 8px;
-      padding: 10px 12px; background: var(--panel-bg);
-      border-bottom: 1px solid var(--border); flex: none;
-    }
-    header h1 { font-size: 1rem; margin: 0; color: var(--heading); flex: 1 1 auto; }
     .badge {
       font-size: 0.7rem; padding: 3px 7px; border-radius: 10px;
       background: var(--panel-contrast); color: var(--muted); white-space: nowrap;
@@ -69,6 +71,12 @@
       max-height: 42vh; overflow-y: auto; display: none;
     }
     #blockPanel.open { display: block; }
+    .panel-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 10px 12px 6px; font-size: 0.75rem; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .panel-head .badge { text-transform: none; letter-spacing: 0; }
     .block-row {
       display: flex; align-items: center; gap: 10px; width: 100%;
       padding: 10px 12px; background: transparent; border: none;
@@ -95,16 +103,31 @@
 
     /* Tabs ------------------------------------------------------------- */
     nav#tabs { display: flex; flex: none; background: var(--panel-bg); border-bottom: 1px solid var(--border); }
-    nav#tabs button {
+    nav#tabs button[data-tab] {
       flex: 1 1 0; min-height: 46px; padding: 0 4px; border-radius: 0;
       background: transparent; color: var(--muted); font-size: 0.85rem; font-weight: 600;
       border-bottom: 3px solid transparent;
     }
     nav#tabs button.active { color: var(--heading); border-bottom-color: var(--accent); }
+    nav#tabs #blocksToggle {
+      flex: none; min-width: 46px; min-height: 46px; padding: 0; border-radius: 0;
+      border-left: 1px solid var(--border); font-size: 1.1rem;
+    }
 
-    main { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    main { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
     .tab { display: none; padding: 12px; }
     .tab.active { display: block; }
+
+    /*
+      The Draw tab is a workspace, not a document: nothing scrolls, and the
+      canvas takes every pixel the tab bar and footer leave. It shrinks with
+      the WebView when the keyboard opens instead of being pushed under the
+      footer, and grows back when the keyboard goes.
+    */
+    body.tab-draw main { display: flex; flex-direction: column; overflow: hidden; }
+    .tab[data-tab="draw"].active {
+      display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; padding: 8px;
+    }
 
     .panel { background: var(--panel-bg); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
     .panel-title { font-size: 0.75rem; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -125,6 +148,7 @@
     .preview-frame svg, .preview-frame img { max-width: 100%; height: auto; }
 
     .msg { padding: 10px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 10px; line-height: 1.4; }
+    #message { flex: none; cursor: pointer; }   /* tap to dismiss */
     .msg.error { background: var(--error-bg); color: var(--error-ink); }
     .msg.ok { background: var(--ok-bg); color: var(--ok-ink); }
     .msg.warn { background: var(--warn-bg); color: var(--warn-ink); }
@@ -147,7 +171,18 @@
     .caret-readout { font-size: 0.72rem; color: var(--muted); font-family: ui-monospace, monospace; }
 
     /* Draw ------------------------------------------------------------- */
-    #drawSurface { height: 58vh; min-height: 320px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+    #drawSurface { flex: 1 1 auto; min-height: 0; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+    /* js-draw's stylesheet pins its editor to 400px; it must follow the surface. */
+    #drawSurface .imageEditorContainer { height: 100%; min-height: 0; }
+    /*
+      Below 540px js-draw wraps its toolbar into two rows (actions above tools),
+      which on a phone costs a second strip of canvas. Keep the single-row
+      layout it uses on wider screens — the tool row scrolls sideways anyway —
+      with 44px buttons so one more tool fits before the swipe.
+    */
+    #drawSurface .toolbar-edge-toolbar { flex-wrap: nowrap; --toolbar-button-height: 44px; }
+    #drawSurface .toolbar-edge-toolbar > .toolbar-action-row { flex: none; }
+    #drawSurface .toolbar-edge-toolbar > .toolbar-tool-row { min-width: 0; }
     .imageditor-toolbar-root button, .toolbar-button { min-height: 40px; }
 
     /* AI --------------------------------------------------------------- */
@@ -159,12 +194,14 @@
       flex: none; background: var(--panel-bg); border-top: 1px solid var(--border);
       padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
     }
-    .seg-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
-    .seg-label { font-size: 0.72rem; color: var(--muted); flex: none; width: 52px; }
+    body.typing footer { display: none; }
+    .opt-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
     .seg { display: flex; flex: 1 1 auto; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    #formatSeg { flex: none; }
     .seg button {
-      flex: 1 1 0; min-height: 36px; padding: 0; border-radius: 0;
-      background: transparent; color: var(--muted); font-size: 0.78rem; font-weight: 600;
+      flex: 1 1 0; min-height: 40px; padding: 0 8px; border-radius: 0;
+      background: transparent; color: var(--muted); font-size: 0.76rem; font-weight: 600;
+      white-space: nowrap;
     }
     .seg button.active { background: var(--accent); color: var(--accent-ink); }
     .seg button:disabled { opacity: 0.3; }
@@ -173,25 +210,24 @@
 </head>
 <body>
   <div id="app">
-    <header>
-      <h1>Diagram Studio</h1>
-      <span class="badge" id="scopeBadge">…</span>
-      <button class="icon secondary" id="blocksToggle" aria-label="Show diagrams in this note">☰</button>
-    </header>
-
-    <div id="blockPanel">
-      <div id="blockRows"></div>
-      <div class="panel-actions">
-        <button class="secondary" id="newDiagramButton">+ New diagram</button>
-      </div>
-    </div>
-
     <nav id="tabs">
       <button data-tab="mermaid" class="active">Mermaid</button>
-      <button data-tab="draw">Draw</button>
+      <button data-tab="draw" data-i18n="draw">Draw</button>
       <button data-tab="ascii">ASCII</button>
       <button data-tab="ai">AI</button>
+      <button class="secondary" id="blocksToggle" data-i18n-aria="showDiagrams" aria-label="Show diagrams in this note">☰</button>
     </nav>
+
+    <div id="blockPanel">
+      <div class="panel-head">
+        <span data-i18n="diagrams">Diagrams</span>
+        <span class="badge" id="scopeBadge">…</span>
+      </div>
+      <div id="blockRows"></div>
+      <div class="panel-actions">
+        <button class="secondary" id="newDiagramButton" data-i18n="newDiagram">+ New diagram</button>
+      </div>
+    </div>
 
     <main>
       <div id="message" class="msg hidden" style="margin:12px 12px 0"></div>
@@ -199,44 +235,42 @@
       <!-- Mermaid ---------------------------------------------------- -->
       <section class="tab active" data-tab="mermaid">
         <div class="panel">
-          <div class="panel-title">Diagram source</div>
+          <div class="panel-title" data-i18n="diagramSource">Diagram source</div>
           <textarea id="mermaidEditor" rows="8" spellcheck="false" autocapitalize="off"
                     autocorrect="off" autocomplete="off"
-                    placeholder="graph TD&#10;  A[Start] --> B{Choice}&#10;  B -->|yes| C[Do it]&#10;  B -->|no| D[Stop]"></textarea>
+                    data-i18n-placeholder="mermaidPlaceholder" placeholder="graph TD&#10;  A[Start] --> B{Choice}&#10;  B -->|yes| C[Do it]&#10;  B -->|no| D[Stop]"></textarea>
         </div>
         <div id="mermaidError" class="msg error hidden"></div>
         <div class="panel">
-          <div class="panel-title">Preview</div>
+          <div class="panel-title" data-i18n="preview">Preview</div>
           <div class="preview-frame" id="mermaidPreview"></div>
         </div>
       </section>
 
       <!-- Draw ------------------------------------------------------- -->
       <section class="tab" data-tab="draw">
+        <!-- Clear lives in the drawing toolbar, at the end of the tool row. -->
         <div id="drawSurface"></div>
-        <div class="panel-actions" style="padding-left:0;padding-right:0">
-          <button class="secondary" id="drawClear">Clear</button>
-        </div>
       </section>
 
       <!-- ASCII ------------------------------------------------------ -->
       <section class="tab" data-tab="ascii">
         <div class="panel">
-          <div class="panel-title">Characters</div>
+          <div class="panel-title" data-i18n="characters">Characters</div>
           <div id="glyphBar"></div>
           <div class="panel-title" style="display:flex;justify-content:space-between;align-items:center">
-            <span>Art</span><span class="caret-readout" id="caretReadout">row 1, col 1</span>
+            <span data-i18n="art">Art</span><span class="caret-readout" id="caretReadout">row 1, col 1</span>
           </div>
           <!-- wrap=off is non-negotiable: soft wrapping destroys the grid. -->
           <textarea id="asciiEditor" rows="10" wrap="off" spellcheck="false"
                     autocapitalize="off" autocorrect="off" autocomplete="off"
-                    placeholder="+--------+      +--------+&#10;| Client |----->| Server |&#10;+--------+      +--------+"></textarea>
+                    data-i18n-placeholder="asciiPlaceholder" placeholder="+--------+      +--------+&#10;| Client |----->| Server |&#10;+--------+      +--------+"></textarea>
           <div class="panel-actions" style="padding:8px 0 0">
-            <button class="secondary" id="asciiNormalise">Pad to rectangle</button>
+            <button class="secondary" id="asciiNormalise" data-i18n="padRectangle">Pad to rectangle</button>
           </div>
         </div>
         <div class="panel">
-          <div class="panel-title">Preview</div>
+          <div class="panel-title" data-i18n="preview">Preview</div>
           <div class="preview-frame" id="asciiPreview"></div>
         </div>
       </section>
@@ -244,45 +278,42 @@
       <!-- AI --------------------------------------------------------- -->
       <section class="tab" data-tab="ai">
         <div class="panel">
-          <div class="panel-title">Describe the diagram</div>
-          <textarea id="aiPrompt" rows="3" placeholder="a system architecture diagram with a mobile app, an API gateway and two services"></textarea>
+          <div class="panel-title" data-i18n="describe">Describe the diagram</div>
+          <textarea id="aiPrompt" rows="3" data-i18n-placeholder="aiPlaceholder" placeholder="a system architecture diagram with a mobile app, an API gateway and two services"></textarea>
           <div class="panel-actions" style="padding:8px 0 0">
-            <button id="aiGenerate">Generate</button>
-            <button class="secondary" id="aiReset">Start over</button>
+            <button id="aiGenerate" data-i18n="generate">Generate</button>
+            <button class="secondary" id="aiReset" data-i18n="startOver">Start over</button>
           </div>
         </div>
         <div id="aiNotice" class="msg warn hidden"></div>
         <div class="panel hidden" id="aiHistoryPanel">
-          <div class="panel-title">Refinements</div>
+          <div class="panel-title" data-i18n="refinements">Refinements</div>
           <div id="aiHistory"></div>
         </div>
         <div class="panel">
-          <div class="panel-title">Preview</div>
+          <div class="panel-title" data-i18n="preview">Preview</div>
           <div class="preview-frame" id="aiPreview"></div>
         </div>
       </section>
     </main>
 
     <footer>
-      <div class="seg-row">
-        <span class="seg-label">Format</span>
-        <div class="seg" id="formatSeg">
+      <div class="opt-row">
+        <div class="seg" id="formatSeg" role="group" data-i18n-aria="imageFormat" aria-label="Image format">
           <button data-format="svg" class="active">SVG</button>
           <button data-format="png">PNG</button>
           <button data-format="jpg">JPG</button>
         </div>
-      </div>
-      <div class="seg-row">
-        <span class="seg-label">Place</span>
-        <div class="seg" id="positionSeg">
-          <button data-position="above" class="active">Above source</button>
-          <button data-position="below">Below source</button>
+        <div class="seg" id="positionSeg" role="group" data-i18n-aria="imagePosition" aria-label="Where the image goes">
+          <button data-position="above" class="active" data-i18n="above">Above source</button>
+          <button data-position="below" data-i18n="below">Below source</button>
         </div>
       </div>
-      <button id="saveButton" disabled>Save to note</button>
+      <button id="saveButton" disabled data-i18n="addToNote">Add to note</button>
     </footer>
   </div>
 
+  <script src="src/i18n.js"></script>
   <script src="src/blocks.js"></script>
   <script src="src/writeback.js"></script>
   <script src="src/raster.js"></script>
@@ -306,6 +337,8 @@
                   '|', '-', '+', '<', '>', 'v', '^'];
 
     var $ = function (id) { return document.getElementById(id); };
+    var I18n = window.DiagramI18n;
+    var tr = function (key, vars) { return I18n.t(key, vars); };
 
     var state = {
       note: null,
@@ -326,6 +359,7 @@
     // ---------------------------------------------------------------
     // Messaging
     // ---------------------------------------------------------------
+    var messageTimer = null;
     function showMessage(text, kind, action) {
       var el = $('message');
       el.className = 'msg ' + (kind || 'error');
@@ -341,11 +375,64 @@
         el.appendChild(wrap);
       }
       el.classList.remove('hidden');
+      // Good news is a toast: on the Draw tab every line of banner is a line
+      // of canvas. Errors and warnings stay until dismissed or superseded.
+      if (messageTimer) clearTimeout(messageTimer);
+      messageTimer = null;
+      if (kind === 'ok' && !action) messageTimer = setTimeout(clearMessage, 4000);
     }
     function clearMessage() {
+      if (messageTimer) clearTimeout(messageTimer);
+      messageTimer = null;
       $('message').classList.add('hidden');
       $('message').textContent = '';
     }
+
+    // ---------------------------------------------------------------
+    // Keyboard
+    // ---------------------------------------------------------------
+    /*
+     There is no keyboard event to listen for inside a WebView. What can be
+     seen is that a text box takes focus, and then the host shrinks the page
+     to make room. Both are used: focus hides the footer straight away (the
+     keyboard is on its way, and a footer riding up on it would cover the
+     text box), and the page growing back to full height brings it back even
+     if the text box still has focus — Android's back button dismisses the
+     keyboard without blurring anything, and the user is then looking for
+     the Save button.
+
+     The check is deferred a beat: tapping a button briefly moves focus away
+     from a text box on Android, and reacting to that intermediate state
+     would make the footer flash in and out.
+    */
+    var typingTimer = null;
+    var typingSource = null;
+    var fullHeight = {};   // innerWidth → tallest innerHeight seen: the page with no keyboard
+    function isEditable(el) {
+      if (!el) return false;
+      if (el.tagName === 'TEXTAREA') return true;
+      if (el.tagName === 'INPUT') {
+        return !/^(button|checkbox|radio|range|color|file|submit|reset|image)$/i.test(el.type || '');
+      }
+      return !!el.isContentEditable;
+    }
+    function pageShrunk() {
+      var w = window.innerWidth, h = window.innerHeight;
+      if (!fullHeight[w] || h > fullHeight[w]) fullHeight[w] = h;
+      return h < fullHeight[w] - 80;
+    }
+    function syncTyping(source) {
+      typingSource = source;
+      if (typingTimer) clearTimeout(typingTimer);
+      typingTimer = setTimeout(function () {
+        typingTimer = null;
+        var editing = isEditable(document.activeElement);
+        var shrunk = pageShrunk();
+        document.body.classList.toggle('typing', editing && (shrunk || typingSource === 'focus'));
+      }, 120);
+    }
+    function onFocusChange() { syncTyping('focus'); }
+    function onViewportResize() { syncTyping('resize'); }
 
     function setBusy(on, label) {
       state.busy = on;
@@ -358,10 +445,11 @@
     /** Says which of the two things Save will do, so neither is a surprise. */
     function saveLabel() {
       if (state.current) {
-        var what = state.current.kind === 'other' ? 'block' : state.current.kind + ' diagram';
-        return 'Replace this ' + what;
+        var what = state.current.kind === 'other'
+          ? tr('block') : tr('diagram', { kind: state.current.kind });
+        return tr('replace', { what: what });
       }
-      return 'Add to note';
+      return tr('addToNote');
     }
 
     function canSave() {
@@ -392,8 +480,7 @@
         var empty = document.createElement('div');
         empty.style.cssText = 'padding:12px;color:var(--muted);font-size:0.85rem';
         empty.textContent = state.writer.isBlockScope
-          ? 'This block has no diagram yet — pick a tab and start one.'
-          : 'No diagrams found in this note yet.';
+          ? tr('noBlockDiagram') : tr('noDiagrams');
         rows.appendChild(empty);
         return;
       }
@@ -410,10 +497,10 @@
         meta.className = 'block-meta';
         var kind = document.createElement('div');
         kind.className = 'block-kind';
-        kind.textContent = unit.kind === 'other' ? 'text block' : unit.kind;
+        kind.textContent = unit.kind === 'other' ? tr('textBlock') : unit.kind;
         var prev = document.createElement('div');
         prev.className = 'block-preview';
-        prev.textContent = (unit.body || '(image only)').split('\n')[0].slice(0, 60) || '(empty)';
+        prev.textContent = (unit.body || tr('imageOnly')).split('\n')[0].slice(0, 60) || tr('empty');
         meta.appendChild(kind);
         meta.appendChild(prev);
 
@@ -485,7 +572,7 @@
       rows.innerHTML = '';
       var head = document.createElement('div');
       head.style.cssText = 'padding:12px;color:var(--heading);font-size:0.85rem';
-      head.textContent = 'Where should the new diagram go?';
+      head.textContent = tr('insertQuestion');
       rows.appendChild(head);
 
       function option(label, at) {
@@ -499,18 +586,18 @@
           state.insertAt = at;
           toggleBlockPanel(false);
           resetActiveTab();
-          showMessage('New diagram will be added ' + label.toLowerCase() + '.', 'ok');
+          showMessage(tr('insertChosen', { where: label.toLowerCase() }), 'ok');
           renderBlockList();
         });
         rows.appendChild(row);
       }
 
       state.units.forEach(function (unit, i) {
-        var name = (unit.kind === 'other' ? 'text block' : unit.kind) + ' #' + (i + 1);
-        option('Before the ' + name, { unit: unit, where: 'before' });
-        option('After the ' + name, { unit: unit, where: 'after' });
+        var name = (unit.kind === 'other' ? tr('textBlock') : unit.kind) + ' #' + (i + 1);
+        option(tr('before', { name: name }), { unit: unit, where: 'before' });
+        option(tr('after', { name: name }), { unit: unit, where: 'after' });
       });
-      option('At the end of the note', null);
+      option(tr('end'), null);
       toggleBlockPanel(true);
     }
 
@@ -545,40 +632,50 @@
         state.current = null;
         state.insertAt = null;
         renderBlockList();
-        showMessage(
-          'Starting a new ' + name + ' diagram. The ' + '‘' +
-          'Save' + '’' + ' button adds it to the note and leaves the ' +
-          'block you were viewing alone.',
-          'ok'
-        );
+        showMessage(tr('newKind', { kind: name }), 'ok');
       }
 
       state.tab = name;
-      Array.prototype.forEach.call(document.querySelectorAll('nav#tabs button'), function (b) {
+      Array.prototype.forEach.call(document.querySelectorAll('nav#tabs button[data-tab]'), function (b) {
         b.classList.toggle('active', b.getAttribute('data-tab') === name);
       });
       Array.prototype.forEach.call(document.querySelectorAll('main .tab'), function (s) {
         s.classList.toggle('active', s.getAttribute('data-tab') === name);
       });
+      // The Draw tab is laid out as a fixed workspace rather than a
+      // scrolling document; see the stylesheet.
+      document.body.classList.toggle('tab-draw', name === 'draw');
 
-      // Draw is SVG-only: rasterising it would throw away the round trip that
-      // makes the drawing re-editable.
-      var drawOnly = name === 'draw';
-      Array.prototype.forEach.call(document.querySelectorAll('#formatSeg button'), function (b) {
-        var f = b.getAttribute('data-format');
-        b.disabled = drawOnly && f !== 'svg';
-      });
-      if (drawOnly) setFormat('svg');
-
+      renderFormatSeg();
       if (name === 'draw') ensureDrawSurface();
       if (!silent) { state.lastSvg = null; refreshSave(); }
     }
 
+    /**
+     * The format a save will actually produce. Draw is SVG-only, because
+     * rasterising it would throw away the round trip that makes the drawing
+     * re-editable; AI images arrive as PNG. The user's own choice is kept for
+     * the tabs where it applies, so visiting Draw does not silently reset a
+     * PNG preference.
+     */
+    function lockedFormat() {
+      if (state.tab === 'draw') return 'svg';
+      if (state.tab === 'ai') return 'png';
+      return null;
+    }
+    function renderFormatSeg() {
+      var locked = lockedFormat();
+      var shown = locked || state.format;
+      Array.prototype.forEach.call(document.querySelectorAll('#formatSeg button'), function (b) {
+        var f = b.getAttribute('data-format');
+        b.disabled = !!locked && f !== locked;
+        b.classList.toggle('active', f === shown);
+      });
+    }
+
     function setFormat(f) {
       state.format = f;
-      Array.prototype.forEach.call(document.querySelectorAll('#formatSeg button'), function (b) {
-        b.classList.toggle('active', b.getAttribute('data-format') === f);
-      });
+      renderFormatSeg();
       persistPrefs();
     }
     function setPosition(p) {
@@ -634,16 +731,16 @@
       var btn = document.createElement('button');
       btn.className = 'secondary';
       btn.style.marginTop = '8px';
-      btn.textContent = 'Fix with AI';
+      btn.textContent = tr('fixAi');
       btn.addEventListener('click', function () {
         btn.disabled = true;
-        btn.textContent = 'Asking…';
+        btn.textContent = tr('asking');
         Synapse.chatAI(
           'This Mermaid diagram does not parse. Return ONLY the corrected Mermaid ' +
           'source with no code fence, no explanation.\n\nError: ' + error + '\n\nSource:\n' + code
         ).then(function (res) {
           btn.disabled = false;
-          btn.textContent = 'Fix with AI';
+          btn.textContent = tr('fixAi');
           if (!res || !res.success) throw new Error((res && res.error) || 'unknown error');
           var fixed = String(res.response || '').replace(/^```[a-z]*\s*|\s*```$/g, '').trim();
           if (!fixed) throw new Error('the model returned nothing');
@@ -651,8 +748,8 @@
           scheduleMermaid();
         }).catch(function (e) {
           btn.disabled = false;
-          btn.textContent = 'Fix with AI';
-          showMessage('Could not get a fix: ' + (e && e.message ? e.message : e));
+          btn.textContent = tr('fixAi');
+          showMessage(tr('couldNotFix', { error: e && e.message ? e.message : e }));
         });
       });
       box.appendChild(btn);
@@ -666,6 +763,9 @@
       GLYPHS.forEach(function (g) {
         var b = document.createElement('button');
         b.textContent = g;
+        // Keep focus (and the keyboard) on the editor: a tap on a button
+        // would otherwise blur it, and the caret with it.
+        b.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
         b.addEventListener('click', function (ev) {
           ev.preventDefault();
           insertAtCaret($('asciiEditor'), g);
@@ -688,7 +788,7 @@
       var el = $('asciiEditor');
       var upto = el.value.slice(0, el.selectionStart);
       var lines = upto.split('\n');
-      $('caretReadout').textContent = 'row ' + lines.length + ', col ' + (lines[lines.length - 1].length + 1);
+      $('caretReadout').textContent = tr('rowCol', { row: lines.length, col: lines[lines.length - 1].length + 1 });
     }
 
     var asciiTimer = null;
@@ -717,38 +817,36 @@
     function ensureDrawSurface() {
       if (state.drawSurface) return;
       if (!DiagramDraw.available()) {
-        showMessage('The drawing library did not load, so the Draw tab is unavailable.');
+        showMessage(tr('drawUnavailable'));
         return;
       }
       try {
         state.drawSurface = DiagramDraw.createSurface($('drawSurface'), {
           background: DIAGRAM_BG,
+          localization: I18n.editorLocalization(),
+          clearLabel: tr('clear'),
           onChange: refreshSave,
         });
       } catch (e) {
-        showMessage('The drawing surface could not start: ' + (e && e.message ? e.message : e));
+        showMessage(tr('drawStartError', { error: e && e.message ? e.message : e }));
       }
     }
 
     function loadDrawing(unit) {
       ensureDrawSurface();
       if (!state.drawSurface || !unit.renderRef) return;
-      setBusy(true, 'Loading…');
+      setBusy(true, tr('loading'));
       state.writer.readRender(unit.renderRef).then(function (found) {
         setBusy(false);
         if (!found || !found.text) {
           // Never silently open a blank canvas over an existing drawing.
-          showMessage(
-            'This drawing\'s image could not be read back, so it cannot be edited here. ' +
-            'The image in your note is untouched.',
-            'warn'
-          );
+          showMessage(tr('drawingUnreadable'), 'warn');
           return;
         }
         return state.drawSurface.loadSvg(found.text).then(refreshSave);
       }).catch(function (e) {
         setBusy(false);
-        showMessage('Could not load the drawing: ' + (e && e.message ? e.message : e), 'warn');
+        showMessage(tr('drawingLoadError', { error: e && e.message ? e.message : e }), 'warn');
       });
     }
 
@@ -776,7 +874,7 @@
         div.className = 'turn';
         var who = document.createElement('div');
         who.className = 'who';
-        who.textContent = i === 0 ? 'brief' : 'revision ' + i;
+        who.textContent = i === 0 ? tr('brief') : tr('revision', { number: i });
         var what = document.createElement('div');
         what.textContent = turn.instruction;
         div.appendChild(who);
@@ -787,27 +885,23 @@
 
     function generateAi() {
       var instruction = $('aiPrompt').value.trim();
-      if (!instruction) { showMessage('Describe the diagram you want first.'); return; }
+      if (!instruction) { showMessage(tr('describeFirst')); return; }
       clearMessage();
-      setBusy(true, 'Generating…');
+      setBusy(true, tr('generating'));
 
       state.ai.generate(aiKey(), instruction, { prompt: instruction }).then(function (res) {
         setBusy(false);
         state.aiImageUri = res.imageUri;
         var img = document.createElement('img');
         img.src = res.dataUri || res.imageUri;
-        img.alt = 'Generated diagram';
+        img.alt = tr('generatedAlt');
         $('aiPreview').innerHTML = '';
         $('aiPreview').appendChild(img);
 
         if (res.turn > 1) {
           // Be honest about what refinement actually did.
           var notice = $('aiNotice');
-          notice.textContent = res.usedPriorImage
-            ? 'Refined from the previous image. If the result looks unrelated rather than edited, ' +
-              'this backend may not support image-to-image editing — the instructions are still ' +
-              'being accumulated, so keep describing the whole diagram you want.'
-            : 'Generated from the accumulated description.';
+          notice.textContent = res.usedPriorImage ? tr('refined') : tr('accumulated');
           notice.classList.remove('hidden');
         }
         $('aiPrompt').value = '';
@@ -881,12 +975,13 @@
     function save() {
       if (state.busy) return;
       clearMessage();
-      setBusy(true, 'Saving…');
+      setBusy(true, tr('saving'));
 
       buildImage().then(function (image) {
         if (image.fellBack) {
-          showMessage('Could not convert to ' + state.format.toUpperCase() +
-            ' (' + image.reason + '), so the diagram was inserted as SVG.', 'warn');
+          showMessage(tr('rasterFallback', {
+            format: state.format.toUpperCase(), reason: image.reason
+          }), 'warn');
         }
         var src = currentSource();
         return state.writer.saveUnit({
@@ -916,7 +1011,7 @@
         state.current = match;
         renderBlockList();
         refreshSave();
-        showMessage('Saved to the note.', 'ok');
+        showMessage(tr('saved'), 'ok');
       }).catch(function (e) {
         setBusy(false);
         showMessage(e && e.message ? e.message : String(e));
@@ -929,8 +1024,8 @@
     function start() {
       var notes = (window.Synapse && window.Synapse.Notes) || [];
       if (!notes.length) {
-        $('scopeBadge').textContent = 'no note';
-        showMessage('Open Diagram Studio on a note, or on a selected block within one.');
+        $('scopeBadge').textContent = tr('noNote');
+        showMessage(tr('openOnNote'));
         document.querySelector('footer').classList.add('hidden');
         return;
       }
@@ -943,7 +1038,7 @@
       });
       state.ai = DiagramAi.createSession({ synapse: window.Synapse });
 
-      $('scopeBadge').textContent = state.writer.isBlockScope ? 'selected block' : 'whole note';
+      $('scopeBadge').textContent = state.writer.isBlockScope ? tr('selectedBlock') : tr('wholeNote');
 
       buildGlyphBar();
       wireEvents();
@@ -976,8 +1071,14 @@
       $('blocksToggle').addEventListener('click', function () { toggleBlockPanel(); });
       $('newDiagramButton').addEventListener('click', startNewDiagram);
       $('saveButton').addEventListener('click', save);
+      $('message').addEventListener('click', clearMessage);
+      document.addEventListener('focusin', onFocusChange);
+      document.addEventListener('focusout', onFocusChange);
+      window.addEventListener('resize', onViewportResize);
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewportResize);
+      pageShrunk();   // record the full height before any keyboard appears
 
-      Array.prototype.forEach.call(document.querySelectorAll('nav#tabs button'), function (b) {
+      Array.prototype.forEach.call(document.querySelectorAll('nav#tabs button[data-tab]'), function (b) {
         b.addEventListener('click', function () { selectTab(b.getAttribute('data-tab')); });
       });
       Array.prototype.forEach.call(document.querySelectorAll('#formatSeg button'), function (b) {
@@ -995,9 +1096,6 @@
         $('asciiEditor').value = DiagramAscii.padLines($('asciiEditor').value);
         renderAscii();
       });
-      $('drawClear').addEventListener('click', function () {
-        if (state.drawSurface) { state.drawSurface.clear(); refreshSave(); }
-      });
       $('aiGenerate').addEventListener('click', generateAi);
       $('aiReset').addEventListener('click', function () {
         state.ai.reset(aiKey(), '');
@@ -1009,9 +1107,54 @@
       });
     }
 
+    function applyLanguage(tag) {
+      I18n.setLanguage(tag);
+      Array.prototype.forEach.call(document.querySelectorAll('[data-i18n]'), function (el) {
+        el.textContent = tr(el.getAttribute('data-i18n'));
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-i18n-placeholder]'), function (el) {
+        el.setAttribute('placeholder', tr(el.getAttribute('data-i18n-placeholder')));
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-i18n-aria]'), function (el) {
+        el.setAttribute('aria-label', tr(el.getAttribute('data-i18n-aria')));
+      });
+      if (state.writer) {
+        $('scopeBadge').textContent = state.writer.isBlockScope ? tr('selectedBlock') : tr('wholeNote');
+        renderBlockList();
+        renderAiThread();
+      }
+      updateCaretReadout();
+      refreshSave();
+
+      // js-draw reads its localization table only when mounted. Serialize and
+      // restore the drawing so a live language switch keeps every unsaved
+      // stroke and the dirty bit.
+      if (state.drawSurface) {
+        var svg = state.drawSurface.toSvg();
+        var dirty = state.drawSurface.dirty;
+        state.drawSurface.destroy();
+        state.drawSurface = null;
+        ensureDrawSurface();
+        if (state.drawSurface && svg) {
+          state.drawSurface.loadSvg(svg).then(function () {
+            state.drawSurface.dirty = dirty;
+            refreshSave();
+          });
+        }
+      }
+    }
+
+    window.addEventListener('synapse:localechanged', function (event) {
+      applyLanguage(event.detail);
+    });
+
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', start);
+      document.addEventListener('DOMContentLoaded', function () {
+        applyLanguage((window.Synapse && window.Synapse.locale) || navigator.language || 'en-US');
+        start();
+      });
     } else {
+      applyLanguage((window.Synapse && window.Synapse.locale) || navigator.language || 'en-US');
       start();
     }
   })();

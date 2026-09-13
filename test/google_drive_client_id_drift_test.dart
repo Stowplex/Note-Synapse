@@ -253,30 +253,16 @@ void main() {
 
     test('placeholder client IDs stay recognizable as placeholders, and a real '
         'one is recognized as configured', () {
-      // The "not configured" path must keep working while debugClientId is
-      // a placeholder, and must stop being taken the moment a real ID is
-      // pasted in. Both directions asserted so neither can rot.
-      // CURRENT, DELIBERATE STATE: the one real client the project has
-      // (`438894533578-…`) is registered against the `.debug` package, so
-      // DEBUG is configured and RELEASE is knowingly not yet created. This
-      // was originally the other way round — the ID was pasted into
-      // `releaseClientId` on the assumption it was a release client, and a
-      // debug build then correctly refused to connect, which is how the
-      // mix-up surfaced.
-      //
-      // Both directions are pinned rather than relaxed, so neither can rot
-      // silently: if someone creates a release client, or clears the debug
-      // one, this test fails and names what to do. That is the same
-      // symmetric-fail-on-change discipline `hard_delete_audit_test.dart`
-      // uses for its own baseline.
+      // Both variants now have distinct configured clients. Placeholders
+      // remain recognizable by the marker for future build configurations.
       expect(
         GoogleDriveClientConfig.debugClientId.contains(
           GoogleDriveClientConfig.placeholderMarker,
         ),
         isFalse,
         reason:
-            'The DEBUG client ID looks like a placeholder. Debug builds — '
-            'the only ones currently able to connect at all — would refuse.',
+            'The DEBUG client ID looks like a placeholder; connecting would '
+            'be disabled.',
       );
       expect(
         GoogleDriveClientConfig.debugClientId.endsWith(
@@ -288,14 +274,10 @@ void main() {
         GoogleDriveClientConfig.releaseClientId.contains(
           GoogleDriveClientConfig.placeholderMarker,
         ),
-        isTrue,
+        isFalse,
         reason:
-            'RELEASE is expected to still be an unset placeholder — no '
-            'release-package client has been created yet. If you just '
-            'created one, set releaseClientId, '
-            'googleReversedClientIdRelease in android/app/build.gradle.kts '
-            'and GOOGLE_REVERSED_CLIENT_ID in ios/Flutter/Release.xcconfig, '
-            'then flip this expectation to isFalse.',
+            'The release client configured in Gradle must also be configured '
+            'in Dart and the iOS release xcconfig.',
       );
 
       // `isConfigured` is what the UI's "not available in this build"

@@ -5,6 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/models/note.dart';
 import 'package:note_synapse/models/relationship.dart';
+import 'package:note_synapse/models/user_app.dart';
 
 void main() {
   group('Database Service Tests', () {
@@ -69,6 +70,33 @@ void main() {
         greaterThanOrEqualTo(expectedTables.length),
         reason: 'Database should not be missing tables',
       );
+    });
+
+    test('should persist localized user app metadata', () async {
+      final now = DateTime.now();
+      final app = UserApp(
+        id: 'localized-app',
+        uuid: 'localized-app-uuid',
+        name: 'Cartograph',
+        description: 'Map notes.',
+        steps: const ['created'],
+        htmlContent: '',
+        createdAt: now,
+        updatedAt: now,
+        i18n: const {
+          'zh-CN': UserAppLocalizedMetadata(
+            name: '绘图志',
+            description: '将笔记转为导图。',
+          ),
+        },
+      );
+
+      await databaseService.insertUserApp(app);
+      final restored = await databaseService.getUserApp(app.id);
+
+      expect(restored, isNotNull);
+      expect(restored!.nameForTag('zh-CN'), '绘图志');
+      expect(restored.descriptionForTag('zh-CN'), '将笔记转为导图。');
     });
 
     test('should insert and retrieve note', () async {

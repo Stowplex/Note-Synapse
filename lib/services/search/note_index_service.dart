@@ -277,6 +277,11 @@ class NoteIndexService {
   /// time — no request stampede from concurrent per-note passes).
   Future<void> _embedTail = Future.value();
 
+  // Deleting stored vectors cancels work already waiting on a provider. A
+  // response from an earlier generation must never recreate deleted data.
+  int _embedGeneration = 0;
+  bool _deletingEmbeddings = false;
+
   /// Chunk ids whose vectors became stale in a COMMITTED write of the
   /// current queued action (chunk deleted, or content changed invalidating
   /// its embeddings). Filled only by [_transactionWithRemovals] after a
@@ -987,6 +992,18 @@ class NoteIndexService {
     // chunk rows are still maintained (search degrades to substring).
     final ftsAvailable = _db.chunksFtsAvailable;
     await _transactionWithRemovals(db, (txn, removals) async {
+      final liveNotes = await txn.query(
+        'notes',
+        columns: ['metadata'],
+        where: 'id = ? AND __deleted__ = 0',
+        whereArgs: [noteId],
+      );
+      if (liveNotes.isEmpty ||
+          isNoteSearchExcluded(
+            _decodeMetadata(liveNotes.first['metadata'] as String?),
+          )) {
+        return;
+      }
       if (guardSnapshot) {
         final stateRows = await txn.query(
           'search_index_state',
@@ -2799,7 +2816,10 @@ class NoteIndexService {
       total: 0,
       stage: null,
     );
-    if (_paused) return unavailable;
+    if (_paused || _deletingEmbeddings) return unavailable;
+    final generation = _embedGeneration;
+    bool cancelled() =>
+        _paused || _deletingEmbeddings || generation != _embedGeneration;
     final db = await _db.database;
     // Policy purge FIRST, ahead of every gate below: it only DELETES local
     // rows, so it needs no provider, no consent, no network and no unhalted
@@ -2817,14 +2837,28 @@ class NoteIndexService {
     if (config == null || provider == null) return unavailable;
     final providerKey = config.providerKey;
     final stage = stageEmbed(providerKey);
-    if (!await _embedConsentCheck(providerKey)) return unavailable;
+    if (!await _embedConsentCheck(providerKey) || cancelled()) {
+      return unavailable;
+    }
+
+    Future<void> writeGlobal(String status, {String? errorMessage}) =>
+        _serialized(() async {
+          if (cancelled()) return;
+          await _writeEmbedGlobalRow(
+            db,
+            stage,
+            status,
+            errorMessage: errorMessage,
+          );
+        });
 
     if (!force && await _embedStageHalted(db, stage)) {
       return (outcome: _embedOutcomeHalted, done: 0, total: 0, stage: stage);
     }
     if (!await _embedNetworkAllowed()) {
-      // Wifi-only gate closed: leave the global row untouched (a completed
-      // stage stays complete) — the next sweep re-evaluates.
+      // A note may have changed since the previous completed pass. Keep
+      // ensureBackfilled eligible to resume once the network gate reopens.
+      await _clearEmbedGlobalDone(db, stage);
       return (outcome: _embedOutcomeDeferred, done: 0, total: 0, stage: stage);
     }
 
@@ -2848,12 +2882,14 @@ class NoteIndexService {
       );
       gapIds.sort((a, b) => a.id.compareTo(b.id));
     }
+    if (cancelled()) return unavailable;
     final total = gapIds.length;
     var done = 0;
+    var staleBatch = false;
     if (gapIds.isEmpty) {
       if (scopeNoteId == null && !_paused) {
-        await _writeEmbedGlobalRow(db, stage, statusDone);
-        await _maybePromoteServing(registry, providerKey);
+        await writeGlobal(statusDone);
+        if (!cancelled()) await _maybePromoteServing(registry, providerKey);
       }
       return (outcome: _embedOutcomeDone, done: 0, total: 0, stage: stage);
     }
@@ -2885,6 +2921,7 @@ class NoteIndexService {
     /// what [ensureBackfilled] consults, so a per-note pass deferred by the
     /// wifi gate would otherwise never be picked back up.
     Future<({int outcome, int done, int total, String? stage})> defer() async {
+      if (cancelled()) return unavailable;
       await _clearEmbedGlobalDone(db, stage);
       return (
         outcome: _embedOutcomeDeferred,
@@ -2895,7 +2932,10 @@ class NoteIndexService {
     }
 
     for (final batchIds in batches) {
-      if (_paused || !await _embedNetworkAllowed()) {
+      if (cancelled() || !await _embedConsentCheck(providerKey)) {
+        return unavailable;
+      }
+      if (!await _embedNetworkAllowed()) {
         return defer();
       }
       // Text is fetched per batch (never for the whole pass at once) and is
@@ -2910,7 +2950,11 @@ class NoteIndexService {
       List<Float32List> vectors;
       List<_PreparedEmbedInput> prepared;
       try {
-        final embedded = await _embedBatchWithRetry(provider, batch);
+        final embedded = await _embedBatchWithRetry(
+          provider,
+          batch,
+          shouldAbort: cancelled,
+        );
         vectors = embedded.vectors;
         prepared = embedded.prepared;
         if (vectors.length != batch.length) {
@@ -2920,17 +2964,13 @@ class NoteIndexService {
           );
         }
       } on EmbeddingProviderException catch (e) {
+        if (cancelled()) return unavailable;
         if (e.isAuthError || e.isNotInstalled || e.detectedDimensions != null) {
           // Halt the whole pass; visible error state for settings (§2.2).
           LoggerService.error(
             '[NoteIndex] embed pass halted for $providerKey: ${e.message}',
           );
-          await _writeEmbedGlobalRow(
-            db,
-            stage,
-            statusError,
-            errorMessage: encodeEmbedHalt(e),
-          );
+          await writeGlobal(statusError, errorMessage: encodeEmbedHalt(e));
           return (
             outcome: _embedOutcomeHalted,
             done: done,
@@ -2950,51 +2990,55 @@ class NoteIndexService {
         LoggerService.error(
           '[NoteIndex] embed batch failed permanently: ${e.message}',
         );
-        await _serialized(
-          () => _writeChunkEmbedErrors(batch, stage, e.message),
-        );
+        final recorded = await _serialized(() async {
+          if (cancelled()) return 0;
+          return _writeChunkEmbedErrors(batch, stage, e.message);
+        });
+        if (recorded < batch.length) staleBatch = true;
         done += batchIds.length;
         reportProgress();
         continue;
       } catch (e) {
+        if (cancelled()) return unavailable;
         // Unexpected (e.g. ArgumentError): treat as permanent for the batch.
         LoggerService.error('[NoteIndex] embed batch failed: $e', error: e);
-        await _serialized(() => _writeChunkEmbedErrors(batch, stage, '$e'));
+        final recorded = await _serialized(() async {
+          if (cancelled()) return 0;
+          return _writeChunkEmbedErrors(batch, stage, '$e');
+        });
+        if (recorded < batch.length) staleBatch = true;
         done += batchIds.length;
         reportProgress();
         continue;
       }
 
+      if (cancelled() || !await _embedConsentCheck(providerKey)) {
+        return unavailable;
+      }
       final written = await _serialized(
-        () =>
-            _writeEmbeddingBatch(providerKey, batch, vectors, prepared, stage),
+        () => _writeEmbeddingBatch(
+          providerKey,
+          batch,
+          vectors,
+          prepared,
+          stage,
+          generation: generation,
+        ),
       );
-      if (!written) {
-        // Paused before the queued write ran (recovery swap): nothing
-        // landed; the resume sweep re-runs.
-        return defer();
-      }
-      // Incremental vector-index patches (plan §2.3: never reload from
-      // SQLite on edits). No-ops cheaply while this key is not loaded.
-      final vs = _vectorSearch;
-      if (vs != null) {
-        for (var j = 0; j < batch.length; j++) {
-          vs.upsert(providerKey, batch[j].chunkId, vectors[j]);
-        }
-      }
+      if (written == null) return unavailable;
+      if (written < batch.length) staleBatch = true;
       done += batchIds.length;
       reportProgress();
     }
 
-    if (_paused) {
-      return defer();
-    }
+    if (cancelled()) return unavailable;
+    if (staleBatch) return defer();
     if (scopeNoteId == null) {
       // Recorded per-chunk errors are stable, inspectable rows — terminal
       // for completeness (a permanently failing chunk must not pin the
       // stage incomplete forever).
-      await _writeEmbedGlobalRow(db, stage, statusDone);
-      await _maybePromoteServing(registry, providerKey);
+      await writeGlobal(statusDone);
+      if (!cancelled()) await _maybePromoteServing(registry, providerKey);
     }
     return (outcome: _embedOutcomeDone, done: done, total: total, stage: stage);
   }
@@ -3045,10 +3089,12 @@ class NoteIndexService {
       final rows = await db.rawQuery(
         '''
         SELECT c.id, c.sourceType,
+               n.id AS liveNoteId, n.metadata AS noteMetadata,
                a.id AS attachmentId,
                a.includeInAIContext AS aiInclude,
                a.metadata AS attachmentMetadata
         FROM search_chunks c
+        LEFT JOIN notes n ON n.id = c.noteId AND n.__deleted__ = 0
         LEFT JOIN chunk_embeddings e
           ON e.chunkId = c.id AND e.providerKey = ?
         LEFT JOIN attachments a
@@ -3099,6 +3145,10 @@ class NoteIndexService {
   /// tombstoned row still joins) and the `aiInclude`/`attachmentMetadata`
   /// decisions below are read off a row that no longer exists.
   bool _passesEmbedPolicy(Map<String, Object?> row) {
+    if (row['liveNoteId'] == null ||
+        isNoteSearchExcluded(_decodeMetadata(row['noteMetadata'] as String?))) {
+      return false;
+    }
     final sourceType = row['sourceType'] as String? ?? '';
     if (!_attachmentSourceTypes.contains(sourceType)) return true;
     if (row['attachmentId'] == null) {
@@ -3154,15 +3204,16 @@ class NoteIndexService {
       final rows = await db.rawQuery(
         '''
         SELECT DISTINCT c.id, c.sourceType,
+               n.id AS liveNoteId, n.metadata AS noteMetadata,
                a.id AS attachmentId,
                a.includeInAIContext AS aiInclude,
                a.metadata AS attachmentMetadata
         FROM chunk_embeddings e
         JOIN search_chunks c ON c.id = e.chunkId
+        LEFT JOIN notes n ON n.id = c.noteId AND n.__deleted__ = 0
         LEFT JOIN attachments a
           ON a.id = c.sourceId $_liveAttachmentJoinFilter
-        WHERE c.sourceType IN ('attachment_text','attachment_ocr','figure')
-          AND c.id > ?
+        WHERE c.id > ?
           ${scopeNoteId != null ? 'AND c.noteId = ?' : ''}
         ORDER BY c.id
         LIMIT ?
@@ -3234,6 +3285,7 @@ class NoteIndexService {
       final rows = await db.rawQuery(
         '''
         SELECT c.id, c.sourceType, c.meta,
+               n.id AS liveNoteId, n.metadata AS noteMetadata,
                a.id AS attachmentId,
                a.includeInAIContext AS aiInclude,
                a.metadata AS attachmentMetadata,
@@ -3241,6 +3293,7 @@ class NoteIndexService {
                a.filePath AS attFilePath,
                a.isRelativePath AS attIsRelative
         FROM search_chunks c
+        LEFT JOIN notes n ON n.id = c.noteId AND n.__deleted__ = 0
         JOIN chunk_embeddings e
           ON e.chunkId = c.id AND e.providerKey = ?
           AND e.contentHash = c.contentHash AND e.modality = 'text'
@@ -3337,7 +3390,7 @@ class NoteIndexService {
   /// order given. Chunks deleted since the scan (or emptied) simply drop out
   /// — the pass counts them as done and the next sweep re-checks.
   Future<List<_EmbedGap>> _loadEmbedGapBatch(
-    Database db,
+    DatabaseExecutor db,
     List<int> chunkIds,
   ) async {
     if (chunkIds.isEmpty) return const [];
@@ -3351,12 +3404,17 @@ class NoteIndexService {
       // The attachment join carries what the multimodal path needs to locate
       // a figure's image without a second query per chunk.
       final rows = await db.rawQuery(
-        'SELECT c.id, c.text, c.contentHash, c.sourceType, c.meta, '
+        'SELECT c.id, c.chunkKey, c.text, c.contentHash, c.sourceType, c.meta, '
+        'n.id AS liveNoteId, n.metadata AS noteMetadata, '
+        'a.id AS attachmentId, a.includeInAIContext AS aiInclude, '
+        'a.metadata AS attachmentMetadata, '
         'a.fileName AS attFileName, a.filePath AS attFilePath, '
         'a.isRelativePath AS attIsRelative '
         'FROM search_chunks c '
+        'LEFT JOIN notes n ON n.id = c.noteId AND n.__deleted__ = 0 '
         'LEFT JOIN attachments a ON a.id = c.sourceId '
-        "AND c.sourceType = 'figure' $_liveAttachmentJoinFilter "
+        "AND c.sourceType IN ('attachment_text','attachment_ocr','figure') "
+        '$_liveAttachmentJoinFilter '
         'WHERE c.id IN ($placeholders)',
         slice,
       );
@@ -3367,12 +3425,13 @@ class NoteIndexService {
     final gaps = <_EmbedGap>[];
     for (final chunkId in chunkIds) {
       final row = byId[chunkId];
-      if (row == null) continue;
+      if (row == null || !_passesEmbedPolicy(row)) continue;
       final text = row['text'] as String;
       if (text.trim().isEmpty) continue;
       gaps.add(
         _EmbedGap(
           chunkId: chunkId,
+          chunkKey: row['chunkKey'] as String,
           text: text,
           contentHash: row['contentHash'] as String,
           sourceType: row['sourceType'] as String? ?? '',
@@ -3395,12 +3454,19 @@ class NoteIndexService {
   Future<({List<Float32List> vectors, List<_PreparedEmbedInput> prepared})>
   _embedBatchWithRetry(
     EmbeddingProvider provider,
-    List<_EmbedGap> batch,
-  ) async {
+    List<_EmbedGap> batch, {
+    required bool Function() shouldAbort,
+  }) async {
     final prepared = await _buildEmbedInputs(provider, batch);
     final inputs = [for (final item in prepared) item.input];
     var attempt = 0;
     while (true) {
+      if (shouldAbort()) {
+        throw const EmbeddingProviderException(
+          'Embedding pass cancelled',
+          isTransient: true,
+        );
+      }
       try {
         return (
           vectors: await provider.embedDocuments(inputs),
@@ -3565,7 +3631,9 @@ class NoteIndexService {
 
   /// Stores one batch of vectors (float32 LE, already L2-normalized by the
   /// provider) in a single transaction, clearing any per-chunk error states
-  /// they supersede. Returns false when paused (nothing written).
+  /// they supersede. Returns the committed count, or null when cancelled.
+  /// Rows edited, deleted, moved or excluded during the provider call are
+  /// discarded after checking their current identity, hash and policy.
   ///
   /// A figure that fell back to text because its image file is present but
   /// UNUSABLE gets a 'skipped' chunk-scoped state row instead of the usual
@@ -3573,19 +3641,35 @@ class NoteIndexService {
   /// otherwise re-embed the same text, for a provider call per sweep,
   /// forever). Same transaction as the vector, so the two can never disagree;
   /// the row dies with the chunk, and `backfillAll(force: true)` clears it.
-  Future<bool> _writeEmbeddingBatch(
+  Future<int?> _writeEmbeddingBatch(
     String providerKey,
     List<_EmbedGap> batch,
     List<Float32List> vectors,
     List<_PreparedEmbedInput> prepared,
-    String stage,
-  ) async {
-    if (_paused) return false;
+    String stage, {
+    required int generation,
+  }) async {
+    if (_paused || _deletingEmbeddings || generation != _embedGeneration) {
+      return null;
+    }
     final db = await _db.database;
     final now = DateTime.now().millisecondsSinceEpoch;
+    final committed = <int>[];
     await db.transaction((txn) async {
+      final current = {
+        for (final gap in await _loadEmbedGapBatch(txn, [
+          for (final gap in batch) gap.chunkId,
+        ]))
+          gap.chunkId: gap,
+      };
       for (var i = 0; i < batch.length; i++) {
         final gap = batch[i];
+        final live = current[gap.chunkId];
+        if (live == null ||
+            live.chunkKey != gap.chunkKey ||
+            live.contentHash != gap.contentHash) {
+          continue;
+        }
         final vector = vectors[i];
         final input = i < prepared.length ? prepared[i] : null;
         await txn.insert('chunk_embeddings', {
@@ -3596,6 +3680,7 @@ class NoteIndexService {
           'vector': encodeVectorFloat32Le(vector),
           'contentHash': gap.contentHash,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
+        committed.add(i);
         if (input?.imageUnusable ?? false) {
           await txn.insert('search_index_state', {
             'scopeType': 'chunk',
@@ -3615,21 +3700,39 @@ class NoteIndexService {
         );
       }
     });
-    return true;
+    // Apply only committed rows while still on the write queue, before a
+    // following chunk mutation can remove or replace their vectors.
+    for (final i in committed) {
+      _vectorSearch?.upsert(providerKey, batch[i].chunkId, vectors[i]);
+    }
+    return committed.length;
   }
 
   /// Records per-chunk permanent-error states for [batch] (keyed to each
   /// chunk's current contentHash so gap scans skip them until it changes).
-  Future<void> _writeChunkEmbedErrors(
+  Future<int> _writeChunkEmbedErrors(
     List<_EmbedGap> batch,
     String stage,
     String errorMessage,
   ) async {
-    if (_paused) return;
+    if (_paused) return 0;
     final db = await _db.database;
     final now = DateTime.now().millisecondsSinceEpoch;
+    var recorded = 0;
     await db.transaction((txn) async {
+      final current = {
+        for (final gap in await _loadEmbedGapBatch(txn, [
+          for (final gap in batch) gap.chunkId,
+        ]))
+          gap.chunkId: gap,
+      };
       for (final gap in batch) {
+        final live = current[gap.chunkId];
+        if (live == null ||
+            live.chunkKey != gap.chunkKey ||
+            live.contentHash != gap.contentHash) {
+          continue;
+        }
         await txn.insert('search_index_state', {
           'scopeType': 'chunk',
           'scopeId': '${gap.chunkId}',
@@ -3639,8 +3742,10 @@ class NoteIndexService {
           'errorMessage': errorMessage,
           'updatedAt': now,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
+        recorded++;
       }
     });
+    return recorded;
   }
 
   Future<void> _writeEmbedGlobalRow(
@@ -3716,6 +3821,16 @@ class NoteIndexService {
   /// Self-contained on purpose: the guarantee holds whether or not the
   /// caller also invokes [EmbeddingProviderRegistry.clearActiveConfig].
   Future<void> deleteStoredEmbeddings() async {
+    _embedGeneration++;
+    _deletingEmbeddings = true;
+    try {
+      await _deleteStoredEmbeddingsNow();
+    } finally {
+      _deletingEmbeddings = false;
+    }
+  }
+
+  Future<void> _deleteStoredEmbeddingsNow() async {
     final registry = _embeddingRegistry;
     final revokeKeys = <String>{};
     await _serialized(() async {
@@ -4467,7 +4582,8 @@ class NoteIndexService {
       'WHERE a.__deleted__ = 0 AND n.__deleted__ = 0';
   static const String _liveNoteIdsSql =
       'SELECT id FROM notes WHERE __deleted__ = 0';
-  static const String _liveAttachmentJoinFilter = 'AND a.__deleted__ = 0';
+  static const String _liveAttachmentJoinFilter =
+      'AND a.__deleted__ = 0 AND a.noteId = c.noteId';
 
   /// SQL predicate matching OCR-eligible fileNames (PDF + raster images).
   ///
@@ -4573,6 +4689,7 @@ typedef _EmbedGapId = ({int id, bool figure});
 class _EmbedGap {
   const _EmbedGap({
     required this.chunkId,
+    this.chunkKey = '',
     required this.text,
     required this.contentHash,
     this.sourceType = '',
@@ -4582,6 +4699,7 @@ class _EmbedGap {
     this.attachmentIsRelativePath = true,
   });
   final int chunkId;
+  final String chunkKey;
   final String text;
   final String contentHash;
 

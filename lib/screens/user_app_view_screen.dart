@@ -12,10 +12,10 @@ import '../services/service_locator.dart';
 import '../services/sync/cloud_sync_service.dart';
 import '../services/user_app_service.dart';
 import '../services/user_app_session_service.dart';
-import '../services/service_locator.dart';
 import '../services/logger_service.dart';
 import '../utils/file_utils.dart';
 import '../utils/global_keys.dart';
+import '../utils/user_app_localization.dart';
 import '../widgets/user_app_web_view.dart';
 import 'user_app_edit_screen.dart';
 import 'note_detail_screen.dart';
@@ -456,7 +456,7 @@ class UserAppViewScreenState extends State<UserAppViewScreen> with RouteAware {
               title: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(widget.app.name),
+                  Text(currentApp.displayName(context)),
                   if (widget.app.type == UserAppType.noteAction &&
                       widget.selectedNotes != null)
                     Text(
@@ -735,7 +735,9 @@ class UserAppViewScreenState extends State<UserAppViewScreen> with RouteAware {
           app: currentApp,
           revision: revision,
           selectedNotes: widget.selectedNotes ?? const [],
-          sourceLabel: 'App: ${widget.app.name}',
+          sourceLabel: AppLocalizations.of(
+            context,
+          )!.approvalSourceApp(currentApp.displayName(context)),
           onOpenNote: (note, replaceWindow) async {
             if (!mounted) return;
             if (replaceWindow) {
@@ -1055,7 +1057,7 @@ class UserAppViewScreenState extends State<UserAppViewScreen> with RouteAware {
     AppLocalizations l10n,
   ) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.app.name)),
+      appBar: AppBar(title: Text(widget.app.displayName(context))),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),

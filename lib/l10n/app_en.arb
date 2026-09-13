@@ -2442,6 +2442,125 @@
   "runNoteActionAppOnSelection": "Run Note Action App",
   "approvalScopeBlockOnly": "Applies to the selected block only.",
   "approvalScopeWholeNote": "Applies to the ENTIRE note, not just the selected block.",
+  "approvalNoteModificationTitle": "Allow Note Modification?",
+  "approvalBatchNoteModificationTitle": "Allow Batched Note Modification?",
+  "approvalSourceWantsModifyNote": "{source} wants to modify the note:",
+  "@approvalSourceWantsModifyNote": {
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "approvalSourceWantsModifyNotes": "{source} wants to modify {count} notes:",
+  "@approvalSourceWantsModifyNotes": {
+    "placeholders": {
+      "source": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "approvalOperationWantsModifyNote": "The operation wants to modify the note:",
+  "approvalOperationWantsModifyNotes": "The operation wants to modify {count} notes:",
+  "@approvalOperationWantsModifyNotes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "approvalSourceApp": "App: {name}",
+  "@approvalSourceApp": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "approvalSourceEmbeddedApp": "Embedded app: {name}",
+  "@approvalSourceEmbeddedApp": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "approvalAllowForSession": "Allow for this session",
+  "approvalDeny": "Deny",
+  "approvalApprove": "Approve",
+  "approvalNoteId": "Note ID: {id}",
+  "@approvalNoteId": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "approvalNoteLabel": "Note: ",
+  "approvalNoNotesSpecified": "No notes specified",
+  "approvalShowFullChange": "Show full change",
+  "approvalBatchUpdate": "Batch update of {count} notes",
+  "@approvalBatchUpdate": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "approvalBatchUpdatePreview": "Batch update of {count} notes (showing first {visibleCount}):",
+  "@approvalBatchUpdatePreview": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "visibleCount": {
+        "type": "int"
+      }
+    }
+  },
+  "approvalUnknown": "unknown",
+  "approvalSetTitle": "Set Title: \"{value}\"",
+  "approvalAppendContent": "Append Content: \"{value}\"",
+  "approvalInsertBefore": "Insert Before: \"{value}\"",
+  "approvalDeleteSelectedContent": "Delete the selected content",
+  "approvalReplaceContentWith": "Replace Content With: \"{value}\"",
+  "approvalSetContent": "Set Content: \"{value}\"",
+  "approvalContent": "Content: {value}",
+  "approvalAddTags": "Add Tags: {value}",
+  "approvalRemoveTags": "Remove Tags: {value}",
+  "approvalTags": "Tags: {value}",
+  "approvalSetType": "Set Type: \"{value}\"",
+  "approvalSetStatus": "Set Status: \"{value}\"",
+  "approvalPinNote": "Pin Note",
+  "approvalUnpinNote": "Unpin Note",
+  "approvalArchiveNote": "Archive Note",
+  "approvalUnarchiveNote": "Unarchive Note",
+  "approvalSetField": "Set {field}: {value}",
+  "@approvalSetField": {
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@approvalSetTitle": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalAppendContent": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalInsertBefore": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalReplaceContentWith": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalSetContent": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalContent": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalAddTags": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalRemoveTags": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalTags": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalSetType": {"placeholders": {"value": {"type": "String"}}},
+  "@approvalSetStatus": {"placeholders": {"value": {"type": "String"}}},
+  "approvalDetailsTruncated": "… (truncated for display)",
   "blockSelectionOutOfSync": "This block cannot be targeted: its position in the note could not be confirmed, so no app was opened. The note was left unchanged.",
   "deleteSelection": "Delete Blocks",
   "confirmDeleteBlocks": "Are you sure you want to delete {count} blocks?",

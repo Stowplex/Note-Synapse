@@ -12,11 +12,13 @@
 // `AppDocumentsBlobFileResolver`, so the phase is driven against real files
 // on disk without `path_provider` — the resolver interface exists for
 // exactly this.
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:note_synapse/services/database_service.dart';
+import 'package:note_synapse/services/sync/blob_gc.dart';
 import 'package:note_synapse/services/sync/blob_sync.dart';
 import 'package:note_synapse/services/sync/sync_session.dart';
 
@@ -286,6 +288,63 @@ void main() {
       'appCode': code,
     });
   }
+
+  test('localized mini-app metadata syncs when created and updated', () async {
+    await createMiniApp(a, code: 'code');
+    final localized = jsonEncode({
+      'zh': {'name': '计数器', 'description': '计数'},
+    });
+    await (await a.db).update('user_apps', {'i18n': localized});
+    await syncFully(a);
+    await syncFully(b);
+    expect((await (await b.db).query('user_apps')).single['i18n'], localized);
+
+    final updated = jsonEncode({
+      'zh': {'name': '新计数器', 'description': '新的描述'},
+    });
+    await (await a.db).update('user_apps', {'i18n': updated});
+    await syncFully(a);
+    await syncFully(b);
+    expect((await (await b.db).query('user_apps')).single['i18n'], updated);
+  });
+
+  test(
+    'published mini-app code stays live for GC, including older sender state',
+    () async {
+      await createMiniApp(a, code: 'source code');
+      await syncFully(a);
+      final hash = BlobSyncPhase.hashString('source code');
+      expect(
+        (await a.blobs.allReferences()).map((r) => r.blobHash),
+        contains(hash),
+      );
+      expect(
+        (await BlobGc(a.databaseService).scan(backend)).candidates,
+        isEmpty,
+      );
+
+      // Reproduce a sender that published with the old pending-only stamping.
+      await (await a.db).update(
+        'sync_field_state',
+        {'blobHash': null},
+        where: 'entityTable = ? AND fieldName = ?',
+        whereArgs: ['app_revisions', 'appCode'],
+      );
+      expect(
+        (await a.blobs.allReferences()).map((r) => r.blobHash),
+        isNot(contains(hash)),
+      );
+      await syncFully(a);
+      expect(
+        (await a.blobs.allReferences()).map((r) => r.blobHash),
+        contains(hash),
+      );
+      expect(
+        (await BlobGc(a.databaseService).scan(backend)).candidates,
+        isEmpty,
+      );
+    },
+  );
 
   test(
     'a mini app arrives on a second device WITH its code — app_revisions '

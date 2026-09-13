@@ -26,6 +26,8 @@
 // sync. It has been in `user_apps`' sync scope since M2.4. That assertion
 // failing is what turned it into a content-blob rather than leaving a
 // legacy app's HTML travelling inline in every commit that touched the row.
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:note_synapse/services/database_service.dart';
@@ -33,6 +35,37 @@ import 'package:note_synapse/services/sync/large_row_reader.dart';
 import 'package:note_synapse/services/sync/sync_session.dart';
 
 import '../sync_backend/mock_sync_backend.dart';
+
+/// Models the Android per-row byte limit and failures during chunk reads.
+class _BoundedReader implements DatabaseExecutor {
+  _BoundedReader(this.delegate, {this.failAfterChunk});
+  final DatabaseExecutor delegate;
+  final int? failAfterChunk;
+  int chunkReads = 0;
+
+  @override
+  Future<List<Map<String, Object?>>> rawQuery(
+    String sql, [
+    List<Object?>? arguments,
+  ]) async {
+    if (sql.startsWith('SELECT substr(')) {
+      chunkReads++;
+      if (failAfterChunk != null && chunkReads > failAfterChunk!) {
+        throw StateError('injected chunk I/O failure');
+      }
+    }
+    final rows = await delegate.rawQuery(sql, arguments);
+    for (final row in rows) {
+      if (utf8.encode(jsonEncode(row)).length > 2 * 1024 * 1024) {
+        throw StateError('row exceeds Android CursorWindow');
+      }
+    }
+    return rows;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 void main() {
   setUpAll(() {
@@ -47,6 +80,90 @@ void main() {
 
   /// Larger than [syncLargeColumnThreshold], so it takes the chunked path.
   String vendoredWasm() => 'W' * (syncLargeColumnThreshold + 1024);
+
+  for (final useWhere in [false, true]) {
+    test('large Unicode reads respect byte limits (where=$useWhere)', () async {
+      final db = await svc.database;
+      final content = '${'中文😀' * 30000}\u0000${'😀' * (1024 * 1024 + 5)}';
+      await db.insert('notes', {
+        'id': 'unicode',
+        'title': 'title',
+        'content': content,
+        'type': 'note',
+        'createdAt': 1,
+        'updatedAt': 1,
+      });
+      final reader = _BoundedReader(db);
+      final row = useWhere
+          ? (await readSyncRowsWhere(
+              reader,
+              table: 'notes',
+              columns: ['id', 'content'],
+              keyColumns: ['id'],
+              where: 'id = ?',
+              whereArgs: ['unicode'],
+            )).single
+          : await readSyncRow(
+              reader,
+              table: 'notes',
+              idColumn: 'id',
+              entityId: 'unicode',
+              columns: ['id', 'content'],
+            );
+      expect(row!['content'], content);
+      expect(reader.chunkReads, greaterThan(1));
+    });
+
+    test(
+      'failed chunk reads never return a publishable prefix (where=$useWhere)',
+      () async {
+        final db = await svc.database;
+        await db.insert('notes', {
+          'id': 'large',
+          'title': 'title',
+          'content': 'x' * (2 * 1024 * 1024),
+          'type': 'note',
+          'createdAt': 1,
+          'updatedAt': 1,
+        });
+        final reader = _BoundedReader(db, failAfterChunk: 1);
+        final read = useWhere
+            ? readSyncRowsWhere(
+                reader,
+                table: 'notes',
+                columns: ['id', 'content'],
+                keyColumns: ['id'],
+                where: 'id = ?',
+                whereArgs: ['large'],
+              )
+            : readSyncRow(
+                reader,
+                table: 'notes',
+                idColumn: 'id',
+                entityId: 'large',
+                columns: ['id', 'content'],
+              );
+        await expectLater(read, throwsStateError);
+      },
+    );
+  }
+
+  test(
+    'a missing row during chunking fails instead of returning partial data',
+    () async {
+      await expectLater(
+        readLargeTextColumn(
+          await svc.database,
+          table: 'notes',
+          column: 'content',
+          idColumn: 'id',
+          entityId: 'missing',
+          totalLength: 10,
+        ),
+        throwsStateError,
+      );
+    },
+  );
 
   test('an oversized column round-trips exactly through the chunked read',
       () async {

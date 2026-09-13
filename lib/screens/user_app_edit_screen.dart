@@ -17,6 +17,7 @@ import '../services/user_app_library_service.dart';
 import 'note_selection_dialog.dart';
 import '../widgets/synapse_code_editor.dart';
 import '../models/generation_context.dart';
+import '../utils/user_app_localization.dart';
 import '../models/model_config.dart';
 import '../widgets/model_selector_button.dart';
 import '../widgets/drawing_editor.dart';
@@ -258,6 +259,9 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
 
       // Create generation context with override
       final generationContext = GenerationContext();
+      generationContext.uiLanguageTag = userAppLocaleTag(
+        Localizations.localeOf(context),
+      );
       if (_selectedModel != null) {
         generationContext.modelOverride = _selectedModel;
       } else {
@@ -752,7 +756,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  widget.app.name,
+                                  widget.app.displayName(context),
                                   style: theme.textTheme.bodyLarge,
                                 ),
                                 const SizedBox(height: 16),
@@ -765,7 +769,7 @@ class _UserAppEditScreenState extends State<UserAppEditScreen>
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  widget.app.description,
+                                  widget.app.displayDescription(context),
                                   style: theme.textTheme.bodyMedium,
                                 ),
                               ],

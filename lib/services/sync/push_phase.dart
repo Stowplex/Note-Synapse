@@ -248,7 +248,7 @@ class PushPhase {
     this.maxPayloadBytesPerCommit = defaultMaxPayloadBytesPerCommit,
     BlobSyncPhase? blobs,
     DatasetCrypto crypto = const DatasetCrypto.plaintext(),
-  }) : _blobs = blobs ?? BlobSyncPhase(_databaseService),
+  }) : _blobs = blobs ?? BlobSyncPhase(_databaseService, crypto: crypto),
        _crypto = crypto;
 
   final DatabaseService _databaseService;
@@ -343,6 +343,28 @@ class PushPhase {
     // re-encode a pure function of durable state, which is what the
     // intent's `payloadHash` check already assumes.
     await _stampBlobHashes(db, authorId);
+    // Older builds stamped content hashes only on the pending operation.
+    // Repair already-published local winners too, before GC reads liveness.
+    await db.rawUpdate(
+      '''
+      UPDATE sync_field_state AS state
+      SET blobHash = (
+        SELECT op.blobHash FROM sync_pending_ops op
+        WHERE op.authorId = state.authorId AND op.authorSeq = state.authorSeq
+          AND op.entityTable = state.entityTable AND op.entityId = state.entityId
+          AND op.fieldName = state.fieldName AND op.valueJson IS state.valueJson
+      )
+      WHERE state.authorId = ? AND state.blobHash IS NULL
+        AND EXISTS (
+          SELECT 1 FROM sync_pending_ops op
+          WHERE op.authorId = state.authorId AND op.authorSeq = state.authorSeq
+            AND op.entityTable = state.entityTable AND op.entityId = state.entityId
+            AND op.fieldName = state.fieldName AND op.valueJson IS state.valueJson
+            AND op.blobHash IS NOT NULL
+        )
+    ''',
+      [authorId],
+    );
     lastBlobResult = await _blobs.uploadReferenced(
       backend,
       await _pendingBlobReferences(db, authorId),
@@ -594,11 +616,15 @@ class PushPhase {
       if (isContentBlobColumn(entityTable, fieldName)) {
         final value = BlobSyncPhase.decodeValue(row['valueJson'] as String?);
         if (value is! String || value.isEmpty) continue;
-        await db.update(
-          'sync_pending_ops',
-          {'blobHash': BlobSyncPhase.hashString(value)},
-          where: 'authorId = ? AND authorSeq = ?',
-          whereArgs: [authorId, row['authorSeq']],
+        await _recordBlobHash(
+          db,
+          authorId: authorId,
+          authorSeq: row['authorSeq'] as int,
+          entityTable: entityTable,
+          entityId: row['entityId'] as String,
+          fieldName: fieldName,
+          valueJson: row['valueJson'] as String?,
+          hash: BlobSyncPhase.hashString(value),
         );
         continue;
       }
@@ -704,8 +730,10 @@ class PushPhase {
     DatabaseExecutor db,
     String authorId,
   ) async => BlobSyncPhase.referencesInPendingOps(
-    await db.query(
-      'sync_pending_ops',
+    await readSyncRowsWhere(
+      db,
+      table: 'sync_pending_ops',
+      keyColumns: const ['authorId', 'authorSeq'],
       // `fieldName` is load-bearing, not decorative: it is what
       // `referencesInPendingOps` uses to tell a content-backed column from a
       // file-backed one. Omitting it silently classified every `appCode` as

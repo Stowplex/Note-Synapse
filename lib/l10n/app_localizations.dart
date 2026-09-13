@@ -9170,6 +9170,222 @@ abstract class AppLocalizations {
   /// **'Applies to the ENTIRE note, not just the selected block.'**
   String get approvalScopeWholeNote;
 
+  /// No description provided for @approvalNoteModificationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Note Modification?'**
+  String get approvalNoteModificationTitle;
+
+  /// No description provided for @approvalBatchNoteModificationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Batched Note Modification?'**
+  String get approvalBatchNoteModificationTitle;
+
+  /// No description provided for @approvalSourceWantsModifyNote.
+  ///
+  /// In en, this message translates to:
+  /// **'{source} wants to modify the note:'**
+  String approvalSourceWantsModifyNote(String source);
+
+  /// No description provided for @approvalSourceWantsModifyNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'{source} wants to modify {count} notes:'**
+  String approvalSourceWantsModifyNotes(String source, int count);
+
+  /// No description provided for @approvalOperationWantsModifyNote.
+  ///
+  /// In en, this message translates to:
+  /// **'The operation wants to modify the note:'**
+  String get approvalOperationWantsModifyNote;
+
+  /// No description provided for @approvalOperationWantsModifyNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'The operation wants to modify {count} notes:'**
+  String approvalOperationWantsModifyNotes(int count);
+
+  /// No description provided for @approvalSourceApp.
+  ///
+  /// In en, this message translates to:
+  /// **'App: {name}'**
+  String approvalSourceApp(String name);
+
+  /// No description provided for @approvalSourceEmbeddedApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Embedded app: {name}'**
+  String approvalSourceEmbeddedApp(String name);
+
+  /// No description provided for @approvalAllowForSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow for this session'**
+  String get approvalAllowForSession;
+
+  /// No description provided for @approvalDeny.
+  ///
+  /// In en, this message translates to:
+  /// **'Deny'**
+  String get approvalDeny;
+
+  /// No description provided for @approvalApprove.
+  ///
+  /// In en, this message translates to:
+  /// **'Approve'**
+  String get approvalApprove;
+
+  /// No description provided for @approvalNoteId.
+  ///
+  /// In en, this message translates to:
+  /// **'Note ID: {id}'**
+  String approvalNoteId(String id);
+
+  /// No description provided for @approvalNoteLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Note: '**
+  String get approvalNoteLabel;
+
+  /// No description provided for @approvalNoNotesSpecified.
+  ///
+  /// In en, this message translates to:
+  /// **'No notes specified'**
+  String get approvalNoNotesSpecified;
+
+  /// No description provided for @approvalShowFullChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Show full change'**
+  String get approvalShowFullChange;
+
+  /// No description provided for @approvalBatchUpdate.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch update of {count} notes'**
+  String approvalBatchUpdate(int count);
+
+  /// No description provided for @approvalBatchUpdatePreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch update of {count} notes (showing first {visibleCount}):'**
+  String approvalBatchUpdatePreview(int count, int visibleCount);
+
+  /// No description provided for @approvalUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'unknown'**
+  String get approvalUnknown;
+
+  /// No description provided for @approvalSetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Set Title: \"{value}\"'**
+  String approvalSetTitle(String value);
+
+  /// No description provided for @approvalAppendContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Append Content: \"{value}\"'**
+  String approvalAppendContent(String value);
+
+  /// No description provided for @approvalInsertBefore.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert Before: \"{value}\"'**
+  String approvalInsertBefore(String value);
+
+  /// No description provided for @approvalDeleteSelectedContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the selected content'**
+  String get approvalDeleteSelectedContent;
+
+  /// No description provided for @approvalReplaceContentWith.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace Content With: \"{value}\"'**
+  String approvalReplaceContentWith(String value);
+
+  /// No description provided for @approvalSetContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Set Content: \"{value}\"'**
+  String approvalSetContent(String value);
+
+  /// No description provided for @approvalContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Content: {value}'**
+  String approvalContent(String value);
+
+  /// No description provided for @approvalAddTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Tags: {value}'**
+  String approvalAddTags(String value);
+
+  /// No description provided for @approvalRemoveTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove Tags: {value}'**
+  String approvalRemoveTags(String value);
+
+  /// No description provided for @approvalTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Tags: {value}'**
+  String approvalTags(String value);
+
+  /// No description provided for @approvalSetType.
+  ///
+  /// In en, this message translates to:
+  /// **'Set Type: \"{value}\"'**
+  String approvalSetType(String value);
+
+  /// No description provided for @approvalSetStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Set Status: \"{value}\"'**
+  String approvalSetStatus(String value);
+
+  /// No description provided for @approvalPinNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin Note'**
+  String get approvalPinNote;
+
+  /// No description provided for @approvalUnpinNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin Note'**
+  String get approvalUnpinNote;
+
+  /// No description provided for @approvalArchiveNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive Note'**
+  String get approvalArchiveNote;
+
+  /// No description provided for @approvalUnarchiveNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Unarchive Note'**
+  String get approvalUnarchiveNote;
+
+  /// No description provided for @approvalSetField.
+  ///
+  /// In en, this message translates to:
+  /// **'Set {field}: {value}'**
+  String approvalSetField(String field, String value);
+
+  /// No description provided for @approvalDetailsTruncated.
+  ///
+  /// In en, this message translates to:
+  /// **'… (truncated for display)'**
+  String get approvalDetailsTruncated;
+
   /// No description provided for @blockSelectionOutOfSync.
   ///
   /// In en, this message translates to:

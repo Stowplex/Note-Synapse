@@ -64,10 +64,10 @@
 //    nothing per commit keeps the M2.6 crash-safety story exactly as it was.
 //  * M2.10's per-operation containment survives batching via a **fallback,
 //    not a weakening**: if the whole-commit transaction throws, the commit is
-//    retried operation-by-operation, each in its own transaction, so one
-//    unapplicable operation parks only itself and its 63 neighbours still
-//    apply. The fast path is unchanged for the overwhelmingly common case
-//    where nothing throws.
+//    retried operation-by-operation using savepoints within one transaction.
+//    An unapplicable operation parks only itself, while the operations and
+//    frontier still commit together. A crash cannot leave half a commit
+//    durable and replay a removal on the next round.
 //
 // **An unknown FUTURE envelope version stops that log for the round rather
 // than parking it.** Parking advances the frontier past a commit, which is
@@ -243,8 +243,7 @@ class PullResult {
   /// avoid double-counting a parked operation that also failed this round.
   /// Non-empty means something is wrong and needs a human, but the device is
   /// still syncing everything else.
-  final List<(String authorId, int authorSeq, String error)>
-  failedOperations;
+  final List<(String authorId, int authorSeq, String error)> failedOperations;
 
   /// Commits whose envelope version this build does not implement —
   /// `(deviceLogId, deviceSeq, error)`, a COMMIT POSITION, not a dot, since
@@ -636,15 +635,18 @@ class PullPhase {
             error: error,
             stackTrace: stack,
           );
-          (appliedHere, blockedHere, changesHere) =
-              await _applyCommitOperationByOperation(
-                db,
-                deviceLogId: deviceLogId,
-                commit: commit,
-                wireOps: wireOps,
-                ownAuthorId: ownAuthorId,
-                failed: failed,
-              );
+          (
+            appliedHere,
+            blockedHere,
+            changesHere,
+          ) = await _applyCommitOperationByOperation(
+            db,
+            deviceLogId: deviceLogId,
+            commit: commit,
+            wireOps: wireOps,
+            ownAuthorId: ownAuthorId,
+            failed: failed,
+          );
         }
 
         localFrontier = commit.deviceSeq;
@@ -780,17 +782,10 @@ class PullPhase {
     return blockedThisOp;
   }
 
-  /// M2.10's per-operation containment, applied after a whole-commit
-  /// transaction has already failed and rolled back. Each operation gets its
-  /// own transaction; a failing one is parked with its own single-operation
-  /// payload (never the whole batch — replaying a batch to retry one
-  /// operation would re-apply the other 63) and the rest still apply.
-  ///
-  /// This log's frontier/pull-tip are advanced past the commit at the end
-  /// regardless, exactly as the pre-M2.12 single-operation park did, and for
-  /// the same reason: the commit was OBSERVED (§ Architecture 2's frontier
-  /// records observation, not successful materialization), and not advancing
-  /// would re-read and re-fail it on every future sync.
+  /// Isolates failed operations with savepoints while preserving commit-level
+  /// atomicity. The successful writes, parked payloads, frontier and pull tip
+  /// must commit together: otherwise a crash before the frontier write would
+  /// replay already-applied OR-Set removals on the next pull.
   Future<(int, int, SyncChangeCollector)> _applyCommitOperationByOperation(
     Database db, {
     required String deviceLogId,
@@ -799,14 +794,13 @@ class PullPhase {
     required String ownAuthorId,
     required List<(String, int, String)> failed,
   }) async {
-    var applied = 0;
-    var blocked = 0;
-    final changes = SyncChangeCollector();
-    for (final wireOp in wireOps) {
-      try {
-        // Per-operation collector, per-operation transaction: an operation
-        // that throws here rolls back alone and contributes nothing.
-        final (wasBlocked, opChanges) = await db.transaction((txn) async {
+    return db.transaction((txn) async {
+      var applied = 0;
+      var blocked = 0;
+      final changes = SyncChangeCollector();
+      for (final wireOp in wireOps) {
+        await txn.execute('SAVEPOINT sync_pull_operation');
+        try {
           final local = SyncChangeCollector();
           final wasBlocked = await _applyOneOperation(
             txn,
@@ -815,36 +809,35 @@ class PullPhase {
             ownAuthorId: ownAuthorId,
             changes: local,
           );
-          return (wasBlocked, local);
-        });
-        changes.addAll(opChanges);
-        if (wasBlocked) {
+          await txn.execute('RELEASE SAVEPOINT sync_pull_operation');
+          changes.addAll(local);
+          if (wasBlocked) {
+            blocked++;
+          } else {
+            applied++;
+          }
+        } catch (error, stack) {
+          await txn.execute('ROLLBACK TO SAVEPOINT sync_pull_operation');
+          await txn.execute('RELEASE SAVEPOINT sync_pull_operation');
+          LoggerService.error(
+            'PullPhase: parking operation '
+            '${wireOp.authorId}#${wireOp.authorSeq} (${wireOp.kind} '
+            '${wireOp.entityTable}/${wireOp.entityId}) from commit '
+            '$deviceLogId#${commit.deviceSeq} after its apply/materialize step '
+            'failed; the rest of this sync continues',
+            error: error,
+            stackTrace: stack,
+          );
+          await _parkFailedOperation(txn, wireOp: wireOp, error: error);
+          failed.add((wireOp.authorId, wireOp.authorSeq, '$error'));
           blocked++;
-        } else {
-          applied++;
         }
-      } catch (error, stack) {
-        LoggerService.error(
-          'PullPhase: parking operation '
-          '${wireOp.authorId}#${wireOp.authorSeq} (${wireOp.kind} '
-          '${wireOp.entityTable}/${wireOp.entityId}) from commit '
-          '$deviceLogId#${commit.deviceSeq} after its apply/materialize step '
-          'failed; the rest of this sync continues',
-          error: error,
-          stackTrace: stack,
-        );
-        await _parkFailedOperation(db, wireOp: wireOp, error: error);
-        failed.add((wireOp.authorId, wireOp.authorSeq, '$error'));
-        blocked++;
       }
-    }
 
-    await db.transaction((txn) async {
       await _writeFrontier(txn, deviceLogId, commit.deviceSeq);
       await _writePullTip(txn, deviceLogId, commit.commitHash);
+      return (applied, blocked, changes);
     });
-
-    return (applied, blocked, changes);
   }
 
   /// Re-attempts every parked operation that has attempts left, replaying it
@@ -903,13 +896,17 @@ class PullPhase {
       try {
         changes.addAll(
           await db.transaction((txn) async {
-            final op = _incomingFrom(wireOp, authorId, authorSeq);
-            final result = await _engine.apply(txn, op);
-            final local = await _materializer.materialize(
+            final local = SyncChangeCollector();
+            // A replay can now apply but still await an unseen OR-Set add.
+            // Use the live path so it retains those missing target dots and
+            // the same clock/acknowledgment bookkeeping before retiring the
+            // failed-operation entry.
+            await _applyOneOperation(
               txn,
-              op: op,
-              result: result,
+              deviceLogId: authorId,
+              wireOp: wireOp,
               ownAuthorId: ownAuthorId,
+              changes: local,
             );
             await txn.delete(
               'sync_materialize_queue',
@@ -993,35 +990,33 @@ class PullPhase {
   /// commit after every operation has had its turn, since `deviceSeq` counts
   /// commits.
   Future<void> _parkFailedOperation(
-    Database db, {
+    DatabaseExecutor txn, {
     required WireOperation wireOp,
     required Object error,
     int attempts = 1,
   }) async {
-    await db.transaction((txn) async {
-      await txn.insert('sync_materialize_queue', {
-        'blockingReason': operationFailedBlockingReason,
-        'entityTable': wireOp.entityTable,
-        'entityId': wireOp.entityId,
-        'fieldName': wireOp.fieldName,
-        'operationJson': jsonEncode({
-          'kind': wireOp.kind,
-          'authorId': wireOp.authorId,
-          'authorSeq': wireOp.authorSeq,
-          // The complete, verbatim operation — every field, for every kind.
-          'commitBytes': base64Encode(encodeCommitBytes(wireOp)),
-          'attempts': attempts,
-          'error': '$error',
-        }),
-        'blockingKey': '${wireOp.authorId}#${wireOp.authorSeq}',
-        'enqueuedAt': DateTime.now().millisecondsSinceEpoch,
-      });
-
-      // Same unconditional-on-observation bookkeeping the successful path
-      // performs. The operation was observed; only its effect was not
-      // applied.
-      await _hlc.merge(wireOp.hlc.wallMs, wireOp.hlc.logical, executor: txn);
+    await txn.insert('sync_materialize_queue', {
+      'blockingReason': operationFailedBlockingReason,
+      'entityTable': wireOp.entityTable,
+      'entityId': wireOp.entityId,
+      'fieldName': wireOp.fieldName,
+      'operationJson': jsonEncode({
+        'kind': wireOp.kind,
+        'authorId': wireOp.authorId,
+        'authorSeq': wireOp.authorSeq,
+        // The complete, verbatim operation — every field, for every kind.
+        'commitBytes': base64Encode(encodeCommitBytes(wireOp)),
+        'attempts': attempts,
+        'error': '$error',
+      }),
+      'blockingKey': '${wireOp.authorId}#${wireOp.authorSeq}',
+      'enqueuedAt': DateTime.now().millisecondsSinceEpoch,
     });
+
+    // Same unconditional-on-observation bookkeeping the successful path
+    // performs. The operation was observed; only its effect was not
+    // applied.
+    await _hlc.merge(wireOp.hlc.wallMs, wireOp.hlc.logical, executor: txn);
   }
 
   // ── sync_materialize_queue: enqueue + bounded sweep ──────────────────

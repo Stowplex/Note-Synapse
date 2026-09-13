@@ -51,8 +51,9 @@
 (function (global) {
   'use strict';
   var BB = (global.BB = global.BB || {});
-  var BOARD = BB.board, M = BB.model;
+  var BOARD = BB.board, M = BB.model, I18n = BB.i18n;
   var R = (BB.render = {});
+  function tr(text) { return I18n ? I18n.text(text) : text; }
 
   var SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -589,11 +590,16 @@
           // usable on touch screens where there is no modifier key to hold.
           var groupPort = el('div', 'group-port');
           groupPort.dataset.groupPort = id;
-          groupPort.title = 'Drag onto another card to group';
+          groupPort.title = tr('Drag onto another card to group');
           groupPort.setAttribute('aria-label', groupPort.title);
           e.appendChild(groupPort);
           els[id] = e;
           elCards.appendChild(e);
+        }
+        var groupPortNow = e.querySelector('.group-port');
+        if (groupPortNow) {
+          groupPortNow.title = tr('Drag onto another card to group');
+          groupPortNow.setAttribute('aria-label', groupPortNow.title);
         }
         paint(e, board, id, it, ctx);
       });
@@ -712,7 +718,7 @@
         chips.textContent = '';
         if (state) {
           var s = el('span', 'chip state');
-          s.textContent = state;
+          s.textContent = tr(state);
           chips.appendChild(s);
         }
         tags.forEach(function (t) {
@@ -1029,7 +1035,7 @@
         if (!h) {
           h = el('div', 'bb-link prop');
           h.dataset.id = p.i;
-          h.title = 'Drop this suggestion';
+          h.title = tr('Drop this suggestion');
           h.setAttribute('aria-label', h.title);
           // A constant, like the link handle's: nothing from the board or from
           // a model ever reaches innerHTML.
@@ -1038,6 +1044,8 @@
           phels[p.i] = h;
           elHandles.appendChild(h);
         }
+        h.title = tr('Drop this suggestion');
+        h.setAttribute('aria-label', h.title);
         place(h, pg.mid[0], pg.mid[1], 'translate(-50%,-50%)');
 
         var lab = plels[p.i];

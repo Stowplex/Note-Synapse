@@ -35,12 +35,12 @@ class _FakePathProviderPlatform extends Fake
 class _CountingIndexService extends NoteIndexService {
   _CountingIndexService(super.db, {super.changeNotifier, super.debounceDelay});
 
-  int ensureBackfilledCalls = 0;
+  int backfillCalls = 0;
 
   @override
-  Future<void> ensureBackfilled() {
-    ensureBackfilledCalls++;
-    return super.ensureBackfilled();
+  Future<void> backfillAll({bool force = false}) {
+    backfillCalls++;
+    return super.backfillAll(force: force);
   }
 }
 
@@ -101,6 +101,7 @@ void main() {
   /// global backfill-complete flag is set and the FTS path is live.
   Future<void> indexAll() async {
     await indexer.flushPending();
+    await search.ensureReady();
     await indexer.backfillAll();
     expect(
       await indexer.isBackfillComplete(),
@@ -128,6 +129,19 @@ void main() {
     int seq = 0,
   }) async {
     final raw = await db.database;
+    if (sourceId != null &&
+        {'figure', 'attachment_text', 'attachment_ocr'}.contains(sourceType)) {
+      await raw.insert('attachments', {
+        'id': sourceId,
+        'noteId': noteId,
+        'fileName': '$sourceId.pdf',
+        'fileType': 'application/pdf',
+        'filePath': '/missing/$sourceId.pdf',
+        'isRelativePath': 0,
+        'createdAt': 0,
+        'includeInAIContext': 1,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
     final chunkId = await raw.insert('search_chunks', {
       'chunkKey': chunkKey,
       'noteId': noteId,
@@ -909,7 +923,41 @@ void main() {
   });
 
   group('startup backfill trigger', () {
-    test('first query fires ensureBackfilled exactly once', () async {
+    test('startup repairs a saved edit whose debounce never ran', () async {
+      await db.insertNote(buildNote('n1', content: 'original persisted body'));
+      await indexAll();
+      final raw = await db.database;
+      // A note save is durable before its debounced indexing action runs.
+      // Simulate restart with the old global done flags still in the DB.
+      await raw.update('notes', {
+        'content': 'updated persisted body',
+      }, where: "id = 'n1'");
+      indexer.dispose();
+      indexer = NoteIndexService(
+        db,
+        changeNotifier: notifier,
+        ocrExtractor: stubOcrExtractor(db),
+        figureExtractor: stubFigureExtractor(),
+      );
+      final restarted = SearchService(
+        db,
+        indexer,
+        notesProvider: () => db.getAllNotes(),
+      );
+      await restarted.ensureReady();
+      await indexer.backfillAll(); // Joins the startup sweep.
+
+      final updated = await restarted.searchLexical('updated');
+      expect(updated.usedSubstringFallback, isFalse);
+      expect(noteIds(updated), ['n1']);
+      final chunks = await raw.query('search_chunks', where: "noteId = 'n1'");
+      expect(
+        chunks.map((row) => row['text']).join(' '),
+        isNot(contains('original persisted body')),
+      );
+    });
+
+    test('first query starts exactly one startup fingerprint sweep', () async {
       // A dedicated counting indexer (the setUp indexer keeps running; its
       // hooks being re-pointed here is harmless for this test).
       final counting = _CountingIndexService(
@@ -927,15 +975,16 @@ void main() {
       await db.insertNote(buildNote('n1', content: 'trigger test'));
       await counting.flushPending();
       await counting.backfillAll();
+      counting.backfillCalls = 0;
 
       await countingSearch.searchLexical('trigger');
       await countingSearch.searchLexical('trigger');
       await countingSearch.searchLexical('nothing-matches-this');
-      expect(counting.ensureBackfilledCalls, 1);
+      expect(counting.backfillCalls, 1);
 
       // Explicit ensureReady after a query is also a no-op.
       await countingSearch.ensureReady();
-      expect(counting.ensureBackfilledCalls, 1);
+      expect(counting.backfillCalls, 1);
     });
   });
 

@@ -1006,6 +1006,183 @@ void main() {
     expect((await embedGlobalState(configA.providerKey))!['status'], 'done');
   });
 
+  test(
+    'offline edits resume from ensureBackfilled after a completed pass',
+    () async {
+      var allowed = true;
+      final registry = buildRegistry();
+      await registry.setActiveConfig(configA);
+      await db.insertNote(buildNote('n1', content: 'original body'));
+      buildIndexer(
+        registry,
+        consented: {configA.providerKey},
+        networkAllowed: () async => allowed,
+      );
+      await indexer.backfillAll();
+      expect((await embedGlobalState(configA.providerKey))!['status'], 'done');
+
+      allowed = false;
+      await db.updateNote(buildNote('n1', content: 'edited while offline'));
+      await indexer.reindexNote('n1');
+      await indexer.flushPending();
+      expect(await embedGlobalState(configA.providerKey), isNull);
+
+      allowed = true;
+      await indexer.ensureBackfilled();
+      expect(
+        providers[configA.providerKey]!.embeddedTexts,
+        contains('edited while offline'),
+      );
+      expect((await embedGlobalState(configA.providerKey))!['status'], 'done');
+    },
+  );
+
+  test(
+    'deleting stored embeddings cancels an in-flight provider response',
+    () async {
+      final registry = buildRegistry();
+      await registry.setActiveConfig(configA);
+      await db.insertNote(buildNote('n1'));
+      buildIndexer(registry, consented: {configA.providerKey});
+      final provider = providerFor(configA);
+      provider.beforeEmbed = () async {
+        provider.beforeEmbed = null;
+        await indexer.deleteStoredEmbeddings();
+      };
+      await indexer.backfillAll();
+
+      expect(provider.documentCalls, 1);
+      expect(await embeddingRows(), isEmpty);
+      expect(await embedGlobalState(configA.providerKey), isNull);
+      expect(registry.activeConfig, isNull);
+      expect(
+        await vectorSearch.topK(configA.providerKey, Float32List(4)..[0] = 1),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'a response cannot restore a chunk deleted during its provider call',
+    () async {
+      final registry = buildRegistry();
+      await registry.setActiveConfig(configA);
+      await db.insertNote(buildNote('n1'));
+      buildIndexer(registry, consented: {configA.providerKey});
+      final probe = Float32List(4)..[0] = 1;
+      await vectorSearch.topK(configA.providerKey, probe);
+      final provider = providerFor(configA);
+      provider.beforeEmbed = () async {
+        provider.beforeEmbed = null;
+        await indexer.removeNote('n1');
+      };
+      await indexer.backfillAll();
+
+      expect(await embeddingRows(), isEmpty);
+      expect(await vectorSearch.topK(configA.providerKey, probe), isEmpty);
+      expect(await embedGlobalState(configA.providerKey), isNull);
+    },
+  );
+
+  test(
+    'a response cannot store the old vector after chunk content changes',
+    () async {
+      final registry = buildRegistry();
+      await registry.setActiveConfig(configA);
+      await db.insertNote(buildNote('n1'));
+      buildIndexer(registry, consented: {configA.providerKey});
+      final probe = Float32List(4)..[0] = 1;
+      await vectorSearch.topK(configA.providerKey, probe);
+      final raw = await db.database;
+      late int changedId;
+      final provider = providerFor(configA);
+      provider.beforeEmbed = () async {
+        provider.beforeEmbed = null;
+        changedId =
+            (await raw.query(
+                  'search_chunks',
+                  where: "sourceType = 'note_body'",
+                )).single['id']
+                as int;
+        await raw.update(
+          'search_chunks',
+          {'text': 'new chunk revision', 'contentHash': 'new-hash'},
+          where: 'id = ?',
+          whereArgs: [changedId],
+        );
+      };
+      await indexer.backfillAll();
+
+      expect(
+        (await embeddingRows()).map((row) => row['chunkId']),
+        isNot(contains(changedId)),
+      );
+      expect(
+        (await vectorSearch.topK(
+          configA.providerKey,
+          probe,
+        )).map((hit) => hit.chunkId),
+        isNot(contains(changedId)),
+      );
+      expect(await embedGlobalState(configA.providerKey), isNull);
+    },
+  );
+
+  for (final change in ['privacy', 'tombstone', 'move', 'note exclusion']) {
+    test('batch load rechecks $change after the gap scan', () async {
+      final registry = buildRegistry();
+      await registry.setActiveConfig(configA);
+      await db.insertNote(buildNote('n1'));
+      await db.insertNote(buildNote('n2'));
+      final raw = await db.database;
+      await insertAttachmentRow(raw, id: 'a1');
+      final chunkId = await raw.insert('search_chunks', {
+        'chunkKey': 'n1:attachment_text:a1:1',
+        'noteId': 'n1',
+        'sourceType': 'attachment_text',
+        'sourceId': 'a1',
+        'page': 1,
+        'seq': 1,
+        'text': 'sensitive attachment',
+        'contentHash': 'sensitive-hash',
+        'updatedAt': 0,
+      });
+      var gates = 0;
+      buildIndexer(
+        registry,
+        consented: {configA.providerKey},
+        networkAllowed: () async {
+          if (++gates == 2) {
+            if (change == 'note exclusion') {
+              await raw.update('notes', {
+                'metadata': jsonEncode({
+                  'searchIndex': {'exclude': true},
+                }),
+              }, where: "id = 'n1'");
+            } else {
+              await raw.update('attachments', switch (change) {
+                'privacy' => {'includeInAIContext': 0},
+                'tombstone' => {'__deleted__': 1},
+                _ => {'noteId': 'n2'},
+              }, where: "id = 'a1'");
+            }
+          }
+          return true;
+        },
+      );
+      await indexer.backfillAll();
+
+      expect(
+        providers[configA.providerKey]!.embeddedTexts,
+        isNot(contains('sensitive attachment')),
+      );
+      expect(
+        (await embeddingRows()).map((row) => row['chunkId']),
+        isNot(contains(chunkId)),
+      );
+    });
+  }
+
   // ── Vector index patching ──────────────────────────────────────────────────
 
   test(

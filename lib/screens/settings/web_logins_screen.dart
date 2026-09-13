@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../models/user_app.dart';
 import '../../services/app_domain_grant_service.dart';
 import '../../services/database_service.dart';
 import '../../services/logger_service.dart';
 import '../../services/protocol_study/protocol_study_workspace.dart';
 import '../../services/service_locator.dart';
 import '../../services/web_session_service.dart';
+import '../../utils/user_app_localization.dart';
 import 'protocol_studies_screen.dart';
 import 'protocol_study_browser_screen.dart';
 import 'web_login_browser_screen.dart';
@@ -56,7 +58,7 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
     final apps = await Future.wait(appUuids.map(_db.getUserAppByUuid));
     return [
       for (var i = 0; i < appUuids.length; i++)
-        _GrantedApp(uuid: appUuids[i], name: apps[i]?.name ?? appUuids[i]),
+        _GrantedApp(uuid: appUuids[i], app: apps[i]),
     ];
   }
 
@@ -66,7 +68,7 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(l10n.revokeAppAccessTitle),
-        content: Text(l10n.revokeAppAccessConfirm(app.name, domain)),
+        content: Text(l10n.revokeAppAccessConfirm(app.name(context), domain)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -358,7 +360,7 @@ class _WebLoginsScreenState extends State<WebLoginsScreen> {
                               Icons.extension_outlined,
                               size: 20,
                             ),
-                            title: Text(app.name),
+                            title: Text(app.name(context)),
                             trailing: TextButton(
                               onPressed: () => _revokeApp(entry.domain, app),
                               child: Text(l10n.revoke),
@@ -432,8 +434,10 @@ class _WebLoginEntry {
 }
 
 class _GrantedApp {
-  const _GrantedApp({required this.uuid, required this.name});
+  const _GrantedApp({required this.uuid, required this.app});
 
   final String uuid;
-  final String name;
+  final UserApp? app;
+
+  String name(BuildContext context) => app?.displayName(context) ?? uuid;
 }

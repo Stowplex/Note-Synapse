@@ -1,6 +1,7 @@
 # NotebookLM Plugin
 
-Connects Note Synapse to [Google NotebookLM](https://notebooklm.google.com).
+Connects Note Synapse to [Google NotebookLM](https://notebook.google.com)
+(now branded "Gemini Notebook").
 Sync local notes into a NotebookLM notebook as sources, ask questions answered
 from those sources (with citations), and generate podcasts (Audio Overviews)
 and slide decks — either from the plugin's own UI or by just asking the AI
@@ -16,6 +17,9 @@ plugins/
   build.sh                   # regenerates the .yaml after editing the HTML
 skills/
   NotebookLM_Assistant.md    # agent skill teaching the AI how to use the tools
+dev/
+  run.js                     # node tests for the protocol client (no browser)
+  fixtures/                  # captured batchexecute responses
 ```
 
 ## Install
@@ -58,6 +62,10 @@ edges:
 
 - Google can change or break them at any time; if a tool starts failing with
   an `nlm_error_*` code, the plugin likely needs an update.
+- Google is moving the app from `notebooklm.google.com` to
+  `notebook.google.com`. The plugin follows whichever host your account lands
+  on and remembers it, so no configuration is needed on either side of the
+  rollout.
 - The NotebookLM free tier is rate limited (roughly 50 queries/day).
 - Sessions expire; reopen the app and reconnect when prompted.
 
@@ -67,7 +75,10 @@ Note Synapse.
 ## Development
 
 Edit `plugins/notebooklm_manager.html`, then run `plugins/build.sh` to
-regenerate `NotebookLM_Manager.yaml`.
+regenerate `NotebookLM_Manager.yaml`. `node dev/run.js` exercises the
+protocol client (host resolution, token scraping, error envelopes) against
+captured responses; `flutter test test/contrib_notebooklm_test.dart` checks
+the yaml matches the HTML.
 
 ## License
 

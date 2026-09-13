@@ -26,3 +26,11 @@
                  }
                ```
                </example>
+14. LOCALIZATION:
+    - New apps must put every app-authored visible and accessibility string in one dictionary with complete `en-US` and `zh-CN` entries.
+    - Select the dictionary from `Synapse.locale || navigator.language || 'en-US'`. Match the exact BCP-47 tag first, then its bare language key when one exists, then fall back to `en-US`. Never choose an arbitrary same-language regional sibling.
+    - Set `document.documentElement.lang` and listen for `synapse:localechanged`. Apply the new language live without reloading the document, repeating writes, or resetting unsaved app state.
+    - Translate static and dynamic status/error text, placeholders, titles, ARIA labels, empty states, and confirmations. Do not translate note content, note titles, tags, or other user data.
+    - Persist stable enum, command, and state keys rather than translated labels.
+    - When displaying a `Synapse.chatAI` answer, explicitly request that answer in the currently selected language.
+    - For an edit, preserve and extend an existing localization architecture. If a legacy app has none and the requested edit is unrelated, do not turn it into an unsolicited full localization rewrite.

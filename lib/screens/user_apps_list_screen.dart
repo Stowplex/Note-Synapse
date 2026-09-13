@@ -8,6 +8,7 @@ import '../models/user_app.dart';
 import '../services/logger_service.dart';
 import '../services/user_app_service.dart';
 import '../services/service_locator.dart';
+import '../utils/user_app_localization.dart';
 import 'user_app_creation_screen.dart';
 import 'user_app_view_screen.dart';
 import 'user_app_edit_screen.dart';
@@ -61,7 +62,7 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
   void _startEditingAppName(UserApp app) {
     setState(() {
       _editingAppId = app.id;
-      _editingController.text = app.name;
+      _editingController.text = app.displayName(context);
     });
     _editingFocusNode.requestFocus();
   }
@@ -79,9 +80,11 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
       final appProvider = context.read<AppProvider>();
       final app = appProvider.userApps.firstWhere((a) => a.id == _editingAppId);
 
-      if (app.name != newName) {
+      if (app.name != newName ||
+          app.i18n.values.any((metadata) => metadata.name != null)) {
         final updatedApp = app.copyWith(
           name: newName,
+          i18n: app.i18nWithoutNames,
           updatedAt: DateTime.now(),
         );
 
@@ -278,11 +281,9 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
       return apps;
     }
     return apps.where((app) {
-      final nameMatch = app.name.toLowerCase().contains(_searchQuery);
-      final descriptionMatch = app.description.toLowerCase().contains(
-        _searchQuery,
+      return app.searchableMetadata.any(
+        (value) => value.toLowerCase().contains(_searchQuery),
       );
-      return nameMatch || descriptionMatch;
     }).toList();
   }
 
@@ -334,14 +335,14 @@ class _UserAppsListScreenState extends State<UserAppsListScreen> {
             : GestureDetector(
                 onTap: () => _startEditingAppName(app),
                 child: Text(
-                  app.name,
+                  app.displayName(context),
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(app.description),
+            Text(app.displayDescription(context)),
             const SizedBox(height: 4),
             Text(
               _getAppTypeLabel(l10n, app.type),

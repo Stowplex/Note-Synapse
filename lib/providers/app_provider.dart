@@ -78,7 +78,7 @@ class AppProvider extends ChangeNotifier {
   int _dataVersion = 0;
   String? _error;
   bool _isDarkMode = false;
-  Locale _locale = const Locale('en', '');
+  Locale _locale = const Locale('en', 'US');
   ModelConfig? _modelConfig;
   bool newNoteFromShare = false;
   List<String> _multiFunctionApps = [];
@@ -1301,7 +1301,7 @@ class AppProvider extends ChangeNotifier {
   }
 
   void changeLanguage(Locale locale) {
-    _locale = locale;
+    _locale = _canonicalSupportedLocale(locale);
     _saveLanguagePreference();
     notifyListeners();
   }
@@ -1321,11 +1321,21 @@ class AppProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final languageCode = prefs.getString('language_code') ?? 'en';
       final countryCode = prefs.getString('country_code') ?? '';
-      _locale = Locale(languageCode, countryCode);
+      _locale = _canonicalSupportedLocale(Locale(languageCode, countryCode));
       notifyListeners();
     } catch (e) {
       LoggerService.error('Error loading language preference: $e', error: e);
-      _locale = const Locale('en', ''); // Default to English
+      _locale = const Locale('en', 'US'); // Default to English
+    }
+  }
+
+  static Locale _canonicalSupportedLocale(Locale locale) {
+    switch (locale.languageCode.toLowerCase()) {
+      case 'zh':
+        return const Locale('zh', 'CN');
+      case 'en':
+      default:
+        return const Locale('en', 'US');
     }
   }
 

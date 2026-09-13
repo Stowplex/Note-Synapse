@@ -13,12 +13,13 @@ void main() {
     Map<String, dynamic> modification, {
     String source = 'Evil App',
     String noteTitle = 'My Note',
+    Locale locale = const Locale('en'),
   }) async {
     await tester.pumpWidget(
       MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        locale: const Locale('en'),
+        locale: locale,
         home: ApprovalDialog(
           request: ApprovalRequest.noteModification(
             noteId: 'parent-1',
@@ -54,6 +55,34 @@ void main() {
       lessThan(approveY),
       reason: 'the user must see the scope before they can approve it',
     );
+  });
+
+  testWidgets('note modification consent surface is localized in zh-CN', (
+    tester,
+  ) async {
+    await pumpDialog(
+      tester,
+      {
+        'title': '新标题',
+        'content': {'action': 'append', 'text': '新内容'},
+      },
+      source: '应用：大爆炸',
+      locale: const Locale('zh', 'CN'),
+    );
+
+    expect(find.text('允许修改笔记？'), findsOneWidget);
+    expect(find.text('应用：大爆炸 想要修改此笔记：'), findsOneWidget);
+    expect(find.text('在本次会话中允许'), findsOneWidget);
+    expect(find.text('拒绝'), findsOneWidget);
+    expect(find.text('允许'), findsOneWidget);
+
+    final details = tester
+        .widgetList<SelectableText>(find.byType(SelectableText))
+        .map((widget) => widget.data ?? '')
+        .where((text) => text.contains('设置标题'))
+        .single;
+    expect(details, contains('• 设置标题：“新标题”'));
+    expect(details, contains('• 追加内容：“新内容”'));
   });
 
   testWidgets('a padded app name cannot push the warning out of view', (

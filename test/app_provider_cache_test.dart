@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
@@ -19,7 +20,11 @@ import 'package:note_synapse/services/user_app_service.dart';
 import 'app_provider_cache_test.mocks.dart';
 
 @GenerateMocks([DatabaseService, UserAppService, ModelStorageService])
-Note buildNote(String id, {String title = 'title', List<String> tags = const []}) {
+Note buildNote(
+  String id, {
+  String title = 'title',
+  List<String> tags = const [],
+}) {
   final now = DateTime.now();
   return Note(
     id: id,
@@ -73,12 +78,34 @@ void main() {
     provider = AppProvider(databaseService: mockDb, changeNotifier: notifier);
   });
 
+  group('language preference', () {
+    test('uses fully-qualified supported locales', () async {
+      expect(provider.locale, const Locale('en', 'US'));
+
+      provider.changeLanguage(const Locale('zh'));
+      expect(provider.locale, const Locale('zh', 'CN'));
+
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('language_code'), 'zh');
+      expect(prefs.getString('country_code'), 'CN');
+    });
+
+    test('upgrades a legacy language-only preference on load', () async {
+      SharedPreferences.setMockInitialValues({'language_code': 'zh'});
+
+      await provider.loadLanguagePreference();
+
+      expect(provider.locale, const Locale('zh', 'CN'));
+    });
+  });
+
   group('refreshNotesFromDb', () {
     test('upserts changed, appends new, removes deleted', () async {
       final existing = buildNote('a', title: 'old');
-      when(mockDb.getNotesByIds(any)).thenAnswer(
-        (_) async => [buildNote('a', title: 'new'), buildNote('b')],
-      );
+      when(
+        mockDb.getNotesByIds(any),
+      ).thenAnswer((_) async => [buildNote('a', title: 'new'), buildNote('b')]);
       provider.notes.add(existing);
       provider.notes.add(buildNote('gone'));
 
@@ -89,8 +116,9 @@ void main() {
     });
 
     test('notifies exactly once per batch', () async {
-      when(mockDb.getNotesByIds(any))
-          .thenAnswer((_) async => [buildNote('a'), buildNote('b')]);
+      when(
+        mockDb.getNotesByIds(any),
+      ).thenAnswer((_) async => [buildNote('a'), buildNote('b')]);
       var notifications = 0;
       provider.addListener(() => notifications++);
 
@@ -155,52 +183,67 @@ void main() {
       );
     });
 
-    test('an action that throws does not poison the lock for later actions',
-        () async {
-      when(mockDb.insertNote(any)).thenThrow(Exception('insert broken'));
-      await expectLater(provider.addNote(buildNote('x')), throwsException);
+    test(
+      'an action that throws does not poison the lock for later actions',
+      () async {
+        when(mockDb.insertNote(any)).thenThrow(Exception('insert broken'));
+        await expectLater(provider.addNote(buildNote('x')), throwsException);
 
-      when(mockDb.insertNote(any)).thenAnswer((_) async => 'id');
-      when(mockDb.getNote('y')).thenAnswer((_) async => buildNote('y'));
-      await provider.addNote(buildNote('y'));
+        when(mockDb.insertNote(any)).thenAnswer((_) async => 'id');
+        when(mockDb.getNote('y')).thenAnswer((_) async => buildNote('y'));
+        await provider.addNote(buildNote('y'));
 
-      expect(provider.notes.map((n) => n.id), contains('y'));
-    });
+        expect(provider.notes.map((n) => n.id), contains('y'));
+      },
+    );
   });
 
   group('change events', () {
-    test('a merged notes+tags+filters event produces one notification',
-        () async {
-      when(mockDb.getNotesByIds(any)).thenAnswer((_) async => [buildNote('a')]);
-      when(mockDb.getAllTags()).thenAnswer(
-        (_) async => [Tag(id: 't1', name: 'tag', color: '#fff', createdAt: DateTime.now())],
-      );
-      when(mockDb.getAllFilters()).thenAnswer(
-        (_) async => [
-          Filter(
-            id: 'f1',
-            name: 'filter',
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
+    test(
+      'a merged notes+tags+filters event produces one notification',
+      () async {
+        when(
+          mockDb.getNotesByIds(any),
+        ).thenAnswer((_) async => [buildNote('a')]);
+        when(mockDb.getAllTags()).thenAnswer(
+          (_) async => [
+            Tag(
+              id: 't1',
+              name: 'tag',
+              color: '#fff',
+              createdAt: DateTime.now(),
+            ),
+          ],
+        );
+        when(mockDb.getAllFilters()).thenAnswer(
+          (_) async => [
+            Filter(
+              id: 'f1',
+              name: 'filter',
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ),
+          ],
+        );
+        var notifications = 0;
+        provider.addListener(() => notifications++);
+
+        notifier.publish(
+          const DataChangeEvent(
+            noteIds: {'a'},
+            tagsChanged: true,
+            filtersChanged: true,
+            relationshipNoteIds: {'a'},
           ),
-        ],
-      );
-      var notifications = 0;
-      provider.addListener(() => notifications++);
+        );
+        await notifier.waitForIdle();
 
-      notifier.publish(const DataChangeEvent(
-        noteIds: {'a'},
-        tagsChanged: true,
-        filtersChanged: true,
-        relationshipNoteIds: {'a'},
-      ));
-      await notifier.waitForIdle();
-
-      expect(notifications, 1);
-      expect(provider.notes.map((n) => n.id), contains('a'));
-      expect(provider.tags.map((t) => t.name), contains('tag'));
-      expect(provider.filters.map((f) => f.name), contains('filter'));
-    });
+        expect(notifications, 1);
+        expect(provider.notes.map((n) => n.id), contains('a'));
+        expect(provider.tags.map((t) => t.name), contains('tag'));
+        expect(provider.filters.map((f) => f.name), contains('filter'));
+      },
+    );
 
     test('a relationship-only event still notifies', () async {
       var notifications = 0;
@@ -213,20 +256,22 @@ void main() {
       verifyNever(mockDb.getNotesByIds(any));
     });
 
-    test('bulk supersedes targeted work and debounces into one loadData',
-        () async {
-      notifier.publish(const DataChangeEvent(bulk: true, noteIds: {'a'}));
-      notifier.publish(const DataChangeEvent(bulk: true));
-      await notifier.waitForIdle();
+    test(
+      'bulk supersedes targeted work and debounces into one loadData',
+      () async {
+        notifier.publish(const DataChangeEvent(bulk: true, noteIds: {'a'}));
+        notifier.publish(const DataChangeEvent(bulk: true));
+        await notifier.waitForIdle();
 
-      // Debounce window has not elapsed: no reload, no targeted fetch.
-      verifyNever(mockDb.getAllNotes());
-      verifyNever(mockDb.getNotesByIds(any));
+        // Debounce window has not elapsed: no reload, no targeted fetch.
+        verifyNever(mockDb.getAllNotes());
+        verifyNever(mockDb.getNotesByIds(any));
 
-      await Future<void>.delayed(const Duration(milliseconds: 700));
-      verify(mockDb.getAllNotes()).called(1);
-      verifyNever(mockDb.getNotesByIds(any));
-    });
+        await Future<void>.delayed(const Duration(milliseconds: 700));
+        verify(mockDb.getAllNotes()).called(1);
+        verifyNever(mockDb.getNotesByIds(any));
+      },
+    );
 
     test('events after dispose are not delivered', () async {
       provider.dispose();
@@ -240,7 +285,9 @@ void main() {
     test('clears notes, tags, AND filters under the lock', () async {
       when(mockDb.getAllNotes()).thenAnswer((_) async => [buildNote('a')]);
       when(mockDb.getAllTags()).thenAnswer(
-        (_) async => [Tag(id: 't1', name: 'tag', color: '#fff', createdAt: DateTime.now())],
+        (_) async => [
+          Tag(id: 't1', name: 'tag', color: '#fff', createdAt: DateTime.now()),
+        ],
       );
       when(mockDb.getAllFilters()).thenAnswer(
         (_) async => [
@@ -266,8 +313,9 @@ void main() {
 
   group('app revisions cache', () {
     test('getAppRevisions serves the cache without re-querying', () async {
-      when(mockUserAppService.getAppRevisions('app1'))
-          .thenAnswer((_) async => [buildRevision('app1', 1)]);
+      when(
+        mockUserAppService.getAppRevisions('app1'),
+      ).thenAnswer((_) async => [buildRevision('app1', 1)]);
 
       await provider.getAppRevisions('app1');
       await provider.getAppRevisions('app1');
@@ -275,27 +323,30 @@ void main() {
       verify(mockUserAppService.getAppRevisions('app1')).called(1);
     });
 
-    test('refreshAppRevisions replaces a stale cached list and notifies',
-        () async {
-      when(mockUserAppService.getAppRevisions('app1'))
-          .thenAnswer((_) async => [buildRevision('app1', 1)]);
-      await provider.getAppRevisions('app1');
+    test(
+      'refreshAppRevisions replaces a stale cached list and notifies',
+      () async {
+        when(
+          mockUserAppService.getAppRevisions('app1'),
+        ).thenAnswer((_) async => [buildRevision('app1', 1)]);
+        await provider.getAppRevisions('app1');
 
-      // A new revision lands in the database (e.g. via app import).
-      when(mockUserAppService.getAppRevisions('app1')).thenAnswer(
-        (_) async => [buildRevision('app1', 1), buildRevision('app1', 2)],
-      );
-      var notifications = 0;
-      provider.addListener(() => notifications++);
+        // A new revision lands in the database (e.g. via app import).
+        when(mockUserAppService.getAppRevisions('app1')).thenAnswer(
+          (_) async => [buildRevision('app1', 1), buildRevision('app1', 2)],
+        );
+        var notifications = 0;
+        provider.addListener(() => notifications++);
 
-      await provider.refreshAppRevisions('app1');
+        await provider.refreshAppRevisions('app1');
 
-      expect(
-        provider.appRevisions['app1']!.map((r) => r.revisionNumber),
-        [1, 2],
-      );
-      expect(notifications, 1);
-    });
+        expect(provider.appRevisions['app1']!.map((r) => r.revisionNumber), [
+          1,
+          2,
+        ]);
+        expect(notifications, 1);
+      },
+    );
   });
 
   group('scheduleReload', () {

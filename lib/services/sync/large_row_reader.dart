@@ -40,12 +40,13 @@
 // CLAUDE.md's "Database Columns (Large Data)" note is the standing
 // instruction; this brings the sync engine under it.
 
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:sqflite/sqflite.dart';
 
-import '../logger_service.dart';
-
-/// Columns at or above this many characters are fetched in chunks instead of
-/// inline.
+/// Maximum inline byte budget for a selected row, and the byte count per
+/// chunk. Byte-based reads preserve Unicode and embedded NUL characters.
 ///
 /// Well under Android's ~2 MB CursorWindow, because the budget is for the
 /// WHOLE ROW: a row can carry several near-threshold columns plus the
@@ -58,8 +59,8 @@ const int syncLargeColumnThreshold = 256 * 1024;
 /// Reads one row's [columns] without ever asking SQLite for a result set
 /// that could exceed the CursorWindow.
 ///
-/// Any column longer than [syncLargeColumnThreshold] comes back through
-/// [readLargeTextColumn] instead of inline. The returned map has the same
+/// The inline byte budget is shared by [columns]. Any column exceeding its
+/// share comes back through [readLargeTextColumn] instead of inline. The returned map has the same
 /// shape either way, so callers cannot tell which columns were chunked —
 /// that is the point: a caller that has to remember is a caller that will
 /// forget.
@@ -77,12 +78,13 @@ Future<Map<String, Object?>?> readSyncRow(
   // nothing but its length here. Both are aliased back to the plain column
   // name so the result map matches what a naive `query()` would have given.
   final select = <String>[];
+  final columnByteLimit = syncLargeColumnThreshold ~/ columns.length;
   for (final column in columns) {
     select.add(
-      'CASE WHEN length("$column") > $syncLargeColumnThreshold '
+      'CASE WHEN length(CAST("$column" AS BLOB)) > $columnByteLimit '
       'THEN NULL ELSE "$column" END AS "$column"',
     );
-    select.add('length("$column") AS "${column}__len"');
+    select.add('length(CAST("$column" AS BLOB)) AS "${column}__len"');
   }
 
   final rows = await txn.rawQuery(
@@ -97,7 +99,7 @@ Future<Map<String, Object?>?> readSyncRow(
   for (final column in columns) {
     final value = row[column];
     final length = row['${column}__len'] as int? ?? 0;
-    if (value == null && length > syncLargeColumnThreshold) {
+    if (value == null && length > 0) {
       result[column] = await readLargeTextColumn(
         txn,
         table: table,
@@ -113,17 +115,18 @@ Future<Map<String, Object?>?> readSyncRow(
   return result;
 }
 
-/// Reads one oversized TEXT column back in `substr` slices.
+/// Reads one oversized TEXT column back in byte slices. [totalLength] is
+/// its UTF-8 byte length, as reported by `length(CAST(column AS BLOB))`.
+/// Decoding happens only after reassembly, so a chunk may split a code point.
 ///
 /// The sync engine's counterpart to `DatabaseService._readLargeString`,
 /// which is private and keyed on a plain `id`. This one takes the same
 /// `CAST(id AS TEXT)` predicate every sync reader uses, so a table whose id
 /// is not TEXT (the two User-App library tables) behaves identically.
 ///
-/// **Returns what it read even if a chunk comes back empty**, rather than
-/// throwing: a partial value is still wrong, but it is wrong in a way the
-/// ordinary value comparison downstream will notice, whereas an exception
-/// here takes down a sync round that had nothing else wrong with it.
+/// Fails if any chunk cannot be read completely. Returning a prefix would
+/// mint a new sync operation containing truncated user data and publish it
+/// as a legitimate edit, so an incomplete read must abort the transaction.
 Future<String> readLargeTextColumn(
   DatabaseExecutor txn, {
   required String table,
@@ -131,32 +134,18 @@ Future<String> readLargeTextColumn(
   required String idColumn,
   required String entityId,
   required int totalLength,
-  int chunkSize = 1024 * 1024,
-}) async {
-  final buffer = StringBuffer();
-  try {
-    for (var offset = 0; offset < totalLength; offset += chunkSize) {
-      final size = (offset + chunkSize > totalLength)
-          ? totalLength - offset
-          : chunkSize;
-      final chunk = await txn.rawQuery(
-        'SELECT substr("$column", ?, ?) AS chunk FROM "$table" '
-        'WHERE CAST("$idColumn" AS TEXT) = ?',
-        [offset + 1, size, entityId],
-      );
-      if (chunk.isEmpty) break;
-      buffer.write(chunk.first['chunk'] as String? ?? '');
-    }
-  } catch (e) {
-    LoggerService.error(
-      'readLargeTextColumn: $table.$column for $entityId failed at '
-      '${buffer.length}/$totalLength chars: $e',
-    );
-  }
-  return buffer.toString();
-}
+  int chunkSize = syncLargeColumnThreshold,
+}) => _readLargeWhere(
+  txn,
+  table: table,
+  column: column,
+  where: 'CAST("$idColumn" AS TEXT) = ?',
+  whereArgs: [entityId],
+  totalLength: totalLength,
+  chunkSize: chunkSize,
+);
 
-/// The length of one column without reading it — for the several places
+/// The UTF-8 byte length of a column without reading it — for the places
 /// that only need to know whether a value is present or empty.
 ///
 /// `blob_gc.dart` and `blob_sync.dart` both used to ask for the column
@@ -170,7 +159,7 @@ Future<int> syncColumnLength(
   required String entityId,
 }) async {
   final rows = await txn.rawQuery(
-    'SELECT length("$column") AS len FROM "$table" '
+    'SELECT length(CAST("$column" AS BLOB)) AS len FROM "$table" '
     'WHERE CAST("$idColumn" AS TEXT) = ? LIMIT 1',
     [entityId],
   );
@@ -197,13 +186,16 @@ Future<List<Map<String, Object?>>> readSyncRowsWhere(
   String? orderBy,
   required List<String> keyColumns,
 }) async {
+  final selectedColumns = {...columns, ...keyColumns};
+  if (selectedColumns.isEmpty) return [];
   final select = <String>[];
-  for (final column in {...columns, ...keyColumns}) {
+  final columnByteLimit = syncLargeColumnThreshold ~/ selectedColumns.length;
+  for (final column in selectedColumns) {
     select.add(
-      'CASE WHEN length("$column") > $syncLargeColumnThreshold '
+      'CASE WHEN length(CAST("$column" AS BLOB)) > $columnByteLimit '
       'THEN NULL ELSE "$column" END AS "$column"',
     );
-    select.add('length("$column") AS "${column}__len"');
+    select.add('length(CAST("$column" AS BLOB)) AS "${column}__len"');
   }
   final rows = await txn.rawQuery(
     'SELECT ${select.join(', ')} FROM "$table" WHERE $where'
@@ -217,7 +209,7 @@ Future<List<Map<String, Object?>>> readSyncRowsWhere(
     for (final column in {...columns, ...keyColumns}) {
       final value = raw[column];
       final length = raw['${column}__len'] as int? ?? 0;
-      if (value == null && length > syncLargeColumnThreshold) {
+      if (value == null && length > 0) {
         // Re-read this one column for this one row, addressed by the key
         // columns the caller named — the same substr walk as the entity
         // reader, without needing the table to have a single id column.
@@ -245,26 +237,28 @@ Future<String> _readLargeWhere(
   required String where,
   required List<Object?> whereArgs,
   required int totalLength,
-  int chunkSize = 1024 * 1024,
+  int chunkSize = syncLargeColumnThreshold,
 }) async {
-  final buffer = StringBuffer();
-  try {
-    for (var offset = 0; offset < totalLength; offset += chunkSize) {
-      final size = (offset + chunkSize > totalLength)
-          ? totalLength - offset
-          : chunkSize;
-      final chunk = await txn.rawQuery(
-        'SELECT substr("$column", ?, ?) AS chunk FROM "$table" WHERE $where',
-        [offset + 1, size, ...whereArgs],
-      );
-      if (chunk.isEmpty) break;
-      buffer.write(chunk.first['chunk'] as String? ?? '');
-    }
-  } catch (e) {
-    LoggerService.error(
-      'readSyncRowsWhere: $table.$column failed at '
-      '${buffer.length}/$totalLength chars: $e',
+  if (chunkSize <= 0) throw ArgumentError.value(chunkSize, 'chunkSize');
+  final buffer = BytesBuilder(copy: false);
+  for (var offset = 0; offset < totalLength; offset += chunkSize) {
+    final size = (offset + chunkSize > totalLength)
+        ? totalLength - offset
+        : chunkSize;
+    final rows = await txn.rawQuery(
+      'SELECT substr(CAST("$column" AS BLOB), ?, ?) AS chunk '
+      'FROM "$table" WHERE $where',
+      [offset + 1, size, ...whereArgs],
     );
+    final value = rows.isEmpty ? null : rows.first['chunk'];
+    // SQLite TEXT length/substr stop at NUL. BLOB slices preserve every
+    // byte and keep the CursorWindow budget independent of character set.
+    if (value is! List<int> || value.length != size) {
+      throw StateError(
+        'Incomplete sync read of $table.$column at $offset/$totalLength',
+      );
+    }
+    buffer.add(value);
   }
-  return buffer.toString();
+  return utf8.decode(buffer.takeBytes());
 }

@@ -10,6 +10,7 @@ import '../providers/app_provider.dart';
 import 'note_selection_dialog.dart';
 import 'user_app_result_screen.dart';
 import '../models/generation_context.dart';
+import '../utils/user_app_localization.dart';
 import '../models/model_config.dart';
 import '../widgets/model_selector_button.dart';
 import '../widgets/drawing_editor.dart';
@@ -373,6 +374,9 @@ class _UserAppCreationScreenState extends State<UserAppCreationScreen>
       final appProvider = context.read<AppProvider>();
 
       final generationContext = GenerationContext();
+      generationContext.uiLanguageTag = userAppLocaleTag(
+        Localizations.localeOf(context),
+      );
       if (_selectedModel != null) {
         generationContext.modelOverride = _selectedModel;
       } else {

@@ -181,7 +181,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 63; // Target schema version
+  static const int DATABASE_VERSION = 64; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -425,6 +425,7 @@ class DatabaseService {
         selectedRevisionId TEXT, -- Currently active revision ID
         author TEXT DEFAULT "", -- Author name
         license TEXT DEFAULT "", -- License text
+        i18n TEXT, -- JSON object: locale -> localized name/description
         createdAt INTEGER NOT NULL, -- Creation timestamp
         updatedAt INTEGER NOT NULL, -- Last update timestamp
         __deleted__ INTEGER NOT NULL DEFAULT 0 -- Soft-delete tombstone flag (M1.4). Apps have no fallback concept: this value is authoritative.
@@ -1649,7 +1650,7 @@ class DatabaseService {
     ),
     // user_apps: `id`/`uuid`/`createdAt` excluded. Every other column has a
     // live write path via `updateUserApp` (name, description, steps,
-    // htmlContent, type, selectedRevisionId, author, license, updatedAt) or
+    // htmlContent, type, selectedRevisionId, author, license, i18n, updatedAt) or
     // `updateUserAppState` (appState).
     SyncEntityCaptureScope(
       table: 'user_apps',
@@ -1664,6 +1665,7 @@ class DatabaseService {
         'selectedRevisionId',
         'author',
         'license',
+        'i18n',
         'updatedAt',
         '__deleted__',
       ],
@@ -2262,10 +2264,22 @@ class DatabaseService {
         readOnly: true,
         singleInstance: false,
       );
-      final versionResult = await checkDb.rawQuery('PRAGMA user_version');
-      final currentVersion = versionResult.isNotEmpty
-          ? versionResult.first['user_version'] as int
+      final schemaTable = await checkDb.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='_schema_version'",
+      );
+      final versionResult = schemaTable.isNotEmpty
+          ? await checkDb.query('_schema_version')
+          : await checkDb.rawQuery('PRAGMA user_version');
+      final recordedVersion = versionResult.isNotEmpty
+          ? versionResult.first[schemaTable.isNotEmpty
+                    ? 'version'
+                    : 'user_version']
+                as int
           : 0;
+      final currentVersion = await _migrationStartingVersion(
+        checkDb,
+        recordedVersion,
+      );
 
       if (currentVersion < DATABASE_VERSION && currentVersion > 0) {
         // Migration is needed, create backup
@@ -2280,7 +2294,8 @@ class DatabaseService {
       }
     } catch (e) {
       LoggerService.error('Error checking database version: $e', error: e);
-      // If we can't check the version, we'll let openDatabase handle it
+      // A failed backup must stop the upgrade before schema/data changes.
+      rethrow;
     } finally {
       if (checkDb != null && checkDb.isOpen) {
         await checkDb.close();
@@ -2487,6 +2502,7 @@ class DatabaseService {
       }
     }
 
+    currentVersion = await _migrationStartingVersion(db, currentVersion);
     if (currentVersion >= DATABASE_VERSION) {
       return; // No migration needed
     }
@@ -2496,7 +2512,6 @@ class DatabaseService {
     );
 
     // Run migrations
-    bool migrationSuccess = true;
     for (
       int version = currentVersion + 1;
       version <= DATABASE_VERSION;
@@ -2519,19 +2534,32 @@ class DatabaseService {
           'Migration to version $version failed: $e',
           error: e,
         );
-        migrationSuccess = false;
 
         // Navigate to RecoveryScreen with error
         _navigateToRecoveryScreen('Migration failed at version $version: $e');
-        break; // Stop migration on error
+        rethrow; // Never expose a connection with an incomplete schema.
       }
     }
 
     // Only update version if ALL migrations succeeded
-    if (migrationSuccess) {
-      await db.update('_schema_version', {'version': DATABASE_VERSION});
-      LoggerService.info('Schema version updated to $DATABASE_VERSION');
+    await db.update('_schema_version', {'version': DATABASE_VERSION});
+    LoggerService.info('Schema version updated to $DATABASE_VERSION');
+  }
+
+  /// Main shipped localization as v48 while this branch used v48 for sync.
+  /// Presence of the control plane distinguishes those two histories. Replay
+  /// the additive v48 step when absent, then preserve the remaining numbers.
+  static Future<int> _migrationStartingVersion(Database db, int version) async {
+    if (version >= SQFLITE_VERSION) {
+      return _detectActualSchemaVersion(db);
     }
+    if (version == 48) {
+      final syncTable = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='sync_pending_ops'",
+      );
+      if (syncTable.isEmpty) return 47;
+    }
+    return version;
   }
 
   /// Detect the actual schema version by probing for tables/columns
@@ -2585,6 +2613,17 @@ class DatabaseService {
       "'sync_pending_ops')",
     );
     if (searchChunksCheck.length == 4 && detected >= 47) detected = 63;
+    if (detected == 63) {
+      final appCols = await db.rawQuery("PRAGMA table_info('user_apps')");
+      final capture = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='trigger' "
+        "AND name='sync_touch_user_apps_au_i18n'",
+      );
+      if (appCols.any((column) => column['name'] == 'i18n') &&
+          capture.isNotEmpty) {
+        detected = 64;
+      }
+    }
 
     // Check for notes_fts table (v31/v36)
     if (detected < 36) {
@@ -2855,7 +2894,43 @@ class DatabaseService {
           'Create search_chunks, chunk_embeddings, search_index_state tables and chunks_fts virtual table for layered search',
       execute: _migrateToVersion63,
     ),
+    64: MigrationStep(
+      description: 'Add localized User App metadata and sync capture',
+      execute: _migrateToVersion64,
+    ),
   };
+
+  /// Localization shipped as v48 on main before the sync/index merge.
+  /// Its new step also upgrades branch databases that already reached v63.
+  static Future<void> _migrateToVersion64(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    final columns = await db.rawQuery("PRAGMA table_info('user_apps')");
+    // Some recovery fixtures and very old/minimal databases legitimately do
+    // not contain the optional User Apps subsystem. There is nothing to
+    // migrate in those databases; a later table creation uses the current DDL.
+    if (columns.isEmpty) return;
+    if (!columns.any((column) => column['name'] == 'i18n')) {
+      await db.execute('ALTER TABLE user_apps ADD COLUMN i18n TEXT');
+    }
+    // Existing installations already have the other capture triggers. Only
+    // install this field's trigger once the new column exists.
+    final syncTables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='sync_touch_log'",
+    );
+    if (syncTables.isNotEmpty) {
+      for (final statement in _entityCaptureTriggerStatementsFor(
+        const SyncEntityCaptureScope(
+          table: 'user_apps',
+          idColumn: 'id',
+          syncScopeColumns: ['i18n'],
+        ),
+      )) {
+        await db.execute(statement);
+      }
+    }
+  }
 
   /// The reserved tag name migration 47 writes. A frozen copy of
   /// `SpaceScopeService.allSpacesTag` — see [_migrateToVersion47].
@@ -3869,6 +3944,9 @@ class DatabaseService {
     );
     try {
       for (final statement in _syncMutationCaptureTriggerStatements) {
+        // v64 creates i18n and its trigger together. Installing the trigger
+        // before its column exists would break interim user_apps writes.
+        if (statement.contains('sync_touch_user_apps_au_i18n')) continue;
         await db.execute(statement);
       }
       LoggerService.info('Successfully migrated to version 58');
@@ -4360,8 +4438,8 @@ class DatabaseService {
 
         // Copy data from old table to new table
         await db.execute('''
-          INSERT INTO user_apps (id, uuid, name, description, steps, htmlContent, appState, type, selectedRevisionId, author, license, createdAt, updatedAt)
-          SELECT id, uuid, name, description, steps, htmlContent, appState, type, selectedRevisionId, author, license, createdAt, updatedAt
+          INSERT INTO user_apps (id, uuid, name, description, steps, htmlContent, appState, type, selectedRevisionId, author, license, i18n, createdAt, updatedAt)
+          SELECT id, uuid, name, description, steps, htmlContent, appState, type, selectedRevisionId, author, license, i18n, createdAt, updatedAt
           FROM user_apps_old
         ''');
 
@@ -6671,6 +6749,7 @@ class DatabaseService {
     int oldVersion,
     int newVersion,
   ) async {
+    oldVersion = await _migrationStartingVersion(db, oldVersion);
     LoggerService.info(
       'Migrating backup database from version $oldVersion to $newVersion',
     );
@@ -6694,7 +6773,7 @@ class DatabaseService {
           'Backup migration to version $version failed: $e',
           error: e,
         );
-        break; // Stop on error
+        rethrow; // Recovery must not merge a partially migrated database.
       }
     }
   }
@@ -7296,6 +7375,7 @@ class DatabaseService {
       'selectedRevisionId': app.selectedRevisionId,
       'author': app.author,
       'license': app.license,
+      'i18n': app.i18n.isEmpty ? null : jsonEncode(userAppI18nToJson(app.i18n)),
       'createdAt': app.createdAt.millisecondsSinceEpoch,
       'updatedAt': app.updatedAt.millisecondsSinceEpoch,
     };
@@ -7319,7 +7399,7 @@ class DatabaseService {
     // above), so this raw filter is already the effective one.
     final maps = await db.rawQuery('''
       SELECT id, uuid, name, description, steps, htmlContent, type,
-             selectedRevisionId, author, license, createdAt, updatedAt
+             selectedRevisionId, author, license, i18n, createdAt, updatedAt
       FROM user_apps
       WHERE __deleted__ = 0
       ORDER BY createdAt DESC
@@ -7336,7 +7416,7 @@ class DatabaseService {
     final maps = await db.rawQuery(
       '''
       SELECT id, uuid, name, description, steps, htmlContent, type,
-             selectedRevisionId, author, license, createdAt, updatedAt
+             selectedRevisionId, author, license, i18n, createdAt, updatedAt
       FROM user_apps
       WHERE id = ? AND __deleted__ = 0
     ''',
@@ -7354,7 +7434,7 @@ class DatabaseService {
     final maps = await db.rawQuery(
       '''
       SELECT id, uuid, name, description, steps, htmlContent, type,
-             selectedRevisionId, author, license, createdAt, updatedAt
+             selectedRevisionId, author, license, i18n, createdAt, updatedAt
       FROM user_apps
       WHERE uuid = ? AND __deleted__ = 0
       LIMIT 1
@@ -7381,6 +7461,7 @@ class DatabaseService {
       'selectedRevisionId': app.selectedRevisionId,
       'author': app.author,
       'license': app.license,
+      'i18n': app.i18n.isEmpty ? null : jsonEncode(userAppI18nToJson(app.i18n)),
       'createdAt': app.createdAt.millisecondsSinceEpoch,
       'updatedAt': app.updatedAt.millisecondsSinceEpoch,
     };
@@ -7475,6 +7556,19 @@ class DatabaseService {
       }
     }
 
+    Map<String, UserAppLocalizedMetadata> parseI18n(dynamic raw) {
+      if (raw == null) return const {};
+      try {
+        final decoded = raw is String ? jsonDecode(raw) : raw;
+        return userAppI18nFromJson(decoded);
+      } catch (e) {
+        LoggerService.warning(
+          'Ignoring malformed localized metadata for app ${map['id']}: $e',
+        );
+        return const {};
+      }
+    }
+
     return UserApp(
       id: map['id'] as String,
       uuid:
@@ -7497,6 +7591,7 @@ class DatabaseService {
       selectedRevisionId: map['selectedRevisionId'] as String?,
       author: map['author'] as String? ?? '',
       license: map['license'] as String? ?? '',
+      i18n: parseI18n(map['i18n']),
       createdAt: parseTimestamp(map['createdAt']),
       updatedAt: parseTimestamp(map['updatedAt']),
     );
@@ -9958,8 +10053,8 @@ class DatabaseService {
   /// deletion is a soft-delete write everywhere in this file: without that
   /// predicate a deleted note's chunks would keep surfacing in search until
   /// the indexer's next orphan sweep happened to run. Same for the
-  /// attachment LEFT JOIN, so a tombstoned attachment's includeInAIContext
-  /// reads as null (unknown source) rather than as a live audience flag.
+  /// attachment-derived chunks: the source attachment must still be live
+  /// and belong to this note, even for UI searches that ignore AI consent.
   /// Returned in no particular order; callers reorder by their own ranking.
   ///
   /// [sourceTypes] / [noteId] drop out-of-scope rows in SQL. `c.text` can be a
@@ -10002,8 +10097,11 @@ class DatabaseService {
                a.includeInAIContext AS attachmentIncludeInAIContext
         FROM search_chunks c
         JOIN notes n ON n.id = c.noteId AND n.__deleted__ = 0
-        LEFT JOIN attachments a ON a.id = c.sourceId AND a.__deleted__ = 0
+        LEFT JOIN attachments a ON a.id = c.sourceId
+          AND a.noteId = c.noteId AND a.__deleted__ = 0
         WHERE c.id IN ($placeholders)$scopeSql
+          AND (c.sourceType NOT IN ('attachment_text', 'attachment_ocr', 'figure')
+               OR a.id IS NOT NULL)
       ''', args);
       for (final row in rows) {
         final aiFlag = row['attachmentIncludeInAIContext'] as int?;

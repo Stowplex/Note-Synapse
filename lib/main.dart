@@ -73,9 +73,6 @@ Future<void> _bootstrap() async {
     // Initialize background agent service for Android foreground service
     await BackgroundAgentService.init();
 
-    // Re-arm any persisted plugin task schedules (e.g. studio polling).
-    await getIt<PluginTaskService>().initialize();
-
     // Kick off the search-index backfill check (fire-and-forget: ensureReady
     // is idempotent and does all work in the background; search degrades to
     // the substring fallback until the index is complete).
@@ -188,8 +185,8 @@ class NoteSynapseApp extends StatelessWidget {
               GlobalCupertinoLocalizations.delegate,
             ],
             supportedLocales: const [
-              Locale('en', ''), // English
-              Locale('zh', ''), // Chinese Simplified
+              Locale('en', 'US'), // English (United States)
+              Locale('zh', 'CN'), // Chinese Simplified (China)
             ],
             locale: appProvider.locale,
             navigatorKey: navigatorKey,
@@ -257,6 +254,9 @@ class _AppWrapperState extends State<AppWrapper> {
     final appProvider = context.read<AppProvider>();
     await appProvider.loadThemePreference();
     await appProvider.loadLanguagePreference();
+    // Scheduled User Apps may run immediately. Re-arm them only after their
+    // `Synapse.locale` source of truth has loaded from preferences.
+    await getIt<PluginTaskService>().initialize();
     await appProvider.loadData();
 
     await getIt<AIService>().initialize(appProvider);

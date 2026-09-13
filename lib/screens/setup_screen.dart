@@ -36,11 +36,11 @@ class _SetupScreenState extends State<SetupScreen> {
                   },
                   items: const [
                     DropdownMenuItem(
-                      value: Locale('en', ''),
+                      value: Locale('en', 'US'),
                       child: Text('English'),
                     ),
                     DropdownMenuItem(
-                      value: Locale('zh', ''),
+                      value: Locale('zh', 'CN'),
                       child: Text('简体中文'),
                     ),
                   ],

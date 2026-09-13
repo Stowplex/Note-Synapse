@@ -273,7 +273,7 @@ class LanguageSettingsScreen extends StatelessWidget {
                   children: [
                     RadioListTile<Locale>(
                       title: Text(l10n.english),
-                      value: const Locale('en', ''),
+                      value: const Locale('en', 'US'),
                       groupValue: appProvider.locale,
                       onChanged: (Locale? value) {
                         if (value != null) {
@@ -289,7 +289,7 @@ class LanguageSettingsScreen extends StatelessWidget {
                     ),
                     RadioListTile<Locale>(
                       title: Text(l10n.chineseSimplified),
-                      value: const Locale('zh', ''),
+                      value: const Locale('zh', 'CN'),
                       groupValue: appProvider.locale,
                       onChanged: (Locale? value) {
                         if (value != null) {
@@ -1600,7 +1600,7 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
           children: [
             RadioListTile<Locale>(
               title: Text(l10n.english),
-              value: const Locale('en', ''),
+              value: const Locale('en', 'US'),
               groupValue: appProvider.locale,
               onChanged: (Locale? value) {
                 if (value != null) {
@@ -1617,7 +1617,7 @@ class _SystemSettingsScreenState extends State<SystemSettingsScreen> {
             ),
             RadioListTile<Locale>(
               title: Text(l10n.chineseSimplified),
-              value: const Locale('zh', ''),
+              value: const Locale('zh', 'CN'),
               groupValue: appProvider.locale,
               onChanged: (Locale? value) {
                 if (value != null) {

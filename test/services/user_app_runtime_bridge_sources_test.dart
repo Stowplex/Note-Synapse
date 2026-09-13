@@ -1,3 +1,5 @@
+import 'dart:ui' show Locale;
+
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
@@ -97,6 +99,7 @@ void main() {
     setUp(() async {
       await resetForTesting();
       mockAppProvider = MockAppProvider();
+      when(mockAppProvider.locale).thenReturn(const Locale('en', 'US'));
     });
 
     tearDown(() async {
@@ -147,8 +150,8 @@ void main() {
         isInteractive: true,
         selectedNotes: [note('a'), note('b')],
       );
-      expect(bootstrap(bridge), isNot(contains('"id":"s2"')));
-
+      // Sources load before the bootstrap script is frozen for this page,
+      // matching UserAppWebView's initialization sequence.
       await bridge.loadSelectedNoteSources();
 
       final source = bootstrap(bridge);
@@ -160,6 +163,8 @@ void main() {
         ),
       );
       expect(source, contains('"sources":[]'));
+      verify(mockAppProvider.getNoteSources('a')).called(1);
+      verify(mockAppProvider.getNoteSources('b')).called(1);
     });
 
     /// Registers a [BlockNoteScopeService] and opens a scope over the body of

@@ -42,4 +42,8 @@ class GenerationContext {
   /// Optional model configuration override for this specific request.
   ModelConfig? get modelOverride => _values['modelOverride'] as ModelConfig?;
   set modelOverride(ModelConfig? value) => setValue('modelOverride', value);
+
+  /// Note Synapse UI language for request-localized explanations and apps.
+  String? get uiLanguageTag => _values['uiLanguageTag'] as String?;
+  set uiLanguageTag(String? value) => setValue('uiLanguageTag', value);
 }

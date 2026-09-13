@@ -5110,6 +5110,154 @@ class AppLocalizationsZh extends AppLocalizations {
   String get approvalScopeWholeNote => '将作用于整条笔记，而不仅是所选区块。';
 
   @override
+  String get approvalNoteModificationTitle => '允许修改笔记？';
+
+  @override
+  String get approvalBatchNoteModificationTitle => '允许批量修改笔记？';
+
+  @override
+  String approvalSourceWantsModifyNote(String source) {
+    return '$source 想要修改此笔记：';
+  }
+
+  @override
+  String approvalSourceWantsModifyNotes(String source, int count) {
+    return '$source 想要修改 $count 条笔记：';
+  }
+
+  @override
+  String get approvalOperationWantsModifyNote => '此操作想要修改笔记：';
+
+  @override
+  String approvalOperationWantsModifyNotes(int count) {
+    return '此操作想要修改 $count 条笔记：';
+  }
+
+  @override
+  String approvalSourceApp(String name) {
+    return '应用：$name';
+  }
+
+  @override
+  String approvalSourceEmbeddedApp(String name) {
+    return '嵌入式应用：$name';
+  }
+
+  @override
+  String get approvalAllowForSession => '在本次会话中允许';
+
+  @override
+  String get approvalDeny => '拒绝';
+
+  @override
+  String get approvalApprove => '允许';
+
+  @override
+  String approvalNoteId(String id) {
+    return '笔记 ID：$id';
+  }
+
+  @override
+  String get approvalNoteLabel => '笔记：';
+
+  @override
+  String get approvalNoNotesSpecified => '未指定笔记';
+
+  @override
+  String get approvalShowFullChange => '查看完整更改';
+
+  @override
+  String approvalBatchUpdate(int count) {
+    return '批量更新 $count 条笔记';
+  }
+
+  @override
+  String approvalBatchUpdatePreview(int count, int visibleCount) {
+    return '批量更新 $count 条笔记（显示前 $visibleCount 条）：';
+  }
+
+  @override
+  String get approvalUnknown => '未知';
+
+  @override
+  String approvalSetTitle(String value) {
+    return '设置标题：“$value”';
+  }
+
+  @override
+  String approvalAppendContent(String value) {
+    return '追加内容：“$value”';
+  }
+
+  @override
+  String approvalInsertBefore(String value) {
+    return '在前面插入：“$value”';
+  }
+
+  @override
+  String get approvalDeleteSelectedContent => '删除所选内容';
+
+  @override
+  String approvalReplaceContentWith(String value) {
+    return '将内容替换为：“$value”';
+  }
+
+  @override
+  String approvalSetContent(String value) {
+    return '设置内容：“$value”';
+  }
+
+  @override
+  String approvalContent(String value) {
+    return '内容：$value';
+  }
+
+  @override
+  String approvalAddTags(String value) {
+    return '添加标签：$value';
+  }
+
+  @override
+  String approvalRemoveTags(String value) {
+    return '移除标签：$value';
+  }
+
+  @override
+  String approvalTags(String value) {
+    return '标签：$value';
+  }
+
+  @override
+  String approvalSetType(String value) {
+    return '设置类型：“$value”';
+  }
+
+  @override
+  String approvalSetStatus(String value) {
+    return '设置状态：“$value”';
+  }
+
+  @override
+  String get approvalPinNote => '置顶笔记';
+
+  @override
+  String get approvalUnpinNote => '取消置顶笔记';
+
+  @override
+  String get approvalArchiveNote => '归档笔记';
+
+  @override
+  String get approvalUnarchiveNote => '取消归档笔记';
+
+  @override
+  String approvalSetField(String field, String value) {
+    return '设置 $field：$value';
+  }
+
+  @override
+  String get approvalDetailsTruncated => '…（显示内容已截断）';
+
+  @override
   String get blockSelectionOutOfSync =>
       '无法定位该区块：未能确认它在笔记中的位置，因此没有打开任何应用。笔记未被修改。';
 

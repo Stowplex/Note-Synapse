@@ -45,10 +45,8 @@ if (keystorePropertiesFile.exists()) {
 // substitution for `${googleReversedClientId}` — without it the manifest
 // merger fails outright on any variant we forgot to name here.
 // ---------------------------------------------------------------------------
-// PLACEHOLDER: no release-variant Google OAuth client exists yet. The
-// `438894533578-…` client turned out to be registered against the `.debug`
-// package, so it moved to the debug value below. See `releaseClientId` in
-// google_drive_client_config.dart for how to create a release one.
+// Keep these schemes aligned with the distinct release/debug client IDs in
+// google_drive_client_config.dart and the corresponding iOS xcconfigs.
 val googleReversedClientIdRelease =
     "com.googleusercontent.apps.438894533578-g0tpgg76soku9srh76hj21p14to3kc4c"
 val googleReversedClientIdDebug =

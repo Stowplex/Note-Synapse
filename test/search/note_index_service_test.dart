@@ -784,6 +784,38 @@ void main() {
       },
     );
 
+    for (final excluded in [false, true]) {
+      test(
+        'an unindexed snapshot cannot restore a ${excluded ? 'newly excluded' : 'deleted'} note',
+        () async {
+          await rawInsertNote('n1');
+          final note = (await db.getNote('n1'))!;
+          final drafts = chunkNote(note);
+          final raw = await db.database;
+          await raw.update(
+            'notes',
+            excluded
+                ? {
+                    'metadata': jsonEncode({
+                      'searchIndex': {'exclude': true},
+                    }),
+                  }
+                : {'__deleted__': 1},
+            where: "id = 'n1'",
+          );
+          await indexer.debugWriteChunksGuarded(
+            'n1',
+            drafts,
+            [for (final draft in drafts) normalizeForIndex(draft.text)],
+            noteContentFingerprint(note, const []),
+            snapshotStateHash: null,
+          );
+          expect(await chunksFor('n1'), isEmpty);
+          expect(await noteState('n1'), isNull);
+        },
+      );
+    }
+
     test('a matching snapshot lets the batch write proceed', () async {
       await rawInsertNote('n1', content: 'only version of the body');
       final note = (await db.getNote('n1'))!;

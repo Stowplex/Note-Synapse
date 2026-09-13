@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' show Locale;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -94,6 +95,7 @@ void main() {
   setUp(() async {
     await resetForTesting();
     appProvider = MockAppProvider();
+    when(appProvider.locale).thenReturn(const Locale('en', 'US'));
     controller = MockInAppWebViewController();
     scope = SpaceScopeService();
     getIt.registerSingleton<SpaceScopeService>(scope);
@@ -168,7 +170,9 @@ void main() {
   group('synapse:spacechanged', () {
     test('reaches the live WebView with the new Space as its detail', () async {
       final bridge = buildBridge();
+      bridge.buildBootstrapScript();
       bridge.registerJavaScriptHandlers(controller);
+      await bridge.pageDidFinishLoading();
       scope.setActive('space-1', const ['thesis'], name: 'Thesis');
 
       await bridge.notifySpaceChanged();
@@ -182,8 +186,8 @@ void main() {
               as String;
       expect(source, contains("'synapse:spacechanged'"));
       expect(source, contains('window.dispatchEvent'));
-      expect(source, contains('window.Synapse.space = space'));
-      expect(jsonDecode(spaceLiteral(source, 'var space = ')), {
+      expect(source, contains('window.Synapse.space = nextSpace'));
+      expect(jsonDecode(spaceLiteral(source, 'var nextSpace = ')), {
         'id': 'space-1',
         'name': 'Thesis',
         'tags': ['thesis'],
@@ -191,9 +195,11 @@ void main() {
     });
 
     test('carries a null payload on leave', () async {
-      final bridge = buildBridge();
-      bridge.registerJavaScriptHandlers(controller);
       scope.setActive('space-1', const ['thesis'], name: 'Thesis');
+      final bridge = buildBridge();
+      bridge.buildBootstrapScript();
+      bridge.registerJavaScriptHandlers(controller);
+      await bridge.pageDidFinishLoading();
       scope.setActive(null, const []);
 
       await bridge.notifySpaceChanged();
@@ -205,7 +211,7 @@ void main() {
                 ),
               ).captured.single
               as String;
-      expect(source, contains('var space = null;'));
+      expect(source, contains('var nextSpace = null;'));
       expect(source, contains("'synapse:spacechanged'"));
     });
 
@@ -220,7 +226,10 @@ void main() {
 
     test('survives a WebView that has already gone away', () async {
       final bridge = buildBridge();
+      bridge.buildBootstrapScript();
       bridge.registerJavaScriptHandlers(controller);
+      await bridge.pageDidFinishLoading();
+      scope.setActive('space-1', const ['thesis'], name: 'Thesis');
       when(
         controller.evaluateJavascript(source: anyNamed('source')),
       ).thenThrow(StateError('webview disposed'));

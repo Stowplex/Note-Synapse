@@ -47,6 +47,30 @@ contrib/
 
 The starter apps are already installed; there is nothing to import for those.
 
+## Localization
+
+User apps read Note Synapse's resolved BCP-47 language from
+`Synapse.locale` (`en-US` or `zh-CN`) and listen for the
+`synapse:localechanged` window event. For compatibility with older hosts, use
+`window.Synapse?.locale || navigator.language || 'en-US'`. Change visible
+strings in place so unsaved app state survives a language switch.
+
+Installable YAML keeps `name` and `description` as base values and may add
+localized package metadata:
+
+```yaml
+name: Example App
+description: Example description
+i18n:
+  zh-CN:
+    name: 示例应用
+    description: 示例描述
+```
+
+Locale matching is exact tag, then an explicitly supplied bare-language key,
+then the package base value. Unknown locale fields are ignored for forward
+compatibility.
+
 ## Plugins
 
 - **notebooklm** — sync notes to Google NotebookLM as sources, ask questions

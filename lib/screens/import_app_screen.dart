@@ -76,17 +76,13 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       final yamlContent = await yamlFile.readAsString();
       final yamlData = loadYaml(yamlContent);
 
-      // Convert YamlMap to Map<String, dynamic>
-      final Map<String, dynamic> parsedData = {};
-      if (yamlData is Map) {
-        yamlData.forEach((key, value) {
-          if (key is String) {
-            parsedData[key] = value;
-          }
-        });
-      } else {
+      // Convert nested YamlMap/YamlList values before validation. Keeping a
+      // YamlMap inside `i18n` makes typed validation surprisingly brittle.
+      final convertedYaml = _convertYamlValue(yamlData);
+      if (convertedYaml is! Map<String, dynamic>) {
         throw Exception(AppLocalizations.of(context)!.errorInvalidYamlFormat);
       }
+      final parsedData = convertedYaml;
 
       setState(() {
         _currentStatus = AppLocalizations.of(context)!.validatingYamlStructure;
@@ -229,6 +225,10 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       }
     }
 
+    // Parsing performs the strict locale-key/value validation and catches
+    // duplicate keys after case/underscore normalization.
+    _parseLocalizedMetadata(yamlData['i18n']);
+
     if (yamlData['libraries'] != null) {
       final libraries = yamlData['libraries'];
       if (libraries is List) {
@@ -273,7 +273,62 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       'app_type': appType,
       'code': yamlData['code']?.toString() ?? '',
       'libraries': _convertLibraries(yamlData['libraries']),
+      'i18n': _parseLocalizedMetadata(yamlData['i18n']),
     };
+  }
+
+  dynamic _convertYamlValue(dynamic value) {
+    if (value is Map) {
+      final converted = <String, dynamic>{};
+      for (final entry in value.entries) {
+        if (entry.key is! String) {
+          throw const FormatException('YAML map keys must be strings');
+        }
+        converted[entry.key as String] = _convertYamlValue(entry.value);
+      }
+      return converted;
+    }
+    if (value is List) {
+      return value.map(_convertYamlValue).toList();
+    }
+    return value;
+  }
+
+  Map<String, UserAppLocalizedMetadata> _parseLocalizedMetadata(dynamic raw) {
+    if (raw == null) return const {};
+    if (raw is! Map) {
+      throw const FormatException('i18n must be a locale map');
+    }
+    final result = <String, UserAppLocalizedMetadata>{};
+    for (final entry in raw.entries) {
+      if (entry.key is! String || (entry.key as String).trim().isEmpty) {
+        throw const FormatException(
+          'i18n locale keys must be non-empty strings',
+        );
+      }
+      if (!isValidUserAppLocaleTag(entry.key as String)) {
+        throw FormatException('Invalid i18n locale tag: ${entry.key}');
+      }
+      if (entry.value is! Map) {
+        throw FormatException('i18n.${entry.key} must be a map');
+      }
+      final normalized = normalizeUserAppLocaleTag(entry.key as String);
+      if (result.containsKey(normalized)) {
+        throw FormatException('Duplicate normalized i18n locale: $normalized');
+      }
+      final localeMap = entry.value as Map;
+      for (final field in const ['name', 'description']) {
+        final value = localeMap[field];
+        if (value != null && value is! String) {
+          throw FormatException('i18n.${entry.key}.$field must be a string');
+        }
+      }
+      final metadata = UserAppLocalizedMetadata.fromJson(
+        Map<String, dynamic>.from(localeMap),
+      );
+      if (!metadata.isEmpty) result[normalized] = metadata;
+    }
+    return Map.unmodifiable(result);
   }
 
   /// Converts string representation to UserAppType enum for YAML import.
@@ -349,6 +404,9 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       steps: ['Imported from YAML'],
       htmlContent: '', // No longer used - code is stored in revisions
       type: appData['app_type'] as UserAppType,
+      author: appData['author'],
+      license: appData['license'],
+      i18n: appData['i18n'] as Map<String, UserAppLocalizedMetadata>,
       createdAt: now,
       updatedAt: now,
     );
@@ -416,8 +474,15 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
     await databaseService.insertAppRevision(revision);
 
     // Update app with new revision
+    final incomingI18n =
+        appData['i18n'] as Map<String, UserAppLocalizedMetadata>;
     final updatedApp = existingApp.copyWith(
       selectedRevisionId: revisionId,
+      // Preserve a user's base-name override. If the base name still matches
+      // the package, the new package translations are safe to adopt.
+      i18n: existingApp.name == appData['name']
+          ? incomingI18n
+          : _withoutLocalizedNames(incomingI18n),
       updatedAt: now,
     );
     await databaseService.updateUserApp(updatedApp);
@@ -429,6 +494,16 @@ class _ImportAppScreenState extends State<ImportAppScreen> {
       '_createNewRevision completed, _importedApp set to: ${_importedApp?.name}',
     );
   }
+
+  Map<String, UserAppLocalizedMetadata> _withoutLocalizedNames(
+    Map<String, UserAppLocalizedMetadata> source,
+  ) => Map.unmodifiable({
+    for (final entry in source.entries)
+      if (entry.value.description != null)
+        entry.key: UserAppLocalizedMetadata(
+          description: entry.value.description,
+        ),
+  });
 
   Future<void> _downloadDependencies(
     Map<String, dynamic> appData,

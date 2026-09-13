@@ -112,14 +112,12 @@ Future<Database> _openRawV46(String dbName) async {
 /// Tests that read back through a `DatabaseService` query pass `to: 52`: the
 /// read path filters on `filters.__deleted__`, which migration 52 adds.
 ///
-/// Steps are applied ONE AT A TIME on purpose. `migrateBackupDatabase` stops
-/// the whole chain at the first failure, and steps between 47 and 52 touch
-/// tables this fixture does not have (user_apps, subnotes, …) — stepping lets
-/// those fail harmlessly while the `filters` steps still run.
+/// Only apply steps relevant to the minimal fixture. User-App guards and
+/// other unrelated migrations correctly fail if their tables are absent.
 Future<void> _migrateFixture(Database raw, {int to = 47}) async {
   final service = DatabaseService.createNew();
-  for (var v = 47; v <= to; v++) {
-    await service.migrateBackupDatabase(raw, v - 1, v);
+  for (final version in [47, 52].where((version) => version <= to)) {
+    await service.migrateBackupDatabase(raw, version - 1, version);
   }
   await service.close();
   await raw.update('_schema_version', {
@@ -162,7 +160,7 @@ void main() {
   // moved past it when the cloud-sync and note-index migrations (48..63) were
   // renumbered up from their pre-merge 47..62 to make room.
   test('DATABASE_VERSION is past the Spaces migration', () {
-    expect(DatabaseService.DATABASE_VERSION, 63);
+    expect(DatabaseService.DATABASE_VERSION, 64);
     expect(DatabaseService.DATABASE_VERSION, greaterThan(47));
   });
 
@@ -187,6 +185,7 @@ void main() {
       final db = await service.database;
 
       expect(await _columnsOf(db, 'filters'), contains('isSpace'));
+      expect(await _columnsOf(db, 'user_apps'), contains('i18n'));
       expect(await _schemaVersionOf(db), DatabaseService.DATABASE_VERSION);
 
       await service.close();

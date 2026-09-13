@@ -489,6 +489,7 @@
     global.Synapse = S = {
       Notes: [],
       Params: {},
+      locale: (global.navigator && global.navigator.language) || 'en-US',
       __mock: mock,
       runQuery: function (sql) {
         if (mock.pending) { var edit = mock.pending; mock.pending = null; edit(mock); }
@@ -735,6 +736,13 @@
     } catch (e) { /* not in a browser */ }
     var m = installMock(seedNotes);
     S.Params = params;
+    S.locale = params.locale || S.locale || 'en-US';
+    global.setLocale = function (tag) {
+      S.locale = tag;
+      if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
+        global.dispatchEvent(new global.CustomEvent('synapse:localechanged', { detail: tag }));
+      }
+    };
     /*
      * What the app was LAUNCHED with, which is a different thing from what is
      * in the store. `?notes=a,b,c` is how the harness arrives as a note-action

@@ -626,7 +626,8 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       await backupDb.close();
 
       // Check if backup version is compatible
-      if (backupVersion > DatabaseService.DATABASE_VERSION) {
+      if (backupVersion > DatabaseService.DATABASE_VERSION &&
+          backupVersion != DatabaseService.SQFLITE_VERSION) {
         throw Exception(l10n.backupVersionTooNew);
       }
 
@@ -634,20 +635,14 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       _updateImportProgress(0.25);
 
       // Step 4: Upgrade the backup database to current version
-      final migratedBackupDb = await openDatabase(
-        backupDbPath,
-        version: DatabaseService.DATABASE_VERSION,
-        onCreate: (db, version) async {
-          // This shouldn't be called since we're opening an existing DB
-        },
-        onUpgrade: (db, oldVersion, newVersion) async {
-          // Apply migrations from old version to new version
-          await databaseService.migrateBackupDatabase(
-            db,
-            oldVersion,
-            newVersion,
-          );
-        },
+      // Existing databases use PRAGMA user_version=999 as a sqflite
+      // sentinel. Passing the application schema version to openDatabase
+      // would therefore request a downgrade and fail before migration.
+      final migratedBackupDb = await openDatabase(backupDbPath);
+      await databaseService.migrateBackupDatabase(
+        migratedBackupDb,
+        backupVersion,
+        DatabaseService.DATABASE_VERSION,
       );
 
       _addImportLog(l10n.mergingNotes);
@@ -734,19 +729,28 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       _updateImportProgress(0.66);
 
       // Step 10: Insert all conversation messages that are not already in the db (by message id)
-      await _mergeService.mergeConversationMessages(stagingDb, migratedBackupDb);
+      await _mergeService.mergeConversationMessages(
+        stagingDb,
+        migratedBackupDb,
+      );
 
       _addImportLog('Merging conversation attachments...');
       _updateImportProgress(0.72);
 
       // Step 11: Insert all conversation attachments that are not already in db (by id)
-      await _mergeService.mergeConversationAttachments(stagingDb, migratedBackupDb);
+      await _mergeService.mergeConversationAttachments(
+        stagingDb,
+        migratedBackupDb,
+      );
 
       _addImportLog('Merging conversation-message mappings...');
       _updateImportProgress(0.78);
 
       // Step 12: Insert all unique conversation - message mappings by (conversationId, messageId)
-      await _mergeService.mergeConversationMessageMappings(stagingDb, migratedBackupDb);
+      await _mergeService.mergeConversationMessageMappings(
+        stagingDb,
+        migratedBackupDb,
+      );
 
       _addImportLog('Merging message parents...');
       _updateImportProgress(0.84);
@@ -758,13 +762,19 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       _updateImportProgress(0.87);
 
       // Step 14: Insert all unique conversation tag mappings (conversationId, tagId)
-      await _mergeService.mergeConversationTagMappings(stagingDb, migratedBackupDb);
+      await _mergeService.mergeConversationTagMappings(
+        stagingDb,
+        migratedBackupDb,
+      );
 
       _addImportLog('Merging conversation-note mappings...');
       _updateImportProgress(0.90);
 
       // Step 15: Insert all conversation note mapping unique by (noteId, conversationId)
-      await _mergeService.mergeConversationNoteMappings(stagingDb, migratedBackupDb);
+      await _mergeService.mergeConversationNoteMappings(
+        stagingDb,
+        migratedBackupDb,
+      );
 
       _addImportLog('Merging note annotations...');
       _updateImportProgress(0.92);
@@ -1500,7 +1510,6 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       ),
     );
   }
-
 
   Widget _buildSectionTitle(String title) {
     return Text(

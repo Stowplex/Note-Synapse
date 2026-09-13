@@ -8,4 +8,4 @@
 //
 // Must match `releaseClientId` in
 // lib/services/sync/google_drive_client_config.dart, reversed.
-GOOGLE_REVERSED_CLIENT_ID=com.googleusercontent.apps.replace-with-release-client-id
+GOOGLE_REVERSED_CLIENT_ID=com.googleusercontent.apps.438894533578-g0tpgg76soku9srh76hj21p14to3kc4c

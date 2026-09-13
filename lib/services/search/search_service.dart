@@ -357,14 +357,16 @@ class SearchService {
   bool isCurrent(SearchTicket ticket) =>
       ticket.standalone || _newestTicket?.seq == ticket.seq;
 
-  /// Kicks off the index backfill if it never completed. Fire-and-forget and
-  /// idempotent per service instance; called implicitly by the first query,
-  /// or explicitly at startup.
+  /// Starts one fingerprint sweep per service instance, implicitly on the
+  /// first query or explicitly at startup. A save followed by shutdown can
+  /// leave the debounced index write unfinished even when the previous
+  /// backfill was marked done; persisted source fingerprints repair that
+  /// gap. Repeated searches do not start additional sweeps.
   Future<void> ensureReady() async {
     if (_backfillTriggered) return;
     _backfillTriggered = true;
     unawaited(
-      _indexService.ensureBackfilled().catchError((Object e) {
+      _indexService.backfillAll().catchError((Object e) {
         LoggerService.error(
           '[SearchService] Startup backfill trigger failed: $e',
           error: e,

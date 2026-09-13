@@ -25,6 +25,7 @@ import '../services/user_app_service.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
 import '../utils/synapse_temp_utils.dart';
+import '../utils/user_app_localization.dart';
 import 'approval_service.dart';
 import 'block_note_scope_service.dart';
 import 'note_modification_service.dart';
@@ -37,6 +38,25 @@ typedef OpenNoteCallback = Future<void> Function(Note note, bool replaceWindow);
 typedef OpenConversationsCallback =
     Future<void> Function(List<Note> notes, bool immersiveMode);
 typedef OpenAIActionsCallback = Future<void> Function(List<Note> notes);
+
+Locale _localeFromLanguageTag(String languageTag) {
+  final parts = languageTag.replaceAll('_', '-').split('-');
+  final language = parts.first.toLowerCase();
+  String? script;
+  String? country;
+  for (final part in parts.skip(1)) {
+    if (part.length == 4 && script == null) {
+      script = '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}';
+    } else if ((part.length == 2 || part.length == 3) && country == null) {
+      country = part.toUpperCase();
+    }
+  }
+  return Locale.fromSubtags(
+    languageCode: language.isEmpty ? 'en' : language,
+    scriptCode: script,
+    countryCode: country,
+  );
+}
 
 /// Asks the host to open the note merge screen on [notes]; resolves to the
 /// merged note, or `null` if the user backed out without merging.
@@ -160,6 +180,15 @@ class UserAppRuntimeBridge {
   /// attached (a bootstrap-script-only unit test), which is why
   /// [notifySpaceChanged] is a no-op rather than an error in that state.
   InAppWebViewController? _controller;
+  UserScript? _bootstrapScript;
+  String? _bootstrapSpaceJson;
+  String? _bootstrapLocaleJson;
+  String? _publishedSpaceJson;
+  String? _publishedLocaleJson;
+  bool _pageReady = false;
+  bool _detached = false;
+  int _documentGeneration = 0;
+  Future<void> _publishTail = Future<void>.value();
 
   void approveSession() {
     _sessionApprovedModifications = true;
@@ -219,9 +248,14 @@ class UserAppRuntimeBridge {
 
   /// Creates the bootstrap user script that initialises the Synapse namespace.
   UserScript buildBootstrapScript() {
+    final existing = _bootstrapScript;
+    if (existing != null) return existing;
     final notesJson = _buildSelectedNotesJson();
     final paramsJson = _buildParamsJson();
     final spaceJson = buildSpaceJson();
+    final localeJson = buildLocaleJson();
+    _bootstrapSpaceJson = spaceJson;
+    _bootstrapLocaleJson = localeJson;
     final toolEnvFlag = isInteractive ? 'true' : 'false';
 
     final script =
@@ -447,6 +481,7 @@ class UserAppRuntimeBridge {
           Notes: $notesJson,
           Params: $paramsJson,
           space: $spaceJson,
+          locale: $localeJson,
         };
 
         if (!window.Synapse.tool) {
@@ -468,7 +503,7 @@ class UserAppRuntimeBridge {
           return result;
         };
       ''';
-    return UserScript(
+    return _bootstrapScript = UserScript(
       source: script,
       injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
     );
@@ -476,6 +511,12 @@ class UserAppRuntimeBridge {
 
   /// Name of the DOM event fired at `window` when the active Space changes.
   static const String spaceChangedEvent = 'synapse:spacechanged';
+
+  /// Name of the DOM event fired when the Note Synapse UI locale changes.
+  static const String localeChangedEvent = 'synapse:localechanged';
+
+  /// The resolved Note Synapse locale as a safely encoded JavaScript string.
+  String buildLocaleJson() => jsonEncode(userAppLocaleTag(appProvider.locale));
 
   /// `window.Synapse.space` as a JavaScript literal: `{id, name, tags}` for the
   /// active Space, or `null` when none is active.
@@ -523,28 +564,104 @@ class UserAppRuntimeBridge {
     ''';
   }
 
+  /// The focused live-page locale update used by compatibility tests and
+  /// embedders that only need the locale half of the context contract.
+  String buildLocaleChangedScript() {
+    final localeJson = buildLocaleJson();
+    return '''
+      (function () {
+        var locale = $localeJson;
+        if (window.Synapse) { window.Synapse.locale = locale; }
+        window.dispatchEvent(
+          new CustomEvent('$localeChangedEvent', { detail: locale })
+        );
+      })();
+    ''';
+  }
+
   /// Tells the live page that the active Space changed.
   ///
   /// The boot-time value in [buildBootstrapScript] is not enough on its own:
   /// a background user app keeps a **live WebView** (its route is covered, not
   /// popped), so an app running while the user switches Spaces would otherwise
   /// go on scoping its queries to a Space the user has left.
-  Future<void> notifySpaceChanged() async {
+  Future<void> notifySpaceChanged() => republishContextIfChanged();
+
+  Future<void> notifyLocaleChanged() => republishContextIfChanged();
+
+  /// Marks a newly navigating document as unavailable for live publication.
+  void pageDidStartLoading() {
+    _documentGeneration++;
+    _pageReady = false;
+    _publishedSpaceJson = null;
+    _publishedLocaleJson = null;
+  }
+
+  /// Marks the document ready, records its frozen bootstrap context, then
+  /// flushes any locale/Space changes that happened while it loaded.
+  Future<void> pageDidFinishLoading() async {
+    if (_detached) return;
+    _pageReady = true;
+    _publishedSpaceJson = _bootstrapSpaceJson ?? buildSpaceJson();
+    _publishedLocaleJson = _bootstrapLocaleJson ?? buildLocaleJson();
+    await republishContextIfChanged();
+  }
+
+  /// Serializes and atomically republishes the current host context.
+  Future<void> republishContextIfChanged() {
+    final next = _publishTail.then((_) => _republishContextNow());
+    _publishTail = next.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
+    );
+    return next;
+  }
+
+  Future<void> _republishContextNow() async {
     final controller = _controller;
-    if (controller == null) return;
+    if (controller == null || !_pageReady || _detached) return;
+    final spaceJson = buildSpaceJson();
+    final localeJson = buildLocaleJson();
+    final spaceChanged = spaceJson != _publishedSpaceJson;
+    final localeChanged = localeJson != _publishedLocaleJson;
+    if (!spaceChanged && !localeChanged) return;
+    final generation = _documentGeneration;
+    final script =
+        '''
+      (function () {
+        var nextSpace = $spaceJson;
+        var nextLocale = $localeJson;
+        if (window.Synapse) {
+          ${spaceChanged ? 'window.Synapse.space = nextSpace;' : ''}
+          ${localeChanged ? 'window.Synapse.locale = nextLocale;' : ''}
+        }
+        ${localeChanged ? "window.dispatchEvent(new CustomEvent('$localeChangedEvent', { detail: nextLocale }));" : ''}
+        ${spaceChanged ? "window.dispatchEvent(new CustomEvent('$spaceChangedEvent', { detail: nextSpace }));" : ''}
+      })();
+    ''';
     try {
-      await controller.evaluateJavascript(source: buildSpaceChangedScript());
+      await controller.evaluateJavascript(source: script);
+      if (_detached || generation != _documentGeneration) return;
+      if (spaceChanged) _publishedSpaceJson = spaceJson;
+      if (localeChanged) _publishedLocaleJson = localeJson;
     } catch (e) {
-      // A WebView disposed between the space change and this call throws; the
-      // page is gone, so there is nothing to tell and nothing to recover.
       LoggerService.warning(
-        '[UserAppRuntimeBridge] Could not dispatch $spaceChangedEvent: $e',
+        '[UserAppRuntimeBridge] Could not republish host context: $e',
       );
     }
   }
 
+  /// Detaches this bridge from its WebView lifetime.
+  void detach() {
+    _detached = true;
+    _pageReady = false;
+    _controller = null;
+    _documentGeneration++;
+  }
+
   /// Registers all JavaScript handlers required by the Synapse runtime.
   void registerJavaScriptHandlers(InAppWebViewController controller) {
+    _detached = false;
     _controller = controller;
     controller.addJavaScriptHandler(
       handlerName: 'runQuery',
@@ -1570,10 +1687,13 @@ class UserAppRuntimeBridge {
               options['includeSubNotesAndLinkedNotes'] != false;
           final includeAttachments = options['includeAttachmentList'] != false;
 
-          // Load a default (English) localization instance; exportNotes has no
-          // BuildContext, and the l10n only affects section labels in the
-          // exported markdown.
-          final l10n = await AppLocalizations.delegate.load(const Locale('en'));
+          // Preserve legacy English output unless the plugin explicitly asks
+          // for localized section labels.
+          final requestedLocale = options['locale']?.toString().trim();
+          final locale = requestedLocale == null || requestedLocale.isEmpty
+              ? const Locale('en', 'US')
+              : _localeFromLanguageTag(requestedLocale);
+          final l10n = await AppLocalizations.delegate.load(locale);
 
           final exported = <Map<String, dynamic>>[];
           for (final noteId in noteIds) {

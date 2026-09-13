@@ -7,6 +7,7 @@ import '../services/ai_tool_service.dart';
 import '../services/mcp_service.dart';
 import '../services/user_app_service.dart';
 import '../services/database_service.dart';
+import '../utils/user_app_localization.dart';
 
 /// Bottom sheet for inserting tool links into note content.
 /// Returns a markdown link string like [toolName](notesynapse://tool/...) when dismissed.
@@ -229,7 +230,7 @@ class _UserDefinedToolsTabState extends State<_UserDefinedToolsTab> {
                   ListTile(
                     enabled: false,
                     leading: const Icon(Icons.cloud_off_outlined),
-                    title: Text(app.name),
+                    title: Text(app.displayName(context)),
                     subtitle: Text(l10n.aiToolCodeNotSynced),
                   ),
                   const Divider(height: 1),
@@ -242,12 +243,12 @@ class _UserDefinedToolsTabState extends State<_UserDefinedToolsTab> {
                 // Whole-app entry
                 ListTile(
                   leading: const Icon(Icons.extension),
-                  title: Text(app.name),
-                  subtitle: app.description.isNotEmpty
-                      ? Text(app.description)
+                  title: Text(app.displayName(context)),
+                  subtitle: app.displayDescription(context).isNotEmpty
+                      ? Text(app.displayDescription(context))
                       : null,
                   onTap: () => widget.onSelect(
-                    '[${app.name}](notesynapse://tool/user_defined/${app.uuid})',
+                    '[${app.displayName(context)}](notesynapse://tool/user_defined/${app.uuid})',
                   ),
                 ),
                 // Individual function entries (indented)
@@ -264,7 +265,7 @@ class _UserDefinedToolsTabState extends State<_UserDefinedToolsTab> {
                           )
                         : null,
                     onTap: () => widget.onSelect(
-                      '[${app.name}.${def.toolName}](notesynapse://tool/user_defined/${app.uuid}/${def.toolName})',
+                      '[${app.displayName(context)}.${def.toolName}](notesynapse://tool/user_defined/${app.uuid}/${def.toolName})',
                     ),
                   ),
                 ),
