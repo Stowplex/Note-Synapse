@@ -17,7 +17,7 @@
 // Five things are verified, matching the milestone's own acceptance bar:
 //  1. Fresh-install: a brand-new database already has `__deleted__` on both
 //     tables (DatabaseService.createNew() -> _onCreate).
-//  2. Migration round-trip (DATABASE_VERSION 50 -> 51): existing rows in
+//  2. Migration round-trip (DATABASE_VERSION 52 -> 53): existing rows in
 //     both tables survive migration with __deleted__=0, ids/patterns
 //     unchanged.
 //  3. Soft-delete confirmation: deleteFilter/deleteWorkflowBinding write
@@ -48,7 +48,7 @@ import 'package:note_synapse/models/workflow_binding_row.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/tag_workflow_service.dart';
 
-/// The exact pre-M1.7 (DATABASE_VERSION <= 50) shape of `filters`: no
+/// The exact pre-M1.7 (DATABASE_VERSION <= 52) shape of `filters`: no
 /// `__deleted__` column. Hand-written rather than derived from
 /// DatabaseService.getSchema() — as of M1.7, getSchema() already returns
 /// the NEW DDL — same approach test/user_app_soft_delete_test.dart
@@ -134,7 +134,7 @@ void main() {
   });
 
   group(
-    'M1.7 filters/tag_workflow_bindings soft-delete — migration round-trip (v51 -> v52)',
+    'M1.7 filters/tag_workflow_bindings soft-delete — migration round-trip (v52 -> v53)',
     () {
       late Database preMigrationDb;
 
@@ -159,7 +159,7 @@ void main() {
         await preMigrationDb.execute('''
           CREATE TABLE _schema_version (version INTEGER NOT NULL)
         ''');
-        await preMigrationDb.insert('_schema_version', {'version': 50});
+        await preMigrationDb.insert('_schema_version', {'version': 52});
 
         expect(await _hasColumn(preMigrationDb, 'filters', '__deleted__'), isFalse);
         expect(
@@ -196,7 +196,7 @@ void main() {
           });
 
           final service = DatabaseService.createNew();
-          await service.migrateBackupDatabase(preMigrationDb, 51, 52);
+          await service.migrateBackupDatabase(preMigrationDb, 52, 53);
 
           expect(await _hasColumn(preMigrationDb, 'filters', '__deleted__'), isTrue);
           expect(
@@ -215,7 +215,7 @@ void main() {
       );
 
       test(
-        'running the v51 -> v52 migration twice does not error and leaves '
+        'running the v52 -> v53 migration twice does not error and leaves '
         'schema/data unchanged the second time',
         () async {
           await preMigrationDb.insert('filters', {
@@ -231,10 +231,10 @@ void main() {
           });
 
           final service = DatabaseService.createNew();
-          await service.migrateBackupDatabase(preMigrationDb, 51, 52);
+          await service.migrateBackupDatabase(preMigrationDb, 52, 53);
           final afterFirst = await preMigrationDb.query('filters', orderBy: 'id');
 
-          await service.migrateBackupDatabase(preMigrationDb, 51, 52);
+          await service.migrateBackupDatabase(preMigrationDb, 52, 53);
           final afterSecond = await preMigrationDb.query('filters', orderBy: 'id');
 
           expect(afterSecond, equals(afterFirst));

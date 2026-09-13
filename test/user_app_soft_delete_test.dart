@@ -23,7 +23,7 @@
 // Six things are verified, matching the milestone's own acceptance bar:
 //  1. Fresh-install: a brand-new database already has the new columns
 //     (DatabaseService.createNew() -> _onCreate).
-//  2. Migration round-trip (DATABASE_VERSION 48 -> 49): an existing
+//  2. Migration round-trip (DATABASE_VERSION 50 -> 51): an existing
 //     pre-M1.4 database's rows across all four tables (plus
 //     multi_function_apps, the one other table with a real FK into
 //     user_apps) survive migration with __deleted__=0/deletedAt=NULL, ids
@@ -57,7 +57,7 @@ import 'package:note_synapse/models/app_revision.dart';
 import 'package:note_synapse/models/user_app.dart';
 import 'package:note_synapse/services/database_service.dart';
 
-/// The exact pre-M1.4 (DATABASE_VERSION <= 48) shape of the four target
+/// The exact pre-M1.4 (DATABASE_VERSION <= 50) shape of the four target
 /// tables: no `__deleted__`/`deletedAt` columns. Hand-written rather than
 /// derived from DatabaseService.getSchema() — as of M1.4, getSchema()
 /// already returns the NEW DDL — same approach
@@ -197,7 +197,7 @@ void main() {
     );
   });
 
-  group('M1.4 User-App soft-delete — migration round-trip (v49 -> v50)', () {
+  group('M1.4 User-App soft-delete — migration round-trip (v50 -> v51)', () {
     late Database preMigrationDb;
 
     setUp(() async {
@@ -228,7 +228,7 @@ void main() {
       await preMigrationDb.execute('''
         CREATE TABLE _schema_version (version INTEGER NOT NULL)
       ''');
-      await preMigrationDb.insert('_schema_version', {'version': 48});
+      await preMigrationDb.insert('_schema_version', {'version': 50});
 
       expect(await _hasColumn(preMigrationDb, 'user_apps', '__deleted__'), isFalse);
       expect(await _hasColumn(preMigrationDb, 'app_revisions', '__deleted__'), isFalse);
@@ -290,7 +290,7 @@ void main() {
         });
 
         final service = DatabaseService.createNew();
-        await service.migrateBackupDatabase(preMigrationDb, 49, 50);
+        await service.migrateBackupDatabase(preMigrationDb, 50, 51);
 
         expect(await _hasColumn(preMigrationDb, 'user_apps', '__deleted__'), isTrue);
         expect(await _hasColumn(preMigrationDb, 'app_revisions', '__deleted__'), isTrue);
@@ -327,7 +327,7 @@ void main() {
     );
 
     test(
-      'running the v49 -> v50 migration twice does not error and leaves '
+      'running the v50 -> v51 migration twice does not error and leaves '
       'schema/data unchanged the second time',
       () async {
         await preMigrationDb.insert('user_apps', {
@@ -343,10 +343,10 @@ void main() {
         });
 
         final service = DatabaseService.createNew();
-        await service.migrateBackupDatabase(preMigrationDb, 49, 50);
+        await service.migrateBackupDatabase(preMigrationDb, 50, 51);
         final afterFirst = await preMigrationDb.query('user_apps', orderBy: 'id');
 
-        await service.migrateBackupDatabase(preMigrationDb, 49, 50);
+        await service.migrateBackupDatabase(preMigrationDb, 50, 51);
         final afterSecond = await preMigrationDb.query('user_apps', orderBy: 'id');
 
         expect(afterSecond, equals(afterFirst));

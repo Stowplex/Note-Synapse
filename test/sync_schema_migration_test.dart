@@ -136,7 +136,7 @@ void main() {
         inMemoryDatabasePath,
       );
       // Build a database that represents an existing install already fully
-      // migrated through the previous DATABASE_VERSION (46): the current
+      // migrated through the released DATABASE_VERSION (48): the current
       // core-table DDL (getSchema()), which deliberately excludes the
       // sync_* tables (see DatabaseService.getSchema's doc comment), plus
       // the other tables _onCreate creates outside getSchema() so table
@@ -144,10 +144,15 @@ void main() {
       for (final statement in DatabaseService.getSchema()) {
         await preMigrationDb.execute(statement);
       }
+      // getSchema() also documents the current derived index tables. They
+      // were absent from released v48 and must stay absent until step 64.
+      await preMigrationDb.execute('DROP TABLE chunk_embeddings');
+      await preMigrationDb.execute('DROP TABLE search_index_state');
+      await preMigrationDb.execute('DROP TABLE search_chunks');
       await preMigrationDb.execute('''
         CREATE TABLE _schema_version (version INTEGER NOT NULL)
       ''');
-      await preMigrationDb.insert('_schema_version', {'version': 46});
+      await preMigrationDb.insert('_schema_version', {'version': 48});
 
       // Sanity check: none of the sync tables exist yet.
       final tables = await _tableNames(preMigrationDb);
@@ -159,10 +164,10 @@ void main() {
     });
 
     test(
-      'migrating v46 -> v48 creates all fifteen sync tables',
+      'migrating v48 -> v49 creates all fifteen sync tables',
       () async {
         final service = DatabaseService.createNew();
-        await service.migrateBackupDatabase(preMigrationDb, 46, 48);
+        await service.migrateBackupDatabase(preMigrationDb, 48, 49);
 
         final tables = await _tableNames(preMigrationDb);
         expect(
@@ -171,6 +176,11 @@ void main() {
           reason:
               'Missing sync tables after migration: '
               '${_kSyncTableNames.difference(tables)}',
+        );
+        expect(
+          tables,
+          isNot(contains('search_chunks')),
+          reason: 'indexing has its own later migration at version 64',
         );
 
         // Existing (pre-migration) tables and data must be untouched —
@@ -181,10 +191,10 @@ void main() {
       },
     );
 
-    test('running the v46 -> v48 migration twice does not error', () async {
+    test('running the v48 -> v49 migration twice does not error', () async {
       final service = DatabaseService.createNew();
 
-      await service.migrateBackupDatabase(preMigrationDb, 46, 48);
+      await service.migrateBackupDatabase(preMigrationDb, 48, 49);
       final tablesAfterFirst = await _tableNames(preMigrationDb);
       final indexAfterFirst = await _indexNames(
         preMigrationDb,
@@ -192,8 +202,8 @@ void main() {
       );
 
       // Second run must be a no-op, not an error (CREATE TABLE/INDEX IF NOT
-      // EXISTS throughout _migrateToVersion48).
-      await service.migrateBackupDatabase(preMigrationDb, 46, 48);
+      // EXISTS throughout _migrateToVersion49).
+      await service.migrateBackupDatabase(preMigrationDb, 48, 49);
       final tablesAfterSecond = await _tableNames(preMigrationDb);
       final indexAfterSecond = await _indexNames(
         preMigrationDb,

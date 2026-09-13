@@ -182,7 +182,7 @@ class DatabaseService {
   }
 
   // Current database version - exported for use by recovery/import operations
-  static const int DATABASE_VERSION = 64; // Target schema version
+  static const int DATABASE_VERSION = 65; // Target schema version
   static const int SQFLITE_VERSION =
       999; // High value to prevent sqflite onUpgrade
 
@@ -950,7 +950,7 @@ class DatabaseService {
   //
   // M2.6 (`lib/services/sync/push_phase.dart`) adds `authorId`/`deviceSeq`
   // (fresh installs via this CREATE TABLE; existing installs via
-  // `_migrateToVersion59`'s ALTER TABLE) — a schema gap the original
+  // `_migrateToVersion60`'s ALTER TABLE) — a schema gap the original
   // definition left open. § Architecture 11.7 Phase A step 0's resume
   // procedure requires scanning `sync_publish_intent` for `status='pending'`
   // rows "for this namespace" and calling `readCommits(deviceLogId, afterSeq
@@ -1084,7 +1084,7 @@ class DatabaseService {
   /// Single source of truth for the fifteen M1.1 sync control-plane
   /// tables (plus their non-primary-key indexes), shared verbatim by the
   /// fresh-install path (_onCreate) and the additive migration
-  /// (_migrateToVersion48) so the two paths can never drift apart — every
+  /// (_migrateToVersion49) so the two paths can never drift apart — every
   /// statement uses IF NOT EXISTS, so running it against either an empty
   /// database or an already-migrated one is always safe.
   static const List<String> _syncControlPlaneTableStatements = [
@@ -1178,10 +1178,10 @@ class DatabaseService {
   // (`_syncControlPlaneTableStatements` above) for the same anti-drift
   // reason: the exact trigger SQL for a given table must never be able to
   // diverge between the fresh-install path (_onCreate) and any additive
-  // migration (_migrateToVersion51, _migrateToVersion57). This sharing is
+  // migration (_migrateToVersion52, _migrateToVersion58). This sharing is
   // deliberately scoped to the SQL-generation helper only, not to which
   // *tables* each call site targets -- see `_hardDeleteGuardTriggerStatements`'s
-  // own doc comment below for why `_migrateToVersion51`/`_migrateToVersion57`
+  // own doc comment below for why `_migrateToVersion52`/`_migrateToVersion58`
   // each use their own frozen, historical table list instead of the
   // shared, current one.
   static String _hardDeleteGuardTrigger(String table) {
@@ -1218,11 +1218,11 @@ class DatabaseService {
   /// protects today", used by the fresh-install path (_onCreate, which
   /// legitimately always wants the current, complete list) and by
   /// `clearAllData`'s trigger-reinstall step (same reasoning: reinstall
-  /// whatever is current). Deliberately NOT used by `_migrateToVersion51`
-  /// or `_migrateToVersion57` — each of those is a frozen, historical
+  /// whatever is current). Deliberately NOT used by `_migrateToVersion52`
+  /// or `_migrateToVersion58` — each of those is a frozen, historical
   /// migration step that must install exactly the tables it originally
   /// documented installing, not whatever this list has since grown to; see
-  /// `_migrateToVersion51`'s own doc comment for the full reasoning and
+  /// `_migrateToVersion52`'s own doc comment for the full reasoning and
   /// the bug this would otherwise cause for a real multi-step upgrade.
   static final List<String> _hardDeleteGuardTriggerStatements = [
     for (final table in _hardDeleteGuardedTables)
@@ -1295,7 +1295,7 @@ class DatabaseService {
   //
   // A shared per-table statement list (`_syncMutationCaptureTriggerStatements`),
   // consumed by both the fresh-install path (`_onCreate`) and the additive
-  // migration (`_migrateToVersion58`), so the two paths can never drift
+  // migration (`_migrateToVersion59`), so the two paths can never drift
   // apart -- the exact same M1.1/M1.5/M1.13 anti-drift pattern
   // `_syncControlPlaneTableStatements`/`_hardDeleteGuardTriggerStatements`
   // already establish in this file. Every statement uses `CREATE TRIGGER IF
@@ -1801,7 +1801,7 @@ class DatabaseService {
   ];
 
   /// Single source of truth for every M2.4 sync mutation-capture trigger —
-  /// shared verbatim by `_onCreate` and `_migrateToVersion58`, the same
+  /// shared verbatim by `_onCreate` and `_migrateToVersion59`, the same
   /// anti-drift pattern as `_syncControlPlaneTableStatements`/
   /// `_hardDeleteGuardTriggerStatements` above.
   static final List<String> _syncMutationCaptureTriggerStatements = [
@@ -1952,11 +1952,11 @@ class DatabaseService {
       END;
   ''';
 
-  // Search index tables (v63). Hold data derived from notes/attachments —
+  // Search index tables (v64). Hold data derived from notes/attachments —
   // rebuilt by the indexer and never merged during recovery. NOTE: DB backups
   // are whole-file copies, so these tables DO ship in backups today; size
-  // impact is evaluated when the indexer lands. All v63 DDL uses IF NOT
-  // EXISTS: migration 62 runs outside a transaction (custom-migration path),
+  // impact is evaluated when the indexer lands. All v64 DDL uses IF NOT
+  // EXISTS: migration 64 runs outside a transaction (custom-migration path),
   // so a mid-migration crash must be re-runnable, not a permanent recovery
   // loop.
   static const String _createSearchChunksTable = '''
@@ -2010,7 +2010,7 @@ class DatabaseService {
       CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts4(content);
   ''';
 
-  // Search index indexes (v63) - shared by _createIndexes and migration 62
+  // Search index indexes (v64) - shared by _createIndexes and migration 64
   static const String _createIdxSearchChunksKey =
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_search_chunks_key ON search_chunks(chunkKey)';
   static const String _createIdxSearchChunksNoteId =
@@ -2070,7 +2070,7 @@ class DatabaseService {
   /// (user_app_service.dart/note_tools.dart) and the raw-data-manager schema
   /// viewer, and sync machinery is not user content — the same reasoning
   /// that already kept `_schema_version` off this list. Both are still
-  /// created for every database via _onCreate/_migrateToVersion48.
+  /// created for every database via _onCreate/_migrateToVersion49.
   static List<String> getSchema() {
     return [
       _createNotesTable,
@@ -2337,7 +2337,7 @@ class DatabaseService {
 
     // Create the M1.1 sync control-plane tables (see the comment above
     // _syncControlPlaneTableStatements) so a brand-new install starts with
-    // the same schema an existing install reaches via _migrateToVersion48.
+    // the same schema an existing install reaches via _migrateToVersion49.
     for (final statement in _syncControlPlaneTableStatements) {
       await db.execute(statement);
     }
@@ -2345,7 +2345,7 @@ class DatabaseService {
     // Create the M1.5 hard-delete guard triggers (see
     // _hardDeleteGuardTriggerStatements's doc comment) so a brand-new
     // install starts with the same enforcement an existing install reaches
-    // via _migrateToVersion51.
+    // via _migrateToVersion52.
     for (final statement in _hardDeleteGuardTriggerStatements) {
       await db.execute(statement);
     }
@@ -2353,7 +2353,7 @@ class DatabaseService {
     // Create the M2.4 sync mutation-capture triggers (see
     // _syncMutationCaptureTriggerStatements's doc comment) so a brand-new
     // install starts with the same capture coverage an existing install
-    // reaches via _migrateToVersion58.
+    // reaches via _migrateToVersion59.
     for (final statement in _syncMutationCaptureTriggerStatements) {
       await db.execute(statement);
     }
@@ -2364,7 +2364,7 @@ class DatabaseService {
     await db.execute(_createNotesFtsDeleteTrigger);
     await db.execute(_createNotesFtsUpdateTrigger);
 
-    // Create search index tables (v63)
+    // Create search index tables (v64)
     await db.execute(_createSearchChunksTable);
     await db.execute(_createChunkEmbeddingsTable);
     await db.execute(_createSearchIndexStateTable);
@@ -2396,7 +2396,7 @@ class DatabaseService {
     await _ensureSearchSourceLookupIndexes(db);
 
     // Record chunks_fts availability (its FTS4 CREATE in _onCreate/migration
-    // 62 is allowed to fail on platforms without FTS4).
+    // 64 is allowed to fail on platforms without FTS4).
     final chunksFtsCheck = await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'",
     );
@@ -2499,14 +2499,13 @@ class DatabaseService {
     LoggerService.info('Schema version updated to $DATABASE_VERSION');
   }
 
-  /// Main shipped localization as v48 while this branch used v48 for sync.
-  /// Replaying that additive step handles either history and interrupted
-  /// upgrades whose first sync table exists but whose later tables do not.
+  /// Published version numbers retain their original meaning. In particular,
+  /// released v48 is localization; cloud sync starts at v49. Only missing or
+  /// corrupted version tracking needs conservative schema detection.
   static Future<int> _migrationStartingVersion(Database db, int version) async {
     if (version <= 0 || version >= SQFLITE_VERSION) {
       return _detectActualSchemaVersion(db);
     }
-    if (version == 48) return 47;
     return version;
   }
 
@@ -2667,78 +2666,82 @@ class DatabaseService {
       execute: _migrateToVersion47,
     ),
     48: MigrationStep(
-      description:
-          'Create the fifteen sync_* control-plane tables for CRDT cloud sync (M1.1, pure-additive)',
+      description: 'Add localized metadata to user_apps',
       execute: _migrateToVersion48,
     ),
     49: MigrationStep(
       description:
-          'Convert tags.name from a column-level UNIQUE constraint to the '
-          'partial unique index idx_tags_name_live, and add tags.__deleted__/'
-          'tags.redirectTarget columns (M1.3, tags identity schema)',
+          'Create the fifteen sync_* control-plane tables for CRDT cloud sync (M1.1, pure-additive)',
       execute: _migrateToVersion49,
     ),
     50: MigrationStep(
+      description:
+          'Convert tags.name from a column-level UNIQUE constraint to the '
+          'partial unique index idx_tags_name_live, and add tags.__deleted__/'
+          'tags.redirectTarget columns (M1.3, tags identity schema)',
+      execute: _migrateToVersion50,
+    ),
+    51: MigrationStep(
       description:
           'Add __deleted__ tombstone columns to user_apps/app_revisions/'
           'user_app_libraries/user_app_library_dependencies, and '
           'app_revisions.deletedAt for fallback-selection tie-break (M1.4, '
           'User-App-family soft-delete conversion)',
-      execute: _migrateToVersion50,
-    ),
-    51: MigrationStep(
-      description:
-          'Install the M1.5 hard-delete guard triggers on user_apps/'
-          'app_revisions/user_app_libraries/user_app_library_dependencies '
-          '(BEFORE DELETE ... RAISE(ABORT, ...))',
       execute: _migrateToVersion51,
     ),
     52: MigrationStep(
       description:
-          'Add __deleted__ tombstone columns to filters and '
-          'tag_workflow_bindings (M1.7, filters + tag_workflow_bindings '
-          'soft-delete conversion)',
+          'Install the M1.5 hard-delete guard triggers on user_apps/'
+          'app_revisions/user_app_libraries/user_app_library_dependencies '
+          '(BEFORE DELETE ... RAISE(ABORT, ...))',
       execute: _migrateToVersion52,
     ),
     53: MigrationStep(
       description:
-          'Add __deleted__ tombstone columns to relationships and '
-          'conversation_attachments (M1.8, relationships + '
-          'conversation_attachments soft-delete conversion)',
+          'Add __deleted__ tombstone columns to filters and '
+          'tag_workflow_bindings (M1.7, filters + tag_workflow_bindings '
+          'soft-delete conversion)',
       execute: _migrateToVersion53,
     ),
     54: MigrationStep(
       description:
-          'Add __deleted__ tombstone column to notes (M1.10, deleteNote '
-          'soft-delete conversion)',
+          'Add __deleted__ tombstone columns to relationships and '
+          'conversation_attachments (M1.8, relationships + '
+          'conversation_attachments soft-delete conversion)',
       execute: _migrateToVersion54,
     ),
     55: MigrationStep(
       description:
-          'Add __deleted__ tombstone columns to subnotes and attachments '
-          '(M1.11, updateNote/_persistNote diff-based soft-delete '
-          'conversion)',
+          'Add __deleted__ tombstone column to notes (M1.10, deleteNote '
+          'soft-delete conversion)',
       execute: _migrateToVersion55,
     ),
     56: MigrationStep(
+      description:
+          'Add __deleted__ tombstone columns to subnotes and attachments '
+          '(M1.11, updateNote/_persistNote diff-based soft-delete '
+          'conversion)',
+      execute: _migrateToVersion56,
+    ),
+    57: MigrationStep(
       description:
           'Add __deleted__ tombstone columns to conversations and '
           'conversation_messages (M1.12, conversations + '
           'conversation_messages family soft-delete conversion, including '
           'the new membership-derived effective-visibility formula for '
           'conversation_messages)',
-      execute: _migrateToVersion56,
+      execute: _migrateToVersion57,
     ),
-    57: MigrationStep(
+    58: MigrationStep(
       description:
           'Install the M1.13 hard-delete guard triggers on notes/subnotes/'
           'attachments/tags/filters/relationships/tag_workflow_bindings/'
           'conversations/conversation_messages/conversation_attachments '
           '(BEFORE DELETE ... RAISE(ABORT, ...), extending the M1.5 guard '
           'to every fully-converted entity table)',
-      execute: _migrateToVersion57,
+      execute: _migrateToVersion58,
     ),
-    58: MigrationStep(
+    59: MigrationStep(
       description:
           'Install the M2.4 sync mutation-capture triggers on every '
           'requirement-1 sync-scope table (the fourteen hard-delete-guarded '
@@ -2746,27 +2749,27 @@ class DatabaseService {
           'writing into sync_touch_log; the five OR-Set membership tables, '
           'AFTER INSERT/AFTER DELETE) — § Architecture 11.3, "Mutation '
           'capture: from ordinary writes to a durable outbox"',
-      execute: _migrateToVersion58,
+      execute: _migrateToVersion59,
     ),
-    59: MigrationStep(
+    60: MigrationStep(
       description:
           'Add authorId/deviceSeq columns to sync_publish_intent — M2.6 '
           '(§ Architecture 11.7 Phase A resume procedure needs to recover '
           'which namespace/deviceSeq a pending publish intent belongs to; '
           'no existing row is ever affected since no code before M2.6 ever '
           'called appendCommit)',
-      execute: _migrateToVersion59,
+      execute: _migrateToVersion60,
     ),
-    60: MigrationStep(
+    61: MigrationStep(
       description:
           'Install M2.4 sync mutation-capture triggers for tags.name/'
           'tags.color — M2.7 (Architecture 11.6(e) auto-merge/collision '
           'detection needs a remote tag name, which the original '
           'syncScopeColumns list never captured; a required, adjacent fix, '
           'same shape as M2.4\'s own replaceTag follow-up)',
-      execute: _migrateToVersion60,
+      execute: _migrateToVersion61,
     ),
-    61: MigrationStep(
+    62: MigrationStep(
       description:
           'Install M2.4 sync mutation-capture triggers for six more '
           'creation-time-varying columns the M2.8 sync-scope-exclusion-'
@@ -2780,9 +2783,9 @@ class DatabaseService {
           'user_app_library_dependencies.{original_url,local_path} — '
           'see syncEntityCaptureScopes\' own per-table doc comments for '
           'the full finding-by-finding reasoning',
-      execute: _migrateToVersion61,
+      execute: _migrateToVersion62,
     ),
-    62: MigrationStep(
+    63: MigrationStep(
       description:
           'Add opAuthorSeqsJson to sync_publish_intent — M2.12 (a commit now '
           'carries a BATCH of operations, so the resume procedure has to know '
@@ -2792,22 +2795,41 @@ class DatabaseService {
           'constants, which would wedge the namespace permanently). NULL on '
           'every pre-existing row, which is exactly right: those intents were '
           'written when one commit meant one operation',
-      execute: _migrateToVersion62,
-    ),
-    63: MigrationStep(
-      description:
-          'Create search_chunks, chunk_embeddings, search_index_state tables and chunks_fts virtual table for layered search',
       execute: _migrateToVersion63,
     ),
     64: MigrationStep(
-      description: 'Add localized User App metadata and sync capture',
+      description:
+          'Create search_chunks, chunk_embeddings, search_index_state tables and chunks_fts virtual table for layered search',
       execute: _migrateToVersion64,
+    ),
+    65: MigrationStep(
+      description:
+          'Repair localization and sync capture for earlier branch databases',
+      execute: _migrateToVersion65,
     ),
   };
 
-  /// Localization shipped as v48 on main before the sync/index merge.
-  /// Its new step also upgrades branch databases that already reached v63.
-  static Future<void> _migrateToVersion64(
+  /// v48: optional localized User App package metadata.
+  static Future<void> _migrateToVersion48(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    final columns = await db.rawQuery("PRAGMA table_info('user_apps')");
+    // Some recovery fixtures and very old/minimal databases legitimately do
+    // not contain the optional User Apps subsystem. There is nothing to
+    // migrate in those databases; a later table creation uses the v48 DDL.
+    if (columns.isEmpty) return;
+    if (!columns.any((column) => column['name'] == 'i18n')) {
+      await db.execute('ALTER TABLE user_apps ADD COLUMN i18n TEXT');
+    }
+  }
+
+  /// Earlier unshipped branch builds used v48 for sync, v63 for indexing,
+  /// and v64 for localization. Moving feature migrations after released v48
+  /// replays at most the last applied feature step for those databases. This
+  /// forward-only repair also covers old v63/v64 databases, and installs the
+  /// localization capture trigger after its column exists.
+  static Future<void> _migrateToVersion65(
     Database db, {
     required bool isBackupMigration,
   }) async {
@@ -2943,17 +2965,17 @@ class DatabaseService {
   /// Adds `opAuthorSeqsJson` to `sync_publish_intent` (M2.12's batched
   /// commits). Guarded with the same `PRAGMA table_info` existence check
   /// every other `ADD COLUMN` migration in this file uses — and for the same
-  /// two concrete reasons `_migrateToVersion59`'s doc comment sets out at
-  /// length: `_migrateToVersion48` builds the sync tables from the *live*
+  /// two concrete reasons `_migrateToVersion60`'s doc comment sets out at
+  /// length: `_migrateToVersion49` builds the sync tables from the *live*
   /// `_syncControlPlaneTableStatements` list (which now already contains this
   /// column, so an upgrade from <= 46 arrives here with it present), and a
   /// mid-chain crash replays a step whose DDL SQLite already committed.
-  static Future<void> _migrateToVersion62(
+  static Future<void> _migrateToVersion63(
     Database db, {
     required bool isBackupMigration,
   }) async {
     LoggerService.info(
-      'Starting migration to version 62: add opAuthorSeqsJson to '
+      'Starting migration to version 63: add opAuthorSeqsJson to '
       'sync_publish_intent (M2.12 batched commits)',
     );
     try {
@@ -2977,10 +2999,10 @@ class DatabaseService {
           'ALTER TABLE sync_publish_intent ADD COLUMN opAuthorSeqsJson TEXT',
         );
       }
-      LoggerService.info('Successfully migrated to version 62');
+      LoggerService.info('Successfully migrated to version 63');
     } catch (e, stackTrace) {
       LoggerService.error(
-        'Failed to migrate to version 62',
+        'Failed to migrate to version 63',
         error: e,
         stackTrace: stackTrace,
       );
@@ -2997,22 +3019,22 @@ class DatabaseService {
   /// bricked any device that reached it with those columns already present.**
   /// It was the sole `ADD COLUMN` migration in this file's entire history that
   /// omitted the `PRAGMA table_info` existence guard every sibling uses
-  /// (`_migrateToVersion50`/`51`/`52`/`53`/`54`/`55`), and it shipped that way
+  /// (the soft-delete migrations), and it shipped that way
   /// because every migration test only ever exercised a clean forward path
   /// from a version at or above 47.
   ///
   /// There are two independent ways a device arrives here with the columns
   /// already present, and the first is deterministic, not a rare race:
   ///
-  /// 1. **Any upgrade from schema version <= 46.** `_migrateToVersion48`
+  /// 1. **Any upgrade from schema version <= 48.** `_migrateToVersion49`
   ///    creates the fifteen sync_* tables by looping over the *live, shared*
   ///    `_syncControlPlaneTableStatements` list — and M2.6 added
   ///    `authorId`/`deviceSeq` to that list's `CREATE TABLE
-  ///    sync_publish_intent`. So v48 now creates the table *with* both
-  ///    columns, and v59 then tried to add them again a few steps later in the
+  ///    sync_publish_intent`. So v49 creates the table *with* both
+  ///    columns, and v60 then tried to add them again a few steps later in the
   ///    very same chain. (This is the same "an early migration reuses a
   ///    since-grown live list" pattern already noted for
-  ///    `_migrateToVersion58`'s triggers — judged harmless there only because
+  ///    `_migrateToVersion59`'s triggers — judged harmless there only because
   ///    `CREATE TRIGGER IF NOT EXISTS` is idempotent. `ADD COLUMN` is not, so
   ///    the same reuse was *not* harmless here.)
   /// 2. **Any crash or later-step failure mid-chain.** The runner stamps
@@ -3028,12 +3050,12 @@ class DatabaseService {
   /// idempotent, which fixes both paths at once and lets an already-affected
   /// device recover simply by installing a build containing this fix, with its
   /// data intact and no restore required.
-  static Future<void> _migrateToVersion59(
+  static Future<void> _migrateToVersion60(
     Database db, {
     required bool isBackupMigration,
   }) async {
     LoggerService.info(
-      'Starting migration to version 59: add authorId/deviceSeq columns to '
+      'Starting migration to version 60: add authorId/deviceSeq columns to '
       'sync_publish_intent (M2.6 push-phase resume procedure)',
     );
     try {
@@ -3064,10 +3086,10 @@ class DatabaseService {
           'ALTER TABLE sync_publish_intent ADD COLUMN deviceSeq INTEGER',
         );
       }
-      LoggerService.info('Successfully migrated to version 59');
+      LoggerService.info('Successfully migrated to version 60');
     } catch (e, stackTrace) {
       LoggerService.error(
-        'Failed to migrate to version 59',
+        'Failed to migrate to version 60',
         error: e,
         stackTrace: stackTrace,
       );
@@ -3160,22 +3182,22 @@ class DatabaseService {
   // Repair confirmed legacy User App FK damage before adding the fifteen
   // sync control-plane tables. The shared sync DDL itself is idempotent and
   // additive; only the targeted legacy repair needs a table transaction.
-  static Future<void> _migrateToVersion48(
+  static Future<void> _migrateToVersion49(
     Database db, {
     required bool isBackupMigration,
   }) async {
     LoggerService.info(
-      'Starting migration to version 48: Create the fifteen sync_* control-plane tables for CRDT cloud sync (M1.1, pure-additive)',
+      'Starting migration to version 49: Create the fifteen sync_* control-plane tables for CRDT cloud sync (M1.1, pure-additive)',
     );
     try {
       await _repairLegacyUserAppForeignKeys(db);
       for (final statement in _syncControlPlaneTableStatements) {
         await db.execute(statement);
       }
-      LoggerService.info('Successfully migrated to version 48');
+      LoggerService.info('Successfully migrated to version 49');
     } catch (e, stackTrace) {
       LoggerService.error(
-        'Failed to migrate to version 48',
+        'Failed to migrate to version 49',
         error: e,
         stackTrace: stackTrace,
       );
@@ -3351,12 +3373,12 @@ class DatabaseService {
   // `.rawDelete('DELETE FROM ...')` calls, never `db.execute('DROP TABLE
   // ...')` — the same reason _migrateToVersion23's own `DROP TABLE
   // user_apps_old` has never been flagged either.
-  static Future<void> _migrateToVersion49(
+  static Future<void> _migrateToVersion50(
     Database db, {
     required bool isBackupMigration,
   }) async {
     LoggerService.info(
-      'Starting migration to version 49: converting tags.name UNIQUE to '
+      'Starting migration to version 50: converting tags.name UNIQUE to '
       'partial index idx_tags_name_live, adding __deleted__/redirectTarget',
     );
 
@@ -3425,9 +3447,9 @@ class DatabaseService {
         await db.execute('PRAGMA foreign_keys = ON');
       }
 
-      LoggerService.info('Migration to version 49 completed successfully');
+      LoggerService.info('Migration to version 50 completed successfully');
     } catch (e) {
-      LoggerService.error('Error in migration to version 49: $e', error: e);
+      LoggerService.error('Error in migration to version 50: $e', error: e);
       rethrow;
     }
   }
@@ -3439,12 +3461,12 @@ class DatabaseService {
   // doc comment).
   //
   // **Deliberately plain `ALTER TABLE ... ADD COLUMN`, not the
-  // temporary-table-rename dance `_migrateToVersion49` needed.** The two
+  // temporary-table-rename dance `_migrateToVersion50` needed.** The two
   // tables here with real incoming FKs (`user_apps` — referenced by
   // `app_revisions.appId`/`user_app_libraries.app_uuid`/
   // `multi_function_apps.appId` — and `user_app_libraries`, referenced by
   // `user_app_library_dependencies.library_id`) look superficially like the
-  // same hazard `_migrateToVersion49`'s doc comment documents for `tags`,
+  // same hazard `_migrateToVersion50`'s doc comment documents for `tags`,
   // but the mechanism there is specific to `ALTER TABLE x RENAME TO y`:
   // renaming rewrites every OTHER table's `REFERENCES x(...)` clause to say
   // `y`, which dangles once the old table is dropped. This migration never
@@ -3467,15 +3489,15 @@ class DatabaseService {
   // plain `ADD COLUMN` is metadata-only and touches zero existing row data,
   // so there is no `INSERT ... SELECT` copy of either large column to get
   // right (or wrong) in the first place — the safe-for-large-data
-  // requirement that mattered so much for `_migrateToVersion49`'s
+  // requirement that mattered so much for `_migrateToVersion50`'s
   // rename-dance (which never touches a large-data table anyway) simply
   // doesn't arise here.
-  static Future<void> _migrateToVersion50(
+  static Future<void> _migrateToVersion51(
     Database db, {
     required bool isBackupMigration,
   }) async {
     LoggerService.info(
-      'Starting migration to version 50: adding __deleted__ tombstone '
+      'Starting migration to version 51: adding __deleted__ tombstone '
       'columns to the User-App family, and app_revisions.deletedAt '
       '(M1.4)',
     );
@@ -3514,10 +3536,10 @@ class DatabaseService {
           );
         }
       }
-      LoggerService.info('Successfully migrated to version 50');
+      LoggerService.info('Successfully migrated to version 51');
     } catch (e, stackTrace) {
       LoggerService.error(
-        'Failed to migrate to version 50',
+        'Failed to migrate to version 51',
         error: e,
         stackTrace: stackTrace,
       );
@@ -3528,34 +3550,19 @@ class DatabaseService {
   // M1.5: install the hard-delete guard triggers (see the doc comment
   // above _hardDeleteGuardTriggerStatements) for an existing install —
   // pure-additive, `CREATE TRIGGER IF NOT EXISTS`, same shape
-  // _migrateToVersion48 used for the sync control-plane tables: no
+  // _migrateToVersion49 used for the sync control-plane tables: no
   // existing table/data is touched, so no rename/copy/drop dance or
   // transaction wrapping is needed.
-  // Deliberately does NOT iterate the shared `_hardDeleteGuardTriggerStatements`
-  // (unlike _onCreate and _migrateToVersion57, which legitimately want
-  // "whatever the guarded-table list is today"): this migration step is a
-  // frozen, historical fact about what version 51 specifically did --
-  // install the guard on exactly the four original User-App-family
-  // tables. `_hardDeleteGuardedTables` grew from 4 to 14 entries in M1.13;
-  // had this migration kept referencing that shared, since-grown list, a
-  // real multi-step upgrade landing on this step (e.g. an existing v46
-  // install migrating straight to v57) would silently install all
-  // fourteen triggers here instead of the four this step's own doc
-  // comment and log message describe -- harmless today only by accident
-  // (migrations 51-55 are pure `ALTER TABLE ADD COLUMN`, nothing that
-  // could trip a trigger before its own dedicated migration step installs
-  // it), but a latent trap for any future migration ever inserted between
-  // 50 and 56. `newlyGuardedTablesAtV50` is therefore its own frozen
-  // snapshot, local to this function, of exactly what M1.5 guarded at the
-  // time this step was written -- immune to any future growth of the
-  // shared list, exactly like _migrateToVersion57's own `newlyGuardedTables`
-  // local list is immune to any growth beyond M1.13.
-  static Future<void> _migrateToVersion51(
+  // Keep this step's four-table scope fixed. The shared current list has
+  // fourteen tables; using it here would install guards before the later
+  // soft-delete conversions. Version 58 installs its own fixed list of the
+  // ten additional guards after those conversions finish.
+  static Future<void> _migrateToVersion52(
     Database db, {
     required bool isBackupMigration,
   }) async {
     LoggerService.info(
-      'Starting migration to version 51: install the M1.5 hard-delete '
+      'Starting migration to version 52: install the M1.5 hard-delete '
       'guard triggers on user_apps/app_revisions/user_app_libraries/'
       'user_app_library_dependencies',
     );
@@ -3569,10 +3576,10 @@ class DatabaseService {
       for (final table in newlyGuardedTablesAtV50) {
         await db.execute(_hardDeleteGuardTrigger(table));
       }
-      LoggerService.info('Successfully migrated to version 51');
+      LoggerService.info('Successfully migrated to version 52');
     } catch (e, stackTrace) {
       LoggerService.error(
-        'Failed to migrate to version 51',
+        'Failed to migrate to version 52',
         error: e,
         stackTrace: stackTrace,
       );
@@ -3587,80 +3594,24 @@ class DatabaseService {
   // User-App family.
   //
   // Deliberately a plain `ALTER TABLE ... ADD COLUMN`, the same
-  // `_migrateToVersion50` precedent used, not `_migrateToVersion49`'s
+  // `_migrateToVersion51` precedent used, not `_migrateToVersion50`'s
   // temporary-table-rename dance: neither table has any incoming FK
   // (`filters`/`tag_workflow_bindings` are both leaf tables with no child
   // table referencing them — see kFkEdgeBaseline in
   // test/hard_delete_audit_test.dart), so the rename-specific
-  // `REFERENCES x(...)` rewrite hazard `_migrateToVersion49`'s own doc
+  // `REFERENCES x(...)` rewrite hazard `_migrateToVersion50`'s own doc
   // comment describes never arises here, and a plain `ADD COLUMN` is
   // metadata-only besides.
-  static Future<void> _migrateToVersion52(
-    Database db, {
-    required bool isBackupMigration,
-  }) async {
-    LoggerService.info(
-      'Starting migration to version 52: adding __deleted__ tombstone '
-      'columns to filters and tag_workflow_bindings (M1.7)',
-    );
-    try {
-      const targetTables = ['filters', 'tag_workflow_bindings'];
-      for (final tableName in targetTables) {
-        final tableExists = await db.rawQuery(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-          [tableName],
-        );
-        if (tableExists.isEmpty) {
-          LoggerService.info(
-            '$tableName table does not exist, skipping (fresh installs get '
-            'the current schema straight from _onCreate)',
-          );
-          continue;
-        }
-
-        final columns = await db.rawQuery('PRAGMA table_info($tableName)');
-        final columnNames = columns.map((c) => c['name'] as String).toSet();
-
-        if (!columnNames.contains('__deleted__')) {
-          await db.execute(
-            'ALTER TABLE $tableName ADD COLUMN __deleted__ INTEGER NOT NULL DEFAULT 0',
-          );
-        }
-      }
-      LoggerService.info('Successfully migrated to version 52');
-    } catch (e, stackTrace) {
-      LoggerService.error(
-        'Failed to migrate to version 52',
-        error: e,
-        stackTrace: stackTrace,
-      );
-      rethrow;
-    }
-  }
-
-  // M1.8 (design doc § Phased delivery, M1.8): adds `__deleted__` to
-  // `relationships` and `conversation_attachments` — "independent entities,
-  // touched only on explicit removal (no reinsert pattern)".
-  //
-  // Deliberately a plain `ALTER TABLE ... ADD COLUMN`, the same
-  // `_migrateToVersion50`/`_migrateToVersion52` precedent: both tables do
-  // have incoming FKs from other tables (`notes -> relationships`,
-  // `conversation_messages -> conversation_attachments`), but neither table
-  // is itself the *target* of a rename or column-type change here — only a
-  // new nullable-default column is being appended, so the
-  // `_migrateToVersion49`-style temporary-table-rename dance (needed there
-  // because `tags.name`'s UNIQUE constraint itself had to change) still
-  // does not apply.
   static Future<void> _migrateToVersion53(
     Database db, {
     required bool isBackupMigration,
   }) async {
     LoggerService.info(
       'Starting migration to version 53: adding __deleted__ tombstone '
-      'columns to relationships and conversation_attachments (M1.8)',
+      'columns to filters and tag_workflow_bindings (M1.7)',
     );
     try {
-      const targetTables = ['relationships', 'conversation_attachments'];
+      const targetTables = ['filters', 'tag_workflow_bindings'];
       for (final tableName in targetTables) {
         final tableExists = await db.rawQuery(
           "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
@@ -3694,31 +3645,29 @@ class DatabaseService {
     }
   }
 
-  // M1.10 (design doc § Phased delivery, M1.10): adds `__deleted__` to
-  // `notes` only — `deleteNote` is the sole function this milestone
-  // converts. `subnotes`/`attachments` deliberately do NOT gain a
-  // `__deleted__` column here; see the doc comment above `deleteNote`
-  // itself for why (their diff-based update-path rewrite is M1.11's job,
-  // not this milestone's).
+  // M1.8 (design doc § Phased delivery, M1.8): adds `__deleted__` to
+  // `relationships` and `conversation_attachments` — "independent entities,
+  // touched only on explicit removal (no reinsert pattern)".
   //
   // Deliberately a plain `ALTER TABLE ... ADD COLUMN`, the same
-  // `_migrateToVersion50`/`51`/`52` precedent: `notes` does have incoming
-  // FKs from other tables (`subnotes`/`attachments`/`note_tags`/
-  // `relationships`/`conversation_note_mapping` all reference it), but
-  // `notes` itself is not the *target* of a rename or column-type change
-  // here — only a new nullable-default column is being appended, so the
-  // `_migrateToVersion49`-style temporary-table-rename dance still does
-  // not apply.
+  // `_migrateToVersion51`/`_migrateToVersion53` precedent: both tables do
+  // have incoming FKs from other tables (`notes -> relationships`,
+  // `conversation_messages -> conversation_attachments`), but neither table
+  // is itself the *target* of a rename or column-type change here — only a
+  // new nullable-default column is being appended, so the
+  // `_migrateToVersion50`-style temporary-table-rename dance (needed there
+  // because `tags.name`'s UNIQUE constraint itself had to change) still
+  // does not apply.
   static Future<void> _migrateToVersion54(
     Database db, {
     required bool isBackupMigration,
   }) async {
     LoggerService.info(
       'Starting migration to version 54: adding __deleted__ tombstone '
-      'column to notes (M1.10)',
+      'columns to relationships and conversation_attachments (M1.8)',
     );
     try {
-      const targetTables = ['notes'];
+      const targetTables = ['relationships', 'conversation_attachments'];
       for (final tableName in targetTables) {
         final tableExists = await db.rawQuery(
           "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
@@ -3752,34 +3701,31 @@ class DatabaseService {
     }
   }
 
-  // M1.11 (design doc § Phased delivery, M1.11 — "subnotes + attachments
-  // via updateNote/_persistNote, per the dedicated design discussion
-  // above"): adds `__deleted__` to `subnotes` and `attachments`, so
-  // `updateNote`/`_persistNote`'s rewritten diff logic (id-keyed for
-  // subnotes, filePath-diffed-but-id-targeted for attachments) can
-  // tombstone a removed child row instead of hard-deleting it, matching
-  // the entity-table treatment every other converted table in this effort
-  // already has. `deleteNote` itself is unaffected — it deliberately keeps
-  // real-deleting both tables' rows for the note being deleted (see its
-  // own doc comment in this file), so this migration only adds the column;
-  // it does not change what `deleteNote` does with it.
+  // M1.10 (design doc § Phased delivery, M1.10): adds `__deleted__` to
+  // `notes` only — `deleteNote` is the sole function this milestone
+  // converts. `subnotes`/`attachments` deliberately do NOT gain a
+  // `__deleted__` column here; see the doc comment above `deleteNote`
+  // itself for why (their diff-based update-path rewrite is M1.11's job,
+  // not this milestone's).
   //
-  // Deliberately a plain `ALTER TABLE ... ADD COLUMN`, the same
-  // `_migrateToVersion50`/`51`/`52`/`53` precedent: both tables have an
-  // incoming FK from `notes`, but neither is itself the *target* of a
-  // rename or column-type change here — only a new nullable-default column
-  // is being appended, so the `_migrateToVersion49`-style temporary-table-
-  // rename dance still does not apply.
+  // Deliberately a plain `ALTER TABLE ... ADD COLUMN`, as in the
+  // earlier soft-delete migrations: `notes` does have incoming
+  // FKs from other tables (`subnotes`/`attachments`/`note_tags`/
+  // `relationships`/`conversation_note_mapping` all reference it), but
+  // `notes` itself is not the *target* of a rename or column-type change
+  // here — only a new nullable-default column is being appended, so the
+  // `_migrateToVersion50`-style temporary-table-rename dance still does
+  // not apply.
   static Future<void> _migrateToVersion55(
     Database db, {
     required bool isBackupMigration,
   }) async {
     LoggerService.info(
       'Starting migration to version 55: adding __deleted__ tombstone '
-      'columns to subnotes and attachments (M1.11)',
+      'column to notes (M1.10)',
     );
     try {
-      const targetTables = ['subnotes', 'attachments'];
+      const targetTables = ['notes'];
       for (final tableName in targetTables) {
         final tableExists = await db.rawQuery(
           "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
@@ -3813,35 +3759,34 @@ class DatabaseService {
     }
   }
 
-  // M1.12 (design doc § Phased delivery, M1.12 — "conversations +
-  // conversation_messages family"): adds `__deleted__` to `conversations`
-  // and `conversation_messages`. `conversations` is a straightforward
-  // entity tombstone (see the doc comment above `_createConversationsTable`).
-  // `conversation_messages` additionally requires the new, membership-
-  // derived effective-visibility formula (`computeConversationMessageVisibility`,
-  // near the conversation-messages CRUD section) since this table never had
-  // a tombstone column at all before this milestone.
+  // M1.11 (design doc § Phased delivery, M1.11 — "subnotes + attachments
+  // via updateNote/_persistNote, per the dedicated design discussion
+  // above"): adds `__deleted__` to `subnotes` and `attachments`, so
+  // `updateNote`/`_persistNote`'s rewritten diff logic (id-keyed for
+  // subnotes, filePath-diffed-but-id-targeted for attachments) can
+  // tombstone a removed child row instead of hard-deleting it, matching
+  // the entity-table treatment every other converted table in this effort
+  // already has. `deleteNote` itself is unaffected — it deliberately keeps
+  // real-deleting both tables' rows for the note being deleted (see its
+  // own doc comment in this file), so this migration only adds the column;
+  // it does not change what `deleteNote` does with it.
   //
-  // Deliberately a plain `ALTER TABLE ... ADD COLUMN`, the same
-  // `_migrateToVersion50`/`51`/`52`/`53`/`54` precedent: both tables have
-  // incoming FKs from other tables (`conversation_message_mapping`/
-  // `conversation_note_mapping`/`conversation_tags` reference `conversations`;
-  // `conversation_attachments`/`conversation_message_mapping`/
-  // `message_parents` reference `conversation_messages`), but neither table
-  // is itself the *target* of a rename or column-type change here — only a
-  // new nullable-default column is being appended, so the
-  // `_migrateToVersion49`-style temporary-table-rename dance still does not
-  // apply.
+  // Deliberately a plain `ALTER TABLE ... ADD COLUMN`, as in the
+  // earlier soft-delete migrations: both tables have an
+  // incoming FK from `notes`, but neither is itself the *target* of a
+  // rename or column-type change here — only a new nullable-default column
+  // is being appended, so the `_migrateToVersion50`-style temporary-table-
+  // rename dance still does not apply.
   static Future<void> _migrateToVersion56(
     Database db, {
     required bool isBackupMigration,
   }) async {
     LoggerService.info(
       'Starting migration to version 56: adding __deleted__ tombstone '
-      'columns to conversations and conversation_messages (M1.12)',
+      'columns to subnotes and attachments (M1.11)',
     );
     try {
-      const targetTables = ['conversations', 'conversation_messages'];
+      const targetTables = ['subnotes', 'attachments'];
       for (final tableName in targetTables) {
         final tableExists = await db.rawQuery(
           "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
@@ -3875,23 +3820,85 @@ class DatabaseService {
     }
   }
 
+  // M1.12 (design doc § Phased delivery, M1.12 — "conversations +
+  // conversation_messages family"): adds `__deleted__` to `conversations`
+  // and `conversation_messages`. `conversations` is a straightforward
+  // entity tombstone (see the doc comment above `_createConversationsTable`).
+  // `conversation_messages` additionally requires the new, membership-
+  // derived effective-visibility formula (`computeConversationMessageVisibility`,
+  // near the conversation-messages CRUD section) since this table never had
+  // a tombstone column at all before this milestone.
+  //
+  // Deliberately a plain `ALTER TABLE ... ADD COLUMN`, as in the
+  // earlier soft-delete migrations: both tables have
+  // incoming FKs from other tables (`conversation_message_mapping`/
+  // `conversation_note_mapping`/`conversation_tags` reference `conversations`;
+  // `conversation_attachments`/`conversation_message_mapping`/
+  // `message_parents` reference `conversation_messages`), but neither table
+  // is itself the *target* of a rename or column-type change here — only a
+  // new nullable-default column is being appended, so the
+  // `_migrateToVersion50`-style temporary-table-rename dance still does not
+  // apply.
+  static Future<void> _migrateToVersion57(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    LoggerService.info(
+      'Starting migration to version 57: adding __deleted__ tombstone '
+      'columns to conversations and conversation_messages (M1.12)',
+    );
+    try {
+      const targetTables = ['conversations', 'conversation_messages'];
+      for (final tableName in targetTables) {
+        final tableExists = await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+          [tableName],
+        );
+        if (tableExists.isEmpty) {
+          LoggerService.info(
+            '$tableName table does not exist, skipping (fresh installs get '
+            'the current schema straight from _onCreate)',
+          );
+          continue;
+        }
+
+        final columns = await db.rawQuery('PRAGMA table_info($tableName)');
+        final columnNames = columns.map((c) => c['name'] as String).toSet();
+
+        if (!columnNames.contains('__deleted__')) {
+          await db.execute(
+            'ALTER TABLE $tableName ADD COLUMN __deleted__ INTEGER NOT NULL DEFAULT 0',
+          );
+        }
+      }
+      LoggerService.info('Successfully migrated to version 57');
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Failed to migrate to version 57',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
   // M1.13: install the hard-delete guard triggers for every entity table
   // M1.7-M1.12 converted to soft-delete, extending the M1.5 guard beyond
   // its original four User-App-family tables (see the doc comment above
   // `_hardDeleteGuardedTables`). Pure-additive, `CREATE TRIGGER IF NOT
-  // EXISTS`, same shape `_migrateToVersion51` used for the original four:
+  // EXISTS`, same shape `_migrateToVersion52` used for the original four:
   // no existing table/data is touched, so no rename/copy/drop dance or
   // transaction wrapping is needed. Deliberately lists only the ten NEW
   // tables here (not the full, now-14-entry `_hardDeleteGuardedTables`) so
   // an existing install's migration log clearly shows what changed at
   // this version, even though re-running `CREATE TRIGGER IF NOT EXISTS`
   // for the original four would be harmless.
-  static Future<void> _migrateToVersion57(
+  static Future<void> _migrateToVersion58(
     Database db, {
     required bool isBackupMigration,
   }) async {
     LoggerService.info(
-      'Starting migration to version 57: install the M1.13 hard-delete '
+      'Starting migration to version 58: install the M1.13 hard-delete '
       'guard triggers on notes/subnotes/attachments/tags/filters/'
       'relationships/tag_workflow_bindings/conversations/'
       'conversation_messages/conversation_attachments',
@@ -3912,44 +3919,6 @@ class DatabaseService {
       for (final table in newlyGuardedTables) {
         await db.execute(_hardDeleteGuardTrigger(table));
       }
-      LoggerService.info('Successfully migrated to version 57');
-    } catch (e, stackTrace) {
-      LoggerService.error(
-        'Failed to migrate to version 57',
-        error: e,
-        stackTrace: stackTrace,
-      );
-      rethrow;
-    }
-  }
-
-  // M2.4: install the sync mutation-capture triggers (see
-  // _syncMutationCaptureTriggerStatements's own doc comment for the full
-  // design rationale). Pure-additive, `CREATE TRIGGER IF NOT EXISTS`, the
-  // same shape `_migrateToVersion57` used for the hard-delete guard: no
-  // existing table/data is touched, so no rename/copy/drop dance or extra
-  // transaction wrapping is needed. Reuses the single shared statement list
-  // (not a separately-hand-copied subset) since, unlike
-  // `_migrateToVersion51`/`_migrateToVersion57`'s deliberately-frozen
-  // historical table lists, this is the very first version this mechanism
-  // is introduced at — there is no earlier, narrower historical scope to
-  // preserve, so "current, complete list" and "this migration's own scope"
-  // are the same list today.
-  static Future<void> _migrateToVersion58(
-    Database db, {
-    required bool isBackupMigration,
-  }) async {
-    LoggerService.info(
-      'Starting migration to version 58: install the M2.4 sync '
-      'mutation-capture triggers on every requirement-1 sync-scope table',
-    );
-    try {
-      for (final statement in _syncMutationCaptureTriggerStatements) {
-        // v64 creates i18n and its trigger together. Installing the trigger
-        // before its column exists would break interim user_apps writes.
-        if (statement.contains('sync_touch_user_apps_au_i18n')) continue;
-        await db.execute(statement);
-      }
       LoggerService.info('Successfully migrated to version 58');
     } catch (e, stackTrace) {
       LoggerService.error(
@@ -3961,21 +3930,63 @@ class DatabaseService {
     }
   }
 
-  // M2.7: `tags.name`/`tags.color` joined `syncScopeColumns` after
-  // `_migrateToVersion58` had already shipped, so that migration's own
-  // reuse of the "current, complete" trigger-statement list no longer
-  // covers an already-migrated install. Pure-additive, `CREATE TRIGGER IF
-  // NOT EXISTS`, identical shape to `_migrateToVersion58` — explicit rather
-  // than re-running the full (now-current) shared list, matching
-  // `_migrateToVersion57`/`_migrateToVersion51`'s own "frozen historical
-  // scope" precedent for a migration introduced after the mechanism's
-  // initial version.
-  static Future<void> _migrateToVersion60(
+  // M2.4: install the sync mutation-capture triggers (see
+  // _syncMutationCaptureTriggerStatements's own doc comment for the full
+  // design rationale). Pure-additive, `CREATE TRIGGER IF NOT EXISTS`, the
+  // same shape `_migrateToVersion58` used for the hard-delete guard: no
+  // existing table/data is touched, so no rename/copy/drop dance or extra
+  // transaction wrapping is needed. Reuses the single shared statement list
+  // (not a separately-hand-copied subset) since, unlike
+  // `_migrateToVersion52`/`_migrateToVersion58`'s deliberately-frozen
+  // historical table lists, this is the very first version this mechanism
+  // is introduced at — there is no earlier, narrower historical scope to
+  // preserve, so "current, complete list" and "this migration's own scope"
+  // are the same list today.
+  static Future<void> _migrateToVersion59(
     Database db, {
     required bool isBackupMigration,
   }) async {
     LoggerService.info(
-      'Starting migration to version 60: install sync mutation-capture '
+      'Starting migration to version 59: install the M2.4 sync '
+      'mutation-capture triggers on every requirement-1 sync-scope table',
+    );
+    try {
+      final appColumns = await db.rawQuery('PRAGMA table_info(user_apps)');
+      final hasI18n = appColumns.any((column) => column['name'] == 'i18n');
+      for (final statement in _syncMutationCaptureTriggerStatements) {
+        // Released v48 already added this column. Older branch previews may
+        // lack it; v65 installs their column and trigger together.
+        if (!hasI18n && statement.contains('sync_touch_user_apps_au_i18n')) {
+          continue;
+        }
+        await db.execute(statement);
+      }
+      LoggerService.info('Successfully migrated to version 59');
+    } catch (e, stackTrace) {
+      LoggerService.error(
+        'Failed to migrate to version 59',
+        error: e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  // M2.7: `tags.name`/`tags.color` joined `syncScopeColumns` after
+  // `_migrateToVersion59` had already shipped, so that migration's own
+  // reuse of the "current, complete" trigger-statement list no longer
+  // covers an already-migrated install. Pure-additive, `CREATE TRIGGER IF
+  // NOT EXISTS`, identical shape to `_migrateToVersion59` — explicit rather
+  // than re-running the full (now-current) shared list, matching
+  // `_migrateToVersion58`/`_migrateToVersion52`'s own "frozen historical
+  // scope" precedent for a migration introduced after the mechanism's
+  // initial version.
+  static Future<void> _migrateToVersion61(
+    Database db, {
+    required bool isBackupMigration,
+  }) async {
+    LoggerService.info(
+      'Starting migration to version 61: install sync mutation-capture '
       'triggers for tags.name/tags.color',
     );
     try {
@@ -3989,10 +4000,10 @@ class DatabaseService {
           END;
         ''');
       }
-      LoggerService.info('Successfully migrated to version 60');
+      LoggerService.info('Successfully migrated to version 61');
     } catch (e, stackTrace) {
       LoggerService.error(
-        'Failed to migrate to version 60',
+        'Failed to migrate to version 61',
         error: e,
         stackTrace: stackTrace,
       );
@@ -4007,13 +4018,13 @@ class DatabaseService {
   // each column's own finding, recorded at its `syncEntityCaptureScopes`
   // entry above. Pure-additive, `CREATE TRIGGER IF NOT EXISTS`, identical
   // shape and same "explicit rather than re-running the full current
-  // shared list" precedent as `_migrateToVersion60`.
-  static Future<void> _migrateToVersion61(
+  // shared list" precedent as `_migrateToVersion61`.
+  static Future<void> _migrateToVersion62(
     Database db, {
     required bool isBackupMigration,
   }) async {
     LoggerService.info(
-      'Starting migration to version 61: install sync mutation-capture '
+      'Starting migration to version 62: install sync mutation-capture '
       'triggers for the M2.8 sync-scope-exclusion-reasoning audit findings',
     );
     try {
@@ -4048,10 +4059,10 @@ class DatabaseService {
           ''');
         }
       }
-      LoggerService.info('Successfully migrated to version 61');
+      LoggerService.info('Successfully migrated to version 62');
     } catch (e, stackTrace) {
       LoggerService.error(
-        'Failed to migrate to version 61',
+        'Failed to migrate to version 62',
         error: e,
         stackTrace: stackTrace,
       );
@@ -4059,15 +4070,10 @@ class DatabaseService {
     }
   }
 
-  /// Creates the layered-search index tables. Renumbered from 47 to 62 when
-  /// the note-index branch merged with cloud sync, which had already
-  /// consumed 47..61: a database already stamped 61 would never run a step
-  /// keyed 47, and the whole search index would be silently absent.
-  ///
-  /// All DDL here is `IF NOT EXISTS`: migration 62 runs outside a
-  /// transaction (custom-migration path), so a mid-migration crash must be
-  /// re-runnable, not a permanent recovery loop.
-  static Future<void> _migrateToVersion63(
+  /// Creates the layered-search index after released migrations through v48
+  /// and cloud-sync migrations v49..v63. DDL is idempotent so interruption
+  /// before the version stamp can safely replay this step.
+  static Future<void> _migrateToVersion64(
     Database db, {
     required bool isBackupMigration,
   }) async {
@@ -9924,7 +9930,7 @@ class DatabaseService {
   /// scope). Merging the two lists and ORing around the whole conjunction is
   /// the bug this shape exists to prevent: a search for tag `invoice` inside a
   /// Space would return every `all-spaces` note, none of which has `invoice`,
-  /// and migration v48 put `all-spaces` on every `agent-skill` note.
+  /// and migration v47 put `all-spaces` on every `agent-skill` note.
   ///
   /// Appending `all-spaces` as one more AND term would instead require every
   /// match to be an `all-spaces` note. The flag does nothing without

@@ -105,18 +105,18 @@ Future<Database> _openRawV46(String dbName) async {
 ///
 /// The fixture deliberately carries just the four tables migration 47 touches
 /// (filters, tags, notes, note_tags). Opening it through `DatabaseService`
-/// would instead run the whole 47..63 chain, and the cloud-sync / note-index
+/// would instead run the whole 47..65 chain, and the cloud-sync / note-index
 /// steps above 47 need tables the fixture does not have. This file is about
 /// what migration 47 does, so 47 is normally the only step that should run.
 ///
-/// Tests that read back through a `DatabaseService` query pass `to: 52`: the
-/// read path filters on `filters.__deleted__`, which migration 52 adds.
+/// Tests that read back through a `DatabaseService` query pass `to: 53`: the
+/// read path filters on `filters.__deleted__`, which migration 53 adds.
 ///
 /// Only apply steps relevant to the minimal fixture. User-App guards and
 /// other unrelated migrations correctly fail if their tables are absent.
 Future<void> _migrateFixture(Database raw, {int to = 47}) async {
   final service = DatabaseService.createNew();
-  for (final version in [47, 52].where((version) => version <= to)) {
+  for (final version in [47, 53].where((version) => version <= to)) {
     await service.migrateBackupDatabase(raw, version - 1, version);
   }
   await service.close();
@@ -157,10 +157,10 @@ void main() {
 
   // The Spaces migration is 47 and stays 47 — it shipped on main, and every
   // database that already applied it records that number. DATABASE_VERSION
-  // moved past it when the cloud-sync and note-index migrations (48..63) were
-  // renumbered up from their pre-merge 47..62 to make room.
+  // moved past it when the cloud-sync and note-index migrations (49..64) were
+  // placed after released main's v48 localization migration.
   test('DATABASE_VERSION is past the Spaces migration', () {
-    expect(DatabaseService.DATABASE_VERSION, 64);
+    expect(DatabaseService.DATABASE_VERSION, 65);
     expect(DatabaseService.DATABASE_VERSION, greaterThan(47));
   });
 
@@ -224,7 +224,7 @@ void main() {
       'createdAt': now,
       'updatedAt': now,
     });
-    await _migrateFixture(raw, to: 52);
+    await _migrateFixture(raw, to: 53);
     await raw.close();
 
     // Reopens without replaying anything: _migrateTo47 stamped the current
@@ -408,7 +408,7 @@ void main() {
     final linksAfterFirst = await raw.query('note_tags');
 
     // Replay the step itself. (Rewinding _schema_version and reopening would
-    // replay 47..63, and the four-table fixture cannot carry the rest.)
+    // replay 47..65, and the four-table fixture cannot carry the rest.)
     await _migrateFixture(raw);
 
     expect(await _columnsOf(raw, 'filters'), contains('isSpace'));

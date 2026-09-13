@@ -44,7 +44,7 @@ import 'package:note_synapse/models/relationship.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/note_modification_service.dart';
 
-/// The exact pre-M1.8 (DATABASE_VERSION <= 51) shape of `relationships`: no
+/// The exact pre-M1.8 (DATABASE_VERSION <= 53) shape of `relationships`: no
 /// `__deleted__` column. Hand-written rather than derived from
 /// DatabaseService.getSchema() — as of M1.8, getSchema() already returns the
 /// NEW DDL — same approach test/filters_workflow_bindings_soft_delete_test.dart
@@ -160,7 +160,7 @@ void main() {
 
   group(
     'M1.8 relationships/conversation_attachments soft-delete — migration '
-    'round-trip (v52 -> v53)',
+    'round-trip (v53 -> v54)',
     () {
       late Database preMigrationDb;
 
@@ -185,7 +185,7 @@ void main() {
         await preMigrationDb.execute('''
           CREATE TABLE _schema_version (version INTEGER NOT NULL)
         ''');
-        await preMigrationDb.insert('_schema_version', {'version': 51});
+        await preMigrationDb.insert('_schema_version', {'version': 53});
 
         expect(
           await _hasColumn(preMigrationDb, 'relationships', '__deleted__'),
@@ -250,7 +250,7 @@ void main() {
           });
 
           final service = DatabaseService.createNew();
-          await service.migrateBackupDatabase(preMigrationDb, 52, 53);
+          await service.migrateBackupDatabase(preMigrationDb, 53, 54);
 
           expect(
             await _hasColumn(preMigrationDb, 'relationships', '__deleted__'),
@@ -278,7 +278,7 @@ void main() {
       );
 
       test(
-        'running the v52 -> v53 migration twice does not error and leaves '
+        'running the v53 -> v54 migration twice does not error and leaves '
         'schema/data unchanged the second time',
         () async {
           await preMigrationDb.insert('notes', {
@@ -306,13 +306,13 @@ void main() {
           });
 
           final service = DatabaseService.createNew();
-          await service.migrateBackupDatabase(preMigrationDb, 52, 53);
+          await service.migrateBackupDatabase(preMigrationDb, 53, 54);
           final afterFirst = await preMigrationDb.query(
             'relationships',
             orderBy: 'id',
           );
 
-          await service.migrateBackupDatabase(preMigrationDb, 52, 53);
+          await service.migrateBackupDatabase(preMigrationDb, 53, 54);
           final afterSecond = await preMigrationDb.query(
             'relationships',
             orderBy: 'id',

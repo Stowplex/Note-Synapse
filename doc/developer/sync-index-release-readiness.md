@@ -39,9 +39,23 @@ and [Google's Android custom-scheme policy](https://developers.googleblog.com/im
 
 ## Upgrade and correctness fixes
 
+Released `origin/main` migration numbers are preserved. The canonical order is:
+
+| Versions | Migration family |
+| --- | --- |
+| Through 48 | Released main history; 47 is Spaces and 48 is app localization. |
+| 49–63 | Cloud-sync schema, tombstones, guards, capture, and publication metadata. |
+| 64 | Search chunks, embeddings, progress, and FTS tables. |
+| 65 | Forward compatibility for earlier branch builds using the old numbering. |
+
+A released database at version 48 upgrades directly to 49; it is never reinterpreted as 47.
+Earlier branch databases retain their data and replay at most their last feature
+step under the shifted numbering. Step 65 ensures their localization column and
+capture trigger exist. Normal startup and backup recovery use the same sequence.
+
 | Existing-library trigger | Problem | Result after the fixes |
 | --- | --- | --- |
-| Upgrade released main schema 48 | Main used version 48 for localization; the feature branch used it for sync. | Replay the additive sync chain, preserve localization, reach schema 64 with both sync and search objects. |
+| Upgrade released main schema 48 | Main used version 48 for localization; the feature branch reused it for sync. | Keep released version 48 unchanged; apply sync 49–63 and indexing 64, then branch compatibility 65. |
 | Several startup services open the database together | Separate open/backup/migration attempts could race. | Share one opening future; failed opens can be retried. |
 | A reader prevents checkpointing recent committed WAL data | SQLite reports a busy checkpoint without throwing; copying only the main file could omit recent data from the safety backup. | Stop the upgrade before copying/migrating when checkpointing is busy or incomplete; retry safely after the lock clears. |
 | Missing/empty version metadata, sentinel 999, or interrupted sync/index migration | Inferring completion from a handful of table names could skip required objects; replaying metadata migration could fail on an existing column. | Detect a conservative starting version and replay the idempotent sync/index steps. |
@@ -179,10 +193,13 @@ The seed diagnostic is `tool/benchmarks/sync_seed_benchmark_test.dart`.
 ## Validation and release follow-up
 
 The final combined `flutter test --no-pub --reporter expanded` run passed
-**4,722 tests in 5m55s**, with three existing environment skips: one missing
+**4,736 tests in 5m57s**, with three existing environment skips: one missing
 image fixture and two native PDFium integrations unavailable in the headless
 runner. The new populated-upgrade, recovery, large-row, sync, and search
 regressions are included. Both manual benchmark fixtures also passed.
+The strengthened 29-case upgrade suite also passed separately, including
+released-version boundaries, startup and backup upgrades from earlier branch
+versions, and preservation of existing chunks, embeddings, and index progress.
 
 Android release manifest processing and resolved iOS Release build settings
 passed; the 25 OAuth configuration/auth tests passed separately and are also

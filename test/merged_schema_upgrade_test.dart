@@ -169,6 +169,195 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test(
+    'released v47 to v48 adds localization before any feature schema',
+    () async {
+      final raw = await _main48Fixture(path, recordedVersion: 47);
+      await raw.execute('ALTER TABLE user_apps DROP COLUMN i18n');
+      final service = DatabaseService.createNew(databaseName: path);
+      try {
+        // This boundary is frozen by the released main history. A sync step
+        // assigned48 would either omit i18n here or create feature tables early.
+        await service.migrateBackupDatabase(raw, 47, 48);
+        expect(
+          (await raw.rawQuery(
+            'PRAGMA table_info(user_apps)',
+          )).map((column) => column['name']),
+          contains('i18n'),
+        );
+        expect(
+          await raw.rawQuery(
+            "SELECT name FROM sqlite_master WHERE "
+            "name LIKE 'sync_%' OR name IN "
+            "('search_chunks', 'chunk_embeddings', 'search_index_state', 'chunks_fts')",
+          ),
+          isEmpty,
+        );
+        expect(
+          (await raw.query('user_apps')).single['appState'],
+          '{"retained":true}',
+        );
+        // Released48 remains idempotent and never installs capture triggers.
+        await service.migrateBackupDatabase(raw, 47, 48);
+        await raw.update('_schema_version', {'version': 48});
+        await raw.close();
+        await _verifyUpgrade(service, localized: false);
+      } finally {
+        if (raw.isOpen) await raw.close();
+        await service.close();
+      }
+    },
+  );
+
+  test('released v48 gets sync through v63 and indexing only at v64', () async {
+    final raw = await _main48Fixture(path);
+    final service = DatabaseService.createNew(databaseName: path);
+    try {
+      await service.migrateBackupDatabase(raw, 48, 49);
+      expect(
+        await raw.rawQuery(
+          "SELECT name FROM sqlite_master WHERE name='sync_pending_ops'",
+        ),
+        hasLength(1),
+      );
+      expect(
+        await raw.rawQuery(
+          "SELECT name FROM sqlite_master WHERE name='search_chunks'",
+        ),
+        isEmpty,
+      );
+      expect((await raw.query('user_apps')).single['i18n'], _localizedMetadata);
+      const searchTables = [
+        'search_chunks',
+        'chunk_embeddings',
+        'search_index_state',
+        'chunks_fts',
+      ];
+      Future<List<Map<String, Object?>>> searchSchema() => raw.rawQuery(
+        "SELECT name FROM sqlite_master WHERE name IN "
+        "('search_chunks', 'chunk_embeddings', 'search_index_state', 'chunks_fts')",
+      );
+      await service.migrateBackupDatabase(raw, 49, 63);
+      expect(await searchSchema(), isEmpty);
+      await service.migrateBackupDatabase(raw, 63, 64);
+      expect(
+        (await searchSchema()).map((row) => row['name']),
+        unorderedEquals(searchTables),
+      );
+      await raw.update('_schema_version', {'version': 64});
+      await raw.close();
+      await _verifyUpgrade(service, localized: true);
+    } finally {
+      if (raw.isOpen) await raw.close();
+      await service.close();
+    }
+  });
+
+  for (final previewVersion in [48, 49, 58, 62, 63, 64]) {
+    for (final viaBackup in [false, true]) {
+      test(
+        'old branch v$previewVersion upgrades (backup: $viaBackup)',
+        () async {
+          final raw = await _main48Fixture(
+            path,
+            recordedVersion: previewVersion,
+          );
+          // Earlier feature builds had Spaces, but had repurposed48 instead of
+          // retaining main's localization. Apply the equivalent feature prefix
+          // at its new +1 number, then stamp the old number as those builds did.
+          await raw.execute('ALTER TABLE user_apps DROP COLUMN i18n');
+          final service = DatabaseService.createNew(databaseName: path);
+          await service.migrateBackupDatabase(
+            raw,
+            48,
+            previewVersion < 64 ? previewVersion + 1 : 64,
+          );
+          if (previewVersion == 64) {
+            // Old64 was the late localization/capture repair now numbered65.
+            await service.migrateBackupDatabase(raw, 64, 65);
+            await raw.update('user_apps', {'i18n': _localizedMetadata});
+          }
+          await raw.insert('sync_state', {
+            'key': 'kept-migration-state',
+            'value': 'existing branch state',
+          });
+          final indexSnapshot = <String, List<Map<String, Object?>>>{};
+          if (previewVersion >= 63) {
+            await raw.insert('search_chunks', {
+              'id': 321,
+              'chunkKey': 'kept-note:note_body:-:0',
+              'noteId': 'kept-note',
+              'sourceType': 'note_body',
+              'seq': 0,
+              'text': 'already indexed content',
+              'contentHash': 'kept-index-hash',
+              'updatedAt': 123,
+            });
+            await raw.rawInsert(
+              'INSERT INTO chunks_fts(docid, content) VALUES(?, ?)',
+              [321, 'already indexed content'],
+            );
+            await raw.insert('chunk_embeddings', {
+              'chunkId': 321,
+              'providerKey': 'legacy:model:1',
+              'modality': 'text',
+              'dims': 1,
+              'vector': Uint8List.fromList([0, 0, 128, 63]),
+              'contentHash': 'kept-index-hash',
+            });
+            await raw.insert('search_index_state', {
+              'scopeType': 'note',
+              'scopeId': 'kept-note',
+              'stage': 'chunks',
+              'contentHash': 'kept-index-hash',
+              'status': 'done',
+              'updatedAt': 123,
+            });
+            for (final table in [
+              'search_chunks',
+              'chunk_embeddings',
+              'search_index_state',
+              'chunks_fts',
+            ]) {
+              indexSnapshot[table] = await raw.query(table);
+            }
+          }
+          final touches = await raw.query('sync_touch_log');
+          try {
+            if (viaBackup) {
+              await service.migrateBackupDatabase(
+                raw,
+                previewVersion,
+                DatabaseService.DATABASE_VERSION,
+              );
+              await raw.update('_schema_version', {
+                'version': DatabaseService.DATABASE_VERSION,
+              });
+            }
+            await raw.close();
+            final upgraded = await service.database;
+            expect(await upgraded.query('sync_touch_log'), touches);
+            for (final entry in indexSnapshot.entries) {
+              expect(await upgraded.query(entry.key), entry.value);
+            }
+            expect(
+              (await upgraded.query(
+                'sync_state',
+                where: 'key = ?',
+                whereArgs: ['kept-migration-state'],
+              )).single['value'],
+              'existing branch state',
+            );
+            await _verifyUpgrade(service, localized: previewVersion == 64);
+          } finally {
+            if (raw.isOpen) await raw.close();
+            await service.close();
+          }
+        },
+      );
+    }
+  }
+
   for (final recordedVersion in [48, 999]) {
     test(
       'main v48 with recorded version $recordedVersion upgrades completely',
@@ -222,8 +411,14 @@ void main() {
         );
         final service = DatabaseService.createNew(databaseName: path);
         try {
-          await service.migrateBackupDatabase(raw, recordedVersion, 64);
-          await raw.update('_schema_version', {'version': 64});
+          await service.migrateBackupDatabase(
+            raw,
+            recordedVersion,
+            DatabaseService.DATABASE_VERSION,
+          );
+          await raw.update('_schema_version', {
+            'version': DatabaseService.DATABASE_VERSION,
+          });
           await raw.close();
           await _verifyUpgrade(service, localized: true);
         } finally {
@@ -235,36 +430,14 @@ void main() {
   }
 
   test(
-    'index branch v63 gains localization without losing synced rows',
-    () async {
-      final seed = DatabaseService.createNew(databaseName: path);
-      final raw = await seed.database;
-      await raw.execute('DROP TRIGGER sync_touch_user_apps_au_i18n');
-      await raw.execute('ALTER TABLE user_apps DROP COLUMN i18n');
-      await raw.update('_schema_version', {'version': 63});
-      await _seedRows(raw, localized: false);
-      final touches = await raw.query('sync_touch_log');
-      await seed.close();
-
-      final service = DatabaseService.createNew(databaseName: path);
-      try {
-        expect(await (await service.database).query('sync_touch_log'), touches);
-        await _verifyUpgrade(service, localized: false);
-      } finally {
-        await service.close();
-      }
-    },
-  );
-
-  test(
     'backup migration reports failures instead of merging partial schemas',
     () async {
       final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
       try {
-        // v51 requires the User-App-family tables, absent in this malformed
+        // v52 requires the User-App-family tables, absent in this malformed
         // backup. A successful return would let recovery merge incomplete data.
         await expectLater(
-          DatabaseService().migrateBackupDatabase(db, 50, 51),
+          DatabaseService().migrateBackupDatabase(db, 51, 52),
           throwsA(isA<DatabaseException>()),
         );
       } finally {
@@ -307,10 +480,10 @@ void main() {
       final raw = await _main48Fixture(path, recordedVersion: 999);
       // The sync control plane and search tables may be present from an
       // interrupted merge/upgrade while all content tables still have the
-      // released schema. Table-name probes must not declare this v63 complete.
+      // released schema. Table-name probes must not declare this v64 complete.
       final service = DatabaseService.createNew(databaseName: path);
-      await service.migrateBackupDatabase(raw, 47, 48);
-      await service.migrateBackupDatabase(raw, 62, 63);
+      await service.migrateBackupDatabase(raw, 48, 49);
+      await service.migrateBackupDatabase(raw, 63, 64);
       await raw.close();
       try {
         await _verifyUpgrade(service, localized: true);

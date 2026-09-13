@@ -16,7 +16,7 @@
 // Four things are verified, matching the milestone's own acceptance bar:
 //  1. Fresh-install: a brand-new database already has the new columns and
 //     the partial unique index (DatabaseService.createNew() -> _onCreate).
-//  2. Migration round-trip (DATABASE_VERSION 47 -> 48): an existing
+//  2. Migration round-trip (DATABASE_VERSION 49 -> 50): an existing
 //     pre-M1.3 database's tags (plus every table with a real FK into
 //     tags: note_tags, conversation_tags, tag_images, tag_ai_configs)
 //     survive migration with __deleted__=0/redirectTarget=NULL, ids
@@ -159,7 +159,7 @@ void main() {
     );
   });
 
-  group('M1.3 tags identity schema — migration round-trip (v48 -> v49)', () {
+  group('M1.3 tags identity schema — migration round-trip (v49 -> v50)', () {
     late Database preMigrationDb;
 
     setUp(() async {
@@ -167,7 +167,7 @@ void main() {
         inMemoryDatabasePath,
       );
 
-      // Build a v48 (pre-M1.3) database: every current-schema statement
+      // Build a v49 (pre-M1.3) database: every current-schema statement
       // EXCEPT the (now-updated) tags table and its new partial index,
       // replaced with the literal old-schema equivalents, plus the two
       // tag-referencing child tables getSchema() omits.
@@ -185,7 +185,7 @@ void main() {
       await preMigrationDb.execute('''
         CREATE TABLE _schema_version (version INTEGER NOT NULL)
       ''');
-      await preMigrationDb.insert('_schema_version', {'version': 47});
+      await preMigrationDb.insert('_schema_version', {'version': 49});
 
       // Sanity check: pre-migration schema really is the old shape.
       expect(await _hasColumn(preMigrationDb, 'tags', '__deleted__'), isFalse);
@@ -257,7 +257,7 @@ void main() {
         });
 
         final service = DatabaseService.createNew();
-        await service.migrateBackupDatabase(preMigrationDb, 48, 49);
+        await service.migrateBackupDatabase(preMigrationDb, 49, 50);
 
         // New columns present, existing rows carry the documented defaults.
         expect(await _hasColumn(preMigrationDb, 'tags', '__deleted__'), isTrue);
@@ -321,7 +321,7 @@ void main() {
     );
 
     test(
-      'running the v48 -> v49 migration twice does not error and leaves '
+      'running the v49 -> v50 migration twice does not error and leaves '
       'schema/data unchanged the second time',
       () async {
         await preMigrationDb.insert('tags', {
@@ -333,15 +333,15 @@ void main() {
         });
 
         final service = DatabaseService.createNew();
-        await service.migrateBackupDatabase(preMigrationDb, 48, 49);
+        await service.migrateBackupDatabase(preMigrationDb, 49, 50);
         final afterFirst = await preMigrationDb.query('tags', orderBy: 'id');
 
         // Second run is guarded by the __deleted__-column idempotency
-        // check inside _migrateToVersion49 (see its doc comment), not by
+        // check inside _migrateToVersion50 (see its doc comment), not by
         // an unconditional rename dance that would fail the second time
         // (tags_old already having been dropped) or duplicate the index
         // (already IF NOT EXISTS).
-        await service.migrateBackupDatabase(preMigrationDb, 48, 49);
+        await service.migrateBackupDatabase(preMigrationDb, 49, 50);
         final afterSecond = await preMigrationDb.query('tags', orderBy: 'id');
 
         expect(afterSecond, equals(afterFirst));

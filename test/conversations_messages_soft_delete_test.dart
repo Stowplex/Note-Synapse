@@ -44,7 +44,7 @@ import 'package:note_synapse/models/conversation.dart';
 import 'package:note_synapse/models/conversation_attachment.dart';
 import 'package:note_synapse/services/database_service.dart';
 
-/// The exact pre-M1.12 (DATABASE_VERSION <= 54) shape of `conversations`:
+/// The exact pre-M1.12 (DATABASE_VERSION <= 56) shape of `conversations`:
 /// no `__deleted__` column. Hand-written rather than derived from
 /// DatabaseService.getSchema() — as of M1.12, getSchema() already returns
 /// the NEW DDL — same approach every prior soft-delete milestone's test
@@ -154,7 +154,7 @@ void main() {
 
   group(
     'M1.12 conversations/conversation_messages soft-delete — migration '
-    'round-trip (v55 -> v56)',
+    'round-trip (v56 -> v57)',
     () {
       late Database preMigrationDb;
 
@@ -177,7 +177,7 @@ void main() {
         await preMigrationDb.execute('''
           CREATE TABLE _schema_version (version INTEGER NOT NULL)
         ''');
-        await preMigrationDb.insert('_schema_version', {'version': 54});
+        await preMigrationDb.insert('_schema_version', {'version': 56});
 
         expect(
           await _hasColumn(preMigrationDb, 'conversations', '__deleted__'),
@@ -217,7 +217,7 @@ void main() {
           });
 
           final service = DatabaseService.createNew();
-          await service.migrateBackupDatabase(preMigrationDb, 55, 56);
+          await service.migrateBackupDatabase(preMigrationDb, 56, 57);
 
           expect(
             await _hasColumn(preMigrationDb, 'conversations', '__deleted__'),
@@ -245,7 +245,7 @@ void main() {
       );
 
       test(
-        'running the v55 -> v56 migration twice does not error and leaves '
+        'running the v56 -> v57 migration twice does not error and leaves '
         'schema/data unchanged the second time',
         () async {
           await preMigrationDb.insert('conversations', {
@@ -258,8 +258,8 @@ void main() {
           });
 
           final service = DatabaseService.createNew();
-          await service.migrateBackupDatabase(preMigrationDb, 55, 56);
-          await service.migrateBackupDatabase(preMigrationDb, 55, 56);
+          await service.migrateBackupDatabase(preMigrationDb, 56, 57);
+          await service.migrateBackupDatabase(preMigrationDb, 56, 57);
 
           final cols = await _tableInfo(preMigrationDb, 'conversations');
           expect(cols.where((c) => c['name'] == '__deleted__').length, 1);

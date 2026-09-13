@@ -2,14 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:note_synapse/services/database_service.dart';
 
-/// Tests for migration 61 -> 62: search_chunks, chunk_embeddings,
-/// search_index_state tables + chunks_fts FTS4 virtual table + indexes.
-///
-/// 62, not 47: the layered-search migration was renumbered when this branch
-/// merged with cloud sync, which had already consumed 47..61. The upgrade
-/// these tests exercise is therefore the real one a shipped device performs
-/// — off the full cloud-sync schema (61) onto 62 — not a synthetic 46 -> 47
-/// hop that no database can ever be in.
+/// Tests for migration 63 -> 64: search_chunks, chunk_embeddings,
+/// search_index_state tables, chunks_fts, and indexes. Released migrations
+/// end at 48; cloud sync occupies 49..63 and indexing follows at 64.
 void main() {
   setUpAll(() {
     sqfliteFfiInit();
@@ -105,14 +100,35 @@ void main() {
   }
 
   test(
-    'migrating a v62 database to v63 creates the search index schema',
+    'step 64 alone installs indexing after the complete v63 sync schema',
+    () async {
+      final service = DatabaseService.createNew();
+      final db = await service.database;
+      addTearDown(service.close);
+      await db.execute('DROP TABLE IF EXISTS chunks_fts');
+      await db.execute('DROP TABLE IF EXISTS chunk_embeddings');
+      await db.execute('DROP TABLE IF EXISTS search_index_state');
+      await db.execute('DROP TABLE IF EXISTS search_chunks');
+      await db.execute('DROP INDEX IF EXISTS idx_attachments_noteId');
+
+      // Run exactly the index step: the later preview compatibility repair
+      // must not hide a missing or incorrectly numbered search migration.
+      await service.migrateBackupDatabase(db, 63, 64);
+      await verifySearchIndexSchema(db);
+      await service.migrateBackupDatabase(db, 63, 64);
+      await verifySearchIndexSchema(db);
+    },
+  );
+
+  test(
+    'migrating a v63 database to v64 creates the search index schema',
     () async {
       final dbName =
           'search_index_migration_test_${DateTime.now().microsecondsSinceEpoch}.db';
 
-      // 1. Create a fresh (v63) database, then strip it back to the v62
+      // 1. Create a fresh (current-version) database, then strip it back to the v63
       // schema — every other table, including the fifteen sync_* control-
-      // plane tables and their triggers, stays exactly as v62 left it.
+      // plane tables and their triggers, stays exactly as v63 left it.
       final freshService = DatabaseService.createNew(databaseName: dbName);
       final freshDb = await freshService.database;
 
@@ -127,10 +143,10 @@ void main() {
       await freshDb.execute('DROP TABLE IF EXISTS chunk_embeddings');
       await freshDb.execute('DROP TABLE IF EXISTS search_index_state');
       await freshDb.execute('DROP INDEX IF EXISTS idx_attachments_noteId');
-      await freshDb.update('_schema_version', {'version': 61});
+      await freshDb.update('_schema_version', {'version': 63});
       await freshService.close();
 
-      // 2. Reopen: _handleCustomMigrations should run migration 62
+      // 2. Reopen: _handleCustomMigrations should run migration 64
       final migratedService = DatabaseService.createNew(databaseName: dbName);
       final migratedDb = await migratedService.database;
 
@@ -147,8 +163,8 @@ void main() {
       ]);
       expect(migratedSql, expectedSql);
 
-      // 4. Migration 62 is purely additive on top of the cloud-sync schema:
-      // the v62 control-plane tables it upgraded from are untouched.
+      // 4. Migration 64 is purely additive on top of the cloud-sync schema:
+      // the v63 control-plane tables it upgraded from are untouched.
       final syncTables = await migratedDb.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='table' "
         "AND name LIKE 'sync\\_%' ESCAPE '\\'",
@@ -161,7 +177,7 @@ void main() {
           'sync_pending_ops',
           'sync_materialize_queue',
         ]),
-        reason: 'the v62 sync control plane must survive migration 62',
+        reason: 'the v63 sync control plane must survive migration 64',
       );
 
       await migratedService.close();
@@ -169,13 +185,13 @@ void main() {
   );
 
   test(
-    'partially-applied migration 62 (crash mid-migration) completes on reopen',
+    'partially-applied migration 64 (crash mid-migration) completes on reopen',
     () async {
       final dbName =
           'search_index_partial_test_${DateTime.now().microsecondsSinceEpoch}.db';
 
-      // Simulate a crash after the first CREATE of migration 62: only
-      // search_chunks exists, version still 61.
+      // Simulate a crash after the first CREATE of migration 64: only
+      // search_chunks exists, version still 63.
       final freshService = DatabaseService.createNew(databaseName: dbName);
       final freshDb = await freshService.database;
       await freshDb.execute('DROP TABLE IF EXISTS chunks_fts');
@@ -185,10 +201,10 @@ void main() {
       await freshDb.execute('DROP INDEX IF EXISTS idx_search_chunks_key');
       await freshDb.execute('DROP INDEX IF EXISTS idx_search_chunks_noteId');
       await freshDb.execute('DROP INDEX IF EXISTS idx_search_chunks_source');
-      await freshDb.update('_schema_version', {'version': 61});
+      await freshDb.update('_schema_version', {'version': 63});
       await freshService.close();
 
-      // Reopen: migration 62 must re-run idempotently (IF NOT EXISTS) and
+      // Reopen: migration 64 must re-run idempotently (IF NOT EXISTS) and
       // create the missing objects instead of throwing on search_chunks.
       final migratedService = DatabaseService.createNew(databaseName: dbName);
       final migratedDb = await migratedService.database;

@@ -111,6 +111,11 @@ These columns can be very large and require careful handling:
 ### Database Changes
 When modifying tables, update `recovery_screen.dart` to ensure consistency during recovery.
 
+Preserve the published migration numbers and meanings from released `origin/main`.
+New cloud-sync and indexing migrations must follow every released migration;
+never handle a collision by rewinding or reinterpreting a released version.
+Add a forward compatibility step when renumbering migrations used by branch builds.
+
 ### User App Notes
 - `user_apps.uuid` is the stable package identity; `user_apps.id` is the row key referenced by revisions.
 - Current runnable code is in `app_revisions.appCode`; `user_apps.htmlContent` is a legacy field.

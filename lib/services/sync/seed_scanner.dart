@@ -8,8 +8,8 @@
 // ---------------------------------------------------------------------
 // M2.4's mutation-capture triggers (`database_service.dart`'s
 // `_syncMutationCaptureTriggerStatements`, installed by `_onCreate` and
-// `_migrateToVersion57`) fire on INSERT/UPDATE/DELETE and nothing else.
-// `_migrateToVersion57` installs them but deliberately does not backfill, so
+// `_migrateToVersion59`) fire on INSERT/UPDATE/DELETE and nothing else.
+// `_migrateToVersion59` installs them but deliberately does not backfill, so
 // every row that already existed when the migration ran has **zero**
 // `sync_touch_log` rows. `OutboxDrainer` reads exactly that table, so it
 // mints nothing for those rows: sync works perfectly for data created AFTER

@@ -40,7 +40,7 @@ import 'logger_service.dart';
 ///   `DatabaseService` — see `_syncControlPlaneTableStatements` there)
 /// - `search_chunks`, `chunk_embeddings`, `search_index_state` and the
 ///   `chunks_fts` virtual table (the layered-search index, `DatabaseService`
-///   migration 62): derived data, rebuilt from notes/attachments by
+///   migration 64): derived data, rebuilt from notes/attachments by
 ///   `NoteIndexService`, so merging two divergent index states would be
 ///   meaningless work rather than recovered content. `RecoveryScreen`
 ///   additionally clears the staging DB's *global* `search_index_state`

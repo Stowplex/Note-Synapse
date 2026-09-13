@@ -52,7 +52,7 @@
 //   2. Step 0's `_readPendingOp(db, authorId, deviceSeq)`, which looked a
 //      pending op up BY `authorSeq = deviceSeq` — replaced by
 //      [_reconstructBatch], which reads the operations an intent covers from
-//      `sync_publish_intent.opAuthorSeqsJson` (schema v61) and verifies them
+//      `sync_publish_intent.opAuthorSeqsJson` (schema v63) and verifies them
 //      against its recorded `payloadHash` (see that method).
 //   3. `decodeCommitBytes(expectedAuthorSeq: commit.deviceSeq)` on the pull
 //      side — replaced by `decodeCommitOperations` (`wire_format.dart`),
@@ -813,7 +813,7 @@ class PushPhase {
   /// Rebuilds exactly the commit a recorded, still-pending intent covers.
   ///
   /// **The intent RECORDS which operations it covers
-  /// (`sync_publish_intent.opAuthorSeqsJson`, added by schema v61), so this
+  /// (`sync_publish_intent.opAuthorSeqsJson`, added by schema v63), so this
   /// method verifies rather than searches.** An earlier version of this file
   /// carried no such column and instead re-derived the batch by trying
   /// candidate layouts — the batch today's constants would form, then every

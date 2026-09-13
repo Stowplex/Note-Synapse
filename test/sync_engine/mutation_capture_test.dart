@@ -66,9 +66,6 @@ int get _expectedTriggerCount =>
       0, (count, scope) => count + 1 + scope.syncScopeColumns.length,
     ) + DatabaseService.syncSetCaptureScopes.length * 2;
 
-// v58-v61 intentionally defer the i18n trigger until v64 adds its column.
-int get _expectedPreLocalizationTriggerCount => _expectedTriggerCount - 1;
-
 void main() {
   setUpAll(() {
     sqfliteFfiInit();
@@ -155,28 +152,12 @@ void main() {
     },
   );
 
-  group('migration round-trip (v57 -> v58)', () {
-    test('migrating an existing v57 database installs the pre-localization trigger set, '
+  group('migration round-trip (v58 -> v59)', () {
+    test('migrating an existing v58 database installs the complete trigger set, '
         'twice, safely', () async {
-      // M2.7/M2.8 finding: _migrateToVersion58 (database_service.dart)
-      // reuses the CURRENT, live `_syncMutationCaptureTriggerStatements`
-      // list rather than a hand-frozen historical one (its own doc comment
-      // says so explicitly: "there is no earlier, narrower historical scope
-      // to preserve" — true when 57 was the newest version). Now that
-      // `syncEntityCaptureScopes` includes tags.name/tags.color (M2.7) AND
-      // the M2.8 sync-scope-exclusion-reasoning audit's six further
-      // findings (relationships.type; conversation_attachments' and
-      // attachments' path/name/type/isRelativePath columns; app_revisions'
-      // revisionNumber/userPrompt/aiResponse/attachmentPaths;
-      // user_app_libraries' name/usage_instructions;
-      // user_app_library_dependencies' original_url/local_path — see each
-      // one's own SyncEntityCaptureScope doc comment), a v57->57 migration
-      // installs the pre-localization trigger set, not the 85 a purely historical snapshot
-      // would have. This is harmless (idempotent CREATE TRIGGER IF NOT
-      // EXISTS, no data touched) — the separate v60/v61 migrations below
-      // exist for the real upgrade path this test doesn't cover: a device
-      // already AT v58/58/59 when it receives this build, where v58 does
-      // NOT re-run.
+      // Capture starts after released v48 localization, so the first capture
+      // migration must install every current field trigger, including i18n.
+      // Later additive capture steps replay these statements idempotently.
       final preMigrationDb = await databaseFactoryFfi.openDatabase(
         inMemoryDatabasePath,
         options: OpenDatabaseOptions(singleInstance: false),
@@ -188,7 +169,7 @@ void main() {
       // the M1.5/M1.13 guard triggers, and (per its own doc comment,
       // "AI-facing schema documentation... sync machinery is not user
       // content") a few tables it never lists at all, including
-      // tag_workflow_bindings — a real v57 install would already have all
+      // tag_workflow_bindings — a real v58 install would already have all
       // of these from earlier migrations. Recreate the minimal slice this
       // migration actually depends on: sync_touch_log itself, plus
       // tag_workflow_bindings (one of the fourteen sync-scope entity
@@ -217,7 +198,7 @@ void main() {
       await preMigrationDb.execute(
         'CREATE TABLE _schema_version (version INTEGER NOT NULL)',
       );
-      await preMigrationDb.insert('_schema_version', {'version': 56});
+      await preMigrationDb.insert('_schema_version', {'version': 58});
 
       final before = await preMigrationDb.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='trigger' "
@@ -226,33 +207,38 @@ void main() {
       expect(before, isEmpty);
 
       final service = DatabaseService.createNew();
-      await service.migrateBackupDatabase(preMigrationDb, 57, 58);
+      await service.migrateBackupDatabase(preMigrationDb, 58, 59);
 
       final after = await preMigrationDb.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='trigger' "
         "AND name LIKE 'sync_touch_%'",
       );
-      expect(after.length, _expectedPreLocalizationTriggerCount);
+      expect(after.length, _expectedTriggerCount);
+      expect(
+        after.map((trigger) => trigger['name']),
+        contains('sync_touch_user_apps_au_i18n'),
+        reason: 'released v48 localization precedes all cloud-sync triggers',
+      );
 
       // Running it again must be a safe no-op (CREATE TRIGGER IF NOT
       // EXISTS throughout).
-      await service.migrateBackupDatabase(preMigrationDb, 57, 58);
+      await service.migrateBackupDatabase(preMigrationDb, 58, 59);
       final afterTwice = await preMigrationDb.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='trigger' "
         "AND name LIKE 'sync_touch_%'",
       );
-      expect(afterTwice.length, _expectedPreLocalizationTriggerCount);
+      expect(afterTwice.length, _expectedTriggerCount);
 
       await service.close();
       await preMigrationDb.close();
     });
   });
 
-  group('migration round-trip (v57 -> v60, M2.7 tags.name/color addendum)', () {
+  group('migration round-trip (v58 -> v61, M2.7 tags.name/color addendum)', () {
     test(
-      'migrating an existing v57 database all the way to v60 installs the pre-localization trigger set '
-      '(v58 alone already installs the live/current full set, including the M2.8 findings — '
-      'see the v57->v58 test above), including tags.name/tags.color, twice, safely',
+      'migrating an existing v58 database all the way to v61 installs the complete trigger set '
+      '(v59 alone already installs the live/current full set, including the M2.8 findings — '
+      'see the v58->v59 test above), including tags.name/tags.color, twice, safely',
       () async {
         final preMigrationDb = await databaseFactoryFfi.openDatabase(
           inMemoryDatabasePath,
@@ -285,16 +271,16 @@ void main() {
         await preMigrationDb.execute(
           'CREATE TABLE _schema_version (version INTEGER NOT NULL)',
         );
-        await preMigrationDb.insert('_schema_version', {'version': 56});
+        await preMigrationDb.insert('_schema_version', {'version': 58});
 
         final service = DatabaseService.createNew();
-        await service.migrateBackupDatabase(preMigrationDb, 57, 60);
+        await service.migrateBackupDatabase(preMigrationDb, 58, 61);
 
         final after = await preMigrationDb.rawQuery(
           "SELECT name FROM sqlite_master WHERE type='trigger' "
           "AND name LIKE 'sync_touch_%'",
         );
-        expect(after.length, _expectedPreLocalizationTriggerCount);
+        expect(after.length, _expectedTriggerCount);
         final names = after.map((r) => r['name'] as String).toSet();
         expect(
           names,
@@ -325,12 +311,12 @@ void main() {
         expect(touches, isNotEmpty);
 
         // Running it again must be a safe no-op.
-        await service.migrateBackupDatabase(preMigrationDb, 57, 60);
+        await service.migrateBackupDatabase(preMigrationDb, 58, 61);
         final afterTwice = await preMigrationDb.rawQuery(
           "SELECT name FROM sqlite_master WHERE type='trigger' "
           "AND name LIKE 'sync_touch_%'",
         );
-        expect(afterTwice.length, _expectedPreLocalizationTriggerCount);
+        expect(afterTwice.length, _expectedTriggerCount);
 
         await service.close();
         await preMigrationDb.close();
@@ -339,10 +325,10 @@ void main() {
   });
 
   group(
-    'migration round-trip (v57 -> v61, M2.8 sync-scope-exclusion-reasoning audit findings)',
+    'migration round-trip (v58 -> v62, M2.8 sync-scope-exclusion-reasoning audit findings)',
     () {
       test(
-        'migrating an existing v57 database all the way to v61 installs the pre-localization trigger set, '
+        'migrating an existing v58 database all the way to v62 installs the complete trigger set, '
         'including every M2.8 audit finding, twice, safely',
         () async {
           final preMigrationDb = await databaseFactoryFfi.openDatabase(
@@ -376,16 +362,16 @@ void main() {
           await preMigrationDb.execute(
             'CREATE TABLE _schema_version (version INTEGER NOT NULL)',
           );
-          await preMigrationDb.insert('_schema_version', {'version': 56});
+          await preMigrationDb.insert('_schema_version', {'version': 58});
 
           final service = DatabaseService.createNew();
-          await service.migrateBackupDatabase(preMigrationDb, 57, 61);
+          await service.migrateBackupDatabase(preMigrationDb, 58, 62);
 
           final after = await preMigrationDb.rawQuery(
             "SELECT name FROM sqlite_master WHERE type='trigger' "
             "AND name LIKE 'sync_touch_%'",
           );
-          expect(after.length, _expectedPreLocalizationTriggerCount);
+          expect(after.length, _expectedTriggerCount);
           final names = after.map((r) => r['name'] as String).toSet();
           expect(
             names,
@@ -412,7 +398,7 @@ void main() {
 
           // A real UPDATE against relationships.type now actually fires the
           // new trigger (the same "prove it, don't just assert trigger
-          // existence" standard the v60 test above applies to tags.name).
+          // existence" standard the v61 test above applies to tags.name).
           await preMigrationDb.insert('notes', {
             'id': 'note1',
             'title': 'T1',
@@ -443,12 +429,12 @@ void main() {
           expect(touches, isNotEmpty);
 
           // Running it again must be a safe no-op.
-          await service.migrateBackupDatabase(preMigrationDb, 57, 61);
+          await service.migrateBackupDatabase(preMigrationDb, 58, 62);
           final afterTwice = await preMigrationDb.rawQuery(
             "SELECT name FROM sqlite_master WHERE type='trigger' "
             "AND name LIKE 'sync_touch_%'",
           );
-          expect(afterTwice.length, _expectedPreLocalizationTriggerCount);
+          expect(afterTwice.length, _expectedTriggerCount);
 
           await service.close();
           await preMigrationDb.close();

@@ -1,44 +1,9 @@
-// Regression test for the v59 migration brick.
-//
-// A real device reported `Migration failed at version 59: DatabaseException(
-// duplicate column name: authorId ... ALTER TABLE sync_publish_intent ADD
-// COLUMN authorId TEXT)` and was then stuck in the Recovery Manager on every
-// launch, permanently, with no way forward.
-//
-// Root cause: `_migrateToVersion59` (M2.6) was the ONLY `ADD COLUMN` migration
-// in this file's entire history written without the `PRAGMA table_info`
-// existence guard that every sibling uses (`_migrateToVersion50`/`51`/`52`/
-// `53`/`54`/`55`). That made it non-idempotent, and there are two independent
-// ways to reach it with the columns already present:
-//
-//   1. DETERMINISTIC: any upgrade from schema version <= 46.
-//      `_migrateToVersion48` builds the fifteen sync_* tables from the *live,
-//      shared* `_syncControlPlaneTableStatements` list, and M2.6 added
-//      `authorId`/`deviceSeq` to that list's `CREATE TABLE
-//      sync_publish_intent`. So v48 creates the table already carrying both
-//      columns, and v59 -- a few steps later in the very same chain -- then
-//      tried to add them again. Every such device bricked, 100% of the time.
-//
-//   2. Any crash or later-step failure mid-chain: the runner stamps
-//      `_schema_version` only after ALL steps succeed, but SQLite commits each
-//      DDL immediately and nothing rolls it back, so a failure in v60/v61 (or
-//      a process kill) left the version stamp behind and replayed v59 against
-//      its own already-applied result on the next launch.
-//
-// Why no existing test caught it: every migration test in this repo starts
-// from a version >= 47 (M2.3+ used v50->v57, v56->v57, v57->v58, etc.) or
-// tests a fresh install. Neither shape can reach the <= 46 path, and none
-// replayed a step against its own output.
-//
-// TESTING NOTE, and the reason these tests assert on schema shape rather than
-// on a thrown exception: `migrateBackupDatabase` *catches* a failing step,
-// logs it, and `break`s out of its loop -- it does not rethrow. So "v59 threw"
-// is invisible to a naive `expect(..., throwsA(...))`. What IS unambiguously
-// observable is the partial-application signature: the buggy version issues
-// two bare `ALTER`s in sequence, so if the first one throws, the second never
-// runs and `deviceSeq` is silently left missing. Each test below is built so
-// that the buggy and fixed versions produce genuinely different schema, with
-// no dependence on exception propagation.
+// Regression tests for idempotent sync_publish_intent upgrades: migration
+// 60 adds authorId/deviceSeq; migration 63 adds opAuthorSeqsJson. Both run
+// after released main v48. The first sync migration (49) uses the current
+// CREATE TABLE statements, so these columns can already be present during
+// a normal upgrade. A crash before the version stamp can also replay a step.
+// Existing columns and pending intents must survive either path.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -54,8 +19,8 @@ void main() {
     return rows.map((r) => r['name'] as String).toSet();
   }
 
-  /// Creates `sync_publish_intent` in the shape v48 leaves it in, optionally
-  /// already carrying the two columns v59 wants to add.
+  /// Creates `sync_publish_intent` in the shape v49 leaves it in, optionally
+  /// already carrying the two columns v60 wants to add.
   Future<Database> openWithPublishIntent({
     required bool withAuthorId,
     required bool withDeviceSeq,
@@ -78,10 +43,10 @@ void main() {
   }
 
   test(
-    'v59 against a table that already has BOTH columns is a clean no-op '
-    '(the deterministic <=v46 path, where v48 already created them)',
+    'v60 against a table that already has BOTH columns is a clean no-op '
+    '(the deterministic v48 upgrade path, where v49 already created them)',
     () async {
-      // This is exactly the state `_migrateToVersion48` leaves behind today,
+      // This is exactly the state `_migrateToVersion49` leaves behind today,
       // because it builds the table from the live statement list that M2.6
       // extended. The buggy version threw `duplicate column name: authorId`
       // here and bricked the device on every subsequent launch.
@@ -92,13 +57,13 @@ void main() {
       addTearDown(() => db.close());
 
       final before = await columnsOf(db, 'sync_publish_intent');
-      await DatabaseService().migrateBackupDatabase(db, 58, 59);
+      await DatabaseService().migrateBackupDatabase(db, 59, 60);
       final after = await columnsOf(db, 'sync_publish_intent');
 
       expect(
         after,
         equals(before),
-        reason: 'v59 must be a pure no-op when both columns already exist',
+        reason: 'v60 must be a pure no-op when both columns already exist',
       );
       expect(after.contains('authorId'), isTrue);
       expect(after.contains('deviceSeq'), isTrue);
@@ -106,15 +71,14 @@ void main() {
   );
 
   test(
-    'v59 completes the job when only authorId exists -- the partial-state '
+    'v60 completes the job when only authorId exists -- the partial-state '
     'case that makes buggy vs. fixed unambiguously distinguishable',
     () async {
       // The buggy version throws on its FIRST bare ALTER (authorId already
       // exists), so its second ALTER never runs and deviceSeq stays missing.
       // The fixed version skips authorId and still adds deviceSeq. That
-      // difference is observable in the schema itself, independent of whether
-      // the exception propagates -- which it does not, since
-      // migrateBackupDatabase swallows it.
+      // difference is observable in the schema itself, and backup migration
+      // now also propagates any migration failure to its caller.
       final db = await openWithPublishIntent(
         withAuthorId: true,
         withDeviceSeq: false,
@@ -124,7 +88,7 @@ void main() {
       expect((await columnsOf(db, 'sync_publish_intent')).contains('deviceSeq'),
           isFalse);
 
-      await DatabaseService().migrateBackupDatabase(db, 58, 59);
+      await DatabaseService().migrateBackupDatabase(db, 59, 60);
 
       expect(
         (await columnsOf(db, 'sync_publish_intent')).contains('deviceSeq'),
@@ -138,7 +102,7 @@ void main() {
   );
 
   test(
-    'v59 still does its real work on a genuine pre-M2.6 table '
+    'v60 still does its real work on a genuine pre-M2.6 table '
     '(the guard must not turn the migration into a no-op for everyone)',
     () async {
       final db = await openWithPublishIntent(
@@ -147,7 +111,7 @@ void main() {
       );
       addTearDown(() => db.close());
 
-      await DatabaseService().migrateBackupDatabase(db, 58, 59);
+      await DatabaseService().migrateBackupDatabase(db, 59, 60);
 
       final after = await columnsOf(db, 'sync_publish_intent');
       expect(after.contains('authorId'), isTrue);
@@ -156,7 +120,7 @@ void main() {
   );
 
   test(
-    'v59 replayed twice in a row is idempotent (the crash / failed-later-step '
+    'v60 replayed twice in a row is idempotent (the crash / failed-later-step '
     'path, where the version stamp never advanced)',
     () async {
       final db = await openWithPublishIntent(
@@ -166,12 +130,12 @@ void main() {
       addTearDown(() => db.close());
 
       final service = DatabaseService();
-      await service.migrateBackupDatabase(db, 58, 59);
+      await service.migrateBackupDatabase(db, 59, 60);
       final afterFirst = await columnsOf(db, 'sync_publish_intent');
 
-      // Replay, exactly as a device does when v60/v61 failed or the process
+      // Replay, exactly as a device does when v61/v62 failed or the process
       // died before `_schema_version` was stamped.
-      await service.migrateBackupDatabase(db, 58, 59);
+      await service.migrateBackupDatabase(db, 59, 60);
       final afterReplay = await columnsOf(db, 'sync_publish_intent');
 
       expect(afterReplay, equals(afterFirst));
@@ -181,20 +145,20 @@ void main() {
   );
 
   // ==========================================================================
-  // M2.12 / schema v62 — `opAuthorSeqsJson`, added by `_migrateToVersion62`.
+  // M2.12 / schema v63 — `opAuthorSeqsJson`, added by `_migrateToVersion63`.
   // ==========================================================================
   //
-  // The same two arrival paths this file already documents for v59 apply
-  // verbatim: `_migrateToVersion48` builds `sync_publish_intent` from the
+  // The same two arrival paths this file already documents for v60 apply
+  // verbatim: `_migrateToVersion49` builds `sync_publish_intent` from the
   // LIVE `_syncControlPlaneTableStatements` list, which now already declares
-  // this column, so every upgrade from <= 46 reaches v62 with it present; and
-  // a crash after v62 but before `_schema_version` is stamped replays it. The
+  // this column, so every upgrade from v48 reaches v63 with it present; and
+  // a crash after v63 but before `_schema_version` is stamped replays it. The
   // guard is present from the start this time, and these tests are what keep
   // it there.
 
-  /// `sync_publish_intent` in its post-v59 shape, optionally already carrying
-  /// the column v62 wants to add.
-  Future<Database> openPostV58({required bool withOpAuthorSeqsJson}) async {
+  /// `sync_publish_intent` in its post-v60 shape, optionally already carrying
+  /// the column v63 wants to add.
+  Future<Database> openPostV60({required bool withOpAuthorSeqsJson}) async {
     final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
     await db.execute('''
       CREATE TABLE sync_publish_intent (
@@ -213,11 +177,11 @@ void main() {
     return db;
   }
 
-  test('v62 adds opAuthorSeqsJson when it is missing', () async {
-    final db = await openPostV58(withOpAuthorSeqsJson: false);
+  test('v63 adds opAuthorSeqsJson when it is missing', () async {
+    final db = await openPostV60(withOpAuthorSeqsJson: false);
     addTearDown(() => db.close());
 
-    await DatabaseService().migrateBackupDatabase(db, 61, 62);
+    await DatabaseService().migrateBackupDatabase(db, 62, 63);
 
     expect(
       (await columnsOf(db, 'sync_publish_intent')).contains('opAuthorSeqsJson'),
@@ -226,37 +190,37 @@ void main() {
   });
 
   test(
-    'v62 against a table that already has the column is a clean no-op (the '
-    'deterministic <=v46 path, where v48 already created it)',
+    'v63 against a table that already has the column is a clean no-op (the '
+    'deterministic v48 upgrade path, where v49 already created it)',
     () async {
-      final db = await openPostV58(withOpAuthorSeqsJson: true);
+      final db = await openPostV60(withOpAuthorSeqsJson: true);
       addTearDown(() => db.close());
 
       final before = await columnsOf(db, 'sync_publish_intent');
-      await DatabaseService().migrateBackupDatabase(db, 61, 62);
+      await DatabaseService().migrateBackupDatabase(db, 62, 63);
 
       expect(await columnsOf(db, 'sync_publish_intent'), equals(before));
     },
   );
 
-  test('v62 replayed twice in a row is idempotent', () async {
-    final db = await openPostV58(withOpAuthorSeqsJson: false);
+  test('v63 replayed twice in a row is idempotent', () async {
+    final db = await openPostV60(withOpAuthorSeqsJson: false);
     addTearDown(() => db.close());
 
     final service = DatabaseService();
-    await service.migrateBackupDatabase(db, 61, 62);
+    await service.migrateBackupDatabase(db, 62, 63);
     final afterFirst = await columnsOf(db, 'sync_publish_intent');
-    await service.migrateBackupDatabase(db, 61, 62);
+    await service.migrateBackupDatabase(db, 62, 63);
 
     expect(await columnsOf(db, 'sync_publish_intent'), equals(afterFirst));
     expect(afterFirst.contains('opAuthorSeqsJson'), isTrue);
   });
 
   test(
-    'an existing pending intent survives v62 with opAuthorSeqsJson NULL — the '
+    'an existing pending intent survives v63 with opAuthorSeqsJson NULL — the '
     'pre-M2.12 shape push_phase.dart falls back to a single v1 operation for',
     () async {
-      final db = await openPostV58(withOpAuthorSeqsJson: false);
+      final db = await openPostV60(withOpAuthorSeqsJson: false);
       addTearDown(() => db.close());
       await db.insert('sync_publish_intent', {
         'intentHash': 'legacy',
@@ -268,7 +232,7 @@ void main() {
         'createdAt': 1000,
       });
 
-      await DatabaseService().migrateBackupDatabase(db, 61, 62);
+      await DatabaseService().migrateBackupDatabase(db, 62, 63);
 
       final row = (await db.query('sync_publish_intent')).single;
       expect(row['intentHash'], 'legacy');
