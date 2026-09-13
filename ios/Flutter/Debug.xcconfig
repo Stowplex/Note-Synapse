@@ -1,28 +1,8 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
 #include "Generated.xcconfig"
 
-// Google Drive sync OAuth redirect scheme (M2.9).
-//
-// Substituted into Runner/Info.plist's CFBundleURLSchemes as
-// $(GOOGLE_REVERSED_CLIENT_ID). Defined here (Debug) and in Release.xcconfig
-// rather than in project.pbxproj, which must never be edited (CLAUDE.md).
-//
-// Must match `debugClientId` in
-// lib/services/sync/google_drive_client_config.dart, reversed — Dart selects
-// the client ID by kDebugMode, and the scheme the OS has registered has to be
-// the one Dart asks Google to redirect to.
-//
-// The client must be of the **iOS** application type: only that type gets a
-// reversed-client-ID redirect. See google_drive_client_config.dart's header.
-//
-// PLACEHOLDER: no debug-variant Google OAuth client exists yet. While it is a
-// placeholder, the Cloud Sync settings screen shows "Not available in this
-// build" and renders no Connect button.
-//
-// iOS caveat: unlike Android, the bundle identifier is the same for Debug and
-// Release (com.github.kkspeed.notesynapse.noteSynapse), so the two cannot be
-// installed side by side and there is nothing to keep apart. If you only care
-// about iOS, set debugClientId equal to releaseClientId in
-// google_drive_client_config.dart and set the value below to the release
-// scheme — the drift test enforces that both edits happen together.
+// Google Drive callback for Debug. Runner/Info.plist consumes this setting;
+// Release and Profile use Release.xcconfig. Keep it aligned with
+// GoogleDriveClientConfig.debugClientId. This registers the native callback
+// only; the Google client must separately be valid for the shipping platform.
 GOOGLE_REVERSED_CLIENT_ID=com.googleusercontent.apps.438894533578-i9ecrp6g518tdenpq5fo4dkv90ce2rig

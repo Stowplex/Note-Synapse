@@ -102,18 +102,19 @@ Run `./coverage.sh` to generate a full test coverage report:
 ### Database Columns (Large Data)
 These columns can be very large and require careful handling:
 - `conversation_messages.metadata` - chunked read required
-- `user_app_revision.code`
-- `user_app_libraries.code`
-- `note.content`
+- `app_revisions.appCode`
+- `user_app_library_dependencies.bytes`
+- `user_apps.appState`
+- `notes.content`
 - `search_chunks.text` (raw chunk text; derived from notes, rebuildable via the search indexer)
 
 ### Database Changes
 When modifying tables, update `recovery_screen.dart` to ensure consistency during recovery.
 
 ### User App Notes
-- `user_app.uuid` is the effective primary key
-- `user_app.html` column should NOT be used
-- `user_app_revision.revision` is the revision number (not `id`)
+- `user_apps.uuid` is the stable package identity; `user_apps.id` is the row key referenced by revisions.
+- Current runnable code is in `app_revisions.appCode`; `user_apps.htmlContent` is a legacy field.
+- `app_revisions.revisionNumber` is the revision number; `app_revisions.id` identifies the revision row.
 
 ### Multi-functions Table
 Deliberately excluded from recovery operations.

@@ -233,7 +233,9 @@ class OutboxDrainer {
   /// Processes every `sync_touch_log` row with `processedAt IS NULL`, in
   /// `id` order (§ 11.3's drain-ordering invariant). Safe to call
   /// repeatedly (including with zero pending touches).
-  Future<DrainResult> drain() async {
+  Future<DrainResult> drain({
+    List<BlobReference> restoredAttachments = const [],
+  }) async {
     final db = await _databaseService.database;
     final authorId = await _deviceIdentity.ensureDeviceId();
 
@@ -332,6 +334,68 @@ class OutboxDrainer {
         return ops;
       });
       minted.addAll(result);
+    }
+
+    for (final reference in restoredAttachments) {
+      final field = syncBlobBackedColumns[reference.entityTable];
+      if (field == null || reference.storedPath == null) continue;
+      final op = await db.transaction((txn) async {
+        final state = await txn.query(
+          'sync_field_state',
+          where: 'entityTable = ? AND entityId = ? AND fieldName = ?',
+          whereArgs: [reference.entityTable, reference.entityId, field],
+          limit: 1,
+        );
+        if (state.isEmpty) return null;
+        final row = state.single;
+        final valueJson = jsonEncode(reference.storedPath);
+        if (row['blobHash'] != null ||
+            row['valueJson'] != valueJson ||
+            (row['authorId'] != authorId &&
+                row['authorId'] != 'seed:$authorId')) {
+          return null; // a real edit or another sync superseded the file read
+        }
+        final scope = _entityScopesByTable[reference.entityTable]!;
+        final relativeColumn = syncBlobPathIsRelativeColumns[scope.table]!;
+        final owner = scope.table == 'attachments'
+            ? (table: 'notes', column: 'noteId')
+            : (table: 'conversation_messages', column: 'messageId');
+        final current = await txn.rawQuery(
+          'SELECT t.$field, t.$relativeColumn FROM ${scope.table} t '
+          'JOIN ${owner.table} owner ON owner.id = t.${owner.column} '
+          'WHERE t.${scope.idColumn} = ? AND t.__deleted__ = 0 '
+          'AND owner.__deleted__ = 0 LIMIT 1',
+          [reference.entityId],
+        );
+        if (current.isEmpty ||
+            (current.single[relativeColumn] == 1) != reference.isRelative ||
+            current.single[field] != reference.storedPath) {
+          return null;
+        }
+        final minted = await _mintFieldOperation(
+          txn,
+          authorId: authorId,
+          kind: 'field',
+          entityTable: reference.entityTable,
+          entityId: reference.entityId,
+          fieldName: field,
+          valueJson: valueJson,
+        );
+        await txn.update(
+          'sync_pending_ops',
+          {'blobHash': reference.blobHash},
+          where: 'authorId = ? AND authorSeq = ?',
+          whereArgs: [minted.authorId, minted.authorSeq],
+        );
+        await txn.update(
+          'sync_field_state',
+          {'blobHash': reference.blobHash},
+          where: 'entityTable = ? AND entityId = ? AND fieldName = ?',
+          whereArgs: [reference.entityTable, reference.entityId, field],
+        );
+        return minted;
+      });
+      if (op != null) minted.add(op);
     }
 
     return DrainResult(
@@ -531,30 +595,33 @@ class OutboxDrainer {
 
       // ── Arm 1: a local row with no complete register ──────────────────
       if (runArm1) {
-      final rowsWithoutRegister = await db.rawQuery(
-        'SELECT CAST(t.${scope.idColumn} AS TEXT) AS entityId, '
-        's.valueJson AS valueJson '
-        'FROM ${scope.table} t '
-        'LEFT JOIN sync_field_state s '
-        'ON s.entityTable = ? '
-        'AND s.entityId = CAST(t.${scope.idColumn} AS TEXT) '
-        'AND s.fieldName = ?',
-        [scope.table, _existsFieldSentinel],
-      );
-      for (final row in rowsWithoutRegister) {
-        final valueJson = row['valueJson'] as String?;
-        if (valueJson != null &&
-            existsPayloadIsComplete(carried, decodeExistsPayload(valueJson))) {
-          continue;
+        final rowsWithoutRegister = await db.rawQuery(
+          'SELECT CAST(t.${scope.idColumn} AS TEXT) AS entityId, '
+          's.valueJson AS valueJson '
+          'FROM ${scope.table} t '
+          'LEFT JOIN sync_field_state s '
+          'ON s.entityTable = ? '
+          'AND s.entityId = t.${scope.idColumn} '
+          'AND s.fieldName = ?',
+          [scope.table, _existsFieldSentinel],
+        );
+        for (final row in rowsWithoutRegister) {
+          final valueJson = row['valueJson'] as String?;
+          if (valueJson != null &&
+              existsPayloadIsComplete(
+                carried,
+                decodeExistsPayload(valueJson),
+              )) {
+            continue;
+          }
+          await db.insert('sync_touch_log', {
+            'entityTable': scope.table,
+            'entityId': row['entityId'],
+            'fieldName': null,
+            'memberUuid': null,
+            'touchedAt': now,
+          });
         }
-        await db.insert('sync_touch_log', {
-          'entityTable': scope.table,
-          'entityId': row['entityId'],
-          'fieldName': null,
-          'memberUuid': null,
-          'touchedAt': now,
-        });
-      }
       }
 
       // ── Arm 2: a complete register with no local row ──────────────────
@@ -564,7 +631,7 @@ class OutboxDrainer {
         's.hlc AS hlc '
         'FROM sync_field_state s '
         'LEFT JOIN ${scope.table} t '
-        'ON CAST(t.${scope.idColumn} AS TEXT) = s.entityId '
+        'ON t.${scope.idColumn} = s.entityId '
         'WHERE s.entityTable = ? AND s.fieldName = ? '
         'AND t.${scope.idColumn} IS NULL',
         [scope.table, _existsFieldSentinel],
@@ -709,6 +776,7 @@ class OutboxDrainer {
     final existsValueJson = encodeExistsPayloadJson(
       syncability.existsCarriedColumns,
       row,
+      createdAtColumn: syncEntityCreatedAtColumnByTable[scope.table],
     );
 
     final recordedExistsValueJson = await _readFieldStateValueJson(
@@ -1198,6 +1266,7 @@ class OutboxDrainer {
       columns: [
         for (final column in info)
           if (column['name'] == scope.idColumn ||
+              column['name'] == syncEntityCreatedAtColumnByTable[scope.table] ||
               scope.syncScopeColumns.contains(column['name']) ||
               syncability.existsCarriedColumns.contains(column['name']))
             column['name'] as String,

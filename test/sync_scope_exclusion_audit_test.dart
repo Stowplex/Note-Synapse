@@ -131,7 +131,7 @@ final List<TableAudit> kTableAudits = [
       ExcludedColumn('id', 'primary key — never changes by definition'),
       ExcludedColumn(
         'createdAt',
-        'derived at materialization time from the __exists__ operation\'s own HLC wall-clock '
+        'carried immutably in the __exists__ payload; legacy operations fall back to their HLC '
             '(materializer.dart\'s _createdAtColumnByTable) — not carried as independent field data',
       ),
     ],
@@ -154,7 +154,7 @@ final List<TableAudit> kTableAudits = [
       ),
       ExcludedColumn(
         'createdAt',
-        'derived at materialization time from the __exists__ operation\'s own HLC',
+        'carried immutably in the __exists__ payload; legacy operations fall back to their HLC',
       ),
     ],
     insertSites: {
@@ -173,7 +173,7 @@ final List<TableAudit> kTableAudits = [
       ExcludedColumn('id', 'primary key'),
       ExcludedColumn(
         'createdAt',
-        'derived at materialization time from the __exists__ operation\'s own HLC',
+        'carried immutably in the __exists__ payload; legacy operations fall back to their HLC',
       ),
       ExcludedColumn(
         'usageCount',
@@ -208,7 +208,7 @@ final List<TableAudit> kTableAudits = [
       ExcludedColumn('id', 'primary key'),
       ExcludedColumn(
         'createdAt',
-        'derived at materialization time from the __exists__ operation\'s own HLC',
+        'carried immutably in the __exists__ payload; legacy operations fall back to their HLC',
       ),
     ],
     insertSites: {'lib/services/database_service.dart::insertFilter'},
@@ -226,7 +226,7 @@ final List<TableAudit> kTableAudits = [
       ExcludedColumn('toNoteId', 'endpoint FK, never reassigned in place'),
       ExcludedColumn(
         'createdAt',
-        'derived at materialization time from the __exists__ operation\'s own HLC',
+        'carried immutably in the __exists__ payload; legacy operations fall back to their HLC',
       ),
     ],
     insertSites: {
@@ -256,7 +256,7 @@ final List<TableAudit> kTableAudits = [
       ExcludedColumn('id', 'primary key'),
       ExcludedColumn(
         'createdAt',
-        'derived at materialization time from the __exists__ operation\'s own HLC',
+        'carried immutably in the __exists__ payload; legacy operations fall back to their HLC',
       ),
       ExcludedColumn(
         'noteIds',
@@ -283,7 +283,7 @@ final List<TableAudit> kTableAudits = [
       ExcludedColumn('id', 'primary key'),
       ExcludedColumn(
         'timestamp',
-        'this table\'s createdAt-equivalent — derived at materialization time from the __exists__ operation\'s '
+        'this table\'s createdAt-equivalent — carried immutably in the __exists__ payload; legacy operations use their '
             'own HLC (the live update site round-trips the same unchanged value, never actually changing it)',
       ),
     ],
@@ -303,7 +303,7 @@ final List<TableAudit> kTableAudits = [
       ExcludedColumn('messageId', 'owner FK, never reassigned in place'),
       ExcludedColumn(
         'createdAt',
-        'derived at materialization time from the __exists__ operation\'s own HLC',
+        'carried immutably in the __exists__ payload; legacy operations fall back to their HLC',
       ),
     ],
     insertSites: {
@@ -329,7 +329,7 @@ final List<TableAudit> kTableAudits = [
       ExcludedColumn('noteId', 'owner FK, never reassigned in place'),
       ExcludedColumn(
         'createdAt',
-        'derived at materialization time from the __exists__ operation\'s own HLC',
+        'carried immutably in the __exists__ payload; legacy operations fall back to their HLC',
       ),
     ],
     insertSites: {'lib/services/database_service.dart::_insertAttachmentRow'},
@@ -352,7 +352,7 @@ final List<TableAudit> kTableAudits = [
       ),
       ExcludedColumn(
         'createdAt',
-        'derived at materialization time from the __exists__ operation\'s own HLC',
+        'carried immutably in the __exists__ payload; legacy operations fall back to their HLC',
       ),
     ],
     insertSites: {'lib/services/database_service.dart::insertUserApp'},
@@ -370,7 +370,7 @@ final List<TableAudit> kTableAudits = [
       ExcludedColumn('appId', 'owner FK, never reassigned in place'),
       ExcludedColumn(
         'revisionTimestamp',
-        'this table\'s createdAt-equivalent — derived from the __exists__ HLC',
+        'this table\'s createdAt-equivalent — carried immutably in the __exists__ payload with a legacy HLC fallback',
       ),
       ExcludedColumn(
         'deletedAt',

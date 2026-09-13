@@ -1,74 +1,29 @@
-// Google OAuth client configuration for Drive sync — M2.9.
+// Google OAuth client configuration for Drive sync.
 //
-// ===========================================================================
-// READ THIS FIRST: both clients must be of the **iOS** application type.
-// ===========================================================================
+// Dart selects a separate client for debug versus release/profile builds.
+// Android manifest placeholders and iOS xcconfigs must register the same
+// callback scheme that Dart sends; google_drive_client_id_drift_test.dart
+// checks that contract. Distinct debug/release callbacks keep side-by-side
+// Android installations from receiving each other's authorization response.
 //
-// Not Android. Not Desktop. This is counter-intuitive for an app whose two
-// variants are distinguished by *Android* package name, so it is spelled out
-// rather than left to be inferred:
+// The release ID was verified against the supplied installed-client JSON.
+// An unauthenticated authorization probe on 2026-09-12 identified this as an
+// Android client and returned: "Custom URI scheme is not enabled for your
+// Android client." Google Cloud must enable that client's Advanced settings
+// > Custom URI scheme for this browser + PKCE flow to proceed. Merely
+// replacing the client ID or registering a manifest callback cannot do so.
+// https://support.google.com/googleapi/answer/6158849
 //
-//   * The redirect this whole milestone registers —
-//     `com.googleusercontent.apps.<prefix>:/oauth2redirect`, the "reversed
-//     client ID" — is the **iOS** client pattern. An **Android**-type client
-//     does not get one: its private-use redirect is
-//     `<package.name>:/oauth2redirect` instead. Creating an Android-type
-//     client and pasting its ID below therefore produces a client that
-//     *cannot* use the redirect this app registers with the OS, and Google
-//     rejects the authorization request (`redirect_uri_mismatch`).
-//   * Google's native-app documentation is now titled "OAuth 2.0 for **iOS
-//     & Desktop Apps**" — Android was removed from it — and Google has
-//     restricted custom URI schemes for *new* Android OAuth clients
-//     outright. So iOS-type is not merely the tidier choice here; for a
-//     custom-scheme flow it is the only one still available.
-//     - https://developers.google.com/identity/protocols/oauth2/native-app
-//     - https://developers.googleblog.com/improving-user-safety-in-oauth-flows-through-new-oauth-custom-uri-scheme-restrictions/
-//   * Desktop type is separately ruled out: it issues a client secret, and
-//     Note Synapse is open source, so anything in the binary is public.
-//     iOS-type clients issue no secret and rely on PKCE (RFC 7636), which is
-//     what `GoogleDriveAuthService` uses.
+// This app uses a system browser, PKCE and a private-use callback instead of
+// a Google Play Services dependency. Google disables custom URI schemes for
+// Android clients by default; do not infer the client type or server-side
+// permissions from the exported JSON's "installed" key or its filename.
+// https://developers.googleblog.com/improving-user-safety-in-oauth-flows-through-new-oauth-custom-uri-scheme-restrictions/
 //
-// An iOS-type client is bound to a **bundle ID** and carries no SHA-1
-// fingerprint. Google does not refuse to serve it to an Android device — the
-// binding that actually matters for this flow is the redirect scheme, which
-// only the app registering that scheme can receive. That is why one client
-// type covers both platforms here.
-//
-// **Nothing below has been verified against Google.** See [releaseClientId].
-//
-// **Why there are two client IDs, and why they must not be merged.**
-// `android/app/build.gradle.kts` gives the debug build type
-// `applicationIdSuffix = ".debug"`, so a debug install is the *separate
-// Android package* `com.github.kkspeed.note_synapse.note_synapse.debug`,
-// installable side by side with a release install. Two installs on one
-// device must not register the same custom URL scheme: if they did, Android
-// would show a disambiguation chooser (or silently hand the redirect to
-// whichever app the system picked) and one build could swallow the other
-// build's OAuth callback, authorization code included.
-//
-// Note what this reasoning does *not* rest on: it is NOT that an OAuth
-// client is bound to an Android package name (iOS-type clients are not —
-// they have no package name and no SHA-1). Two clients exist purely because
-// two clients are the only way to obtain two *distinct reversed-client-ID
-// schemes*, and distinct schemes are what keep the two installs apart. Any
-// two iOS-type clients will do; their bundle IDs are not load-bearing for
-// this flow.
-//
-// **Why the redirect is the reversed client ID.** Google deprecated the
-// loopback (`http://127.0.0.1:port`) redirect for mobile client types
-// (blocked for new clients since Oct 2022), and on iOS a loopback listener
-// can be suspended by the OS during the foreground handoff to the browser,
-// so the redirect may never land. The OAuth 2.0 device flow is not an
-// option either: Drive scopes are not in Google's device-flow allowlist.
-// That leaves the private-use URI scheme, which for Google is the client ID
-// reversed: `com.googleusercontent.apps.<prefix>:/oauth2redirect`.
-//
-// **Single source of truth.** The scheme is *derived* here from the client
-// ID ([reversedSchemeFor]) rather than written out a second time, so the
-// only way Dart and Gradle can disagree is if the Gradle literal itself
-// drifts — which `test/google_drive_client_id_drift_test.dart` fails on.
-// That test compares strings this repo controls; it can say nothing about
-// what Google has on file for either client (see [releaseClientId]).
+// Client IDs are public identifiers; no client secret belongs in the app.
+// Matching repository/build settings proves callback wiring, not Google-side
+// authorization. Validate the client registration and complete a real
+// authorization flow for each shipping platform, including iOS.
 
 import 'package:flutter/foundation.dart';
 

@@ -263,7 +263,13 @@ class SyncSession {
   }) async {
     final ownAuthorId = await _deviceIdentity.ensureDeviceId();
 
-    final drainResult = await _drainer.drain();
+    // Older releases can keep absolute attachment paths. Copy them to this
+    // device's app storage before drain/seed reads the rows, so both the
+    // captured path and its bytes are usable on another device.
+    await _blobs.preparePortableAttachmentPaths();
+    final drainResult = await _drainer.drain(
+      restoredAttachments: await _blobs.restoredAttachmentReferences(),
+    );
 
     // Phase 0.5 — the M2.10 initial seed scan, placed here deliberately.
     //

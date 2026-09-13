@@ -475,7 +475,7 @@ void main() {
             where: 'entityTable = ? AND fieldName = ?',
             whereArgs: ['subnotes', existsFieldSentinel],
           )).single['valueJson'],
-          '{"noteId":"n1"}',
+          '{"createdAt":1002,"noteId":"n1"}',
           reason: 'the repair pass minted the missing register',
         );
         final subnote = (await dbB.query('subnotes')).single;
@@ -932,7 +932,7 @@ void main() {
             where: 'entityTable = ? AND entityId = ? AND fieldName = ?',
             whereArgs: ['relationships', 'r1', existsFieldSentinel],
           )).single['valueJson'],
-          '{"fromNoteId":"n1","toNoteId":"n2"}',
+          '{"createdAt":1002,"fromNoteId":"n1","toNoteId":"n2"}',
           reason:
               'the completeness test is the SAME function the runtime uses, '
               'so the two cannot disagree about a partial payload',

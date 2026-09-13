@@ -89,7 +89,7 @@ Future<Map<String, Object?>?> readSyncRow(
 
   final rows = await txn.rawQuery(
     'SELECT ${select.join(', ')} FROM "$table" '
-    'WHERE CAST("$idColumn" AS TEXT) = ? LIMIT 1',
+    'WHERE "$idColumn" = ? LIMIT 1',
     [entityId],
   );
   if (rows.isEmpty) return null;
@@ -121,8 +121,10 @@ Future<Map<String, Object?>?> readSyncRow(
 ///
 /// The sync engine's counterpart to `DatabaseService._readLargeString`,
 /// which is private and keyed on a plain `id`. This one takes the same
-/// `CAST(id AS TEXT)` predicate every sync reader uses, so a table whose id
-/// is not TEXT (the two User-App library tables) behaves identically.
+/// direct primary-key predicate used by [readSyncRow]. SQLite applies the
+/// column's affinity to the bound string, including integer primary keys.
+/// Casting the indexed column instead would scan the whole table for every
+/// row and every chunk, making an existing library's first sync quadratic.
 ///
 /// Fails if any chunk cannot be read completely. Returning a prefix would
 /// mint a new sync operation containing truncated user data and publish it
@@ -139,7 +141,7 @@ Future<String> readLargeTextColumn(
   txn,
   table: table,
   column: column,
-  where: 'CAST("$idColumn" AS TEXT) = ?',
+  where: '"$idColumn" = ?',
   whereArgs: [entityId],
   totalLength: totalLength,
   chunkSize: chunkSize,
@@ -160,7 +162,7 @@ Future<int> syncColumnLength(
 }) async {
   final rows = await txn.rawQuery(
     'SELECT length(CAST("$column" AS BLOB)) AS len FROM "$table" '
-    'WHERE CAST("$idColumn" AS TEXT) = ? LIMIT 1',
+    'WHERE "$idColumn" = ? LIMIT 1',
     [entityId],
   );
   return rows.isEmpty ? 0 : (rows.first['len'] as int? ?? 0);

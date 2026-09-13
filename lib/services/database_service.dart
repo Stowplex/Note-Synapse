@@ -21,6 +21,7 @@ import '../models/conversation.dart';
 import '../models/conversation_attachment.dart';
 import '../models/attachment.dart';
 import 'logger_service.dart';
+import 'sync/large_row_reader.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/file_utils.dart';
 import '../utils/global_keys.dart';
@@ -1348,7 +1349,10 @@ class DatabaseService {
   /// that, even where an UPDATE statement's column list happens to
   /// literally re-mention it (several `updateX` methods round-trip the
   /// model's own unchanged `createdAt` value straight back into the SET
-  /// list), never actually changes value in practice. This mirrors this
+  /// list), never actually changes value in practice. Creation snapshots
+  /// carry the original timestamp and owner linkage; these exclusions apply
+  /// only to mutable-field UPDATE capture, not to initial synchronization.
+  /// This mirrors this
   /// file's own trigger-over-call-site-census philosophy (see the section
   /// doc comment above): a column that in fact never changes just means its
   /// `WHEN` clause never fires (harmless); a column excluded here that
@@ -1508,14 +1512,8 @@ class DatabaseService {
     // `tags.name`/`color`: added to `syncScopeColumns`, so both an
     // `AFTER UPDATE` trigger (defense-in-depth; no real call site fires it
     // today) and `OutboxDrainer._processExistsTouch`'s creation-time diff
-    // loop cover it. **Currently latent, not active, unlike the tags case**:
-    // `materializer.dart`'s generic owner-FK-skip already means
-    // `relationships` entities (two owner FKs: `fromNoteId`/`toNoteId`) are
-    // not yet cross-device-creatable at all (§ M2.7's own disclosed
-    // residual) — so this fix is forward-looking/defensive today, not a
-    // currently-observable data-loss fix, but the exclusion reasoning gap
-    // itself was real and is closed now rather than left to be
-    // rediscovered once owner-FK entity creation is eventually built.
+    // loop cover it. Creation snapshots carry both endpoint IDs and the
+    // materializer queues the relationship until its parent notes exist.
     SyncEntityCaptureScope(
       table: 'relationships',
       idColumn: 'id',
@@ -1601,10 +1599,8 @@ class DatabaseService {
     // this table at all — no large-blob concern applies here the way it
     // does for `user_app_library_dependencies.bytes` below). Fixed the same
     // way as `relationships.type` above: added to `syncScopeColumns`.
-    // **Currently latent**: `conversation_attachments` has an owner FK
-    // (`messageId`), so `materializer.dart`'s generic owner-FK-skip means
-    // it isn't cross-device-creatable yet either — same disclosed-residual
-    // status as `relationships.type`, not an active data-loss fix.
+    // Creation snapshots carry message ownership; the materializer waits
+    // for that message and the blob phase transfers the attachment bytes.
     SyncEntityCaptureScope(
       table: 'conversation_attachments',
       idColumn: 'id',
@@ -1631,10 +1627,8 @@ class DatabaseService {
     // supplied at insert time (same shape, and the same fix, as
     // `conversation_attachments` immediately above — small metadata
     // strings/a bool flag, not the file bytes themselves). Fixed by adding
-    // to `syncScopeColumns`. **Currently latent**: `attachments` has an
-    // owner FK (`noteId`), so it isn't cross-device-creatable yet either —
-    // same disclosed-residual status as the other M2.8 audit findings in
-    // this list.
+    // to `syncScopeColumns`. The creation snapshot carries note ownership;
+    // materialization waits for the note and blob sync transfers the file.
     SyncEntityCaptureScope(
       table: 'attachments',
       idColumn: 'id',
@@ -1670,46 +1664,10 @@ class DatabaseService {
         '__deleted__',
       ],
     ),
-    // app_revisions: `id`/`appId` (owner FK)/`revisionTimestamp` (the
-    // createdAt-equivalent, derived at materialization time from the
-    // `__exists__` operation's own HLC — see `materializer.dart`'s
-    // `_createdAtColumnByTable`) excluded — this table is immutable-content,
-    // append-only-history by design (each edit mints a brand-new revision
-    // row rather than mutating an existing one; no `updateAppRevision`
-    // function exists anywhere in this file). `deletedAt` is also excluded:
-    // it is fallback-selection tie-break bookkeeping
-    // (`computeAppRevisionVisibility`), always written in the same local
-    // transaction as `__deleted__` and fully derivable from it plus that
-    // operation's own HLC — not independent synced content.
-    //
-    // M2.8 audit finding — `revisionNumber`/`userPrompt`/`aiResponse`/
-    // `attachmentPaths` were excluded on the same "no update function"
-    // reasoning as `deletedAt`/`revisionTimestamp` above, but that reasoning
-    // only ever addressed the UPDATE side, exactly the gap class the M2.7
-    // addendum found for `tags.name`/`color`: `insertAppRevision` gives
-    // every one of these four a real, per-revision-varying value at
-    // creation (the actual user prompt/AI explanation/revision number/
-    // attachment-path list — a revision's entire *content*, since this
-    // table is append-only, only ever exists as creation-time data). None
-    // of the four is large (comparable in size class to
-    // `conversation_messages.content`, already ordinary sync-scope
-    // content) — fixed by adding all four to `syncScopeColumns`.
-    // `appCode` is the one column deliberately, correctly left excluded —
-    // but the reasoning is NOT "no update call site" (that was never the
-    // right justification for it either): `appCode` stores the app's full
-    // HTML/JS source (CLAUDE.md's own "Database Columns (Large Data)" note
-    // singles this table out for careful/chunked handling), and belongs to
-    // the content-addressed-blob sync mechanism § Architecture 4 already
-    // designs for exactly this content class, not ordinary inline
-    // `valueJson` field sync — implementing that is M3 scope
-    // ("Attachments via content-addressed blobs... encryption"), not this
-    // milestone's. Left out of `syncScopeColumns` deliberately, pending M3,
-    // now for the correct stated reason. **Currently latent, like every
-    // other M2.8 audit finding in this list**: `app_revisions` has an owner
-    // FK (`appId`), so `materializer.dart`'s generic owner-FK-skip means
-    // the whole User-App family isn't cross-device-creatable yet (§ M2.7's
-    // own disclosed residual) — this fix is forward-looking, not a
-    // currently-observable data-loss fix.
+    // Revisions are immutable history. Their creation snapshot carries
+    // appId and the original revisionTimestamp. The materializer waits for
+    // the parent app; appCode travels through content-addressed blob sync.
+    // deletedAt is derived from the deletion operation for fallback ordering.
     SyncEntityCaptureScope(
       table: 'app_revisions',
       idColumn: 'id',
@@ -1729,44 +1687,16 @@ class DatabaseService {
         '__deleted__',
       ],
     ),
-    // user_app_libraries: `id`/`app_uuid`/`revision_id` (owner FKs)
-    // excluded — same "immutable content, no update function anywhere in
-    // this file" reasoning as `app_revisions` above.
-    //
-    // M2.8 audit finding — `name`/`usage_instructions` were excluded on
-    // that same UPDATE-only reasoning, the same gap class as
-    // `app_revisions` above: `insertUserAppLibrary`'s own creation path
-    // gives both a real, per-library-varying value (the library's actual
-    // name and usage instructions — small text, not the library's file
-    // content, which lives in `user_app_library_dependencies.bytes`, a
-    // genuinely separate table). Fixed by adding both to
-    // `syncScopeColumns`. **Currently latent**: `user_app_libraries.id` is
-    // a non-portable `INTEGER PRIMARY KEY AUTOINCREMENT`, so
-    // `materializer.dart`'s generic autoincrement-id skip applies here too
-    // (independent of, and in addition to, the owner-FK-skip reasoning
-    // above) — same disclosed-residual status as every other finding here.
+    // Library rows use device-local integer IDs. Capture remains installed,
+    // but portable-identity guards exclude these rows from seed/drain/apply
+    // until a stable identity/remapping protocol exists.
     SyncEntityCaptureScope(
       table: 'user_app_libraries',
       idColumn: 'id',
       syncScopeColumns: ['name', 'usage_instructions', '__deleted__'],
     ),
-    // user_app_library_dependencies: `id`/`library_id` (owner FK) excluded
-    // — same reasoning as `app_revisions`/`user_app_libraries` above.
-    //
-    // M2.8 audit finding — `original_url`/`local_path` were excluded on
-    // that same UPDATE-only reasoning; `insertUserAppLibraryDependency`'s
-    // creation path gives both a real, per-dependency-varying small-text
-    // value (the dependency's origin URL and its local storage path).
-    // Fixed by adding both to `syncScopeColumns`. `bytes` is the one
-    // column deliberately, correctly left excluded, for the same real
-    // reason as `app_revisions.appCode` above (not "no update call site"):
-    // it is the dependency's actual raw file content, `BLOB NOT NULL`,
-    // exactly the large-data class CLAUDE.md's own guidance singles out and
-    // § Architecture 4's content-addressed-blob mechanism is designed for
-    // — deferred to M3, not ordinary inline field sync, now for the
-    // correct stated reason. **Currently latent**, same disclosed-residual
-    // status (non-portable autoincrement `id`) as `user_app_libraries`
-    // above.
+    // Dependencies share the library family's non-portable integer-ID
+    // restriction. Their bytes stay local alongside the owning library.
     SyncEntityCaptureScope(
       table: 'user_app_library_dependencies',
       idColumn: 'id',
@@ -2184,6 +2114,7 @@ class DatabaseService {
   }
 
   Database? _database;
+  Future<Database>? _openingDatabase;
 
   /// Whether the chunks_fts FTS4 virtual table exists on this database.
   /// The FTS4 CREATE is allowed to fail (web wasm sqlite is FTS5-only;
@@ -2224,8 +2155,18 @@ class DatabaseService {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
+    // Startup services can request the connection together. Share the whole
+    // backup/open/migration operation so they cannot race an upgrade.
+    return _openingDatabase ??= _openDatabaseOnce();
+  }
+
+  Future<Database> _openDatabaseOnce() async {
+    try {
+      return _database = await _initDatabase();
+    } finally {
+      // A failed open must remain retryable after recovery.
+      _openingDatabase = null;
+    }
   }
 
   Future<Database> _initDatabase() async {
@@ -2313,8 +2254,19 @@ class DatabaseService {
       // Open a fresh connection (not read-only) to do the checkpoint
       backupDb = await openDatabase(dbPath, singleInstance: false);
 
-      // Force checkpoint to ensure WAL is merged
-      await backupDb.rawQuery('PRAGMA wal_checkpoint(FULL)');
+      // FULL reports a busy/incomplete checkpoint as a result row, not an
+      // exception. Copying just the main file in that case silently omits
+      // committed WAL-only data from the safety backup.
+      final checkpoint = (await backupDb.rawQuery(
+        'PRAGMA wal_checkpoint(FULL)',
+      )).single;
+      if (checkpoint['busy'] != 0 ||
+          (checkpoint['log'] as int) > (checkpoint['checkpointed'] as int)) {
+        throw StateError(
+          'Cannot create a safe pre-migration backup: '
+          'SQLite WAL checkpoint is busy or incomplete ($checkpoint)',
+        );
+      }
       await backupDb.close();
       backupDb = null;
 
@@ -2441,6 +2393,7 @@ class DatabaseService {
 
     // Custom schema version tracking - migrations only run onOpen, not onUpgrade
     await _handleCustomMigrations(db);
+    await _ensureSearchSourceLookupIndexes(db);
 
     // Record chunks_fts availability (its FTS4 CREATE in _onCreate/migration
     // 62 is allowed to fail on platforms without FTS4).
@@ -2471,14 +2424,10 @@ class DatabaseService {
       currentVersion = pragmaVersion.isNotEmpty
           ? pragmaVersion.first['user_version'] as int
           : 0;
-      // SQFLITE_VERSION (999) is a sentinel value passed to openDatabase()
-      // to prevent sqflite's built-in onUpgrade. If we read it back here,
-      // it means this is a legacy DB that was already opened with the new
-      // system but never had _schema_version created. Fall back to the
-      // last known pre-custom-migration version.
-      if (currentVersion == 0 || currentVersion >= SQFLITE_VERSION) {
-        currentVersion = 19; // Assume min supported version
-      }
+      // openDatabase has already replaced PRAGMA user_version with 999.
+      // Infer a safe starting point from the existing schema rather than
+      // replaying every old destructive migration against a current DB.
+      currentVersion = await _migrationStartingVersion(db, currentVersion);
       await db.insert('_schema_version', {'version': currentVersion});
       LoggerService.info(
         'Created _schema_version table, initialized from PRAGMA: v$currentVersion',
@@ -2489,6 +2438,10 @@ class DatabaseService {
       currentVersion = versionResult.isNotEmpty
           ? versionResult.first['version'] as int
           : 0;
+      if (versionResult.isEmpty) {
+        currentVersion = await _detectActualSchemaVersion(db);
+        await db.insert('_schema_version', {'version': currentVersion});
+      }
       // Fix corrupted version: if _schema_version was set to the SQFLITE_VERSION
       // sentinel (999) due to the legacy PRAGMA fallback bug, reset it to the
       // actual DATABASE_VERSION and re-run any missing migrations.
@@ -2547,24 +2500,19 @@ class DatabaseService {
   }
 
   /// Main shipped localization as v48 while this branch used v48 for sync.
-  /// Presence of the control plane distinguishes those two histories. Replay
-  /// the additive v48 step when absent, then preserve the remaining numbers.
+  /// Replaying that additive step handles either history and interrupted
+  /// upgrades whose first sync table exists but whose later tables do not.
   static Future<int> _migrationStartingVersion(Database db, int version) async {
-    if (version >= SQFLITE_VERSION) {
+    if (version <= 0 || version >= SQFLITE_VERSION) {
       return _detectActualSchemaVersion(db);
     }
-    if (version == 48) {
-      final syncTable = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='sync_pending_ops'",
-      );
-      if (syncTable.isEmpty) return 47;
-    }
+    if (version == 48) return 47;
     return version;
   }
 
-  /// Detect the actual schema version by probing for tables/columns
-  /// introduced in known migration steps. Returns the highest version
-  /// whose schema changes are present.
+  /// Recover a conservative starting point when version tracking is lost.
+  /// Sync/index migrations are idempotent and may be only partly applied;
+  /// replay them rather than inferring completion from a few table names.
   static Future<int> _detectActualSchemaVersion(Database db) async {
     int detected = 19; // Minimum supported version
 
@@ -2580,49 +2528,6 @@ class DatabaseService {
         "SELECT name FROM sqlite_master WHERE type='table' AND name='tag_images'",
       );
       if (tagImagesCheck.isNotEmpty) detected = 41;
-    }
-
-    // Check for the v63 search index tables (v48 on the note-index branch
-    // before the merge with main, which had already spent 47 on Spaces).
-    // Require ALL three: a crash mid-migration can leave a partial set, and
-    // stamping 63 then would skip the (idempotent) re-run that creates the
-    // missing objects.
-    //
-    // Detection is the HIGHEST version whose schema is present, and 63 is
-    // the highest step there is — so it is placed last among the "raise"
-    // probes and every probe below is `if (detected < N)`-guarded, meaning
-    // nothing can shadow it. It must not shadow the chain BELOW it either:
-    // neither the cloud-sync migrations (48..62) nor Spaces (47) add a probe
-    // of their own, so stamping 63 on a database carrying the search tables
-    // but not their schema would skip them permanently. Hence the extra
-    // sync_pending_ops and isSpace checks: without them detection stays at
-    // the lower value and the chain re-runs.
-    //
-    // Re-running is the SAFER of the two failures (skipping 47..62 loses the
-    // Spaces column and the sync schema outright), but it is not a free one:
-    // `_migrateToVersion42` is a bare `ALTER TABLE notes ADD COLUMN metadata
-    // TEXT` with no `PRAGMA table_info` guard, so a database detected at 41
-    // that already has that column throws "duplicate column name", and the
-    // migration loop aborts into the recovery screen. Pre-existing (this
-    // branch changes neither v42 nor the loop) — recorded here so the
-    // surrounding reasoning is not read as "every step is existence-guarded",
-    // which it is not. This file's own v63 DDL IS `IF NOT EXISTS` throughout.
-    final searchChunksCheck = await db.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type='table' "
-      "AND name IN ('search_chunks', 'chunk_embeddings', 'search_index_state', "
-      "'sync_pending_ops')",
-    );
-    if (searchChunksCheck.length == 4 && detected >= 47) detected = 63;
-    if (detected == 63) {
-      final appCols = await db.rawQuery("PRAGMA table_info('user_apps')");
-      final capture = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='trigger' "
-        "AND name='sync_touch_user_apps_au_i18n'",
-      );
-      if (appCols.any((column) => column['name'] == 'i18n') &&
-          capture.isNotEmpty) {
-        detected = 64;
-      }
     }
 
     // Check for notes_fts table (v31/v36)
@@ -2911,6 +2816,8 @@ class DatabaseService {
     // not contain the optional User Apps subsystem. There is nothing to
     // migrate in those databases; a later table creation uses the current DDL.
     if (columns.isEmpty) return;
+    // Also cover branch databases that had already passed the sync step.
+    await _repairLegacyUserAppForeignKeys(db);
     if (!columns.any((column) => column['name'] == 'i18n')) {
       await db.execute('ALTER TABLE user_apps ADD COLUMN i18n TEXT');
     }
@@ -3250,11 +3157,9 @@ class DatabaseService {
     await db.execute(_createTagWorkflowBindingsTable);
   }
 
-  // M1.1: pure-additive creation of the fifteen sync control-plane tables.
-  // No existing table/data is touched, so — unlike _migrateToVersion23 —
-  // this needs no rename/copy/drop dance or transaction wrapping: every
-  // statement is CREATE TABLE/INDEX IF NOT EXISTS, run directly against the
-  // shared _syncControlPlaneTableStatements list also used by _onCreate.
+  // Repair confirmed legacy User App FK damage before adding the fifteen
+  // sync control-plane tables. The shared sync DDL itself is idempotent and
+  // additive; only the targeted legacy repair needs a table transaction.
   static Future<void> _migrateToVersion48(
     Database db, {
     required bool isBackupMigration,
@@ -3263,6 +3168,7 @@ class DatabaseService {
       'Starting migration to version 48: Create the fifteen sync_* control-plane tables for CRDT cloud sync (M1.1, pure-additive)',
     );
     try {
+      await _repairLegacyUserAppForeignKeys(db);
       for (final statement in _syncControlPlaneTableStatements) {
         await db.execute(statement);
       }
@@ -3274,6 +3180,102 @@ class DatabaseService {
         stackTrace: stackTrace,
       );
       rethrow;
+    }
+  }
+
+  /// Older v23 releases renamed user_apps before rebuilding it. SQLite
+  /// rewrote incoming foreign keys to user_apps_old, which was then dropped.
+  /// Repair only affected children, preserving their actual columns, indexes,
+  /// triggers and data instead of rebuilding them from today's schema.
+  static Future<void> _repairLegacyUserAppForeignKeys(Database db) async {
+    const candidates = [
+      'app_revisions',
+      'user_app_libraries',
+      'multi_function_apps',
+    ];
+    final affected = <String>[];
+    for (final table in candidates) {
+      final foreignKeys = await db.rawQuery('PRAGMA foreign_key_list($table)');
+      if (foreignKeys.any((key) => key['table'] == 'user_apps_old')) {
+        affected.add(table);
+      }
+    }
+    if (affected.isEmpty) return;
+
+    final foreignKeysEnabled =
+        (await db.rawQuery('PRAGMA foreign_keys')).single['foreign_keys'] == 1;
+    await db.execute('PRAGMA foreign_keys = OFF');
+    try {
+      await db.transaction((txn) async {
+        for (final table in affected) {
+          final schema = await txn.rawQuery(
+            'SELECT type, sql FROM sqlite_master '
+            'WHERE tbl_name = ? AND sql IS NOT NULL',
+            [table],
+          );
+          final sourceDdl =
+              schema.singleWhere((row) => row['type'] == 'table')['sql']
+                  as String;
+          final replacement = '${table}_fk_repair';
+          int? originalSequence;
+          if (RegExp(
+            'AUTOINCREMENT',
+            caseSensitive: false,
+          ).hasMatch(sourceDdl)) {
+            final sequence = await txn.rawQuery(
+              'SELECT seq FROM sqlite_sequence WHERE name = ?',
+              [table],
+            );
+            originalSequence = sequence.isEmpty
+                ? null
+                : sequence.single['seq'] as int;
+          }
+          final columns = await txn.rawQuery('PRAGMA table_info($table)');
+          final columnList = columns
+              .map((column) {
+                final name = (column['name'] as String).replaceAll('"', '""');
+                return '"$name"';
+              })
+              .join(', ');
+          final repairedDdl = sourceDdl
+              .substring(sourceDdl.indexOf('('))
+              .replaceAll(
+                RegExp(
+                  r'REFERENCES\s+(?:"user_apps_old"|\[user_apps_old\]|`user_apps_old`|user_apps_old)(?=\s|\()',
+                  caseSensitive: false,
+                ),
+                'REFERENCES user_apps',
+              );
+          // Create-new/drop-old/rename-new avoids rewriting any incoming
+          // references to this child (notably library dependency ownership).
+          await txn.execute('CREATE TABLE "$replacement" $repairedDdl');
+          await txn.execute(
+            'INSERT INTO "$replacement" ($columnList) '
+            'SELECT $columnList FROM "$table"',
+          );
+          await txn.execute('DROP TABLE "$table"');
+          await txn.execute('ALTER TABLE "$replacement" RENAME TO "$table"');
+          if (originalSequence != null) {
+            final updated = await txn.rawUpdate(
+              'UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = ?',
+              [originalSequence, table],
+            );
+            if (updated == 0) {
+              await txn.insert('sqlite_sequence', {
+                'name': table,
+                'seq': originalSequence,
+              });
+            }
+          }
+          for (final object in schema.where((row) => row['type'] != 'table')) {
+            await txn.execute(object['sql'] as String);
+          }
+        }
+      });
+    } finally {
+      await db.execute(
+        'PRAGMA foreign_keys = ${foreignKeysEnabled ? 'ON' : 'OFF'}',
+      );
     }
   }
 
@@ -3327,10 +3329,9 @@ class DatabaseService {
   // today via `app_revisions.appId REFERENCES user_apps(id)` — the
   // mechanism is now well-understood and demonstrated for this exact
   // "rename old table first" pattern under this project's actual
-  // runtime, though `_migrateToVersion23` itself was not independently
-  // re-verified via sqflite for that specific migration; fixing it is out
-  // of this milestone's scope, but this migration must not copy the same
-  // mistake into new code now that the mechanism is known.
+  // runtime. v23 now adds a unique index without renaming the table;
+  // _repairLegacyUserAppForeignKeys repairs existing damage from older
+  // releases. Neither path can copy the rename-first mistake into new code.
   //
   // The fix, and SQLite's own documented safe procedure for this exact
   // case (lang_altertable.html, "Making Other Kinds Of Table Schema
@@ -4089,6 +4090,32 @@ class DatabaseService {
         'chunks_fts FTS4 creation failed, search will degrade to substring matching: $e',
       );
     }
+    await _ensureSearchSourceLookupIndexes(db);
+  }
+
+  /// Backfill reads sources by their owning note/attachment. Without these
+  /// indexes every batch scans the whole source table. Ensure them on every
+  /// open so existing index-branch databases also receive the lookup paths.
+  static Future<void> _ensureSearchSourceLookupIndexes(Database db) async {
+    final tables = (await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' "
+      "AND name IN ('subnotes', 'note_annotations')",
+    )).map((row) => row['name']).toSet();
+    if (tables.contains('subnotes')) {
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_subnotes_noteId ON subnotes(noteId)',
+      );
+    }
+    if (tables.contains('note_annotations')) {
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_note_annotations_note_id '
+        'ON note_annotations(note_id)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_note_annotations_attachment_id '
+        'ON note_annotations(attachment_id)',
+      );
+    }
   }
 
   static Future<void> _migrateToVersion28(
@@ -4406,69 +4433,25 @@ class DatabaseService {
     Database db, {
     required bool isBackupMigration,
   }) async {
-    LoggerService.info(
-      'Starting migration to version 23: Adding UNIQUE constraint to user_apps.uuid column',
-    );
+    final columns = await db.rawQuery('PRAGMA table_info(user_apps)');
+    if (columns.isEmpty) return;
 
-    try {
-      // Check if user_apps table exists
-      final tables = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='user_apps'",
-      );
-
-      if (tables.isEmpty) {
-        LoggerService.info(
-          'user_apps table does not exist, skipping migration',
-        );
+    // A unique index enforces UUID identity without rebuilding the table.
+    // Rebuilding from today's CREATE statement assumed later columns (i18n)
+    // existed in the source and renamed incoming app_revisions/library FKs
+    // to user_apps_old. Preserve every existing column, row, index and FK.
+    final indexes = await db.rawQuery('PRAGMA index_list(user_apps)');
+    for (final index in indexes.where((row) => row['unique'] == 1)) {
+      final name = (index['name'] as String).replaceAll("'", "''");
+      final indexedColumns = await db.rawQuery("PRAGMA index_info('$name')");
+      if (indexedColumns.length == 1 &&
+          indexedColumns.single['name'] == 'uuid') {
         return;
       }
-
-      // Temporarily disable foreign key constraints
-      await db.execute('PRAGMA foreign_keys = OFF');
-
-      // Begin transaction
-      await db.execute('BEGIN TRANSACTION');
-
-      try {
-        // Rename the old table
-        await db.execute('ALTER TABLE user_apps RENAME TO user_apps_old');
-
-        // Create the new table with UNIQUE constraint on uuid
-        await db.execute(_createUserAppsTable);
-
-        // Copy data from old table to new table
-        await db.execute('''
-          INSERT INTO user_apps (id, uuid, name, description, steps, htmlContent, appState, type, selectedRevisionId, author, license, i18n, createdAt, updatedAt)
-          SELECT id, uuid, name, description, steps, htmlContent, appState, type, selectedRevisionId, author, license, i18n, createdAt, updatedAt
-          FROM user_apps_old
-        ''');
-
-        // Drop the old table
-        await db.execute('DROP TABLE user_apps_old');
-
-        // Commit transaction
-        await db.execute('COMMIT');
-
-        LoggerService.info(
-          'Successfully migrated user_apps table with UNIQUE uuid constraint',
-        );
-      } catch (e) {
-        // Rollback on error
-        await db.execute('ROLLBACK');
-        LoggerService.error(
-          'Error during user_apps table migration, rolled back: $e',
-        );
-        rethrow;
-      } finally {
-        // Re-enable foreign key constraints
-        await db.execute('PRAGMA foreign_keys = ON');
-      }
-
-      LoggerService.info('Migration to version 23 completed successfully');
-    } catch (e) {
-      LoggerService.error('Error in migration to version 23: $e', error: e);
-      rethrow;
     }
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_user_apps_uuid ON user_apps(uuid)',
+    );
   }
 
   static Future<void> _migrateToVersion24(
@@ -4647,7 +4630,10 @@ class DatabaseService {
     Database db, {
     required bool isBackupMigration,
   }) async {
-    await db.execute('ALTER TABLE notes ADD COLUMN metadata TEXT');
+    final columns = await db.rawQuery('PRAGMA table_info(notes)');
+    if (!columns.any((column) => column['name'] == 'metadata')) {
+      await db.execute('ALTER TABLE notes ADD COLUMN metadata TEXT');
+    }
   }
 
   // Migrate existing conversation data to new structure
@@ -4745,8 +4731,8 @@ class DatabaseService {
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
     SELECT 
       id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived, recurrenceRule,
-      CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
-      length(content) as _contentLength
+      CASE WHEN length(CAST(content AS BLOB)) < 500000 THEN content ELSE NULL END as content,
+      length(CAST(content AS BLOB)) as _contentLength
     FROM notes
     WHERE __deleted__ = 0
     ORDER BY pinned DESC, createdAt DESC
@@ -4782,27 +4768,26 @@ class DatabaseService {
       // Fetch SubNotes. M1.11: `AND __deleted__ = 0` -- a tombstoned
       // subnote row still physically exists, so without this guard it
       // would remain visible.
-      final subNoteResults = await db.rawQuery('''
-      SELECT
-        id, noteId, name, createdAt, isCompleted,
-        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
-        length(content) as _contentLength
-      FROM subnotes
-      WHERE noteId IN ($placeholders) AND __deleted__ = 0
-      ORDER BY createdAt ASC
-      ''', chunkIds);
+      final subNoteResults = await readSyncRowsWhere(
+        db,
+        table: 'subnotes',
+        columns: [
+          'id',
+          'noteId',
+          'name',
+          'createdAt',
+          'isCompleted',
+          'content',
+        ],
+        keyColumns: ['id'],
+        where: 'noteId IN ($placeholders) AND __deleted__ = 0',
+        whereArgs: chunkIds,
+        orderBy: 'createdAt ASC',
+      );
 
       for (final row in subNoteResults) {
         final noteId = row['noteId'] as String;
-        String content = row['content'] as String? ?? '';
-        if (content.isEmpty && (row['_contentLength'] as int? ?? 0) > 0) {
-          content = await _readLargeString(
-            db,
-            'subnotes',
-            'content',
-            row['id'] as String,
-          );
-        }
+        final content = row['content'] as String? ?? '';
 
         final subNote = SubNote(
           id: row['id'] as String,
@@ -4848,6 +4833,7 @@ class DatabaseService {
       // would remain visible.
       final attachmentResults = await db.query(
         'attachments',
+        columns: ['noteId', 'filePath', 'isRelativePath'],
         where: 'noteId IN ($placeholders) AND __deleted__ = 0',
         whereArgs: chunkIds,
       );
@@ -4873,13 +4859,15 @@ class DatabaseService {
 
     // Assemble Notes
     for (final map in noteMaps) {
+      final noteId = map['id'] as String;
+      String content = map['content'] as String? ?? '';
+      // A failed source read must abort the snapshot. Treating it as a
+      // malformed model and skipping the note could make reference cleanup
+      // delete mappings to a note that is still present in the database.
+      if (content.isEmpty && (map['_contentLength'] as int? ?? 0) > 0) {
+        content = await _readLargeString(db, 'notes', 'content', noteId);
+      }
       try {
-        final noteId = map['id'] as String;
-        String content = map['content'] as String? ?? '';
-        if (content.isEmpty && (map['_contentLength'] as int? ?? 0) > 0) {
-          content = await _readLargeString(db, 'notes', 'content', noteId);
-        }
-
         final note = Note(
           id: noteId,
           title: map['title'] as String,
@@ -4969,8 +4957,8 @@ class DatabaseService {
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
       SELECT
         id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived,
-        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
-        length(content) as _contentLength
+        CASE WHEN length(CAST(content AS BLOB)) < 500000 THEN content ELSE NULL END as content,
+        length(CAST(content AS BLOB)) as _contentLength
       FROM notes
       $whereClause
       ORDER BY pinned DESC, createdAt DESC
@@ -4984,8 +4972,8 @@ class DatabaseService {
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
       SELECT
         id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived,
-        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
-        length(content) as _contentLength
+        CASE WHEN length(CAST(content AS BLOB)) < 500000 THEN content ELSE NULL END as content,
+        length(CAST(content AS BLOB)) as _contentLength
       FROM notes
       WHERE pinned = 1 AND isArchived = 0 AND __deleted__ = 0
       ORDER BY createdAt DESC
@@ -4999,8 +4987,8 @@ class DatabaseService {
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
       SELECT
         id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived,
-        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
-        length(content) as _contentLength
+        CASE WHEN length(CAST(content AS BLOB)) < 500000 THEN content ELSE NULL END as content,
+        length(CAST(content AS BLOB)) as _contentLength
       FROM notes
       WHERE isArchived = 1 AND __deleted__ = 0
       ORDER BY createdAt DESC
@@ -5015,8 +5003,8 @@ class DatabaseService {
       '''
       SELECT 
         id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived, recurrenceRule,
-        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
-        length(content) as _contentLength
+        CASE WHEN length(CAST(content AS BLOB)) < 500000 THEN content ELSE NULL END as content,
+        length(CAST(content AS BLOB)) as _contentLength
       FROM notes
       WHERE id = ? AND __deleted__ = 0
       ''',
@@ -5043,14 +5031,28 @@ class DatabaseService {
       final chunkIds = noteIds.sublist(i, end);
       final placeholders = List.filled(chunkIds.length, '?').join(',');
       maps.addAll(
-        await db.rawQuery('''
-      SELECT
-        id, title, type, createdAt, updatedAt, scheduledAt, completeBy, status, completionPercentage, pinned, isArchived, recurrenceRule,
-        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
-        length(content) as _contentLength
-      FROM notes
-      WHERE id IN ($placeholders) AND __deleted__ = 0
-      ''', chunkIds),
+        await readSyncRowsWhere(
+          db,
+          table: 'notes',
+          columns: [
+            'id',
+            'title',
+            'type',
+            'createdAt',
+            'updatedAt',
+            'scheduledAt',
+            'completeBy',
+            'status',
+            'completionPercentage',
+            'pinned',
+            'isArchived',
+            'recurrenceRule',
+            'content',
+          ],
+          keyColumns: ['id'],
+          where: 'id IN ($placeholders) AND __deleted__ = 0',
+          whereArgs: chunkIds,
+        ),
       );
     }
 
@@ -5065,8 +5067,8 @@ class DatabaseService {
       SELECT
         n.id, n.title, n.type, n.createdAt, n.updatedAt, n.scheduledAt, n.completeBy,
         n.status, n.completionPercentage, n.pinned, n.isArchived, n.recurrenceRule,
-        CASE WHEN length(n.content) < 500000 THEN n.content ELSE NULL END as content,
-        length(n.content) as _contentLength
+        CASE WHEN length(CAST(n.content AS BLOB)) < 500000 THEN n.content ELSE NULL END as content,
+        length(CAST(n.content AS BLOB)) as _contentLength
       FROM notes n
       JOIN note_tags nt ON n.id = nt.noteId
       JOIN tags t ON nt.tagId = t.id
@@ -5563,9 +5565,11 @@ class DatabaseService {
   /// would remain readable.
   Future<Map<String, dynamic>?> getNoteMetadata(String noteId) async {
     final db = await database;
-    final rows = await db.query(
-      'notes',
+    final rows = await readSyncRowsWhere(
+      db,
+      table: 'notes',
       columns: ['metadata'],
+      keyColumns: ['id'],
       where: 'id = ? AND __deleted__ = 0',
       whereArgs: [noteId],
     );
@@ -5706,8 +5710,21 @@ class DatabaseService {
   /// physically exists, so without this guard it would remain readable.
   Future<Attachment?> getAttachmentById(String attachmentId) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'attachments',
+    final maps = await readSyncRowsWhere(
+      db,
+      table: 'attachments',
+      columns: [
+        'id',
+        'noteId',
+        'filePath',
+        'fileName',
+        'fileType',
+        'createdAt',
+        'isRelativePath',
+        'includeInAIContext',
+        'metadata',
+      ],
+      keyColumns: ['id'],
       where: 'id = ? AND __deleted__ = 0',
       whereArgs: [attachmentId],
     );
@@ -5721,8 +5738,21 @@ class DatabaseService {
   /// physically exists, so without this guard it would remain visible.
   Future<List<Attachment>> getAttachmentsForNote(String noteId) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'attachments',
+    final maps = await readSyncRowsWhere(
+      db,
+      table: 'attachments',
+      columns: [
+        'id',
+        'noteId',
+        'filePath',
+        'fileName',
+        'fileType',
+        'createdAt',
+        'isRelativePath',
+        'includeInAIContext',
+        'metadata',
+      ],
+      keyColumns: ['id'],
       where: 'noteId = ? AND __deleted__ = 0',
       whereArgs: [noteId],
     );
@@ -5874,8 +5904,8 @@ class DatabaseService {
       '''
       SELECT
         id, noteId, name, createdAt, isCompleted,
-        CASE WHEN length(content) < 500000 THEN content ELSE NULL END as content,
-        length(content) as _contentLength
+        CASE WHEN length(CAST(content AS BLOB)) < 500000 THEN content ELSE NULL END as content,
+        length(CAST(content AS BLOB)) as _contentLength
       FROM subnotes
       WHERE noteId = ? AND __deleted__ = 0
       ORDER BY createdAt ASC
@@ -7518,7 +7548,7 @@ class DatabaseService {
       '''
       SELECT id,
              CASE 
-               WHEN length(appState) > 0 THEN 'TEXT_DATA'
+               WHEN length(CAST(appState AS BLOB)) > 0 THEN 'TEXT_DATA'
                ELSE NULL 
              END as has_text
       FROM user_apps 
@@ -7644,8 +7674,8 @@ class DatabaseService {
       '''
       SELECT
         id, appId, revisionNumber, revisionTimestamp, userPrompt, aiResponse, attachmentPaths,
-        CASE WHEN length(appCode) < 500000 THEN appCode ELSE NULL END as appCode,
-        length(appCode) as _appCodeLength
+        CASE WHEN length(CAST(appCode AS BLOB)) < 500000 THEN appCode ELSE NULL END as appCode,
+        length(CAST(appCode AS BLOB)) as _appCodeLength
       FROM app_revisions
       WHERE appId = ? AND (__deleted__ = 0 OR id = ?)
       ORDER BY revisionNumber ASC
@@ -7681,8 +7711,8 @@ class DatabaseService {
       '''
       SELECT
         id, appId, revisionNumber, revisionTimestamp, userPrompt, aiResponse, attachmentPaths,
-        CASE WHEN length(appCode) < 500000 THEN appCode ELSE NULL END as appCode,
-        length(appCode) as _appCodeLength
+        CASE WHEN length(CAST(appCode AS BLOB)) < 500000 THEN appCode ELSE NULL END as appCode,
+        length(CAST(appCode AS BLOB)) as _appCodeLength
       FROM app_revisions
       WHERE id = ?
       ''',
@@ -7807,8 +7837,8 @@ class DatabaseService {
       '''
       SELECT
         id, appId, revisionNumber, revisionTimestamp, userPrompt, aiResponse, attachmentPaths,
-        CASE WHEN length(appCode) < 500000 THEN appCode ELSE NULL END as appCode,
-        length(appCode) as _appCodeLength
+        CASE WHEN length(CAST(appCode AS BLOB)) < 500000 THEN appCode ELSE NULL END as appCode,
+        length(CAST(appCode AS BLOB)) as _appCodeLength
       FROM app_revisions
       WHERE appId = ? AND (__deleted__ = 0 OR id = ?)
       ORDER BY revisionNumber DESC
@@ -8165,51 +8195,28 @@ class DatabaseService {
     String column,
     String id, {
     String idColumn = 'id',
-    int chunkSize = 1024 * 1024, // 1MB
+    int chunkSize = syncLargeColumnThreshold,
   }) async {
-    final StringBuffer allText = StringBuffer();
-
-    try {
-      // Get the total size of the TEXT
-      final sizeResult = await db.rawQuery(
-        'SELECT length($column) as text_size FROM $table WHERE $idColumn = ?',
-        [id],
-      );
-
-      if (sizeResult.isEmpty) {
-        return '';
-      }
-
-      final int totalSize = sizeResult.first['text_size'] as int;
-      if (totalSize == 0) {
-        return '';
-      }
-
-      // Read TEXT in chunks
-      for (int offset = 0; offset < totalSize; offset += chunkSize) {
-        final int currentChunkSize = (offset + chunkSize > totalSize)
-            ? totalSize - offset
-            : chunkSize;
-
-        final chunkResult = await db.rawQuery(
-          'SELECT substr($column, ?, ?) as chunk FROM $table WHERE $idColumn = ?',
-          [offset + 1, currentChunkSize, id],
-        );
-
-        if (chunkResult.isNotEmpty && chunkResult.first['chunk'] != null) {
-          final chunk = chunkResult.first['chunk'] as String;
-          allText.write(chunk);
-        }
-      }
-
-      return allText.toString();
-    } catch (e) {
-      LoggerService.error(
-        'Error reading large string from $table.$column: $e',
-        error: e,
-      );
-      return '';
+    // SQLite length(TEXT)/substr(TEXT) stop at embedded NUL and count code
+    // points rather than UTF-8 bytes. Reuse the validated byte-slice reader
+    // so chunks fit Android's CursorWindow even for multibyte text.
+    final sizes = await db.rawQuery(
+      'SELECT length(CAST("$column" AS BLOB)) AS text_size '
+      'FROM "$table" WHERE "$idColumn" = ?',
+      [id],
+    );
+    if (sizes.isEmpty) {
+      throw StateError('Missing row while reading $table.$column ($id)');
     }
+    return readLargeTextColumn(
+      db,
+      table: table,
+      column: column,
+      idColumn: idColumn,
+      entityId: id,
+      totalLength: sizes.single['text_size'] as int? ?? 0,
+      chunkSize: chunkSize,
+    );
   }
 
   Future<List<int>> _readLargeBlob(

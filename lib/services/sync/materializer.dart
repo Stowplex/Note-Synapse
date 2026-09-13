@@ -35,8 +35,8 @@
 // other sync-scope fields have arrived yet — there is no "current resolved
 // value" to read for a NOT-NULL column like `notes.title`. The INSERT this
 // file performs is therefore a **shell row**: `idColumn` + entityId,
-// `createdAt`-equivalent (derived from the `__exists__` operation's own HLC
-// wall-clock component — see `syncEntityCreatedAtColumnByTable`
+// `createdAt`-equivalent (preserved in the `__exists__` payload, with a
+// legacy HLC fallback — see `syncEntityCreatedAtColumnByTable`
 // (`sync_table_shape.dart`), which is exactly
 // what every entity table's `syncEntityCaptureScope` doc comment in
 // `database_service.dart` means by "id/createdAt excluded"), and every
@@ -570,7 +570,8 @@ class SyncMaterializer {
       // the row-creating entries first means one sweep drains the entity
       // completely. Ties keep `id ASC`, which is the drain order the rest of
       // this engine is built on.
-      orderBy: "CASE WHEN fieldName = '$existsFieldSentinel' THEN 0 ELSE 1 END, id ASC",
+      orderBy:
+          "CASE WHEN fieldName = '$existsFieldSentinel' THEN 0 ELSE 1 END, id ASC",
     );
     for (final row in rows) {
       final id = row['id'] as int;
@@ -951,67 +952,13 @@ class SyncMaterializer {
     changes.recordRow(scope.table, entityId);
   }
 
-  /// The creation timestamp an arriving operation's HLC wall component
-  /// stands for — with the one case that component cannot stand for anything
-  /// handled explicitly instead of being written through.
-  ///
-  /// ---------------------------------------------------------------------
-  /// **M2.13, review round 5.** A post-reset re-seed stamps [Hlc.zero] on
-  /// every operation it mints (`seed_scanner.dart`), including `__exists__`,
-  /// so that a re-statement of content this device already had loses every
-  /// conflict it enters rather than winning on recency. A wall component of
-  /// `0` is therefore a real, expected value on the wire — and writing it
-  /// into a `createdAt` column dates a rebuilt library `1970-01-01`,
-  /// permanently, since `createdAt` is outside every scope's
-  /// `syncScopeColumns` and no later operation ever corrects it.
-  ///
-  /// Round 4 addressed that by excluding `__exists__` from the recessive
-  /// stamp. **That fix was in the wrong place**, because the `__exists__`
-  /// register records the winner's DOT as well as its HLC, and
-  /// `_creationDot`/`_generationDot` both read it — so a dominant
-  /// `__exists__` seed flipped the creation dot of every entity on every
-  /// peer that pulled a post-reset seed, changing the input to § Architecture
-  /// 10's tag collision tie-break and to both `contentKey`s
-  /// `_mintAutoMergeLoserPair` mints. The stamp is back; the 1970 problem is
-  /// fixed here, at the one place that actually derives a timestamp from an
-  /// HLC.
-  ///
-  /// **Why the receiving device's own clock, rather than carrying the real
-  /// `createdAt` on the operation.** Both were weighed:
-  ///
-  ///  * Carrying it *inside* the `__exists__` payload is not available: that
-  ///    payload is the constant `true`, and it is hashed into the GENESIS
-  ///    `contentKey`. Two devices holding different `createdAt` values for
-  ///    the same entity (the ordinary case — a receiving device's value is
-  ///    already derived, not the origin's) would stop deduping their
-  ///    `__exists__` seeds and would each carry a permanently competing
-  ///    candidate. That is a strictly worse outcome than an approximate
-  ///    timestamp.
-  ///  * Carrying it *beside* the payload — a new envelope field — needs a
-  ///    `sync_pending_ops` column, its migration, and the matching
-  ///    `recovery_screen.dart` update, and it still would not make the value
-  ///    deterministic across peers: `contentKey` dedup plus this method's
-  ///    first-writer-wins guard mean whichever device's `__exists__` was
-  ///    observed first decides, which is observation order. It buys a
-  ///    genuinely better value (the entity's true creation time, closing a
-  ///    pre-existing residual M2.10 also has) at the cost of a schema change,
-  ///    and it belongs with the milestone that brings `createdAt` into sync
-  ///    scope properly, not with a recovery fix.
-  ///
-  /// **What this costs, stated rather than glossed.** For a wall-0 operation
-  /// the value becomes receiver-local: two peers rebuilding the same library
-  /// get different absolute timestamps, where a real HLC gives them the same
-  /// one. Relative ORDER is preserved, which is what the ~13 `ORDER BY
-  /// createdAt` sites actually consume — operations arrive in per-author seq
-  /// order, which for a seed scan is `rowid` order on the seeding device, and
-  /// each is stamped at materialization time. And `createdAt` was already
-  /// only an approximation on any rebuilding peer (it is the seeding
-  /// device's *seed* time, never the entity's true creation time). This
-  /// trades one inconsistent-but-plausible value for another; it does not
-  /// give up a guarantee that existed.
-  static int _createdAtFromHlcWall(int hlcWallMs) => hlcWallMs > 0
-      ? hlcWallMs
-      : DateTime.now().millisecondsSinceEpoch;
+  /// Backward-compatible timestamp for operations whose immutable payload
+  /// predates source-date preservation. New payloads carry the original
+  /// creation date, so seeding an existing library no longer dates all its
+  /// notes/messages/revisions at first-sync time. A legacy recessive seed has
+  /// Hlc.zero and must use the receiver's clock instead of inventing 1970.
+  static int _createdAtFromHlcWall(int hlcWallMs) =>
+      hlcWallMs > 0 ? hlcWallMs : DateTime.now().millisecondsSinceEpoch;
 
   /// Turns a resolved `__exists__` into a real `INSERT` — a shell row for
   /// any not-yet-arrived `syncScopeColumns` entry, corrected in place as
@@ -1140,7 +1087,12 @@ class SyncMaterializer {
       final name = col['name'] as String;
       if (name == scope.idColumn) continue;
       if (name == createdAtColumn) {
-        row[name] = _createdAtFromHlcWall(existsHlcWallMs);
+        // New senders preserve the source timestamp, including epoch and
+        // pre-epoch dates. Legacy payloads had none, so retain their HLC
+        // fallback. Re-read the winning payload on queue retries as well.
+        row[name] = payload[name] is int
+            ? payload[name]
+            : _createdAtFromHlcWall(existsHlcWallMs);
         continue;
       }
       if (carried.contains(name)) {
@@ -1296,7 +1248,8 @@ class SyncMaterializer {
     String entityId,
   ) async {
     final referenceColumns = {
-      for (final reference in syncability.existsOwnerReferences) reference.column,
+      for (final reference in syncability.existsOwnerReferences)
+        reference.column,
     };
     for (final column in syncability.existsCarriedColumns) {
       if (referenceColumns.contains(column)) continue;

@@ -484,6 +484,115 @@ void main() {
     );
   });
 
+  for (final hasLocalImage in [false, true]) {
+    test(
+      'recovery remaps duplicate tag IDs across imported memberships and images '
+      '(local image: $hasLocalImage)',
+      () async {
+        await _insertTag(stagingDb, id: 'local-tag', name: 'Shared');
+        await _insertTag(backupDb, id: 'backup-tag', name: 'Shared');
+        for (final db in [stagingDb, backupDb]) {
+          for (final noteId in [
+            'existing-note',
+            if (identical(db, backupDb)) 'restored-note',
+          ]) {
+            await db.insert('notes', {
+              'id': noteId,
+              'title': noteId,
+              'content': 'Preserved content',
+              'type': 'note',
+              'createdAt': 1000,
+              'updatedAt': 1000,
+            });
+            await db.insert('note_tags', {
+              'noteId': noteId,
+              'tagId': identical(db, backupDb) ? 'backup-tag' : 'local-tag',
+            });
+          }
+          await db.insert('conversations', {
+            'id': 'conversation',
+            'title': 'Preserved conversation',
+            'createdAt': 1000,
+            'updatedAt': 1000,
+          });
+          await db.insert('conversation_tags', {
+            'conversationId': 'conversation',
+            'tagId': identical(db, backupDb) ? 'backup-tag' : 'local-tag',
+          });
+        }
+        await backupDb.insert('tag_images', {
+          'tagId': 'backup-tag',
+          'imagePath': 'backup-image.png',
+        });
+        if (hasLocalImage) {
+          await stagingDb.insert('tag_images', {
+            'tagId': 'local-tag',
+            'imagePath': 'local-image.png',
+          });
+        }
+        await stagingDb.delete('sync_touch_log');
+
+        // Follow the real recovery-screen ordering twice. This must work with
+        // foreign keys enabled and duplicate memberships already in staging.
+        for (var pass = 0; pass < 2; pass++) {
+          await mergeService.mergeNotes(stagingDb, backupDb);
+          final remap = await mergeService.mergeTags(stagingDb, backupDb);
+          expect(remap, {'backup-tag': 'local-tag'});
+          await mergeService.mergeTagImages(
+            stagingDb,
+            backupDb,
+            tagIdRemap: remap,
+          );
+          await mergeService.mergeNoteTags(
+            stagingDb,
+            backupDb,
+            tagIdRemap: remap,
+          );
+          await mergeService.mergeConversations(stagingDb, backupDb);
+          await mergeService.mergeConversationTagMappings(
+            stagingDb,
+            backupDb,
+            tagIdRemap: remap,
+          );
+        }
+        expect(await stagingDb.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+        expect(await stagingDb.query('note_tags', orderBy: 'noteId'), [
+          {'noteId': 'existing-note', 'tagId': 'local-tag'},
+          {'noteId': 'restored-note', 'tagId': 'local-tag'},
+        ]);
+        expect(await stagingDb.query('conversation_tags'), [
+          {'conversationId': 'conversation', 'tagId': 'local-tag'},
+        ]);
+        expect(await stagingDb.query('tag_images'), [
+          {
+            'tagId': 'local-tag',
+            'imagePath': hasLocalImage ? 'local-image.png' : 'backup-image.png',
+          },
+        ]);
+        expect((await stagingService.getNote('restored-note'))?.tags, [
+          'Shared',
+        ]);
+        expect(
+          (await stagingService.getConversationTags(
+            'conversation',
+          )).single.name,
+          'Shared',
+        );
+        final capturedMembers = await stagingDb.query(
+          'sync_touch_log',
+          columns: ['memberUuid'],
+          where: 'memberUuid IS NOT NULL',
+        );
+        expect(capturedMembers, isNotEmpty);
+        expect(
+          capturedMembers.map((row) => row['memberUuid']),
+          everyElement('local-tag'),
+        );
+        expect((await backupDb.query('tags')).single['id'], 'backup-tag');
+      },
+    );
+  }
+
   group(
     'mergeTagWorkflowBindings — M1.7 liveness-aware conservative merge',
     () {

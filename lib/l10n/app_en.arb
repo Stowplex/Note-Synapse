@@ -1469,6 +1469,10 @@
   "syncItemsAppRevisions": "Mini app versions",
   "syncItemsUserAppLibraries": "Mini app libraries",
   "syncItemsUserAppLibraryDependencies": "Mini app library files",
+  "syncItemsNoteAnnotations": "Note annotations",
+  "syncItemsTagImages": "Tag images",
+  "syncItemsTagAiConfigs": "Tag AI settings",
+  "syncItemsMultiFunctionApps": "Multi-function app settings",
   "cloudSyncNowError": "Sync failed: {error}",
   "@cloudSyncNowError": {
     "placeholders": {

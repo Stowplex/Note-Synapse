@@ -25,19 +25,12 @@ if (keystorePropertiesFile.exists()) {
 // `test/google_drive_client_id_drift_test.dart` parses this file and fails
 // the build's test suite if the two ever disagree.
 //
-// Both values come from Google OAuth clients of the **iOS** application type,
-// not Android — only an iOS-type client gets a reversed-client-ID redirect
-// (an Android-type client's is `<package.name>:/oauth2redirect`), and Google
-// has restricted custom URI schemes for new Android clients. See the header
-// of google_drive_client_config.dart for the full reasoning and links.
-//
-// Debug and release deliberately register DIFFERENT schemes. `debug` carries
-// `applicationIdSuffix = ".debug"`, so both variants can be installed at once;
-// if they registered the same scheme, Android would let either app claim the
-// other's OAuth redirect (authorization code included). Two clients exist
-// solely to yield two distinct schemes — NOT because a client is bound to an
-// Android package name, which is not true of iOS-type clients. Do not
-// "simplify" these into one value.
+// The release client comes from the supplied installed-client JSON. Google
+// identifies it as an Android client, whose custom URI callback must also be
+// enabled under Advanced settings in Google Cloud. Native registration here
+// and Google-side permission are separate requirements.
+// Debug and release use distinct callbacks because debug can be installed
+// beside release via applicationIdSuffix = ".debug".
 //
 // `profile` has no applicationIdSuffix and therefore shares the release
 // package name, so it takes the release scheme via `defaultConfig` below.

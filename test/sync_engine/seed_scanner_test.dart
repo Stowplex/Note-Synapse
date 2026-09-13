@@ -229,7 +229,7 @@ void main() {
             entityTable: 'notes',
             entityId: 'n1',
             fieldName: '__exists__',
-            valueJson: jsonEncode(true),
+            valueJson: '{"createdAt":1000}',
           ),
         );
         expect(
@@ -2224,6 +2224,30 @@ void main() {
 
   // ══════════════════════════════════════════════════════════════════════
   group('progress reporting', () {
+    test('reports progress before finishing a large existing notes table', () async {
+      await db.transaction((txn) async {
+        for (var i = 0; i < 101; i++) {
+          await txn.insert('notes', {
+            'id': 'progress-$i',
+            'title': 'Historical note $i',
+            'content': 'Keep this content',
+            'type': 'note',
+            'createdAt': 1000 + i,
+            'updatedAt': 2000 + i,
+          });
+        }
+      });
+      await _makePreExisting(db);
+      final progress = <SeedScanProgress>[];
+      final result = await device.scanner.scan(onProgress: progress.add);
+      expect(result.completed, isTrue);
+      expect(progress.first.table, 'notes');
+      expect(progress.first.tablesDone, 0,
+          reason: 'the user sees work while the first table is still being seeded');
+      expect(progress.first.operationsSeededSoFar, greaterThan(0));
+      expect(progress.last.operationsSeededSoFar, result.operationsSeeded);
+    });
+
     test('onProgress fires per table so a first sync is not a frozen button',
         () async {
       await _insertPreExistingNote(db, id: 'n1', title: 'T', content: 'C');

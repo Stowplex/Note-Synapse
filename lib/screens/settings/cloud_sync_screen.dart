@@ -1271,6 +1271,10 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
     'user_app_libraries' => l10n.syncItemsUserAppLibraries,
     'user_app_library_dependencies' =>
       l10n.syncItemsUserAppLibraryDependencies,
+    'note_annotations' => l10n.syncItemsNoteAnnotations,
+    'tag_images' => l10n.syncItemsTagImages,
+    'tag_ai_configs' => l10n.syncItemsTagAiConfigs,
+    'multi_function_apps' => l10n.syncItemsMultiFunctionApps,
     _ => table,
   };
 

@@ -109,26 +109,10 @@ Future<bool> _computeHasPortableEntityId(
   return !isNonPortableIntegerPrimaryKey(idInfo);
 }
 
-/// Each entity table's creation-timestamp column — the column every
-/// `syncEntityCaptureScope` doc comment in `database_service.dart` means by
-/// "id/createdAt excluded". `materializer.dart` fills it from the
-/// `__exists__` operation's own HLC wall-clock component; the syncability
-/// predicate below has to know about it for the same reason (it is
-/// resolvable without being in `syncScopeColumns`).
-///
-/// **`app_revisions.revisionTimestamp` was missing from this map until
-/// M2.14, and its absence was a real (if latent) misstatement rather than an
-/// omission.** `database_service.dart`'s own scope comment for
-/// `app_revisions` already calls `revisionTimestamp` "the createdAt-
-/// equivalent... derived at materialization time from the `__exists__`
-/// operation's own HLC", and `insertAppRevision` writes exactly
-/// `revision.revisionTimestamp.millisecondsSinceEpoch` — the same unit and
-/// meaning as every other entry here. Leaving it out made
-/// [entitySyncability] report `revisionTimestamp` as the reason
-/// `app_revisions` cannot sync, which is false: the column is perfectly
-/// resolvable and the real blocker is `appCode` (see
-/// [syncContentDeferredTables]). A health surface that names the wrong
-/// column sends the next person to fix the wrong thing.
+/// Creation timestamps carried immutably on new `__exists__` payloads.
+/// They stay outside mutable field scope and retain the original stored
+/// date when an existing release library is seeded onto another device.
+/// Legacy payloads without these keys fall back to the operation's HLC.
 const Map<String, String> syncEntityCreatedAtColumnByTable = {
   'notes': 'createdAt',
   'subnotes': 'createdAt',
@@ -405,7 +389,10 @@ Future<EntitySyncability> _computeEntitySyncability(
 
   final foreignKeys = await _foreignKeyTargets(txn, scope.table);
   final allForeignKeyColumns = await _allForeignKeyColumns(txn, scope.table);
-  final singleColumnUniques = await _singleColumnUniqueColumns(txn, scope.table);
+  final singleColumnUniques = await _singleColumnUniqueColumns(
+    txn,
+    scope.table,
+  );
 
   final createdAtColumn = syncEntityCreatedAtColumnByTable[scope.table];
   final carried = <String>[];
@@ -628,118 +615,34 @@ Future<Set<String>> _singleColumnUniqueColumns(
   return columns;
 }
 
-// ---------------------------------------------------------------------------
-// M2.14: the `__exists__` payload — owner references and identity columns.
-// ---------------------------------------------------------------------------
-
-/// The `__exists__` payload for a table with no carried columns at all: the
-/// constant `true` this operation has always carried, byte for byte.
-///
-/// **Preserving it exactly is not tidiness, it is the compatibility
-/// argument.** **Eight** of the fourteen entity tables select no carried
-/// column and six do — counted against the live schema by
-/// `seed_scanner_test.dart`'s syncability audit, which is also where an
-/// earlier "ten and four" in this comment (and in M2.14's own commit
-/// message) was found to be wrong. The bare eight are `notes`, `tags`,
-/// `filters`, `conversations`, `conversation_messages`,
-/// `tag_workflow_bindings`, `user_app_libraries` and
-/// `user_app_library_dependencies`; the carried six are `subnotes`,
-/// `relationships`, `attachments`, `conversation_attachments`, `user_apps`
-/// and `app_revisions`.
-///
-/// **All six tables that already round-tripped before M2.14 are in the bare
-/// set**, which is the whole compatibility claim: for them M2.14 changes
-/// nothing on the wire — the same `true`, the same GENESIS `contentKey`, the
-/// same dedup classes as every operation already published to a backend, so
-/// no published key changes. Only tables that could never materialize anyway
-/// get a new payload shape, and no correct operation for them exists in the
-/// field to be compared against. (The two `user_app_*` tables are bare for a
-/// different reason from the other six: [entitySyncability] rejects them on
-/// [EntitySyncBlocker.nonPortableId] before it looks at any column, so they
-/// mint nothing at all.)
+/// Compatibility sentinel for entities with no carried references or date.
 const String bareExistsPayloadJson = 'true';
 
-/// Encodes one entity row's `__exists__` payload — the values of
-/// [EntitySyncability.existsCarriedColumns], as a JSON object keyed by
-/// column name in that list's (sorted) order, or [bareExistsPayloadJson]
-/// when the table has none.
+/// Encodes owner/identity columns and an optional original creation date.
+/// Keys are sorted independently of schema column order (migrated tables
+/// append columns differently); compact JSON is hashed into GENESIS keys.
+/// No values means the legacy bare `true` sentinel. Old receivers ignore
+/// additional date keys, and new receivers accept old payloads unchanged.
 ///
-/// ---------------------------------------------------------------------
-/// **The exact byte form is part of the interoperability contract, and this
-/// is the only place it is written down.** The `contentKey` formula hashes
-/// this string, so a reimplementation of this protocol that produces the
-/// same key/value pairs in the same order but a different SERIALIZATION
-/// stops deduping GENESIS seeds against this one — silently, because every
-/// individual operation still validates. Three facts, all load-bearing:
-///
-///  1. **Which columns.** [entitySyncability]'s carried-column rule: a
-///     `NOT NULL`, no-default column outside the id, the createdAt-
-///     equivalent and `syncScopeColumns`, that is additionally either the
-///     `from` side of a single-column `FOREIGN KEY` or the sole column of a
-///     non-partial, non-primary `UNIQUE` index.
-///  2. **In sorted (byte-wise ascending) key order** — NOT `PRAGMA
-///     table_info` order, because `ALTER TABLE ADD COLUMN` appends, so a
-///     migrated database and a freshly-created one report the same columns
-///     in different orders.
-///  3. **Serialized as Dart's `jsonEncode` of a `Map<String, Object?>`
-///     emits it: no whitespace anywhere, `"` string quoting, `:` and `,`
-///     with nothing around them.** So one carried column named `noteId`
-///     with value `n1` is exactly the 15 bytes `{"noteId":"n1"}` — not
-///     `{"noteId": "n1"}`, which is what Python's `json.dumps` defaults
-///     produce and what a reimplementer would most naturally write. Pinned
-///     against a byte-literal (not against `jsonEncode` of itself, which
-///     asserts only self-consistency) in `child_entity_sync_test.dart`.
-///
-/// **This is what makes `subnotes`/`attachments`/`relationships`/
-/// `conversation_attachments`/`user_apps` materializable on a peer at all**:
-/// `materializer.dart`'s `_materializeExists` builds its shell-row `INSERT`
-/// from `idColumn` + the createdAt-equivalent + `syncScopeColumns`
-/// placeholders, and had no source whatsoever for a `NOT NULL` owner FK
-/// outside all three. Now it reads it back from here.
-///
-/// **What this does to the GENESIS `contentKey`, stated because it is one of
-/// the two arguments the constant `true` was load-bearing for.** The payload
-/// is hashed into `genesisContentKey` like any other value, so two devices
-/// seeding the same subnote must produce the same string here or their seeds
-/// stop deduping. They do: `existsCarriedColumns` is sorted (not schema
-/// order), the values are read from the two devices' own copies of the same
-/// logical row, and the carried columns are by construction the ones this
-/// codebase never reassigns (that is precisely why they are outside
-/// `syncScopeColumns` — see each table's scope comment in
-/// `database_service.dart`). So the two payloads are equal and dedup holds
-/// exactly as it did for `true`.
-///
-/// **If they ever DID disagree** — two devices holding the same row uuid
-/// under different owners, which needs a uuid collision or a hand-edited
-/// database, not any ordinary flow — the two seeds get different
-/// `contentKey`s, do not dedup, and become two concurrent candidates in the
-/// `__exists__` register. Field conflict resolution then picks one
-/// deterministically on `(hlc, authorId, authorSeq)`, so every device agrees
-/// on WHICH owner the row has. See `materializer.dart`'s `_materializeExists`
-/// for the one residual that survives that argument (a device which already
-/// inserted the row under the losing payload does not rewrite it).
-///
-/// **The SECOND argument the constant was load-bearing for, and how it
-/// changes.** M2.13 round 5 justified leaving `__exists__` conflicts
-/// unresolved-in-any-special-way on the grounds that "either side
-/// materializes the identical outcome" — true of a constant `true` by
-/// definition. That is now a claim about DATA rather than a tautology, and
-/// it has to be earned twice over: the carried columns are set once at
-/// creation and never reassigned (so two candidates for one entity carry
-/// equal values in every flow the app can produce), and even a
-/// hypothetically unequal pair converges, because the register picks one
-/// winner deterministically and every device reads the payload back out of
-/// the register rather than off the operation in hand. What genuinely
-/// weakens is that the outcome is now OBSERVABLE — a row's `noteId` — so
-/// "identical outcome" is checkable instead of vacuous, and the one place
-/// it can fail (a row already inserted under the loser) is named rather
-/// than covered by the old slogan.
+/// Two copies of the same original row deduplicate exactly. A preview build
+/// that already replaced dates with sync-time approximations may produce a
+/// different seed key for the same id; the normal conflict resolver handles
+/// those concurrent immutable payloads without replacing existing real rows.
 String encodeExistsPayloadJson(
   List<String> carriedColumns,
-  Map<String, Object?> row,
-) {
-  if (carriedColumns.isEmpty) return bareExistsPayloadJson;
-  return jsonEncode({for (final column in carriedColumns) column: row[column]});
+  Map<String, Object?> row, {
+  String? createdAtColumn,
+}) {
+  // A seed's HLC describes synchronization time, not when the user's note,
+  // conversation message or app revision was created. Carry that immutable
+  // source timestamp without changing the envelope or requiring old peers
+  // to understand a new field operation. They ignore additional payload keys.
+  final columns = {
+    ...carriedColumns,
+    if (createdAtColumn != null && row[createdAtColumn] is int) createdAtColumn,
+  }.toList()..sort();
+  if (columns.isEmpty) return bareExistsPayloadJson;
+  return jsonEncode({for (final column in columns) column: row[column]});
 }
 
 /// Decodes what [encodeExistsPayloadJson] produced.
@@ -903,9 +806,7 @@ String? _unquoteSqlStringLiteral(String text) {
   final quote = text[0];
   if (quote != "'" && quote != '"') return null;
   if (!text.endsWith(quote)) return null;
-  return text
-      .substring(1, text.length - 1)
-      .replaceAll('$quote$quote', quote);
+  return text.substring(1, text.length - 1).replaceAll('$quote$quote', quote);
 }
 
 /// Per-table overrides of [shellRowPlaceholderValue] — columns a shell-row

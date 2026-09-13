@@ -600,9 +600,9 @@ class SeedScanner {
   /// [maxOperations] optionally caps how many operations one call will mint
   /// before stopping early — the scan is fully resumable, so a capped call
   /// simply leaves the rest for the next sync. Defaults to `null` (no cap):
-  /// a partial seed is worse UX than a slow first sync, and the real
-  /// bottleneck for a large library is Phase A's one-network-round-trip-per-
-  /// operation push, not this walk. The parameter exists so a caller that
+  /// a partial seed is worse UX than a slow first sync, and network
+  /// push and blob transfer can also dominate large libraries; Phase A batches
+  /// operations into bounded commits. The parameter exists so a caller that
   /// does want to bound a single round (a future background scheduler) can.
   Future<SeedScanResult> scan({
     int? maxOperations,
@@ -666,6 +666,7 @@ class SeedScanner {
         continue;
       }
       final ids = await _entityIds(db, scope);
+      var rowsSinceProgress = 0;
       for (final entityId in ids) {
         if (maxOperations != null && seeded >= maxOperations) {
           budgetExhausted = true;
@@ -685,6 +686,20 @@ class SeedScanner {
         seeded += outcome.$1;
         deferred += outcome.$2;
         atDefault += outcome.$3;
+        // A large pre-existing notes table can take most of the seed pass.
+        // Report inside that table, so progress does not stay silent until
+        // every note has been read and converted into operations.
+        if (++rowsSinceProgress == _membershipBatchSize) {
+          rowsSinceProgress = 0;
+          onProgress?.call(
+            SeedScanProgress(
+              table: scope.table,
+              tablesDone: tablesDone,
+              tablesTotal: tablesTotal,
+              operationsSeededSoFar: seeded,
+            ),
+          );
+        }
       }
       // Not reported when the budget cut this table off partway: the table
       // is not done, and claiming otherwise would make a resumed scan look
@@ -813,48 +828,10 @@ class SeedScanner {
     );
     switch (existsState) {
       case _Pristine.yes:
-        // RECESSIVE in recessive mode, like every other `field` operation
-        // this scan mints — and getting here took two rounds of being
-        // wrong in opposite directions, so both are recorded.
-        //
-        // **Round 3** made `__exists__` recessive along with everything
-        // else, and `materializer.dart`'s `_materializeExists` wrote the
-        // operation's `hlc.wallMs` straight into the entity's
-        // creation-timestamp column (`syncEntityCreatedAtColumnByTable`,
-        // outside every scope's `syncScopeColumns`, so nothing ever
-        // corrects it) — dating every rebuilt note, tag, filter and
-        // conversation 1970-01-01, permanently, on exactly the flow this
-        // milestone exists to serve.
-        //
-        // **Round 4 fixed that by excluding `__exists__` from the stamp,
-        // and that was the wrong place.** The `__exists__` register records
-        // the WINNER'S DOT as well as its HLC, and `materializer.dart`
-        // reads that dot twice: `_creationDot` feeds § Architecture 10's
-        // tag name-collision tie-break, and `_generationDot` is folded into
-        // both `contentKey`s `_mintAutoMergeLoserPair` mints, where two
-        // devices must agree or the pair fails to dedup. A dominant
-        // `__exists__` seed therefore flipped the creation dot of EVERY
-        // entity on EVERY peer that pulled a post-reset seed. The round-4
-        // justification — "either side of that conflict materializes the
-        // identical outcome" — was true of the VALUE (a constant `true`)
-        // and silent about the dot.
-        //
-        // **Round 5** puts the stamp back and fixes the timestamp where it
-        // is actually derived: `_materializeExists` now falls back to the
-        // receiving device's own clock for a wall-0 operation. See
-        // `_createdAtFromHlcWall` in `materializer.dart` for the full
-        // weighing, including why carrying the real `createdAt` on the wire
-        // was not chosen.
-        //
-        // **M2.14** replaces the constant `true` with this row's carried
-        // owner/identity values (`encodeExistsPayloadJson`). It stays a
-        // constant — the bare `true` sentinel — for the EIGHT tables that
-        // carry nothing, so every GENESIS `contentKey` already published for
-        // `notes`/`tags`/`filters`/`conversations`/`conversation_messages`/
-        // `tag_workflow_bindings` is byte-identical before and after, and
-        // two devices seeding the same subnote still produce the same key
-        // (see [encodeExistsPayloadJson]'s own doc comment for that
-        // argument, and for what happens if they ever disagree).
+        // The HLC remains recessive after reset so a seed cannot replace a
+        // real edit. Original creation dates travel separately in the same
+        // immutable payload as owner/identity references: the seed's wall
+        // clock describes sync time, not when this existing row was created.
         await _mintAndApplyField(
           txn,
           authorId: authorId,
@@ -865,6 +842,7 @@ class SeedScanner {
           valueJson: encodeExistsPayloadJson(
             syncability.existsCarriedColumns,
             row,
+            createdAtColumn: syncEntityCreatedAtColumnByTable[scope.table],
           ),
           recessive: recessive,
         );
@@ -1078,17 +1056,16 @@ class SeedScanner {
 
   /// Whether the seed scan needs to READ this column's value.
   ///
-  /// The id and the carried reference columns go on the `__exists__`
-  /// payload; the sync-scope columns become field operations. Everything
-  /// else — `htmlContent`, `deletedAt`, the createdAt-equivalent — is
-  /// derived, excluded, or dead, and reading it costs CursorWindow budget
-  /// the large columns need.
+  /// Identity, owner references and the original creation timestamp go on
+  /// `__exists__`; sync-scope columns become field operations. Other columns
+  /// are derived or excluded and must not consume the row's byte budget.
   bool _isNeededForSeed(
     SyncEntityCaptureScope scope,
     EntitySyncability syncability,
     String column,
   ) =>
       column == scope.idColumn ||
+      column == syncEntityCreatedAtColumnByTable[scope.table] ||
       scope.syncScopeColumns.contains(column) ||
       syncability.existsCarriedColumns.contains(column);
 

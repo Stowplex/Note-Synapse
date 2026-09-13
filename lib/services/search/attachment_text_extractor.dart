@@ -284,6 +284,8 @@ class AttachmentTextExtractor {
       }
 
       final drafts = <ChunkDraft>[];
+      var failedPages = 0;
+      String? firstPageError;
       for (var i = 0; i < pageCount; i++) {
         if (shouldAbort?.call() ?? false) {
           return ExtractionResult._(
@@ -296,6 +298,8 @@ class AttachmentTextExtractor {
           pageText = await source.loadPageText(i);
         } catch (e) {
           // One broken page must not lose the rest of the document.
+          failedPages++;
+          firstPageError ??= '$e';
           LoggerService.warning(
             '[AttachmentTextExtractor] Page ${i + 1} of '
             '${attachment.fileName} failed: $e',
@@ -304,6 +308,18 @@ class AttachmentTextExtractor {
         }
         drafts.addAll(
           chunkPdfPage(attachment.noteId, attachment.id, i + 1, pageText),
+        );
+      }
+      if (pageCount > 0 && failedPages == pageCount) {
+        // A failed engine/document read is different from a scanned PDF
+        // with an empty text layer. Preserve an existing index on failure
+        // and expose the error, as the OCR stage already does.
+        return ExtractionResult._(
+          ExtractionStatus.failed,
+          pageCount: pageCount,
+          errorMessage:
+              'Text extraction failed on all $pageCount pages; '
+              'first: $firstPageError',
         );
       }
       return ExtractionResult._(

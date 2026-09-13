@@ -32,6 +32,7 @@ import '../data_change_notifier.dart';
 import '../database_service.dart';
 import '../logger_service.dart';
 import '../search_settings_service.dart';
+import '../sync/large_row_reader.dart';
 import 'attachment_ocr_extractor.dart';
 import 'attachment_text_extractor.dart';
 import 'embedding/embedding_provider.dart';
@@ -200,8 +201,8 @@ class NoteIndexService {
   /// Maximum notes chunked per compute() batch during backfill.
   static const int _backfillBatchSize = 50;
 
-  /// Byte budget (sum of note content lengths) per compute() batch, so a run
-  /// of large notes cannot spike memory the way 50 x 500KB would. A single
+  /// Text-size budget (note, subnote, and annotation content) per compute()
+  /// batch, so large child records cannot hide behind a small note body. A single
   /// note always forms a batch even when it exceeds the budget alone.
   static const int _backfillBatchByteBudget = 2 * 1024 * 1024;
 
@@ -263,6 +264,11 @@ class NoteIndexService {
   /// currently running one (see [backfillAll]).
   Future<void>? _forcedFollowUp;
 
+  /// A bulk mutation can land after the active sweep took its source
+  /// snapshot. Coalescing into that run would lose new or changed sources;
+  /// keep one follow-up pass for all such events.
+  Future<void>? _bulkFollowUp;
+
   /// Note ids whose change events arrived while paused. Flushed (as normal
   /// debounced reindexes) on [resume] so pausing never loses events.
   final Set<String> _pendingWhilePaused = {};
@@ -304,6 +310,11 @@ class NoteIndexService {
   /// observability for the fingerprint-before-chunking skip.
   @visibleForTesting
   int debugBackfillNotesChunked = 0;
+
+  /// Largest estimated source-text batch loaded by the last sweep. A
+  /// single over-budget note must still be processed on its own.
+  @visibleForTesting
+  int debugBackfillLargestBatchBytes = 0;
 
   /// Queues a snapshot-guarded chunk write, exactly like a backfill batch
   /// write does. Test hook for the stale-snapshot guard.
@@ -413,8 +424,17 @@ class NoteIndexService {
       _bulkCheckTimer?.cancel();
       _bulkCheckTimer = Timer(debounceDelay, () {
         _bulkCheckTimer = null;
+        final running = _backfill;
+        final sweep = running == null
+            ? backfillAll()
+            : (_bulkFollowUp ??= running
+                  .then<void>((_) {}, onError: (_) {})
+                  .then((_) {
+                    _bulkFollowUp = null;
+                    return backfillAll();
+                  }));
         unawaited(
-          backfillAll().catchError((Object e) {
+          sweep.catchError((Object e) {
             LoggerService.error(
               '[NoteIndex] Bulk completeness sweep failed: $e',
               error: e,
@@ -851,7 +871,7 @@ class NoteIndexService {
   }
 
   Future<void> _reindexNoteNow(String noteId) async {
-    final note = await _db.getNote(noteId);
+    final note = (await _db.getNotesByIds([noteId])).firstOrNull;
     if (note == null) {
       await _removeNoteNow(noteId);
       return;
@@ -863,31 +883,170 @@ class NoteIndexService {
       return;
     }
     final annotations = await _loadAnnotations(noteId);
-    final drafts = chunkNote(note, annotations: annotations);
-    final normalized = [for (final d in drafts) normalizeForIndex(d.text)];
+    // Editing/importing a large note can cost many frames of synchronous
+    // hashing, chunking, and normalization. Use the same worker as startup
+    // backfill so the debounced path also keeps that CPU off the UI isolate.
+    final output = (await compute(_chunkNotesBatch, [
+      _BackfillInput(note: note, annotations: annotations),
+    ])).single;
     await _writeChunks(
       noteId,
-      drafts,
-      normalized,
-      noteContentFingerprint(note, annotations),
+      output.drafts,
+      output.normalized,
+      output.fingerprint,
     );
     debugReindexRuns++;
   }
 
   /// Annotations feeding a note's chunks: note-scoped rows plus rows scoped
   /// to the note's attachments (deduplicated by id).
-  Future<List<NoteAnnotation>> _loadAnnotations(String noteId) async {
-    final byId = <String, NoteAnnotation>{};
-    for (final annotation in await _db.getNoteAnnotationsForNote(noteId)) {
-      byId[annotation.id] = annotation;
-    }
-    for (final attachment in await _db.getAttachmentsForNote(noteId)) {
-      final rows = await _db.getNoteAnnotationsForAttachment(attachment.id);
-      for (final annotation in rows) {
-        byId[annotation.id] = annotation;
+  Future<List<NoteAnnotation>> _loadAnnotations(String noteId) async =>
+      (await _loadAnnotationsForNotes([noteId]))[noteId] ?? [];
+
+  /// One owner join per note batch replaces the former per-note query plus
+  /// one additional query for every attachment. Attachment-only annotations
+  /// are included, and a row with both owner fields is deduplicated per note.
+  Future<Map<String, List<NoteAnnotation>>> _loadAnnotationsForNotes(
+    List<String> noteIds,
+  ) async => loadIndexAnnotations(await _db.database, noteIds);
+
+  /// Source-only annotation reader, exposed for a CursorWindow-constrained
+  /// executor regression. Paths and timestamps never feed chunks and are
+  /// deliberately omitted, even when old annotations store large payloads.
+  @visibleForTesting
+  static Future<Map<String, List<NoteAnnotation>>> loadIndexAnnotations(
+    DatabaseExecutor db,
+    List<String> noteIds,
+  ) async {
+    if (noteIds.isEmpty) return {};
+    final placeholders = List.filled(noteIds.length, '?').join(',');
+    final rows = await db.rawQuery(
+      // Separate indexed branches: an OR spanning a joined owner would
+      // force SQLite to scan every annotation again for each note batch.
+      'SELECT ann.id, ann.note_id AS _ownerNoteId FROM note_annotations ann '
+      'WHERE ann.note_id IN ($placeholders) '
+      'UNION ALL '
+      'SELECT ann.id, a.noteId AS _ownerNoteId FROM attachments a '
+      'JOIN note_annotations ann ON ann.attachment_id = a.id '
+      'WHERE a.noteId IN ($placeholders) AND a.__deleted__ = 0 '
+      'AND (ann.note_id IS NULL OR ann.note_id <> a.noteId)',
+      [...noteIds, ...noteIds],
+    );
+    final ids = {for (final row in rows) row['id'] as String}.toList();
+    final annotations = <String, NoteAnnotation>{};
+    for (var i = 0; i < ids.length; i += _sqlVarChunk) {
+      final page = ids.sublist(i, math.min(i + _sqlVarChunk, ids.length));
+      final contents = await readSyncRowsWhere(
+        db,
+        table: 'note_annotations',
+        columns: ['id', 'content'],
+        keyColumns: ['id'],
+        where: 'id IN (${List.filled(page.length, '?').join(',')})',
+        whereArgs: page,
+      );
+      for (final row in contents) {
+        final id = row['id'] as String;
+        annotations[id] = NoteAnnotation(
+          id: id,
+          content: row['content'] as String? ?? '',
+          attachmentPaths: const [],
+          createdAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+        );
       }
     }
-    return byId.values.toList();
+    final byNote = <String, List<NoteAnnotation>>{};
+    for (final row in rows) {
+      final annotation = annotations[row['id']];
+      if (annotation != null) {
+        (byNote[row['_ownerNoteId'] as String] ??= []).add(annotation);
+      }
+    }
+    return byNote;
+  }
+
+  /// Loads first-upgrade attachment policy without asking Android for a
+  /// multi-megabyte joined row. Keep only the search policy once parsed:
+  /// unrelated PDF marker data must not accumulate across the full library.
+  @visibleForTesting
+  static Future<List<(Attachment, bool)>> loadIndexAttachments(
+    DatabaseExecutor db, {
+    String? eligibleFileNameSql,
+  }) async {
+    final owners = await db.rawQuery(
+      'SELECT a.id, '
+      'COALESCE(length(CAST(a.metadata AS BLOB)), 0) + '
+      'COALESCE(length(CAST(n.metadata AS BLOB)), 0) AS metadataBytes '
+      'FROM attachments a JOIN notes n ON n.id = a.noteId '
+      '$_liveRowsPredicate '
+      '${eligibleFileNameSql == null ? '' : 'AND ($eligibleFileNameSql)'}',
+    );
+    final lengths = {
+      for (final row in owners)
+        row['id'] as String: row['metadataBytes'] as int,
+    };
+    final work = <(Attachment, bool)>[];
+    for (final ids in planBackfillBatches(lengths.keys.toList(), lengths)) {
+      final rows = await readSyncRowsWhere(
+        db,
+        table: 'attachments',
+        columns: [
+          'id',
+          'noteId',
+          'filePath',
+          'fileName',
+          'fileType',
+          'createdAt',
+          'isRelativePath',
+          'includeInAIContext',
+          'metadata',
+        ],
+        keyColumns: ['id'],
+        where:
+            'id IN (${List.filled(ids.length, '?').join(',')}) AND __deleted__ = 0',
+        whereArgs: ids,
+      );
+      final noteIds = {
+        for (final row in rows) row['noteId'] as String,
+      }.toList();
+      if (noteIds.isEmpty) continue;
+      final noteRows = await readSyncRowsWhere(
+        db,
+        table: 'notes',
+        columns: ['id', 'metadata'],
+        keyColumns: ['id'],
+        where:
+            'id IN (${List.filled(noteIds.length, '?').join(',')}) AND __deleted__ = 0',
+        whereArgs: noteIds,
+      );
+      final excluded = {
+        for (final row in noteRows)
+          row['id'] as String: isNoteSearchExcluded(
+            _decodeMetadata(row['metadata'] as String?),
+          ),
+      };
+      for (final row in rows) {
+        final attachment = Attachment.fromDatabase(row);
+        final noteExcluded = excluded[attachment.noteId];
+        if (noteExcluded == null) continue;
+        work.add((
+          Attachment(
+            id: attachment.id,
+            noteId: attachment.noteId,
+            filePath: attachment.filePath,
+            fileName: attachment.fileName,
+            fileType: attachment.fileType,
+            createdAt: attachment.createdAt,
+            isRelativePath: attachment.isRelativePath,
+            includeInAIContext: attachment.includeInAIContext,
+            metadata: {
+              'searchIndex': attachment.getSearchIndexConfig().toJson(),
+            },
+          ),
+          noteExcluded,
+        ));
+      }
+    }
+    return work;
   }
 
   Future<void> _removeNoteNow(String noteId) async {
@@ -992,9 +1151,11 @@ class NoteIndexService {
     // chunk rows are still maintained (search degrades to substring).
     final ftsAvailable = _db.chunksFtsAvailable;
     await _transactionWithRemovals(db, (txn, removals) async {
-      final liveNotes = await txn.query(
-        'notes',
+      final liveNotes = await readSyncRowsWhere(
+        txn,
+        table: 'notes',
         columns: ['metadata'],
+        keyColumns: ['id'],
         where: 'id = ? AND __deleted__ = 0',
         whereArgs: [noteId],
       );
@@ -1066,6 +1227,11 @@ class NoteIndexService {
     final staleByKey = {
       for (final row in existing) row['chunkKey'] as String: row,
     };
+    // A pre-existing library can contain tens of thousands of chunks. Batch
+    // writes keep each one from paying several platform-channel round trips,
+    // while retaining the surrounding per-note/attachment transaction.
+    var batch = txn.batch();
+    var pendingChunks = 0;
 
     for (var i = 0; i < drafts.length; i++) {
       final draft = drafts[i];
@@ -1085,10 +1251,9 @@ class NoteIndexService {
         'contentHash': draft.contentHash,
         'updatedAt': now,
       };
-      int chunkId;
       if (old != null) {
-        chunkId = old['id'] as int;
-        await txn.update(
+        final chunkId = old['id'] as int;
+        batch.update(
           'search_chunks',
           values,
           where: 'id = ?',
@@ -1096,27 +1261,40 @@ class NoteIndexService {
         );
         // Content changed: stored vectors and FTS content are stale. The
         // vector index drops the row too (a fresh embed pass re-adds it).
-        await txn.delete(
+        batch.delete(
           'chunk_embeddings',
           where: 'chunkId = ?',
           whereArgs: [chunkId],
         );
         removals.add(chunkId);
         if (ftsAvailable) {
-          await txn.rawDelete('DELETE FROM chunks_fts WHERE docid = ?', [
-            chunkId,
-          ]);
+          batch.rawDelete('DELETE FROM chunks_fts WHERE docid = ?', [chunkId]);
+          batch.rawInsert(
+            'INSERT INTO chunks_fts(docid, content) VALUES(?, ?)',
+            [chunkId, normalized[i]],
+          );
         }
       } else {
-        chunkId = await txn.insert('search_chunks', values);
+        batch.insert('search_chunks', values);
+        if (ftsAvailable) {
+          // Resolve the inserted id inside SQLite rather than transferring
+          // it to Dart and back. The unique chunkKey makes the mapping
+          // explicit, including when other virtual-table inserts run.
+          batch.rawInsert(
+            'INSERT INTO chunks_fts(docid, content) '
+            'SELECT id, ? FROM search_chunks WHERE chunkKey = ?',
+            [normalized[i], draft.chunkKey],
+          );
+        }
       }
-      if (ftsAvailable) {
-        await txn.rawInsert(
-          'INSERT INTO chunks_fts(docid, content) VALUES(?, ?)',
-          [chunkId, normalized[i]],
-        );
+      pendingChunks++;
+      if (pendingChunks >= 200) {
+        await batch.commit(noResult: true);
+        batch = txn.batch();
+        pendingChunks = 0;
       }
     }
+    if (pendingChunks > 0) await batch.commit(noResult: true);
 
     // Whatever is left in staleByKey no longer exists in the source.
     final staleIds = [for (final row in staleByKey.values) row['id'] as int];
@@ -1848,20 +2026,15 @@ class NoteIndexService {
     // mid-pass must leave a hash that no longer matches, so the next sweep
     // re-evaluates the attachments this one processed under the old policy.
     final policyHash = await _ocrPolicyHash();
-    final rows = await db.rawQuery(
-      'SELECT a.*, n.metadata AS _noteMetadata FROM attachments a '
-      'JOIN notes n ON n.id = a.noteId '
-      '$_liveRowsPredicate',
+    final work = await loadIndexAttachments(
+      db,
+      eligibleFileNameSql: _ocrEligibleFileNameSql,
     );
     final pending = <(Attachment, bool)>[];
     final pageTotals = <String, int>{};
     var totalPages = 0;
-    for (final row in rows) {
+    for (final (attachment, noteExcluded) in work) {
       if (_paused) return null;
-      final attachment = Attachment.fromDatabase(row);
-      if (!AttachmentOcrExtractor.isOcrEligible(attachment)) continue;
-      final noteMetadata = _decodeMetadata(row['_noteMetadata'] as String?);
-      final noteExcluded = isNoteSearchExcluded(noteMetadata);
       if (!force &&
           await _ocrStateIsCurrent(attachment, noteExcluded: noteExcluded)) {
         continue;
@@ -2086,12 +2259,13 @@ class NoteIndexService {
   /// tags and annotations it has no use for.
   Future<String?> _loadNoteContent(String noteId) async {
     final db = await _db.database;
-    final rows = await db.query(
-      'notes',
+    final rows = await readSyncRowsWhere(
+      db,
+      table: 'notes',
       columns: ['content'],
+      keyColumns: ['id'],
       where: 'id = ? AND __deleted__ = 0',
       whereArgs: [noteId],
-      limit: 1,
     );
     if (rows.isEmpty) return null;
     return (rows.first['content'] as String?) ?? '';
@@ -2643,19 +2817,13 @@ class NoteIndexService {
     // mid-pass must leave a hash that no longer matches, so the next sweep
     // re-evaluates the attachments this one processed under the old policy.
     final policyHash = await _figuresPolicyHash();
-    final rows = await db.rawQuery(
-      'SELECT a.*, n.metadata AS _noteMetadata FROM attachments a '
-      'JOIN notes n ON n.id = a.noteId '
-      '$_liveRowsPredicate',
+    final work = await loadIndexAttachments(
+      db,
+      eligibleFileNameSql: _figureEligibleFileNameSql,
     );
     final byNote = <String, List<(Attachment, bool)>>{};
     var total = 0;
-    for (final row in rows) {
-      final attachment = Attachment.fromDatabase(row);
-      if (!isFigureEligible(attachment)) continue;
-      final noteExcluded = isNoteSearchExcluded(
-        _decodeMetadata(row['_noteMetadata'] as String?),
-      );
+    for (final (attachment, noteExcluded) in work) {
       byNote.putIfAbsent(attachment.noteId, () => []).add((
         attachment,
         noteExcluded,
@@ -3089,10 +3257,10 @@ class NoteIndexService {
       final rows = await db.rawQuery(
         '''
         SELECT c.id, c.sourceType,
-               n.id AS liveNoteId, n.metadata AS noteMetadata,
+               n.id AS liveNoteId, $_embedNoteMetadataSql,
                a.id AS attachmentId,
                a.includeInAIContext AS aiInclude,
-               a.metadata AS attachmentMetadata
+               $_embedAttachmentMetadataSql
         FROM search_chunks c
         LEFT JOIN notes n ON n.id = c.noteId AND n.__deleted__ = 0
         LEFT JOIN chunk_embeddings e
@@ -3123,7 +3291,7 @@ class NoteIndexService {
         ],
       );
       if (rows.isEmpty) return ids;
-      for (final row in rows) {
+      for (final row in await hydrateIndexEmbedPolicies(db, rows)) {
         afterId = row['id'] as int;
         if (!_passesEmbedPolicy(row)) continue;
         ids.add((id: afterId, figure: row['sourceType'] == 'figure'));
@@ -3166,6 +3334,71 @@ class NoteIndexService {
     return true;
   }
 
+  // A chunk scan may join a note and attachment whose marker metadata is
+  // megabytes. Keep the ordinary row small; load oversized policies through
+  // the byte-safe reader before making any upload or stored-vector decision.
+  static const int _inlinePolicyBytes = 64 * 1024;
+  static const String _embedNoteMetadataSql =
+      'CASE WHEN length(CAST(n.metadata AS BLOB)) <= $_inlinePolicyBytes '
+      'THEN n.metadata END AS noteMetadata, '
+      'length(CAST(n.metadata AS BLOB)) AS noteMetadataBytes';
+  static const String _embedAttachmentMetadataSql =
+      'CASE WHEN length(CAST(a.metadata AS BLOB)) <= $_inlinePolicyBytes '
+      'THEN a.metadata END AS attachmentMetadata, '
+      'length(CAST(a.metadata AS BLOB)) AS attachmentMetadataBytes';
+
+  @visibleForTesting
+  static Future<List<Map<String, Object?>>> hydrateIndexEmbedPolicies(
+    DatabaseExecutor db,
+    List<Map<String, Object?>> rows,
+  ) async {
+    final policies = <String, Map<String, String?>>{};
+    for (final (table, ownerColumn, metadataColumn) in [
+      ('notes', 'liveNoteId', 'noteMetadata'),
+      ('attachments', 'attachmentId', 'attachmentMetadata'),
+    ]) {
+      final lengths = <String, int>{};
+      for (final row in rows) {
+        final length = row['${metadataColumn}Bytes'] as int? ?? 0;
+        final owner = row[ownerColumn] as String?;
+        if (owner != null && length > _inlinePolicyBytes) {
+          lengths[owner] = length;
+        }
+      }
+      final byOwner = <String, String?>{};
+      for (final ids in planBackfillBatches(lengths.keys.toList(), lengths)) {
+        final metadataRows = await readSyncRowsWhere(
+          db,
+          table: table,
+          columns: ['id', 'metadata'],
+          keyColumns: ['id'],
+          where: 'id IN (${List.filled(ids.length, '?').join(',')})',
+          whereArgs: ids,
+        );
+        for (final row in metadataRows) {
+          final metadata = _decodeMetadata(row['metadata'] as String?);
+          final policy = metadata?['searchIndex'];
+          byOwner[row['id'] as String] = policy is Map
+              ? jsonEncode({'searchIndex': policy})
+              : null;
+        }
+      }
+      policies[metadataColumn] = byOwner;
+    }
+    return [
+      for (final row in rows)
+        {
+          ...row,
+          if ((row['noteMetadataBytes'] as int? ?? 0) > _inlinePolicyBytes)
+            'noteMetadata': policies['noteMetadata']![row['liveNoteId']],
+          if ((row['attachmentMetadataBytes'] as int? ?? 0) >
+              _inlinePolicyBytes)
+            'attachmentMetadata':
+                policies['attachmentMetadata']![row['attachmentId']],
+        },
+    ];
+  }
+
   /// Deletes the STORED vectors of every chunk that no longer passes
   /// [_passesEmbedPolicy] — the purge half of plan §1.3 ("flipping a flag off
   /// promptly deletes the affected chunks, embeddings and derived figure
@@ -3204,10 +3437,10 @@ class NoteIndexService {
       final rows = await db.rawQuery(
         '''
         SELECT DISTINCT c.id, c.sourceType,
-               n.id AS liveNoteId, n.metadata AS noteMetadata,
+               n.id AS liveNoteId, $_embedNoteMetadataSql,
                a.id AS attachmentId,
                a.includeInAIContext AS aiInclude,
-               a.metadata AS attachmentMetadata
+               $_embedAttachmentMetadataSql
         FROM chunk_embeddings e
         JOIN search_chunks c ON c.id = e.chunkId
         LEFT JOIN notes n ON n.id = c.noteId AND n.__deleted__ = 0
@@ -3221,7 +3454,7 @@ class NoteIndexService {
         [afterId, if (scopeNoteId != null) scopeNoteId, embedScanPageSize],
       );
       if (rows.isEmpty) break;
-      for (final row in rows) {
+      for (final row in await hydrateIndexEmbedPolicies(db, rows)) {
         afterId = row['id'] as int;
         if (!_passesEmbedPolicy(row)) doomed.add(afterId);
       }
@@ -3285,10 +3518,10 @@ class NoteIndexService {
       final rows = await db.rawQuery(
         '''
         SELECT c.id, c.sourceType, c.meta,
-               n.id AS liveNoteId, n.metadata AS noteMetadata,
+               n.id AS liveNoteId, $_embedNoteMetadataSql,
                a.id AS attachmentId,
                a.includeInAIContext AS aiInclude,
-               a.metadata AS attachmentMetadata,
+               $_embedAttachmentMetadataSql,
                a.fileName AS attFileName,
                a.filePath AS attFilePath,
                a.isRelativePath AS attIsRelative
@@ -3322,7 +3555,7 @@ class NoteIndexService {
         ],
       );
       if (rows.isEmpty) return ids;
-      for (final row in rows) {
+      for (final row in await hydrateIndexEmbedPolicies(db, rows)) {
         afterId = row['id'] as int;
         if (!_passesEmbedPolicy(row)) continue;
         final path = await _figureImagePath(
@@ -3405,9 +3638,9 @@ class NoteIndexService {
       // a figure's image without a second query per chunk.
       final rows = await db.rawQuery(
         'SELECT c.id, c.chunkKey, c.text, c.contentHash, c.sourceType, c.meta, '
-        'n.id AS liveNoteId, n.metadata AS noteMetadata, '
+        'n.id AS liveNoteId, $_embedNoteMetadataSql, '
         'a.id AS attachmentId, a.includeInAIContext AS aiInclude, '
-        'a.metadata AS attachmentMetadata, '
+        '$_embedAttachmentMetadataSql, '
         'a.fileName AS attFileName, a.filePath AS attFilePath, '
         'a.isRelativePath AS attIsRelative '
         'FROM search_chunks c '
@@ -3418,7 +3651,7 @@ class NoteIndexService {
         'WHERE c.id IN ($placeholders)',
         slice,
       );
-      for (final row in rows) {
+      for (final row in await hydrateIndexEmbedPolicies(db, rows)) {
         byId[row['id'] as int] = row;
       }
     }
@@ -4084,20 +4317,45 @@ class NoteIndexService {
     // Raw-SQL deletes can orphan chunks without ever firing a hook.
     await _purgeOrphanRows(db);
 
-    final idRows = await db.rawQuery(
-      'SELECT id, metadata, length(content) AS contentLength FROM notes '
-      'WHERE __deleted__ = 0',
-    );
+    // Budget the complete text that getNotesByIds + the annotation loader
+    // will materialize, not only notes.content. Imported notes often keep
+    // most of their text in subnotes or PDF annotations. Pre-aggregated
+    // joins avoid a correlated child-table scan for every note.
+    final idRows = await db.rawQuery('''
+      SELECT n.id,
+        COALESCE(length(CAST(n.content AS BLOB)), 0) +
+        COALESCE(length(CAST(n.title AS BLOB)), 0) +
+        COALESCE(length(CAST(n.metadata AS BLOB)), 0) +
+        COALESCE(s.sourceLength, 0) + COALESCE(ann.sourceLength, 0)
+          AS contentLength
+      FROM notes n
+      LEFT JOIN (
+        SELECT noteId,
+          SUM(length(CAST(content AS BLOB)) + length(CAST(name AS BLOB)))
+            AS sourceLength
+        FROM subnotes WHERE __deleted__ = 0 GROUP BY noteId
+      ) s ON s.noteId = n.id
+      LEFT JOIN (
+        SELECT noteId, SUM(sourceLength) AS sourceLength FROM (
+          SELECT note_id AS noteId, length(CAST(content AS BLOB)) AS sourceLength
+          FROM note_annotations WHERE note_id IS NOT NULL
+          UNION ALL
+          SELECT a.noteId, length(CAST(ann.content AS BLOB)) AS sourceLength
+          FROM note_annotations ann
+          JOIN attachments a ON a.id = ann.attachment_id
+          WHERE a.__deleted__ = 0
+            AND (ann.note_id IS NULL OR ann.note_id <> a.noteId)
+        ) GROUP BY noteId
+      ) ann ON ann.noteId = n.id
+      WHERE n.__deleted__ = 0
+    ''');
     final noteIds = [for (final row in idRows) row['id'] as String];
-    final metadataById = {
-      for (final row in idRows)
-        row['id'] as String: _decodeMetadata(row['metadata'] as String?),
-    };
     final contentLengths = {
       for (final row in idRows)
         row['id'] as String: (row['contentLength'] as int?) ?? 0,
     };
 
+    debugBackfillLargestBatchBytes = 0;
     var done = 0;
     var failed = 0;
     // Notes left to a fresher pending debounced reindex: their state stays
@@ -4118,10 +4376,27 @@ class NoteIndexService {
     try {
       for (final batchIds in planBackfillBatches(noteIds, contentLengths)) {
         if (_paused) return;
+        debugBackfillLargestBatchBytes = math.max(
+          debugBackfillLargestBatchBytes,
+          batchIds.fold<int>(0, (sum, id) => sum + contentLengths[id]!),
+        );
 
         final stateByNoteId = await _loadNoteStates(db, batchIds);
+        final metadataRows = await readSyncRowsWhere(
+          db,
+          table: 'notes',
+          columns: ['id', 'metadata'],
+          keyColumns: ['id'],
+          where: 'id IN (${List.filled(batchIds.length, '?').join(',')})',
+          whereArgs: batchIds,
+        );
+        final metadataById = {
+          for (final row in metadataRows)
+            row['id'] as String: _decodeMetadata(row['metadata'] as String?),
+        };
         final notes = await _db.getNotesByIds(batchIds);
         final notesById = {for (final note in notes) note.id: note};
+        final annotationsByNoteId = await _loadAnnotationsForNotes(batchIds);
 
         final inputs = <_BackfillInput>[];
         final snapshotHashByNoteId = <String, String?>{};
@@ -4160,18 +4435,16 @@ class NoteIndexService {
             continue;
           }
           final state = stateByNoteId[noteId];
-          final annotations = await _loadAnnotations(noteId);
-          if (!force &&
-              state != null &&
-              state.status == statusDone &&
-              state.contentHash == noteContentFingerprint(note, annotations)) {
-            // Up to date — skipped BEFORE chunking; this is what keeps bulk
-            // completeness sweeps cheap when nothing relevant changed.
-            done++;
-            continue;
-          }
           snapshotHashByNoteId[noteId] = state?.contentHash;
-          inputs.add(_BackfillInput(note: note, annotations: annotations));
+          inputs.add(
+            _BackfillInput(
+              note: note,
+              annotations: annotationsByNoteId[noteId] ?? [],
+              indexedFingerprint: !force && state?.status == statusDone
+                  ? state?.contentHash
+                  : null,
+            ),
+          );
         }
         _progress.value = IndexProgress(
           done: done,
@@ -4182,7 +4455,7 @@ class NoteIndexService {
 
         if (inputs.isEmpty) continue;
         final outputs = await compute(_chunkNotesBatch, inputs);
-        debugBackfillNotesChunked += outputs.length;
+        debugBackfillNotesChunked += outputs.where((o) => !o.unchanged).length;
 
         for (final output in outputs) {
           if (_paused) return;
@@ -4190,6 +4463,8 @@ class NoteIndexService {
             // An edit landed after this batch's snapshot; the pending
             // debounced reindex will write the fresher content instead.
             deferred++;
+          } else if (output.unchanged) {
+            done++;
           } else {
             try {
               await _serialized(
@@ -4330,18 +4605,10 @@ class NoteIndexService {
     // next sweep re-evaluates the attachments this one processed under the old
     // cap.
     final policyHash = await _pdfTextPolicyHash();
-    final rows = await db.rawQuery(
-      'SELECT a.*, n.metadata AS _noteMetadata FROM attachments a '
-      'JOIN notes n ON n.id = a.noteId '
-      '$_liveRowsPredicate',
+    final work = await loadIndexAttachments(
+      db,
+      eligibleFileNameSql: "a.fileName LIKE '%.pdf'",
     );
-    final work = <(Attachment, bool)>[];
-    for (final row in rows) {
-      final attachment = Attachment.fromDatabase(row);
-      if (!AttachmentTextExtractor.isPdfAttachment(attachment)) continue;
-      final noteMetadata = _decodeMetadata(row['_noteMetadata'] as String?);
-      work.add((attachment, isNoteSearchExcluded(noteMetadata)));
-    }
 
     var done = 0;
     var failed = 0;
@@ -4825,9 +5092,14 @@ String _imageMimeForExtension(String extension) {
 }
 
 class _BackfillInput {
-  const _BackfillInput({required this.note, required this.annotations});
+  const _BackfillInput({
+    required this.note,
+    required this.annotations,
+    this.indexedFingerprint,
+  });
   final Note note;
   final List<NoteAnnotation> annotations;
+  final String? indexedFingerprint;
 }
 
 class _BackfillOutput {
@@ -4836,23 +5108,39 @@ class _BackfillOutput {
     required this.fingerprint,
     required this.drafts,
     required this.normalized,
+    this.unchanged = false,
   });
   final String noteId;
   final String fingerprint;
   final List<ChunkDraft> drafts;
   final List<String> normalized;
+  final bool unchanged;
 }
 
-/// Top-level for compute(): chunk + normalize a batch of notes off the main
-/// isolate (pure Dart, no database access).
+/// Top-level for compute(): fingerprint, skip unchanged sources, then chunk
+/// and normalize off the UI isolate. Large notes are hashed only once even
+/// on their first upgrade pass; repeat sweeps do not rechunk them.
 List<_BackfillOutput> _chunkNotesBatch(List<_BackfillInput> inputs) {
   return [
     for (final input in inputs)
       () {
+        final fingerprint = noteContentFingerprint(
+          input.note,
+          input.annotations,
+        );
+        if (fingerprint == input.indexedFingerprint) {
+          return _BackfillOutput(
+            noteId: input.note.id,
+            fingerprint: fingerprint,
+            drafts: const [],
+            normalized: const [],
+            unchanged: true,
+          );
+        }
         final drafts = chunkNote(input.note, annotations: input.annotations);
         return _BackfillOutput(
           noteId: input.note.id,
-          fingerprint: noteContentFingerprint(input.note, input.annotations),
+          fingerprint: fingerprint,
           drafts: drafts,
           normalized: [for (final d in drafts) normalizeForIndex(d.text)],
         );

@@ -168,37 +168,10 @@ enum SyncHealthIssueKind {
   /// is why no reset button is attached to it — a reset would fix nothing.
   rootFolderAmbiguous,
 
-  /// Entity tables whose rows are deliberately not minted at all, because a
-  /// receiving device could never build them (`entitySyncability`).
+  /// Populated user-content tables that cannot sync, either because their
+  /// identity is not portable or because capture/materialization does not
+  /// support them yet. Derived local search-index tables are excluded.
   ///
-  /// **M2.14 note — what this kind deliberately does NOT cover, and why a
-  /// sibling kind for it was written and then removed.** Attachment rows now
-  /// reach a second device while the FILES they point at do not (they live
-  /// on disk and have never been part of any operation), and the obvious
-  /// move was a second health kind reporting `syncContentDeferredTables`. It
-  /// would have marked essentially every device with an attachment
-  /// permanently degraded, which is precisely the outcome this detector's
-  /// own "only when the user actually HAS rows there" rule exists to avoid
-  /// — and the rule's own words settle it: "'You have data that is not
-  /// syncing' is actionable; 'this app does not sync attachments yet' is a
-  /// release note."
-  ///
-  /// The honest, actionable signal for a file that did not travel is
-  /// per-attachment and already exists at the point of use: the note-detail
-  /// card greys the attachment and shows `l10n.attachmentMissing` in red with
-  /// its tap disabled, and the immersive viewer shows the same string. (Both
-  /// were true of the immersive viewer only until review round 1 — the
-  /// note-detail card printed a hardcoded English literal, in a state M2.14
-  /// promoted from rare to routine on every second device. And
-  /// `attachmentMissing` was declared twice in `app_en.arb`, so the name this
-  /// sentence points a maintainer at did not resolve to one string; the dead
-  /// duplicate is gone.)
-  ///
-  /// `app_revisions` needs no sibling kind either — it is `canSync == false`,
-  /// so THIS kind names it, with `appCode` as the reason. That was true only
-  /// on the AUTHORING device until review round 1: see `recomputeSyncHealth`'s
-  /// own block 2 for the `count == 0` guard that made it silent on exactly
-  /// the receiving device M2.14 creates.
   tablesNotSynced,
 
   /// Remote operations parked after their apply/materialize step failed.
@@ -449,41 +422,36 @@ Future<SyncHealth> recomputeSyncHealth(
 
   // ── 2/4: tables gated out of minting ─────────────────────────────────
   //
-  // **Only reported when the user actually HAS the affected data.** Three of
-  // the fourteen sync-scope tables cannot be built by a receiving device
-  // (`app_revisions`, blocked by `appCode`; `user_app_libraries` and
-  // `user_app_library_dependencies`, blocked by non-portable integer ids), so
-  // an unconditional report would mark every device on earth permanently
-  // degraded — which would train people to ignore the warning and defeat the
-  // entire point of building it. "You have data that is not syncing" is
-  // actionable; "this app does not sync mini-app source code yet" is a
-  // release note.
-  //
-  // **"Has the data" is NOT the same as "has rows in that table", and
-  // assuming it was made this detector silent on the device that most needs
-  // it (M2.14 review round 1).** A RECEIVING device has zero `app_revisions`
-  // rows precisely BECAUSE the table cannot sync — so `count == 0` skipped
-  // it, and a device holding a screenful of mini apps with not one line of
-  // their code showed a green sync card. M2.14 is what manufactures that
-  // state in quantity: it made `user_apps` rows travel while their revisions
-  // stayed behind. So a blocked table is also reported when the table its
-  // `__exists__` OWNER reference points at is populated locally — for
-  // `app_revisions` that is `user_apps`, i.e. exactly "you have mini apps
-  // and none of their code". Tables blocked on a non-portable id have no
-  // owner references at all (`entitySyncability` rejects them before it
-  // looks at a single column), so their behaviour is unchanged: they are
-  // reported only when they hold local rows, which is the right rule for a
-  // condition that is about this device's own data.
-  //
-  // [entitySyncability] is memoized across the loop. Uncached it is four
-  // `PRAGMA` round trips per table, i.e. ~56 per recompute, on the one call
-  // site of the four that had not yet been given the cache its own doc
-  // comment asks every caller for.
+  // Report actual local data that the protocol omits. Identity-blocked
+  // library rows and tables without capture scopes need a visible warning;
+  // derived search indexes are deliberately local and are not user data.
   final gated = <String>[];
   final syncabilityCache = <String, EntitySyncability>{};
   Future<int> rowCount(String table) async =>
       Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM $table')) ??
       0;
+  // These real user features predate cloud sync, but have no entity/set
+  // capture scope. Checking only declared scopes made an existing library
+  // report healthy even though annotations, tag images/prompts and app
+  // preferences never left the device. Name the omitted data while it exists.
+  for (final entry in const {
+    'note_annotations':
+        'SELECT 1 FROM note_annotations a WHERE '
+        'EXISTS (SELECT 1 FROM notes n WHERE n.id = a.note_id AND n.__deleted__ = 0) '
+        'OR EXISTS (SELECT 1 FROM attachments t JOIN notes n ON n.id = t.noteId '
+        'WHERE t.id = a.attachment_id AND t.__deleted__ = 0 AND n.__deleted__ = 0) LIMIT 1',
+    'tag_images':
+        'SELECT 1 FROM tag_images i JOIN tags t ON t.id = i.tagId '
+        'WHERE t.__deleted__ = 0 AND t.redirectTarget IS NULL LIMIT 1',
+    'tag_ai_configs':
+        'SELECT 1 FROM tag_ai_configs c JOIN tags t ON t.id = c.tagId '
+        'WHERE t.__deleted__ = 0 AND t.redirectTarget IS NULL LIMIT 1',
+    'multi_function_apps':
+        'SELECT 1 FROM multi_function_apps m JOIN user_apps a ON a.id = m.appId '
+        'WHERE a.__deleted__ = 0 LIMIT 1',
+  }.entries) {
+    if ((await db.rawQuery(entry.value)).isNotEmpty) gated.add(entry.key);
+  }
   for (final scope in DatabaseService.syncEntityCaptureScopes) {
     final syncability = await entitySyncability(
       db,
@@ -658,17 +626,19 @@ Future<SyncHealth> recomputeSyncHealth(
   // cannot disagree. Guarded so a failure to resolve a path can never take
   // the health recompute down with it, matching every other detector here.
   try {
-    final outstanding = await BlobSyncPhase(databaseService)
-        .outstandingReferences();
-    if (outstanding.isNotEmpty) {
+    final blobs = BlobSyncPhase(databaseService);
+    final outstanding = await blobs.outstandingReferences();
+    final missing = <String>{
+      for (final reference in outstanding)
+        '${reference.entityTable}/${reference.entityId}',
+      ...await blobs.missingUnhashedAttachments(),
+    };
+    if (missing.isNotEmpty) {
       issues.add(
         SyncHealthIssue(
           kind: SyncHealthIssueKind.attachmentBytesMissing,
-          count: outstanding.length,
-          detail: outstanding
-              .take(5)
-              .map((r) => '${r.entityTable}/${r.entityId}')
-              .join(', '),
+          count: missing.length,
+          detail: missing.take(5).join(', '),
         ),
       );
     }

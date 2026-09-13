@@ -90,12 +90,14 @@ import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:path/path.dart' as p;
 
 import '../../utils/file_utils.dart';
 import '../data_change_notifier.dart';
 import '../database_service.dart';
 import '../logger_service.dart';
 import 'blob_gc.dart';
+import 'device_identity.dart';
 import 'large_row_reader.dart';
 import 'sync_backend.dart';
 import 'sync_change_publisher.dart';
@@ -169,6 +171,14 @@ bool isContentBlobColumn(String entityTable, String? fieldName) =>
 const Map<String, String> syncBlobPathIsRelativeColumns = {
   'attachments': 'isRelativePath',
   'conversation_attachments': 'isRelativePath',
+};
+
+const _attachmentOwners = {
+  'attachments': (table: 'notes', column: 'noteId'),
+  'conversation_attachments': (
+    table: 'conversation_messages',
+    column: 'messageId',
+  ),
 };
 
 /// Resolves a stored attachment path to an absolute one, and does the file
@@ -312,6 +322,96 @@ class BlobSyncPhase {
     return digest.toString();
   }
 
+  /// Copies legacy absolute-path attachments into portable app storage
+  /// before capture. A receiver cannot use another device's sandbox path.
+  /// Keep the original file, and change the row only after a complete copy
+  /// exists; a failed/interrupted copy leaves the original attachment usable.
+  Future<int> preparePortableAttachmentPaths() async {
+    final db = await _databaseService.database;
+    final ownAuthorId = await DeviceIdentity(_databaseService).ensureDeviceId();
+    final changes = SyncChangeCollector();
+    var prepared = 0;
+    for (final entry in syncBlobBackedColumns.entries) {
+      final table = entry.key;
+      final column = entry.value;
+      final relativeColumn = syncBlobPathIsRelativeColumns[table]!;
+      final idColumn = _idColumnFor(table);
+      final owner = _attachmentOwners[table]!;
+      final rows = await db.rawQuery(
+        'SELECT t.$idColumn, t.$column, t.$relativeColumn, t.fileName, '
+        's.authorId AS pathAuthorId FROM $table t '
+        'JOIN ${owner.table} owner ON owner.id = t.${owner.column} '
+        'LEFT JOIN sync_field_state s ON s.entityTable = ? '
+        'AND s.entityId = t.$idColumn AND s.fieldName = ? '
+        'WHERE t.__deleted__ = 0 AND owner.__deleted__ = 0 '
+        'AND (t.$relativeColumn = 0 OR t.$column LIKE ? OR t.$column LIKE ?)',
+        [table, column, '/%', '_:%'],
+      );
+      for (final row in rows) {
+        final storedPath = row[column] as String?;
+        if (storedPath == null || storedPath.isEmpty) continue;
+        final authorId = row['pathAuthorId'] as String?;
+        // A peer-provided path must never authorize reading an arbitrary
+        // local file and uploading it back. Only migrate pristine release
+        // rows or paths that this device itself published.
+        if (authorId != null &&
+            authorId != ownAuthorId &&
+            authorId != 'seed:$ownAuthorId') {
+          continue;
+        }
+        if (!p.posix.isAbsolute(storedPath) &&
+            !p.windows.isAbsolute(storedPath)) {
+          continue;
+        }
+        try {
+          // Absolute paths must be resolved as absolute even if a legacy
+          // row accidentally kept the column's default relative flag.
+          final source = File(await _resolver.absolutePath(storedPath, false));
+          if (!await source.exists()) continue;
+          final hash = await hashFile(source);
+          final extension = p.extension(row['fileName'] as String? ?? '');
+          final safeExtension =
+              RegExp(r'^\.[a-zA-Z0-9]{1,16}$').hasMatch(extension)
+              ? extension
+              : '';
+          // Attachment deletion removes its own file. Distinct rows must
+          // keep distinct paths even when their bytes (and blob hash) match.
+          final identity = hashString('$table/${row[idColumn]}');
+          final portablePath =
+              'attachments/sync_${identity}_$hash$safeExtension';
+          final target = File(await _resolver.absolutePath(portablePath, true));
+          if (!await target.exists() || await hashFile(target) != hash) {
+            await target.parent.create(recursive: true);
+            final temporary = File('${target.path}.part');
+            await source.copy(temporary.path);
+            if (await hashFile(temporary) != hash) {
+              await temporary.delete();
+              continue; // source changed during the copy; retry next round
+            }
+            await temporary.rename(target.path);
+          }
+          final changed = await db.update(
+            table,
+            {column: portablePath, relativeColumn: 1},
+            where: '$idColumn = ? AND $column = ?',
+            whereArgs: [row[idColumn], storedPath],
+          );
+          if (changed > 0) {
+            prepared++;
+            changes.recordRow(table, row[idColumn] as String);
+          }
+        } catch (e) {
+          LoggerService.warning(
+            'BlobSyncPhase: cannot make $table attachment '
+            '${row[idColumn]} portable: $e',
+          );
+        }
+      }
+    }
+    await _changes.publish(db, changes);
+    return prepared;
+  }
+
   /// The blob hash for a field about to be minted, or null when the column
   /// is not blob-backed or the file is not there.
   ///
@@ -336,7 +436,9 @@ class BlobSyncPhase {
       return await hashFile(file);
     } catch (e) {
       // A resolver failure must not take the mint down with it.
-      LoggerService.warning('BlobSyncPhase: cannot hash $entityTable/$value: $e');
+      LoggerService.warning(
+        'BlobSyncPhase: cannot hash $entityTable/$value: $e',
+      );
       return null;
     }
   }
@@ -486,15 +588,35 @@ class BlobSyncPhase {
           // that it never returns bytes that mismatch the hash, so what
           // lands here is exactly what the authoring device had.
           final db = await _databaseService.database;
-          await db.update(
+          final changed = await db.update(
             reference.entityTable,
             {reference.contentColumn!: utf8.decode(bytes)},
-            where: '${_idColumnFor(reference.entityTable)} = ?',
-            whereArgs: [reference.entityId],
+            where:
+                '${_idColumnFor(reference.entityTable)} = ? '
+                'AND (${reference.contentColumn} IS NULL '
+                'OR length(CAST(${reference.contentColumn} AS BLOB)) = 0) '
+                'AND EXISTS (SELECT 1 FROM sync_field_state s '
+                'WHERE s.entityTable = ? AND s.entityId = ? '
+                'AND s.fieldName = ? AND s.blobHash = ?)',
+            whereArgs: [
+              reference.entityId,
+              reference.entityTable,
+              reference.entityId,
+              reference.contentColumn,
+              reference.blobHash,
+            ],
           );
+          if (changed == 0) continue; // local edit or a newer winner arrived
           downloaded++;
           changes.recordRow(reference.entityTable, reference.entityId);
           await _gc?.noteBlobPresent(reference.blobHash);
+          continue;
+        }
+        if (!_hasPortableDownloadPath(reference)) {
+          // Dataset content is not authority to write into another sandbox
+          // or a parent directory. An updated sender republishes a portable
+          // path after preparePortableAttachmentPaths copies its local file.
+          failed.add(reference.blobHash);
           continue;
         }
         final path = await _resolver.absolutePath(
@@ -556,7 +678,7 @@ class BlobSyncPhase {
   /// definition of "still missing", so the number the user sees and the work
   /// the fetch does cannot drift apart.
   Future<List<BlobReference>> outstandingReferences() async {
-    final all = await _allReferences();
+    final all = await _allReferences(liveOnly: true);
     final outstanding = <BlobReference>[];
     for (final reference in all) {
       try {
@@ -568,7 +690,13 @@ class BlobSyncPhase {
           // comparison: `appCode` is megabytes, and re-hashing every
           // revision on every health recompute would cost more than the
           // download it is checking for.
-          if (await _contentColumnIsEmpty(reference)) outstanding.add(reference);
+          if (await _contentColumnIsEmpty(reference)) {
+            outstanding.add(reference);
+          }
+          continue;
+        }
+        if (!_hasPortableDownloadPath(reference)) {
+          outstanding.add(reference);
           continue;
         }
         final path = await _resolver.absolutePath(
@@ -581,6 +709,118 @@ class BlobSyncPhase {
       }
     }
     return outstanding;
+  }
+
+  static bool _hasPortableDownloadPath(BlobReference reference) {
+    final storedPath = reference.storedPath;
+    if (!reference.isRelative || storedPath == null || storedPath.isEmpty) {
+      return false;
+    }
+    if (p.posix.isAbsolute(storedPath) || p.windows.isAbsolute(storedPath)) {
+      return false;
+    }
+    // Check both separators even on Unix, so a path cannot become unsafe
+    // when the same dataset is opened on a different desktop platform.
+    return !storedPath.split(RegExp(r'[/\\]')).contains('..');
+  }
+
+  /// Rows whose file was already absent when sync tried to hash it have no
+  /// blob reference yet. They cannot be downloaded, but must still appear in
+  /// health rather than making an incomplete existing library look healthy.
+  Future<List<String>> missingUnhashedAttachments() async {
+    final db = await _databaseService.database;
+    final missing = <String>[];
+    for (final entry in syncBlobBackedColumns.entries) {
+      final table = entry.key;
+      final column = entry.value;
+      final idColumn = _idColumnFor(table);
+      final relativeColumn = syncBlobPathIsRelativeColumns[table]!;
+      final owner = _attachmentOwners[table]!;
+      final rows = await db.rawQuery(
+        'SELECT t.$idColumn AS entityId, t.$column AS storedPath, '
+        't.$relativeColumn AS isRelative FROM $table t '
+        'JOIN ${owner.table} owner ON owner.id = t.${owner.column} '
+        'LEFT JOIN sync_field_state s ON s.entityTable = ? '
+        'AND s.entityId = t.$idColumn AND s.fieldName = ? '
+        'WHERE t.__deleted__ = 0 AND owner.__deleted__ = 0 AND s.blobHash IS NULL',
+        [table, column],
+      );
+      for (final row in rows) {
+        final key = '$table/${row['entityId']}';
+        final storedPath = row['storedPath'] as String?;
+        if (storedPath == null || storedPath.isEmpty) {
+          missing.add(key);
+          continue;
+        }
+        try {
+          final path = await _resolver.absolutePath(
+            storedPath,
+            row['isRelative'] == 1,
+          );
+          if (!await File(path).exists()) missing.add(key);
+        } catch (_) {
+          missing.add(key);
+        }
+      }
+    }
+    return missing;
+  }
+
+  /// Published metadata can outlive a missing source file. If its bytes
+  /// return later at the same path, a new operation must publish the hash;
+  /// changing an already-published operation would invalidate the log chain.
+  /// Hash outside SQLite transactions and only for this device's own paths.
+  Future<List<BlobReference>> restoredAttachmentReferences() async {
+    final db = await _databaseService.database;
+    final authorId = await DeviceIdentity(_databaseService).ensureDeviceId();
+    final restored = <BlobReference>[];
+    for (final entry in syncBlobBackedColumns.entries) {
+      final table = entry.key;
+      final column = entry.value;
+      final owner = _attachmentOwners[table]!;
+      final relativeColumn = syncBlobPathIsRelativeColumns[table]!;
+      final rows = await db.rawQuery(
+        'SELECT t.id AS entityId, t.$column AS storedPath, '
+        't.$relativeColumn AS isRelative, s.valueJson '
+        'FROM sync_field_state s JOIN $table t ON t.id = s.entityId '
+        'JOIN ${owner.table} owner ON owner.id = t.${owner.column} '
+        'JOIN sync_pending_ops op ON op.authorId = s.authorId '
+        'AND op.authorSeq = s.authorSeq '
+        'WHERE s.entityTable = ? AND s.fieldName = ? '
+        'AND s.authorId IN (?, ?) AND s.blobHash IS NULL '
+        'AND op.publishedAt IS NOT NULL '
+        'AND t.__deleted__ = 0 AND owner.__deleted__ = 0',
+        [table, column, authorId, 'seed:$authorId'],
+      );
+      for (final row in rows) {
+        final storedPath = row['storedPath'] as String?;
+        if (storedPath == null ||
+            storedPath.isEmpty ||
+            row['valueJson'] != jsonEncode(storedPath)) {
+          continue;
+        }
+        try {
+          final isRelative = row['isRelative'] == 1;
+          final path = await _resolver.absolutePath(storedPath, isRelative);
+          final source = File(path);
+          if (!await source.exists()) continue;
+          restored.add(
+            BlobReference(
+              blobHash: await hashFile(source),
+              entityTable: table,
+              entityId: row['entityId'] as String,
+              storedPath: storedPath,
+              isRelative: isRelative,
+            ),
+          );
+        } catch (e) {
+          LoggerService.warning(
+            'BlobSyncPhase: restored attachment read failed: $e',
+          );
+        }
+      }
+    }
+    return restored;
   }
 
   /// Collects a downloaded stream, decrypts it if the dataset is encrypted,
@@ -612,10 +852,10 @@ class BlobSyncPhase {
     return opened;
   }
 
-  static String _idColumnFor(String table) =>
-      DatabaseService.syncEntityCaptureScopes
-          .firstWhere((s) => s.table == table)
-          .idColumn;
+  static String _idColumnFor(String table) => DatabaseService
+      .syncEntityCaptureScopes
+      .firstWhere((s) => s.table == table)
+      .idColumn;
 
   /// **Asks for the LENGTH, never the value** (M3.8). This decides "is
   /// `appCode` still the empty placeholder?", and reading the column to
@@ -642,7 +882,7 @@ class BlobSyncPhase {
   /// was in use.
   Future<List<BlobReference>> allReferences() => _allReferences();
 
-  Future<List<BlobReference>> _allReferences() async {
+  Future<List<BlobReference>> _allReferences({bool liveOnly = false}) async {
     final db = await _databaseService.database;
     final references = <BlobReference>[];
 
@@ -655,15 +895,19 @@ class BlobSyncPhase {
           .firstOrNull;
       if (scope == null) continue;
 
+      final owner = _attachmentOwners[table]!;
+
       final rows = await db.rawQuery(
         'SELECT s.blobHash AS blobHash, '
         'CAST(t.${scope.idColumn} AS TEXT) AS entityId, '
         't.$column AS storedPath'
         '${relativeColumn == null ? '' : ', t.$relativeColumn AS isRelative'} '
         'FROM sync_field_state s '
-        'JOIN $table t ON CAST(t.${scope.idColumn} AS TEXT) = s.entityId '
+        'JOIN $table t ON t.${scope.idColumn} = s.entityId '
+        '${liveOnly ? 'JOIN ${owner.table} owner ON owner.id = t.${owner.column} ' : ''}'
         'WHERE s.entityTable = ? AND s.fieldName = ? '
-        'AND s.blobHash IS NOT NULL',
+        'AND s.blobHash IS NOT NULL '
+        '${liveOnly ? 'AND t.__deleted__ = 0 AND owner.__deleted__ = 0' : ''}',
         [table, column],
       );
       for (final row in rows) {
@@ -694,9 +938,11 @@ class BlobSyncPhase {
         'SELECT s.blobHash AS blobHash, '
         'CAST(t.${scope.idColumn} AS TEXT) AS entityId '
         'FROM sync_field_state s '
-        'JOIN $table t ON CAST(t.${scope.idColumn} AS TEXT) = s.entityId '
+        'JOIN $table t ON t.${scope.idColumn} = s.entityId '
         'WHERE s.entityTable = ? AND s.fieldName = ? '
-        'AND s.blobHash IS NOT NULL',
+        'AND s.blobHash IS NOT NULL '
+        '${liveOnly ? 'AND t.__deleted__ = 0 ' : ''}'
+        '${liveOnly && table == 'app_revisions' ? 'AND EXISTS (SELECT 1 FROM user_apps owner WHERE owner.id = t.appId AND owner.__deleted__ = 0)' : ''}',
         [table, column],
       );
       for (final row in rows) {

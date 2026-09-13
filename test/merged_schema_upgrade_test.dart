@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_synapse/services/database_service.dart';
@@ -80,7 +81,10 @@ Future<void> _verifyUpgrade(
   required bool localized,
 }) async {
   final db = await service.database;
-  expect((await db.query('_schema_version')).single['version'], 64);
+  expect(
+    (await db.query('_schema_version')).single['version'],
+    DatabaseService.DATABASE_VERSION,
+  );
   expect(
     (await service.getNote('kept-note'))?.content,
     'migrationsearchable body',
@@ -261,6 +265,432 @@ void main() {
         // backup. A successful return would let recovery merge incomplete data.
         await expectLater(
           DatabaseService().migrateBackupDatabase(db, 50, 51),
+          throwsA(isA<DatabaseException>()),
+        );
+      } finally {
+        await db.close();
+      }
+    },
+  );
+
+  for (final missingTable in [false, true]) {
+    test(
+      'lost schema tracking is recovered (missing table: $missingTable)',
+      () async {
+        final raw = await _main48Fixture(path);
+        if (missingTable) {
+          await raw.execute('DROP TABLE _schema_version');
+        } else {
+          await raw.delete('_schema_version');
+        }
+        await raw.close();
+
+        final service = DatabaseService.createNew(databaseName: path);
+        try {
+          await _verifyUpgrade(service, localized: true);
+          expect(
+            directory.listSync().whereType<File>().where(
+              (file) => p.basename(file.path).contains('_pre_migration_'),
+            ),
+            hasLength(1),
+          );
+        } finally {
+          await service.close();
+        }
+      },
+    );
+  }
+
+  test(
+    'partial sync plus complete search tables do not skip sync upgrades',
+    () async {
+      final raw = await _main48Fixture(path, recordedVersion: 999);
+      // The sync control plane and search tables may be present from an
+      // interrupted merge/upgrade while all content tables still have the
+      // released schema. Table-name probes must not declare this v63 complete.
+      final service = DatabaseService.createNew(databaseName: path);
+      await service.migrateBackupDatabase(raw, 47, 48);
+      await service.migrateBackupDatabase(raw, 62, 63);
+      await raw.close();
+      try {
+        await _verifyUpgrade(service, localized: true);
+        expect(
+          await (await service.database).rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='trigger' "
+            "AND name='sync_touch_notes_au_content'",
+          ),
+          hasLength(1),
+        );
+      } finally {
+        await service.close();
+      }
+    },
+  );
+
+  test(
+    'an interrupted pre-Spaces upgrade can replay the notes metadata step',
+    () async {
+      final raw = await _main48Fixture(path, recordedVersion: 41);
+      await raw.execute('ALTER TABLE filters DROP COLUMN isSpace');
+      await raw.close();
+      final service = DatabaseService.createNew(databaseName: path);
+      try {
+        await _verifyUpgrade(service, localized: true);
+      } finally {
+        await service.close();
+      }
+    },
+  );
+
+  test('concurrent startup consumers share one backup and migration', () async {
+    final raw = await _main48Fixture(path);
+    await raw.close();
+    final service = DatabaseService.createNew(databaseName: path);
+    try {
+      final connections = await Future.wait(
+        List.generate(12, (_) => service.database),
+      );
+      expect(
+        connections.every((db) => identical(db, connections.first)),
+        isTrue,
+      );
+      expect(
+        directory.listSync().whereType<File>().where(
+          (file) => p.basename(file.path).contains('_pre_migration_'),
+        ),
+        hasLength(1),
+      );
+      await _verifyUpgrade(service, localized: true);
+    } finally {
+      await service.close();
+    }
+  });
+
+  test(
+    'failed initialization can retry on the same service after repair',
+    () async {
+      final raw = await _main48Fixture(path);
+      await raw.execute('''
+      CREATE TRIGGER reject_version_update BEFORE UPDATE ON _schema_version
+      BEGIN SELECT RAISE(ABORT, 'simulated interrupted upgrade'); END
+    ''');
+      await raw.close();
+      final service = DatabaseService.createNew(databaseName: path);
+      await expectLater(service.database, throwsA(isA<DatabaseException>()));
+
+      final repaired = await databaseFactory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
+      await repaired.execute('DROP TRIGGER reject_version_update');
+      await repaired.close();
+      try {
+        await _verifyUpgrade(service, localized: true);
+      } finally {
+        await service.close();
+      }
+    },
+  );
+
+  test(
+    'busy WAL checkpoint blocks upgrade until a complete backup is possible',
+    () async {
+      final writer = await _main48Fixture(path);
+      await writer.rawQuery('PRAGMA journal_mode = WAL');
+      await writer.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
+      final reader = await databaseFactory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
+      final service = DatabaseService.createNew(databaseName: path);
+      try {
+        // This live read snapshot prevents FULL from checkpointing the newer
+        // WAL frames below. SQLite returns busy=1 instead of throwing.
+        await reader.execute('BEGIN');
+        await reader.query('user_apps');
+        await writer.update('user_apps', {'appState': '{"latest":true}'});
+        await expectLater(
+          service.database,
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains('checkpoint'),
+            ),
+          ),
+        );
+        expect((await writer.query('_schema_version')).single['version'], 48);
+        expect(
+          directory.listSync().whereType<File>().where(
+            (file) => p.basename(file.path).contains('_pre_migration_'),
+          ),
+          isEmpty,
+        );
+      } finally {
+        await reader.execute('ROLLBACK');
+        await reader.close();
+        await writer.close();
+      }
+
+      // Once the read lock clears, the same service must retry normally and
+      // its backup must include the latest WAL-only application state.
+      try {
+        final upgraded = await service.database;
+        expect(
+          (await upgraded.query('user_apps')).single['appState'],
+          '{"latest":true}',
+        );
+        final backupPath = directory
+            .listSync()
+            .whereType<File>()
+            .singleWhere(
+              (file) => p.basename(file.path).contains('_pre_migration_'),
+            )
+            .path;
+        final backup = await databaseFactory.openDatabase(
+          backupPath,
+          options: OpenDatabaseOptions(singleInstance: false, readOnly: true),
+        );
+        try {
+          expect(
+            (await backup.query('user_apps')).single['appState'],
+            '{"latest":true}',
+          );
+        } finally {
+          await backup.close();
+        }
+      } finally {
+        await service.close();
+      }
+    },
+  );
+
+  test(
+    'close waits for a running upgrade and the next open gets a fresh connection',
+    () async {
+      final raw = await _main48Fixture(path);
+      await raw.close();
+      final service = DatabaseService.createNew(databaseName: path);
+      final opening = service.database;
+      await service.close();
+      final first = await opening;
+      expect(first.isOpen, isFalse);
+      try {
+        final reopened = await service.database;
+        expect(identical(first, reopened), isFalse);
+        expect(reopened.isOpen, isTrue);
+        await _verifyUpgrade(service, localized: true);
+      } finally {
+        await service.close();
+      }
+    },
+  );
+
+  test(
+    'released DB repairs FKs left by the historical rename-first v23 upgrade',
+    () async {
+      final raw = await _main48Fixture(path);
+      await raw.execute(
+        'ALTER TABLE app_revisions ADD COLUMN legacyExtension TEXT',
+      );
+      await raw.update('app_revisions', {
+        'legacyExtension': 'retained extra data',
+      });
+      await raw.execute(
+        'CREATE INDEX legacy_revision_extension ON app_revisions(legacyExtension)',
+      );
+      await raw.execute('CREATE TABLE legacy_revision_audit (revisionId TEXT)');
+      await raw.execute('''
+      CREATE TRIGGER legacy_revision_update AFTER UPDATE OF appCode ON app_revisions
+      BEGIN INSERT INTO legacy_revision_audit VALUES(NEW.id); END
+    ''');
+      await raw.insert('user_app_libraries', {
+        'id': 42,
+        'app_uuid': 'kept-app-uuid',
+        'revision_id': 1,
+        'name': 'retained library',
+      });
+      final dependencyBytes = Uint8List.fromList([1, 2, 3, 4, 255]);
+      await raw.rawUpdate(
+        'UPDATE sqlite_sequence SET seq = 100 WHERE name = ?',
+        ['user_app_libraries'],
+      );
+      await raw.insert('user_app_library_dependencies', {
+        'id': 77,
+        'library_id': 42,
+        'local_path': 'library.js',
+        'bytes': dependencyBytes,
+      });
+      await raw.insert('multi_function_apps', {
+        'appId': 'kept-app',
+        'addedAt': 1000,
+      });
+
+      // Reproduce the exact old v23 rename-first sequence. Modern SQLite
+      // rewrites every child's REFERENCES target even with enforcement off.
+      await raw.execute('PRAGMA foreign_keys = OFF');
+      final appDdl =
+          (await raw.rawQuery(
+                "SELECT sql FROM sqlite_master WHERE name='user_apps'",
+              )).single['sql']
+              as String;
+      await raw.execute('ALTER TABLE user_apps RENAME TO user_apps_old');
+      await raw.execute(appDdl);
+      await raw.execute('INSERT INTO user_apps SELECT * FROM user_apps_old');
+      await raw.execute('DROP TABLE user_apps_old');
+      for (final table in [
+        'app_revisions',
+        'user_app_libraries',
+        'multi_function_apps',
+      ]) {
+        expect(
+          (await raw.rawQuery(
+            'PRAGMA foreign_key_list($table)',
+          )).single['table'],
+          'user_apps_old',
+        );
+      }
+      await raw.close();
+
+      final service = DatabaseService.createNew(databaseName: path);
+      try {
+        final repaired = await service.database;
+        expect(await repaired.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+        expect(
+          (await repaired.query('app_revisions')).single['legacyExtension'],
+          'retained extra data',
+        );
+        expect((await repaired.query('user_app_libraries')).single['id'], 42);
+        final dependency = (await repaired.query(
+          'user_app_library_dependencies',
+        )).single;
+        expect(dependency['id'], 77);
+        expect(dependency['library_id'], 42);
+        expect(dependency['bytes'], dependencyBytes);
+        expect(await repaired.query('multi_function_apps'), hasLength(1));
+        expect(
+          await repaired.rawQuery(
+            "SELECT name FROM sqlite_master WHERE name='legacy_revision_extension'",
+          ),
+          hasLength(1),
+        );
+        await repaired.update('app_revisions', {
+          'appCode': '<main>Still writable</main>',
+        });
+        expect(
+          (await repaired.query('legacy_revision_audit')).single['revisionId'],
+          'kept-revision',
+        );
+        // The repaired child must remain writable with FK enforcement on.
+        final newLibraryId = await repaired.insert('user_app_libraries', {
+          'app_uuid': 'kept-app-uuid',
+          'revision_id': 1,
+          'name': 'new library',
+        });
+        expect(newLibraryId, greaterThan(100));
+        await repaired.update('app_revisions', {
+          'appCode': '<main>Original revision</main>',
+        });
+        await _verifyUpgrade(service, localized: true);
+      } finally {
+        await service.close();
+      }
+    },
+  );
+
+  test(
+    'v23 adds UUID uniqueness without losing older app data or incoming FKs',
+    () async {
+      final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
+      try {
+        final statements =
+            (jsonDecode(
+                      await File(
+                        'test/fixtures/main_v48_schema.json',
+                      ).readAsString(),
+                    )
+                    as List<dynamic>)
+                .cast<String>();
+        // v22 had no UUID constraint or i18n field. Keep a forward-added
+        // custom column to detect accidental loss from a table reconstruction.
+        final appDdl = statements
+            .singleWhere(
+              (statement) => statement.contains('CREATE TABLE user_apps('),
+            )
+            .replaceFirst('uuid TEXT NOT NULL UNIQUE', 'uuid TEXT NOT NULL')
+            .replaceFirst(RegExp(r'        i18n TEXT,[^\n]*\n'), '');
+        await db.execute(appDdl);
+        await db.execute(
+          'ALTER TABLE user_apps ADD COLUMN retainedExtension TEXT',
+        );
+        for (final table in [
+          'app_revisions',
+          'user_app_libraries',
+          'multi_function_apps',
+        ]) {
+          await db.execute(
+            statements.singleWhere(
+              (statement) => statement.contains('CREATE TABLE $table('),
+            ),
+          );
+        }
+        await db.insert('user_apps', {
+          'id': 'old-app',
+          'uuid': 'stable-uuid',
+          'name': 'Old app',
+          'description': 'Preserve',
+          'steps': '[]',
+          'htmlContent': 'legacy html',
+          'createdAt': 100,
+          'updatedAt': 200,
+          'retainedExtension': 'keep me',
+        });
+        await db.insert('app_revisions', {
+          'id': 'old-revision',
+          'appId': 'old-app',
+          'revisionNumber': 7,
+          'revisionTimestamp': 100,
+          'userPrompt': 'original',
+          'aiResponse': 'original',
+          'appCode': '<html>preserved revision</html>',
+        });
+        await db.insert('user_app_libraries', {
+          'app_uuid': 'stable-uuid',
+          'revision_id': 7,
+          'name': 'library',
+        });
+        await db.insert('multi_function_apps', {
+          'appId': 'old-app',
+          'addedAt': 100,
+        });
+
+        final service = DatabaseService();
+        await service.migrateBackupDatabase(db, 22, 23);
+        await service.migrateBackupDatabase(db, 22, 23);
+        expect(
+          (await db.query('user_apps')).single['retainedExtension'],
+          'keep me',
+        );
+        expect(
+          (await db.query('app_revisions')).single['appCode'],
+          '<html>preserved revision</html>',
+        );
+        expect(await db.query('user_app_libraries'), hasLength(1));
+        expect(await db.query('multi_function_apps'), hasLength(1));
+        expect(await db.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+        await db.execute('PRAGMA foreign_keys = ON');
+        await db.update('app_revisions', {'appCode': 'still writable'});
+        await expectLater(
+          db.insert('user_apps', {
+            'id': 'duplicate',
+            'uuid': 'stable-uuid',
+            'name': 'Duplicate',
+            'description': '',
+            'steps': '[]',
+            'htmlContent': '',
+            'createdAt': 100,
+            'updatedAt': 200,
+          }),
           throwsA(isA<DatabaseException>()),
         );
       } finally {

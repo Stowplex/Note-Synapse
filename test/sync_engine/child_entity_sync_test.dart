@@ -218,6 +218,38 @@ void main() {
 
   // ══════════════════════════════════════════════════════════════════════
   group('a fresh device rebuilds the real thing', () {
+    for (final preExisting in [true, false]) {
+      test('preserves historical creation dates after first sync '
+          '(pre-existing release data=$preExisting)', () async {
+        final dbA = await a.db;
+        final dbB = await b.db;
+        await _buildLibrary(dbA);
+        if (preExisting) await dbA.delete('sync_touch_log');
+        await syncBoth(rounds: 1);
+        for (final entry in syncEntityCreatedAtColumnByTable.entries) {
+          final source = await dbA.query(
+            entry.key,
+            columns: ['id', entry.value],
+          );
+          if (source.isEmpty) continue;
+          for (final row in source) {
+            final received = await dbB.query(
+              entry.key,
+              columns: [entry.value],
+              where: 'id = ?',
+              whereArgs: [row['id']],
+            );
+            expect(received, hasLength(1), reason: '${entry.key}/${row['id']}');
+            expect(
+              received.single[entry.value],
+              row[entry.value],
+              reason: '${entry.key}/${row['id']} must retain ${entry.value}',
+            );
+          }
+        }
+      });
+    }
+
     test(
       'subnotes, a note link, a note attachment, a chat attachment and a mini '
       'app all arrive on device B as real rows — asserted column by column',
@@ -241,11 +273,7 @@ void main() {
           'noteId': 'n1',
           'name': 'Draft the spec',
           'content': 'by friday',
-          // createdAt is derived from the __exists__ operation's own HLC wall
-          // clock, not carried — see `_createdAtFromHlcWall`. Asserted as a
-          // plausible instant rather than as A's 1002, because it is a
-          // documented origin/receiver split, not an identity.
-          'createdAt': isA<int>(),
+          'createdAt': 1002,
           'isCompleted': 0,
           '__deleted__': 0,
         });
@@ -330,21 +358,27 @@ void main() {
         }
       }
 
-      expect(payloads['subnotes/s1'], {'noteId': 'n1'});
+      expect(payloads['subnotes/s1'], {'createdAt': 1002, 'noteId': 'n1'});
       expect(payloads['relationships/r1'], {
+        'createdAt': 1004,
         // Sorted, not schema order — two devices must produce the identical
         // string or their GENESIS contentKeys diverge, and `ALTER TABLE ADD
         // COLUMN` makes declaration order device-dependent.
         'fromNoteId': 'n1',
         'toNoteId': 'n2',
       });
-      expect(payloads['attachments/a1'], {'noteId': 'n1'});
-      expect(payloads['conversation_attachments/ca1'], {'messageId': 'm1'});
-      expect(payloads['user_apps/app1'], {'uuid': 'uuid-app1'});
+      expect(payloads['attachments/a1'], {'createdAt': 1005, 'noteId': 'n1'});
+      expect(payloads['conversation_attachments/ca1'], {
+        'createdAt': 1008,
+        'messageId': 'm1',
+      });
+      expect(payloads['user_apps/app1'], {
+        'createdAt': 1009,
+        'uuid': 'uuid-app1',
+      });
 
-      // Ten of the fourteen tables carry nothing, and their payload is
-      // byte-for-byte the constant every already-published operation has:
-      // no GENESIS contentKey anywhere in the field changes.
+      // Tables without owner references now carry their original creation
+      // date; tables with no date or owner values retain the legacy sentinel.
       for (final commit in commits) {
         for (final op in decodeCommitOperations(
           commit.commitBytes,
@@ -360,11 +394,12 @@ void main() {
             'conversation_messages',
             'tag_workflow_bindings',
           }.contains(op.entityTable)) {
-            expect(
-              op.valueJson,
-              bareExistsPayloadJson,
-              reason: '${op.entityTable} must still carry the constant true',
-            );
+            final column = syncEntityCreatedAtColumnByTable[op.entityTable];
+            if (column == null) {
+              expect(op.valueJson, bareExistsPayloadJson);
+            } else {
+              expect(decodeExistsPayload(op.valueJson)[column], isA<int>());
+            }
           }
         }
       }
@@ -392,13 +427,19 @@ void main() {
       await syncBoth();
 
       expect(
-        (await dbA.query('subnotes', where: 'id = ?', whereArgs: ['s1']))
-            .single['isCompleted'],
+        (await dbA.query(
+          'subnotes',
+          where: 'id = ?',
+          whereArgs: ['s1'],
+        )).single['isCompleted'],
         1,
       );
       expect(
-        (await dbA.query('attachments', where: 'id = ?', whereArgs: ['a1']))
-            .single['includeInAIContext'],
+        (await dbA.query(
+          'attachments',
+          where: 'id = ?',
+          whereArgs: ['a1'],
+        )).single['includeInAIContext'],
         0,
       );
     });
@@ -418,8 +459,11 @@ void main() {
       await syncBoth();
 
       expect(
-        (await dbB.query('relationships', where: 'id = ?', whereArgs: ['r1']))
-            .single['__deleted__'],
+        (await dbB.query(
+          'relationships',
+          where: 'id = ?',
+          whereArgs: ['r1'],
+        )).single['__deleted__'],
         1,
       );
     });
@@ -849,7 +893,7 @@ void main() {
         )).single;
         expect(
           registerA['valueJson'],
-          jsonEncode({'noteId': 'n1'}),
+          jsonEncode({'createdAt': 1001, 'noteId': 'n1'}),
           reason: 'the stale register was replaced, not left in place',
         );
         expect(
@@ -957,16 +1001,94 @@ void main() {
       );
     });
 
-    test('a malformed exists payload decodes to empty rather than throwing', () {
-      expect(decodeExistsPayload(null), isEmpty);
-      expect(decodeExistsPayload('not json'), isEmpty);
-      expect(decodeExistsPayload('[1,2,3]'), isEmpty);
-      expect(decodeExistsPayload('123'), isEmpty);
-    });
+    test(
+      'a malformed exists payload decodes to empty rather than throwing',
+      () {
+        expect(decodeExistsPayload(null), isEmpty);
+        expect(decodeExistsPayload('not json'), isEmpty);
+        expect(decodeExistsPayload('[1,2,3]'), isEmpty);
+        expect(decodeExistsPayload('123'), isEmpty);
+      },
+    );
   });
 
   // ══════════════════════════════════════════════════════════════════════
   group('what M3.1 closed, and what is still not synced', () {
+    test(
+      'existing user data outside capture scopes is reported as unsynced',
+      () async {
+        final dbA = await a.db;
+        await _buildLibrary(dbA);
+        await dbA.insert('tags', {
+          'id': 'tag1',
+          'name': 'Review',
+          'color': 'red',
+          'createdAt': 1000,
+        });
+        await dbA.insert('note_annotations', {
+          'id': 'annotation1',
+          'note_id': 'n1',
+          'content': 'Keep this margin note',
+          'created_at': '2020-01-01T00:00:00Z',
+        });
+        await dbA.insert('tag_images', {
+          'tagId': 'tag1',
+          'imagePath': 'tag.png',
+        });
+        await dbA.insert('tag_ai_configs', {
+          'tagId': 'tag1',
+          'extractionPrompt': 'Extract action items',
+        });
+        await dbA.insert('multi_function_apps', {
+          'appId': 'app1',
+          'isDefault': 1,
+          'addedAt': 1000,
+        });
+        await syncBoth(rounds: 1);
+        final health = await recomputeSyncHealth(a.databaseService);
+        final omitted = health.issues
+            .where((issue) => issue.kind == SyncHealthIssueKind.tablesNotSynced)
+            .expand((issue) => issue.subjects);
+        expect(
+          omitted,
+          containsAll([
+            'note_annotations',
+            'tag_images',
+            'tag_ai_configs',
+            'multi_function_apps',
+          ]),
+        );
+        final dbB = await b.db;
+        expect(
+          await dbB.query('notes', where: 'id = ?', whereArgs: ['n1']),
+          isNotEmpty,
+        );
+        for (final table in [
+          'note_annotations',
+          'tag_images',
+          'tag_ai_configs',
+          'multi_function_apps',
+        ]) {
+          expect(
+            await dbB.query(table),
+            isEmpty,
+            reason: '$table needs capture, identity/deletion and blob support',
+          );
+        }
+        for (final table in ['notes', 'tags', 'user_apps']) {
+          await dbA.update(table, {'__deleted__': 1});
+        }
+        final afterDeletion = await recomputeSyncHealth(a.databaseService);
+        expect(
+          afterDeletion.issues.where(
+            (issue) => issue.kind == SyncHealthIssueKind.tablesNotSynced,
+          ),
+          isEmpty,
+          reason: 'hidden owner data must not warn as unsynced live items',
+        );
+      },
+    );
+
     test('the attachment FILE and the mini app CODE both arrive now — the '
         'two residuals M2.14 disclosed and M3.1 closed', () async {
       final dbA = await a.db;

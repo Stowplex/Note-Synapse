@@ -3347,6 +3347,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncItemsUserAppLibraryDependencies => '小应用库文件';
 
   @override
+  String get syncItemsNoteAnnotations => '笔记批注';
+
+  @override
+  String get syncItemsTagImages => '标签图片';
+
+  @override
+  String get syncItemsTagAiConfigs => '标签 AI 设置';
+
+  @override
+  String get syncItemsMultiFunctionApps => '多功能应用设置';
+
+  @override
   String cloudSyncNowError(String error) {
     return '同步失败：$error';
   }

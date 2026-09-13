@@ -53,9 +53,8 @@ void main() {
           config.clientSecret,
           isNull,
           reason:
-              'Note Synapse is open source: a shipped client secret is public. '
-              'The iOS client type issues none and relies on PKCE, which is '
-              'why the Desktop client type was ruled out.',
+              'A client secret shipped in a native app cannot stay secret. '
+              'This browser authorization flow uses PKCE without one.',
         );
         expect(config.redirectUri, GoogleDriveClientConfig.redirectUri);
         expect(

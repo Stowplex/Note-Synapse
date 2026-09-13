@@ -153,32 +153,24 @@ void main() {
       expect(rowB['__deleted__'], 0);
     });
 
-    test('conversations createdAt is derived from the __exists__ operation\'s own HLC wall-clock', () async {
+    test('conversations preserve their original creation timestamp', () async {
       final dbA = await deviceA.db;
       final dbB = await deviceB.db;
       await dbA.insert('conversations', {
         'id': 'c1',
         'title': 'Conv',
         'noteIds': '[]',
-        'createdAt': 999999, // deliberately NOT what should end up on B
+        'createdAt': 999999,
         'updatedAt': 999999,
         'isArchived': 0,
       });
 
       await deviceA.session.run(backend);
-      final beforePull = DateTime.now().millisecondsSinceEpoch;
       await deviceB.session.run(backend);
-      final afterPull = DateTime.now().millisecondsSinceEpoch;
 
       final rowB = (await dbB.query('conversations', where: 'id = ?', whereArgs: ['c1'])).single;
       expect(rowB['title'], 'Conv');
-      // createdAt is NOT the literal 999999 A's local row happened to have
-      // (that column is deliberately excluded from sync scope, § materializer.dart's
-      // top doc comment) — it's derived from B's own pull-time HLC instead,
-      // so it should land somewhere around "now", not the arbitrary sentinel.
-      final createdAt = rowB['createdAt'] as int;
-      expect(createdAt, greaterThanOrEqualTo(beforePull - 5000));
-      expect(createdAt, lessThanOrEqualTo(afterPull + 5000));
+      expect(rowB['createdAt'], 999999);
     });
   });
 

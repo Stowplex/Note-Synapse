@@ -342,150 +342,27 @@ class RecoveryMergeService {
     }
   }
 
-  // M1.3 gave `tags` `__deleted__`/`redirectTarget` columns and dropped its
-  // blanket `name` UNIQUE constraint (replaced by the partial index
-  // `idx_tags_name_live`, `WHERE __deleted__ = 0 AND redirectTarget IS
-  // NULL`) — but, per M1.3's own scoping, its actual code changes were
-  // confined to `_getOrCreateTagId`'s two duplicated copies plus
-  // `replaceTag`; this recovery-merge method's tag-identity lookup was
-  // NOT updated at that time and had been running an unguarded, stale
-  // `WHERE name = ?` match ever since M1.3 landed (confirmed against this
-  // file's own git history — no commit between M1.3 and this one touched
-  // it) — a real, live regression risk for exactly the reason described
-  // below, not a hypothetical one.
-  //
-  // M1.6 (this milestone) is what actually fixes this: switches the
-  // lookup to `DatabaseService.findLiveTagByName`'s liveness-aware
-  // predicate, and re-audits the method against every TAG-liveness
-  // combination reachable at a recovery merge, per the design doc's own
-  // "recovery_screen.dart consistency pass" scope. Unlike
-  // `_mergeUserApps`/`_insertPinnedRevisionForApp` below, no second gap
-  // in the tag-liveness handling ITSELF was found beyond this one
-  // lookup-predicate fix — the three cases below are already handled
-  // correctly once the predicate is fixed. **This re-audit was scoped to
-  // `mergeTags` in isolation; it does not cover a real, separate,
-  // pre-existing gap in how this method's `continue` branch (case 1)
-  // interacts with `mergeNoteTags`, called later in the same merge
-  // sequence — see the comment directly on that `continue` branch below.
-  // That gap predates M1 entirely (it exists in the original, unmodified
-  // `_mergeNoteTags`/`_mergeTags` pairing) and is left unfixed here,
-  // deliberately, as out of this milestone's scope — recorded here so a
-  // future reader isn't misled into thinking "re-audited end-to-end"
-  // means this interaction was checked.**
-  //
-  //  1. Backup tag's name matches a LIVE staging tag under a different id
-  //     (regardless of whether the backup's own copy is itself live or
-  //     tombstoned): `findLiveTagByName` finds the staging row, note_tags
-  //     referencing the backup id are repointed to it, and the backup row
-  //     itself is never inserted (`continue`) — the live staging tag wins,
-  //     no partial-unique-index violation is possible since only one row
-  //     is ever live per name. (This is the branch with the separate,
-  //     pre-existing `mergeNoteTags` interaction gap noted above.)
-  //  2. Backup tag's name matches NO live staging tag (staging has no row
-  //     with that name, or only tombstoned ones) and the backup tag's own
-  //     id doesn't already exist in staging: the backup row is inserted
-  //     as-is, preserving its own live/tombstoned state. If staging
-  //     already has a tombstoned row under the same name, the result is
-  //     two rows sharing a name — one live (the newly inserted backup row
-  //     if it's live) or two tombstoned rows (if the backup row is also
-  //     tombstoned) — both satisfy the partial index, which only
-  //     constrains live, non-redirecting rows.
-  //  3. Backup tag's id already exists in staging (same id, e.g. the exact
-  //     same tombstoned tag present in both copies, or a same-id row with
-  //     a different liveness state than the backup's copy): nothing is
-  //     inserted or updated. `tags` has no `updatedAt`/HLC field to compare
-  //     against, so — consistent with how the rest of this file treats
-  //     tables lacking one — the conservative choice is to keep staging's
-  //     own existing row untouched rather than guess which side is
-  //     "newer".
-  //
-  //  What remains explicitly out of scope, and genuinely unreachable
-  //  today, not merely deferred: reconciling two independently
-  //  tombstoned/redirecting copies of the SAME name via `redirectTarget`
-  //  (a real `tagMerge`/cycle-suppression operation) needs the `tagMerge`
-  //  machinery itself, which does not exist anywhere in this application
-  //  codebase yet — `redirectTarget` is written by nothing today (see
-  //  `_createTagsTable`'s own doc comment in database_service.dart) and
-  //  stays that way until a real `tagMerge` operation is implemented.
-  //  **M1.9 update**: `deleteTag`/`replaceTag` now tombstone `tags` rows
-  //  instead of hard-deleting them, so a genuinely tombstoned `tags` row
-  //  is an entirely ordinary result of everyday app usage today, not only
-  //  something a raw write (e.g. a test) could produce as this comment
-  //  previously (and, as of M1.9, incorrectly) claimed — cases 1-3 above
-  //  were already written to handle exactly that (liveness-aware
-  //  matching via `findLiveTagByName`, tolerating an arbitrary mix of
-  //  live/tombstoned rows on either side), so no logic change was needed
-  //  here, only this correction. `redirectTarget` itself, specifically,
-  //  is still never written by anything, so there is still no live code
-  //  path, recovery included, that could ever encounter a
-  //  `redirectTarget`-bearing row to reconcile — that part of this
-  //  comment remains accurate and this remains real future work (post
-  //  sync-engine, M2+), not something M1.6 or M1.9 could complete.
-  Future<void> mergeTags(Database stagingDb, Database backupDb) async {
+  /// Merge tag identities and return backup IDs mapped to staging IDs.
+  /// Callers must reuse the map for every imported tag membership/image:
+  /// matching names can identify different IDs on independent databases.
+  /// Existing staging rows keep their own liveness state.
+  Future<Map<String, String>> mergeTags(
+    Database stagingDb,
+    Database backupDb,
+  ) async {
     final backupTags = await backupDb.query('tags');
-
+    final tagIdRemap = <String, String>{};
     for (final tag in backupTags) {
       final backupTagId = tag['id'] as String;
-      final tagName = tag['name'] as String;
-
-      // Match by LIVE name only (DatabaseService.findLiveTagByName's exact
-      // predicate: `__deleted__ = 0 AND redirectTarget IS NULL`), not a
-      // bare `WHERE name = ?`. Before this schema change, `tags.name` was
-      // a table-wide UNIQUE constraint, so at most one row could ever
-      // share a name — a bare match was safe. Now that an ordinary
-      // deletion leaves a tombstoned row behind with its name intact, a
-      // bare name match here would incorrectly treat a live backup tag as
-      // "the same tag" as a *tombstoned* staging tag and repoint
-      // note_tags onto the tombstoned row's id — exactly the
-      // `_getOrCreateTagId` bug this milestone's schema change fixes
-      // everywhere else; this call site must not reintroduce it.
       final existingLiveTag = await DatabaseService.findLiveTagByName(
         stagingDb,
-        tagName,
+        tag['name'] as String,
       );
-
       if (existingLiveTag != null) {
-        // A live tag with this name already exists in staging.
-        final existingTagId = existingLiveTag['id'] as String;
-        if (existingTagId != backupTagId) {
-          // Update note_tags table to use the existing tag ID
-          await stagingDb.update(
-            'note_tags',
-            {'tagId': existingTagId},
-            where: 'tagId = ?',
-            whereArgs: [backupTagId],
-          );
-        }
-        // KNOWN, PRE-EXISTING, OUT-OF-SCOPE GAP (confirmed real, not
-        // fixed here): the update above only repoints `note_tags` rows
-        // ALREADY PRESENT in `stagingDb` at this point in the merge
-        // sequence. `mergeNoteTags` (below, called later in
-        // `recovery_screen.dart`'s own merge step ordering) subsequently
-        // inserts the BACKUP's own `note_tags` rows verbatim, including
-        // any row whose `tagId` is this exact `backupTagId` — which was
-        // never inserted into `stagingDb.tags` (we `continue`d past that
-        // insert precisely because a live staging tag already covers this
-        // name). Those newly-inserted rows are left dangling, referencing
-        // a `tags.id` that doesn't exist in `stagingDb`. `stagingDb`/
-        // `migratedBackupDb` are opened via plain `openDatabase` in
-        // `recovery_screen.dart`, not through `DatabaseService`'s own
-        // `_onOpen` (which sets `PRAGMA foreign_keys = ON`), so this does
-        // not throw — it silently produces an orphaned `note_tags` row.
-        // This predates M1 entirely (the same structural gap existed
-        // before M1.3's schema change, just without a name-liveness
-        // dimension to it) and isn't named by any M1.1-M1.5 deferred-work
-        // comment; fixing it would need either reordering the merge steps
-        // so `mergeNoteTags` runs first, or `mergeTags` building and
-        // returning an id-remap table for `mergeNoteTags` to consult —
-        // left for a future, dedicated fix rather than folded into M1.6.
+        tagIdRemap[backupTagId] = existingLiveTag['id'] as String;
         continue;
       }
-
-      // No live tag with this name in staging. Insert the backup row as
-      // its own tag (preserving its own id/__deleted__/redirectTarget) —
-      // unless a row with this exact id already exists in staging (e.g.
-      // the same tombstoned tag present in both copies), in which case
-      // there is nothing to insert.
+      tagIdRemap[backupTagId] = backupTagId;
       final existingById = await stagingDb.query(
         'tags',
         where: 'id = ?',
@@ -497,9 +374,14 @@ class RecoveryMergeService {
         await stagingDb.insert('tags', filteredData);
       }
     }
+    return tagIdRemap;
   }
 
-  Future<void> mergeTagImages(Database stagingDb, Database backupDb) async {
+  Future<void> mergeTagImages(
+    Database stagingDb,
+    Database backupDb, {
+    Map<String, String> tagIdRemap = const {},
+  }) async {
     // Check if tag_images table exists in backup DB
     final tableCheck = await backupDb.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='tag_images'",
@@ -509,7 +391,8 @@ class RecoveryMergeService {
     final backupTagImages = await backupDb.query('tag_images');
 
     for (final tagImage in backupTagImages) {
-      final tagId = tagImage['tagId'] as String;
+      final backupTagId = tagImage['tagId'] as String;
+      final tagId = tagIdRemap[backupTagId] ?? backupTagId;
 
       // Only import if the tag exists in staging
       final existingTag = await stagingDb.query(
@@ -537,10 +420,18 @@ class RecoveryMergeService {
   // M1.10: same disclosed residual as `mergeSubNotes` above -- can merge
   // in a note_tags row for a note `mergeNotes` correctly left tombstoned.
   // See the doc comment above `mergeNotes` for the full investigation.
-  Future<void> mergeNoteTags(Database stagingDb, Database backupDb) async {
+  Future<void> mergeNoteTags(
+    Database stagingDb,
+    Database backupDb, {
+    Map<String, String> tagIdRemap = const {},
+  }) async {
     final backupNoteTags = await backupDb.query('note_tags');
 
-    for (final noteTag in backupNoteTags) {
+    for (final backupNoteTag in backupNoteTags) {
+      final noteTag = {
+        ...backupNoteTag,
+        'tagId': tagIdRemap[backupNoteTag['tagId']] ?? backupNoteTag['tagId'],
+      };
       // Check if note-tag relationship exists in staging
       final existingNoteTags = await stagingDb.query(
         'note_tags',
@@ -1350,11 +1241,16 @@ class RecoveryMergeService {
 
   Future<void> mergeConversationTagMappings(
     Database stagingDb,
-    Database backupDb,
-  ) async {
+    Database backupDb, {
+    Map<String, String> tagIdRemap = const {},
+  }) async {
     final backupMappings = await backupDb.query('conversation_tags');
 
-    for (final mapping in backupMappings) {
+    for (final backupMapping in backupMappings) {
+      final mapping = {
+        ...backupMapping,
+        'tagId': tagIdRemap[backupMapping['tagId']] ?? backupMapping['tagId'],
+      };
       final existingMappings = await stagingDb.query(
         'conversation_tags',
         where: 'conversationId = ? AND tagId = ?',

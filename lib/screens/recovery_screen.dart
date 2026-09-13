@@ -661,16 +661,27 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       _updateImportProgress(0.18);
 
       // Step 3: Insert all tags
-      await _mergeService.mergeTags(stagingDb, migratedBackupDb);
+      final tagIdRemap = await _mergeService.mergeTags(
+        stagingDb,
+        migratedBackupDb,
+      );
 
       _addImportLog('Merging tag images...');
-      await _mergeService.mergeTagImages(stagingDb, migratedBackupDb);
+      await _mergeService.mergeTagImages(
+        stagingDb,
+        migratedBackupDb,
+        tagIdRemap: tagIdRemap,
+      );
 
       _addImportLog('Merging note-tag relationships...');
       _updateImportProgress(0.24);
 
       // Step 4: Merge note_tags table
-      await _mergeService.mergeNoteTags(stagingDb, migratedBackupDb);
+      await _mergeService.mergeNoteTags(
+        stagingDb,
+        migratedBackupDb,
+        tagIdRemap: tagIdRemap,
+      );
 
       _addImportLog(l10n.mergingRelationships);
       _updateImportProgress(0.30);
@@ -765,6 +776,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       await _mergeService.mergeConversationTagMappings(
         stagingDb,
         migratedBackupDb,
+        tagIdRemap: tagIdRemap,
       );
 
       _addImportLog('Merging conversation-note mappings...');

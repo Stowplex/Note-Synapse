@@ -6056,6 +6056,30 @@ abstract class AppLocalizations {
   /// **'Mini app library files'**
   String get syncItemsUserAppLibraryDependencies;
 
+  /// No description provided for @syncItemsNoteAnnotations.
+  ///
+  /// In en, this message translates to:
+  /// **'Note annotations'**
+  String get syncItemsNoteAnnotations;
+
+  /// No description provided for @syncItemsTagImages.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag images'**
+  String get syncItemsTagImages;
+
+  /// No description provided for @syncItemsTagAiConfigs.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag AI settings'**
+  String get syncItemsTagAiConfigs;
+
+  /// No description provided for @syncItemsMultiFunctionApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Multi-function app settings'**
+  String get syncItemsMultiFunctionApps;
+
   /// No description provided for @cloudSyncNowError.
   ///
   /// In en, this message translates to:

@@ -3503,6 +3503,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncItemsUserAppLibraryDependencies => 'Mini app library files';
 
   @override
+  String get syncItemsNoteAnnotations => 'Note annotations';
+
+  @override
+  String get syncItemsTagImages => 'Tag images';
+
+  @override
+  String get syncItemsTagAiConfigs => 'Tag AI settings';
+
+  @override
+  String get syncItemsMultiFunctionApps => 'Multi-function app settings';
+
+  @override
   String cloudSyncNowError(String error) {
     return 'Sync failed: $error';
   }

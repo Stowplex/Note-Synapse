@@ -42,12 +42,20 @@ class _BoundedReader implements DatabaseExecutor {
   final DatabaseExecutor delegate;
   final int? failAfterChunk;
   int chunkReads = 0;
+  final List<String> lookupPlans = [];
 
   @override
   Future<List<Map<String, Object?>>> rawQuery(
     String sql, [
     List<Object?>? arguments,
   ]) async {
+    if (sql.startsWith('SELECT ')) {
+      final plans = await delegate.rawQuery(
+        'EXPLAIN QUERY PLAN $sql',
+        arguments,
+      );
+      lookupPlans.addAll(plans.map((row) => row['detail'] as String));
+    }
     if (sql.startsWith('SELECT substr(')) {
       chunkReads++;
       if (failAfterChunk != null && chunkReads > failAfterChunk!) {
@@ -80,6 +88,70 @@ void main() {
 
   /// Larger than [syncLargeColumnThreshold], so it takes the chunked path.
   String vendoredWasm() => 'W' * (syncLargeColumnThreshold + 1024);
+
+  test(
+    'entity and chunk reads use primary-key lookups for an existing library',
+    () async {
+      final db = await svc.database;
+      final content = vendoredWasm();
+      await db.insert('notes', {
+        'id': 'lookup',
+        'title': 'Historical note',
+        'content': content,
+        'type': 'note',
+        'createdAt': 1,
+        'updatedAt': 1,
+      });
+      final reader = _BoundedReader(db);
+      expect(
+        (await readSyncRow(
+          reader,
+          table: 'notes',
+          idColumn: 'id',
+          entityId: 'lookup',
+          columns: ['id', 'content'],
+        ))!['content'],
+        content,
+      );
+      expect(
+        await syncColumnLength(
+          reader,
+          table: 'notes',
+          column: 'content',
+          idColumn: 'id',
+          entityId: 'lookup',
+        ),
+        content.length,
+      );
+      expect(reader.chunkReads, greaterThan(0));
+      expect(reader.lookupPlans, isNotEmpty);
+      expect(
+        reader.lookupPlans,
+        everyElement(contains('SEARCH notes USING INDEX')),
+      );
+    },
+  );
+
+  test(
+    'primary-key lookup retains integer affinity for string wire ids',
+    () async {
+      final db = await svc.database;
+      await db.execute(
+        'CREATE TABLE integer_keys(id INTEGER PRIMARY KEY, content TEXT)',
+      );
+      await db.insert('integer_keys', {'id': 123, 'content': 'integer key'});
+      expect(
+        (await readSyncRow(
+          db,
+          table: 'integer_keys',
+          idColumn: 'id',
+          entityId: '123',
+          columns: ['content'],
+        ))!['content'],
+        'integer key',
+      );
+    },
+  );
 
   for (final useWhere in [false, true]) {
     test('large Unicode reads respect byte limits (where=$useWhere)', () async {
@@ -165,38 +237,40 @@ void main() {
     },
   );
 
-  test('an oversized column round-trips exactly through the chunked read',
-      () async {
-    final db = await svc.database;
-    final code = vendoredWasm();
-    await db.insert('user_apps', {
-      'id': 'app1',
-      'uuid': 'u1',
-      'name': 'Counter',
-      'description': 'd',
-      'steps': '[]',
-      'htmlContent': code,
-      'type': 'normal',
-      'createdAt': 1,
-      'updatedAt': 1,
-    });
+  test(
+    'an oversized column round-trips exactly through the chunked read',
+    () async {
+      final db = await svc.database;
+      final code = vendoredWasm();
+      await db.insert('user_apps', {
+        'id': 'app1',
+        'uuid': 'u1',
+        'name': 'Counter',
+        'description': 'd',
+        'steps': '[]',
+        'htmlContent': code,
+        'type': 'normal',
+        'createdAt': 1,
+        'updatedAt': 1,
+      });
 
-    final row = await readSyncRow(
-      db,
-      table: 'user_apps',
-      idColumn: 'id',
-      entityId: 'app1',
-      columns: const ['id', 'name', 'htmlContent'],
-    );
-    expect(row!['name'], 'Counter');
-    expect(
-      row['htmlContent'],
-      code,
-      reason:
-          'chunking must be invisible to the caller — a reader that has to '
-          'remember which columns were chunked is a reader that will forget',
-    );
-  });
+      final row = await readSyncRow(
+        db,
+        table: 'user_apps',
+        idColumn: 'id',
+        entityId: 'app1',
+        columns: const ['id', 'name', 'htmlContent'],
+      );
+      expect(row!['name'], 'Counter');
+      expect(
+        row['htmlContent'],
+        code,
+        reason:
+            'chunking must be invisible to the caller — a reader that has to '
+            'remember which columns were chunked is a reader that will forget',
+      );
+    },
+  );
 
   test('a small column is still returned inline, in one query', () async {
     final db = await svc.database;
@@ -259,68 +333,65 @@ void main() {
     );
   });
 
-  test(
-    'a mini app with a vendored-WebAssembly-sized appCode syncs end to end, '
-    'and so does the legacy htmlContent — both as blobs',
-    () async {
-      final backend = MockSyncBackend();
-      final b = DatabaseService.createNew();
-      addTearDown(b.close);
+  test('a mini app with a vendored-WebAssembly-sized appCode syncs end to end, '
+      'and so does the legacy htmlContent — both as blobs', () async {
+    final backend = MockSyncBackend();
+    final b = DatabaseService.createNew();
+    addTearDown(b.close);
 
-      final code = vendoredWasm();
-      final db = await svc.database;
-      await db.insert('user_apps', {
-        'id': 'app1',
-        'uuid': 'uuid-app1',
-        'name': 'Counter',
-        'description': 'd',
-        'steps': '[]',
-        // The legacy column, deliberately populated. It IS in sync scope
-        // (since M2.4) — the comment here previously claimed it was not,
-        // and this test failing is what corrected that. M3.8 makes it a
-        // content-blob so it travels once instead of inline.
-        'htmlContent': vendoredWasm(),
-        'type': 'normal',
-        'selectedRevisionId': 'rev1',
-        'createdAt': 1,
-        'updatedAt': 1,
-      });
-      await db.insert('app_revisions', {
-        'id': 'rev1',
-        'appId': 'app1',
-        'revisionNumber': 1,
-        'revisionTimestamp': 1,
-        'userPrompt': 'p',
-        'aiResponse': 'r',
-        'appCode': code,
-      });
+    final code = vendoredWasm();
+    final db = await svc.database;
+    await db.insert('user_apps', {
+      'id': 'app1',
+      'uuid': 'uuid-app1',
+      'name': 'Counter',
+      'description': 'd',
+      'steps': '[]',
+      // The legacy column, deliberately populated. It IS in sync scope
+      // (since M2.4) — the comment here previously claimed it was not,
+      // and this test failing is what corrected that. M3.8 makes it a
+      // content-blob so it travels once instead of inline.
+      'htmlContent': vendoredWasm(),
+      'type': 'normal',
+      'selectedRevisionId': 'rev1',
+      'createdAt': 1,
+      'updatedAt': 1,
+    });
+    await db.insert('app_revisions', {
+      'id': 'rev1',
+      'appId': 'app1',
+      'revisionNumber': 1,
+      'revisionTimestamp': 1,
+      'userPrompt': 'p',
+      'aiResponse': 'r',
+      'appCode': code,
+    });
 
-      for (var i = 0; i < 3; i++) {
-        await SyncSession(svc).run(backend);
-      }
-      for (var i = 0; i < 3; i++) {
-        await SyncSession(b).run(backend);
-      }
+    for (var i = 0; i < 3; i++) {
+      await SyncSession(svc).run(backend);
+    }
+    for (var i = 0; i < 3; i++) {
+      await SyncSession(b).run(backend);
+    }
 
-      final revision = (await (await b.database).query(
-        'app_revisions',
-        columns: const ['id', 'appCode'],
-      )).single;
-      expect(revision['appCode'], code);
+    final revision = (await (await b.database).query(
+      'app_revisions',
+      columns: const ['id', 'appCode'],
+    )).single;
+    expect(revision['appCode'], code);
 
-      expect(
-        (await (await b.database).query(
-          'user_apps',
-          columns: const ['htmlContent'],
-        )).single['htmlContent'],
-        vendoredWasm(),
-        reason:
-            'it arrives, but as a BLOB rather than inline in a commit — the '
-            'legacy column is in sync scope and cannot simply be dropped '
-            'without losing a legacy app\'s content on the second device',
-      );
-    },
-  );
+    expect(
+      (await (await b.database).query(
+        'user_apps',
+        columns: const ['htmlContent'],
+      )).single['htmlContent'],
+      vendoredWasm(),
+      reason:
+          'it arrives, but as a BLOB rather than inline in a commit — the '
+          'legacy column is in sync scope and cannot simply be dropped '
+          'without losing a legacy app\'s content on the second device',
+    );
+  });
 
   // ── The push path (M3.8, second half) ──────────────────────────────────
   //
@@ -328,78 +399,72 @@ void main() {
   // oversized operation ALONE, so the row the encoder is guaranteed to meet
   // on its own is exactly the one that cannot fit through a CursorWindow.
 
-  test(
-    'an oversized operation is encoded, published and re-read without ever '
-    'selecting the whole row inline',
-    () async {
-      final backend = MockSyncBackend();
-      final db = await svc.database;
-      final code = vendoredWasm();
-      await db.insert('notes', {
-        'id': 'n1',
-        'title': 'has a big body',
-        // notes.content is ordinary sync scope — not a blob — so this is
-        // the plain "one operation larger than the batch budget" case.
-        'content': code,
-        'type': 'note',
-        'createdAt': 1,
-        'updatedAt': 1,
-      });
+  test('an oversized operation is encoded, published and re-read without ever '
+      'selecting the whole row inline', () async {
+    final backend = MockSyncBackend();
+    final db = await svc.database;
+    final code = vendoredWasm();
+    await db.insert('notes', {
+      'id': 'n1',
+      'title': 'has a big body',
+      // notes.content is ordinary sync scope — not a blob — so this is
+      // the plain "one operation larger than the batch budget" case.
+      'content': code,
+      'type': 'note',
+      'createdAt': 1,
+      'updatedAt': 1,
+    });
 
-      for (var i = 0; i < 3; i++) {
-        await SyncSession(svc).run(backend);
-      }
+    for (var i = 0; i < 3; i++) {
+      await SyncSession(svc).run(backend);
+    }
 
-      final b = DatabaseService.createNew();
-      addTearDown(b.close);
-      for (var i = 0; i < 3; i++) {
-        await SyncSession(b).run(backend);
-      }
+    final b = DatabaseService.createNew();
+    addTearDown(b.close);
+    for (var i = 0; i < 3; i++) {
+      await SyncSession(b).run(backend);
+    }
 
-      expect(
-        (await (await b.database).query(
-          'notes',
-          columns: const ['content'],
-        )).single['content'],
-        code,
-        reason:
-            'the operation is larger than the batch byte budget, so it is '
-            'sent alone — encode, publish and materialize all have to read '
-            'it one row at a time',
-      );
-    },
-  );
+    expect(
+      (await (await b.database).query(
+        'notes',
+        columns: const ['content'],
+      )).single['content'],
+      code,
+      reason:
+          'the operation is larger than the batch byte budget, so it is '
+          'sent alone — encode, publish and materialize all have to read '
+          'it one row at a time',
+    );
+  });
 
-  test(
-    'a pending publish intent covering an oversized operation still '
-    'resolves on resume — payloadHash re-derivation reads it too',
-    () async {
-      final backend = MockSyncBackend();
-      final db = await svc.database;
-      await db.insert('notes', {
-        'id': 'n1',
-        'title': 't',
-        'content': vendoredWasm(),
-        'type': 'note',
-        'createdAt': 1,
-        'updatedAt': 1,
-      });
+  test('a pending publish intent covering an oversized operation still '
+      'resolves on resume — payloadHash re-derivation reads it too', () async {
+    final backend = MockSyncBackend();
+    final db = await svc.database;
+    await db.insert('notes', {
+      'id': 'n1',
+      'title': 't',
+      'content': vendoredWasm(),
+      'type': 'note',
+      'createdAt': 1,
+      'updatedAt': 1,
+    });
 
-      for (var i = 0; i < 3; i++) {
-        await SyncSession(svc).run(backend);
-      }
+    for (var i = 0; i < 3; i++) {
+      await SyncSession(svc).run(backend);
+    }
 
-      expect(
-        await db.query(
-          'sync_publish_intent',
-          where: 'status = ?',
-          whereArgs: ['pending'],
-        ),
-        isEmpty,
-        reason:
-            'an intent left pending is what an unresolvable re-encode looks '
-            'like, and the resume path re-reads the same oversized row',
-      );
-    },
-  );
+    expect(
+      await db.query(
+        'sync_publish_intent',
+        where: 'status = ?',
+        whereArgs: ['pending'],
+      ),
+      isEmpty,
+      reason:
+          'an intent left pending is what an unresolvable re-encode looks '
+          'like, and the resume path re-reads the same oversized row',
+    );
+  });
 }

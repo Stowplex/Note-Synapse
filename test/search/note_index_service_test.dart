@@ -921,6 +921,107 @@ void main() {
   });
 
   group('backfill batching', () {
+    test(
+      'large subnotes and annotations count toward the batch budget',
+      () async {
+        final raw = await db.database;
+        final childText = '${'searchable padding ' * 60000}childtailmarker';
+        for (final id in ['a', 'b', 'c']) {
+          await rawInsertNote(id);
+          if (id == 'a') {
+            await raw.insert('subnotes', {
+              'id': 'sub-$id',
+              'noteId': id,
+              'name': 'Imported transcript',
+              'content': childText,
+              'createdAt': 1,
+              'isCompleted': 0,
+            });
+          } else {
+            await raw.insert('note_annotations', {
+              'id': 'ann-$id',
+              'note_id': id,
+              'content': childText,
+              'attachment_paths': '[]',
+              'created_at': DateTime(2026).toIso8601String(),
+            });
+          }
+        }
+
+        await indexer.backfillAll();
+        expect(indexer.debugBackfillNotesChunked, 3);
+        expect(
+          indexer.debugBackfillLargestBatchBytes,
+          lessThanOrEqualTo(2 * 1024 * 1024),
+        );
+        for (final id in ['a', 'b', 'c']) {
+          final rows = await chunksFor(id);
+          expect(rows.length, greaterThan(200));
+          expect(
+            rows.any((r) => (r['text'] as String).contains('childtailmarker')),
+            isTrue,
+          );
+          expect(
+            (await ftsRowsFor(id)).length,
+            rows.length,
+            reason: 'all native write batches retain aligned FTS rows',
+          );
+        }
+      },
+    );
+
+    test(
+      'batch annotation owners include attachment-only and deduplicate both fields',
+      () async {
+        final raw = await db.database;
+        await rawInsertNote('a');
+        await rawInsertNote('b');
+        for (final id in ['live', 'deleted']) {
+          await raw.insert('attachments', {
+            'id': id,
+            'noteId': 'a',
+            'filePath': '/missing/$id.txt',
+            'fileName': '$id.txt',
+            'fileType': 'txt',
+            'isRelativePath': 0,
+            'createdAt': 1,
+            '__deleted__': id == 'deleted' ? 1 : 0,
+          });
+        }
+        for (final (id, owner, attachment) in [
+          ('attachment-only', null, 'live'),
+          ('both-fields', 'a', 'live'),
+          ('two-owners', 'b', 'live'),
+          ('deleted-owner', null, 'deleted'),
+        ]) {
+          await raw.insert('note_annotations', {
+            'id': id,
+            'note_id': owner,
+            'attachment_id': attachment,
+            'content': 'Annotation $id',
+            'attachment_paths': '[]',
+            'created_at': DateTime(2026).toIso8601String(),
+          });
+        }
+        await indexer.backfillAll();
+        expect(
+          (await chunksFor('a'))
+              .where((r) => r['sourceType'] == 'annotation')
+              .map((r) => r['sourceId']),
+          unorderedEquals(['attachment-only', 'both-fields', 'two-owners']),
+        );
+        expect(
+          (await chunksFor('b'))
+              .where((r) => r['sourceType'] == 'annotation')
+              .map((r) => r['sourceId']),
+          ['two-owners'],
+        );
+        indexer.debugBackfillNotesChunked = 0;
+        await indexer.backfillAll();
+        expect(indexer.debugBackfillNotesChunked, 0);
+      },
+    );
+
     test('planBackfillBatches enforces note cap and byte budget', () {
       final tinyIds = List.generate(120, (i) => 'n$i');
       final tinyLengths = {for (final id in tinyIds) id: 10};
@@ -1157,6 +1258,75 @@ void main() {
         expect(result.best.sourceType, 'attachment_text');
         expect(result.attachmentId, 'a1');
         expect(result.page, 2, reason: 'deep link must carry the 1-based page');
+      },
+    );
+
+    test(
+      'bulk changes during PDF backfill receive a follow-up snapshot',
+      () async {
+        final extractionStarted = Completer<void>();
+        final releaseExtraction = Completer<void>();
+        makePdfIndexer(
+          loadOverride: (_) async {
+            if (!extractionStarted.isCompleted) extractionStarted.complete();
+            await releaseExtraction.future;
+            return 'Extracted PDF';
+          },
+        );
+        await rawInsertNote('existing');
+        await insertPdfAttachment('a1', 'existing', ['one page']);
+        final originalPass = indexer.backfillAll();
+        await extractionStarted.future;
+        await rawInsertNote(
+          'arrived-after-snapshot',
+          content: 'newly synced content',
+        );
+        notifier.publish(const DataChangeEvent(bulk: true));
+        await notifier.waitForIdle();
+        // The bulk debounce fires while the old PDF pass is still in flight.
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+        releaseExtraction.complete();
+        await originalPass;
+        final deadline = DateTime.now().add(const Duration(seconds: 10));
+        while ((await chunksFor('arrived-after-snapshot')).isEmpty) {
+          if (DateTime.now().isAfter(deadline)) {
+            fail('bulk follow-up did not index the new note');
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 25));
+        }
+        await indexer.backfillAll();
+        expect(openCalls, 1, reason: 'follow-up skips the unchanged PDF');
+      },
+    );
+
+    test(
+      'all PDF page reads failing preserve the old searchable chunks',
+      () async {
+        var failReads = false;
+        makePdfIndexer(
+          loadOverride: (_) async {
+            if (failReads) throw StateError('temporary PDF engine failure');
+            return 'previously indexed PDF text';
+          },
+        );
+        await rawInsertNote('n1');
+        await insertPdfAttachment('a1', 'n1', ['one page', 'second page']);
+        await indexer.backfillAll();
+        final before = await attachmentChunks('a1');
+        expect(before, hasLength(2));
+
+        failReads = true;
+        await indexer.backfillAll(force: true);
+        expect((await attachmentState('a1'))!['status'], 'error');
+        expect(
+          (await attachmentState('a1'))!['errorMessage'],
+          contains('all 2 pages'),
+        );
+        expect(
+          await attachmentChunks('a1'),
+          before,
+          reason: 'a failed extraction must not erase the working text index',
+        );
       },
     );
 
