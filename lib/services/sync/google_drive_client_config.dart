@@ -9,8 +9,10 @@
 // The release ID was verified against the supplied installed-client JSON.
 // An unauthenticated authorization probe on 2026-09-12 identified this as an
 // Android client and returned: "Custom URI scheme is not enabled for your
-// Android client." The current browser + PKCE flow therefore cannot proceed
-// with this client's default settings. Google recommends Identity Services
+// Android client." The owner subsequently confirmed the custom-scheme opt-in
+// is enabled. Retain browser + PKCE; that configuration action is complete.
+// The probe has not been rerun, and signed-device consent/refresh/Drive access
+// still need verification. Google recommends Identity Services
 // AuthorizationClient for Android Drive authorization, but it requires GMS.
 // https://support.google.com/googleapi/answer/6158849
 // https://developer.android.com/identity/authorization

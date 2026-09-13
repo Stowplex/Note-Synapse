@@ -22,19 +22,27 @@ manifest registers the matching reversed-client-ID scheme. Xcode's resolved
 Release build settings also contain the matching `GOOGLE_REVERSED_CLIENT_ID`.
 These checks do not constitute a signed APK/IPA or a completed login test.
 
-**Release blocker:** an unauthenticated Google authorization preflight with
+**Custom URI configuration resolved (owner-confirmed):** the owner confirmed
+that **Advanced settings → Custom URI scheme** is now enabled for the Android
+client. Retain the existing browser + PKCE flow and no-GMS implementation.
+Enabling this setting is no longer an outstanding release action.
+
+Before that change, an unauthenticated Google authorization preflight with
 the release ID, configured redirect, `drive.file` scope, and PKCE returned
 `400 invalid_request`: **“Custom URI scheme is not enabled for your Android
-client.”** The JSON's `installed` key does not establish the OAuth platform
-type. The server identified this registration as Android.
+client.”** This is historical evidence, not the current configuration status.
+The preflight has not been rerun since the owner's confirmation. Consent,
+callback delivery, token refresh, and Drive access still need verification on
+a signed release device. The JSON's `installed` key does not establish the
+OAuth platform type; the server identified this registration as Android.
 
 **Google's recommended Android approach:** Google Identity Services
 `AuthorizationClient`, using the Android registration
 whose package name and SHA-1 match the distributed app. Google recommends this
 API for Drive permissions; Credential Manager serves the separate sign-in
 purpose. After consent, subsequent `authorize()` calls can obtain access tokens
-without interaction while permissions remain granted. The current app-side
-refresh-token handling must be adapted to that model, including token
+without interaction while permissions remain granted. Adopting this approach
+would require adapting the current app-side refresh-token handling, including token
 invalidation and cases requiring renewed consent. See
 [Android's authorization guide](https://developer.android.com/identity/authorization).
 
@@ -42,12 +50,12 @@ invalidation and cases requiring renewed consent. See
 `test/no_gms_dependency_audit_test.dart` explicitly record a requirement to
 operate without Google Play Services. `AuthorizationClient` requires Play
 Services, so adopting it would change that supported-device requirement.
-The current browser flow implements the no-GMS choice. No native-authorization
-migration has been made; this is a product tradeoff to resolve, not a missing
-client ID or a callback typo.
+The current browser flow implements the no-GMS choice, with the custom-scheme
+exception now enabled by the owner. No native-authorization migration is
+required for this chosen approach.
 
-The Console's **Advanced settings → Custom URI scheme** opt-in can unblock
-the existing browser flow, but Google discourages it because custom schemes
+The enabled **Advanced settings → Custom URI scheme** opt-in permits the
+existing browser flow, but Google discourages it because custom schemes
 allow app impersonation. It is an exception when the recommended API cannot
 meet an app's needs, not the default release recommendation. See
 [Google's Android custom-scheme policy](https://developers.googleblog.com/improving-user-safety-in-oauth-flows-through-new-oauth-custom-uri-scheme-restrictions/).
@@ -228,9 +236,10 @@ and 661 existing lint findings; it exits nonzero for those findings.
 Signed-device OAuth, native PDF/OCR end-to-end behavior, and real cloud
 transfer performance were not validated by these tests.
 
-Before describing this as complete cross-device sync, resolve the Android
-authorization/no-GMS tradeoff, configure a separate iOS client, test signed
-release builds on both target platforms, and
+The owner has confirmed that Android custom URI schemes are enabled; that
+configuration action is complete. Before describing this as complete
+cross-device sync, configure a separate iOS client, verify consent, callback,
+token refresh, and Drive access on signed release builds for both platforms, and
 complete the unsupported data families and app identity reconciliation above.
 Use an existing-library fixture with substantial PDF/image attachments and
 downloaded app dependencies for device timing, interrupt/resume, and offline
