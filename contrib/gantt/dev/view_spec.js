@@ -281,7 +281,7 @@
     ok('gantt.html disables page zoom', /user-scalable=no/.test(shell) && /viewport-fit=cover/.test(shell));
     var order = [];
     shell.replace(/<script src="src\/([a-z0-9]+)\.js"><\/script>/g, function (m, n) { order.push(n); return m; });
-    eq('gantt.html loads the modules in the D18 order', order.join(','), 'i18n,dates,model,undo,block,md,host,store,scale,layout,theme,render,gestures,sheet,app');
+    eq('gantt.html loads the modules in the D18 order', order.join(','), 'i18n,dates,model,undo,block,md,host,store,scale,layout,theme,render,gestures,sheet,exporter,app');
     ok('gantt.html boots the app last', /<script src="src\/app\.js"><\/script>\n<script>GT\.app\.boot\(\);<\/script>/.test(shell));
     ok('gantt.html has the §12.8 structure', ['id="topbar"', 'id="gantt" class="g-root"', 'class="g-corner"', 'class="g-hdr-cv"', 'class="g-names"',
       'class="g-names-inner"', 'class="g-divider"', 'class="g-body"', 'class="g-grid-cv"', 'class="g-bars"', 'id="empty"', 'id="banner"', 'id="home"'].every(function (x) { return shell.indexOf(x) >= 0; }));

@@ -16,7 +16,7 @@ cd "$(dirname "$0")"
 
 SOURCE="gantt.html"
 # D18 load order, which is also the order the shell lists them in.
-MODULES=(i18n dates model undo block md host store scale layout theme render gestures sheet app)
+MODULES=(i18n dates model undo block md host store scale layout theme render gestures sheet exporter app)
 TMP_HTML="$(mktemp)"
 trap 'rm -f "$TMP_HTML"' EXIT
 

@@ -5,7 +5,7 @@ var base = path.join(__dirname, '..', 'plugins', 'src');
 
 // Load order is D18. render.js and app.js touch no DOM at load time; their
 // DOM behaviour is covered by the Chrome pages.
-var MODULES = ['i18n', 'dates', 'model', 'undo', 'block', 'md', 'host', 'store', 'scale', 'layout', 'theme', 'render', 'gestures', 'sheet', 'app'];
+var MODULES = ['i18n', 'dates', 'model', 'undo', 'block', 'md', 'host', 'store', 'scale', 'layout', 'theme', 'render', 'gestures', 'sheet', 'exporter', 'app'];
 MODULES.forEach(function (f) {
   eval(fs.readFileSync(path.join(base, f + '.js'), 'utf8'));
 });
@@ -38,6 +38,7 @@ require('./gesture_spec.js');
 require('./edit_spec.js');
 require('./style_spec.js');
 require('./m9_spec.js');
+require('./export_spec.js');
 globalThis.GT.spec.run().then(function (res) {
   var fail = res.filter(function (r) { return !r.pass; });
   res.forEach(function (r) { if (!r.pass) console.log('FAIL  ' + r.name + (r.detail ? '\n      ' + String(r.detail).replace(/\n/g, '\n      ') : '')); });

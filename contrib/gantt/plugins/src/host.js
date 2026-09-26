@@ -639,6 +639,22 @@
       return single({ id: id, modification: { content: { action: 'append', text: text } } });
     });
 
+    /*
+     * Export image: one file added to a note's attachments, as the base64
+     * object form of `attachments.added` (api doc "ATTACHMENT FORMATS"; the
+     * bridge turns it into a file with processAttachment before the update,
+     * bridge 3281-3292). Content is untouched. -> {ok, denied, error}
+     */
+    h.attachFile = safe(function (id, dataUrl, fileName) {
+      if (!sqlId(id)) return { ok: false, denied: false, error: 'bad id' };
+      if (typeof dataUrl !== 'string' || !/^data:[\w.+-]+\/[\w.+-]+;base64,/.test(dataUrl)) return { ok: false, denied: false, error: 'bad data' };
+      if (typeof fileName !== 'string' || !fileName.trim()) return { ok: false, denied: false, error: 'bad file name' };
+      // fileName before data: the approval dialog prints the entry cut at
+      // 20000 characters (approval_dialog.dart 733-738, 807-810), so the name
+      // has to come before the base64 to be seen.
+      return single({ id: id, modification: { attachments: { added: [{ type: 'base64', fileName: fileName, data: dataUrl }] } } });
+    });
+
     // Rename a note (the chart). -> {ok, denied, error}
     h.rename = safe(function (id, title) {
       if (!sqlId(id)) return { ok: false, denied: false, error: 'bad id' };
@@ -1575,6 +1591,21 @@
                 content = PORT.contentModification(content, mod.content);
               }
               if (isObj(mod.title) && typeof mod.title.new_title === 'string' && mod.title.new_title.length) title = mod.title.new_title;
+              // attachments.added: a path or a {type:'base64', data, fileName}
+              // object (processAttachment); anything else fails the entry.
+              var added = isObj(mod.attachments) && Array.isArray(mod.attachments.added) ? mod.attachments.added : [];
+              var files = added.map(function (a) {
+                if (typeof a === 'string' && a) return { path: a };
+                if (isObj(a) && a.type === 'base64' && typeof a.data === 'string' && a.data && typeof a.fileName === 'string' && a.fileName) {
+                  var mm = /^data:([^;,]+);base64,/.exec(a.data), dot = a.fileName.lastIndexOf('.');
+                  // The host stores it as <stem>_<uuid>.<ext> (FileUtils.generateUniqueFileName, file_utils.dart 119-133).
+                  var stem = dot > 0 ? a.fileName.slice(0, dot) : a.fileName, ext = dot > 0 ? a.fileName.slice(dot) : '';
+                  var uuid = '00000000-0000-4000-8000-' + ('000000000000' + (++db.seq)).slice(-12);
+                  return { path: 'attachments/' + stem + '_' + uuid + ext, fileName: a.fileName, mimeType: mm ? mm[1] : null, bytes: Math.floor(a.data.replace(/^[^,]*,/, '').length * 3 / 4) };
+                }
+                throw new Error('Invalid attachment format');
+              });
+              if (files.length) n.attachments = (n.attachments || []).concat(files);
               n.content = content;
               n.title = title;
               n.updatedAt = db.tick();

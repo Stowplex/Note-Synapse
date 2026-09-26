@@ -120,7 +120,14 @@ var FRAMES = {
   dfr: 'fixture=region-basic.md&launch=note&frame=timer&app=gt-smoke-dfr',
   dfl: 'fixture=region-basic.md&launch=note&frame=timer&app=gt-smoke-dfl',
   dfcjk: 'fixture=cjk.json&launch=note&locale=zh-CN&frame=timer&app=gt-smoke-dfcjk',
-  dfu: 'fixture=unscheduled.json&launch=note&frame=timer&app=gt-smoke-dfu'
+  dfu: 'fixture=unscheduled.json&launch=note&frame=timer&app=gt-smoke-dfu',
+  // Export image (§12.9): light PNG with the name column, whole chart or on screen, attached to the chart note.
+  ex: 'fixture=region-basic.md&launch=note&frame=timer&theme=dark&app=gt-smoke-ex',
+  exdeny: 'fixture=region-basic.md&launch=note&frame=timer&approvals=deny&app=gt-smoke-exdeny',
+  exzh: 'fixture=cjk.json&launch=note&locale=zh-CN&frame=timer&app=gt-smoke-exzh',
+  // ... review round 1: failure paths.
+  exfail: 'fixture=region-basic.md&launch=note&frame=timer&app=gt-smoke-exfail',
+  exdeny2: 'fixture=region-basic.md&launch=note&frame=timer&approvals=deny&app=gt-smoke-exdeny2'
 };
 // Landscape phone frames; the rest are 390 x 780.
 var SIZES = { land: [844, 390], bigLand: [844, 390], sideLand: [844, 390], r19l: [844, 390], dfl: [844, 390] };
@@ -3467,6 +3474,175 @@ function feedback1r() {
   });
 }
 
+// Export image (§12.9).
+function pngSize(dataUrl) {
+  var b = atob(dataUrl.slice(dataUrl.indexOf(',') + 1, dataUrl.indexOf(',') + 1 + 44));
+  function u32(i) { return ((b.charCodeAt(i) << 24) >>> 0) + (b.charCodeAt(i + 1) << 16) + (b.charCodeAt(i + 2) << 8) + b.charCodeAt(i + 3); }
+  return { png: b.slice(1, 4) === 'PNG', w: u32(16), h: u32(20) };
+}
+// The pixel at (x, y) of a PNG data URL, as [r, g, b].
+function pixelAt(dataUrl, x, y) {
+  return new Promise(function (res) {
+    var img = new Image();
+    img.onload = function () {
+      var c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      var ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      var p = ctx.getImageData(x, y, 1, 1).data;
+      res([p[0], p[1], p[2]]);
+    };
+    img.onerror = function () { res(null); };
+    img.src = dataUrl;
+  });
+}
+function lastAttach(W) {
+  var u = W.GTDev.mock.updates, e = u.length ? u[u.length - 1][0] : null;
+  return e && e.modification && e.modification.attachments ? e.modification.attachments.added[0] : null;
+}
+function exportFlow() {
+  var W, s, A, d, m, c0, res;
+  return booted('ex').then(opened).then(function (w) {
+    W = w; s = S(W); A = W.GT.app; d = W.document; m = W.GTDev.mock;
+    eq('ex: the app is in the dark theme', d.documentElement.getAttribute('data-theme'), 'dark');
+    A.openMore();
+    var item = d.querySelector('#sheet [data-item="export"]');
+    ok('ex: More has Export image, enabled', !!item && item.textContent.indexOf('Export image') >= 0 && !item.disabled);
+    item.click();
+    eq('ex: it opens the export sheet', s.sheet.kind(), 'export');
+    ok('ex: ... with Whole chart and What is on screen', !!sheetBtn(W, 'range', 'all') && !!sheetBtn(W, 'range', 'view') && sheetBtn(W, 'range', 'all').getAttribute('aria-pressed') === 'true',
+      d.getElementById('sheet').innerHTML.slice(0, 400));
+    eq('ex: ... and one action to attach it', d.querySelector('#sheet [data-action="export"]').textContent, 'Attach to chart note');
+    // A pending (debounced) chart edit is saved before the image.
+    A.commitEdit(W.GT.model.moveTask(s.session.live, 't3', 1), 'Move', 't3', { save: 'debounce' });
+    c0 = null;
+    var u0 = ups(W);
+    d.querySelector('#sheet [data-action="export"]').click();
+    return waitFor(function () { return ups(W) - u0 >= 2 && !s.session.busy; }, 8000, 'the save and the attach').then(function () { return wait(50); }).then(function () {
+      eq('ex: the pending edit saved first, then one updateNotes for the image', ups(W) - u0, 2);
+      ok('ex: ... the first was the chart region', /replace_text/.test(JSON.stringify(m.updates[m.updates.length - 2][0].modification.content)));
+      var att = lastAttach(W), n = m.note('chart-note');
+      ok('ex: the image is a PNG attached to the chart note', !!att && att.type === 'base64' && /^data:image\/png;base64,/.test(att.data) && n.attachments && n.attachments.length === 1);
+      ok('ex: named after the chart and today', att.fileName === 'Q4 Launch 2026-10-20.png', att && att.fileName);
+      ok('ex: the update changes nothing else', Object.keys(m.updates[m.updates.length - 1][0].modification).join(',') === 'attachments');
+      ok('ex: a toast says where it went, with Open chart note', /Image attached to the chart note: Q4 Launch 2026-10-20\.png/.test(d.getElementById('toast').textContent) && !!d.querySelector('#toast button'));
+      c0 = m.content('chart-note');
+      var sz = pngSize(att.data), svg = A.exportSvg('all');
+      ok('ex: whole chart: the PNG is the layout at 2x (' + sz.w + 'x' + sz.h + ')', sz.png && sz.w === svg.w * 2 && sz.h === svg.h * 2);
+      ok('ex: ... wider than the screen, with every row', svg.w > 390 && svg.rows === 6, svg.w + ' ' + svg.rows);
+      A.setAllGroups(true);
+      eq('ex: ... collapsed groups are expanded in the whole-chart image', A.exportSvg('all').rows + '|' + A.exportSvg('view').rows, '6|2');
+      A.setAllGroups(false);
+      return pixelAt(att.data, 6, sz.h - 4).then(function (px) {
+        ok('ex: light theme although the app is dark (name column is white)', !!px && px[0] > 245 && px[1] > 245 && px[2] > 245, JSON.stringify(px));
+        return pixelAt(att.data, sz.w - 4, 4);
+      }).then(function (px) {
+        ok('ex: ... and so is the title line', !!px && px[0] > 245, JSON.stringify(px));
+      });
+    });
+  }).then(function () {
+    // What is on screen: the camera window and the rows in view.
+    s.view.setPpd(10); flush(W);
+    return A.exportImage('view');
+  }).then(function (r) {
+    res = r;
+    var vs = s.view.viewSize(), svg = A.exportSvg('view');
+    ok('ex: on screen: attached', r.ok && m.note('chart-note').attachments.length === 2);
+    eq('ex: on screen: name column plus the visible days', svg.w, svg.nameW + vs.bodyW);
+    ok('ex: ... the PNG at 2x', pngSize(lastAttach(W).data).w === svg.w * 2 && r.w === svg.w * 2);
+    eq('ex: the chart note content is untouched by the images', m.content('chart-note'), c0);
+    return wait(300);
+  }).then(function () {
+    ok('ex: no banner after the attach (the chart is unchanged)', d.getElementById('banner').hidden);
+    return booted('exdeny').then(opened);
+  }).then(function (X) {
+    return X.GT.app.exportImage('all').then(function (r) {
+      eq('exdeny: a denial is reported', r.ok + '|' + r.reason, 'false|denied');
+      ok('exdeny: ... no attachment', !X.GTDev.mock.note('chart-note').attachments);
+      eq('exdeny: ... and a toast', X.document.getElementById('toast').textContent, 'The image was not attached: not approved');
+    });
+  }).then(function () { return booted('exzh').then(opened); }).then(function (Z) {
+    Z.GT.app.openExport();
+    var dz = Z.document;
+    eq('exzh: the sheet in zh-CN', dz.querySelector('#sheet .sh-title, #sheet h2, #sheet [id$="-title"]') ? dz.querySelector('#sheet .sh-title, #sheet h2, #sheet [id$="-title"]').textContent : '', '导出图片');
+    eq('exzh: ... its choices', sheetBtn(Z, 'range', 'all').textContent + '|' + sheetBtn(Z, 'range', 'view').textContent, '整个图表|当前屏幕');
+    S(Z).sheet.close();
+    var svg = Z.GT.app.exportSvg('all');
+    ok('exzh: the image has the zh-CN titles and months', svg.svg.indexOf('>季度发布计划</text>') > 0 && svg.svg.indexOf('2026年10月') > 0);
+    return Z.GT.app.exportImage('all').then(function (r) {
+      ok('exzh: attached', r.ok && /^季度发布计划 2026-10-20\.png$/.test(r.fileName), JSON.stringify(r));
+    });
+  }).then(function () { return booted('big'); }).then(function (B) {
+    // big.json: the raster stays within the caps.
+    var X = B.GT.exporter, svg = B.GT.app.exportSvg('all'), sc = X.scaleFor(svg.w, svg.h);
+    ok('ex big: the day axis is zoomed out to fit (chart ' + (svg.w - svg.nameW) + ' px)', svg.w - svg.nameW <= X.MAX_CHART_W + 400);
+    ok('ex big: the raster is within 12 Mpx and 8192 a side', svg.w * sc * svg.h * sc <= X.MAX_PX + 1 && svg.w * sc <= X.MAX_SIDE && svg.h * sc <= X.MAX_SIDE, [svg.w, svg.h, sc].join(','));
+    return X.toPng(svg.svg, svg.w, svg.h, B.document).then(function (png) {
+      var sz = pngSize(png.dataUrl);
+      ok('ex big: it rasterizes (' + sz.w + 'x' + sz.h + ')', png.ok && sz.w === Math.round(svg.w * sc) && sz.h === Math.round(svg.h * sc));
+    });
+  });
+}
+
+// Export image, review round 1: failure paths, the in-flight guard, escaping in the browser.
+function exportFailFlow() {
+  var W, s, A, d, m, X, keep = {};
+  return booted('future').then(function (F) {
+    F.GT.app.openMore();
+    var it = F.document.querySelector('#sheet [data-item="export"]');
+    ok('exf: a read-only chart has Export image disabled', !F.GT.app.editable() && !!it && it.disabled);
+    eq('exf: ... and exportImage refuses', typeof F.GT.app.openExport() + '|' + F.GT.app.openExport(), 'boolean|false');
+    S(F).sheet.close();
+    return booted('exfail').then(opened);
+  }).then(function (w) {
+    W = w; s = S(W); A = W.GT.app; d = W.document; m = W.GTDev.mock; X = W.GT.exporter;
+    // The SVG parses as XML with a hostile chart title.
+    s.session.title = 'R&D <x> "q"';
+    var doc = new W.DOMParser().parseFromString(A.exportSvg('all').svg, 'image/svg+xml');
+    ok('exf: the SVG parses (DOMParser) with <&"> in the title', !doc.querySelector('parsererror') && doc.documentElement.nodeName === 'svg');
+    ok('exf: ... and the title reads back as typed', Array.prototype.some.call(doc.querySelectorAll('text'), function (t) { return t.textContent === 'R&D <x> "q"'; }));
+    s.session.title = 'Q4 Launch';
+    // A render failure: toast, nothing written.
+    keep.toPng = X.toPng;
+    X.toPng = function () { return Promise.resolve({ ok: false, error: 'stub' }); };
+    var u0 = ups(W);
+    return A.exportImage('all');
+  }).then(function (r) {
+    X.toPng = keep.toPng;
+    eq('exf: a failed raster is reported', r.ok + '|' + r.reason, 'false|render');
+    eq('exf: ... with a toast', d.getElementById('toast').textContent, 'Couldn’t make the image.');
+    ok('exf: ... and nothing written', !m.note('chart-note').attachments);
+    keep.build = X.build;
+    X.build = function () { throw new Error('boom'); };
+    return A.exportImage('view');
+  }).then(function (r) {
+    X.build = keep.build;
+    eq('exf: a throw while laying out is caught', r.ok + '|' + r.reason + '|' + r.error, 'false|render|boom');
+    eq('exf: ... the toast is not stuck on Preparing', d.getElementById('toast').textContent, 'Couldn’t make the image.');
+    eq('exf: ... and the next export is not blocked', A.exporting(), false);
+    // One export at a time.
+    var p1 = A.exportImage('all'), p2 = A.exportImage('all');
+    ok('exf: while one runs, the More item is disabled', (function () { A.openMore(); var it = d.querySelector('#sheet [data-item="export"]'); var dis = !!it && it.disabled; s.sheet.close(); return dis; })());
+    return Promise.all([p1, p2]);
+  }).then(function (rs) {
+    eq('exf: a second export while one runs is refused', rs.map(function (r) { return r.ok + ':' + r.reason; }).join(','), 'true:null,false:busy');
+    eq('exf: ... one attachment', m.note('chart-note').attachments.length, 1);
+    return booted('exdeny2').then(opened);
+  }).then(function (D2) {
+    // A pending edit whose save is denied: the image is not attached, and no second dialog.
+    var s2 = S(D2), A2 = D2.GT.app, m2 = D2.GTDev.mock;
+    A2.commitEdit(D2.GT.model.moveTask(s2.session.live, 't3', 1), 'Move', 't3', { save: 'debounce' });
+    var u0 = ups(D2), dl0 = m2.dialogs;
+    return A2.exportImage('all').then(function (r) {
+      eq('exf: a denied save of pending edits stops the export', r.ok + '|' + r.reason, 'false|denied');
+      eq('exf: ... one updateNotes (the save), none for the image', ups(D2) - u0, 1);
+      eq('exf: ... one approval dialog, not two', m2.dialogs - dl0, 1);
+      ok('exf: ... no attachment', !m2.note('chart-note').attachments);
+      eq('exf: ... and the toast', D2.document.getElementById('toast').textContent, 'The image was not attached: not approved');
+    });
+  });
+}
+
 function run(name, fn) {
   return fn().catch(function (e) { ok(name + ' ran to the end', false, String((e && e.stack) || e)); });
 }
@@ -3479,7 +3655,7 @@ function run(name, fn) {
   ['membership', membership], ['toggles', toggles], ['syncDates', syncDates], ['zhNewChart', zhNewChart], ['chooserSpace', chooserSpace],
   ['styles', styles], ['source', source], ['prefs', prefsFlow], ['liteMotion', liteMotion], ['states8', states8], ['review8', review8],
   ['localeLive', localeLive], ['taskList', taskList], ['roving', roving], ['a11y', a11y], ['reconcile', reconcile], ['motion9', motion9], ['cjk9', cjk9], ['review9', review9],
-  ['feedback1', feedback1], ['feedback1r', feedback1r]].reduce(function (p, x) {
+  ['feedback1', feedback1], ['feedback1r', feedback1r], ['export', exportFlow], ['exportFail', exportFailFlow]].reduce(function (p, x) {
   return p.then(function () { return run(x[0], x[1]); });
 }, Promise.resolve()).then(report);
 

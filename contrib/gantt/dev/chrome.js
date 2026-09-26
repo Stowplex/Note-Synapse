@@ -56,8 +56,8 @@ var budget = process.env.GT_BUDGET || '300000';
  * count. GT_MIN overrides it for one run - for bisecting, not for CI.
  */
 var FLOORS = {
-  'auto_smoke.html': 2989,
-  'app_smoke.html': 1052
+  'auto_smoke.html': 3053,
+  'app_smoke.html': 1101
 };
 var floor = process.env.GT_MIN ? Number(process.env.GT_MIN)
   : (FLOORS[path.basename(page.split('?')[0])] || 1);

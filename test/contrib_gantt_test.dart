@@ -26,6 +26,7 @@ void main() {
     'src/render.js',
     'src/gestures.js',
     'src/sheet.js',
+    'src/exporter.js',
     'src/app.js',
   ];
 

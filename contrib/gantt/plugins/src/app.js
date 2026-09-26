@@ -1332,11 +1332,86 @@
         { id: 'appearance', label: T('Appearance'), hint: T(APPEARANCE[GT.theme.override()] || 'Auto'), run: A.openAppearance },
         { id: 'rename', label: T('Rename chart'), run: A.rename, disabled: !ed },
         { id: 'open-note', label: T('Open chart note'), run: A.openChartNote },
+        { id: 'export', label: T('Export image'), run: A.openExport, disabled: !ed || A.exporting() },
         // M9 (§15.2): every task as an accessible list.
         { id: 'tasklist', label: T('Task list'), run: function () { A.openTaskList(); } }
       ]
     }, 'peek');
     reg(A.openMore);
+  };
+  /*
+   * Export image (More ▸ Export image, §12.9): the chart as a light-theme
+   * PNG with the name column, of the whole chart or of what is on screen,
+   * added to the chart note's attachments (one approval).
+   */
+  var exportRange = 'all';
+  A.openExport = function () {
+    if (!live() || !editable() || A.exporting()) return false;
+    S.sheet.openForm({
+      kind: 'export', title: T('Export image'), noFocus: true,
+      fields: [
+        { name: 'range', type: 'choice', label: T('Show'), value: exportRange,
+          options: [{ value: 'all', label: T('Whole chart') }, { value: 'view', label: T('What is on screen') }] }
+      ],
+      onChange: function (name, v) { if (name === 'range') exportRange = v === 'view' ? 'view' : 'all'; },
+      actions: [
+        { id: 'export', label: T('Attach to chart note'), primary: true, run: function () { A.exportImage(exportRange); return true; } },
+        { id: 'cancel', label: T('Cancel') }
+      ]
+    }, 'peek');
+    reg(A.openExport);
+    return true;
+  };
+  var measureCtx = null;
+  function measure(text, px, weight) {
+    try {
+      if (!measureCtx) measureCtx = doc.createElement('canvas').getContext('2d');
+      measureCtx.font = (weight || 400) + ' ' + px + 'px ' + GT.exporter.FONT;
+      return measureCtx.measureText(String(text)).width;
+    } catch (e) { return GT.exporter.estimate(text, px); }
+  }
+  // The SVG for a range, from the view's current state. -> exporter.build result
+  A.exportSvg = function (range) {
+    var c = live(), v = S.view, vs = v.viewSize(), d = v.display();
+    return GT.exporter.build({
+      chart: c, title: (S.session && S.session.title) || $('title').textContent, range: range === 'view' ? 'view' : 'all',
+      cam: v.camera(), bodyW: vs.bodyW, bodyH: vs.bodyH, viewRows: v.rows(), density: d.density,
+      rowH: vs.metrics ? vs.metrics.rowH : undefined, info: v.info, today: v.today(), weekStart: I().weekStart(c.settings),
+      showWeekends: d.showWeekends, measure: measure
+    });
+  };
+  /*
+   * exportImage(range) -> Promise {ok, reason?, fileName, w, h, bytes}
+   * reason: 'held' (not editable), 'render' (the PNG failed), 'denied', 'failed'.
+   */
+  // One export at a time (review round 1): a second tap while one runs is 'busy'.
+  var exporting = null;
+  A.exporting = function () { return !!exporting; };
+  A.exportImage = function (range) {
+    var c = live();
+    if (!c || !editable()) return Promise.resolve({ ok: false, reason: 'held' });
+    if (exporting) return Promise.resolve({ ok: false, reason: 'busy' });
+    var s = S.session, out = null, name = null;
+    A.toast(T('Preparing the image…'));
+    var run = Promise.resolve().then(function () {
+      out = A.exportSvg(range);
+      name = GT.exporter.fileName(s.title || $('title').textContent, S.view.today());
+      return GT.exporter.toPng(out.svg, out.w, out.h, doc);
+    }).then(function (png) {
+      if (!png || !png.ok) { A.toast(T('Couldn’t make the image.')); return { ok: false, reason: 'render', error: png && png.error }; }
+      var bytes = Math.floor((png.dataUrl.length - png.dataUrl.indexOf(',') - 1) * 3 / 4);
+      return S.store.attachImage(png.dataUrl, name).then(function (r) {
+        if (r.ok) A.toast(I().fmt('Image attached to the chart note: {name}', { name: name }), { label: T('Open chart note'), run: A.openChartNote });
+        else if (r.reason === 'denied') A.toast(T('The image was not attached: not approved'));
+        else A.toast(T('Couldn’t attach the image.'));
+        return { ok: r.ok, reason: r.reason || null, fileName: name, w: png.w, h: png.h, bytes: bytes, svgW: out.w, svgH: out.h };
+      });
+    }).catch(function (e) {
+      A.toast(T('Couldn’t make the image.'));
+      return { ok: false, reason: 'render', error: String((e && e.message) || e) };
+    }).then(function (r) { exporting = null; return r; });
+    exporting = run;
+    return run;
   };
   /*
    * M9 Task list view (More ▸ Task list, §13.5, §15.2): every task in chart

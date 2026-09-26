@@ -1627,6 +1627,26 @@
       };
     };
 
+    /*
+     * Export image: adds a PNG to the chart note's attachments. Pending
+     * chart edits are saved first, so the note's history reads in order
+     * (that save can raise its own approval; if it is denied, the image is
+     * not attached). Not undoable (the chart itself does not change).
+     * -> {ok} | {ok:false, reason:'held'|'denied'|'failed', error}
+     */
+    st.attachImage = function (dataUrl, fileName) {
+      var s = st.session;
+      if (!canEdit(s)) return P({ ok: false, reason: 'held' });
+      return st.flush().then(function (f) {
+        if (st.session !== s) return { ok: false, reason: 'held' };
+        // The user just said no to saving this chart: do not ask again for the image.
+        if (f && f.ok === false && /^denied/.test(String(f.reason))) return { ok: false, reason: 'denied', flush: f.reason };
+        return H.attachFile(s.noteId, dataUrl, fileName).then(function (w) {
+          return w.ok ? { ok: true } : { ok: false, reason: w.denied ? 'denied' : 'failed', error: w.error || null };
+        });
+      });
+    };
+
     st.renameChart = function (title) {
       var s = st.session;
       if (!canEdit(s)) return P({ ok: false, reason: 'held' });

@@ -32,6 +32,7 @@
 <script src="../plugins/src/render.js"></script>
 <script src="../plugins/src/gestures.js"></script>
 <script src="../plugins/src/sheet.js"></script>
+<script src="../plugins/src/exporter.js"></script>
 <script src="../plugins/src/app.js"></script>
 <script>
 /*
@@ -66,6 +67,7 @@ fetch('fixtures/').then(function (r) { return r.text(); }).then(function (html) 
   .then(function () { return load('edit_spec.js'); })
   .then(function () { return load('style_spec.js'); })
   .then(function () { return load('m9_spec.js'); })
+  .then(function () { return load('export_spec.js'); })
   .then(go)
   .catch(function (e) { document.getElementById('sum').textContent = 'setup failed: ' + e.message; });
 

@@ -38,7 +38,7 @@ function eq(name, a, b) { ok(name, a === b, a === b ? '' : 'expected ' + JSON.st
 // The same inlining, written independently of the shell that does it: this
 // has to be able to disagree with build.sh, or it is asserting nothing.
 // D18 order; must equal MODULES in plugins/build.sh.
-var MODULES = ['i18n', 'dates', 'model', 'undo', 'block', 'md', 'host', 'store', 'scale', 'layout', 'theme', 'render', 'gestures', 'sheet', 'app'];
+var MODULES = ['i18n', 'dates', 'model', 'undo', 'block', 'md', 'host', 'store', 'scale', 'layout', 'theme', 'render', 'gestures', 'sheet', 'exporter', 'app'];
 // The one line each module has and no other file does.
 var MARKER = { i18n: 'GT.i18n = {' };
 MODULES.slice(1).forEach(function (m) { MARKER[m] = '(GT.' + m + ' = {})'; });

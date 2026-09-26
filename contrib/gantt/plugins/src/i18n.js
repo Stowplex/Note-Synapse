@@ -116,7 +116,11 @@
     'The task list above the chart was edited. It is kept as your text.': '图表上方的任务列表被编辑过，已作为你的文本保留。',
     // Device feedback round 1: colour overrides, the name column toggle.
     'Tasks with their own colour keep it.': '设置了颜色的任务保持自己的颜色。',
-    'Collapse task names': '收起任务名', 'Expand task names': '展开任务名'
+    'Collapse task names': '收起任务名', 'Expand task names': '展开任务名',
+    // Export image (§12.9).
+    'Export image': '导出图片', 'Show': '范围', 'Whole chart': '整个图表', 'What is on screen': '当前屏幕',
+    'Attach to chart note': '添加到图表笔记', 'Preparing the image…': '正在生成图片…', 'Couldn’t make the image.': '无法生成图片。',
+    'The image was not attached: not approved': '图片未添加：未获批准', 'Couldn’t attach the image.': '无法添加图片。'
   };
 
   var language = 'en-US';
@@ -180,6 +184,8 @@
     'The chart starts with {n} task(s).': '图表从 {n} 个任务开始。',
     '{n} already on the chart': '{n} 条已在图表中',
     'Removed “{title}” from the chart': '已将“{title}”从图表中移除',
+    // Export image (§12.9).
+    'Image attached to the chart note: {name}': '图片已添加到图表笔记：{name}',
     'Dates not written to {n} task note(s)': '有 {n} 条任务笔记未写入日期',
     // M8
     'Colour by {by} · {style}': '颜色依据：{by} · {style}',

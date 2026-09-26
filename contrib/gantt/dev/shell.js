@@ -334,6 +334,17 @@
         else if (p[0] === 'names') A.setNameW(+p[1], false);
         // Device feedback round 1: the corner toggle (collapse / expand the name column).
         else if (p[0] === 'ntog') A.toggleNames();
+        // Export image: the PNG the export would attach, shown over the page at its CSS size.
+        else if (p[0] === 'exportshow') {
+          var ex = A.exportSvg(p[1] === 'view' ? 'view' : 'all');
+          GT.exporter.toPng(ex.svg, ex.w, ex.h, document).then(function (png) {
+            var im = document.createElement('img');
+            im.src = png.dataUrl;
+            im.id = 'export-preview';
+            im.style.cssText = 'position:fixed;left:0;top:0;z-index:99;width:' + ex.w + 'px;height:' + ex.h + 'px;background:#888';
+            document.body.appendChild(im);
+          });
+        }
         else if (p[0] === 'pick') {
           var sw = document.querySelector('#sheet .sw[data-color="' + p[1] + '"]');
           if (sw) { sw.click(); sw.scrollIntoView({ block: 'nearest', inline: 'center' }); }
